@@ -26,7 +26,7 @@ function showVersion() {
 /**
  * Initialize a new project
  */
-async function initProject(projectName, options) {
+async function initProject(projectName, _options) {
   console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
 
   try {

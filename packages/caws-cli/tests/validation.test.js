@@ -3,8 +3,6 @@
  * @author @darianrosebrook
  */
 
-const fs = require('fs');
-const path = require('path');
 const yaml = require('js-yaml');
 
 // Import the validation function (we'll need to expose it for testing)
