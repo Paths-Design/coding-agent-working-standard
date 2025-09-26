@@ -1,0 +1,119 @@
+# CAWS (Coding Agent Workflow System) CODEOWNERS
+# ================================================
+#
+# This file defines who should be automatically requested for review
+# when changes are made to specific parts of the codebase.
+#
+# Format: path/to/file/or/directory @username @team
+
+# Global Owners - All changes require approval from core maintainers
+* @darianrosebrook
+
+# Root configuration files
+package.json @darianrosebrook
+turbo.json @darianrosebrook
+tsconfig.json @darianrosebrook
+.eslintrc.js @darianrosebrook
+.prettierrc.json @darianrosebrook
+.gitignore @darianrosebrook
+.editorconfig @darianrosebrook
+.npmrc @darianrosebrook
+.nvmrc @darianrosebrook
+
+# Documentation
+README.md @darianrosebrook
+docs/ @darianrosebrook
+CONTRIBUTING.md @darianrosebrook
+CODE_OF_CONDUCT.md @darianrosebrook
+SECURITY.md @darianrosebrook
+CHANGELOG.md @darianrosebrook
+
+# CAWS CLI Package
+packages/caws-cli/ @darianrosebrook
+packages/caws-cli/src/ @darianrosebrook
+packages/caws-cli/tests/ @darianrosebrook
+
+# CAWS Template Package
+packages/caws-template/ @darianrosebrook
+packages/caws-template/apps/ @darianrosebrook
+packages/caws-template/.caws/ @darianrosebrook
+packages/caws-template/agents.md @darianrosebrook
+
+# CAWS Test Project
+packages/caws-test-project/ @darianrosebrook
+
+# CI/CD and automation
+.github/ @darianrosebrook
+.github/workflows/ @darianrosebrook
+
+# Security-related files
+SECURITY.md @darianrosebrook
+docs/api/security.md @darianrosebrook
+
+# Core framework files
+packages/caws-cli/src/index.js @darianrosebrook
+packages/caws-template/apps/tools/caws/ @darianrosebrook
+packages/caws-template/.caws/schemas/ @darianrosebrook
+
+# Build and configuration
+babel.config.js @darianrosebrook
+jest.config.js @darianrosebrook
+
+# Package management
+packages/*/package.json @darianrosebrook
+packages/caws-cli/tsconfig.json @darianrosebrook
+packages/caws-template/tsconfig.json @darianrosebrook
+
+# Example and template files
+packages/caws-test-project/ @darianrosebrook
+CAWS-SETUP.md @darianrosebrook
+
+# ================================================
+# TEAM DEFINITIONS (for future expansion)
+# ================================================
+
+# When the project grows, you can define teams:
+# @caws/core-team
+# @caws/security-team
+# @caws/docs-team
+# @caws/infra-team
+
+# ================================================
+# AUTOMATION RULES
+# ================================================
+
+# Security-sensitive changes require security team review
+SECURITY.md @darianrosebrook
+docs/api/security.md @darianrosebrook
+packages/caws-template/apps/tools/caws/prompt-lint.js @darianrosebrook
+
+# Infrastructure changes require infra team review
+.github/ @darianrosebrook
+turbo.json @darianrosebrook
+packages/*/tsconfig.json @darianrosebrook
+
+# Documentation changes can be reviewed by docs team
+docs/ @darianrosebrook
+CONTRIBUTING.md @darianrosebrook
+CODE_OF_CONDUCT.md @darianrosebrook
+CHANGELOG.md @darianrosebrook
+
+# ================================================
+# CODEOWNERS MAINTENANCE
+# ================================================
+
+# This file should be updated when:
+# - New team members join with specific expertise
+# - New packages or major components are added
+# - Security requirements change
+# - Documentation structure is modified
+
+# To modify this file:
+# 1. Update the owner assignments
+# 2. Ensure the changes are reviewed by existing owners
+# 3. Test that the new assignments work correctly
+# 4. Update documentation if needed
+
+# For questions about CODEOWNERS:
+# - See GitHub documentation: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# - Contact: @darianrosebrook

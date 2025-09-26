@@ -1,0 +1,19 @@
+{
+  "name": "@caws/test-project",
+  "version": "1.0.0",
+  "description": "CAWS (Coding Agent Workflow System) test project",
+  "scripts": {
+    "build": "echo 'Test project does not need building'",
+    "test": "echo 'Test project does not have tests'",
+    "lint": "echo 'Test project does not need linting'",
+    "format": "echo 'Test project does not need formatting'",
+    "validate": "echo 'Test project does not need validation'",
+    "clean": "rm -rf .agent"
+  },
+  "keywords": ["caws", "test", "project", "example", "turborepo"],
+  "author": "@darianrosebrook",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

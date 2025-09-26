@@ -1,0 +1,158 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+.turbo/
+.next/
+.nuxt/
+.output/
+.vercel/
+.netlify/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Generated files
+.agent/
+test-caws-project/
+generated/
+auto-generated/
+target/
+bin/
+obj/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache/
+.stylelintcache/
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Logs
+*.log
+logs/
+
+# Documentation build artifacts
+docs/build/
+docs/.vuepress/dist/
+docs/_book/
+
+# Storybook build outputs
+.storybook-out/
+storybook-static/
+
+# Static site generators
+public/
+static/
+_site/
+dist/
+build/
+out/
+
+# Package files
+*.tgz
+*.tar.gz
+*.zip
+*.rar
+*.7z
+*.json
+*.lock
+
+# Runtime artifacts
+*.pid
+*.seed
+*.pid.lock
+.pids/
+.lock-wscript
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+*.atom
+*.vim/
+*.emacs.d/
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Package managers
+.npmrc
+.yarnrc
+.yarnrc.yml
+.pnp.*
+
+# TypeScript
+*.tsbuildinfo
+
+# Test output
+test-results/
+test-output/
+playwright-report/
+cypress/videos/
+cypress/screenshots/
+
+# Local development overrides
+.local
+.localhost
+.local-dev
+caws.local.*
+local.*
+
+# Backup files
+*.backup
+*.bak
+*.orig
+*.old
+*.new
+
+# Patch files
+*.patch
+*.diff
+*.rej
+
+# Binary files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.webp
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.mp4
+*.mp3
+*.wav
+*.pdf
+*.zip
+*.tar.gz

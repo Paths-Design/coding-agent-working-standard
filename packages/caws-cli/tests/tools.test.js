@@ -1,0 +1,254 @@
+/**
+ * @fileoverview Tests for CAWS tools functionality
+ * @author @darianrosebrook
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+describe('CAWS Tools', () => {
+  const testDir = path.join(__dirname, 'test-tools');
+  const workingSpecPath = path.join(testDir, '.caws/working-spec.yaml');
+
+  beforeAll(() => {
+    // Create test directory
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.mkdirSync(path.join(testDir, '.caws'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, '.agent'), { recursive: true });
+
+    // Create a valid working spec for testing
+    const validSpec = {
+      id: 'TEST-001',
+      title: 'Test Project for Tools',
+      risk_tier: 2,
+      mode: 'feature',
+      change_budget: {
+        max_files: 25,
+        max_loc: 1000,
+      },
+      blast_radius: {
+        modules: ['core', 'api'],
+        data_migration: false,
+      },
+      operational_rollback_slo: '5m',
+      threats: ['Test threat 1', 'Test threat 2'],
+      scope: {
+        in: ['test files'],
+        out: ['other files'],
+      },
+      invariants: ['System remains stable'],
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'Current system state',
+          when: 'Feature is used',
+          then: 'Expected behavior occurs',
+        },
+      ],
+      non_functional: {
+        a11y: ['keyboard navigation'],
+        perf: { api_p95_ms: 250 },
+        security: ['input validation'],
+      },
+      contracts: [
+        {
+          type: 'openapi',
+          path: 'test.yaml',
+        },
+      ],
+      observability: {
+        logs: ['test.log'],
+        metrics: ['test_metric'],
+        traces: ['test_trace'],
+      },
+      migrations: ['Test migration'],
+      rollback: ['Test rollback'],
+    };
+
+    fs.writeFileSync(workingSpecPath, JSON.stringify(validSpec, null, 2));
+  });
+
+  afterAll(() => {
+    // Clean up test directory
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  describe('Validate Tool', () => {
+    test('should validate a correct working spec', () => {
+      const output = execSync(
+        `node ../../../caws-template/apps/tools/caws/validate.js ${workingSpecPath}`,
+        { encoding: 'utf8', cwd: testDir }
+      );
+      expect(output).toContain('✅ Working specification is valid');
+    });
+
+    test('should show summary for valid spec', () => {
+      const output = execSync(
+        `node ../../../caws-template/apps/tools/caws/validate.js ${workingSpecPath}`,
+        { encoding: 'utf8', cwd: testDir }
+      );
+      expect(output).toContain('ID: TEST-001');
+      expect(output).toContain('Title: Test Project for Tools');
+      expect(output).toContain('Risk Tier: 2');
+      expect(output).toContain('Mode: feature');
+      expect(output).toContain('Max Files: 25');
+      expect(output).toContain('Max LOC: 1000');
+      expect(output).toContain('Contracts: 1');
+    });
+
+    test('should fail with missing spec file', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/validate.js missing.yaml', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+  });
+
+  describe('Gates Tool', () => {
+    test('should show tier policy', () => {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/gates.js tier 1', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
+      expect(output).toContain('Tier 1 Policy');
+      expect(output).toContain('Branch Coverage: ≥90%');
+      expect(output).toContain('Mutation Score: ≥70%');
+      expect(output).toContain('Max Files: 40');
+      expect(output).toContain('Max LOC: 1500');
+      expect(output).toContain('Requires Contracts: true');
+      expect(output).toContain('Manual Review: Required');
+    });
+
+    test('should enforce coverage gate', () => {
+      const output = execSync(
+        'node ../../../caws-template/apps/tools/caws/gates.js coverage 2 0.85',
+        {
+          encoding: 'utf8',
+          cwd: testDir,
+        }
+      );
+      expect(output).toContain('✅ Branch coverage gate passed: 0.85 >= 0.8');
+    });
+
+    test('should fail coverage gate when below threshold', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js coverage 2 0.75', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+
+    test('should enforce mutation gate', () => {
+      const output = execSync(
+        'node ../../../caws-template/apps/tools/caws/gates.js mutation 2 0.60',
+        {
+          encoding: 'utf8',
+          cwd: testDir,
+        }
+      );
+      expect(output).toContain('✅ Mutation gate passed: 0.6 >= 0.5');
+    });
+
+    test('should fail mutation gate when below threshold', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js mutation 2 0.40', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+
+    test('should enforce trust score gate', () => {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/gates.js trust 2 85', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
+      expect(output).toContain('✅ Trust score gate passed: 85 >= 82');
+    });
+
+    test('should fail trust score gate when below threshold', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js trust 2 75', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+
+    test('should enforce budget gate', () => {
+      const output = execSync(
+        'node ../../../caws-template/apps/tools/caws/gates.js budget 2 20 800',
+        {
+          encoding: 'utf8',
+          cwd: testDir,
+        }
+      );
+      expect(output).toContain('✅ Budget gate passed: 20 files, 800 LOC');
+    });
+
+    test('should fail budget gate when files exceed limit', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js budget 2 30 800', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+
+    test('should fail budget gate when LOC exceed limit', () => {
+      expect(() => {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js budget 2 20 1200', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
+      }).toThrow();
+    });
+  });
+
+  describe('Attest Tool', () => {
+    test('should generate SBOM', () => {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js sbom', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
+
+      // Parse the JSON output
+      const sbom = JSON.parse(output);
+      expect(sbom).toHaveProperty('spdxId', 'SPDXRef-DOCUMENT');
+      expect(sbom).toHaveProperty('spdxVersion', 'SPDX-2.3');
+      expect(sbom).toHaveProperty('name');
+      expect(sbom).toHaveProperty('packages');
+      expect(sbom.packages).toBeInstanceOf(Array);
+    });
+
+    test('should generate SLSA attestation', () => {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js slsa', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
+
+      const attestation = JSON.parse(output);
+      expect(attestation).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
+      expect(attestation).toHaveProperty('predicateType', 'https://slsa.dev/provenance/v0.2');
+      expect(attestation.predicate).toHaveProperty('builder');
+      expect(attestation.predicate).toHaveProperty('buildType');
+    });
+
+    test('should generate in-toto attestation', () => {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js intoto', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
+
+      const attestation = JSON.parse(output);
+      expect(attestation).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
+      expect(attestation).toHaveProperty('predicateType', 'https://caws.dev/attestation/v1');
+      expect(attestation.predicate).toHaveProperty('generator');
+      expect(attestation.predicate.generator).toHaveProperty('name', 'caws-cli');
+    });
+  });
+});

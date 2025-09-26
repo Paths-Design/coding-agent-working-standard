@@ -1,0 +1,45 @@
+id: PROJECT-001
+title: "Sample CAWS Project"
+risk_tier: 2
+mode: feature
+change_budget:
+  max_files: 25
+  max_loc: 1000
+blast_radius:
+  modules: ["core", "api"]
+  data_migration: false
+operational_rollback_slo: "5m"
+threats:
+  - "Performance degradation under load"
+  - "Race conditions in concurrent operations"
+scope:
+  in: ["user authentication", "api endpoints"]
+  out: ["legacy authentication", "deprecated endpoints"]
+invariants:
+  - "System remains available during deployment"
+  - "Data consistency maintained"
+  - "Authentication state preserved"
+acceptance:
+  - id: A1
+    given: "user provides valid credentials"
+    when: "authentication is requested"
+    then: "user is granted access with valid session"
+  - id: A2
+    given: "user provides invalid credentials"
+    when: "authentication is requested"
+    then: "access is denied with appropriate error message"
+non_functional:
+  a11y: ["keyboard navigation", "screen reader support"]
+  perf: { api_p95_ms: 250 }
+  security: ["input validation", "rate limiting", "secure session management"]
+contracts:
+  - type: openapi
+    path: "apps/contracts/api.yaml"
+observability:
+  logs: ["auth.success", "auth.failure", "auth.blocked"]
+  metrics: ["auth_attempts_total", "auth_success_total", "auth_blocked_total"]
+  traces: ["auth_flow", "session_validation"]
+migrations:
+  - "Create user sessions table"
+  - "Add authentication indexes"
+rollback: ["Feature flag kill-switch", "Database rollback script"]

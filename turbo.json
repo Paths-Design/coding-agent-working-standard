@@ -1,0 +1,52 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "apps/**", ".caws/**", "!**/*.test.*"],
+      "outputs": ["dist/**", "build/**", ".agent/**"]
+    },
+    "lint": {
+      "dependsOn": [],
+      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json"]
+    },
+    "lint:fix": {
+      "dependsOn": [],
+      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json"]
+    },
+    "format": {
+      "dependsOn": [],
+      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json", "*.md"]
+    },
+    "test": {
+      "dependsOn": ["^build", "lint"],
+      "inputs": ["src/**", "tests/**", "apps/**", ".caws/**"],
+      "outputs": ["coverage/**"]
+    },
+    "test:watch": {
+      "dependsOn": [],
+      "persistent": true,
+      "cache": false
+    },
+    "validate": {
+      "dependsOn": [],
+      "inputs": [".caws/**", "apps/tools/caws/**"]
+    },
+    "clean": {
+      "dependsOn": [],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["build"],
+      "persistent": true,
+      "cache": false
+    }
+  },
+  "globalDependencies": [
+    "package.json",
+    "turbo.json",
+    ".eslintrc.js",
+    ".prettierrc"
+  ]
+}
