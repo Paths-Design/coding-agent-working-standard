@@ -1,0 +1,163 @@
+name: CAWS Guards
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  naming_guard:
+    name: Block Shadow File Patterns
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block shadow file patterns
+        run: |
+          # Compare against the base branch to find new/changed files
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF="origin/main"
+          fi
+
+          echo "🔍 Checking for shadow/duplicate filename patterns against $BASE_REF..."
+
+          # Get files that have been added or modified
+          BAD=$(git diff --name-only "$BASE_REF"... | \
+            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.|/duplicate-|/backup-' || true)
+
+          if [ -n "$BAD" ]; then
+            echo "❌ Shadow/duplicate filename patterns detected:"
+            echo "$BAD"
+            echo ""
+            echo "💡 Use in-place refactor & codemod instead of creating shadow files."
+            echo "   See: docs/caws-developer-guide.md"
+            exit 1
+          fi
+
+          echo "✅ No shadow file patterns found"
+
+  scope_guard:
+    name: Enforce Scope Discipline
+    runs-on: ubuntu-latest
+    needs: naming_guard
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -q https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_amd64 -O /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Ensure changes are within scope.in
+        run: |
+          # Check if working spec exists
+          if [ ! -f ".caws/working-spec.yaml" ]; then
+            echo "⚠️ No .caws/working-spec.yaml found - skipping scope check"
+            exit 0
+          fi
+
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF="origin/main"
+          fi
+
+          echo "🔍 Checking scope compliance against $BASE_REF..."
+
+          # Extract scope.in from working spec
+          SCOPE_PATHS=$(yq eval '.scope.in[]' .caws/working-spec.yaml 2>/dev/null | sed 's|^|^|; s|$|/|' || echo "")
+
+          if [ -z "$SCOPE_PATHS" ]; then
+            echo "⚠️ No scope.in defined - skipping scope check"
+            exit 0
+          fi
+
+          # Get changed files
+          CHANGED=$(git diff --name-only "$BASE_REF"...)
+
+          OUT_OF_SCOPE=""
+          for file in $CHANGED; do
+            if [[ ! "$file" =~ ^\. ]] && [[ ! "$file" =~ node_modules ]] && [[ ! "$file" =~ dist ]]; then
+              IN_SCOPE=false
+              for scope_pattern in $SCOPE_PATHS; do
+                if [[ "$file" =~ $scope_pattern ]]; then
+                  IN_SCOPE=true
+                  break
+                fi
+              done
+              if [ "$IN_SCOPE" = false ]; then
+                OUT_OF_SCOPE="$OUT_OF_SCOPE"$'\n'"$file"
+              fi
+            fi
+          done
+
+          if [ -n "$OUT_OF_SCOPE" ]; then
+            echo "❌ Files outside scope.in:"
+            echo "$OUT_OF_SCOPE"
+            echo ""
+            echo "💡 Add a Spec Delta with the new paths if intentional."
+            echo "   Update .caws/working-spec.yaml scope.in section."
+            exit 1
+          fi
+
+          echo "✅ All changes within scope"
+
+  budget_guard:
+    name: Enforce Change Budget
+    runs-on: ubuntu-latest
+    needs: scope_guard
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -q https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_amd64 -O /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Enforce change_budget (files/LOC)
+        run: |
+          # Check if working spec exists
+          if [ ! -f ".caws/working-spec.yaml" ]; then
+            echo "⚠️ No .caws/working-spec.yaml found - skipping budget check"
+            exit 0
+          fi
+
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF="origin/main"
+          fi
+
+          echo "📊 Checking change budget against $BASE_REF..."
+
+          # Extract budget from working spec
+          MAX_FILES=$(yq eval '.change_budget.max_files // 25' .caws/working-spec.yaml 2>/dev/null)
+          MAX_LOC=$(yq eval '.change_budget.max_loc // 1000' .caws/working-spec.yaml 2>/dev/null)
+
+          # Count changed files (excluding common ignore patterns)
+          CHANGED_FILES=$(git diff --name-only "$BASE_REF"... | grep -v -E '^(node_modules|\.git|dist|\.next|\.turbo|coverage)' | wc -l)
+
+          # Count changed lines (additions + deletions)
+          CHANGED_LOC=$(git diff --unified=0 "$BASE_REF"... | grep -E '^\+|^-' | wc -l)
+
+          echo "📈 Budget: $MAX_FILES files, $MAX_LOC LOC"
+          echo "📊 Actual: $CHANGED_FILES files, $CHANGED_LOC LOC"
+
+          if [ "$CHANGED_FILES" -gt "$MAX_FILES" ] || [ "$CHANGED_LOC" -gt "$MAX_LOC" ]; then
+            echo "❌ Budget exceeded!"
+            echo ""
+            echo "💡 Break down your change into smaller, reviewable PRs."
+            echo "   Update .caws/working-spec.yaml change_budget section."
+            exit 1
+          fi
+
+          echo "✅ Within budget"

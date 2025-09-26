@@ -10,10 +10,19 @@
     "validate": "echo 'Test project does not need validation'",
     "clean": "rm -rf .agent"
   },
-  "keywords": ["caws", "test", "project", "example", "turborepo"],
+  "keywords": [
+    "caws",
+    "test",
+    "project",
+    "example",
+    "turborepo"
+  ],
   "author": "@darianrosebrook",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "js-yaml": "4.1.0"
   }
 }

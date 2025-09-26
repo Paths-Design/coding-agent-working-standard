@@ -13,16 +13,24 @@
     "validate": "node apps/tools/caws/validate.js .caws/working-spec.yaml",
     "clean": "rm -rf dist .agent"
   },
-  "keywords": ["caws", "template", "scaffolding", "agents", "workflow", "turborepo"],
+  "keywords": [
+    "caws",
+    "template",
+    "scaffolding",
+    "agents",
+    "workflow",
+    "turborepo"
+  ],
   "author": "@darianrosebrook",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "jest": "^29.0.0",
     "eslint": "^8.0.0",
-    "prettier": "^3.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-node": "^11.1.0",
+    "jest": "^29.0.0",
+    "js-yaml": "4.1.0",
+    "prettier": "^3.0.0",
     "typescript": "^5.0.0"
   },
   "engines": {

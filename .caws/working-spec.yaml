@@ -1,0 +1,35 @@
+# CAWS Working Specification
+# This file defines the current change being worked on
+
+id: TEST-123
+title: Test feature implementation
+risk_tier: 2
+mode: feature
+change_budget:
+  max_files: 25
+  max_loc: 1000
+blast_radius:
+  modules: ["core", "ui"]
+  data_migration: false
+operational_rollback_slo: "15m"
+scope:
+  in: ["docs/TEST-123/", "src/"]
+  out: ["node_modules/", "dist/", ".git/"]
+invariants:
+  - "System maintains ACID properties"
+  - "API contracts remain stable"
+acceptance:
+  - id: "A1"
+    given: "User initiates feature"
+    when: "Feature completes successfully"
+    then: "Expected outcome is achieved"
+non_functional:
+  a11y: ["WCAG 2.1 AA compliance", "Keyboard navigation"]
+  perf:
+    api_p95_ms: 200
+    lcp_ms: 2500
+  security: ["Input validation", "XSS protection"]
+contracts:
+  - type: "openapi"
+    path: "apps/contracts/animator-api.yaml"
+status: draft
