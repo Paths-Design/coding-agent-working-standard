@@ -17,6 +17,14 @@ describe('CAWS Tools', () => {
     fs.mkdirSync(path.join(testDir, '.caws'), { recursive: true });
     fs.mkdirSync(path.join(testDir, '.agent'), { recursive: true });
 
+    // Create package.json for attest tool
+    const packageJson = {
+      name: 'test-tools',
+      version: '1.0.0',
+      description: 'Test project for CAWS tools',
+    };
+    fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+
     // Create a valid working spec for testing
     const validSpec = {
       id: 'TEST-001',
@@ -124,7 +132,7 @@ describe('CAWS Tools', () => {
 
     test('should enforce coverage gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js coverage coverage "2" 0.85',
+        'node ../../../caws-template/apps/tools/caws/gates.js coverage "2" 0.85',
         {
           encoding: 'utf8',
           cwd: testDir,
@@ -135,19 +143,16 @@ describe('CAWS Tools', () => {
 
     test('should fail coverage gate when below threshold', () => {
       expect(() => {
-        execSync(
-          'node ../../../caws-template/apps/tools/caws/gates.js coverage coverage "2" 0.75',
-          {
-            encoding: 'utf8',
-            cwd: testDir,
-          }
-        );
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js coverage "2" 0.75', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
       }).toThrow();
     });
 
     test('should enforce mutation gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js mutation mutation "2" 0.60',
+        'node ../../../caws-template/apps/tools/caws/gates.js mutation "2" 0.60',
         {
           encoding: 'utf8',
           cwd: testDir,
@@ -158,24 +163,18 @@ describe('CAWS Tools', () => {
 
     test('should fail mutation gate when below threshold', () => {
       expect(() => {
-        execSync(
-          'node ../../../caws-template/apps/tools/caws/gates.js mutation mutation "2" 0.40',
-          {
-            encoding: 'utf8',
-            cwd: testDir,
-          }
-        );
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js mutation "2" 0.40', {
+          encoding: 'utf8',
+          cwd: testDir,
+        });
       }).toThrow();
     });
 
     test('should enforce trust score gate', () => {
-      const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js trust trust "2" 85',
-        {
-          encoding: 'utf8',
-          cwd: testDir,
-        }
-      );
+      const output = execSync('node ../../../caws-template/apps/tools/caws/gates.js trust "2" 85', {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('✅ Trust score gate passed: 85 >= 82');
     });
 
@@ -190,7 +189,7 @@ describe('CAWS Tools', () => {
 
     test('should enforce budget gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js budget budget "2" 20 800',
+        'node ../../../caws-template/apps/tools/caws/gates.js budget "2" 20 800',
         {
           encoding: 'utf8',
           cwd: testDir,

@@ -394,7 +394,7 @@ async function initProject(projectName, options) {
         observabilityMetrics: 'requests_total',
         observabilityTraces: 'api_flow',
         migrationPlan: 'Standard deployment process',
-        rollbackPlan: 'Feature flag disable and rollback'
+        rollbackPlan: 'Feature flag disable and rollback',
       };
 
       // Generate working spec for non-interactive mode
