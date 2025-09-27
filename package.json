@@ -33,7 +33,7 @@
     "fix:start": "npm run caws:start -- --mode fix"
   },
   "keywords": ["caws", "cli", "scaffolding", "agents", "workflow", "turborepo", "monorepo"],
-  "author": "@darianrosebrook",
+  "author": "Paths Design <hello@paths.design>",
   "license": "MIT",
   "packageManager": "npm@10.0.0",
   "devDependencies": {
