@@ -225,5 +225,24 @@ ${Object.entries(workingSpecTemplate)
   console.log('6. Run npm run caws:verify to run all gates');
 } catch (error) {
   console.error('❌ Error creating CAWS scaffold:', error.message);
+
+  // Provide helpful debugging information
+  if (error.code === 'EACCES') {
+    console.error('💡 This might be a permissions issue. Try running with elevated privileges.');
+  } else if (error.code === 'ENOENT') {
+    console.error(
+      '💡 Some required directories could not be created. Check your file system permissions.'
+    );
+  } else if (error.code === 'ENOSPC') {
+    console.error('💡 Not enough disk space to create scaffold files.');
+  }
+
+  console.error('🔍 Debug info:', {
+    nodeVersion: process.version,
+    platform: process.platform,
+    cwd: process.cwd(),
+    args: process.argv.slice(2),
+  });
+
   process.exit(1);
 }

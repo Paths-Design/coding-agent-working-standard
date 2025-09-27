@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { handleCliError, safeAsync } = require('./error-handler');
 
 function getWorkingSpec() {
   try {
@@ -20,7 +21,7 @@ function getWorkingSpec() {
     const yaml = require('js-yaml');
     return yaml.load(fs.readFileSync(specPath, 'utf8'));
   } catch (error) {
-    console.error('Error reading working spec:', error.message);
+    handleCliError(error, 'reading working specification', 0); // Don't exit, return null instead
     return null;
   }
 }
@@ -72,7 +73,7 @@ function getTestResults() {
       results.perf = perf.passed ? '✅' : '❌';
     }
   } catch (error) {
-    console.error('Error reading test results:', error.message);
+    handleCliError(error, 'reading test results', 0); // Don't exit, continue with defaults
   }
 
   return results;
@@ -97,7 +98,7 @@ function getChangeMetrics() {
       };
     }
   } catch (error) {
-    console.error('Error getting git diff stats:', error.message);
+    handleCliError(error, 'getting git diff statistics', 0); // Don't exit, return defaults
   }
 
   return { files: 0, additions: 0, deletions: 0, total: 0 };

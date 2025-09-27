@@ -124,7 +124,7 @@ describe('CAWS Tools', () => {
 
     test('should enforce coverage gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js coverage 2 0.85',
+        'node ../../../caws-template/apps/tools/caws/gates.js coverage coverage "2" 0.85',
         {
           encoding: 'utf8',
           cwd: testDir,
@@ -135,16 +135,19 @@ describe('CAWS Tools', () => {
 
     test('should fail coverage gate when below threshold', () => {
       expect(() => {
-        execSync('node ../../../caws-template/apps/tools/caws/gates.js coverage 2 0.75', {
-          encoding: 'utf8',
-          cwd: testDir,
-        });
+        execSync(
+          'node ../../../caws-template/apps/tools/caws/gates.js coverage coverage "2" 0.75',
+          {
+            encoding: 'utf8',
+            cwd: testDir,
+          }
+        );
       }).toThrow();
     });
 
     test('should enforce mutation gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js mutation 2 0.60',
+        'node ../../../caws-template/apps/tools/caws/gates.js mutation mutation "2" 0.60',
         {
           encoding: 'utf8',
           cwd: testDir,
@@ -155,24 +158,30 @@ describe('CAWS Tools', () => {
 
     test('should fail mutation gate when below threshold', () => {
       expect(() => {
-        execSync('node ../../../caws-template/apps/tools/caws/gates.js mutation 2 0.40', {
-          encoding: 'utf8',
-          cwd: testDir,
-        });
+        execSync(
+          'node ../../../caws-template/apps/tools/caws/gates.js mutation mutation "2" 0.40',
+          {
+            encoding: 'utf8',
+            cwd: testDir,
+          }
+        );
       }).toThrow();
     });
 
     test('should enforce trust score gate', () => {
-      const output = execSync('node ../../../caws-template/apps/tools/caws/gates.js trust 2 85', {
-        encoding: 'utf8',
-        cwd: testDir,
-      });
+      const output = execSync(
+        'node ../../../caws-template/apps/tools/caws/gates.js trust trust "2" 85',
+        {
+          encoding: 'utf8',
+          cwd: testDir,
+        }
+      );
       expect(output).toContain('✅ Trust score gate passed: 85 >= 82');
     });
 
     test('should fail trust score gate when below threshold', () => {
       expect(() => {
-        execSync('node ../../../caws-template/apps/tools/caws/gates.js trust 2 75', {
+        execSync('node ../../../caws-template/apps/tools/caws/gates.js trust trust "2" 75', {
           encoding: 'utf8',
           cwd: testDir,
         });
@@ -181,7 +190,7 @@ describe('CAWS Tools', () => {
 
     test('should enforce budget gate', () => {
       const output = execSync(
-        'node ../../../caws-template/apps/tools/caws/gates.js budget 2 20 800',
+        'node ../../../caws-template/apps/tools/caws/gates.js budget budget "2" 20 800',
         {
           encoding: 'utf8',
           cwd: testDir,
@@ -211,44 +220,89 @@ describe('CAWS Tools', () => {
 
   describe('Attest Tool', () => {
     test('should generate SBOM', () => {
-      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js sbom', {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js bundle', {
         encoding: 'utf8',
         cwd: testDir,
       });
 
-      // Parse the JSON output
-      const sbom = JSON.parse(output);
-      expect(sbom).toHaveProperty('spdxId', 'SPDXRef-DOCUMENT');
-      expect(sbom).toHaveProperty('spdxVersion', 'SPDX-2.3');
-      expect(sbom).toHaveProperty('name');
-      expect(sbom).toHaveProperty('packages');
-      expect(sbom.packages).toBeInstanceOf(Array);
+      // Extract JSON from output (it contains status messages before JSON)
+      // Find the JSON part by looking for the opening brace after the status messages
+      const lines = output.split('\n');
+      let jsonStart = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('{')) {
+          jsonStart = i;
+          break;
+        }
+      }
+      expect(jsonStart).toBeGreaterThan(-1);
+
+      const jsonLines = lines.slice(jsonStart);
+      const jsonContent = jsonLines.join('\n');
+      const bundle = JSON.parse(jsonContent);
+
+      expect(bundle).toHaveProperty('sbom');
+      expect(bundle.sbom).toHaveProperty('spdxId', 'SPDXRef-DOCUMENT');
+      expect(bundle.sbom).toHaveProperty('spdxVersion', 'SPDX-2.3');
+      expect(bundle.sbom).toHaveProperty('name');
+      expect(bundle.sbom).toHaveProperty('packages');
+      expect(bundle.sbom.packages).toBeInstanceOf(Array);
     });
 
     test('should generate SLSA attestation', () => {
-      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js slsa', {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js bundle', {
         encoding: 'utf8',
         cwd: testDir,
       });
 
-      const attestation = JSON.parse(output);
-      expect(attestation).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
-      expect(attestation).toHaveProperty('predicateType', 'https://slsa.dev/provenance/v0.2');
-      expect(attestation.predicate).toHaveProperty('builder');
-      expect(attestation.predicate).toHaveProperty('buildType');
+      // Extract JSON from output
+      const lines = output.split('\n');
+      let jsonStart = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('{')) {
+          jsonStart = i;
+          break;
+        }
+      }
+      expect(jsonStart).toBeGreaterThan(-1);
+
+      const jsonLines = lines.slice(jsonStart);
+      const jsonContent = jsonLines.join('\n');
+      const bundle = JSON.parse(jsonContent);
+
+      expect(bundle).toHaveProperty('slsa');
+      expect(bundle.slsa).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
+      expect(bundle.slsa).toHaveProperty('predicateType', 'https://slsa.dev/provenance/v0.2');
+      expect(bundle.slsa.predicate).toHaveProperty('builder');
+      expect(bundle.slsa.predicate).toHaveProperty('buildType');
     });
 
     test('should generate in-toto attestation', () => {
-      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js intoto', {
+      const output = execSync('node ../../../caws-template/apps/tools/caws/attest.js bundle', {
         encoding: 'utf8',
         cwd: testDir,
       });
 
-      const attestation = JSON.parse(output);
-      expect(attestation).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
-      expect(attestation).toHaveProperty('predicateType', 'https://caws.dev/attestation/v1');
-      expect(attestation.predicate).toHaveProperty('generator');
-      expect(attestation.predicate.generator).toHaveProperty('name', 'caws-cli');
+      // Extract JSON from output
+      const lines = output.split('\n');
+      let jsonStart = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('{')) {
+          jsonStart = i;
+          break;
+        }
+      }
+      expect(jsonStart).toBeGreaterThan(-1);
+
+      const jsonLines = lines.slice(jsonStart);
+      const jsonContent = jsonLines.join('\n');
+      const bundle = JSON.parse(jsonContent);
+
+      expect(bundle).toHaveProperty('intoto');
+      expect(bundle.intoto).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
+      expect(bundle.intoto).toHaveProperty('predicateType', 'https://caws.dev/attestation/v1');
+      expect(bundle.intoto.predicate).toHaveProperty('generator');
+      expect(bundle.intoto.predicate.generator).toHaveProperty('name', 'caws-cli');
     });
   });
 });

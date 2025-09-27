@@ -5,12 +5,15 @@ A command-line tool for scaffolding and initializing projects with the **Coding 
 ## Installation
 
 ```bash
-# Install globally from the caws-cli directory
+# Install globally from npm registry (recommended)
+npm install -g @paths.design/caws-cli
+
+# Install locally in a project
+npm install --save-dev @paths.design/caws-cli
+
+# Or install directly from the caws-cli directory during development
 cd caws-cli
 npm install -g .
-
-# Or run directly
-node src/index.js
 ```
 
 ## Usage

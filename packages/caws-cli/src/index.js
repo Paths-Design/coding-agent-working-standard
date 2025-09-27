@@ -710,90 +710,12 @@ async function initProject(projectName, options) {
       await fs.writeFile('.caws/working-spec.yaml', workingSpecContent);
 
       console.log(chalk.green('✅ Working spec generated and validated'));
-
-      // Generate provenance manifest
-      console.log(chalk.cyan('📦 Generating provenance manifest...'));
-
-      const provenanceData = {
-        agent: 'caws-cli',
-        model: 'cli-interactive',
-        modelHash: CLI_VERSION,
-        toolAllowlist: [
-          'node',
-          'npm',
-          'git',
-          'fs-extra',
-          'inquirer',
-          'commander',
-          'js-yaml',
-          'ajv',
-          'chalk',
-        ],
-        prompts: Object.keys(answers),
-        commit: null, // Will be set after git init
-        artifacts: ['.caws/working-spec.yaml'],
-        results: {
-          project_id: answers.projectId,
-          project_title: answers.projectTitle,
-          risk_tier: answers.riskTier,
-          mode: answers.projectMode,
-          change_budget: {
-            max_files: answers.maxFiles,
-            max_loc: answers.maxLoc,
-          },
-        },
-        approvals: [],
-      };
-
-      const provenance = generateProvenance(provenanceData);
-      await saveProvenance(provenance, '.agent/provenance.json');
-
-      console.log(chalk.green('✅ Provenance manifest generated'));
-
-      // Initialize git repository
-      if (options.git) {
-        try {
-          console.log(chalk.cyan('🔧 Initializing git repository...'));
-
-          // Check if git is available
-          try {
-            require('child_process').execSync('git --version', { stdio: 'ignore' });
-          } catch (error) {
-            console.warn(chalk.yellow('⚠️  Git not found. Skipping git initialization.'));
-            console.warn(chalk.blue('💡 Install git to enable automatic repository setup.'));
-            continueToSuccess();
-            return;
-          }
-
-          require('child_process').execSync('git init', { stdio: 'inherit' });
-          require('child_process').execSync('git add .', { stdio: 'inherit' });
-          require('child_process').execSync('git commit -m "Initial CAWS project setup"', {
-            stdio: 'inherit',
-          });
-          console.log(chalk.green('✅ Git repository initialized'));
-
-          // Update provenance with commit hash
-          const commitHash = require('child_process')
-            .execSync('git rev-parse HEAD', { encoding: 'utf8' })
-            .trim();
-          const currentProvenance = JSON.parse(fs.readFileSync('.agent/provenance.json', 'utf8'));
-          currentProvenance.commit = commitHash;
-          currentProvenance.hash = require('crypto')
-            .createHash('sha256')
-            .update(JSON.stringify(currentProvenance, Object.keys(currentProvenance).sort()))
-            .digest('hex');
-          await fs.writeFile('.agent/provenance.json', JSON.stringify(currentProvenance, null, 2));
-
-          console.log(chalk.green('✅ Provenance updated with commit hash'));
-        } catch (error) {
-          console.warn(chalk.yellow('⚠️  Failed to initialize git repository:'), error.message);
-          console.warn(chalk.blue('💡 You can initialize git manually later with:'));
-          console.warn("   git init && git add . && git commit -m 'Initial CAWS project setup'");
-        }
-      }
-
-      continueToSuccess();
     }
+
+    // Finalize project with provenance and git initialization
+    await finalizeProject(projectName, options, answers);
+
+    continueToSuccess();
   } catch (error) {
     console.error(chalk.red('❌ Error during project initialization:'), error.message);
 
@@ -812,6 +734,93 @@ async function initProject(projectName, options) {
     }
 
     process.exit(1);
+  }
+}
+
+// Generate provenance manifest and git initialization (for both modes)
+async function finalizeProject(projectName, options, answers) {
+  try {
+    // Generate provenance manifest
+    console.log(chalk.cyan('📦 Generating provenance manifest...'));
+
+    const provenanceData = {
+      agent: 'caws-cli',
+      model: 'cli-interactive',
+      modelHash: CLI_VERSION,
+      toolAllowlist: [
+        'node',
+        'npm',
+        'git',
+        'fs-extra',
+        'inquirer',
+        'commander',
+        'js-yaml',
+        'ajv',
+        'chalk',
+      ],
+      prompts: Object.keys(answers),
+      commit: null, // Will be set after git init
+      artifacts: ['.caws/working-spec.yaml'],
+      results: {
+        project_id: answers.projectId,
+        project_title: answers.projectTitle,
+        risk_tier: answers.riskTier,
+        mode: answers.projectMode,
+        change_budget: {
+          max_files: answers.maxFiles,
+          max_loc: answers.maxLoc,
+        },
+      },
+      approvals: [],
+    };
+
+    const provenance = generateProvenance(provenanceData);
+    await saveProvenance(provenance, '.agent/provenance.json');
+
+    console.log(chalk.green('✅ Provenance manifest generated'));
+
+    // Initialize git repository
+    if (options.git) {
+      try {
+        console.log(chalk.cyan('🔧 Initializing git repository...'));
+
+        // Check if git is available
+        try {
+          require('child_process').execSync('git --version', { stdio: 'ignore' });
+        } catch (error) {
+          console.warn(chalk.yellow('⚠️  Git not found. Skipping git initialization.'));
+          console.warn(chalk.blue('💡 Install git to enable automatic repository setup.'));
+          return;
+        }
+
+        require('child_process').execSync('git init', { stdio: 'inherit' });
+        require('child_process').execSync('git add .', { stdio: 'inherit' });
+        require('child_process').execSync('git commit -m "Initial CAWS project setup"', {
+          stdio: 'inherit',
+        });
+        console.log(chalk.green('✅ Git repository initialized'));
+
+        // Update provenance with commit hash
+        const commitHash = require('child_process')
+          .execSync('git rev-parse HEAD', { encoding: 'utf8' })
+          .trim();
+        const currentProvenance = JSON.parse(fs.readFileSync('.agent/provenance.json', 'utf8'));
+        currentProvenance.commit = commitHash;
+        currentProvenance.hash = require('crypto')
+          .createHash('sha256')
+          .update(JSON.stringify(currentProvenance, Object.keys(currentProvenance).sort()))
+          .digest('hex');
+        await fs.writeFile('.agent/provenance.json', JSON.stringify(currentProvenance, null, 2));
+
+        console.log(chalk.green('✅ Provenance updated with commit hash'));
+      } catch (error) {
+        console.warn(chalk.yellow('⚠️  Failed to initialize git repository:'), error.message);
+        console.warn(chalk.blue('💡 You can initialize git manually later with:'));
+        console.warn("   git init && git add . && git commit -m 'Initial CAWS project setup'");
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red('❌ Error during project finalization:'), error.message);
   }
 }
 
@@ -993,3 +1002,9 @@ try {
     process.exit(1);
   }
 }
+
+// Export functions for testing
+module.exports = {
+  generateWorkingSpec,
+  validateGeneratedSpec,
+};

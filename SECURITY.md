@@ -185,8 +185,7 @@ Security fixes are released promptly:
 
 For urgent security matters requiring immediate attention:
 
-- **Primary**: security@caws.dev
-- **Emergency**: +1 (555) CAWS-SEC (for critical incidents)
+ 
 
 ## 📜 Compliance
 
@@ -221,7 +220,7 @@ We support responsible disclosure practices:
 
 ---
 
-**Last Updated**: 2024
+**Last Updated**: 2025
 **Contact**: security@caws.dev
 **Response Time**: 24-72 hours for initial acknowledgment
 

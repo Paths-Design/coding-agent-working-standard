@@ -18,29 +18,49 @@ async function validateWorkingSpec(specPath) {
   try {
     // Read and parse the spec file
     if (!fs.existsSync(specPath)) {
-      console.error('❌ Working spec file not found:', specPath);
+      console.error(`❌ Working spec file not found: ${specPath}`);
+      console.error('💡 Make sure the file exists and the path is correct.');
+      console.error('📁 Current working directory:', process.cwd());
       process.exit(1);
     }
 
-    const specContent = fs.readFileSync(specPath, 'utf8');
+    let specContent;
+    try {
+      specContent = fs.readFileSync(specPath, 'utf8');
+    } catch (readError) {
+      console.error(`❌ Cannot read spec file: ${readError.message}`);
+      console.error('💡 Check file permissions and ensure the file is not corrupted.');
+      process.exit(1);
+    }
+
     let spec;
+    const fileExt = path.extname(specPath).toLowerCase();
 
     try {
-      // Try YAML first, then JSON
-      spec = yaml.load(specContent);
-      if (!spec || typeof spec !== 'object') {
-        throw new Error('Invalid YAML/JSON structure');
-      }
-    } catch (yamlError) {
-      try {
+      // Try YAML first (our preferred format), then JSON
+      if (fileExt === '.yaml' || fileExt === '.yml') {
+        spec = yaml.load(specContent);
+      } else {
         spec = JSON.parse(specContent);
-      } catch (jsonError) {
-        console.error(
-          '❌ Invalid YAML or JSON in working spec:',
-          yamlError.message || jsonError.message
-        );
-        process.exit(1);
       }
+
+      if (!spec || typeof spec !== 'object') {
+        throw new Error('Invalid file structure - must be a valid object');
+      }
+    } catch (parseError) {
+      console.error('❌ Invalid YAML or JSON in working spec:');
+      console.error('   Error:', parseError.message);
+      console.error('💡 Check your syntax and ensure the file is properly formatted.');
+      if (fileExt === '.yaml' || fileExt === '.yml') {
+        console.error('💡 For YAML files, ensure proper indentation and valid syntax.');
+        console.error('📖 Example of valid YAML structure:');
+        console.error('   id: FEAT-123');
+        console.error('   title: "My Feature"');
+        console.error('   mode: feature');
+      } else {
+        console.error('💡 For JSON files, ensure valid JSON syntax.');
+      }
+      process.exit(1);
     }
 
     console.log('🔍 Validating working specification...');
@@ -191,8 +211,32 @@ async function validateWorkingSpec(specPath) {
     console.log(`   Contracts: ${spec.contracts.length} APIs`);
     console.log(`   Invariants: ${spec.invariants.length}`);
     console.log(`   Acceptance Criteria: ${spec.acceptance.length}`);
+
+    return { valid: true, spec };
   } catch (error) {
-    console.error('❌ Validation error:', error.message);
+    // Categorize different types of errors for better user experience
+    if (error.message.includes('Missing required field')) {
+      console.error('❌ Validation Error: Missing required specification fields');
+      console.error('💡 Ensure all required fields are present in your working spec.');
+    } else if (error.message.includes('must be')) {
+      console.error('❌ Validation Error: Invalid field values');
+      console.error('💡 Check that all field values meet the required constraints.');
+    } else if (error.message.includes('array') && error.message.includes('non-empty')) {
+      console.error('❌ Validation Error: Empty required arrays');
+      console.error(
+        '💡 Ensure arrays like scope.in, invariants, and acceptance criteria are not empty.'
+      );
+    } else {
+      console.error('❌ Unexpected validation error:', error.message);
+    }
+
+    console.error('🔍 Debug info:', {
+      specPath,
+      fileExists: fs.existsSync(specPath),
+      fileSize: fs.existsSync(specPath) ? fs.statSync(specPath).size : 'N/A',
+      nodeVersion: process.version,
+    });
+
     process.exit(1);
   }
 }
@@ -202,13 +246,44 @@ if (require.main === module) {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error('Usage: node validate.js <spec-path>');
-    console.error('Example: node validate.js .caws/working-spec.yaml');
+    console.error('❌ Usage: node validate.js <spec-path>');
+    console.error('📖 Example: node validate.js .caws/working-spec.yaml');
+    console.error('💡 Use --help for more information');
     process.exit(1);
   }
 
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('🔍 CAWS Working Specification Validator');
+    console.log('');
+    console.log('Usage: node validate.js <spec-path>');
+    console.log('');
+    console.log('Arguments:');
+    console.log('  spec-path    Path to the working specification file');
+    console.log('');
+    console.log('Examples:');
+    console.log('  node validate.js .caws/working-spec.yaml');
+    console.log('  node validate.js specs/feature-spec.yaml');
+    console.log('');
+    console.log('Exit codes:');
+    console.log('  0 - Validation successful');
+    console.log('  1 - Validation failed or file not found');
+    process.exit(0);
+  }
+
   const specPath = args[0];
-  validateWorkingSpec(specPath);
+
+  try {
+    validateWorkingSpec(specPath);
+  } catch (error) {
+    console.error('💥 Unexpected error during validation:', error.message);
+    console.error('🔍 Debug info:', {
+      specPath,
+      nodeVersion: process.version,
+      platform: process.platform,
+      cwd: process.cwd(),
+    });
+    process.exit(1);
+  }
 }
 
 module.exports = { validateWorkingSpec };

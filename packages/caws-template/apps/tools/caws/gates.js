@@ -6,8 +6,8 @@
  * @author @darianrosebrook
  */
 
-const fs = require("fs");
-const path = require("path");
+const fs = require('fs');
+const path = require('path');
 
 /**
  * Tier policy configuration
@@ -20,7 +20,7 @@ const TIER_POLICY = {
     requires_manual_review: true,
     max_files: 40,
     max_loc: 1500,
-    allowed_modes: ["feature", "refactor", "fix"],
+    allowed_modes: ['feature', 'refactor', 'fix'],
   },
   2: {
     min_branch: 0.8,
@@ -28,7 +28,7 @@ const TIER_POLICY = {
     requires_contracts: true,
     max_files: 25,
     max_loc: 1000,
-    allowed_modes: ["feature", "refactor", "fix"],
+    allowed_modes: ['feature', 'refactor', 'fix'],
   },
   3: {
     min_branch: 0.7,
@@ -36,7 +36,7 @@ const TIER_POLICY = {
     requires_contracts: false,
     max_files: 15,
     max_loc: 600,
-    allowed_modes: ["feature", "refactor", "fix", "doc", "chore"],
+    allowed_modes: ['feature', 'refactor', 'fix', 'doc', 'chore'],
   },
 };
 
@@ -105,10 +105,10 @@ function trustScore(tier, prov) {
           ? 1
           : 0
         : 1) +
-    TRUST_WEIGHTS.a11y * (prov.results?.a11y === "pass" ? 1 : 0) +
+    TRUST_WEIGHTS.a11y * (prov.results?.a11y === 'pass' ? 1 : 0) +
     TRUST_WEIGHTS.perf * budgetOk(prov.results?.perf || {}) +
     TRUST_WEIGHTS.flake * (prov.results?.flake_rate <= 0.005 ? 1 : 0.5) +
-    TRUST_WEIGHTS.mode * (prov.results?.mode_compliance === "full" ? 1 : 0.5) +
+    TRUST_WEIGHTS.mode * (prov.results?.mode_compliance === 'full' ? 1 : 0.5) +
     TRUST_WEIGHTS.scope * (prov.results?.scope_within_budget ? 1 : 0) +
     TRUST_WEIGHTS.supplychain *
       (prov.results?.sbom_valid && prov.results?.attestation_valid ? 1 : 0);
@@ -124,39 +124,38 @@ function trustScore(tier, prov) {
 function enforceGate(gateType, options) {
   const { tier, value, threshold } = options;
 
-  if (!TIER_POLICY[tier]) {
-    console.error(`❌ Invalid tier: ${tier}`);
+  // Convert tier to number if it's a string
+  const tierNum = typeof tier === 'string' ? parseInt(tier) : tier;
+
+  if (!TIER_POLICY[tierNum]) {
+    console.error(`❌ Invalid tier: ${tier} (parsed as: ${tierNum})`);
     process.exit(1);
   }
 
   const policy = TIER_POLICY[tier];
 
   switch (gateType) {
-    case "coverage":
+    case 'coverage':
       if (value < policy.min_branch) {
         console.error(
-          `❌ Branch coverage ${value} below tier ${tier} minimum: ${policy.min_branch}`
+          `❌ Branch coverage ${value} below tier ${tierNum} minimum: ${policy.min_branch}`
         );
         process.exit(1);
       }
-      console.log(
-        `✅ Branch coverage gate passed: ${value} >= ${policy.min_branch}`
-      );
+      console.log(`✅ Branch coverage gate passed: ${value} >= ${policy.min_branch}`);
       break;
 
-    case "mutation":
+    case 'mutation':
       if (value < policy.min_mutation) {
         console.error(
-          `❌ Mutation score ${value} below tier ${tier} minimum: ${policy.min_mutation}`
+          `❌ Mutation score ${value} below tier ${tierNum} minimum: ${policy.min_mutation}`
         );
         process.exit(1);
       }
-      console.log(
-        `✅ Mutation gate passed: ${value} >= ${policy.min_mutation}`
-      );
+      console.log(`✅ Mutation gate passed: ${value} >= ${policy.min_mutation}`);
       break;
 
-    case "trust":
+    case 'trust':
       const score = value;
       const minScore = 82; // Target trust score
       if (score < minScore) {
@@ -166,22 +165,20 @@ function enforceGate(gateType, options) {
       console.log(`✅ Trust score gate passed: ${score} >= ${minScore}`);
       break;
 
-    case "budget":
+    case 'budget':
       if (value.files > policy.max_files) {
         console.error(
-          `❌ Files changed (${value.files}) exceeds tier ${tier} limit: ${policy.max_files}`
+          `❌ Files changed (${value.files}) exceeds tier ${tierNum} limit: ${policy.max_files}`
         );
         process.exit(1);
       }
       if (value.loc > policy.max_loc) {
         console.error(
-          `❌ Lines changed (${value.loc}) exceeds tier ${tier} limit: ${policy.max_loc}`
+          `❌ Lines changed (${value.loc}) exceeds tier ${tierNum} limit: ${policy.max_loc}`
         );
         process.exit(1);
       }
-      console.log(
-        `✅ Budget gate passed: ${value.files} files, ${value.loc} LOC`
-      );
+      console.log(`✅ Budget gate passed: ${value.files} files, ${value.loc} LOC`);
       break;
 
     default:
@@ -195,24 +192,21 @@ function enforceGate(gateType, options) {
  * @param {string} tier - Tier to show info for
  */
 function showTierInfo(tier) {
-  const policy = TIER_POLICY[tier];
+  const tierNum = typeof tier === 'string' ? parseInt(tier) : tier;
+  const policy = TIER_POLICY[tierNum];
   if (!policy) {
-    console.error(`❌ Invalid tier: ${tier}`);
+    console.error(`❌ Invalid tier: ${tier} (parsed as: ${tierNum})`);
     return;
   }
 
-  console.log(`📋 Tier ${tier} Policy:`);
+  console.log(`📋 Tier ${tierNum} Policy:`);
   console.log(`   - Branch Coverage: ≥${policy.min_branch * 100}%`);
   console.log(`   - Mutation Score: ≥${policy.min_mutation * 100}%`);
   console.log(`   - Max Files: ${policy.max_files}`);
   console.log(`   - Max LOC: ${policy.max_loc}`);
   console.log(`   - Requires Contracts: ${policy.requires_contracts}`);
-  console.log(`   - Allowed Modes: ${policy.allowed_modes.join(", ")}`);
-  console.log(
-    `   - Manual Review: ${
-      policy.requires_manual_review ? "Required" : "Not required"
-    }`
-  );
+  console.log(`   - Allowed Modes: ${policy.allowed_modes.join(', ')}`);
+  console.log(`   - Manual Review: ${policy.requires_manual_review ? 'Required' : 'Not required'}`);
 }
 
 // CLI interface
@@ -221,29 +215,29 @@ if (require.main === module) {
   const gateType = process.argv[3];
 
   switch (command) {
-    case "coverage":
-      enforceGate("coverage", {
+    case 'coverage':
+      enforceGate('coverage', {
         tier: process.argv[4],
         value: parseFloat(process.argv[5]),
       });
       break;
 
-    case "mutation":
-      enforceGate("mutation", {
+    case 'mutation':
+      enforceGate('mutation', {
         tier: process.argv[4],
         value: parseFloat(process.argv[5]),
       });
       break;
 
-    case "trust":
-      enforceGate("trust", {
+    case 'trust':
+      enforceGate('trust', {
         tier: process.argv[4],
         value: parseInt(process.argv[5]),
       });
       break;
 
-    case "budget":
-      enforceGate("budget", {
+    case 'budget':
+      enforceGate('budget', {
         tier: process.argv[4],
         value: {
           files: parseInt(process.argv[5]),
@@ -252,14 +246,14 @@ if (require.main === module) {
       });
       break;
 
-    case "tier":
+    case 'tier':
       showTierInfo(process.argv[3]);
       break;
 
-    case "trust-score":
+    case 'trust-score':
       if (process.argv.length < 6) {
         console.error(
-          "❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <contracts> <a11y> <perf> <flake> <mode> <scope> <supplychain>"
+          '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <contracts> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
         );
         process.exit(1);
       }
@@ -270,16 +264,16 @@ if (require.main === module) {
           coverage_branch: parseFloat(process.argv[5]),
           mutation_score: parseFloat(process.argv[6]),
           contracts: {
-            consumer: process.argv[7] === "true",
-            provider: process.argv[8] === "true",
+            consumer: process.argv[7] === 'true',
+            provider: process.argv[8] === 'true',
           },
           a11y: process.argv[9],
           perf: { api_p95_ms: parseInt(process.argv[10]) },
           flake_rate: parseFloat(process.argv[11]),
           mode_compliance: process.argv[12],
-          scope_within_budget: process.argv[13] === "true",
-          sbom_valid: process.argv[14] === "true",
-          attestation_valid: process.argv[15] === "true",
+          scope_within_budget: process.argv[13] === 'true',
+          sbom_valid: process.argv[14] === 'true',
+          attestation_valid: process.argv[15] === 'true',
         },
       };
 
@@ -288,15 +282,15 @@ if (require.main === module) {
       break;
 
     default:
-      console.log("CAWS Quality Gates Tool");
-      console.log("Usage:");
-      console.log("  node gates.js coverage <tier> <value>");
-      console.log("  node gates.js mutation <tier> <value>");
-      console.log("  node gates.js trust <tier> <score>");
-      console.log("  node gates.js budget <tier> <files> <loc>");
-      console.log("  node gates.js tier <tier>");
+      console.log('CAWS Quality Gates Tool');
+      console.log('Usage:');
+      console.log('  node gates.js coverage <tier> <value>');
+      console.log('  node gates.js mutation <tier> <value>');
+      console.log('  node gates.js trust <tier> <score>');
+      console.log('  node gates.js budget <tier> <files> <loc>');
+      console.log('  node gates.js tier <tier>');
       console.log(
-        "  node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>"
+        '  node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
       );
       process.exit(1);
   }

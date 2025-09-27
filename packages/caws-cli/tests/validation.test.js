@@ -39,7 +39,7 @@ describe('Working Spec Validation', () => {
   test('should generate valid working spec', () => {
     const specContent = generateWorkingSpec(mockAnswers);
     expect(specContent).toContain('id: TEST-001');
-    expect(specContent).toContain('title: "Test Project"');
+    expect(specContent).toContain('title: Test Project');
     expect(specContent).toContain('risk_tier: 2');
     expect(specContent).toContain('mode: feature');
   });

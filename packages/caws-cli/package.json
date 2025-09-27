@@ -1,11 +1,12 @@
 {
-  "name": "@caws/cli",
+  "name": "@paths.design/caws-cli",
   "version": "1.0.0",
-  "description": "CLI tool for scaffolding CAWS (Coding Agent Workflow System) projects",
+  "description": "CAWS CLI - Coding Agent Workflow System command line tools",
   "main": "dist/index.js",
   "bin": {
     "caws": "dist/index.js"
   },
+  "preferGlobal": true,
   "files": [
     "dist",
     "README.md"
