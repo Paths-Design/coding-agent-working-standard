@@ -113,7 +113,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('Tier 1 Policy');
+      expect(output).toContain('📋 Tier 1 Policy:');
       expect(output).toContain('Branch Coverage: ≥90%');
       expect(output).toContain('Mutation Score: ≥70%');
       expect(output).toContain('Max Files: 40');
@@ -226,20 +226,11 @@ describe('CAWS Tools', () => {
       });
 
       // Extract JSON from output (it contains status messages before JSON)
-      // Find the JSON part by looking for the opening brace after the status messages
-      const lines = output.split('\n');
-      let jsonStart = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('{')) {
-          jsonStart = i;
-          break;
-        }
-      }
-      expect(jsonStart).toBeGreaterThan(-1);
+      // The JSON starts after the "✅ Attestation saved..." messages
+      const jsonMatch = output.match(/(\{[\s\S]*\})/);
+      expect(jsonMatch).toBeTruthy();
 
-      const jsonLines = lines.slice(jsonStart);
-      const jsonContent = jsonLines.join('\n');
-      const bundle = JSON.parse(jsonContent);
+      const bundle = JSON.parse(jsonMatch[1]);
 
       expect(bundle).toHaveProperty('sbom');
       expect(bundle.sbom).toHaveProperty('spdxId', 'SPDXRef-DOCUMENT');
@@ -256,19 +247,10 @@ describe('CAWS Tools', () => {
       });
 
       // Extract JSON from output
-      const lines = output.split('\n');
-      let jsonStart = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('{')) {
-          jsonStart = i;
-          break;
-        }
-      }
-      expect(jsonStart).toBeGreaterThan(-1);
+      const jsonMatch = output.match(/(\{[\s\S]*\})/);
+      expect(jsonMatch).toBeTruthy();
 
-      const jsonLines = lines.slice(jsonStart);
-      const jsonContent = jsonLines.join('\n');
-      const bundle = JSON.parse(jsonContent);
+      const bundle = JSON.parse(jsonMatch[1]);
 
       expect(bundle).toHaveProperty('slsa');
       expect(bundle.slsa).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');
@@ -284,19 +266,10 @@ describe('CAWS Tools', () => {
       });
 
       // Extract JSON from output
-      const lines = output.split('\n');
-      let jsonStart = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('{')) {
-          jsonStart = i;
-          break;
-        }
-      }
-      expect(jsonStart).toBeGreaterThan(-1);
+      const jsonMatch = output.match(/(\{[\s\S]*\})/);
+      expect(jsonMatch).toBeTruthy();
 
-      const jsonLines = lines.slice(jsonStart);
-      const jsonContent = jsonLines.join('\n');
-      const bundle = JSON.parse(jsonContent);
+      const bundle = JSON.parse(jsonMatch[1]);
 
       expect(bundle).toHaveProperty('intoto');
       expect(bundle.intoto).toHaveProperty('_type', 'https://in-toto.io/Statement/v0.1');

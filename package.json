@@ -2,6 +2,7 @@
   "name": "caws",
   "version": "1.0.0",
   "description": "CAWS - Coding Agent Workflow System (Turborepo)",
+  "website": "https://paths.design",
   "private": true,
   "workspaces": [
     "packages/*"

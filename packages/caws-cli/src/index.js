@@ -396,6 +396,23 @@ async function initProject(projectName, options) {
         migrationPlan: 'Standard deployment process',
         rollbackPlan: 'Feature flag disable and rollback'
       };
+
+      // Generate working spec for non-interactive mode
+      const workingSpecContent = generateWorkingSpec(answers);
+
+      // Validate the generated spec
+      validateGeneratedSpec(workingSpecContent, answers);
+
+      // Save the working spec
+      await fs.writeFile('.caws/working-spec.yaml', workingSpecContent);
+
+      console.log(chalk.green('✅ Working spec generated and validated'));
+
+      // Finalize project with provenance and git initialization
+      await finalizeProject(projectName, options, answers);
+
+      continueToSuccess();
+      return;
     }
 
     if (options.interactive && !options.nonInteractive) {
@@ -742,12 +759,12 @@ async function initProject(projectName, options) {
       await fs.writeFile('.caws/working-spec.yaml', workingSpecContent);
 
       console.log(chalk.green('✅ Working spec generated and validated'));
+
+      // Finalize project with provenance and git initialization
+      await finalizeProject(projectName, options, answers);
+
+      continueToSuccess();
     }
-
-    // Finalize project with provenance and git initialization
-    await finalizeProject(projectName, options, answers);
-
-    continueToSuccess();
   } catch (error) {
     console.error(chalk.red('❌ Error during project initialization:'), error.message);
 

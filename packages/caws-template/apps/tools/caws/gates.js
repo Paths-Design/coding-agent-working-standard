@@ -215,63 +215,63 @@ if (require.main === module) {
   switch (command) {
     case 'coverage':
       enforceGate('coverage', {
-        tier: process.argv[4],
-        value: parseFloat(process.argv[5]),
+        tier: process.argv[3],
+        value: parseFloat(process.argv[4]),
       });
       break;
 
     case 'mutation':
       enforceGate('mutation', {
-        tier: process.argv[4],
-        value: parseFloat(process.argv[5]),
+        tier: process.argv[3],
+        value: parseFloat(process.argv[4]),
       });
       break;
 
     case 'trust':
       enforceGate('trust', {
-        tier: process.argv[4],
-        value: parseInt(process.argv[5]),
+        tier: process.argv[3],
+        value: parseInt(process.argv[4]),
       });
       break;
 
     case 'budget':
       enforceGate('budget', {
-        tier: process.argv[4],
+        tier: process.argv[3],
         value: {
-          files: parseInt(process.argv[5]),
-          loc: parseInt(process.argv[6]),
+          files: parseInt(process.argv[4]),
+          loc: parseInt(process.argv[5]),
         },
       });
       break;
 
     case 'tier':
-      showTierInfo(process.argv[4]);
+      showTierInfo(process.argv[3]);
       break;
 
     case 'trust-score':
-      if (process.argv.length < 6) {
+      if (process.argv.length < 4) {
         console.error(
           '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
         );
         process.exit(1);
       }
 
-      const tier = process.argv[4];
+      const tier = process.argv[3];
       const prov = {
         results: {
-          coverage_branch: parseFloat(process.argv[5]),
-          mutation_score: parseFloat(process.argv[6]),
+          coverage_branch: parseFloat(process.argv[4]),
+          mutation_score: parseFloat(process.argv[5]),
           contracts: {
-            consumer: process.argv[7] === 'true',
-            provider: process.argv[8] === 'true',
+            consumer: process.argv[6] === 'true',
+            provider: process.argv[7] === 'true',
           },
-          a11y: process.argv[9],
-          perf: { api_p95_ms: parseInt(process.argv[10]) },
-          flake_rate: parseFloat(process.argv[11]),
-          mode_compliance: process.argv[12],
-          scope_within_budget: process.argv[13] === 'true',
-          sbom_valid: process.argv[14] === 'true',
-          attestation_valid: process.argv[15] === 'true',
+          a11y: process.argv[8],
+          perf: { api_p95_ms: parseInt(process.argv[9]) },
+          flake_rate: parseFloat(process.argv[10]),
+          mode_compliance: process.argv[11],
+          scope_within_budget: process.argv[12] === 'true',
+          sbom_valid: process.argv[13] === 'true',
+          attestation_valid: process.argv[14] === 'true',
         },
       };
 
