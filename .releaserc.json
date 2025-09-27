@@ -17,7 +17,8 @@
       {
         "npmPublish": true,
         "tarballDir": "dist",
-        "pkgRoot": "packages/caws-cli"
+        "pkgRoot": "packages/caws-cli",
+        "registry": "https://registry.npmjs.org"
       }
     ],
     [

@@ -305,6 +305,9 @@ This project uses [Conventional Commits](https://conventionalcommits.org/) for a
 ### Commit Conventions
 See [COMMIT_CONVENTIONS.md](COMMIT_CONVENTIONS.md) for detailed guidelines.
 
+### OIDC Setup
+For automated publishing with OIDC (OpenID Connect), see [OIDC_SETUP.md](OIDC_SETUP.md).
+
 ## Documentation
 
 - **Framework Guide**: Complete system documentation

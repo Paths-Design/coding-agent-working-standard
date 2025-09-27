@@ -9,6 +9,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release:
@@ -44,8 +45,13 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-          scope: '@paths.design'
         # OIDC token will be automatically provided by GitHub Actions for trusted publishers
+
+      - name: Setup publishing environment
+        run: |
+          echo "Setting up publishing environment..."
+          echo "NPM_REGISTRY_URL=https://registry.npmjs.org" >> $GITHUB_ENV
+          # OIDC token is automatically provided by GitHub Actions
 
       - name: Release
         env:

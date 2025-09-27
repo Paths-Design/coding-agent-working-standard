@@ -7,8 +7,6 @@
  */
 
 const fs = require("fs");
-const path = require("path");
-const { JSONSchema7 } = require("json-schema");
 
 /**
  * Validate working specification file
@@ -18,8 +16,9 @@ async function validateWorkingSpec(specPath) {
   try {
     // Read and parse the spec file
     if (!fs.existsSync(specPath)) {
-      console.error("❌ Working spec file not found:", specPath);
-      process.exit(1);
+      const error = new Error(`Working spec file not found: ${specPath}`);
+      error.code = 'ENOENT';
+      throw error;
     }
 
     const specContent = fs.readFileSync(specPath, "utf8");
@@ -28,8 +27,9 @@ async function validateWorkingSpec(specPath) {
     try {
       spec = JSON.parse(specContent);
     } catch (error) {
-      console.error("❌ Invalid JSON in working spec:", error.message);
-      process.exit(1);
+      const parseError = new Error(`Invalid JSON in working spec: ${error.message}`);
+      parseError.code = 'INVALID_JSON';
+      throw parseError;
     }
 
     console.log("🔍 Validating working specification...");
@@ -52,51 +52,59 @@ async function validateWorkingSpec(specPath) {
 
     for (const field of requiredFields) {
       if (!(field in spec)) {
-        console.error(`❌ Missing required field: ${field}`);
-        process.exit(1);
+        const error = new Error(`Missing required field: ${field}`);
+        error.code = 'MISSING_FIELD';
+        throw error;
       }
     }
 
     // Validate risk tier
     if (![1, 2, 3].includes(spec.risk_tier)) {
-      console.error("❌ Risk tier must be 1, 2, or 3");
-      process.exit(1);
+      const error = new Error("Risk tier must be 1, 2, or 3");
+      error.code = 'INVALID_TIER';
+      throw error;
     }
 
     // Validate mode
     const validModes = ["refactor", "feature", "fix", "doc", "chore"];
     if (!validModes.includes(spec.mode)) {
-      console.error(`❌ Mode must be one of: ${validModes.join(", ")}`);
-      process.exit(1);
+      const error = new Error(`Mode must be one of: ${validModes.join(", ")}`);
+      error.code = 'INVALID_MODE';
+      throw error;
     }
 
     // Validate change budget
     if (spec.change_budget.max_files < 1) {
-      console.error("❌ max_files must be at least 1");
-      process.exit(1);
+      const error = new Error("max_files must be at least 1");
+      error.code = 'INVALID_BUDGET';
+      throw error;
     }
 
     if (spec.change_budget.max_loc < 1) {
-      console.error("❌ max_loc must be at least 1");
-      process.exit(1);
+      const error = new Error("max_loc must be at least 1");
+      error.code = 'INVALID_BUDGET';
+      throw error;
     }
 
     // Validate scope
     if (!spec.scope.in || spec.scope.in.length === 0) {
-      console.error("❌ scope.in cannot be empty");
-      process.exit(1);
+      const error = new Error("scope.in cannot be empty");
+      error.code = 'INVALID_SCOPE';
+      throw error;
     }
 
     // Validate invariants
     if (!spec.invariants || spec.invariants.length === 0) {
-      console.error("❌ invariants cannot be empty");
-      process.exit(1);
+      const error = new Error("invariants cannot be empty");
+      error.code = 'INVALID_INVARIANTS';
+      throw error;
     }
 
     // Validate acceptance criteria
     if (!spec.acceptance || spec.acceptance.length === 0) {
-      console.error("❌ acceptance criteria cannot be empty");
-      process.exit(1);
+      const error = new Error("acceptance criteria cannot be empty");
+      error.code = 'INVALID_ACCEPTANCE';
+      throw error;
     }
 
     // Validate contracts for tier 1 and 2
@@ -104,19 +112,19 @@ async function validateWorkingSpec(specPath) {
       (spec.risk_tier === 1 || spec.risk_tier === 2) &&
       (!spec.contracts || spec.contracts.length === 0)
     ) {
-      console.error(
-        `❌ Risk tier ${spec.risk_tier} requires at least one contract`
-      );
-      process.exit(1);
+      const error = new Error(`Risk tier ${spec.risk_tier} requires at least one contract`);
+      error.code = 'MISSING_CONTRACTS';
+      throw error;
     }
 
     // Validate rollback SLO format
     const sloPattern = /^([0-9]+m|[0-9]+h)$/;
     if (!sloPattern.test(spec.operational_rollback_slo)) {
-      console.error(
-        '❌ operational_rollback_slo must be in format like "5m" or "1h"'
+      const error = new Error(
+        'operational_rollback_slo must be in format like "5m" or "1h"'
       );
-      process.exit(1);
+      error.code = 'INVALID_SLO';
+      throw error;
     }
 
     console.log("✅ Working specification is valid");
