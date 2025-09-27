@@ -19,6 +19,7 @@
     "cli": "cd packages/caws-cli && npm run start",
     "scaffold": "cd packages/caws-cli && npm run start scaffold",
     "init": "cd packages/caws-cli && npm run start init",
+    "release": "semantic-release",
     "caws:start": "node apps/tools/caws/start.js",
     "caws:validate": "node .caws/validate.js .caws/working-spec.yaml",
     "caws:verify": "npm run caws:validate && npm run typecheck && npm run lint && npm run test:unit -- --coverage && npm run test:contract && npm run test:integration && npm run test:e2e:smoke && npm run test:mutation && npm run test:axe && npm run perf:budgets",
@@ -35,6 +36,10 @@
   "keywords": ["caws", "cli", "scaffolding", "agents", "workflow", "turborepo", "monorepo"],
   "author": "Paths Design <hello@paths.design>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paths-Design/coding-agent-working-spec.git"
+  },
   "packageManager": "npm@10.0.0",
   "devDependencies": {
     "turbo": "^2.0.0",

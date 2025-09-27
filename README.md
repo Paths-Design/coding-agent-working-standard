@@ -278,12 +278,32 @@ Projects include a comprehensive `.caws/working-spec.yaml` with:
 - Migration and rollback strategies
 
 ### CI/CD Pipeline
-GitHub Actions workflow includes:
-- Scope and budget validation
-- Static analysis and security scanning
-- Unit and integration testing
-- Performance and accessibility checks
-- Provenance and attestation generation
+GitHub Actions workflows include:
+- **Automated Testing**: Comprehensive test suite execution
+- **Quality Gates**: Scope and budget validation with semantic versioning
+- **Static Analysis**: Security scanning and code quality checks
+- **Performance Testing**: Accessibility and performance validation
+- **Automated Publishing**: Semantic versioning with OIDC authentication
+- **Provenance Generation**: SBOM and attestation creation
+
+## Automated Publishing
+
+### Semantic Versioning
+This project uses [Conventional Commits](https://conventionalcommits.org/) for automated versioning:
+
+- `feat:` → Minor release (1.0.0 → 1.1.0)
+- `fix:` → Patch release (1.0.0 → 1.0.1)
+- `BREAKING CHANGE:` → Major release (1.0.0 → 2.0.0)
+
+### Release Process
+1. **Commit Analysis**: Commits analyzed for type and scope
+2. **Version Calculation**: Next version determined by commit types
+3. **Changelog Generation**: Release notes created from commit messages
+4. **Package Publishing**: NPM package published with OIDC authentication
+5. **Git Tagging**: Release tagged and pushed to repository
+
+### Commit Conventions
+See [COMMIT_CONVENTIONS.md](COMMIT_CONVENTIONS.md) for detailed guidelines.
 
 ## Documentation
 
