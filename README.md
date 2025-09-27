@@ -321,7 +321,7 @@ If you encounter issues:
 
 MIT License
 
-Copyright (c) 2025 @darianrosebrook
+Copyright (c) 2025 Paths Design
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -551,7 +551,7 @@ Yes! CAWS is released under the MIT License and welcomes community contributions
 
 ---
 
-**Author**: @darianrosebrook
+**Organization**: Paths Design
 **Version**: 1.0.0
 **License**: MIT
 **Built with**: Turborepo + CAWS v1.0
