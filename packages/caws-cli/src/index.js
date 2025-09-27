@@ -335,6 +335,8 @@ function validateGeneratedSpec(specContent, _answers) {
 async function initProject(projectName, options) {
   console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
 
+  let answers; // Will be set either interactively or with defaults
+
   try {
     // Validate project name
     if (!projectName || projectName.trim() === '') {
@@ -365,6 +367,36 @@ async function initProject(projectName, options) {
 
     // Copy template files
     await copyTemplate(TEMPLATE_DIR, '.');
+
+    // Set default answers for non-interactive mode
+    if (!options.interactive || options.nonInteractive) {
+      answers = {
+        projectId: projectName.toUpperCase().replace(/[^A-Z0-9]/g, '-') + '-001',
+        projectTitle: projectName.charAt(0).toUpperCase() + projectName.slice(1).replace(/-/g, ' '),
+        riskTier: 2,
+        projectMode: 'feature',
+        maxFiles: 25,
+        maxLoc: 1000,
+        blastModules: 'core,ui',
+        dataMigration: false,
+        rollbackSlo: '5m',
+        projectThreats: 'Standard project threats',
+        scopeIn: 'project files',
+        scopeOut: 'external dependencies',
+        projectInvariants: 'System maintains consistency',
+        acceptanceCriteria: 'GIVEN current state WHEN action THEN expected result',
+        a11yRequirements: 'keyboard navigation, screen reader support',
+        perfBudget: 250,
+        securityRequirements: 'input validation, authentication',
+        contractType: 'openapi',
+        contractPath: 'apps/contracts/api.yaml',
+        observabilityLogs: 'auth.success,api.request',
+        observabilityMetrics: 'requests_total',
+        observabilityTraces: 'api_flow',
+        migrationPlan: 'Standard deployment process',
+        rollbackPlan: 'Feature flag disable and rollback'
+      };
+    }
 
     if (options.interactive && !options.nonInteractive) {
       // Interactive setup with enhanced prompts

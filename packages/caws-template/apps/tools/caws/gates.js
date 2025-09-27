@@ -6,8 +6,7 @@
  * @author @darianrosebrook
  */
 
-const fs = require('fs');
-const path = require('path');
+// No file system operations needed for gates
 
 /**
  * Tier policy configuration
@@ -122,7 +121,7 @@ function trustScore(tier, prov) {
  * @param {Object} options - Gate options
  */
 function enforceGate(gateType, options) {
-  const { tier, value, threshold } = options;
+  const { tier, value } = options;
 
   // Convert tier to number if it's a string
   const tierNum = typeof tier === 'string' ? parseInt(tier) : tier;
@@ -212,7 +211,6 @@ function showTierInfo(tier) {
 // CLI interface
 if (require.main === module) {
   const command = process.argv[2];
-  const gateType = process.argv[3];
 
   switch (command) {
     case 'coverage':
@@ -247,13 +245,13 @@ if (require.main === module) {
       break;
 
     case 'tier':
-      showTierInfo(process.argv[3]);
+      showTierInfo(process.argv[4]);
       break;
 
     case 'trust-score':
       if (process.argv.length < 6) {
         console.error(
-          '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <contracts> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
+          '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
         );
         process.exit(1);
       }

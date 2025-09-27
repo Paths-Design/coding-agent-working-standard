@@ -7,7 +7,6 @@
  */
 
 const fs = require("fs");
-const path = require("path");
 
 /**
  * Common secret patterns to detect
