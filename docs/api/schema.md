@@ -227,6 +227,69 @@ The working specification defines the complete project requirements and constrai
       "type": "array",
       "items": { "type": "string" },
       "description": "Rollback steps"
+    },
+    "human_override": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether human override is enabled for this change"
+        },
+        "approver": {
+          "type": "string",
+          "description": "GitHub username or email of the approver"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Reason for the override (urgency, low risk, etc.)"
+        },
+        "waived_gates": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["coverage", "mutation", "contracts", "manual_review", "trust_score"]
+          },
+          "description": "Quality gates to waive"
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the override was approved"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the override expires"
+        }
+      },
+      "description": "Human override for urgent or low-risk changes"
+    },
+    "ai_assessment": {
+      "type": "object",
+      "properties": {
+        "confidence_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "AI's self-assessed confidence (1-10)"
+        },
+        "uncertainty_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Areas where AI is uncertain"
+        },
+        "complexity_factors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Factors increasing complexity"
+        },
+        "risk_factors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Identified risk factors"
+        }
+      },
+      "description": "AI self-assessment of confidence and uncertainty"
     }
   },
   "additionalProperties": false
@@ -275,6 +338,8 @@ interface WorkingSpec {
   observability?: ObservabilityConfig;
   migrations?: string[];         // Migration steps
   rollback?: string[];           // Rollback steps
+  human_override?: HumanOverride; // Optional human override
+  ai_assessment?: AIAssessment;   // Optional AI self-assessment
 }
 
 interface AcceptanceCriteria {
@@ -674,6 +739,110 @@ interface Relationship {
   relationshipType: string;
   relatedSpdxElement: string;
 }
+
+interface HumanOverride {
+  enabled: boolean;               // Whether override is active
+  approver: string;               // Who approved the override
+  rationale: string;              // Reason for override
+  waived_gates: WaivedGate[];     // Gates to skip
+  approved_at: string;            // ISO timestamp
+  expires_at: string;             // ISO timestamp
+}
+
+type WaivedGate = 'coverage' | 'mutation' | 'contracts' | 'manual_review' | 'trust_score';
+
+interface AIAssessment {
+  confidence_level: number;       // 1-10 scale
+  uncertainty_areas: string[];   // Areas of uncertainty
+  complexity_factors: string[];   // Complexity factors
+  risk_factors: string[];         // Identified risks
+}
+
+## Waivers Configuration Schema
+
+### JSON Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CAWS Waivers Configuration",
+  "type": "object",
+  "properties": {
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique waiver identifier"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of why waiver is needed"
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["coverage", "mutation", "contracts", "manual_review", "trust_score"]
+            },
+            "description": "Quality gates to waive"
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["urgent_fix", "experimental", "legacy_code", "resource_constraints", "other"],
+            "description": "Reason for the waiver"
+          },
+          "approver": {
+            "type": "string",
+            "description": "Who approved the waiver"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the waiver expires"
+          },
+          "projects": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Specific projects this waiver applies to"
+          },
+          "max_trust_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Maximum trust score allowed with this waiver"
+          }
+        },
+        "required": ["id", "description", "gates", "reason", "approver", "expires_at"]
+      }
+    }
+  },
+  "required": ["waivers"]
+}
+```
+
+### TypeScript Interface
+
+```typescript
+interface WaiversConfig {
+  waivers: Waiver[];
+}
+
+interface Waiver {
+  id: string;                    // Unique identifier
+  description: string;           // Description of waiver
+  gates: WaivedGate[];           // Gates to skip
+  reason: WaiverReason;          // Reason for waiver
+  approver: string;              // Who approved
+  expires_at: string;            // ISO timestamp
+  projects?: string[];           // Specific projects
+  max_trust_score?: number;      // Max trust score with waiver
+}
+
+type WaiverReason = 'urgent_fix' | 'experimental' | 'legacy_code' | 'resource_constraints' | 'other';
+```
 ```
 
 ## Validation
