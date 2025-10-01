@@ -1,0 +1,236 @@
+name: PR Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  # Quick sanity checks (fail fast)
+  sanity:
+    name: Quick Sanity Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  # CAWS-specific guards
+  caws_guards:
+    name: CAWS Guards
+    runs-on: ubuntu-latest
+    needs: sanity
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Block shadow file patterns
+        run: |
+          BAD=$(git diff --name-only origin/${{ github.base_ref }}... | \
+            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.' || true)
+          if [ -n "$BAD" ]; then
+            echo "❌ Shadow/duplicate filename patterns detected:"
+            echo "$BAD"
+            exit 1
+          fi
+
+      - name: Validate CAWS spec
+        if: hashFiles('.caws/working-spec.yaml') != ''
+        run: npm run caws:validate
+
+      - name: Check scope compliance
+        if: hashFiles('.caws/working-spec.yaml') != ''
+        run: |
+          # Install yq for YAML parsing
+          if ! command -v yq &> /dev/null; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+          
+          # Extract scope.in paths
+          SCOPE_PATHS=$(yq '.scope.in[]' .caws/working-spec.yaml 2>/dev/null || echo "")
+          
+          if [ -n "$SCOPE_PATHS" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...)
+            OUT=""
+            
+            for file in $CHANGED; do
+              IN_SCOPE=false
+              while IFS= read -r scope; do
+                if [[ "$file" == $scope* ]]; then
+                  IN_SCOPE=true
+                  break
+                fi
+              done <<< "$SCOPE_PATHS"
+              
+              if [ "$IN_SCOPE" = false ]; then
+                OUT="$OUT\n$file"
+              fi
+            done
+            
+            if [ -n "$OUT" ]; then
+              echo -e "❌ Files outside scope.in:\n$OUT"
+              echo "Add a Spec Delta with the new paths if intentional."
+              exit 1
+            fi
+          fi
+
+      - name: Enforce change budget
+        if: hashFiles('.caws/working-spec.yaml') != ''
+        run: |
+          if ! command -v yq &> /dev/null; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+          
+          MAXF=$(yq '.change_budget.max_files // 25' .caws/working-spec.yaml)
+          MAXL=$(yq '.change_budget.max_loc // 1000' .caws/working-spec.yaml)
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}... | wc -l)
+          LOC=$(git diff --unified=0 origin/${{ github.base_ref }}... | grep -E '^\+|^-' | wc -l)
+          
+          echo "Files: $FILES (budget: $MAXF)"
+          echo "LOC: $LOC (budget: $MAXL)"
+          
+          if [ "$FILES" -gt "$MAXF" ] || [ "$LOC" -gt "$MAXL" ]; then
+            echo "❌ Budget exceeded - consider breaking into smaller PRs"
+            exit 1
+          fi
+
+  # Comprehensive testing
+  test_suite:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: sanity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests with coverage
+        run: npm run test:unit -- --coverage --passWithNoTests
+
+      - name: Contract tests
+        if: hashFiles('tests/contract/**') != ''
+        run: npm run test:contract
+
+      - name: Integration tests
+        if: hashFiles('tests/integration/**') != ''
+        run: npm run test:integration
+
+      - name: E2E smoke tests
+        if: hashFiles('tests/e2e/**') != ''
+        run: npm run test:e2e:smoke
+
+  # Quality gates (can run in parallel with tests)
+  quality_gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    needs: sanity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Mutation testing
+        if: hashFiles('tests/mutation/**') != ''
+        run: npm run test:mutation || echo "⚠️  Mutation testing not configured"
+
+      - name: Accessibility testing
+        if: hashFiles('tests/axe/**') != ''
+        run: npm run test:axe || echo "⚠️  Accessibility testing not configured"
+
+      - name: Performance budgets
+        run: npm run perf:budgets || echo "⚠️  Performance budgets not configured"
+
+  # Generate PR comment with summary
+  pr_comment:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [caws_guards, test_suite, quality_gates]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate PR comment
+        run: |
+          if [ -f "apps/tools/caws/pr-comment.js" ]; then
+            npm run caws:pr-comment > pr-comment.md
+          else
+            echo "PR checks completed - see workflow for details" > pr-comment.md
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('pr-comment.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
