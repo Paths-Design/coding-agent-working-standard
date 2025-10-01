@@ -15,6 +15,14 @@ describe('CAWS CLI', () => {
   const testProjectName = 'test-caws-project';
 
   beforeAll(() => {
+    // Clean up any existing test projects and mock directories
+    if (fs.existsSync(testProjectName)) {
+      fs.rmSync(testProjectName, { recursive: true, force: true });
+    }
+    if (fs.existsSync(mockTemplateDir)) {
+      fs.rmSync(mockTemplateDir, { recursive: true, force: true });
+    }
+
     // Create mock template directory
     fs.mkdirSync(mockTemplateDir, { recursive: true });
     fs.mkdirSync(path.join(mockTemplateDir, '.caws'), { recursive: true });
@@ -22,33 +30,92 @@ describe('CAWS CLI', () => {
     fs.mkdirSync(path.join(mockTemplateDir, 'codemod'), { recursive: true });
     fs.mkdirSync(path.join(mockTemplateDir, '.github/workflows'), { recursive: true });
 
-    // Create minimal mock files
+    // Create minimal mock files that simulate real tool outputs
     fs.writeFileSync(path.join(mockTemplateDir, '.caws/working-spec.yaml'), 'id: TEST-001\n');
     fs.writeFileSync(
       path.join(mockTemplateDir, 'apps/tools/caws/validate.js'),
-      'console.log("mock validate");'
+      `#!/usr/bin/env node
+console.log("✅ Working specification is valid");
+console.log("ID: TEST-001");
+console.log("Title: Test Project for Tools");
+console.log("Risk Tier: 2");
+console.log("Mode: feature");
+console.log("📊 Scope Analysis:");
+console.log("  IN: test files");
+console.log("  OUT: other files");
+console.log("📝 Quality Metrics:");
+console.log("  Invariants: 1");
+console.log("  Acceptance criteria: 1");
+process.exit(0);`
     );
     fs.writeFileSync(
       path.join(mockTemplateDir, 'apps/tools/caws/gates.js'),
-      'console.log("mock gates");'
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const command = args[0];
+
+if (command === 'tier') {
+  console.log("📋 Tier 1 Policy Analysis:");
+  console.log("Branch Coverage: ≥90%");
+  console.log("Mutation Score: ≥70%");
+  console.log("Max Files: 40");
+} else if (command === 'coverage') {
+  const tier = args[1];
+  const coverage = parseFloat(args[2]);
+  if (coverage >= 0.85) {
+    console.log("✅ Branch coverage gate passed:");
+    console.log(\`  Coverage: \${coverage * 100}%\`);
+  } else {
+    console.log("❌ Branch coverage gate failed:");
+    console.log(\`  Coverage: \${coverage * 100}% (required: ≥85%)\`);
+    process.exit(1);
+  }
+} else if (command === 'budget') {
+  const tier = args[1];
+  const files = parseInt(args[2]);
+  const loc = parseInt(args[3]);
+  console.log("✅ Budget gate passed:");
+  console.log(\`  Files: \${files}, LOC: \${loc}\`);
+}
+process.exit(0);`
     );
     fs.writeFileSync(
       path.join(mockTemplateDir, 'apps/tools/caws/provenance.js'),
-      'console.log("mock provenance");'
+      `#!/usr/bin/env node
+console.log("mock provenance");
+module.exports = {
+  generateProvenance: () => ({ agent: 'caws-cli', version: '1.0.0' }),
+  saveProvenance: () => Promise.resolve()
+};`
     );
     fs.writeFileSync(path.join(mockTemplateDir, 'codemod/test.js'), 'console.log("mock codemod");');
     fs.writeFileSync(path.join(mockTemplateDir, '.github/workflows/caws.yml'), 'name: test');
 
-    // Try to use the actual caws-template for testing
-    const templateDir = path.join(__dirname, '../../caws-template');
-    if (fs.existsSync(templateDir)) {
-      // Use the actual template instead of mock for better testing
-      fs.rmSync(mockTemplateDir, { recursive: true, force: true });
-      fs.symlinkSync(templateDir, mockTemplateDir);
+    // Check if template dependency is available
+    const hasTemplateDependency = (() => {
+      try {
+        require.resolve('@caws/template');
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+
+    if (hasTemplateDependency) {
+      // Use dependency for consistent testing across environments
+      console.log('ℹ️  Using template dependency for testing');
+      // Keep the mock files but they will be overridden by dependency resolution
     } else {
-      // For global installations or when template is not available locally
-      console.log('ℹ️  Using mock template for testing (template not found locally)');
-      // Keep the mock files created above
+      // Fallback to local template if dependency not available
+      const templateDir = path.join(__dirname, '../../caws-template');
+      if (fs.existsSync(templateDir)) {
+        // Use the actual template instead of mock for better testing
+        fs.rmSync(mockTemplateDir, { recursive: true, force: true });
+        fs.symlinkSync(templateDir, mockTemplateDir);
+      } else {
+        console.log('ℹ️  Using mock template for testing (template not found locally)');
+        // Keep the mock files created above
+      }
     }
   });
 

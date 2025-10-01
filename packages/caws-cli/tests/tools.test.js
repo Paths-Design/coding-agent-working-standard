@@ -10,12 +10,8 @@ const yaml = require('js-yaml');
 
 // Helper function to get template tool path via dependency
 function getTemplateToolPath(toolName) {
-  try {
-    return require.resolve(`@caws/template/apps/tools/caws/${toolName}`);
-  } catch (error) {
-    // Fallback to relative path for local development
-    return path.join(__dirname, '../../caws-template/apps/tools/caws', toolName);
-  }
+  // Always prefer dependency over local path for consistent testing
+  return require.resolve(`@caws/template/apps/tools/caws/${toolName}`);
 }
 
 describe('CAWS Tools', () => {
@@ -96,19 +92,19 @@ describe('CAWS Tools', () => {
   describe('Validate Tool', () => {
     test('should validate a correct working spec', () => {
       const validatePath = getTemplateToolPath('validate.js');
-      const output = execSync(
-        `node ${validatePath} ${workingSpecPath}`,
-        { encoding: 'utf8', cwd: testDir }
-      );
+      const output = execSync(`node ${validatePath} ${workingSpecPath}`, {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('✅ Working specification is valid');
     });
 
     test('should show summary for valid spec', () => {
       const validatePath = getTemplateToolPath('validate.js');
-      const output = execSync(
-        `node ${validatePath} ${workingSpecPath}`,
-        { encoding: 'utf8', cwd: testDir }
-      );
+      const output = execSync(`node ${validatePath} ${workingSpecPath}`, {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('ID: TEST-001');
       expect(output).toContain('Title: Test Project for Tools');
       expect(output).toContain('Risk Tier: 2');
@@ -122,7 +118,7 @@ describe('CAWS Tools', () => {
     test('should fail with missing spec file', () => {
       expect(() => {
         const validatePath = getTemplateToolPath('validate.js');
-      execSync(`node ${validatePath} missing.yaml`, {
+        execSync(`node ${validatePath} missing.yaml`, {
           encoding: 'utf8',
           cwd: testDir,
         });
@@ -148,13 +144,10 @@ describe('CAWS Tools', () => {
     });
 
     test('should enforce coverage gate', () => {
-      const output = execSync(
-        `node ${getTemplateToolPath('gates.js')} coverage "2" 0.85`,
-        {
-          encoding: 'utf8',
-          cwd: testDir,
-        }
-      );
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} coverage "2" 0.85`, {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('✅ Branch coverage gate passed:');
     });
 
@@ -169,13 +162,10 @@ describe('CAWS Tools', () => {
     });
 
     test('should enforce mutation gate', () => {
-      const output = execSync(
-        `node ${getTemplateToolPath('gates.js')} mutation "2" 0.60`,
-        {
-          encoding: 'utf8',
-          cwd: testDir,
-        }
-      );
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} mutation "2" 0.60`, {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('✅ Mutation gate passed:');
     });
 
@@ -209,13 +199,10 @@ describe('CAWS Tools', () => {
     });
 
     test('should enforce budget gate', () => {
-      const output = execSync(
-        `node ${getTemplateToolPath('gates.js')} budget "2" 20 800`,
-        {
-          encoding: 'utf8',
-          cwd: testDir,
-        }
-      );
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} budget "2" 20 800`, {
+        encoding: 'utf8',
+        cwd: testDir,
+      });
       expect(output).toContain('✅ Budget gate passed:');
     });
 

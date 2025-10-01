@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Performance Budget Tests', () => {
-  const cliPath = path.join(__dirname, 'dist/index.js');
+  const cliPath = path.join(__dirname, '../dist/index.js');
 
   beforeAll(() => {
     // Ensure CLI is built

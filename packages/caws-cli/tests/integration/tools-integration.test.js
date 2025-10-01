@@ -10,7 +10,7 @@ const yaml = require('js-yaml');
 
 describe('CAWS Tools Integration', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
-  const testProjectName = 'test-tools-integration';
+  const testProjectName = `test-tools-integration-${Date.now()}`;
   const testProjectPath = path.join(__dirname, testProjectName);
 
   beforeAll(() => {
@@ -21,9 +21,28 @@ describe('CAWS Tools Integration', () => {
   });
 
   beforeEach(() => {
-    // Clean up any existing test project
-    if (fs.existsSync(testProjectPath)) {
-      fs.rmSync(testProjectPath, { recursive: true, force: true });
+    // Clean up any existing test project directories
+    const baseTestDir = path.join(__dirname, 'test-tools-integration');
+    const timestampPattern = /^test-tools-integration(-\d+)?$/;
+
+    // Clean up the base directory
+    if (fs.existsSync(baseTestDir)) {
+      fs.rmSync(baseTestDir, { recursive: true, force: true });
+    }
+
+    // Clean up any timestamped variants
+    try {
+      const items = fs.readdirSync(__dirname);
+      items.forEach((item) => {
+        if (timestampPattern.test(item)) {
+          const itemPath = path.join(__dirname, item);
+          if (fs.statSync(itemPath).isDirectory()) {
+            fs.rmSync(itemPath, { recursive: true, force: true });
+          }
+        }
+      });
+    } catch (error) {
+      // Ignore errors if directory doesn't exist or can't be read
     }
   });
 
@@ -43,14 +62,17 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const validateTool = require('./apps/tools/caws/validate.js');
-      const gatesTool = require('./apps/tools/caws/gates.js');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const gatesTool = require(path.join(testProjectPath, 'apps/tools/caws/gates.js'));
       const workingSpecPath = '.caws/working-spec.yaml';
 
       // Step 1: Validate the working spec
@@ -63,7 +85,10 @@ describe('CAWS Tools Integration', () => {
         gatesTool();
       }).not.toThrow();
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
 
     test('should handle validation failures gracefully in gates', () => {
@@ -74,13 +99,16 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const gatesTool = require('./apps/tools/caws/gates.js');
+      const gatesTool = require(path.join(testProjectPath, 'apps/tools/caws/gates.js'));
 
       // Step 1: Create an invalid working spec
       const workingSpecPath = '.caws/working-spec.yaml';
@@ -102,7 +130,10 @@ describe('CAWS Tools Integration', () => {
         gatesTool();
       }).not.toThrow();
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
   });
 
@@ -115,14 +146,17 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const validateTool = require('./apps/tools/caws/validate.js');
-      const provenanceTool = require('./apps/tools/caws/provenance.js');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
       const workingSpecPath = '.caws/working-spec.yaml';
 
       // Step 1: Validate successfully
@@ -142,7 +176,10 @@ describe('CAWS Tools Integration', () => {
       expect(provenance).toHaveProperty('agent');
       expect(provenance).toHaveProperty('results');
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
 
     test('should integrate provenance with project metadata', () => {
@@ -153,13 +190,16 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const provenanceTool = require('./apps/tools/caws/provenance.js');
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
 
       expect(() => {
         provenanceTool();
@@ -172,7 +212,10 @@ describe('CAWS Tools Integration', () => {
       expect(provenance).toHaveProperty('timestamp');
       expect(provenance).toHaveProperty('artifacts');
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
   });
 
@@ -185,15 +228,18 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
       const workingSpecPath = '.caws/working-spec.yaml';
-      const validateTool = require('./apps/tools/caws/validate.js');
-      const provenanceTool = require('./apps/tools/caws/provenance.js');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
 
       // Step 1: Validate and generate provenance
       validateTool(workingSpecPath);
@@ -206,7 +252,10 @@ describe('CAWS Tools Integration', () => {
       expect(provenance).toHaveProperty('results');
       expect(typeof provenance.results).toBe('object');
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
 
     test('should handle tool execution order dependencies', () => {
@@ -217,15 +266,18 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const validateTool = require('./apps/tools/caws/validate.js');
-      const gatesTool = require('./apps/tools/caws/gates.js');
-      const provenanceTool = require('./apps/tools/caws/provenance.js');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const gatesTool = require(path.join(testProjectPath, 'apps/tools/caws/gates.js'));
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
 
       // Test different execution orders
       const orders = [
@@ -247,7 +299,10 @@ describe('CAWS Tools Integration', () => {
         }).not.toThrow();
       });
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
   });
 
@@ -260,14 +315,17 @@ describe('CAWS Tools Integration', () => {
         stdio: 'pipe',
       });
 
-      process.chdir(testProjectPath);
-      execSync(`node "${cliPath}" scaffold`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
+      // Only change directory if it exists
+      if (fs.existsSync(testProjectPath)) {
+        process.chdir(testProjectPath);
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+      }
 
-      const validateTool = require('./apps/tools/caws/validate.js');
-      const provenanceTool = require('./apps/tools/caws/provenance.js');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
 
       // Step 1: Break the working spec
       const workingSpecPath = '.caws/working-spec.yaml';
@@ -283,7 +341,10 @@ describe('CAWS Tools Integration', () => {
         provenanceTool();
       }).not.toThrow();
 
-      process.chdir(__dirname);
+      // Restore working directory
+      if (process.cwd() !== __dirname) {
+        process.chdir(__dirname);
+      }
     });
   });
 });

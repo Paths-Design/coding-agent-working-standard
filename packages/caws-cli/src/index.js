@@ -555,6 +555,28 @@ async function initProject(projectName, options) {
       projectName = sanitizedName;
     }
 
+    // Validate project name length
+    if (projectName.length > 50) {
+      console.error(chalk.red('❌ Project name is too long (max 50 characters)'));
+      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      process.exit(1);
+    }
+
+    // Validate project name format
+    if (projectName.length === 0) {
+      console.error(chalk.red('❌ Project name cannot be empty'));
+      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      process.exit(1);
+    }
+
+    // Check for invalid characters that should cause immediate failure
+    if (projectName.includes('/') || projectName.includes('\\') || projectName.includes('..')) {
+      console.error(chalk.red('❌ Project name contains invalid characters'));
+      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      console.error(chalk.blue('💡 Project name should not contain: / \\ ..'));
+      process.exit(1);
+    }
+
     // Check if directory already exists
     if (fs.existsSync(projectName)) {
       console.error(chalk.red(`❌ Directory ${projectName} already exists`));
@@ -1285,10 +1307,15 @@ async function scaffoldProject(options) {
   const projectName = path.basename(currentDir);
 
   console.log(chalk.cyan(`🔧 Enhancing existing project with CAWS: ${projectName}`));
+  console.log(chalk.gray(`DEBUG: scaffoldProject called with options: ${JSON.stringify(options)}`));
+  console.log(chalk.gray(`DEBUG: currentDir: ${currentDir}`));
 
   try {
     // Detect existing CAWS setup
     const setup = detectCAWSSetup(currentDir);
+
+    console.log(chalk.gray(`DEBUG: setup.hasCAWSDir: ${setup.hasCAWSDir}`));
+    console.log(chalk.gray(`DEBUG: setup.cawsDir: ${setup.cawsDir}`));
 
     if (!setup.hasCAWSDir) {
       console.error(chalk.red('❌ No .caws directory found'));
@@ -1297,6 +1324,12 @@ async function scaffoldProject(options) {
     }
 
     // Adapt behavior based on setup type
+    console.log(
+      chalk.gray(
+        `DEBUG: setup.isEnhanced: ${setup.isEnhanced}, setup.isAdvanced: ${setup.isAdvanced}`
+      )
+    );
+
     if (setup.isEnhanced) {
       console.log(chalk.green('🎯 Enhanced CAWS detected - adding automated publishing'));
     } else if (setup.isAdvanced) {
@@ -1306,6 +1339,7 @@ async function scaffoldProject(options) {
     }
 
     // Generate provenance for scaffolding operation
+    console.log(chalk.gray('DEBUG: Generating provenance'));
     const scaffoldProvenance = {
       agent: 'caws-cli',
       model: 'cli-scaffold',
@@ -1322,18 +1356,36 @@ async function scaffoldProject(options) {
       approvals: [],
       timestamp: new Date().toISOString(),
       version: CLI_VERSION,
-      hash: require('crypto').createHash('sha256').update(JSON.stringify(this)).digest('hex'),
     };
+
+    // Calculate hash after object is fully defined
+    scaffoldProvenance.hash = require('crypto')
+      .createHash('sha256')
+      .update(JSON.stringify(scaffoldProvenance))
+      .digest('hex');
+
+    console.log(chalk.gray('DEBUG: About to determine enhancements'));
 
     // Determine what enhancements to add based on setup type
     const enhancements = [];
 
+    console.log(chalk.gray(`Current dir: ${currentDir}`));
+    console.log(chalk.gray(`Template dir: ${cawsSetup.templateDir}`));
+    console.log(
+      chalk.gray(
+        `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
+      )
+    );
+
     // Add CAWS tools directory structure (matches test expectations)
+    console.log(chalk.gray('Adding CAWS tools enhancement'));
     enhancements.push({
       name: 'apps/tools/caws',
       description: 'CAWS tools directory',
       required: true,
     });
+
+    console.log(chalk.gray(`Enhancements count: ${enhancements.length}`));
 
     enhancements.push({
       name: 'codemod',
@@ -1395,6 +1447,10 @@ async function scaffoldProject(options) {
     for (const enhancement of enhancements) {
       const sourcePath = path.join(cawsSetup.templateDir, enhancement.name);
       const destPath = path.join(currentDir, enhancement.name);
+
+      console.log(chalk.gray(`Processing enhancement: ${enhancement.name}`));
+      console.log(chalk.gray(`  Source: ${sourcePath}`));
+      console.log(chalk.gray(`  Dest: ${destPath}`));
 
       if (!fs.existsSync(destPath)) {
         if (fs.existsSync(sourcePath)) {
