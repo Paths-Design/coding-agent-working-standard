@@ -15,7 +15,7 @@
     [
       "@semantic-release/npm",
       {
-        "npmPublish": true,
+        "npmPublish": false,
         "tarballDir": "dist",
         "pkgRoot": "packages/caws-cli"
       }
