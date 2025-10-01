@@ -220,6 +220,100 @@ module.exports = {
       expect(content).toContain('CAWS');
     });
 
+    test('should initialize in current directory with "."', () => {
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
+      const currentDirTest = 'test-current-dir-init';
+
+      // Create directory and add existing file
+      fs.mkdirSync(currentDirTest);
+      fs.writeFileSync(path.join(currentDirTest, 'existing.js'), 'console.log("test")');
+
+      // Change to directory and init with '.'
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(currentDirTest);
+        execSync(`node "${cliPath}" init . --non-interactive`, {
+          encoding: 'utf8',
+        });
+
+        // Should create CAWS files in current directory, not subdirectory
+        expect(fs.existsSync('.caws')).toBe(true);
+        expect(fs.existsSync('.agent')).toBe(true);
+        expect(fs.existsSync('agents.md')).toBe(true);
+        expect(fs.existsSync('existing.js')).toBe(true);
+
+        // Should NOT create a subdirectory named '-'
+        expect(fs.existsSync('-')).toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+        if (fs.existsSync(currentDirTest)) {
+          fs.rmSync(currentDirTest, { recursive: true, force: true });
+        }
+      }
+    });
+
+    test('should handle agents.md conflict with caws.md fallback', () => {
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
+      const conflictTest = 'test-agents-conflict';
+
+      // Create directory with existing agents.md
+      fs.mkdirSync(conflictTest);
+      fs.writeFileSync(path.join(conflictTest, 'agents.md'), 'Custom agents guide');
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(conflictTest);
+        execSync(`node "${cliPath}" init . --non-interactive`, {
+          encoding: 'utf8',
+        });
+
+        // Original agents.md should be preserved
+        const originalContent = fs.readFileSync('agents.md', 'utf8');
+        expect(originalContent).toBe('Custom agents guide');
+
+        // CAWS guide should be in caws.md
+        expect(fs.existsSync('caws.md')).toBe(true);
+        const cawsContent = fs.readFileSync('caws.md', 'utf8');
+        expect(cawsContent.length).toBeGreaterThan(1000);
+        expect(cawsContent).toContain('CAWS');
+      } finally {
+        process.chdir(originalCwd);
+        if (fs.existsSync(conflictTest)) {
+          fs.rmSync(conflictTest, { recursive: true, force: true });
+        }
+      }
+    });
+
+    test('should skip guide copy when both agents.md and caws.md exist', () => {
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
+      const bothExistTest = 'test-both-exist';
+
+      // Create directory with both files
+      fs.mkdirSync(bothExistTest);
+      fs.writeFileSync(path.join(bothExistTest, 'agents.md'), 'Custom agents');
+      fs.writeFileSync(path.join(bothExistTest, 'caws.md'), 'Custom CAWS');
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(bothExistTest);
+        const output = execSync(`node "${cliPath}" init . --non-interactive`, {
+          encoding: 'utf8',
+        });
+
+        // Should show warning about skipping
+        expect(output).toContain('skipping guide copy');
+
+        // Both files should be preserved
+        expect(fs.readFileSync('agents.md', 'utf8')).toBe('Custom agents');
+        expect(fs.readFileSync('caws.md', 'utf8')).toBe('Custom CAWS');
+      } finally {
+        process.chdir(originalCwd);
+        if (fs.existsSync(bothExistTest)) {
+          fs.rmSync(bothExistTest, { recursive: true, force: true });
+        }
+      }
+    });
+
     test('should generate provenance manifest', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {

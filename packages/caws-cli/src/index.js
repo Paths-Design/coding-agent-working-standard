@@ -586,11 +586,14 @@ async function initProject(projectName, options) {
       process.exit(1);
     }
 
-    // Sanitize project name
-    const sanitizedName = projectName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
-    if (sanitizedName !== projectName) {
-      console.warn(chalk.yellow(`⚠️  Project name sanitized to: ${sanitizedName}`));
-      projectName = sanitizedName;
+    // Special case: '.' means current directory, don't sanitize
+    if (projectName !== '.') {
+      // Sanitize project name
+      const sanitizedName = projectName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+      if (sanitizedName !== projectName) {
+        console.warn(chalk.yellow(`⚠️  Project name sanitized to: ${sanitizedName}`));
+        projectName = sanitizedName;
+      }
     }
 
     // Validate project name length
@@ -615,8 +618,12 @@ async function initProject(projectName, options) {
       process.exit(1);
     }
 
+    // Determine if initializing in current directory
+    const initInCurrentDir = projectName === '.';
+    const targetDir = initInCurrentDir ? process.cwd() : path.resolve(process.cwd(), projectName);
+
     // Check if directory already exists (skip check for current directory)
-    if (projectName !== '.' && fs.existsSync(projectName)) {
+    if (!initInCurrentDir && fs.existsSync(projectName)) {
       console.error(chalk.red(`❌ Directory ${projectName} already exists`));
       console.error(chalk.blue('💡 Choose a different name or remove the existing directory'));
       process.exit(1);
@@ -625,16 +632,18 @@ async function initProject(projectName, options) {
     // Save the original template directory before changing directories
     const originalTemplateDir = cawsSetup?.hasTemplateDir ? cawsSetup.templateDir : null;
 
-    // Check for existing agents.md/caws.md BEFORE changing directories
-    const targetDir = path.resolve(process.cwd(), projectName);
+    // Check for existing agents.md/caws.md in target directory
     const existingAgentsMd = fs.existsSync(path.join(targetDir, 'agents.md'));
     const existingCawsMd = fs.existsSync(path.join(targetDir, 'caws.md'));
 
-    // Create project directory
-    await fs.ensureDir(projectName);
-    process.chdir(projectName);
-
-    console.log(chalk.green(`📁 Created project directory: ${projectName}`));
+    // Create project directory and change to it (unless already in current directory)
+    if (!initInCurrentDir) {
+      await fs.ensureDir(projectName);
+      process.chdir(projectName);
+      console.log(chalk.green(`📁 Created project directory: ${projectName}`));
+    } else {
+      console.log(chalk.green(`📁 Initializing in current directory`));
+    }
 
     // Detect and adapt to existing setup
     const currentSetup = detectCAWSSetup(process.cwd());
@@ -700,9 +709,12 @@ async function initProject(projectName, options) {
 
     // Set default answers for non-interactive mode
     if (!options.interactive || options.nonInteractive) {
+      // Use directory name for current directory init
+      const displayName = initInCurrentDir ? path.basename(process.cwd()) : projectName;
+
       answers = {
-        projectId: projectName.toUpperCase().replace(/[^A-Z0-9]/g, '-') + '-001',
-        projectTitle: projectName.charAt(0).toUpperCase() + projectName.slice(1).replace(/-/g, ' '),
+        projectId: displayName.toUpperCase().replace(/[^A-Z0-9]/g, '-') + '-001',
+        projectTitle: displayName.charAt(0).toUpperCase() + displayName.slice(1).replace(/-/g, ' '),
         riskTier: 2,
         projectMode: 'feature',
         maxFiles: 25,
