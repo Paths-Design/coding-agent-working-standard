@@ -135,3 +135,4 @@ local.*
 *.patch
 *.diff
 *.rej
+packages/caws-cli/templates/

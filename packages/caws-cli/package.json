@@ -9,7 +9,8 @@
   "preferGlobal": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "templates"
   ],
   "scripts": {
     "build": "mkdir -p dist && cp src/*.js dist/ && npm run typecheck",
