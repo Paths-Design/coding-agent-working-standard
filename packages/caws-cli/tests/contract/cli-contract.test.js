@@ -19,6 +19,14 @@ describe('CLI Interface Contracts', () => {
     }
   });
 
+  beforeEach(() => {
+    // Clean up any existing test project
+    if (fs.existsSync(testProjectName)) {
+      fs.rmSync(testProjectName, { recursive: true, force: true });
+      console.log(`🧹 Cleaned up: ${testProjectName}`);
+    }
+  });
+
   afterAll(() => {
     // Clean up test project
     if (fs.existsSync(testProjectName)) {

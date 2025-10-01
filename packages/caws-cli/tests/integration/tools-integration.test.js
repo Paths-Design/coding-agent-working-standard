@@ -50,22 +50,20 @@ describe('CAWS Tools Integration', () => {
 
   beforeEach(() => {
     // Clean up any existing test project directories
-    const baseTestDir = path.join(__dirname, 'test-tools-integration');
     const timestampPattern = /^test-tools-integration(-\d+)?$/;
 
-    // Clean up the base directory
-    if (fs.existsSync(baseTestDir)) {
-      fs.rmSync(baseTestDir, { recursive: true, force: true });
-    }
-
-    // Clean up any timestamped variants
     try {
       const items = fs.readdirSync(__dirname);
       items.forEach((item) => {
         if (timestampPattern.test(item)) {
           const itemPath = path.join(__dirname, item);
-          if (fs.statSync(itemPath).isDirectory()) {
-            fs.rmSync(itemPath, { recursive: true, force: true });
+          try {
+            if (fs.statSync(itemPath).isDirectory()) {
+              fs.rmSync(itemPath, { recursive: true, force: true });
+              console.log(`🧹 Cleaned up: ${item}`);
+            }
+          } catch (_err) {
+            // Ignore errors during cleanup
           }
         }
       });

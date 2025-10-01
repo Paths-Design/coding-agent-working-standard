@@ -145,6 +145,11 @@ describe('Performance Budget Tests', () => {
 
         const startTime = performance.now();
 
+        // Verify the project was created before changing directory
+        if (!fs.existsSync(testProjectPath)) {
+          throw new Error(`Test project not created: ${testProjectPath}`);
+        }
+
         process.chdir(testProjectPath);
 
         execSync(`node "${cliPath}" scaffold`, {

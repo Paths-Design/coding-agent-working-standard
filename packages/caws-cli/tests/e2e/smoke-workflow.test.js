@@ -48,6 +48,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       // Clean up any existing test project
       if (fs.existsSync(testProjectPath)) {
         fs.rmSync(testProjectPath, { recursive: true, force: true });
+        console.log(`🧹 Cleaned up: ${testProjectName}`);
       }
     });
 
