@@ -25,7 +25,7 @@ npm run lint
 
 ### CLI Usage
 
-#### Option 1: Global Installation (Recommended)
+#### Option 1: Global Installation (Recommended for CLI usage)
 ```bash
 # Install globally for CLI usage
 npm install -g @paths.design/caws-cli
@@ -40,7 +40,7 @@ caws scaffold
 caws validate
 ```
 
-#### Option 2: Local Development (Monorepo)
+#### Option 2: Local Development (Monorepo) (Recommended for development)
 ```bash
 # Build and run CLI directly (development)
 node packages/caws-cli/dist/index.js --help
@@ -55,7 +55,7 @@ node packages/caws-cli/dist/index.js scaffold
 node packages/caws-cli/dist/index.js validate
 ```
 
-#### Option 3: npm Scripts (Project Context)
+#### Option 3: npm Scripts (Project Context) (Recommended for project context)
 ```bash
 # From the project root (when working in this monorepo)
 node apps/tools/caws/start.js        # Start a new change
