@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.0...v2.0.1) (2025-10-01)
+
+
+### Bug Fixes
+
+* remove unnecessary @caws/template dependency from CLI package ([dde6502](https://github.com/Paths-Design/coding-agent-working-standard/commit/dde65028a5e587f141c7278ede4617c6b89979e1))
+
 # [2.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v1.0.0...v2.0.0) (2025-10-01)
 
 
