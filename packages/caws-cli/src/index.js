@@ -706,7 +706,7 @@ async function initProject(projectName, options) {
     }
 
     // Set default answers for non-interactive mode
-    if (!options.interactive || options.nonInteractive) {
+    if (!options.interactive || options.nonInteractive || process.env.CI) {
       answers = {
         projectId: projectName.toUpperCase().replace(/[^A-Z0-9]/g, '-') + '-001',
         projectTitle: projectName.charAt(0).toUpperCase() + projectName.slice(1).replace(/-/g, ' '),
@@ -1435,6 +1435,12 @@ async function scaffoldProject(options) {
 
       if (!setup.templateDir) {
         console.log(chalk.red(`❌ No template directory available!`));
+        console.log(chalk.yellow(`🔍 Searched paths:`));
+        possiblePaths.forEach((searchPath) => {
+          console.log(chalk.gray(`   - ${searchPath}`));
+        });
+        console.log(chalk.blue(`💡 This is expected when using the published CLI package.`));
+        console.log(chalk.blue(`💡 The scaffold command will create basic structure instead.`));
       }
     }
 
@@ -1442,9 +1448,27 @@ async function scaffoldProject(options) {
     cawsSetup = setup;
 
     if (!setup.hasCAWSDir) {
-      console.error(chalk.red('❌ No .caws directory found'));
-      console.error(chalk.blue('💡 Run "caws init <project-name>" first to create a CAWS project'));
-      process.exit(1);
+      if (options.init) {
+        console.log(chalk.cyan('🔧 Initializing CAWS in current directory...'));
+        await fs.ensureDir('.caws');
+        await fs.ensureDir('.agent');
+        console.log(chalk.green('✅ Created .caws directory structure'));
+        console.log(chalk.blue('💡 Now you can run "caws scaffold" again to add components'));
+
+        // Update setup to reflect new CAWS directory
+        setup.hasCAWSDir = true;
+        setup.cawsDir = path.resolve('.caws');
+      } else {
+        console.error(chalk.red('❌ No .caws directory found'));
+        console.error(chalk.blue('💡 You have two options:'));
+        console.error(
+          chalk.blue('   1. Run "caws init <project-name>" to create a new CAWS project')
+        );
+        console.error(
+          chalk.blue('   2. Run "caws scaffold --init" to add CAWS to current directory')
+        );
+        process.exit(1);
+      }
     }
 
     // Adapt behavior based on setup type
@@ -1661,7 +1685,21 @@ async function scaffoldProject(options) {
 program
   .name('caws')
   .description('CAWS - Coding Agent Workflow System CLI')
-  .version(CLI_VERSION, '-v, --version', 'Show version information');
+  .version(CLI_VERSION, '-v, --version', 'Show version information')
+  .addHelpText(
+    'after',
+    `
+Examples:
+  $ caws init my-project          Create a new CAWS project
+  $ caws scaffold --init          Add CAWS to current directory
+  $ caws scaffold                 Add components to existing CAWS project
+  $ caws init my-project --non-interactive  Create project without prompts
+
+Commands:
+  init    Create a new CAWS project from scratch
+  scaffold Add CAWS components to existing project
+  `
+  );
 
 program
   .command('init')
@@ -1679,6 +1717,7 @@ program
   .alias('s')
   .description('Add CAWS components to existing project')
   .option('-f, --force', 'Overwrite existing files')
+  .option('--init', 'Initialize CAWS in current directory (creates .caws directory)')
   .action(scaffoldProject);
 
 // Error handling
