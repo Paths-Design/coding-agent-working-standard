@@ -17,6 +17,28 @@ describe('Performance Budget Tests', () => {
     }
   });
 
+  afterAll(() => {
+    // Clean up test directories
+    const testDirPatterns = [/^test-perf-init$/, /^test-perf-scaffold$/];
+    try {
+      const items = fs.readdirSync(__dirname);
+      items.forEach((item) => {
+        if (testDirPatterns.some((pattern) => pattern.test(item))) {
+          const itemPath = path.join(__dirname, item);
+          try {
+            if (fs.statSync(itemPath).isDirectory()) {
+              fs.rmSync(itemPath, { recursive: true, force: true });
+            }
+          } catch (err) {
+            // Ignore errors during cleanup
+          }
+        }
+      });
+    } catch (error) {
+      // Ignore errors if directory doesn't exist
+    }
+  });
+
   describe('CLI Startup Performance', () => {
     test('should start up within performance budget', () => {
       // Performance Contract: CLI should start up quickly (< 500ms)

@@ -1,6 +1,9 @@
 /**
  * @fileoverview CAWS Provenance Tool
  * @author @darianrosebrook
+ *
+ * Note: For enhanced TypeScript version with better error handling, use provenance.ts
+ * This .js version provides basic provenance for backward compatibility
  */
 
 /**
@@ -92,6 +95,31 @@ function saveProvenance(provenance, outputPath) {
     console.log(`✅ Provenance saved to ${outputPath}`);
   } catch (error) {
     throw new Error(`Failed to save provenance: ${error.message}`);
+  }
+}
+
+// Handle direct script execution
+if (require.main === module) {
+  const command = process.argv[2];
+
+  try {
+    if (command === 'generate') {
+      const provenance = generateProvenance();
+      const outputPath = process.argv[3] || '.agent/provenance.json';
+      saveProvenance(provenance, outputPath);
+      console.log('✅ Provenance generated successfully');
+    } else {
+      console.log('CAWS Provenance Tool');
+      console.log('');
+      console.log('Usage:');
+      console.log('  node provenance.js generate [output-path]');
+      console.log('');
+      console.log('Note: For enhanced features, use: npx tsx provenance.ts');
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error(`❌ Error: ${error.message}`);
+    process.exit(1);
   }
 }
 

@@ -195,15 +195,15 @@ graph TD
 Start simple, add complexity as needed:
 
 ```bash
-# Day 1: Basic pre-commit
+# Initial Setup: Basic pre-commit
 - Naming conventions
 - Lint staged files
 
-# Week 1: Add pre-push
+# Add Local Validation: Pre-push hooks
 + Unit tests
 + Build verification
 
-# Month 1: Comprehensive CI
+# Full Integration: Comprehensive CI
 + All test types
 + CAWS guards
 + Quality gates

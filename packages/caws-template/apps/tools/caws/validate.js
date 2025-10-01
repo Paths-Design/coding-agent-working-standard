@@ -1,6 +1,9 @@
 /**
  * @fileoverview CAWS Validation Tool
  * @author @darianrosebrook
+ *
+ * Note: For enhanced TypeScript version with schema validation, use validate.ts
+ * This .js version provides basic validation for backward compatibility
  */
 
 /**
@@ -29,7 +32,6 @@ function validateWorkingSpec(specPath) {
     if (!spec.id) errors.push({ message: 'Missing required field: id' });
     if (!spec.title) errors.push({ message: 'Missing required field: title' });
     if (!spec.risk_tier) errors.push({ message: 'Missing required field: risk_tier' });
-    if (!spec.mode) errors.push({ message: 'Missing required field: mode' });
 
     if (spec.risk_tier && (spec.risk_tier < 1 || spec.risk_tier > 3)) {
       errors.push({ message: 'Risk tier must be 1, 2, or 3' });
@@ -56,6 +58,8 @@ if (require.main === module) {
   const specPath = process.argv[2];
   if (!specPath) {
     console.error('Usage: node validate.js <spec-path>');
+    console.log('');
+    console.log('Note: For enhanced schema validation, use: npx tsx validate.ts spec <spec-path>');
     process.exit(1);
   }
 

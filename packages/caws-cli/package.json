@@ -16,22 +16,23 @@
     "dev": "mkdir -p dist && cp src/*.js dist/ && node dist/index.js",
     "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
-    "test": "npm run build && jest",
-    "test:unit": "npm run build && jest",
-    "test:contract": "npm run build && jest --testPathPattern=contract",
-    "test:integration": "npm run build && jest --testPathPattern=integration",
-    "test:e2e:smoke": "npm run build && jest --testPathPattern=e2e",
-    "test:mutation": "npm run build && jest --testPathPattern=mutation",
-    "test:axe": "npm run build && jest --testPathPattern=axe",
-    "perf:budgets": "npm run build && jest --testPathPattern=perf",
+    "test": "npm run build && jest && npm run test:cleanup",
+    "test:unit": "npm run build && jest && npm run test:cleanup",
+    "test:contract": "npm run build && jest --testPathPattern=contract && npm run test:cleanup",
+    "test:integration": "npm run build && jest --testPathPattern=integration && npm run test:cleanup",
+    "test:e2e:smoke": "npm run build && jest --testPathPattern=e2e && npm run test:cleanup",
+    "test:mutation": "npm run build && jest --testPathPattern=mutation && npm run test:cleanup",
+    "test:axe": "npm run build && jest --testPathPattern=axe && npm run test:cleanup",
+    "perf:budgets": "npm run build && jest --testPathPattern=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
+    "test:cleanup": "node scripts/cleanup-tests.js",
     "lint": "eslint src/**/*.js tests/**/*.js",
     "lint:fix": "eslint src/**/*.js tests/**/*.js --fix",
     "lint:staged": "eslint src/**/*.js tests/**/*.js",
     "format": "prettier --write src/**/*.js tests/**/*.js",
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
-    "clean": "rm -rf dist test-caws-project .agent"
+    "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup"
   },
   "keywords": [
     "caws",
@@ -49,11 +50,11 @@
     "directory": "packages/caws-cli"
   },
   "dependencies": {
+    "@caws/template": "1.0.0",
     "ajv": "^8.12.0",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
-    "inquirer": "^9.0.0",
-    "@caws/template": "1.0.0"
+    "inquirer": "^9.0.0"
   },
   "devDependencies": {
     "@semantic-release/changelog": "6.0.3",
@@ -65,14 +66,15 @@
     "@types/js-yaml": "^4.0.0",
     "@types/node": "^20.0.0",
     "chalk": "4.1.2",
-    "eslint": "^8.0.0",
-    "eslint-config-prettier": "^9.0.0",
+    "eslint": "9.36.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-n": "17.23.1",
     "eslint-plugin-node": "^11.1.0",
-    "jest": "^29.0.0",
+    "jest": "30.1.3",
     "js-yaml": "4.1.0",
     "lint-staged": "15.5.2",
     "prettier": "^3.0.0",
-    "semantic-release": "24.2.9",
+    "semantic-release": "25.0.0-beta.6",
     "typescript": "^5.0.0"
   },
   "engines": {

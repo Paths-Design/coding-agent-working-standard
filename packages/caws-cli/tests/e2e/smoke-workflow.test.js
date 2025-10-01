@@ -18,6 +18,28 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
     }
   });
 
+  afterAll(() => {
+    // Clean up all e2e test directories
+    const testDirPattern = /^test-e2e-/;
+    try {
+      const items = fs.readdirSync(__dirname);
+      items.forEach((item) => {
+        if (testDirPattern.test(item)) {
+          const itemPath = path.join(__dirname, item);
+          try {
+            if (fs.statSync(itemPath).isDirectory()) {
+              fs.rmSync(itemPath, { recursive: true, force: true });
+            }
+          } catch (err) {
+            // Ignore errors during cleanup
+          }
+        }
+      });
+    } catch (error) {
+      // Ignore errors if directory doesn't exist
+    }
+  });
+
   describe('Complete Project Creation Workflow', () => {
     const testProjectName = 'test-e2e-complete-project';
     const testProjectPath = path.join(__dirname, testProjectName);

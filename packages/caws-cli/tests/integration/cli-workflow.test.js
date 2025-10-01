@@ -34,6 +34,13 @@ describe('CLI Workflow Integration', () => {
     }
   });
 
+  afterAll(() => {
+    // Final cleanup: Remove test directory if it still exists
+    if (fs.existsSync(testProjectPath)) {
+      fs.rmSync(testProjectPath, { recursive: true, force: true });
+    }
+  });
+
   describe('Complete Project Workflow', () => {
     test('should complete full project initialization and scaffolding workflow', () => {
       // Integration Contract: CLI should support complete project setup workflow

@@ -578,7 +578,7 @@ function getCategorySuggestions(category, priority) {
 function generateAdoptionRoadmap(scores) {
   const phases = [
     {
-      name: 'Phase 1: Foundation',
+      name: 'Foundation Setup',
       duration: '2-4 weeks',
       prerequisites: ['Basic project structure', 'Development environment'],
       tasks: [
@@ -590,9 +590,9 @@ function generateAdoptionRoadmap(scores) {
       success_criteria: 'CAWS CLI operational, basic quality gates in place',
     },
     {
-      name: 'Phase 2: Testing Infrastructure',
+      name: 'Testing Infrastructure',
       duration: '4-6 weeks',
-      prerequisites: ['Phase 1 complete'],
+      prerequisites: ['Foundation setup complete'],
       tasks: [
         'Implement comprehensive test suite',
         'Add test coverage reporting',
@@ -602,9 +602,9 @@ function generateAdoptionRoadmap(scores) {
       success_criteria: 'Test coverage >70%, automated testing operational',
     },
     {
-      name: 'Phase 3: Documentation & Quality',
+      name: 'Documentation & Quality',
       duration: '3-5 weeks',
-      prerequisites: ['Phase 2 complete'],
+      prerequisites: ['Testing infrastructure complete'],
       tasks: [
         'Complete project documentation',
         'Implement advanced quality gates',
@@ -732,7 +732,7 @@ if (require.main === module) {
       });
 
       console.log('\n🎯 Next Steps:');
-      console.log('   1. Start with Phase 1: Foundation tasks');
+      console.log('   1. Start with Foundation setup tasks');
       console.log('   2. Address high-priority recommendations first');
       console.log('   3. Set up CAWS CLI and create initial working spec');
       console.log('   4. Gradually implement testing and quality improvements');

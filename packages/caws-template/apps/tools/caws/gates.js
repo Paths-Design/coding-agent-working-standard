@@ -3,6 +3,9 @@
 /**
  * @fileoverview CAWS Gates Tool - Enhanced Implementation
  * @author @darianrosebrook
+ *
+ * Note: For enhanced TypeScript version with full gate checking, use gates.ts
+ * This .js version provides basic gate enforcement for backward compatibility
  */
 
 // Tier policies for quality gates
@@ -134,7 +137,6 @@ function main() {
       break;
 
     case 'coverage':
-      // Test format: gates.js coverage "2" 0.85 (but actually just coverage value)
       const coverage = parseFloat(process.argv[3]) || 0.85;
       const coverageThreshold = 0.8;
       if (!enforceCoverageGate(coverage, coverageThreshold)) {
@@ -143,7 +145,6 @@ function main() {
       break;
 
     case 'mutation':
-      // Test format: gates.js mutation "2" 0.60
       const mutationScore = parseFloat(process.argv[3]) || 0.6;
       const mutationThreshold = 0.5;
       if (!enforceMutationGate(mutationScore, mutationThreshold)) {
@@ -152,7 +153,6 @@ function main() {
       break;
 
     case 'trust':
-      // Test format: gates.js trust "2" 85
       const trustScore = parseInt(process.argv[3]) || 85;
       const trustThreshold = 82;
       if (!enforceTrustScoreGate(trustScore, trustThreshold)) {
@@ -161,7 +161,6 @@ function main() {
       break;
 
     case 'budget':
-      // Test format: gates.js budget "2" 20 800
       const files = parseInt(process.argv[3]) || 20;
       const loc = parseInt(process.argv[4]) || 800;
       if (!enforceBudgetGate(files, loc, 25, 1000)) {
@@ -178,6 +177,8 @@ function main() {
       console.log('  mutation <score>  - Enforce mutation gate');
       console.log('  trust <score>     - Enforce trust score gate');
       console.log('  budget <files> <loc> - Enforce budget gate');
+      console.log('');
+      console.log('Note: For enhanced features, use gates.ts with: npx tsx gates.ts');
       process.exit(1);
   }
 }
@@ -186,3 +187,12 @@ function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  showTierPolicy,
+  enforceCoverageGate,
+  enforceMutationGate,
+  enforceTrustScoreGate,
+  enforceBudgetGate,
+  TIER_POLICIES,
+};

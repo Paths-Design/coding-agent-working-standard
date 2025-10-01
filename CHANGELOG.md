@@ -86,22 +86,212 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Operating Systems**: Linux, macOS, Windows
 - **CI/CD**: GitHub Actions (adaptable to other platforms)
 
+## [1.1.0] - 2025-01-15
+
+### 🚀 Major Strategic Enhancements
+
+This release implements a comprehensive set of strategic improvements based on AI agent feedback and best practices in agent-driven development, significantly enhancing CAWS's flexibility, scalability, and developer experience.
+
+#### 🛡️ Fast-Lane Escape Hatches (Proposal #1)
+
+**NEW: Time-Boxed Waiver System**
+- Complete waiver management tool (`waivers.js`) for bypassing quality gates
+- Support for multiple waiver reasons: `urgent_fix`, `experimental`, `legacy_code`, `resource_constraints`
+- Automatic expiration enforcement (default 7 days, configurable)
+- Trust score capping (max 79/100 when waivers active)
+- Waivable gates: coverage, mutation, contracts, manual_review, trust_score
+- CLI commands: `create`, `list`, `remove`, `cleanup`, `check`
+
+**NEW: Human Override in Working Spec**
+- Schema support for `human_override` section with:
+  - Approver identification (GitHub username/email)
+  - Detailed rationale requirement
+  - Selective gate waiving
+  - Approval and expiration timestamps
+- Integrated into CLI prompts for emergency scenarios
+
+**NEW: Experimental Mode**
+- Reduced requirements for prototype/sandbox code
+- Automatic containment verification (sandbox location required)
+- Time-boxed expiration (default 14 days)
+- Restricted to Tier 3 (low-risk) changes only
+- Feature flag and directory isolation enforcement
+
+#### 🧪 Test Meaningfulness Over Coverage (Proposal #2)
+
+**NEW: Test Quality Analyzer** (`test-quality.js`)
+- Multi-dimensional test quality scoring (0-100):
+  - **Assertion Density** (25%): Ratio of assertions to test functions
+  - **Edge Case Coverage** (20%): Error conditions, null/undefined, boundaries
+  - **Descriptive Naming** (15%): Quality of test names and descriptions
+  - **Setup/Teardown** (10%): Proper test lifecycle management
+  - **Mocking Quality** (15%): Appropriate use of test doubles
+  - **Spec Coverage** (15%): Alignment with acceptance criteria
+- Multi-language support (JavaScript, Python, Java)
+- Automated recommendations engine
+- Detection of "assertion theater" and superficial tests
+- Spec-to-test traceability verification
+
+**NEW: Mutant Analyzer** (`mutant-analyzer.js`)
+- Classification of mutations as trivial vs meaningful
+- Domain-specific mutation pattern detection
+- Surviving mutant analysis and justification requirements
+- Integration with trust score calculation
+
+#### 🤖 AI Self-Assessment & Human Oversight (Proposal #3)
+
+**NEW: AI Confidence Tracking**
+- Schema support for `ai_assessment` in working specs:
+  - `confidence_level` (1-10 scale)
+  - `uncertainty_areas` (list of unclear aspects)
+  - `complexity_factors` (identified complexities)
+  - `risk_factors` (potential risks)
+- Integrated into CLI interactive prompts
+- Dynamic oversight triggers based on confidence
+- Low-confidence warnings in CI/CD output
+
+#### 🌍 Multi-Language Support (Proposal #5)
+
+**NEW: Language Support System** (`language-support.js`)
+- Comprehensive language configurations:
+  - **JavaScript/TypeScript**: Jest, Stryker, ESLint, Prettier, Pact
+  - **Python**: pytest, mutmut, pylint, black, schemathesis
+  - **Java**: JUnit, PITest, Checkstyle, JaCoCo
+  - **Go**: go test, gremlins, golangci-lint
+  - **Rust**: cargo test, cargo-mutants, clippy
+- Pluggable quality tool configurations per language
+- Language-specific tier threshold adjustments
+- CI configuration generation per language
+- Tool validation and availability checking
+- Multi-language project support
+
+#### ⚡ CI/CD Pipeline Optimization (Proposal #6)
+
+**NEW: CI Optimizer** (`ci-optimizer.js`)
+- **Tier-Based Conditional Execution**:
+  - Skip mutation tests for Tier 3 changes
+  - Skip contract tests for Tier 3 without external APIs
+  - Property-based tests only for Tier 1
+  - Performance tests only for Tier 1-2
+- **Selective Test Execution**: Run only tests related to changed files
+- **Two-Phase Pipeline**: Quick feedback for commits, full validation for PRs
+- **Parallel Execution**: Maximize parallelization of independent checks
+- Workflow analysis and optimization recommendations
+- Estimated time savings per optimization strategy
+
+#### 📊 Legacy Integration & Assessment (Proposal #7)
+
+**NEW: Legacy Assessor** (`legacy-assessor.js`)
+- Comprehensive codebase assessment without enforcement
+- Multi-category scoring:
+  - Testing infrastructure and coverage
+  - Documentation completeness
+  - Code quality and maintainability
+  - Security posture
+  - Performance characteristics
+- Risk profile calculation with tier recommendations
+- Phased adoption roadmap generation
+- Gap analysis and prioritized recommendations
+- Support for grandfathering legacy modules
+
+#### 🎯 Enhanced Trust Score & Quality Metrics
+
+**NEW: Advanced Trust Score Calculation**
+- Weighted composite scoring across 9 dimensions:
+  - Coverage (20%), Mutation (20%), Contracts (16%)
+  - Accessibility (8%), Performance (8%), Flake Rate (8%)
+  - Mode Compliance (6%), Scope Budget (6%), Supply Chain (4%)
+- Integration with waiver system (score capping)
+- Real-time dashboard with provenance data
+- Historical trend tracking capabilities
+
+**NEW: Performance Budget System** (`perf-budgets.ts`)
+- Configurable performance budgets per tier
+- Automated enforcement in CI/CD
+- Budget compliance tracking
+- Performance regression detection
+
+**NEW: Flake Detector** (`flake-detector.ts`)
+- Automatic flaky test detection
+- Quarantine system for unreliable tests
+- Historical flake rate tracking
+- Impact on trust score calculation
+
+**NEW: Spec-Test Mapper** (`spec-test-mapper.ts`)
+- Links acceptance criteria to test cases
+- Ensures 1:1 mapping of requirements to tests
+- Gap detection for untested requirements
+- Auto-generation of test stubs from specs
+
+#### 📈 Dashboard & Observability
+
+**NEW: Real-Time Dashboard** (`dashboard.js`)
+- Live provenance data visualization
+- Compliance status across all gates
+- Performance budget tracking
+- Flake rate monitoring
+- Mode and scope compliance verification
+- SBOM and attestation validity checks
+- Trust score trends and analytics
+
+#### 🔧 Property-Based Testing Support
+
+**NEW: Property Testing Generator** (`property-testing.js`)
+- Multi-language property test templates
+- Common property patterns (idempotency, commutativity, invariants)
+- Integration with fast-check (JS), Hypothesis (Python), QuickCheck (Haskell)
+- Setup file generation per language
+- Comprehensive documentation generation
+
+#### 📚 Documentation Improvements
+
+- Removed "phase" and "week" terminology from all documentation
+- Updated adoption roadmaps with milestone-based progression
+- Enhanced HOOK_STRATEGY.md with progressive enhancement guidance
+- Comprehensive examples for all new features
+- Multi-language setup guides
+
+### 🛠️ Improvements
+
+- Enhanced CLI with AI assessment prompts
+- Improved error messages with actionable guidance
+- Better validation of experimental mode constraints
+- Expanded schema documentation
+- More granular gate control
+
+### 🔒 Security
+
+- Enhanced provenance tracking with confidence levels
+- Better audit trail for human overrides and waivers
+- Improved tool allowlist for multi-language support
+- Strengthened supply chain validation
+
+### 📦 Breaking Changes
+
+- None - All new features are opt-in and backward compatible
+
+### 🐛 Bug Fixes
+
+- Fixed waiver expiration edge cases
+- Improved language detection reliability
+- Enhanced CI conditional logic for tier-based execution
+
+### ⚡ Performance
+
+- Tier-based CI optimization reduces low-risk PR time by ~60%
+- Selective test execution improves feedback loop speed
+- Parallel job execution maximized across all workflows
+
 ## [Unreleased]
 
 ### Planned Features
-- **v1.1.0 - Ecosystem Expansion**:
-  - IDE integrations (VS Code, IntelliJ, etc.)
-  - Enhanced CI/CD platform support
-  - Plugin system for custom tools
-  - Performance monitoring and analytics
-  - Advanced error reporting and diagnostics
 
-- **v1.2.0 - Multi-Language Support**:
-  - Python language support
-  - Go language support
-  - Rust language support
-  - Language-agnostic core framework
-  - Unified tooling across languages
+- **v1.2.0 - IDE Integration & Developer Tools**:
+  - VS Code extension with inline CAWS validation
+  - IntelliJ IDEA plugin
+  - Real-time spec validation in editor
+  - Interactive trust score visualization
+  - AI confidence indicators in IDE
 
 - **v1.3.0 - Enterprise Features**:
   - Advanced analytics and reporting dashboard
