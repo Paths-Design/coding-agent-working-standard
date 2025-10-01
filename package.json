@@ -57,7 +57,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Paths-Design/coding-agent-working-spec.git"
+    "url": "https://github.com/Paths-Design/coding-agent-working-standard.git"
   },
   "packageManager": "npm@10.0.0",
   "devDependencies": {

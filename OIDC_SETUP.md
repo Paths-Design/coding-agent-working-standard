@@ -19,7 +19,7 @@ The CAWS CLI uses **semantic-release** with **GitHub Actions OIDC** for secure, 
 3. **Click "Add trusted publisher"**
 4. **Configure the publisher**:
    - **Publisher name**: `GitHub Actions`
-   - **Repository**: `Paths-Design/coding-agent-working-spec`
+   - **Repository**: `Paths-Design/coding-agent-working-standard`
    - **Package**: `@paths.design/caws-cli`
    - **Environment**: `release` (this will be created automatically)
 

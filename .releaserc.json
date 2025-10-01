@@ -2,7 +2,7 @@
   "branches": [
     "main"
   ],
-  "repositoryUrl": "https://github.com/Paths-Design/coding-agent-working-spec.git",
+  "repositoryUrl": "https://github.com/Paths-Design/coding-agent-working-standard.git",
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",

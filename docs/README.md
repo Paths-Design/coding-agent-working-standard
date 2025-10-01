@@ -176,11 +176,11 @@ If you find documentation issues:
 
 ## 🔗 External Resources
 
-- **GitHub Repository**: [caws/framework](https://github.com/Paths-Design/coding-agent-working-spec)
-- **Issues**: [Bug Reports & Features](https://github.com/Paths-Design/coding-agent-working-spec/issues)
-- **Discussions**: [Community Discussion](https://github.com/Paths-Design/coding-agent-working-spec/discussions)
-- **Releases**: [Release Notes](https://github.com/Paths-Design/coding-agent-working-spec/releases)
-- **Security**: [Security Policy](https://github.com/Paths-Design/coding-agent-working-spec/security)
+- **GitHub Repository**: [caws/framework](https://github.com/Paths-Design/coding-agent-working-standard)
+- **Issues**: [Bug Reports & Features](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **Discussions**: [Community Discussion](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
+- **Releases**: [Release Notes](https://github.com/Paths-Design/coding-agent-working-standard/releases)
+- **Security**: [Security Policy](https://github.com/Paths-Design/coding-agent-working-standard/security)
 
 ## 📞 Contact
 
