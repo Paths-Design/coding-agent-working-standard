@@ -1404,6 +1404,8 @@ async function scaffoldProject(options) {
   const projectName = path.basename(currentDir);
 
   console.log(chalk.cyan(`🔧 Enhancing existing project with CAWS: ${projectName}`));
+  console.log(chalk.gray(`DEBUG: Scaffold function called from: ${currentDir}`));
+  console.log(chalk.gray(`DEBUG: CLI options: ${JSON.stringify(options)}`));
 
   try {
     // Detect existing CAWS setup with current directory context
@@ -1545,7 +1547,9 @@ async function scaffoldProject(options) {
     let skippedCount = 0;
     const addedFiles = [];
 
+    console.log(chalk.gray(`DEBUG: Processing ${enhancements.length} enhancements`));
     for (const enhancement of enhancements) {
+      console.log(chalk.gray(`DEBUG: Processing enhancement: ${enhancement.name}`));
       if (!setup?.templateDir) {
         console.warn(
           chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)

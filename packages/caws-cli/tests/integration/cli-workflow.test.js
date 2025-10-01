@@ -71,15 +71,42 @@ describe('CLI Workflow Integration', () => {
       try {
         process.chdir(cliTestProjectPath);
 
-        execSync(`node "${cliPath}" scaffold`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-        });
+        // Capture scaffold output for debugging
+        let scaffoldOutput = '';
+        try {
+          scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
+            encoding: 'utf8',
+            stdio: 'pipe',
+          });
+        } catch (scaffoldError) {
+          console.log('Scaffold command failed with error:', scaffoldError.message);
+          console.log('Scaffold stderr:', scaffoldError.stderr);
+          console.log('Scaffold stdout:', scaffoldError.stdout);
+          throw scaffoldError;
+        }
+
+        // Log scaffold output for debugging in CI
+        if (process.env.CI) {
+          console.log('Scaffold output:', scaffoldOutput);
+        }
       } finally {
         process.chdir(originalDir);
       }
 
       // Integration Contract: Scaffolding should create complete tool structure
+      // Debug: List what actually exists
+      if (process.env.CI) {
+        console.log('Files in project directory:', fs.readdirSync(cliTestProjectPath));
+        const appsDir = path.join(cliTestProjectPath, 'apps');
+        if (fs.existsSync(appsDir)) {
+          console.log('Files in apps directory:', fs.readdirSync(appsDir));
+          const toolsDir = path.join(appsDir, 'tools');
+          if (fs.existsSync(toolsDir)) {
+            console.log('Files in apps/tools directory:', fs.readdirSync(toolsDir));
+          }
+        }
+      }
+
       expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws'))).toBe(true);
       expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'))).toBe(
         true
