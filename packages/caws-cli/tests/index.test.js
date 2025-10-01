@@ -286,7 +286,7 @@ module.exports = {
         output = error.stdout || '';
       }
       expect(output).toContain('✅ Added CAWS tools directory');
-      expect(output).toContain('✅ Created Codemod transformation scripts');
+      expect(output).toContain('✅ Added Codemod transformation scripts');
     });
 
     test('should generate scaffold provenance', () => {

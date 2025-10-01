@@ -25,9 +25,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
+
+      - name: Configure Git for CI
+        run: |
+          git config --global user.email "ci@paths.design"
+          git config --global user.name "CAWS CI"
 
       - name: Install dependencies
         run: |
@@ -62,7 +67,7 @@ jobs:
       - name: Setup NPM authentication with OIDC
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
         # OIDC token will be automatically provided by GitHub Actions for trusted publishers
 
