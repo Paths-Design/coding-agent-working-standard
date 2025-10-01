@@ -361,7 +361,7 @@ async function copyTemplate(templatePath, destPath, replacements = {}) {
     if (!fs.existsSync(templatePath)) {
       console.error(chalk.red('❌ Template directory not found:'), templatePath);
       console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
-      process.exit(1);
+      throw new Error(`Template directory not found: ${templatePath}`);
     }
 
     // Copy all files and directories
@@ -665,8 +665,18 @@ async function initProject(projectName, options) {
     if (currentSetup.type === 'new') {
       // Copy template files from generic template
       if (cawsSetup && cawsSetup.hasTemplateDir && cawsSetup.templateDir) {
-        await copyTemplate(cawsSetup.templateDir, '.');
-        console.log(chalk.green('✅ Created CAWS project with templates'));
+        try {
+          await copyTemplate(cawsSetup.templateDir, '.');
+          console.log(chalk.green('✅ Created CAWS project with templates'));
+        } catch (templateError) {
+          console.warn(
+            chalk.yellow('⚠️  Template directory not available, creating basic structure')
+          );
+          // Create minimal CAWS structure
+          await fs.ensureDir('.caws');
+          await fs.ensureDir('.agent');
+          console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
+        }
       } else {
         // Create minimal CAWS structure
         await fs.ensureDir('.caws');
@@ -1384,6 +1394,9 @@ async function scaffoldProject(options) {
     // Detect existing CAWS setup with current directory context
     const setup = detectCAWSSetup(currentDir);
 
+    // Override global cawsSetup with current context for scaffold operations
+    cawsSetup = setup;
+
     console.log(chalk.gray(`DEBUG: setup.hasCAWSDir: ${setup.hasCAWSDir}`));
     console.log(chalk.gray(`DEBUG: setup.cawsDir: ${setup.cawsDir}`));
 
@@ -1440,7 +1453,7 @@ async function scaffoldProject(options) {
     const enhancements = [];
 
     console.log(chalk.gray(`Current dir: ${currentDir}`));
-    console.log(chalk.gray(`Template dir: ${cawsSetup?.templateDir || 'not found'}`));
+    console.log(chalk.gray(`Template dir: ${setup?.templateDir || 'not found'}`));
     console.log(
       chalk.gray(
         `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
@@ -1515,13 +1528,13 @@ async function scaffoldProject(options) {
     const addedFiles = [];
 
     for (const enhancement of enhancements) {
-      if (!cawsSetup?.templateDir) {
+      if (!setup?.templateDir) {
         console.warn(
           chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)
         );
         continue;
       }
-      const sourcePath = path.join(cawsSetup.templateDir, enhancement.name);
+      const sourcePath = path.join(setup.templateDir, enhancement.name);
       const destPath = path.join(currentDir, enhancement.name);
 
       console.log(chalk.gray(`Processing enhancement: ${enhancement.name}`));
