@@ -19,5 +19,12 @@ module.exports = {
     'node/shebang': 'off',
     'no-process-exit': 'off', // CLI tools need process.exit
   },
-  ignorePatterns: ['node_modules/', 'dist/', 'build/'],
+  ignorePatterns: [
+    'node_modules/',
+    'dist/',
+    'build/',
+    '.caws/schemas/',
+    '.caws/policy/',
+    '**/*.json',
+  ],
 };

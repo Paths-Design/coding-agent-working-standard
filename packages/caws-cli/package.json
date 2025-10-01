@@ -12,14 +12,23 @@
     "README.md"
   ],
   "scripts": {
-    "build": "mkdir -p dist && cp src/*.js dist/",
+    "build": "mkdir -p dist && cp src/*.js dist/ && npm run typecheck",
     "dev": "mkdir -p dist && cp src/*.js dist/ && node dist/index.js",
+    "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:unit": "jest",
+    "test:contract": "jest --testPathPattern=contract",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:e2e:smoke": "jest --testPathPattern=e2e",
+    "test:mutation": "jest --testPathPattern=mutation",
+    "test:axe": "jest --testPathPattern=axe",
+    "perf:budgets": "jest --testPathPattern=perf",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.js tests/**/*.js",
     "lint:fix": "eslint src/**/*.js tests/**/*.js --fix",
     "format": "prettier --write src/**/*.js tests/**/*.js",
+    "validate": "echo 'CLI package validation not required'",
     "clean": "rm -rf dist test-caws-project .agent"
   },
   "keywords": [

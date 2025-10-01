@@ -9,4 +9,8 @@ module.exports = {
   moduleNameMapper: {
     '^inquirer$': '<rootDir>/tests/mocks/inquirer.js',
   },
+  // Handle errors gracefully to avoid circular structure issues
+  testEnvironmentOptions: {
+    error: false,
+  },
 };

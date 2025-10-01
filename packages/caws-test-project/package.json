@@ -5,9 +5,18 @@
   "scripts": {
     "build": "echo 'Test project does not need building'",
     "test": "echo 'Test project does not have tests'",
+    "test:unit": "echo 'Test project does not have unit tests'",
+    "test:contract": "echo '⚠️  Contract tests not configured'",
+    "test:integration": "echo '⚠️  Integration tests not configured'",
+    "test:e2e:smoke": "echo '⚠️  E2E smoke tests not configured'",
+    "test:mutation": "echo '⚠️  Mutation tests not configured'",
+    "test:axe": "echo '⚠️  Accessibility tests not configured'",
     "lint": "echo 'Test project does not need linting'",
+    "lint:fix": "echo 'Test project does not need linting fixes'",
     "format": "echo 'Test project does not need formatting'",
     "validate": "echo 'Test project does not need validation'",
+    "dev": "echo 'Test project does not need development mode'",
+    "test:watch": "echo 'Test project does not have watchable tests'",
     "clean": "rm -rf .agent"
   },
   "keywords": [

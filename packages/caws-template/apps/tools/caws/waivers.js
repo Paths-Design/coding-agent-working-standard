@@ -7,7 +7,6 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const yaml = require('js-yaml');
 
 /**
@@ -59,33 +58,6 @@ function saveWaiversConfig(config, waiversPath = '.caws/waivers.yml') {
     console.error('❌ Error saving waivers config:', error.message);
     process.exit(1);
   }
-}
-
-/**
- * Check if a waiver is active and applicable
- * @param {Object} waiver - Waiver configuration
- * @param {string} projectId - Project identifier
- * @param {string} gate - Gate to check
- * @returns {boolean} Whether waiver applies
- */
-function isWaiverActive(waiver, projectId, gate) {
-  const now = new Date();
-  const expiresAt = new Date(waiver.expires_at);
-
-  // Check if expired
-  if (now > expiresAt) {
-    return false;
-  }
-
-  // Check if project specific waiver
-  if (waiver.projects && waiver.projects.length > 0) {
-    if (!waiver.projects.includes(projectId)) {
-      return false;
-    }
-  }
-
-  // Check if gate is waived
-  return waiver.gates.includes(gate);
 }
 
 /**

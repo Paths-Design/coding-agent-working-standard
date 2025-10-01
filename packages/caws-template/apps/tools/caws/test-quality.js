@@ -8,7 +8,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 /**
  * Test quality scoring criteria
@@ -49,10 +48,10 @@ const QUALITY_CRITERIA = {
 /**
  * Analyze a single test file for quality metrics
  * @param {string} filePath - Path to test file
- * @param {Object} spec - Working specification for spec coverage check
+ * @param {Object} _spec - Working specification for spec coverage check
  * @returns {Object} Quality analysis results
  */
-function analyzeTestFile(filePath, spec = null) {
+function analyzeTestFile(filePath, _spec = null) {
   let content = '';
   let language = 'javascript';
 
@@ -92,13 +91,13 @@ function analyzeTestFile(filePath, spec = null) {
   // Language-specific analysis
   switch (language) {
     case 'javascript':
-      analyzeJavaScriptTest(content, lines, analysis, spec);
+      analyzeJavaScriptTest(content, lines, analysis, _spec);
       break;
     case 'python':
-      analyzePythonTest(content, lines, analysis, spec);
+      analyzePythonTest(content, lines, analysis, _spec);
       break;
     case 'java':
-      analyzeJavaTest(content, lines, analysis, spec);
+      analyzeJavaTest(content, lines, analysis, _spec);
       break;
   }
 
@@ -108,7 +107,7 @@ function analyzeTestFile(filePath, spec = null) {
 /**
  * Analyze JavaScript/TypeScript test file
  */
-function analyzeJavaScriptTest(content, lines, analysis, spec) {
+function analyzeJavaScriptTest(content, lines, analysis, _spec) {
   // Count test functions (describe/it/test blocks in Jest/Mocha)
   const testPatterns = [/\b(describe|it|test)\s*\(/g, /\btest\s*\(\s*['"`][^'"`]*['"`]/g];
 
@@ -173,8 +172,8 @@ function analyzeJavaScriptTest(content, lines, analysis, spec) {
   analysis.mocksUsed = /\b(mock|spy|stub|jest\.mock|sinon\.)/.test(content);
 
   // Check spec alignment if spec provided
-  if (spec && spec.acceptance) {
-    const specKeywords = spec.acceptance
+  if (_spec && _spec.acceptance) {
+    const specKeywords = _spec.acceptance
       .flatMap((ac) => [ac.given, ac.when, ac.then].filter(Boolean))
       .join(' ')
       .toLowerCase();
@@ -213,7 +212,7 @@ function analyzeJavaScriptTest(content, lines, analysis, spec) {
 /**
  * Analyze Python test file
  */
-function analyzePythonTest(content, lines, analysis, spec) {
+function analyzePythonTest(content, lines, analysis, _spec) {
   // Count test functions
   const testMatches = content.match(/\bdef\s+test_\w+/g);
   analysis.testFunctions = testMatches ? testMatches.length : 0;
@@ -275,7 +274,7 @@ function analyzePythonTest(content, lines, analysis, spec) {
 /**
  * Analyze Java test file
  */
-function analyzeJavaTest(content, lines, analysis, spec) {
+function analyzeJavaTest(content, lines, analysis, _spec) {
   // Count test methods
   const testMatches = content.match(/@\w*Test\s*public\s+void\s+\w+/g);
   analysis.testFunctions = testMatches ? testMatches.length : 0;
@@ -389,10 +388,10 @@ function normalizeScore(value, thresholds) {
 /**
  * Analyze all test files in a directory
  * @param {string} testDir - Directory containing test files
- * @param {Object} spec - Working specification
+ * @param {Object} _spec - Working specification
  * @returns {Object} Analysis summary
  */
-function analyzeTestDirectory(testDir, spec = null) {
+function analyzeTestDirectory(testDir, _spec = null) {
   const results = {
     files: [],
     summary: {
@@ -412,7 +411,7 @@ function analyzeTestDirectory(testDir, spec = null) {
       const stat = fs.statSync(filePath);
 
       if (stat.isFile() && /\.(test|spec)\.(js|ts|py|java)$/.test(file)) {
-        const analysis = analyzeTestFile(filePath, spec);
+        const analysis = analyzeTestFile(filePath, _spec);
         if (analysis) {
           const qualityScore = calculateQualityScore(analysis);
           analysis.qualityScore = qualityScore;

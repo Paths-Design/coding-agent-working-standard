@@ -483,7 +483,7 @@ function generateIntegrationWorkflow(checklist, outputDir = '.github/workflows')
 /**
  * Generate notification script for workflow
  */
-function generateNotificationScript(checklist) {
+function generateNotificationScript(_checklist) {
   return `
 # Generate and send notifications to required stakeholders
 node apps/tools/caws/cross-functional.js notify-stakeholders review-checklist.json
@@ -493,7 +493,7 @@ node apps/tools/caws/cross-functional.js notify-stakeholders review-checklist.js
 /**
  * Generate approval wait script for workflow
  */
-function generateApprovalWaitScript(checklist) {
+function generateApprovalWaitScript(_checklist) {
   return `
 # Wait for all required stakeholders to approve
 node apps/tools/caws/cross-functional.js wait-for-approvals review-checklist.json

@@ -24,16 +24,47 @@ npm run lint
 ```
 
 ### CLI Usage
+
+#### Option 1: Global Installation (Recommended)
 ```bash
+# Install globally for CLI usage
+npm install -g @paths.design/caws-cli
+
 # Initialize a new CAWS project
-npm run init my-new-project
+caws init my-new-project
 
 # Scaffold an existing project
-npm run scaffold
+caws scaffold
 
-# Run the CLI directly
-npm run cli -- init my-project
+# Validate working specification
+caws validate
 ```
+
+#### Option 2: Local Development (Monorepo)
+```bash
+# Build and run CLI directly (development)
+node packages/caws-cli/dist/index.js --help
+
+# Initialize a new CAWS project
+node packages/caws-cli/dist/index.js init my-new-project
+
+# Scaffold CAWS components
+node packages/caws-cli/dist/index.js scaffold
+
+# Validate working specification
+node packages/caws-cli/dist/index.js validate
+```
+
+#### Option 3: npm Scripts (Project Context)
+```bash
+# From the project root (when working in this monorepo)
+node apps/tools/caws/start.js        # Start a new change
+node .caws/validate.js .caws/working-spec.yaml  # Validate working spec
+npm run caws:verify                  # Run full quality gates
+node apps/tools/caws/attest.js > .agent/attestation.json  # Generate attestations
+```
+
+**Note**: For scripts that need arguments, use direct node execution rather than npm run.
 
 ## Monorepo Structure
 

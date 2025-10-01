@@ -21,30 +21,30 @@ const ASSESSMENT_CATEGORIES = {
       testCoverage: { weight: 0.25, description: 'Code coverage metrics' },
       testTypes: { weight: 0.2, description: 'Unit, integration, and E2E tests' },
       testQuality: { weight: 0.15, description: 'Test structure and assertions' },
-      testAutomation: { weight: 0.1, description: 'CI/CD integration' }
-    }
+      testAutomation: { weight: 0.1, description: 'CI/CD integration' },
+    },
   },
   DOCUMENTATION: {
     name: 'Documentation Quality',
-    weight: 0.20,
+    weight: 0.2,
     indicators: {
       readmeQuality: { weight: 0.3, description: 'README completeness' },
       codeComments: { weight: 0.25, description: 'Inline documentation' },
       apiDocs: { weight: 0.2, description: 'API documentation' },
       architectureDocs: { weight: 0.15, description: 'Architecture documentation' },
-      changelog: { weight: 0.1, description: 'Change tracking' }
-    }
+      changelog: { weight: 0.1, description: 'Change tracking' },
+    },
   },
   CODE_QUALITY: {
     name: 'Code Quality',
-    weight: 0.20,
+    weight: 0.2,
     indicators: {
       linting: { weight: 0.25, description: 'Linting configuration' },
       formatting: { weight: 0.2, description: 'Code formatting standards' },
       complexity: { weight: 0.2, description: 'Cyclomatic complexity' },
       dependencies: { weight: 0.2, description: 'Dependency management' },
-      security: { weight: 0.15, description: 'Security scanning' }
-    }
+      security: { weight: 0.15, description: 'Security scanning' },
+    },
   },
   PROJECT_STRUCTURE: {
     name: 'Project Structure',
@@ -54,20 +54,20 @@ const ASSESSMENT_CATEGORIES = {
       buildConfig: { weight: 0.25, description: 'Build configuration' },
       packageManagement: { weight: 0.2, description: 'Package management' },
       ciCd: { weight: 0.15, description: 'CI/CD configuration' },
-      versionControl: { weight: 0.1, description: 'Version control setup' }
-    }
+      versionControl: { weight: 0.1, description: 'Version control setup' },
+    },
   },
   PROCESS_MATURITY: {
     name: 'Process Maturity',
-    weight: 0.20,
+    weight: 0.2,
     indicators: {
       branchingStrategy: { weight: 0.25, description: 'Branching and merging strategy' },
       codeReview: { weight: 0.25, description: 'Code review process' },
       releaseProcess: { weight: 0.2, description: 'Release management' },
       issueTracking: { weight: 0.15, description: 'Issue tracking' },
-      teamCollaboration: { weight: 0.15, description: 'Team collaboration tools' }
-    }
-  }
+      teamCollaboration: { weight: 0.15, description: 'Team collaboration tools' },
+    },
+  },
 };
 
 /**
@@ -83,11 +83,11 @@ function assessProject(projectDir = process.cwd()) {
     scores: {},
     recommendations: [],
     adoptionRoadmap: [],
-    riskProfile: {}
+    riskProfile: {},
   };
 
   // Calculate scores for each category
-  Object.keys(ASSESSMENT_CATEGORIES).forEach(category => {
+  Object.keys(ASSESSMENT_CATEGORIES).forEach((category) => {
     assessment.scores[category] = calculateCategoryScore(projectDir, category);
   });
 
@@ -116,14 +116,14 @@ function getProjectInfo(projectDir) {
     languages: [],
     packageManager: null,
     frameworks: [],
-    size: { files: 0, lines: 0, directories: 0 }
+    size: { files: 0, lines: 0, directories: 0 },
   };
 
   // Detect languages and frameworks
   try {
     const files = fs.readdirSync(projectDir, { recursive: true });
 
-    files.forEach(file => {
+    files.forEach((file) => {
       const filePath = path.join(projectDir, file);
       const stat = fs.statSync(filePath);
 
@@ -164,7 +164,6 @@ function getProjectInfo(projectDir) {
     } else if (fs.existsSync(path.join(projectDir, 'Cargo.toml'))) {
       info.packageManager = 'cargo';
     }
-
   } catch (error) {
     console.warn('⚠️  Error gathering project info:', error.message);
   }
@@ -179,7 +178,7 @@ function calculateCategoryScore(projectDir, category) {
   const categoryInfo = ASSESSMENT_CATEGORIES[category];
   let totalScore = 0;
 
-  Object.keys(categoryInfo.indicators).forEach(indicator => {
+  Object.keys(categoryInfo.indicators).forEach((indicator) => {
     const indicatorInfo = categoryInfo.indicators[indicator];
     const score = calculateIndicatorScore(projectDir, category, indicator);
     const weightedScore = score * indicatorInfo.weight;
@@ -218,24 +217,31 @@ function calculateTestingScore(projectDir, indicator) {
   switch (indicator) {
     case 'testFiles':
       if (fs.existsSync(testDir)) {
-        const testFiles = fs.readdirSync(testDir).filter(f => f.includes('test') || f.includes('spec'));
+        const testFiles = fs
+          .readdirSync(testDir)
+          .filter((f) => f.includes('test') || f.includes('spec'));
         return Math.min(testFiles.length / 10, 1); // Scale based on number of test files
       }
       return 0;
 
     case 'testCoverage':
       // Check for coverage configuration
-      const coverageFiles = ['.nycrc', 'jest.config.js', 'coverage.json', 'sonar-project.properties'];
-      const hasCoverage = coverageFiles.some(file => fs.existsSync(path.join(projectDir, file)));
+      const coverageFiles = [
+        '.nycrc',
+        'jest.config.js',
+        'coverage.json',
+        'sonar-project.properties',
+      ];
+      const hasCoverage = coverageFiles.some((file) => fs.existsSync(path.join(projectDir, file)));
       return hasCoverage ? 1 : 0;
 
     case 'testTypes':
       if (fs.existsSync(testDir)) {
         const files = fs.readdirSync(testDir);
         let types = 0;
-        if (files.some(f => f.includes('unit'))) types += 0.3;
-        if (files.some(f => f.includes('integration'))) types += 0.3;
-        if (files.some(f => f.includes('e2e'))) types += 0.4;
+        if (files.some((f) => f.includes('unit'))) types += 0.3;
+        if (files.some((f) => f.includes('integration'))) types += 0.3;
+        if (files.some((f) => f.includes('e2e'))) types += 0.4;
         return Math.min(types, 1);
       }
       return 0;
@@ -243,21 +249,23 @@ function calculateTestingScore(projectDir, indicator) {
     case 'testQuality':
       // Basic check for test structure
       if (fs.existsSync(testDir)) {
-        const testContent = fs.readdirSync(testDir)
-          .filter(f => f.endsWith('.js') || f.endsWith('.ts'))
-          .map(f => fs.readFileSync(path.join(testDir, f), 'utf8'))
+        const testContent = fs
+          .readdirSync(testDir)
+          .filter((f) => f.endsWith('.js') || f.endsWith('.ts'))
+          .map((f) => fs.readFileSync(path.join(testDir, f), 'utf8'))
           .join('');
 
         const hasAssertions = /\b(expect|assert|should)\b/.test(testContent);
         const hasDescribe = /\bdescribe\b/.test(testContent);
-        return (hasAssertions && hasDescribe) ? 0.8 : 0.3;
+        return hasAssertions && hasDescribe ? 0.8 : 0.3;
       }
       return 0;
 
     case 'testAutomation':
-      const hasCI = fs.existsSync(path.join(projectDir, '.github/workflows')) ||
-                   fs.existsSync(path.join(projectDir, '.gitlab-ci.yml')) ||
-                   fs.existsSync(path.join(projectDir, 'Jenkinsfile'));
+      const hasCI =
+        fs.existsSync(path.join(projectDir, '.github/workflows')) ||
+        fs.existsSync(path.join(projectDir, '.gitlab-ci.yml')) ||
+        fs.existsSync(path.join(projectDir, 'Jenkinsfile'));
       return hasCI ? 1 : 0;
 
     default:
@@ -274,10 +282,11 @@ function calculateDocumentationScore(projectDir, indicator) {
       const readmePath = path.join(projectDir, 'README.md');
       if (fs.existsSync(readmePath)) {
         const readme = fs.readFileSync(readmePath, 'utf8');
-        const score = (readme.length > 500 ? 0.4 : 0) +
-                     (readme.includes('#') ? 0.2 : 0) +
-                     (readme.includes('install') || readme.includes('setup') ? 0.2 : 0) +
-                     (readme.includes('usage') || readme.includes('example') ? 0.2 : 0);
+        const score =
+          (readme.length > 500 ? 0.4 : 0) +
+          (readme.includes('#') ? 0.2 : 0) +
+          (readme.includes('install') || readme.includes('setup') ? 0.2 : 0) +
+          (readme.includes('usage') || readme.includes('example') ? 0.2 : 0);
         return Math.min(score, 1);
       }
       return 0;
@@ -293,27 +302,33 @@ function calculateDocumentationScore(projectDir, indicator) {
 
       const commentLines = sourceFiles.reduce((sum, file) => {
         const content = fs.readFileSync(file, 'utf8');
-        return sum + (content.match(/\/\//g) || []).length +
-                    (content.match(/\/\*/g) || []).length +
-                    (content.match(/#/g) || []).length;
+        return (
+          sum +
+          (content.match(/\/\//g) || []).length +
+          (content.match(/\/\*/g) || []).length +
+          (content.match(/#/g) || []).length
+        );
       }, 0);
 
       const commentRatio = commentLines / totalLines;
       return Math.min(commentRatio * 5, 1); // Scale comment ratio
 
     case 'apiDocs':
-      const hasApiDocs = fs.existsSync(path.join(projectDir, 'docs/api')) ||
-                        fs.existsSync(path.join(projectDir, 'docs/API.md'));
+      const hasApiDocs =
+        fs.existsSync(path.join(projectDir, 'docs/api')) ||
+        fs.existsSync(path.join(projectDir, 'docs/API.md'));
       return hasApiDocs ? 1 : 0;
 
     case 'architectureDocs':
-      const hasArchDocs = fs.existsSync(path.join(projectDir, 'docs/architecture')) ||
-                         fs.existsSync(path.join(projectDir, 'ARCHITECTURE.md'));
+      const hasArchDocs =
+        fs.existsSync(path.join(projectDir, 'docs/architecture')) ||
+        fs.existsSync(path.join(projectDir, 'ARCHITECTURE.md'));
       return hasArchDocs ? 1 : 0;
 
     case 'changelog':
-      const hasChangelog = fs.existsSync(path.join(projectDir, 'CHANGELOG.md')) ||
-                          fs.existsSync(path.join(projectDir, 'HISTORY.md'));
+      const hasChangelog =
+        fs.existsSync(path.join(projectDir, 'CHANGELOG.md')) ||
+        fs.existsSync(path.join(projectDir, 'HISTORY.md'));
       return hasChangelog ? 1 : 0;
 
     default:
@@ -328,11 +343,10 @@ function calculateCodeQualityScore(projectDir, indicator) {
   switch (indicator) {
     case 'linting':
       const lintingFiles = ['.eslintrc', '.prettierrc', 'tsconfig.json', '.editorconfig'];
-      const hasLinting = lintingFiles.some(file => fs.existsSync(path.join(projectDir, file)));
+      const hasLinting = lintingFiles.some((file) => fs.existsSync(path.join(projectDir, file)));
       return hasLinting ? 1 : 0;
 
     case 'formatting':
-      const formattingTools = ['prettier', 'black', 'gofmt'];
       // Check if formatting tools are likely configured
       return 0.7; // Assume some formatting exists
 
@@ -341,15 +355,18 @@ function calculateCodeQualityScore(projectDir, indicator) {
       return 0.6; // Neutral score
 
     case 'dependencies':
-      const hasPackageFile = fs.existsSync(path.join(projectDir, 'package.json')) ||
-                            fs.existsSync(path.join(projectDir, 'requirements.txt')) ||
-                            fs.existsSync(path.join(projectDir, 'pom.xml'));
+      const hasPackageFile =
+        fs.existsSync(path.join(projectDir, 'package.json')) ||
+        fs.existsSync(path.join(projectDir, 'requirements.txt')) ||
+        fs.existsSync(path.join(projectDir, 'pom.xml'));
       return hasPackageFile ? 1 : 0;
 
     case 'security':
-      const hasSecurity = fs.existsSync(path.join(projectDir, '.github/workflows')) &&
-                         fs.readdirSync(path.join(projectDir, '.github/workflows'))
-                           .some(f => f.includes('security') || f.includes('audit'));
+      const hasSecurity =
+        fs.existsSync(path.join(projectDir, '.github/workflows')) &&
+        fs
+          .readdirSync(path.join(projectDir, '.github/workflows'))
+          .some((f) => f.includes('security') || f.includes('audit'));
       return hasSecurity ? 1 : 0;
 
     default:
@@ -363,23 +380,24 @@ function calculateCodeQualityScore(projectDir, indicator) {
 function calculateProjectStructureScore(projectDir, indicator) {
   switch (indicator) {
     case 'organization':
-      const srcDir = fs.existsSync(path.join(projectDir, 'src')) ||
-                    fs.existsSync(path.join(projectDir, 'lib'));
+      const srcDir =
+        fs.existsSync(path.join(projectDir, 'src')) || fs.existsSync(path.join(projectDir, 'lib'));
       return srcDir ? 1 : 0.5;
 
     case 'buildConfig':
       const buildFiles = ['package.json', 'Makefile', 'CMakeLists.txt', 'build.gradle'];
-      const hasBuild = buildFiles.some(file => fs.existsSync(path.join(projectDir, file)));
+      const hasBuild = buildFiles.some((file) => fs.existsSync(path.join(projectDir, file)));
       return hasBuild ? 1 : 0;
 
     case 'packageManagement':
       const packageFiles = ['package.json', 'requirements.txt', 'pom.xml', 'go.mod', 'Cargo.toml'];
-      const hasPackage = packageFiles.some(file => fs.existsSync(path.join(projectDir, file)));
+      const hasPackage = packageFiles.some((file) => fs.existsSync(path.join(projectDir, file)));
       return hasPackage ? 1 : 0;
 
     case 'ciCd':
-      const hasCI = fs.existsSync(path.join(projectDir, '.github')) ||
-                   fs.existsSync(path.join(projectDir, '.gitlab-ci.yml'));
+      const hasCI =
+        fs.existsSync(path.join(projectDir, '.github')) ||
+        fs.existsSync(path.join(projectDir, '.gitlab-ci.yml'));
       return hasCI ? 1 : 0;
 
     case 'versionControl':
@@ -398,19 +416,25 @@ function calculateProcessMaturityScore(projectDir, indicator) {
   switch (indicator) {
     case 'branchingStrategy':
       // Check for branch protection or common branching files
-      const hasBranches = fs.existsSync(path.join(projectDir, '.github/workflows')) &&
-                         fs.readdirSync(path.join(projectDir, '.github/workflows'))
-                           .some(f => f.includes('branch') || f.includes('merge'));
+      const hasBranches =
+        fs.existsSync(path.join(projectDir, '.github/workflows')) &&
+        fs
+          .readdirSync(path.join(projectDir, '.github/workflows'))
+          .some((f) => f.includes('branch') || f.includes('merge'));
       return hasBranches ? 0.8 : 0.3;
 
     case 'codeReview':
-      const hasPRTemplate = fs.existsSync(path.join(projectDir, '.github/PULL_REQUEST_TEMPLATE.md'));
+      const hasPRTemplate = fs.existsSync(
+        path.join(projectDir, '.github/PULL_REQUEST_TEMPLATE.md')
+      );
       return hasPRTemplate ? 0.9 : 0.4;
 
     case 'releaseProcess':
-      const hasReleaseWorkflow = fs.existsSync(path.join(projectDir, '.github/workflows')) &&
-                               fs.readdirSync(path.join(projectDir, '.github/workflows'))
-                                 .some(f => f.includes('release') || f.includes('publish'));
+      const hasReleaseWorkflow =
+        fs.existsSync(path.join(projectDir, '.github/workflows')) &&
+        fs
+          .readdirSync(path.join(projectDir, '.github/workflows'))
+          .some((f) => f.includes('release') || f.includes('publish'));
       return hasReleaseWorkflow ? 1 : 0;
 
     case 'issueTracking':
@@ -436,11 +460,16 @@ function getSourceFiles(projectDir) {
     try {
       const files = fs.readdirSync(dir);
 
-      files.forEach(file => {
+      files.forEach((file) => {
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
 
-        if (stat.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'target') {
+        if (
+          stat.isDirectory() &&
+          !file.startsWith('.') &&
+          file !== 'node_modules' &&
+          file !== 'target'
+        ) {
           scanDirectory(filePath);
         } else if (stat.isFile() && /\.(js|ts|py|java|go|rs)$/.test(file)) {
           sourceFiles.push(filePath);
@@ -461,7 +490,7 @@ function getSourceFiles(projectDir) {
 function calculateOverallScore(categoryScores) {
   let totalScore = 0;
 
-  Object.keys(categoryScores).forEach(category => {
+  Object.keys(categoryScores).forEach((category) => {
     totalScore += categoryScores[category] * ASSESSMENT_CATEGORIES[category].weight;
   });
 
@@ -474,7 +503,7 @@ function calculateOverallScore(categoryScores) {
 function generateRecommendations(scores) {
   const recommendations = [];
 
-  Object.keys(scores).forEach(category => {
+  Object.keys(scores).forEach((category) => {
     const score = scores[category];
     const categoryInfo = ASSESSMENT_CATEGORIES[category];
 
@@ -483,17 +512,17 @@ function generateRecommendations(scores) {
         category: categoryInfo.name,
         priority: 'high',
         message: `${categoryInfo.name} needs significant improvement (Score: ${score}/100)`,
-        suggestions: getCategorySuggestions(category, 'high')
+        suggestions: getCategorySuggestions(category, 'high'),
       });
     } else if (score < 70) {
       recommendations.push({
         category: categoryInfo.name,
         priority: 'medium',
         message: `${categoryInfo.name} has room for improvement (Score: ${score}/100)`,
-        suggestions: getCategorySuggestions(category, 'medium')
+        suggestions: getCategorySuggestions(category, 'medium'),
       });
     }
-  }
+  });
 
   return recommendations;
 }
@@ -508,40 +537,36 @@ function getCategorySuggestions(category, priority) {
         'Add comprehensive unit test suite',
         'Implement integration tests for critical paths',
         'Set up test automation in CI/CD',
-        'Add test coverage reporting'
+        'Add test coverage reporting',
       ],
       medium: [
         'Improve test coverage for existing code',
         'Add more edge case testing',
-        'Implement automated test execution'
-      ]
+        'Implement automated test execution',
+      ],
     },
     DOCUMENTATION: {
       high: [
         'Create comprehensive README with setup instructions',
         'Add inline code documentation',
         'Document API endpoints and usage',
-        'Create architecture documentation'
+        'Create architecture documentation',
       ],
-      medium: [
-        'Enhance existing documentation',
-        'Add code examples',
-        'Document recent changes'
-      ]
+      medium: ['Enhance existing documentation', 'Add code examples', 'Document recent changes'],
     },
     CODE_QUALITY: {
       high: [
         'Set up linting and code formatting',
         'Implement code quality gates',
         'Add security scanning',
-        'Manage technical debt'
+        'Manage technical debt',
       ],
       medium: [
         'Improve code formatting consistency',
         'Add static code analysis',
-        'Update dependencies regularly'
-      ]
-    }
+        'Update dependencies regularly',
+      ],
+    },
   };
 
   return suggestions[category]?.[priority] || ['Improve this area'];
@@ -560,9 +585,9 @@ function generateAdoptionRoadmap(scores) {
         'Set up CAWS CLI and basic configuration',
         'Create initial working spec template',
         'Establish basic linting and formatting',
-        'Set up version control and CI basics'
+        'Set up version control and CI basics',
       ],
-      success_criteria: 'CAWS CLI operational, basic quality gates in place'
+      success_criteria: 'CAWS CLI operational, basic quality gates in place',
     },
     {
       name: 'Phase 2: Testing Infrastructure',
@@ -572,9 +597,9 @@ function generateAdoptionRoadmap(scores) {
         'Implement comprehensive test suite',
         'Add test coverage reporting',
         'Set up mutation testing',
-        'Integrate tests into CI/CD'
+        'Integrate tests into CI/CD',
       ],
-      success_criteria: 'Test coverage >70%, automated testing operational'
+      success_criteria: 'Test coverage >70%, automated testing operational',
     },
     {
       name: 'Phase 3: Documentation & Quality',
@@ -584,17 +609,17 @@ function generateAdoptionRoadmap(scores) {
         'Complete project documentation',
         'Implement advanced quality gates',
         'Add contract testing',
-        'Set up monitoring and observability'
+        'Set up monitoring and observability',
       ],
-      success_criteria: 'Full CAWS compliance, comprehensive documentation'
-    }
+      success_criteria: 'Full CAWS compliance, comprehensive documentation',
+    },
   ];
 
   // Adjust phases based on current scores
   return phases.map((phase, index) => ({
     ...phase,
     priority: index + 1,
-    estimated_effort: scores[Object.keys(scores)[index]] < 50 ? 'high' : 'medium'
+    estimated_effort: scores[Object.keys(scores)[index]] < 50 ? 'high' : 'medium',
   }));
 }
 
@@ -605,7 +630,7 @@ function assessRiskProfile(projectDir, scores) {
   const profile = {
     overall_risk: 'medium',
     risk_factors: [],
-    recommended_tier: 2
+    recommended_tier: 2,
   };
 
   // Determine risk based on scores
@@ -656,25 +681,36 @@ if (require.main === module) {
       console.log(`🏆 Overall Score: ${assessment.overallScore}/100`);
 
       console.log('\n📈 Category Scores:');
-      Object.keys(assessment.scores).forEach(category => {
+      Object.keys(assessment.scores).forEach((category) => {
         const score = assessment.scores[category];
         const categoryInfo = ASSESSMENT_CATEGORIES[category];
-        const status = score >= 80 ? '✅ Excellent' : score >= 60 ? '🟢 Good' : score >= 40 ? '🟡 Fair' : '🔴 Poor';
+        const status =
+          score >= 80
+            ? '✅ Excellent'
+            : score >= 60
+              ? '🟢 Good'
+              : score >= 40
+                ? '🟡 Fair'
+                : '🔴 Poor';
         console.log(`${status} ${categoryInfo.name}: ${score}/100`);
       });
 
       console.log('\n📋 Project Information:');
       console.log(`   Languages: ${assessment.projectInfo.languages.join(', ')}`);
       console.log(`   Package Manager: ${assessment.projectInfo.packageManager || 'Not detected'}`);
-      console.log(`   Frameworks: ${assessment.projectInfo.frameworks.join(', ') || 'None detected'}`);
-      console.log(`   Project Size: ${assessment.projectInfo.size.files} files, ${assessment.projectInfo.size.directories} directories`);
+      console.log(
+        `   Frameworks: ${assessment.projectInfo.frameworks.join(', ') || 'None detected'}`
+      );
+      console.log(
+        `   Project Size: ${assessment.projectInfo.size.files} files, ${assessment.projectInfo.size.directories} directories`
+      );
 
       if (assessment.recommendations.length > 0) {
         console.log('\n💡 Priority Recommendations:');
         assessment.recommendations.forEach((rec, index) => {
           console.log(`\n${index + 1}. [${rec.priority.toUpperCase()}] ${rec.category}`);
           console.log(`   ${rec.message}`);
-          rec.suggestions.forEach(suggestion => {
+          rec.suggestions.forEach((suggestion) => {
             console.log(`   • ${suggestion}`);
           });
         });
@@ -691,7 +727,7 @@ if (require.main === module) {
       console.log('\n⚠️  Risk Profile:');
       console.log(`   Overall Risk: ${assessment.riskProfile.overall_risk}`);
       console.log(`   Recommended Tier: ${assessment.riskProfile.recommended_tier}`);
-      assessment.riskProfile.risk_factors.forEach(factor => {
+      assessment.riskProfile.risk_factors.forEach((factor) => {
         console.log(`   • ${factor}`);
       });
 
@@ -709,7 +745,7 @@ if (require.main === module) {
       console.log('  node legacy-assessor.js assess [project-directory]');
       console.log('');
       console.log('Assessment Categories:');
-      Object.values(ASSESSMENT_CATEGORIES).forEach(category => {
+      Object.values(ASSESSMENT_CATEGORIES).forEach((category) => {
         console.log(`  - ${category.name} (${Math.round(category.weight * 100)}% weight)`);
       });
       console.log('');
@@ -724,5 +760,5 @@ module.exports = {
   assessProject,
   ASSESSMENT_CATEGORIES,
   generateRecommendations,
-  generateAdoptionRoadmap
+  generateAdoptionRoadmap,
 };

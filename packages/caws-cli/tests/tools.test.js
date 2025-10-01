@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const yaml = require('js-yaml');
 
 describe('CAWS Tools', () => {
   const testDir = path.join(__dirname, 'test-tools');
@@ -74,7 +75,7 @@ describe('CAWS Tools', () => {
       rollback: ['Test rollback'],
     };
 
-    fs.writeFileSync(workingSpecPath, JSON.stringify(validSpec, null, 2));
+    fs.writeFileSync(workingSpecPath, yaml.dump(validSpec));
   });
 
   afterAll(() => {

@@ -167,3 +167,4 @@ git commit --no-verify
 
 **Remember**: Hooks are here to help catch errors before they become problems. Embrace them!
 
+
