@@ -117,10 +117,17 @@ describe('CAWS Tools Integration', () => {
       const provenancePath = path.join(cliTestProjectPath, 'apps/tools/caws/provenance.js');
       expect(fs.existsSync(provenancePath)).toBe(true);
 
+      // Change to project directory before generating provenance
+      const originalCwd = process.cwd();
+      process.chdir(cliTestProjectPath);
+
       const provenanceTool = require(provenancePath);
       expect(() => {
         provenanceTool.generateProvenance();
       }).not.toThrow();
+
+      // Restore directory
+      process.chdir(originalCwd);
 
       const provenanceFile = path.join(cliTestProjectPath, '.agent/provenance.json');
       expect(fs.existsSync(provenanceFile)).toBe(true);
