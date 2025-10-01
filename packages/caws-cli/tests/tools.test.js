@@ -11,7 +11,7 @@ const yaml = require('js-yaml');
 // Helper function to get template tool path via relative path
 function getTemplateToolPath(toolName) {
   // Use relative path from cli package to template
-  return path.join(__dirname, '../../../caws-template/apps/tools/caws', toolName);
+  return path.join(__dirname, '../../caws-template/apps/tools/caws', toolName);
 }
 
 describe('CAWS Tools', () => {

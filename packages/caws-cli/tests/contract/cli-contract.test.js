@@ -161,13 +161,13 @@ describe('CLI Interface Contracts', () => {
 
         // Contract: Tool files should export expected interfaces
         const validateTool = require(
-          path.join(__dirname, '../../../caws-template/apps/tools/caws/validate.js')
+          path.join(__dirname, '../../caws-template/apps/tools/caws/validate.js')
         );
         const gatesTool = require(
-          path.join(__dirname, '../../../caws-template/apps/tools/caws/gates.js')
+          path.join(__dirname, '../../caws-template/apps/tools/caws/gates.js')
         );
         const provenanceTool = require(
-          path.join(__dirname, '../../../caws-template/apps/tools/caws/provenance.js')
+          path.join(__dirname, '../../caws-template/apps/tools/caws/provenance.js')
         );
 
         // Each tool should be a function or have a main export
