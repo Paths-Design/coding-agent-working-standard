@@ -45,7 +45,10 @@ const program = new Command();
 // CAWS Detection and Configuration
 function detectCAWSSetup(cwd = process.cwd()) {
   // Skip logging for version/help commands
-  const isQuietCommand = process.argv.includes('--version') || process.argv.includes('-V');
+  const isQuietCommand =
+    process.argv.includes('--version') ||
+    process.argv.includes('-V') ||
+    process.argv.includes('--help');
 
   if (!isQuietCommand) {
     console.log(chalk.blue('🔍 Detecting CAWS setup...'));
@@ -64,6 +67,8 @@ function detectCAWSSetup(cwd = process.cwd()) {
       hasCAWSDir: false,
       cawsDir: null,
       capabilities: [],
+      hasTemplateDir: false,
+      templateDir: null,
     };
   }
 
@@ -116,13 +121,15 @@ function detectCAWSSetup(cwd = process.cwd()) {
     console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
   }
 
-  // Check for template directory - try multiple possible locations
+  // Check for template directory - try multiple possible locations relative to cwd
   let templateDir = null;
   const possibleTemplatePaths = [
+    path.resolve(cwd, '../caws-template'),
+    path.resolve(cwd, '../../caws-template'),
+    path.resolve(cwd, 'packages/caws-template'),
+    path.resolve(cwd, 'caws-template'),
     path.resolve(__dirname, '../caws-template'),
     path.resolve(__dirname, '../../caws-template'),
-    path.resolve(process.cwd(), 'packages/caws-template'),
-    path.resolve(process.cwd(), 'caws-template'),
   ];
 
   for (const testPath of possibleTemplatePaths) {
@@ -154,7 +161,31 @@ function detectCAWSSetup(cwd = process.cwd()) {
   };
 }
 
-const cawsSetup = detectCAWSSetup();
+let cawsSetup = null;
+
+// Initialize global setup detection
+try {
+  cawsSetup = detectCAWSSetup();
+} catch (error) {
+  console.warn('⚠️  Failed to detect CAWS setup globally:', error.message);
+  cawsSetup = {
+    type: 'unknown',
+    hasCAWSDir: false,
+    cawsDir: null,
+    hasWorkingSpec: false,
+    hasMultipleSpecs: false,
+    hasValidateScript: false,
+    hasPolicy: false,
+    hasSchemas: false,
+    hasTemplates: false,
+    hasTools: false,
+    hasTemplateDir: false,
+    templateDir: null,
+    capabilities: [],
+    isEnhanced: false,
+    isAdvanced: false,
+  };
+}
 
 // Dynamic imports based on setup
 let provenanceTools = null;
@@ -165,7 +196,7 @@ function loadProvenanceTools() {
 
   try {
     const setup = detectCAWSSetup();
-    if (setup.hasTemplateDir && setup.templateDir) {
+    if (setup?.hasTemplateDir && setup?.templateDir) {
       const { generateProvenance, saveProvenance } = require(
         path.join(setup.templateDir, 'apps/tools/caws/provenance.js')
       );
@@ -633,7 +664,7 @@ async function initProject(projectName, options) {
 
     if (currentSetup.type === 'new') {
       // Copy template files from generic template
-      if (cawsSetup.hasTemplateDir) {
+      if (cawsSetup && cawsSetup.hasTemplateDir && cawsSetup.templateDir) {
         await copyTemplate(cawsSetup.templateDir, '.');
         console.log(chalk.green('✅ Created CAWS project with templates'));
       } else {
@@ -1350,7 +1381,7 @@ async function scaffoldProject(options) {
   console.log(chalk.gray(`DEBUG: currentDir: ${currentDir}`));
 
   try {
-    // Detect existing CAWS setup
+    // Detect existing CAWS setup with current directory context
     const setup = detectCAWSSetup(currentDir);
 
     console.log(chalk.gray(`DEBUG: setup.hasCAWSDir: ${setup.hasCAWSDir}`));
@@ -1409,7 +1440,7 @@ async function scaffoldProject(options) {
     const enhancements = [];
 
     console.log(chalk.gray(`Current dir: ${currentDir}`));
-    console.log(chalk.gray(`Template dir: ${cawsSetup.templateDir}`));
+    console.log(chalk.gray(`Template dir: ${cawsSetup?.templateDir || 'not found'}`));
     console.log(
       chalk.gray(
         `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
@@ -1484,6 +1515,12 @@ async function scaffoldProject(options) {
     const addedFiles = [];
 
     for (const enhancement of enhancements) {
+      if (!cawsSetup?.templateDir) {
+        console.warn(
+          chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)
+        );
+        continue;
+      }
       const sourcePath = path.join(cawsSetup.templateDir, enhancement.name);
       const destPath = path.join(currentDir, enhancement.name);
 
