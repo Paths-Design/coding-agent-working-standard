@@ -1414,6 +1414,28 @@ async function scaffoldProject(options) {
     if (cawsSetup?.templateDir && !setup.templateDir) {
       setup.templateDir = cawsSetup.templateDir;
       setup.hasTemplateDir = true;
+    } else if (!setup.templateDir) {
+      // Try to find template directory using absolute paths that work in CI
+      const possiblePaths = [
+        '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
+        '/workspace/packages/caws-template',
+        '/caws/packages/caws-template',
+        path.resolve(process.cwd(), '../../../packages/caws-template'),
+        path.resolve(process.cwd(), '../../packages/caws-template'),
+        path.resolve(process.cwd(), '../packages/caws-template'),
+      ];
+
+      for (const testPath of possiblePaths) {
+        if (fs.existsSync(testPath)) {
+          setup.templateDir = testPath;
+          setup.hasTemplateDir = true;
+          break;
+        }
+      }
+
+      if (!setup.templateDir) {
+        console.log(chalk.red(`❌ No template directory available!`));
+      }
     }
 
     // Override global cawsSetup with current context for scaffold operations
