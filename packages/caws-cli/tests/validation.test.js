@@ -34,6 +34,18 @@ describe('Working Spec Validation', () => {
     observabilityTraces: 'test_trace',
     migrationPlan: '- Test migration',
     rollbackPlan: '- Test rollback',
+    needsOverride: false,
+    overrideRationale: '',
+    overrideApprover: '',
+    waivedGates: [],
+    overrideExpiresDays: 7,
+    isExperimental: false,
+    experimentalRationale: '',
+    experimentalSandbox: 'experimental/',
+    experimentalExpiresDays: 14,
+    aiConfidence: 7,
+    uncertaintyAreas: '',
+    complexityFactors: '',
   };
 
   test('should generate valid working spec', () => {
@@ -116,6 +128,18 @@ describe('Working Spec Validation', () => {
       observabilityTraces: 'none',
       migrationPlan: '- No migration',
       rollbackPlan: '- No rollback',
+      needsOverride: false,
+      overrideRationale: '',
+      overrideApprover: '',
+      waivedGates: [],
+      overrideExpiresDays: 7,
+      isExperimental: false,
+      experimentalRationale: '',
+      experimentalSandbox: 'experimental/',
+      experimentalExpiresDays: 14,
+      aiConfidence: 7,
+      uncertaintyAreas: '',
+      complexityFactors: '',
     };
 
     const specContent = generateWorkingSpec(minimalAnswers);

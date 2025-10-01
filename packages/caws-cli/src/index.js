@@ -13,13 +13,121 @@ const inquirer = require('inquirer').default || require('inquirer');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 
+// Import language support (with fallback for when tools aren't available)
+let languageSupport = null;
+try {
+  languageSupport = require('../../caws-template/apps/tools/caws/language-support.js');
+} catch (error) {
+  console.warn('⚠️  Language support tools not available');
+}
+
 const program = new Command();
 
-// Configuration
-const TEMPLATE_DIR = path.join(__dirname, '../../caws-template');
-const { generateProvenance, saveProvenance } = require(
-  path.join(TEMPLATE_DIR, 'apps/tools/caws/provenance.js')
-);
+// CAWS Detection and Configuration
+function detectCAWSSetup(cwd = process.cwd()) {
+  console.log(chalk.blue('🔍 Detecting CAWS setup...'));
+
+  // Check for existing CAWS setup
+  const cawsDir = path.join(cwd, '.caws');
+  const hasCAWSDir = fs.existsSync(cawsDir);
+
+  if (!hasCAWSDir) {
+    console.log(chalk.gray('ℹ️  No .caws directory found - new project setup'));
+    return {
+      type: 'new',
+      hasCAWSDir: false,
+      cawsDir: null,
+      capabilities: [],
+    };
+  }
+
+  // Analyze existing setup
+  const files = fs.readdirSync(cawsDir);
+  const hasWorkingSpec = fs.existsSync(path.join(cawsDir, 'working-spec.yaml'));
+  const hasValidateScript = fs.existsSync(path.join(cawsDir, 'validate.js'));
+  const hasPolicy = fs.existsSync(path.join(cawsDir, 'policy'));
+  const hasSchemas = fs.existsSync(path.join(cawsDir, 'schemas'));
+  const hasTemplates = fs.existsSync(path.join(cawsDir, 'templates'));
+
+  // Check for multiple spec files (enhanced project pattern)
+  const specFiles = files.filter((f) => f.endsWith('-spec.yaml'));
+  const hasMultipleSpecs = specFiles.length > 1;
+
+  // Check for tools directory (enhanced setup)
+  const toolsDir = path.join(cwd, 'apps/tools/caws');
+  const hasTools = fs.existsSync(toolsDir);
+
+  // Determine setup type
+  let setupType = 'basic';
+  let capabilities = [];
+
+  if (hasMultipleSpecs && hasWorkingSpec) {
+    setupType = 'enhanced';
+    capabilities.push('multiple-specs', 'working-spec', 'domain-specific');
+  } else if (hasWorkingSpec) {
+    setupType = 'standard';
+    capabilities.push('working-spec');
+  }
+
+  if (hasValidateScript) {
+    capabilities.push('validation');
+  }
+  if (hasPolicy) {
+    capabilities.push('policies');
+  }
+  if (hasSchemas) {
+    capabilities.push('schemas');
+  }
+  if (hasTemplates) {
+    capabilities.push('templates');
+  }
+  if (hasTools) {
+    capabilities.push('tools');
+  }
+
+  console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
+  console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
+
+  // Check for template directory
+  const templateDir = path.join(__dirname, '..', '..', '..', 'caws-template');
+  const hasTemplateDir = fs.existsSync(templateDir);
+
+  return {
+    type: setupType,
+    hasCAWSDir: true,
+    cawsDir,
+    hasWorkingSpec,
+    hasMultipleSpecs,
+    hasValidateScript,
+    hasPolicy,
+    hasSchemas,
+    hasTemplates,
+    hasTools,
+    hasTemplateDir,
+    templateDir,
+    capabilities,
+    isEnhanced: setupType === 'enhanced',
+    isAdvanced: hasTools || hasValidateScript,
+  };
+}
+
+const cawsSetup = detectCAWSSetup();
+
+// Dynamic imports based on setup
+let provenanceTools = null;
+try {
+  if (cawsSetup.hasTemplateDir) {
+    const { generateProvenance, saveProvenance } = require(
+      path.join(cawsSetup.templateDir, 'apps/tools/caws/provenance.js')
+    );
+    provenanceTools = { generateProvenance, saveProvenance };
+  }
+} catch (error) {
+  // Fallback for environments without template
+  provenanceTools = null;
+  console.error(chalk.red('❌ Error loading provenance tools:'), error.message, provenanceTools);
+}
+
 const CLI_VERSION = require('../package.json').version;
 
 // Initialize JSON Schema validator - using simplified validation for CLI stability
@@ -66,6 +174,49 @@ const validateWorkingSpec = (spec) => {
           },
         ],
       };
+    }
+
+    // Validate experimental mode
+    if (spec.experimental_mode) {
+      if (typeof spec.experimental_mode !== 'object') {
+        return {
+          valid: false,
+          errors: [
+            {
+              instancePath: '/experimental_mode',
+              message:
+                'Experimental mode must be an object with enabled, rationale, and expires_at fields',
+            },
+          ],
+        };
+      }
+
+      const requiredExpFields = ['enabled', 'rationale', 'expires_at'];
+      for (const field of requiredExpFields) {
+        if (!(field in spec.experimental_mode)) {
+          return {
+            valid: false,
+            errors: [
+              {
+                instancePath: `/experimental_mode/${field}`,
+                message: `Missing required experimental mode field: ${field}`,
+              },
+            ],
+          };
+        }
+      }
+
+      if (spec.experimental_mode.enabled && spec.risk_tier < 3) {
+        return {
+          valid: false,
+          errors: [
+            {
+              instancePath: '/experimental_mode',
+              message: 'Experimental mode can only be used with Tier 3 (low risk) changes',
+            },
+          ],
+        };
+      }
     }
 
     if (spec.risk_tier < 1 || spec.risk_tier > 3) {
@@ -290,6 +441,40 @@ function generateWorkingSpec(answers) {
       .split('\n')
       .map((r) => r.trim())
       .filter((r) => r),
+    human_override: answers.needsOverride
+      ? {
+          enabled: true,
+          approver: answers.overrideApprover,
+          rationale: answers.overrideRationale,
+          waived_gates: answers.waivedGates,
+          approved_at: new Date().toISOString(),
+          expires_at: new Date(
+            Date.now() + answers.overrideExpiresDays * 24 * 60 * 60 * 1000
+          ).toISOString(),
+        }
+      : undefined,
+    experimental_mode: answers.isExperimental
+      ? {
+          enabled: true,
+          rationale: answers.experimentalRationale,
+          expires_at: new Date(
+            Date.now() + answers.experimentalExpiresDays * 24 * 60 * 60 * 1000
+          ).toISOString(),
+          sandbox_location: answers.experimentalSandbox,
+        }
+      : undefined,
+    ai_assessment: {
+      confidence_level: answers.aiConfidence,
+      uncertainty_areas: answers.uncertaintyAreas
+        .split(',')
+        .map((a) => a.trim())
+        .filter((a) => a),
+      complexity_factors: answers.complexityFactors
+        .split(',')
+        .map((f) => f.trim())
+        .filter((f) => f),
+      risk_factors: [], // Could be populated by AI analysis
+    },
   };
 
   return yaml.dump(template, { indent: 2 });
@@ -365,8 +550,24 @@ async function initProject(projectName, options) {
 
     console.log(chalk.green(`📁 Created project directory: ${projectName}`));
 
-    // Copy template files
-    await copyTemplate(TEMPLATE_DIR, '.');
+    // Detect and adapt to existing setup
+    const currentSetup = detectCAWSSetup(process.cwd());
+
+    if (currentSetup.type === 'new') {
+      // Copy template files from generic template
+      if (cawsSetup.hasTemplateDir) {
+        await copyTemplate(cawsSetup.templateDir, '.');
+        console.log(chalk.green('✅ Created CAWS project with templates'));
+      } else {
+        // Create minimal CAWS structure
+        await fs.ensureDir('.caws');
+        await fs.ensureDir('.agent');
+        console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
+      }
+    } else {
+      // Already has CAWS setup
+      console.log(chalk.green('✅ CAWS project detected - skipping template copy'));
+    }
 
     // Set default answers for non-interactive mode
     if (!options.interactive || options.nonInteractive) {
@@ -395,6 +596,18 @@ async function initProject(projectName, options) {
         observabilityTraces: 'api_flow',
         migrationPlan: 'Standard deployment process',
         rollbackPlan: 'Feature flag disable and rollback',
+        needsOverride: false,
+        overrideRationale: '',
+        overrideApprover: '',
+        waivedGates: [],
+        overrideExpiresDays: 7,
+        isExperimental: false,
+        experimentalRationale: '',
+        experimentalSandbox: 'experimental/',
+        experimentalExpiresDays: 14,
+        aiConfidence: 7,
+        uncertaintyAreas: '',
+        complexityFactors: '',
       };
 
       // Generate working spec for non-interactive mode
@@ -719,6 +932,122 @@ async function initProject(projectName, options) {
             return true;
           },
         },
+        {
+          type: 'confirm',
+          name: 'needsOverride',
+          message: '🚨 Need human override for urgent/low-risk change?',
+          default: false,
+        },
+        {
+          type: 'input',
+          name: 'overrideRationale',
+          message: '📝 Override rationale (urgency, low risk, etc.):',
+          when: (answers) => answers.needsOverride,
+          validate: (input) => {
+            if (!input.trim()) return 'Rationale is required for override';
+            return true;
+          },
+        },
+        {
+          type: 'input',
+          name: 'overrideApprover',
+          message: '👤 Override approver (GitHub username or email):',
+          when: (answers) => answers.needsOverride,
+          validate: (input) => {
+            if (!input.trim()) return 'Approver is required for override';
+            return true;
+          },
+        },
+        {
+          type: 'checkbox',
+          name: 'waivedGates',
+          message: '⚠️  Gates to waive (select with space):',
+          choices: [
+            { name: 'Coverage testing', value: 'coverage' },
+            { name: 'Mutation testing', value: 'mutation' },
+            { name: 'Contract testing', value: 'contracts' },
+            { name: 'Manual review', value: 'manual_review' },
+            { name: 'Trust score check', value: 'trust_score' },
+          ],
+          when: (answers) => answers.needsOverride,
+          validate: (input) => {
+            if (input.length === 0) return 'At least one gate must be waived';
+            return true;
+          },
+        },
+        {
+          type: 'number',
+          name: 'overrideExpiresDays',
+          message: '⏰ Override expires in how many days?',
+          default: 7,
+          when: (answers) => answers.needsOverride,
+          validate: (input) => {
+            if (input < 1) return 'Must expire in at least 1 day';
+            if (input > 30) return 'Cannot exceed 30 days';
+            return true;
+          },
+        },
+        {
+          type: 'confirm',
+          name: 'isExperimental',
+          message: '🧪 Experimental/Prototype mode? (Reduced requirements for sandbox code)',
+          default: false,
+        },
+        {
+          type: 'input',
+          name: 'experimentalRationale',
+          message: '🔬 Experimental rationale (what are you exploring?):',
+          when: (answers) => answers.isExperimental,
+          validate: (input) => {
+            if (!input.trim()) return 'Rationale is required for experimental mode';
+            return true;
+          },
+        },
+        {
+          type: 'input',
+          name: 'experimentalSandbox',
+          message: '📁 Sandbox location (directory or feature flag):',
+          default: 'experimental/',
+          when: (answers) => answers.isExperimental,
+          validate: (input) => {
+            if (!input.trim()) return 'Sandbox location is required';
+            return true;
+          },
+        },
+        {
+          type: 'number',
+          name: 'experimentalExpiresDays',
+          message: '⏰ Experimental code expires in how many days?',
+          default: 14,
+          when: (answers) => answers.isExperimental,
+          validate: (input) => {
+            if (input < 1) return 'Must expire in at least 1 day';
+            if (input > 90) return 'Cannot exceed 90 days for experimental code';
+            return true;
+          },
+        },
+        {
+          type: 'number',
+          name: 'aiConfidence',
+          message: '🤖 AI confidence level (1-10, 10 = very confident):',
+          default: 7,
+          validate: (input) => {
+            if (input < 1 || input > 10) return 'Must be between 1 and 10';
+            return true;
+          },
+        },
+        {
+          type: 'input',
+          name: 'uncertaintyAreas',
+          message: '❓ Areas of uncertainty (comma-separated):',
+          default: '',
+        },
+        {
+          type: 'input',
+          name: 'complexityFactors',
+          message: '🔧 Complexity factors (comma-separated):',
+          default: '',
+        },
       ];
 
       console.log(chalk.cyan('⏳ Gathering project requirements...'));
@@ -789,6 +1118,37 @@ async function initProject(projectName, options) {
 // Generate provenance manifest and git initialization (for both modes)
 async function finalizeProject(projectName, options, answers) {
   try {
+    // Detect and configure language support
+    if (languageSupport) {
+      console.log(chalk.cyan('🔍 Detecting project language...'));
+      const detectedLanguage = languageSupport.detectProjectLanguage();
+
+      if (detectedLanguage !== 'unknown') {
+        console.log(chalk.green(`✅ Detected language: ${detectedLanguage}`));
+
+        // Generate language-specific configuration
+        try {
+          const langConfig = languageSupport.generateLanguageConfig(
+            detectedLanguage,
+            '.caws/language-config.json'
+          );
+
+          console.log(chalk.green('✅ Generated language-specific configuration'));
+          console.log(`   Language: ${langConfig.name}`);
+          console.log(`   Tier: ${langConfig.tier}`);
+          console.log(
+            `   Thresholds: Branch ≥${langConfig.thresholds.min_branch * 100}%, Mutation ≥${langConfig.thresholds.min_mutation * 100}%`
+          );
+        } catch (langError) {
+          console.warn(chalk.yellow('⚠️  Could not generate language config:'), langError.message);
+        }
+      } else {
+        console.log(
+          chalk.blue('ℹ️  Could not detect project language - using default configuration')
+        );
+      }
+    }
+
     // Generate provenance manifest
     console.log(chalk.cyan('📦 Generating provenance manifest...'));
 
@@ -823,10 +1183,20 @@ async function finalizeProject(projectName, options, answers) {
       approvals: [],
     };
 
-    const provenance = generateProvenance(provenanceData);
-    await saveProvenance(provenance, '.agent/provenance.json');
-
-    console.log(chalk.green('✅ Provenance manifest generated'));
+    // Generate provenance if tools are available
+    if (
+      provenanceTools &&
+      typeof provenanceTools.generateProvenance === 'function' &&
+      typeof provenanceTools.saveProvenance === 'function'
+    ) {
+      const provenance = provenanceTools.generateProvenance(provenanceData);
+      await provenanceTools.saveProvenance(provenance, '.agent/provenance.json');
+      console.log(chalk.green('✅ Provenance manifest generated'));
+    } else {
+      console.log(
+        chalk.yellow('⚠️  Provenance tools not available - skipping manifest generation')
+      );
+    }
 
     // Initialize git repository
     if (options.git) {
@@ -890,18 +1260,29 @@ async function scaffoldProject(options) {
   const currentDir = process.cwd();
   const projectName = path.basename(currentDir);
 
-  console.log(chalk.cyan(`🔧 Scaffolding existing project: ${projectName}`));
+  console.log(chalk.cyan(`🔧 Enhancing existing project with CAWS: ${projectName}`));
 
   try {
-    // Check if template directory exists
-    if (!fs.existsSync(TEMPLATE_DIR)) {
-      console.error(chalk.red('❌ Template directory not found:'), TEMPLATE_DIR);
-      console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
+    // Detect existing CAWS setup
+    const setup = detectCAWSSetup(currentDir);
+
+    if (!setup.hasCAWSDir) {
+      console.error(chalk.red('❌ No .caws directory found'));
+      console.error(chalk.blue('💡 Run "caws init <project-name>" first to create a CAWS project'));
       process.exit(1);
     }
 
+    // Adapt behavior based on setup type
+    if (setup.isEnhanced) {
+      console.log(chalk.green('🎯 Enhanced CAWS detected - adding automated publishing'));
+    } else if (setup.isAdvanced) {
+      console.log(chalk.blue('🔧 Advanced CAWS detected - adding missing capabilities'));
+    } else {
+      console.log(chalk.blue('📋 Basic CAWS detected - enhancing with additional tools'));
+    }
+
     // Generate provenance for scaffolding operation
-    const scaffoldProvenance = generateProvenance({
+    const scaffoldProvenance = {
       agent: 'caws-cli',
       model: 'cli-scaffold',
       modelHash: CLI_VERSION,
@@ -915,45 +1296,87 @@ async function scaffoldProject(options) {
         target_directory: currentDir,
       },
       approvals: [],
+      timestamp: new Date().toISOString(),
+      version: CLI_VERSION,
+      hash: require('crypto').createHash('sha256').update(JSON.stringify(this)).digest('hex'),
+    };
+
+    // Determine what enhancements to add based on setup type
+    const enhancements = [];
+
+    // Always add automated publishing for all setups
+    enhancements.push({
+      name: '.github/workflows/release.yml',
+      description: 'GitHub Actions workflow for automated publishing',
+      required: true,
     });
 
-    // Copy missing CAWS components
-    const cawsFiles = ['.caws', 'apps/tools/caws', 'codemod', '.github/workflows/caws.yml'];
+    enhancements.push({
+      name: '.releaserc.json',
+      description: 'semantic-release configuration',
+      required: true,
+    });
+
+    // Add commit conventions for setups that don't have them
+    if (!setup.hasTemplates || !fs.existsSync(path.join(currentDir, 'COMMIT_CONVENTIONS.md'))) {
+      enhancements.push({
+        name: 'COMMIT_CONVENTIONS.md',
+        description: 'Commit message guidelines',
+        required: false,
+      });
+    }
+
+    // Add OIDC setup guide for setups that need it
+    if (!setup.isEnhanced || !fs.existsSync(path.join(currentDir, 'OIDC_SETUP.md'))) {
+      enhancements.push({
+        name: 'OIDC_SETUP.md',
+        description: 'OIDC trusted publisher setup guide',
+        required: false,
+      });
+    }
+
+    // For enhanced setups, preserve existing tools
+    if (setup.isEnhanced) {
+      console.log(chalk.blue('ℹ️  Preserving existing sophisticated CAWS tools'));
+    }
 
     let addedCount = 0;
     let skippedCount = 0;
     const addedFiles = [];
 
-    for (const file of cawsFiles) {
-      const templatePath = path.join(TEMPLATE_DIR, file);
-      const destPath = path.join(currentDir, file);
+    for (const enhancement of enhancements) {
+      const sourcePath = path.join(__dirname, '..', '..', '..', enhancement.name);
+      const destPath = path.join(currentDir, enhancement.name);
 
       if (!fs.existsSync(destPath)) {
-        if (fs.existsSync(templatePath)) {
+        if (fs.existsSync(sourcePath)) {
           try {
-            await fs.copy(templatePath, destPath);
-            console.log(chalk.green(`✅ Added ${file}`));
+            await fs.copy(sourcePath, destPath);
+            console.log(chalk.green(`✅ Added ${enhancement.description}`));
             addedCount++;
-            addedFiles.push(file);
+            addedFiles.push(enhancement.name);
           } catch (copyError) {
-            console.warn(chalk.yellow(`⚠️  Failed to copy ${file}:`), copyError.message);
+            console.warn(chalk.yellow(`⚠️  Failed to add ${enhancement.name}:`), copyError.message);
           }
         } else {
-          console.warn(chalk.yellow(`⚠️  Template not found for ${file}, skipping`));
+          console.warn(chalk.yellow(`⚠️  Source not found for ${enhancement.name}, skipping`));
         }
       } else {
         if (options.force) {
           try {
             await fs.remove(destPath);
-            await fs.copy(templatePath, destPath);
-            console.log(chalk.blue(`🔄 Overwritten ${file}`));
+            await fs.copy(sourcePath, destPath);
+            console.log(chalk.blue(`🔄 Updated ${enhancement.description}`));
             addedCount++;
-            addedFiles.push(file);
+            addedFiles.push(enhancement.name);
           } catch (overwriteError) {
-            console.warn(chalk.yellow(`⚠️  Failed to overwrite ${file}:`), overwriteError.message);
+            console.warn(
+              chalk.yellow(`⚠️  Failed to update ${enhancement.name}:`),
+              overwriteError.message
+            );
           }
         } else {
-          console.log(`⏭️  Skipped ${file} (already exists)`);
+          console.log(`⏭️  Skipped ${enhancement.name} (already exists)`);
           skippedCount++;
         }
       }
@@ -964,24 +1387,35 @@ async function scaffoldProject(options) {
     scaffoldProvenance.results.files_added = addedCount;
     scaffoldProvenance.results.files_skipped = skippedCount;
 
-    console.log(chalk.green(`\n🎉 Scaffolding completed!`));
+    // Show summary
+    console.log(chalk.green(`\n🎉 Enhancement completed!`));
     console.log(chalk.bold(`📊 Summary: ${addedCount} added, ${skippedCount} skipped`));
 
     if (addedCount > 0) {
       console.log(chalk.bold('\n📝 Next steps:'));
-      console.log('1. Review and customize the added files');
-      console.log('2. Update .caws/working-spec.yaml if needed');
-      console.log('3. Run tests to ensure everything works');
-      console.log('4. Set up your CI/CD pipeline');
+      console.log('1. Review the added files');
+      console.log('2. Set up OIDC trusted publisher (see OIDC_SETUP.md)');
+      console.log('3. Push to trigger automated publishing');
+      console.log('4. Your existing CAWS tools remain unchanged');
+    }
+
+    if (setup.isEnhanced) {
+      console.log(
+        chalk.blue('\n🎯 Your enhanced CAWS setup has been improved with automated publishing!')
+      );
     }
 
     if (options.force) {
       console.log(chalk.yellow('\n⚠️  Force mode was used - review changes carefully'));
     }
 
-    // Save provenance manifest
-    await saveProvenance(scaffoldProvenance, '.agent/scaffold-provenance.json');
-    console.log(chalk.green('✅ Scaffolding provenance saved'));
+    // Save provenance manifest if tools are available
+    if (provenanceTools && typeof provenanceTools.saveProvenance === 'function') {
+      await provenanceTools.saveProvenance(scaffoldProvenance, '.agent/scaffold-provenance.json');
+      console.log(chalk.green('✅ Scaffolding provenance saved'));
+    } else {
+      console.log(chalk.yellow('⚠️  Provenance tools not available - skipping manifest save'));
+    }
   } catch (error) {
     console.error(chalk.red('❌ Error during scaffolding:'), error.message);
     process.exit(1);

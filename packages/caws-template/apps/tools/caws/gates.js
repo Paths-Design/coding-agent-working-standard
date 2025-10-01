@@ -6,7 +6,9 @@
  * @author @darianrosebrook
  */
 
-// No file system operations needed for gates
+const fs = require('fs');
+const path = require('path');
+const { checkWaiverStatus } = require('./waivers');
 
 /**
  * Tier policy configuration
@@ -37,15 +39,25 @@ const TIER_POLICY = {
     max_loc: 600,
     allowed_modes: ['feature', 'refactor', 'fix', 'doc', 'chore'],
   },
+  experimental: {
+    min_branch: 0.3,
+    min_mutation: 0.1,
+    requires_contracts: false,
+    requires_manual_review: false,
+    max_files: 50,
+    max_loc: 2000,
+    allowed_modes: ['feature', 'refactor', 'fix', 'doc', 'chore'],
+  },
 };
 
 /**
  * Trust score weights
  */
 const TRUST_WEIGHTS = {
-  coverage: 0.2,
-  mutation: 0.2,
-  contracts: 0.16,
+  coverage: 0.15,
+  mutation: 0.15,
+  test_quality: 0.15,
+  contracts: 0.12,
   a11y: 0.08,
   perf: 0.08,
   flake: 0.08,
@@ -80,24 +92,75 @@ function budgetOk(perfResults) {
 
 /**
  * Calculate trust score from provenance data
- * @param {string} tier - Risk tier (1, 2, or 3)
+ * @param {string} tier - Risk tier (1, 2, 3, or 'experimental')
  * @param {Object} prov - Provenance data
  * @returns {number} Trust score (0-100)
  */
 function trustScore(tier, prov) {
-  const policy = TIER_POLICY[tier];
+  // Handle experimental mode
+  const isExperimental = prov.experimental_mode?.enabled;
+  const effectiveTier = isExperimental ? 'experimental' : tier;
+
+  const policy = TIER_POLICY[effectiveTier];
   if (!policy) {
     console.error(`❌ Invalid tier: ${tier}`);
     return 0;
   }
 
+  if (isExperimental) {
+    console.log('🧪 Experimental mode detected - using relaxed quality gates');
+  }
+
   const wsum = Object.values(TRUST_WEIGHTS).reduce((a, b) => a + b, 0);
+
+  // Calculate test quality score if test directory exists
+  let testQualityScore = 0.5; // Default neutral score
+  try {
+    const { analyzeTestDirectory } = require('./test-quality');
+    const testResults = analyzeTestDirectory('tests');
+    testQualityScore = testResults.summary.averageQualityScore / 100;
+    console.log(`📊 Test quality score: ${Math.round(testQualityScore * 100)}/100`);
+  } catch (error) {
+    console.warn('⚠️  Could not analyze test quality:', error.message);
+    testQualityScore = 0.5; // Neutral fallback
+  }
+
+  // Calculate enhanced mutation score if mutation report exists
+  let enhancedMutationScore = prov.results?.mutation_score || 0;
+  try {
+    const { analyzeMutationResults } = require('./mutant-analyzer');
+
+    // Look for mutation report files
+    const mutationReportPaths = [
+      'mutation-report.json',
+      'stryker-report.json',
+      'pit-reports/mutations.xml',
+      'target/pit-reports/mutations.xml',
+    ];
+
+    for (const reportPath of mutationReportPaths) {
+      if (fs.existsSync(reportPath)) {
+        const mutationAnalysis = analyzeMutationResults(reportPath, 'src');
+        if (mutationAnalysis.summary.total > 0) {
+          // Use meaningful mutation score instead of raw score
+          enhancedMutationScore = mutationAnalysis.insights.meaningful_effectiveness;
+          console.log(
+            `🧬 Enhanced mutation score: ${Math.round(enhancedMutationScore * 100)}/100 (meaningful mutants)`
+          );
+          break;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️  Could not analyze mutation results:', error.message);
+    enhancedMutationScore = prov.results?.mutation_score || 0;
+  }
 
   const score =
     TRUST_WEIGHTS.coverage *
       normalize(prov.results?.coverage_branch || 0, policy.min_branch, 0.95) +
-    TRUST_WEIGHTS.mutation *
-      normalize(prov.results?.mutation_score || 0, policy.min_mutation, 0.9) +
+    TRUST_WEIGHTS.mutation * normalize(enhancedMutationScore, policy.min_mutation, 0.9) +
+    TRUST_WEIGHTS.test_quality * testQualityScore +
     TRUST_WEIGHTS.contracts *
       (policy.requires_contracts
         ? prov.results?.contracts?.consumer && prov.results?.contracts?.provider
@@ -121,17 +184,32 @@ function trustScore(tier, prov) {
  * @param {Object} options - Gate options
  */
 function enforceGate(gateType, options) {
-  const { tier, value } = options;
+  const { tier, value, projectId, experimentalMode = false } = options;
+
+  // Handle experimental mode
+  const effectiveTier = experimentalMode ? 'experimental' : tier;
 
   // Convert tier to number if it's a string
-  const tierNum = typeof tier === 'string' ? parseInt(tier) : tier;
+  const tierNum = typeof effectiveTier === 'string' ? parseInt(effectiveTier) : effectiveTier;
 
-  if (!TIER_POLICY[tierNum]) {
+  if (!TIER_POLICY[tierNum] && effectiveTier !== 'experimental') {
     console.error(`❌ Invalid tier: ${tier} (parsed as: ${tierNum})`);
     process.exit(1);
   }
 
-  const policy = TIER_POLICY[tier];
+  const policy = TIER_POLICY[effectiveTier];
+
+  // Check for waivers first
+  const waiverStatus = projectId ? checkWaiverStatus(projectId, gateType) : { waived: false };
+
+  if (waiverStatus.waived) {
+    console.log(
+      `⚠️  Gate ${gateType} waived for project ${projectId} (waiver: ${waiverStatus.waiverId})`
+    );
+    console.log(`   Reason: ${waiverStatus.reason}`);
+    console.log(`   Max Trust Score: ${waiverStatus.maxTrustScore}`);
+    return; // Skip enforcement
+  }
 
   switch (gateType) {
     case 'coverage':
@@ -191,14 +269,17 @@ function enforceGate(gateType, options) {
  * @param {string} tier - Tier to show info for
  */
 function showTierInfo(tier) {
-  const tierNum = typeof tier === 'string' ? parseInt(tier) : tier;
+  const effectiveTier = tier === 'experimental' ? 'experimental' : tier;
+  const tierNum = typeof effectiveTier === 'string' ? parseInt(effectiveTier) : effectiveTier;
   const policy = TIER_POLICY[tierNum];
+
   if (!policy) {
     console.error(`❌ Invalid tier: ${tier} (parsed as: ${tierNum})`);
     return;
   }
 
-  console.log(`📋 Tier ${tierNum} Policy:`);
+  const tierName = effectiveTier === 'experimental' ? 'Experimental' : `Tier ${tierNum}`;
+  console.log(`📋 ${tierName} Policy:`);
   console.log(`   - Branch Coverage: ≥${policy.min_branch * 100}%`);
   console.log(`   - Mutation Score: ≥${policy.min_mutation * 100}%`);
   console.log(`   - Max Files: ${policy.max_files}`);
@@ -206,17 +287,26 @@ function showTierInfo(tier) {
   console.log(`   - Requires Contracts: ${policy.requires_contracts}`);
   console.log(`   - Allowed Modes: ${policy.allowed_modes.join(', ')}`);
   console.log(`   - Manual Review: ${policy.requires_manual_review ? 'Required' : 'Not required'}`);
+
+  if (effectiveTier === 'experimental') {
+    console.log(`   - 🧪 Experimental Mode: Reduced requirements for prototyping`);
+  }
 }
 
 // CLI interface
 if (require.main === module) {
   const command = process.argv[2];
 
+  // Get project ID from environment or arguments
+  const projectId = process.env.CAWS_PROJECT_ID || process.argv[process.argv.length - 1];
+
   switch (command) {
     case 'coverage':
       enforceGate('coverage', {
         tier: process.argv[3],
         value: parseFloat(process.argv[4]),
+        projectId: projectId,
+        experimentalMode: process.argv[5] === 'true',
       });
       break;
 
@@ -224,6 +314,8 @@ if (require.main === module) {
       enforceGate('mutation', {
         tier: process.argv[3],
         value: parseFloat(process.argv[4]),
+        projectId: projectId,
+        experimentalMode: process.argv[5] === 'true',
       });
       break;
 
@@ -231,6 +323,8 @@ if (require.main === module) {
       enforceGate('trust', {
         tier: process.argv[3],
         value: parseInt(process.argv[4]),
+        projectId: projectId,
+        experimentalMode: process.argv[5] === 'true',
       });
       break;
 
@@ -241,6 +335,8 @@ if (require.main === module) {
           files: parseInt(process.argv[4]),
           loc: parseInt(process.argv[5]),
         },
+        projectId: projectId,
+        experimentalMode: process.argv[6] === 'true',
       });
       break;
 
@@ -251,7 +347,7 @@ if (require.main === module) {
     case 'trust-score':
       if (process.argv.length < 4) {
         console.error(
-          '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
+          '❌ Usage: node gates.js trust-score <tier> <coverage> <mutation> <test_quality> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain> <experimental>'
         );
         process.exit(1);
       }
@@ -273,6 +369,9 @@ if (require.main === module) {
           sbom_valid: process.argv[13] === 'true',
           attestation_valid: process.argv[14] === 'true',
         },
+        experimental_mode: {
+          enabled: process.argv[15] === 'true',
+        },
       };
 
       const score = trustScore(tier, prov);
@@ -288,7 +387,7 @@ if (require.main === module) {
       console.log('  node gates.js budget <tier> <files> <loc>');
       console.log('  node gates.js tier <tier>');
       console.log(
-        '  node gates.js trust-score <tier> <coverage> <mutation> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain>'
+        '  node gates.js trust-score <tier> <coverage> <mutation> <test_quality> <consumer> <provider> <a11y> <perf> <flake> <mode> <scope> <supplychain> <experimental>'
       );
       process.exit(1);
   }

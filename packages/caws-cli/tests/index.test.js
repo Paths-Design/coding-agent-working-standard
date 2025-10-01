@@ -88,21 +88,21 @@ describe('CAWS CLI', () => {
 
   describe('Project Initialization', () => {
     test('should create project directory', () => {
-      execSync(`node dist/index.js init ${testProjectName} --non-interactive`, {
+      execSync(`node src/index.js init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
       expect(fs.existsSync(testProjectName)).toBe(true);
     });
 
     test('should create .caws directory', () => {
-      execSync(`node dist/index.js init ${testProjectName} --non-interactive`, {
+      execSync(`node src/index.js init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
       expect(fs.existsSync(path.join(testProjectName, '.caws'))).toBe(true);
     });
 
     test('should create working spec file', () => {
-      execSync(`node dist/index.js init ${testProjectName} --non-interactive`, {
+      execSync(`node src/index.js init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
       const workingSpecPath = path.join(testProjectName, '.caws/working-spec.yaml');
@@ -116,7 +116,7 @@ describe('CAWS CLI', () => {
     });
 
     test('should generate provenance manifest', () => {
-      execSync(`node dist/index.js init ${testProjectName} --non-interactive`, {
+      execSync(`node src/index.js init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
       const provenancePath = path.join(testProjectName, '.agent/provenance.json');
@@ -131,7 +131,7 @@ describe('CAWS CLI', () => {
     });
 
     test('should initialize git repository when requested', () => {
-      execSync(`node dist/index.js init ${testProjectName} --git`, { encoding: 'utf8' });
+      execSync(`node src/index.js init ${testProjectName} --git`, { encoding: 'utf8' });
       expect(fs.existsSync(path.join(testProjectName, '.git'))).toBe(true);
     });
   });
@@ -148,7 +148,7 @@ describe('CAWS CLI', () => {
     });
 
     test('should scaffold CAWS components', () => {
-      execSync('node ../../dist/index.js scaffold', { encoding: 'utf8', cwd: testProjectName });
+      execSync('node ../../src/index.js scaffold', { encoding: 'utf8', cwd: testProjectName });
       expect(fs.existsSync('.caws')).toBe(true);
       expect(fs.existsSync('apps/tools/caws')).toBe(true);
       expect(fs.existsSync('codemod')).toBe(true);
@@ -159,7 +159,7 @@ describe('CAWS CLI', () => {
       fs.mkdirSync('.caws', { recursive: true });
       fs.writeFileSync('.caws/test.txt', 'existing file');
 
-      const output = execSync('node ../../dist/index.js scaffold', {
+      const output = execSync('node ../../src/index.js scaffold', {
         encoding: 'utf8',
         cwd: testProjectName,
       });
@@ -167,7 +167,7 @@ describe('CAWS CLI', () => {
     });
 
     test('should generate scaffold provenance', () => {
-      execSync('node ../../dist/index.js scaffold', { encoding: 'utf8', cwd: testProjectName });
+      execSync('node ../../src/index.js scaffold', { encoding: 'utf8', cwd: testProjectName });
       const provenancePath = '.agent/scaffold-provenance.json';
       expect(fs.existsSync(provenancePath)).toBe(true);
 
@@ -182,7 +182,7 @@ describe('CAWS CLI', () => {
 
   describe('Schema Validation', () => {
     test('should validate working spec against schema', () => {
-      execSync(`node dist/index.js init ${testProjectName} --non-interactive`, {
+      execSync(`node src/index.js init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
 
