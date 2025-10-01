@@ -34,7 +34,13 @@ function generateProvenance() {
     const provenance = {
       agent: 'caws-cli',
       model: 'cli-interactive',
-      modelHash: require('../../../package.json').version || '1.0.0',
+      modelHash: (() => {
+        try {
+          return require('../../../package.json').version || '1.0.0';
+        } catch (error) {
+          return '1.0.0'; // Fallback version if package.json not found
+        }
+      })(),
       toolAllowlist: [
         'node',
         'npm',

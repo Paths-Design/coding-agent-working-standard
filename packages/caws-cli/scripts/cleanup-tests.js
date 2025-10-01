@@ -16,10 +16,17 @@ const TEST_DIR_PATTERNS = [
   /^test-e2e-complete-project$/,
   /^test-perf-init$/,
   /^test-perf-scaffold$/,
+  /^test-memory-check$/,
+  /^test-cpu-monitor$/,
   /^test-project$/,
   /^test-caws-project$/,
   /^test-cli-contract$/,
   /^test-manual$/,
+  /^test-e2e-existing-project$/,
+  /^test-e2e-error-recovery$/,
+  /^test-e2e-feature-project$/,
+  /^test-e2e-refactor-project$/,
+  /^test-e2e-fix-project$/,
 ];
 
 // Directories to search for test folders
