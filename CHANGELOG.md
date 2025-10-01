@@ -1,3 +1,38 @@
+# 1.0.0 (2025-10-01)
+
+
+### Bug Fixes
+
+* CLI accessibility, error handling, and comprehensive test cleanup ([08fb690](https://github.com/Paths-Design/coding-agent-working-standard/commit/08fb6902de3b1d85fe675ca8b84f16ca6b0c8f75))
+* resolve all ESLint issues for production readiness ([56bbbc6](https://github.com/Paths-Design/coding-agent-working-standard/commit/56bbbc6a99013a5f0fe8f3eaf67d9ea6d24bd832))
+* resolve all test suite failures and achieve 100% test pass rate ([d103bf6](https://github.com/Paths-Design/coding-agent-working-standard/commit/d103bf6398212edeaa0c443040fb6ac218d1f4d3))
+* resolve lock file and chalk compatibility issues ([4f00360](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f00360e7941b7d564a8fbf7c8295fd94d797ab7))
+* Resolve remaining linting errors ([ad32019](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad320192a2a9c038b8775cf91c81e0f210d91cef))
+* resolve remaining test issues and CLI argument parsing ([d926623](https://github.com/Paths-Design/coding-agent-working-standard/commit/d92662358e5b949259bda849072d10dfe0df5126))
+* sync package-lock.json and add CI/CD improvements ([ebd74e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/ebd74e35e883fe62d53b4966a4f5b17b484de486))
+* update release workflow to use npx semantic-release directly ([100e4b7](https://github.com/Paths-Design/coding-agent-working-standard/commit/100e4b7d07450ff5ee7702d4eb6f67b33ac0b218))
+
+
+### Features
+
+* comprehensive CAWS CLI operationalization ([4ba1a14](https://github.com/Paths-Design/coding-agent-working-standard/commit/4ba1a1417596954c5adc7fd6f1dc4f2599ebb4cc))
+* configure OIDC automated publishing and fix linting issues ([165d0f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/165d0f34a88986c48343f3c7e605fe1dc069b9a2))
+* enhance CAWS CLI with Chalk styling and improved validation ([f58f205](https://github.com/Paths-Design/coding-agent-working-standard/commit/f58f20520cefcd23c5fa2a852194ff551c69a924))
+* implement automated publishing with OIDC and semantic versioning ([eadb9cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/eadb9cffdd8c36d78407dea79fc46f88974dd45e))
+* implement automated publishing with semantic versioning and OIDC ([fcd7461](https://github.com/Paths-Design/coding-agent-working-standard/commit/fcd7461266f874fb630a4be858868e6974dd8806))
+* Implement complete CAWS toolchain and testing framework ([819fe83](https://github.com/Paths-Design/coding-agent-working-standard/commit/819fe835ee096d6edd67f4c16594d289c86f5835))
+* Implement comprehensive CAWS framework enhancements ([8ee395d](https://github.com/Paths-Design/coding-agent-working-standard/commit/8ee395dfe4fda6c5fbc3b65716180e09de729e55))
+* update CAWS CLI for [@paths](https://github.com/paths).design publication ([9b28ed4](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b28ed4cd61b1b363b0f8661fbb486dfc1027013))
+
+
+### BREAKING CHANGES
+
+* Migrated to automated publishing with OIDC authentication
+* Updated CLI argument parsing for gates tool
+* Updated error handling to throw exceptions instead of process.exit
+* Updated to use OIDC for automated publishing
+* Repository moved to Paths-Design organization with automated publishing
+
 # Changelog
 
 All notable changes to CAWS (Coding Agent Workflow System) will be documented in this file.
