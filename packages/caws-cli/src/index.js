@@ -16,7 +16,7 @@ const chalk = require('chalk');
 // Import language support (with fallback for when tools aren't available)
 let languageSupport = null;
 try {
-  languageSupport = require('../../caws-template/apps/tools/caws/language-support.js');
+  languageSupport = require('@caws/template/apps/tools/caws/language-support.js');
 } catch (error) {
   console.warn('⚠️  Language support tools not available');
 }
@@ -88,9 +88,19 @@ function detectCAWSSetup(cwd = process.cwd()) {
   console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
   console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
 
-  // Check for template directory
-  const templateDir = path.join(__dirname, '..', '..', '..', 'caws-template');
+  // Check for template directory - use correct relative path from packages/caws-cli
+  const templateDir = path.resolve(__dirname, '../caws-template');
   const hasTemplateDir = fs.existsSync(templateDir);
+
+  // Also check if template is available as a dependency
+  const hasTemplateDependency = (() => {
+    try {
+      require.resolve('@caws/template');
+      return true;
+    } catch {
+      return false;
+    }
+  })();
 
   return {
     type: setupType,
@@ -104,6 +114,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
     hasTemplates,
     hasTools,
     hasTemplateDir,
+    hasTemplateDependency,
     templateDir,
     capabilities,
     isEnhanced: setupType === 'enhanced',
@@ -116,16 +127,16 @@ const cawsSetup = detectCAWSSetup();
 // Dynamic imports based on setup
 let provenanceTools = null;
 try {
-  if (cawsSetup.hasTemplateDir) {
-    const { generateProvenance, saveProvenance } = require(
-      path.join(cawsSetup.templateDir, 'apps/tools/caws/provenance.js')
-    );
-    provenanceTools = { generateProvenance, saveProvenance };
-  }
+  // Try to import from the template dependency first
+  const {
+    generateProvenance,
+    saveProvenance,
+  } = require('@caws/template/apps/tools/caws/provenance.js');
+  provenanceTools = { generateProvenance, saveProvenance };
 } catch (error) {
-  // Fallback for environments without template
+  // Fallback for environments without template dependency
   provenanceTools = null;
-  console.error(chalk.red('❌ Error loading provenance tools:'), error.message, provenanceTools);
+  console.warn('⚠️  Provenance tools not available via dependency');
 }
 
 const CLI_VERSION = require('../package.json').version;
@@ -270,15 +281,22 @@ async function copyTemplate(templatePath, destPath, replacements = {}) {
     // Ensure destination directory exists
     await fs.ensureDir(destPath);
 
-    // Check if template directory exists
+    // Check if template directory exists, or try to use template dependency
+    let actualTemplatePath = templatePath;
     if (!fs.existsSync(templatePath)) {
-      console.error(chalk.red('❌ Template directory not found:'), templatePath);
-      console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
-      process.exit(1);
+      try {
+        const templateDepPath = require.resolve('@caws/template');
+        actualTemplatePath = path.dirname(templateDepPath);
+        console.log(chalk.blue('ℹ️  Using template from dependency'));
+      } catch (error) {
+        console.error(chalk.red('❌ Template directory not found:'), templatePath);
+        console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
+        process.exit(1);
+      }
     }
 
     // Copy all files and directories
-    await fs.copy(templatePath, destPath);
+    await fs.copy(actualTemplatePath, destPath);
 
     // Replace template variables in text files
     const files = await fs.readdir(destPath, { recursive: true });
@@ -1323,6 +1341,15 @@ async function scaffoldProject(options) {
       required: true,
     });
 
+    console.log(
+      chalk.gray(`Scaffolding enhancements: ${JSON.stringify(enhancements.map((e) => e.name))}`)
+    );
+    console.log(
+      chalk.gray(
+        `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
+      )
+    );
+
     // Also add automated publishing for enhanced setups
     if (setup.isEnhanced) {
       enhancements.push({
@@ -1366,7 +1393,7 @@ async function scaffoldProject(options) {
     const addedFiles = [];
 
     for (const enhancement of enhancements) {
-      const sourcePath = path.join(__dirname, '..', '..', '..', enhancement.name);
+      const sourcePath = path.join(cawsSetup.templateDir, enhancement.name);
       const destPath = path.join(currentDir, enhancement.name);
 
       if (!fs.existsSync(destPath)) {
@@ -1380,13 +1407,28 @@ async function scaffoldProject(options) {
             console.warn(chalk.yellow(`⚠️  Failed to add ${enhancement.name}:`), copyError.message);
           }
         } else {
-          console.warn(chalk.yellow(`⚠️  Source not found for ${enhancement.name}, skipping`));
+          // If source doesn't exist in template, create the directory structure
+          try {
+            await fs.ensureDir(destPath);
+            console.log(chalk.green(`✅ Created ${enhancement.description}`));
+            addedCount++;
+            addedFiles.push(enhancement.name);
+          } catch (createError) {
+            console.warn(
+              chalk.yellow(`⚠️  Failed to create ${enhancement.name}:`),
+              createError.message
+            );
+          }
         }
       } else {
         if (options.force) {
           try {
             await fs.remove(destPath);
-            await fs.copy(sourcePath, destPath);
+            if (fs.existsSync(sourcePath)) {
+              await fs.copy(sourcePath, destPath);
+            } else {
+              await fs.ensureDir(destPath);
+            }
             console.log(chalk.blue(`🔄 Updated ${enhancement.description}`));
             addedCount++;
             addedFiles.push(enhancement.name);

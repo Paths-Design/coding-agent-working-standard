@@ -170,7 +170,8 @@ describe('CLI Accessibility Tests', () => {
 
       // Accessibility Contract: Should use standard Unicode characters
       // Check for problematic characters that might not render in all terminals
-      const problematicChars = /[\u0000-\u001F\u007F-\u009F]/; // Control characters
+      // eslint-disable-next-line no-control-regex
+      const problematicChars = /[\u0000-\u001f\u007f-\u009f]/u; // Control characters
       expect(helpOutput).not.toMatch(problematicChars);
     });
 

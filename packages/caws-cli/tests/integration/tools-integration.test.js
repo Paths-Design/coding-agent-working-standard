@@ -195,10 +195,7 @@ describe('CAWS Tools Integration', () => {
       const validateTool = require('./apps/tools/caws/validate.js');
       const provenanceTool = require('./apps/tools/caws/provenance.js');
 
-      // Step 1: Get initial spec
-      const initialSpec = yaml.load(fs.readFileSync(workingSpecPath, 'utf8'));
-
-      // Step 2: Validate and generate provenance
+      // Step 1: Validate and generate provenance
       validateTool(workingSpecPath);
       provenanceTool();
 
@@ -237,10 +234,10 @@ describe('CAWS Tools Integration', () => {
         [validateTool, provenanceTool, gatesTool],
       ];
 
-      orders.forEach((order, index) => {
+      orders.forEach((_order) => {
         // Integration Contract: Tools should work regardless of execution order
         expect(() => {
-          order.forEach((tool) => {
+          _order.forEach((tool) => {
             if (tool === validateTool) {
               tool('.caws/working-spec.yaml');
             } else {

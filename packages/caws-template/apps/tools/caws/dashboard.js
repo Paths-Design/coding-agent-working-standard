@@ -8,7 +8,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 /**
  * Generate real provenance data for trust score calculation
@@ -131,13 +130,9 @@ function checkPerformanceCompliance() {
  * @returns {number} Flake rate (0-1)
  */
 function getRealFlakeRate() {
-  try {
-    // This would analyze test run history for flakiness
-    // For now, return a reasonable estimate
-    return 0.02; // 2% flake rate estimate
-  } catch (error) {
-    return 0.05; // Default estimate
-  }
+  // This would analyze test run history for flakiness
+  // For now, return a reasonable estimate
+  return 0.02; // 2% flake rate estimate
 }
 
 /**
@@ -231,10 +226,8 @@ function findSourceFiles(projectRoot) {
   return files;
 }
 
-/**
- * Read historical data for trend calculation
- * @returns {Array|null} Historical data or null if not available
- */
+// Historical data reading function (currently unused but kept for future use)
+// eslint-disable-next-line no-unused-vars
 function readHistoricalData() {
   try {
     // Look for historical metrics files
@@ -253,6 +246,7 @@ function readHistoricalData() {
  * @param {Object} dashboard - Dashboard data structure
  * @param {number} days - Number of days to generate
  */
+// eslint-disable-next-line no-unused-vars
 function generateSimulatedTrends(dashboard, days) {
   // Generate more realistic simulated trends based on current metrics
   const baseTrustScore = dashboard.metrics.TRUST_SCORE.current || 75;

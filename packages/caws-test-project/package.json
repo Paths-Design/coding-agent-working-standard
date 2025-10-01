@@ -13,8 +13,10 @@
     "test:axe": "echo '⚠️  Accessibility tests not configured'",
     "lint": "echo 'Test project does not need linting'",
     "lint:fix": "echo 'Test project does not need linting fixes'",
+    "lint:staged": "echo 'Test project does not need linting'",
     "format": "echo 'Test project does not need formatting'",
     "validate": "echo 'Test project does not need validation'",
+    "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
     "dev": "echo 'Test project does not need development mode'",
     "test:watch": "echo 'Test project does not have watchable tests'",
     "clean": "rm -rf .agent"

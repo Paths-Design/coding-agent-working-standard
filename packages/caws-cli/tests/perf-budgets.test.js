@@ -238,7 +238,9 @@ describe('Performance Budget Tests', () => {
       const startupStart = performance.now();
       try {
         execSync(`node "${cliPath}" --version`, { encoding: 'utf8', stdio: 'pipe' });
-      } catch (error) {}
+      } catch (error) {
+        // Ignore errors for performance measurement
+      }
       const startupEnd = performance.now();
       currentTimes.startup = startupEnd - startupStart;
 

@@ -39,12 +39,16 @@ describe('CAWS CLI', () => {
     fs.writeFileSync(path.join(mockTemplateDir, 'codemod/test.js'), 'console.log("mock codemod");');
     fs.writeFileSync(path.join(mockTemplateDir, '.github/workflows/caws.yml'), 'name: test');
 
-    // Create a symlink to the actual caws-template for testing
+    // Try to use the actual caws-template for testing
     const templateDir = path.join(__dirname, '../../caws-template');
     if (fs.existsSync(templateDir)) {
       // Use the actual template instead of mock for better testing
       fs.rmSync(mockTemplateDir, { recursive: true, force: true });
       fs.symlinkSync(templateDir, mockTemplateDir);
+    } else {
+      // For global installations or when template is not available locally
+      console.log('ℹ️  Using mock template for testing (template not found locally)');
+      // Keep the mock files created above
     }
   });
 

@@ -16,7 +16,7 @@ const { execSync } = require('child_process');
  * @returns {Object} Complete provenance record
  */
 function generateProvenance(options = {}) {
-  const projectRoot = options.projectRoot || process.cwd();
+  // const _projectRoot = options.projectRoot || process.cwd(); // Currently unused
 
   return {
     // Agent and model information
@@ -25,17 +25,17 @@ function generateProvenance(options = {}) {
     model_hash: options.modelHash || generateModelHash(),
 
     // Tool and security information
-    tool_allowlist: options.toolAllowlist || generateToolAllowlist(projectRoot),
+    tool_allowlist: options.toolAllowlist || generateToolAllowlist(process.cwd()),
     prompts: options.prompts || [],
 
     // Git and version control information
-    commit: getCurrentCommit(projectRoot),
-    branch: getCurrentBranch(projectRoot),
-    repository: getRepositoryInfo(projectRoot),
+    commit: getCurrentCommit(process.cwd()),
+    branch: getCurrentBranch(process.cwd()),
+    repository: getRepositoryInfo(process.cwd()),
 
     // File and artifact information
-    artifacts: generateArtifactList(projectRoot),
-    dependencies: generateDependencyInfo(projectRoot),
+    artifacts: generateArtifactList(),
+    dependencies: generateDependencyInfo(process.cwd()),
 
     // Execution results and metadata
     results: options.results || {},
@@ -47,14 +47,14 @@ function generateProvenance(options = {}) {
 
     // Timestamps and versioning
     timestamp: new Date().toISOString(),
-    version: getPackageVersion(projectRoot),
+    version: getPackageVersion(process.cwd()),
     provenance_hash: generateProvenanceHash(),
 
     // Build and deployment information
-    build_info: generateBuildInfo(projectRoot),
+    build_info: generateBuildInfo(process.cwd()),
 
     // Change tracking
-    change_summary: generateChangeSummary(projectRoot),
+    change_summary: generateChangeSummary(process.cwd()),
   };
 }
 
@@ -222,7 +222,7 @@ function getRepositoryInfo(projectRoot) {
  */
 function extractHostFromUrl(url) {
   try {
-    const match = url.match(/https?:\/\/([^\/]+)/);
+    const match = url.match(/https?:\/\/([^/]+)/);
     return match ? match[1] : 'unknown';
   } catch (error) {
     return 'unknown';
@@ -236,7 +236,7 @@ function extractHostFromUrl(url) {
  */
 function extractRepoNameFromUrl(url) {
   try {
-    const match = url.match(/\/([^\/]+)(\.git)?$/);
+    const match = url.match(/\/([^/]+)(\.git)?$/);
     return match ? match[1].replace('.git', '') : 'unknown';
   } catch (error) {
     return 'unknown';
@@ -245,10 +245,10 @@ function extractRepoNameFromUrl(url) {
 
 /**
  * Generate list of project artifacts
- * @param {string} projectRoot - Project root directory
+ * @param {string} _projectRoot - Project root directory (currently unused)
  * @returns {Array} Array of artifact information
  */
-function generateArtifactList(projectRoot) {
+function generateArtifactList(_projectRoot) {
   const artifacts = [];
 
   // Add generated files and directories
@@ -261,7 +261,7 @@ function generateArtifactList(projectRoot) {
   ];
 
   artifactPaths.forEach((artifactPath) => {
-    const fullPath = path.join(projectRoot, artifactPath);
+    const fullPath = path.join(process.cwd(), artifactPath);
 
     if (fs.existsSync(fullPath)) {
       const stat = fs.statSync(fullPath);
@@ -344,10 +344,10 @@ function generateIntegrityInfo() {
 
 /**
  * Generate build information
- * @param {string} projectRoot - Project root directory
+ * @param {string} _projectRoot - Project root directory (currently unused)
  * @returns {Object} Build information
  */
-function generateBuildInfo(projectRoot) {
+function generateBuildInfo(_projectRoot) {
   try {
     const buildTime = execSync('date -Iseconds', {
       encoding: 'utf8',
@@ -525,12 +525,12 @@ function generateProvenanceHash() {
 
 /**
  * Get package version safely
- * @param {string} projectRoot - Project root directory
+ * @param {string} _projectRoot - Project root directory (currently unused)
  * @returns {string} Package version or default
  */
-function getPackageVersion(projectRoot) {
+function getPackageVersion(_projectRoot) {
   try {
-    const packageJsonPath = path.join(projectRoot, 'package.json');
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
     if (fs.existsSync(packageJsonPath)) {
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
       return packageJson.version || '1.0.0';

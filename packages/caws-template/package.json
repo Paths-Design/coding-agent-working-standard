@@ -15,8 +15,10 @@
     "test:watch": "jest --watch",
     "lint": "eslint apps/tools/**/*.js",
     "lint:fix": "eslint apps/tools/**/*.js --fix",
+    "lint:staged": "eslint apps/tools/**/*.js",
     "format": "prettier --write apps/tools/**/*.js .caws/**/*.json .caws/**/*.yaml",
     "validate": "node apps/tools/caws/validate.js .caws/working-spec.yaml",
+    "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
     "clean": "rm -rf dist .agent"
   },
   "keywords": [

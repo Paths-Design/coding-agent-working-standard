@@ -7,7 +7,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 // Tier policies for quality gates
 const TIER_POLICIES = {
@@ -52,6 +51,8 @@ function showTierPolicy(tier = 1, projectRoot = process.cwd()) {
   console.log(`Max Files: ${policy.max_files}`);
   console.log(`Max LOC: ${policy.max_loc}`);
   console.log(`Trust Score: ≥${policy.trust_score}`);
+  console.log('Requires Contracts: true');
+  console.log('Manual Review: Required');
   console.log('');
 
   // Analyze current project against policy
@@ -78,10 +79,10 @@ function showTierPolicy(tier = 1, projectRoot = process.cwd()) {
 /**
  * Analyze project metrics for quality gate evaluation
  * @param {string} projectRoot - Project root directory
- * @param {number} tier - Risk tier for context
+ * @param {number} _tier - Risk tier for context (currently unused)
  * @returns {Object} Project analysis results
  */
-function analyzeProject(projectRoot, tier) {
+function analyzeProject(projectRoot, _tier) {
   const analysis = {
     fileCount: 0,
     lineCount: 0,
@@ -254,10 +255,10 @@ function getMutationScore(projectRoot) {
  * Check quality gates against project analysis
  * @param {Object} analysis - Project analysis results
  * @param {Object} policy - Tier policy
- * @param {number} tier - Risk tier
+ * @param {number} _tier - Risk tier (currently unused)
  * @returns {Array} Array of gate check results
  */
-function checkQualityGates(analysis, policy, tier) {
+function checkQualityGates(analysis, policy, _tier) {
   const gates = [];
 
   // File count gate
@@ -373,44 +374,47 @@ function main() {
       break;
 
     case 'coverage':
-      // Handle test format: gates.js coverage "2" 0.85 (passing case)
-      // and gates.js coverage "2" 0.75 (failing case)
+      // Handle test format: gates.js coverage "2" 0.85 (tier, value)
+      const coverageTier = parseInt(process.argv[3]) || 1;
       const coverage = parseFloat(process.argv[4]) || 0.85;
-      const coverageThreshold = parseFloat(process.argv[4]) || 0.8;
+      const coverageThreshold = TIER_POLICIES[coverageTier]?.branch_coverage || 0.8;
       if (!enforceCoverageGate(coverage, coverageThreshold)) {
-        process.exit(1);
+        throw new Error(`Coverage gate failed: ${coverage} < ${coverageThreshold}`);
       }
       break;
 
     case 'mutation':
-      // Handle test format: gates.js mutation "2" 0.60 (passing case)
-      // and gates.js mutation "2" 0.40 (failing case)
+      // Handle test format: gates.js mutation "2" 0.60 (tier, value)
+      const mutationTier = parseInt(process.argv[3]) || 1;
       const mutationScore = parseFloat(process.argv[4]) || 0.6;
-      const mutationThreshold = parseFloat(process.argv[4]) || 0.5;
+      const mutationThreshold = TIER_POLICIES[mutationTier]?.mutation_score || 0.5;
       if (!enforceMutationGate(mutationScore, mutationThreshold)) {
-        process.exit(1);
+        throw new Error(`Mutation gate failed: ${mutationScore} < ${mutationThreshold}`);
       }
       break;
 
     case 'trust':
-      // Handle test format: gates.js trust "2" 85 (passing case)
-      // and gates.js trust "2" 75 (failing case)
+      // Handle test format: gates.js trust "2" 85 (tier, value)
+      const trustTier = parseInt(process.argv[3]) || 1;
       const trustScore = parseInt(process.argv[4]) || 85;
-      const trustThreshold = parseInt(process.argv[4]) || 82;
+      const trustThreshold = TIER_POLICIES[trustTier]?.trust_score || 82;
       if (!enforceTrustScoreGate(trustScore, trustThreshold)) {
-        process.exit(1);
+        throw new Error(`Trust score gate failed: ${trustScore} < ${trustThreshold}`);
       }
       break;
 
     case 'budget':
-      // Handle test format: gates.js budget "2" 20 800 (passing case)
-      // and gates.js budget 2 30 800 (failing case - too many files)
-      // and gates.js budget 2 20 1200 (failing case - too many LOC)
+      // Handle test format: gates.js budget "2" 20 800 (tier, files, loc)
+      const budgetTier = parseInt(process.argv[3]) || 1;
       const files = parseInt(process.argv[4]) || 20;
       const loc = parseInt(process.argv[5]) || 800;
-      // Use tier 2 defaults for max values
-      if (!enforceBudgetGate(files, loc, 25, 1000)) {
-        process.exit(1);
+      // Use tier-specific limits
+      const maxFiles = TIER_POLICIES[budgetTier]?.max_files || 25;
+      const maxLoc = TIER_POLICIES[budgetTier]?.max_loc || 1000;
+      if (!enforceBudgetGate(files, loc, maxFiles, maxLoc)) {
+        throw new Error(
+          `Budget gate failed: ${files} files or ${loc} LOC exceeds tier ${budgetTier} limits (${maxFiles} files, ${maxLoc} LOC)`
+        );
       }
       break;
 

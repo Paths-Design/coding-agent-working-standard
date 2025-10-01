@@ -5,7 +5,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 const Ajv = require('ajv');
 
 describe('Schema Validation Contracts', () => {

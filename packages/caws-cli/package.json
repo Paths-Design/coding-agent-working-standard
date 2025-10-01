@@ -27,8 +27,10 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.js tests/**/*.js",
     "lint:fix": "eslint src/**/*.js tests/**/*.js --fix",
+    "lint:staged": "eslint src/**/*.js tests/**/*.js",
     "format": "prettier --write src/**/*.js tests/**/*.js",
     "validate": "echo 'CLI package validation not required'",
+    "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
     "clean": "rm -rf dist test-caws-project .agent"
   },
   "keywords": [
@@ -50,7 +52,8 @@
     "ajv": "^8.12.0",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
-    "inquirer": "^9.0.0"
+    "inquirer": "^9.0.0",
+    "@caws/template": "1.0.0"
   },
   "devDependencies": {
     "@semantic-release/changelog": "6.0.3",
