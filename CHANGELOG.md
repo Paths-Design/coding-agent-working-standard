@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v1.0.0...v2.0.0) (2025-10-01)
+
+
+### Features
+
+* enable OIDC trusted publishing with NPM provenance ([93545ea](https://github.com/Paths-Design/coding-agent-working-standard/commit/93545ea2b420b7ca2fe6493039e3ea6abb2a0760))
+
+
+### BREAKING CHANGES
+
+* First production release with complete CI/CD automation
+
 # 1.0.0 (2025-10-01)
 
 
