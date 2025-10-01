@@ -71,42 +71,15 @@ describe('CLI Workflow Integration', () => {
       try {
         process.chdir(cliTestProjectPath);
 
-        // Capture scaffold output for debugging
-        let scaffoldOutput = '';
-        try {
-          scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
-            encoding: 'utf8',
-            stdio: 'pipe',
-          });
-        } catch (scaffoldError) {
-          console.log('Scaffold command failed with error:', scaffoldError.message);
-          console.log('Scaffold stderr:', scaffoldError.stderr);
-          console.log('Scaffold stdout:', scaffoldError.stdout);
-          throw scaffoldError;
-        }
-
-        // Log scaffold output for debugging in CI
-        if (process.env.CI) {
-          console.log('Scaffold output:', scaffoldOutput);
-        }
+        execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
       } finally {
         process.chdir(originalDir);
       }
 
       // Integration Contract: Scaffolding should create complete tool structure
-      // Debug: List what actually exists
-      if (process.env.CI) {
-        console.log('Files in project directory:', fs.readdirSync(cliTestProjectPath));
-        const appsDir = path.join(cliTestProjectPath, 'apps');
-        if (fs.existsSync(appsDir)) {
-          console.log('Files in apps directory:', fs.readdirSync(appsDir));
-          const toolsDir = path.join(appsDir, 'tools');
-          if (fs.existsSync(toolsDir)) {
-            console.log('Files in apps/tools directory:', fs.readdirSync(toolsDir));
-          }
-        }
-      }
-
       expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws'))).toBe(true);
       expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'))).toBe(
         true
@@ -144,35 +117,11 @@ describe('CLI Workflow Integration', () => {
 
       expect(fs.existsSync(cliTestProjectPath)).toBe(true);
 
-      // Capture scaffold output for debugging
-      let scaffoldOutput = '';
-      try {
-        scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-          cwd: cliTestProjectPath, // Scaffold in project directory
-        });
-      } catch (scaffoldError) {
-        console.log('Scaffold command failed with error:', scaffoldError.message);
-        console.log('Scaffold stderr:', scaffoldError.stderr);
-        console.log('Scaffold stdout:', scaffoldError.stdout);
-        throw scaffoldError;
-      }
-
-      // Log scaffold output for debugging in CI
-      if (process.env.CI) {
-        console.log('Scaffold output (test 2):', scaffoldOutput);
-        // Debug: List what actually exists
-        console.log('Files in project directory (test 2):', fs.readdirSync(cliTestProjectPath));
-        const appsDir = path.join(cliTestProjectPath, 'apps');
-        if (fs.existsSync(appsDir)) {
-          console.log('Files in apps directory (test 2):', fs.readdirSync(appsDir));
-          const toolsDir = path.join(appsDir, 'tools');
-          if (fs.existsSync(toolsDir)) {
-            console.log('Files in apps/tools directory (test 2):', fs.readdirSync(toolsDir));
-          }
-        }
-      }
+      execSync(`node "${cliPath}" scaffold`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        cwd: cliTestProjectPath, // Scaffold in project directory
+      });
 
       // Step 2: Modify working spec
       const workingSpecPath = path.join(cliTestProjectPath, '.caws/working-spec.yaml');
@@ -207,35 +156,11 @@ describe('CLI Workflow Integration', () => {
 
       expect(fs.existsSync(cliTestProjectPath)).toBe(true);
 
-      // Capture scaffold output for debugging
-      let scaffoldOutput = '';
-      try {
-        scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-          cwd: cliTestProjectPath, // Scaffold in project directory
-        });
-      } catch (scaffoldError) {
-        console.log('Scaffold command failed with error:', scaffoldError.message);
-        console.log('Scaffold stderr:', scaffoldError.stderr);
-        console.log('Scaffold stdout:', scaffoldError.stdout);
-        throw scaffoldError;
-      }
-
-      // Log scaffold output for debugging in CI
-      if (process.env.CI) {
-        console.log('Scaffold output (test 3):', scaffoldOutput);
-        // Debug: List what actually exists
-        console.log('Files in project directory (test 3):', fs.readdirSync(cliTestProjectPath));
-        const appsDir = path.join(cliTestProjectPath, 'apps');
-        if (fs.existsSync(appsDir)) {
-          console.log('Files in apps directory (test 3):', fs.readdirSync(appsDir));
-          const toolsDir = path.join(appsDir, 'tools');
-          if (fs.existsSync(toolsDir)) {
-            console.log('Files in apps/tools directory (test 3):', fs.readdirSync(toolsDir));
-          }
-        }
-      }
+      execSync(`node "${cliPath}" scaffold`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        cwd: cliTestProjectPath, // Scaffold in project directory
+      });
 
       // Step 1: Validate the working spec
       const validateTool = require(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'));
