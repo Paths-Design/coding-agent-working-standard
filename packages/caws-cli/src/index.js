@@ -121,21 +121,27 @@ function detectCAWSSetup(cwd = process.cwd()) {
     console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
   }
 
-  // Check for template directory - try multiple possible locations relative to cwd
+  // Check for template directory - try multiple possible locations
   let templateDir = null;
   const possibleTemplatePaths = [
+    // Try relative to current working directory (for monorepo setups)
     path.resolve(cwd, '../caws-template'),
     path.resolve(cwd, '../../caws-template'),
     path.resolve(cwd, 'packages/caws-template'),
     path.resolve(cwd, 'caws-template'),
+    // Try relative to CLI location (for installed CLI)
     path.resolve(__dirname, '../caws-template'),
     path.resolve(__dirname, '../../caws-template'),
+    // Try absolute paths for CI environments
+    path.resolve(process.cwd(), 'packages/caws-template'),
+    path.resolve(process.cwd(), '../packages/caws-template'),
+    path.resolve(process.cwd(), '../../packages/caws-template'),
   ];
 
   for (const testPath of possibleTemplatePaths) {
     if (fs.existsSync(testPath)) {
       templateDir = testPath;
-      console.log(`✅ Found template directory: ${templateDir}`);
+      console.log(`✅ Found template directory: ${testPath}`);
       break;
     }
   }
