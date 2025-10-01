@@ -201,40 +201,79 @@ describe('Schema Validation Contracts', () => {
   describe('Tool Interface Contracts', () => {
     test('validation tool should export expected interface', () => {
       // Contract: Validation tool should export an object with validateWorkingSpec function
-      const validatePath = path.join(__dirname, '../../demo-project/apps/tools/caws/validate.js');
+      const possibleDemoPaths = [
+        path.join(__dirname, '../../demo-project'),
+        path.join(__dirname, '../../../demo-project'),
+        path.join(process.cwd(), 'packages/caws-cli/demo-project'),
+        path.join(process.cwd(), 'demo-project'),
+      ];
 
-      if (fs.existsSync(validatePath)) {
-        const validateTool = require(validatePath);
+      let demoPath = null;
+      for (const testPath of possibleDemoPaths) {
+        if (fs.existsSync(testPath)) {
+          demoPath = testPath;
+          break;
+        }
+      }
 
-        // Should be an object with validateWorkingSpec function
-        expect(typeof validateTool).toBe('object');
-        expect(validateTool).toHaveProperty('validateWorkingSpec');
-        expect(typeof validateTool.validateWorkingSpec).toBe('function');
+      if (demoPath) {
+        const validatePath = path.join(demoPath, 'apps/tools/caws/validate.js');
 
-        // Contract: Tool should have proper interface (skip calling with invalid path to avoid process.exit)
-        // The function exists and is callable - interface contract is met
-        expect(validateTool.validateWorkingSpec).toBeDefined();
+        if (fs.existsSync(validatePath)) {
+          const validateTool = require(validatePath);
+
+          // Should be an object with validateWorkingSpec function
+          expect(typeof validateTool).toBe('object');
+          expect(validateTool).toHaveProperty('validateWorkingSpec');
+          expect(typeof validateTool.validateWorkingSpec).toBe('function');
+
+          // Contract: Tool should have proper interface (skip calling with invalid path to avoid process.exit)
+          // The function exists and is callable - interface contract is met
+          expect(validateTool.validateWorkingSpec).toBeDefined();
+        } else {
+          console.log(`⚠️  Validation tool not found at: ${validatePath}`);
+        }
+      } else {
+        console.log('⚠️  Demo project not found - skipping validation tool interface test');
       }
     });
 
     test('tool allowlist should have expected structure', () => {
-      const allowlistPath = path.join(
-        __dirname,
-        '../../demo-project/apps/tools/caws/tools-allow.json'
-      );
+      const possibleDemoPaths = [
+        path.join(__dirname, '../../demo-project'),
+        path.join(__dirname, '../../../demo-project'),
+        path.join(process.cwd(), 'packages/caws-cli/demo-project'),
+        path.join(process.cwd(), 'demo-project'),
+      ];
 
-      if (fs.existsSync(allowlistPath)) {
-        const allowlist = JSON.parse(fs.readFileSync(allowlistPath, 'utf8'));
-
-        // Contract: Should be an array of allowed patterns
-        expect(Array.isArray(allowlist)).toBe(true);
-
-        if (allowlist.length > 0) {
-          // Contract: Each entry should be a string pattern
-          allowlist.forEach((pattern) => {
-            expect(typeof pattern).toBe('string');
-          });
+      let demoPath = null;
+      for (const testPath of possibleDemoPaths) {
+        if (fs.existsSync(testPath)) {
+          demoPath = testPath;
+          break;
         }
+      }
+
+      if (demoPath) {
+        const allowlistPath = path.join(demoPath, 'apps/tools/caws/tools-allow.json');
+
+        if (fs.existsSync(allowlistPath)) {
+          const allowlist = JSON.parse(fs.readFileSync(allowlistPath, 'utf8'));
+
+          // Contract: Should be an array of allowed patterns
+          expect(Array.isArray(allowlist)).toBe(true);
+
+          if (allowlist.length > 0) {
+            // Contract: Each entry should be a string pattern
+            allowlist.forEach((pattern) => {
+              expect(typeof pattern).toBe('string');
+            });
+          }
+        } else {
+          console.log(`⚠️  Tool allowlist not found at: ${allowlistPath}`);
+        }
+      } else {
+        console.log('⚠️  Demo project not found - skipping allowlist structure test');
       }
     });
   });

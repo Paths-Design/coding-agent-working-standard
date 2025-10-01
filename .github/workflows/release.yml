@@ -59,7 +59,25 @@ jobs:
         run: npm run lint
 
       - name: Run tests
-        run: npm test
+        run: |
+          echo "🔍 CI Environment Info:"
+          echo "  Node version: $(node --version)"
+          echo "  NPM version: $(npm --version)"
+          echo "  Current directory: $(pwd)"
+          echo "  Directory contents:"
+          ls -la
+          echo ""
+          echo "🔍 Checking for template and demo directories:"
+          echo "  Template paths:"
+          find . -name "caws-template" -type d 2>/dev/null || echo "  ❌ No caws-template found"
+          echo "  Demo project paths:"
+          find . -name "demo-project" -type d 2>/dev/null || echo "  ❌ No demo-project found"
+          echo ""
+          echo "🔍 Checking test directory structure:"
+          echo "  Test directory: $(ls -la packages/caws-cli/tests/ | head -10)"
+          echo "  Contract tests: $(ls -la packages/caws-cli/tests/contract/)"
+          echo ""
+          npm test
 
       - name: Build packages
         run: npm run build
