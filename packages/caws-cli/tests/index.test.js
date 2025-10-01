@@ -157,14 +157,8 @@ module.exports = {
     test('should validate project name', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       expect(() => {
-        try {
-          execSync(`node "${cliPath}" init ""`, { encoding: 'utf8' });
-        } catch (error) {
-          // Error should contain project name validation message
-          expect(error.message).toContain('Project name is required');
-          throw error; // Re-throw to maintain test behavior
-        }
-      }).toThrow();
+        execSync(`node "${cliPath}" init ""`, { encoding: 'utf8' });
+      }).toThrow('Project name is required');
     });
 
     test('should sanitize project name', () => {
