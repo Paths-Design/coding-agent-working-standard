@@ -48,7 +48,7 @@ Fast checks run early (pre-commit), comprehensive checks run before merge (CI/CD
 - Naming conventions (< 1s)
 - Lint staged files only (< 5s)
 - Type checking (< 10s)
-- Common issues (debugger, etc.)
+- Common issues (debugger statements, etc.)
 ```
 
 **Why**:

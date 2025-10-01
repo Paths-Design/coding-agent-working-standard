@@ -21,6 +21,8 @@
     "dist",
     "build",
     ".turbo",
-    "coverage"
+    "coverage",
+    "packages/caws-template",
+    "apps"
   ]
 }

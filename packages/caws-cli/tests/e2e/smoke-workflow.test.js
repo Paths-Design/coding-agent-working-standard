@@ -30,12 +30,12 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
             if (fs.statSync(itemPath).isDirectory()) {
               fs.rmSync(itemPath, { recursive: true, force: true });
             }
-          } catch (err) {
+          } catch (_err) {
             // Ignore errors during cleanup
           }
         }
       });
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors if directory doesn't exist
     }
   });

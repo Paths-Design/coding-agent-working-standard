@@ -69,7 +69,7 @@ describe('CAWS Tools Integration', () => {
           }
         }
       });
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors if directory doesn't exist or can't be read
     }
   });
@@ -93,12 +93,12 @@ describe('CAWS Tools Integration', () => {
             if (fs.statSync(itemPath).isDirectory()) {
               fs.rmSync(itemPath, { recursive: true, force: true });
             }
-          } catch (err) {
+          } catch (_err) {
             // Ignore errors during cleanup
           }
         }
       });
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors if directory doesn't exist
     }
   });
