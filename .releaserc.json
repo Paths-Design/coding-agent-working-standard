@@ -15,10 +15,9 @@
     [
       "@semantic-release/npm",
       {
-        "npmPublish": true,
+        "npmPublish": false,
         "tarballDir": "dist",
-        "pkgRoot": "packages/caws-cli",
-        "registry": "https://registry.npmjs.org"
+        "pkgRoot": "packages/caws-cli"
       }
     ],
     [

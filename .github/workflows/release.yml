@@ -87,15 +87,9 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-        # OIDC token will be automatically provided by GitHub Actions for trusted publishers
-
-      - name: Setup publishing environment
-        run: |
-          echo "Setting up publishing environment..."
-          echo "NPM_REGISTRY_URL=https://registry.npmjs.org" >> $GITHUB_ENV
-          # OIDC token is automatically provided by GitHub Actions
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release
