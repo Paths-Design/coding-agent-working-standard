@@ -71,10 +71,38 @@ describe('CLI Workflow Integration', () => {
       try {
         process.chdir(cliTestProjectPath);
 
-        execSync(`node "${cliPath}" scaffold`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-        });
+        // Capture scaffold output for debugging
+        let scaffoldOutput = '';
+        try {
+          scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
+            encoding: 'utf8',
+            stdio: 'pipe',
+          });
+        } catch (scaffoldError) {
+          console.log('Scaffold command failed with error:', scaffoldError.message);
+          console.log('Scaffold stderr:', scaffoldError.stderr);
+          console.log('Scaffold stdout:', scaffoldError.stdout);
+          throw scaffoldError;
+        }
+
+        // Log scaffold output for debugging in CI
+        if (process.env.CI) {
+          console.log('Scaffold output (test 1):', scaffoldOutput);
+          console.log('Working directory:', process.cwd());
+          console.log('Files in project directory:', fs.readdirSync(cliTestProjectPath));
+          const appsDir = path.join(cliTestProjectPath, 'apps');
+          if (fs.existsSync(appsDir)) {
+            console.log('Files in apps directory:', fs.readdirSync(appsDir));
+            const toolsDir = path.join(appsDir, 'tools');
+            if (fs.existsSync(toolsDir)) {
+              console.log('Files in apps/tools directory:', fs.readdirSync(toolsDir));
+            } else {
+              console.log('apps/tools directory does not exist');
+            }
+          } else {
+            console.log('apps directory does not exist');
+          }
+        }
       } finally {
         process.chdir(originalDir);
       }
