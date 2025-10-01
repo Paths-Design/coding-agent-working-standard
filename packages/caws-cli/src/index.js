@@ -127,23 +127,44 @@ function detectCAWSSetup(cwd = process.cwd()) {
     // Try relative to current working directory (for monorepo setups)
     path.resolve(cwd, '../caws-template'),
     path.resolve(cwd, '../../caws-template'),
+    path.resolve(cwd, '../../../caws-template'),
     path.resolve(cwd, 'packages/caws-template'),
     path.resolve(cwd, 'caws-template'),
     // Try relative to CLI location (for installed CLI)
     path.resolve(__dirname, '../caws-template'),
     path.resolve(__dirname, '../../caws-template'),
+    path.resolve(__dirname, '../../../caws-template'),
     // Try absolute paths for CI environments
     path.resolve(process.cwd(), 'packages/caws-template'),
     path.resolve(process.cwd(), '../packages/caws-template'),
     path.resolve(process.cwd(), '../../packages/caws-template'),
+    path.resolve(process.cwd(), '../../../packages/caws-template'),
+    // Try from workspace root
+    path.resolve(process.cwd(), 'caws-template'),
+    // Try various other common locations
+    '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
+    '/workspace/packages/caws-template',
+    '/caws/packages/caws-template',
   ];
+
+  console.log(
+    `🔍 Searching for template directory in ${possibleTemplatePaths.length} locations...`
+  );
 
   for (const testPath of possibleTemplatePaths) {
     if (fs.existsSync(testPath)) {
       templateDir = testPath;
       console.log(`✅ Found template directory: ${testPath}`);
       break;
+    } else {
+      console.log(`❌ Template directory not found: ${testPath}`);
     }
+  }
+
+  if (!templateDir) {
+    console.error('❌ Template directory not found in any of the expected locations');
+    console.error('💡 This might be a path resolution issue in the CI environment');
+    console.error('💡 Searched locations:', possibleTemplatePaths.join(', '));
   }
 
   const hasTemplateDir = templateDir !== null;
@@ -1648,19 +1669,18 @@ async function scaffoldProject(options) {
 /**
  * Show version information
  */
-function showVersion() {
-  console.log(chalk.bold(`CAWS CLI v${CLI_VERSION}`));
-  console.log(chalk.cyan('Coding Agent Workflow System - Scaffolding Tool'));
-  console.log(chalk.gray('Author: @darianrosebrook'));
-  console.log(chalk.gray('License: MIT'));
-}
+// function showVersion() {
+//   console.log(chalk.bold(`CAWS CLI v${CLI_VERSION}`));
+//   console.log(chalk.cyan('Coding Agent Workflow System - Scaffolding Tool'));
+//   console.log(chalk.gray('Author: @darianrosebrook'));
+//   console.log(chalk.gray('License: MIT'));
+// }
 
 // CLI Commands
 program
   .name('caws')
   .description('CAWS - Coding Agent Workflow System CLI')
-  .version(CLI_VERSION, '-v, --version', 'Show version information')
-  .action(() => showVersion());
+  .version(CLI_VERSION, '-v, --version', 'Show version information');
 
 program
   .command('init')
