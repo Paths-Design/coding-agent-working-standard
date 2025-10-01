@@ -16,7 +16,23 @@ const chalk = require('chalk');
 // Import language support (with fallback for when tools aren't available)
 let languageSupport = null;
 try {
-  languageSupport = require('@caws/template/apps/tools/caws/language-support.js');
+  // Try multiple possible locations for language support
+  const possiblePaths = [
+    path.join(__dirname, '../../caws-template/apps/tools/caws/language-support.js'),
+    path.join(__dirname, '../../../caws-template/apps/tools/caws/language-support.js'),
+    path.join(process.cwd(), 'packages/caws-template/apps/tools/caws/language-support.js'),
+    path.join(process.cwd(), 'caws-template/apps/tools/caws/language-support.js'),
+  ];
+
+  for (const testPath of possiblePaths) {
+    try {
+      languageSupport = require(testPath);
+      console.log(`✅ Loaded language support from: ${testPath}`);
+      break;
+    } catch (pathError) {
+      // Continue to next path
+    }
+  }
 } catch (error) {
   console.warn('⚠️  Language support tools not available');
 }
@@ -88,19 +104,24 @@ function detectCAWSSetup(cwd = process.cwd()) {
   console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
   console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
 
-  // Check for template directory - use correct relative path from packages/caws-cli
-  const templateDir = path.resolve(__dirname, '../caws-template');
-  const hasTemplateDir = fs.existsSync(templateDir);
+  // Check for template directory - try multiple possible locations
+  let templateDir = null;
+  const possibleTemplatePaths = [
+    path.resolve(__dirname, '../caws-template'),
+    path.resolve(__dirname, '../../caws-template'),
+    path.resolve(process.cwd(), 'packages/caws-template'),
+    path.resolve(process.cwd(), 'caws-template'),
+  ];
 
-  // Also check if template is available as a dependency
-  const hasTemplateDependency = (() => {
-    try {
-      require.resolve('@caws/template');
-      return true;
-    } catch {
-      return false;
+  for (const testPath of possibleTemplatePaths) {
+    if (fs.existsSync(testPath)) {
+      templateDir = testPath;
+      console.log(`✅ Found template directory: ${templateDir}`);
+      break;
     }
-  })();
+  }
+
+  const hasTemplateDir = templateDir !== null;
 
   return {
     type: setupType,
@@ -114,7 +135,6 @@ function detectCAWSSetup(cwd = process.cwd()) {
     hasTemplates,
     hasTools,
     hasTemplateDir,
-    hasTemplateDependency,
     templateDir,
     capabilities,
     isEnhanced: setupType === 'enhanced',
@@ -126,17 +146,27 @@ const cawsSetup = detectCAWSSetup();
 
 // Dynamic imports based on setup
 let provenanceTools = null;
-try {
-  // Try to import from the template dependency first
-  const {
-    generateProvenance,
-    saveProvenance,
-  } = require('@caws/template/apps/tools/caws/provenance.js');
-  provenanceTools = { generateProvenance, saveProvenance };
-} catch (error) {
-  // Fallback for environments without template dependency
-  provenanceTools = null;
-  console.warn('⚠️  Provenance tools not available via dependency');
+
+// Function to load provenance tools dynamically
+function loadProvenanceTools() {
+  if (provenanceTools) return provenanceTools; // Already loaded
+
+  try {
+    const setup = detectCAWSSetup();
+    if (setup.hasTemplateDir && setup.templateDir) {
+      const { generateProvenance, saveProvenance } = require(
+        path.join(setup.templateDir, 'apps/tools/caws/provenance.js')
+      );
+      provenanceTools = { generateProvenance, saveProvenance };
+      console.log('✅ Loaded provenance tools from:', setup.templateDir);
+    }
+  } catch (error) {
+    // Fallback for environments without template
+    provenanceTools = null;
+    console.warn('⚠️  Provenance tools not available:', error.message);
+  }
+
+  return provenanceTools;
 }
 
 const CLI_VERSION = require('../package.json').version;
@@ -281,22 +311,15 @@ async function copyTemplate(templatePath, destPath, replacements = {}) {
     // Ensure destination directory exists
     await fs.ensureDir(destPath);
 
-    // Check if template directory exists, or try to use template dependency
-    let actualTemplatePath = templatePath;
+    // Check if template directory exists
     if (!fs.existsSync(templatePath)) {
-      try {
-        const templateDepPath = require.resolve('@caws/template');
-        actualTemplatePath = path.dirname(templateDepPath);
-        console.log(chalk.blue('ℹ️  Using template from dependency'));
-      } catch (error) {
-        console.error(chalk.red('❌ Template directory not found:'), templatePath);
-        console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
-        process.exit(1);
-      }
+      console.error(chalk.red('❌ Template directory not found:'), templatePath);
+      console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
+      process.exit(1);
     }
 
     // Copy all files and directories
-    await fs.copy(actualTemplatePath, destPath);
+    await fs.copy(templatePath, destPath);
 
     // Replace template variables in text files
     const files = await fs.readdir(destPath, { recursive: true });
@@ -1224,13 +1247,14 @@ async function finalizeProject(projectName, options, answers) {
     };
 
     // Generate provenance if tools are available
+    const tools = loadProvenanceTools();
     if (
-      provenanceTools &&
-      typeof provenanceTools.generateProvenance === 'function' &&
-      typeof provenanceTools.saveProvenance === 'function'
+      tools &&
+      typeof tools.generateProvenance === 'function' &&
+      typeof tools.saveProvenance === 'function'
     ) {
-      const provenance = provenanceTools.generateProvenance(provenanceData);
-      await provenanceTools.saveProvenance(provenance, '.agent/provenance.json');
+      const provenance = tools.generateProvenance(provenanceData);
+      await tools.saveProvenance(provenance, '.agent/provenance.json');
       console.log(chalk.green('✅ Provenance manifest generated'));
     } else {
       console.log(
@@ -1529,8 +1553,9 @@ async function scaffoldProject(options) {
     }
 
     // Save provenance manifest if tools are available
-    if (provenanceTools && typeof provenanceTools.saveProvenance === 'function') {
-      await provenanceTools.saveProvenance(scaffoldProvenance, '.agent/scaffold-provenance.json');
+    const tools = loadProvenanceTools();
+    if (tools && typeof tools.saveProvenance === 'function') {
+      await tools.saveProvenance(scaffoldProvenance, '.agent/scaffold-provenance.json');
       console.log(chalk.green('✅ Scaffolding provenance saved'));
     } else {
       console.log(chalk.yellow('⚠️  Provenance tools not available - skipping manifest save'));

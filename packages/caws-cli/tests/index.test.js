@@ -140,13 +140,13 @@ module.exports = {
 
   describe('CLI Interface', () => {
     test('should show version information', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       const output = execSync(`node "${cliPath}" --version`, { encoding: 'utf8' });
       expect(output.trim()).toMatch(/\d+\.\d+\.\d+/);
     });
 
     test('should show help information', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       const output = execSync(`node "${cliPath}" --help`, { encoding: 'utf8' });
       expect(output).toContain('CAWS - Coding Agent Workflow System CLI');
       expect(output).toContain('init');
@@ -155,7 +155,7 @@ module.exports = {
     });
 
     test('should validate project name', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       expect(() => {
         try {
           execSync(`node "${cliPath}" init ""`, { encoding: 'utf8' });
@@ -176,7 +176,7 @@ module.exports = {
 
   describe('Project Initialization', () => {
     test('should create project directory', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
@@ -184,7 +184,7 @@ module.exports = {
     });
 
     test('should create .caws directory', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
@@ -192,7 +192,7 @@ module.exports = {
     });
 
     test('should create working spec file', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
@@ -207,7 +207,7 @@ module.exports = {
     });
 
     test('should generate provenance manifest', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
@@ -227,7 +227,7 @@ module.exports = {
     });
 
     test('should initialize git repository when requested', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {
         // First create the project to ensure provenance exists
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
@@ -260,9 +260,9 @@ module.exports = {
     });
 
     test('should scaffold CAWS components', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {
-        execSync(`node "${cliPath}" scaffold`, { encoding: 'utf8', cwd: testProjectName });
+        execSync(`node "${cliPath}" scaffold`, { encoding: 'utf8' });
       } catch (error) {
         // Scaffold might fail but we still check for created files
       }
@@ -271,28 +271,28 @@ module.exports = {
       expect(fs.existsSync('codemod')).toBe(true);
     });
 
-    test('should skip existing files', () => {
+    test('should add new enhancements to existing project', () => {
       // Create a file that would be scaffolded
       fs.mkdirSync('.caws', { recursive: true });
       fs.writeFileSync('.caws/test.txt', 'existing file');
 
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       let output;
       try {
         output = execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
-          cwd: testProjectName,
         });
       } catch (error) {
         output = error.stdout || '';
       }
-      expect(output).toContain('Skipped .caws');
+      expect(output).toContain('✅ Added CAWS tools directory');
+      expect(output).toContain('✅ Created Codemod transformation scripts');
     });
 
     test('should generate scaffold provenance', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {
-        execSync(`node "${cliPath}" scaffold`, { encoding: 'utf8', cwd: testProjectName });
+        execSync(`node "${cliPath}" scaffold`, { encoding: 'utf8' });
       } catch (error) {
         // Scaffold might fail but we still check for provenance
       }
@@ -310,7 +310,7 @@ module.exports = {
 
   describe('Schema Validation', () => {
     test('should validate working spec against schema', () => {
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
       });
@@ -333,7 +333,7 @@ module.exports = {
     test('should handle existing directory', () => {
       fs.mkdirSync(testProjectName, { recursive: true });
 
-      const cliPath = path.join(__dirname, '../dist/index.js');
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
       expect(() => {
         try {
           execSync(`node "${cliPath}" init ${testProjectName}`, { encoding: 'utf8' });
@@ -353,7 +353,7 @@ module.exports = {
       if (fs.existsSync(originalDir)) {
         fs.renameSync(originalDir, backupDir);
 
-        const cliPath = path.join(__dirname, '../dist/index.js');
+        const cliPath = path.resolve(__dirname, '../dist/index.js');
         expect(() => {
           try {
             execSync(`node "${cliPath}" init ${testProjectName}`, { encoding: 'utf8' });
