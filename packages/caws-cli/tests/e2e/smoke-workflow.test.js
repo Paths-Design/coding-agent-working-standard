@@ -241,8 +241,12 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   describe('Error Recovery Workflows', () => {
     const errorProjectName = 'test-e2e-error-recovery';
     const errorProjectPath = path.join(__dirname, errorProjectName);
+    const originalCwd = process.cwd();
 
     beforeEach(() => {
+      // Ensure we're in the test directory
+      process.chdir(__dirname);
+
       // Clean up any existing test project
       if (fs.existsSync(errorProjectPath)) {
         fs.rmSync(errorProjectPath, { recursive: true, force: true });
@@ -250,6 +254,18 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
     });
 
     afterEach(() => {
+      // Restore original working directory before cleanup
+      try {
+        process.chdir(originalCwd);
+      } catch (err) {
+        // If original dir doesn't exist, go to __dirname
+        try {
+          process.chdir(__dirname);
+        } catch (err2) {
+          // Directory was deleted, can't change to it
+        }
+      }
+
       // Clean up test project
       if (fs.existsSync(errorProjectPath)) {
         fs.rmSync(errorProjectPath, { recursive: true, force: true });
@@ -313,6 +329,30 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   });
 
   describe('Multi-Package Workflow', () => {
+    const originalCwd = process.cwd();
+
+    beforeEach(() => {
+      // Ensure we're in the test directory
+      try {
+        process.chdir(__dirname);
+      } catch (err) {
+        // Already in a valid directory
+      }
+    });
+
+    afterEach(() => {
+      // Restore original working directory
+      try {
+        process.chdir(originalCwd);
+      } catch (err) {
+        try {
+          process.chdir(__dirname);
+        } catch (err2) {
+          // Can't restore, continue
+        }
+      }
+    });
+
     test('should work across different project types', () => {
       // E2E Contract: CAWS should work with different project structures
 
@@ -326,6 +366,9 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         const projectPath = path.join(__dirname, projectType.name);
 
         try {
+          // Ensure we're in test directory before starting
+          process.chdir(__dirname);
+
           // Clean up
           if (fs.existsSync(projectPath)) {
             fs.rmSync(projectPath, { recursive: true, force: true });
@@ -335,6 +378,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
           execSync(`node "${cliPath}" init ${projectType.name} --non-interactive`, {
             encoding: 'utf8',
             stdio: 'pipe',
+            cwd: __dirname,
           });
 
           process.chdir(projectPath);
@@ -352,7 +396,22 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
           }).not.toThrow();
 
           process.chdir(__dirname);
+        } catch (err) {
+          // Ensure we're back in test directory even on error
+          try {
+            process.chdir(__dirname);
+          } catch (chdirErr) {
+            // Can't change back, continue
+          }
+          throw err;
         } finally {
+          // Ensure we're in test directory before cleanup
+          try {
+            process.chdir(__dirname);
+          } catch (chdirErr) {
+            // Can't change, continue with cleanup anyway
+          }
+
           // Clean up
           if (fs.existsSync(projectPath)) {
             fs.rmSync(projectPath, { recursive: true, force: true });

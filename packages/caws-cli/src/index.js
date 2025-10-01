@@ -27,7 +27,10 @@ try {
   for (const testPath of possiblePaths) {
     try {
       languageSupport = require(testPath);
-      console.log(`✅ Loaded language support from: ${testPath}`);
+      // Only log if not running version command
+      if (!process.argv.includes('--version') && !process.argv.includes('-V')) {
+        console.log(`✅ Loaded language support from: ${testPath}`);
+      }
       break;
     } catch (pathError) {
       // Continue to next path
@@ -41,14 +44,21 @@ const program = new Command();
 
 // CAWS Detection and Configuration
 function detectCAWSSetup(cwd = process.cwd()) {
-  console.log(chalk.blue('🔍 Detecting CAWS setup...'));
+  // Skip logging for version/help commands
+  const isQuietCommand = process.argv.includes('--version') || process.argv.includes('-V');
+
+  if (!isQuietCommand) {
+    console.log(chalk.blue('🔍 Detecting CAWS setup...'));
+  }
 
   // Check for existing CAWS setup
   const cawsDir = path.join(cwd, '.caws');
   const hasCAWSDir = fs.existsSync(cawsDir);
 
   if (!hasCAWSDir) {
-    console.log(chalk.gray('ℹ️  No .caws directory found - new project setup'));
+    if (!isQuietCommand) {
+      console.log(chalk.gray('ℹ️  No .caws directory found - new project setup'));
+    }
     return {
       type: 'new',
       hasCAWSDir: false,
@@ -101,8 +111,10 @@ function detectCAWSSetup(cwd = process.cwd()) {
     capabilities.push('tools');
   }
 
-  console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
-  console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
+  if (!isQuietCommand) {
+    console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
+    console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
+  }
 
   // Check for template directory - try multiple possible locations
   let templateDir = null;
@@ -298,7 +310,10 @@ const validateWorkingSpec = (spec) => {
   }
 };
 
-console.log(chalk.green('✅ Schema validation initialized successfully'));
+// Only log schema validation if not running quiet commands
+if (!process.argv.includes('--version') && !process.argv.includes('-V')) {
+  console.log(chalk.green('✅ Schema validation initialized successfully'));
+}
 
 /**
  * Copy template files to destination

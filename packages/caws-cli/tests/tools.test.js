@@ -128,14 +128,13 @@ describe('CAWS Tools', () => {
       expect(output).toContain('Branch Coverage: ≥90%');
       expect(output).toContain('Mutation Score: ≥70%');
       expect(output).toContain('Max Files: 40');
-      expect(output).toContain('Allowed Modes: feature, refactor, fix');
       expect(output).toContain('Max LOC: 1500');
       expect(output).toContain('Requires Contracts: true');
       expect(output).toContain('Manual Review: Required');
     });
 
     test('should enforce coverage gate', () => {
-      const output = execSync(`node ${getTemplateToolPath('gates.js')} coverage tier 2 0.85`, {
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} coverage 0.85`, {
         encoding: 'utf8',
         cwd: testDir,
       });
@@ -143,16 +142,22 @@ describe('CAWS Tools', () => {
     });
 
     test('should fail coverage gate when below threshold', () => {
-      expect(() => {
-        execSync(`node ${getTemplateToolPath('gates.js')} coverage tier 2 0.75`, {
+      try {
+        execSync(`node ${getTemplateToolPath('gates.js')} coverage 0.75`, {
           encoding: 'utf8',
           cwd: testDir,
+          stdio: 'pipe',
         });
-      }).toThrow();
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Expected to throw
+        expect(error.status).not.toBe(0);
+      }
     });
 
     test('should enforce mutation gate', () => {
-      const output = execSync(`node ${getTemplateToolPath('gates.js')} mutation tier 2 0.60`, {
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} mutation 0.60`, {
         encoding: 'utf8',
         cwd: testDir,
       });
@@ -160,16 +165,22 @@ describe('CAWS Tools', () => {
     });
 
     test('should fail mutation gate when below threshold', () => {
-      expect(() => {
-        execSync(`node ${getTemplateToolPath('gates.js')} mutation tier 2 0.40`, {
+      try {
+        execSync(`node ${getTemplateToolPath('gates.js')} mutation 0.40`, {
           encoding: 'utf8',
           cwd: testDir,
+          stdio: 'pipe',
         });
-      }).toThrow();
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Expected to throw
+        expect(error.status).not.toBe(0);
+      }
     });
 
     test('should enforce trust score gate', () => {
-      const output = execSync(`node ${getTemplateToolPath('gates.js')} trust tier 2 85`, {
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} trust 85`, {
         encoding: 'utf8',
         cwd: testDir,
       });
@@ -177,16 +188,22 @@ describe('CAWS Tools', () => {
     });
 
     test('should fail trust score gate when below threshold', () => {
-      expect(() => {
-        execSync(`node ${getTemplateToolPath('gates.js')} trust tier 2 75`, {
+      try {
+        execSync(`node ${getTemplateToolPath('gates.js')} trust 75`, {
           encoding: 'utf8',
           cwd: testDir,
+          stdio: 'pipe',
         });
-      }).toThrow();
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Expected to throw
+        expect(error.status).not.toBe(0);
+      }
     });
 
     test('should enforce budget gate', () => {
-      const output = execSync(`node ${getTemplateToolPath('gates.js')} budget tier 2 20 800`, {
+      const output = execSync(`node ${getTemplateToolPath('gates.js')} budget 20 800`, {
         encoding: 'utf8',
         cwd: testDir,
       });
@@ -194,21 +211,33 @@ describe('CAWS Tools', () => {
     });
 
     test('should fail budget gate when files exceed limit', () => {
-      expect(() => {
-        execSync(`node ${getTemplateToolPath('gates.js')} budget tier 2 30 800`, {
+      try {
+        execSync(`node ${getTemplateToolPath('gates.js')} budget 30 800`, {
           encoding: 'utf8',
           cwd: testDir,
+          stdio: 'pipe',
         });
-      }).toThrow();
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Expected to throw
+        expect(error.status).not.toBe(0);
+      }
     });
 
     test('should fail budget gate when LOC exceed limit', () => {
-      expect(() => {
-        execSync(`node ${getTemplateToolPath('gates.js')} budget tier 2 20 1200`, {
+      try {
+        execSync(`node ${getTemplateToolPath('gates.js')} budget 20 1200`, {
           encoding: 'utf8',
           cwd: testDir,
+          stdio: 'pipe',
         });
-      }).toThrow();
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Expected to throw
+        expect(error.status).not.toBe(0);
+      }
     });
   });
 

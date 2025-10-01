@@ -142,14 +142,22 @@ describe('CLI Accessibility Tests', () => {
 
       invalidNames.forEach((invalidName) => {
         try {
-          execSync(`node "${cliPath}" init "${invalidName}"`, { encoding: 'utf8' });
+          const output = execSync(`node "${cliPath}" init "${invalidName}"`, {
+            encoding: 'utf8',
+            stdio: 'pipe',
+          });
+
+          // If it succeeds, it should have sanitized the name with a warning
+          if (invalidName === 'test/project' || invalidName === 'test project') {
+            expect(output).toMatch(/sanitized|⚠️/i);
+          }
         } catch (error) {
           const errorOutput = (error.stdout || '') + (error.stderr || '');
 
           if (errorOutput) {
             // Accessibility Contract: Each error should provide clear guidance
             expect(errorOutput.length).toBeGreaterThan(10); // Should have meaningful content
-            expect(errorOutput).toMatch(/error|Error|❌/i); // Should indicate it's an error
+            expect(errorOutput).toMatch(/error|Error|❌|⚠️/i); // Should indicate it's an error or warning
           }
         }
       });

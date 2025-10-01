@@ -200,17 +200,19 @@ describe('Schema Validation Contracts', () => {
 
   describe('Tool Interface Contracts', () => {
     test('validation tool should export expected interface', () => {
-      // Contract: Validation tool should be a function that takes a file path
+      // Contract: Validation tool should export an object with validateWorkingSpec function
       const validatePath = path.join(__dirname, '../../demo-project/apps/tools/caws/validate.js');
 
       if (fs.existsSync(validatePath)) {
         const validateTool = require(validatePath);
 
-        // Should be a function
-        expect(typeof validateTool).toBe('function');
+        // Should be an object with validateWorkingSpec function
+        expect(typeof validateTool).toBe('object');
+        expect(validateTool).toHaveProperty('validateWorkingSpec');
+        expect(typeof validateTool.validateWorkingSpec).toBe('function');
 
         // Should accept a file path parameter and return an object
-        const result = validateTool('/nonexistent/path.yaml');
+        const result = validateTool.validateWorkingSpec('/nonexistent/path.yaml');
         expect(result).toBeDefined();
         expect(typeof result).toBe('object');
         expect(result).toHaveProperty('success');

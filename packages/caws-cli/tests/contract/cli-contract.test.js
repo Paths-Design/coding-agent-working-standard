@@ -161,19 +161,25 @@ describe('CLI Interface Contracts', () => {
 
         // Contract: Tool files should export expected interfaces
         const validateTool = require(
-          path.join(__dirname, '../../caws-template/apps/tools/caws/validate.js')
+          path.join(__dirname, '../../../caws-template/apps/tools/caws/validate.js')
         );
         const gatesTool = require(
-          path.join(__dirname, '../../caws-template/apps/tools/caws/gates.js')
+          path.join(__dirname, '../../../caws-template/apps/tools/caws/gates.js')
         );
         const provenanceTool = require(
-          path.join(__dirname, '../../caws-template/apps/tools/caws/provenance.js')
+          path.join(__dirname, '../../../caws-template/apps/tools/caws/provenance.js')
         );
 
-        // Each tool should be a function or have a main export
+        // Validate tool exports a function
         expect(typeof validateTool).toBe('function');
-        expect(typeof gatesTool).toBe('function');
-        expect(typeof provenanceTool).toBe('function');
+
+        // Gates tool exports an object with functions
+        expect(typeof gatesTool).toBe('object');
+        expect(typeof gatesTool.enforceCoverageGate).toBe('function');
+
+        // Provenance tool exports an object with functions
+        expect(typeof provenanceTool).toBe('object');
+        expect(typeof provenanceTool.generateProvenance).toBe('function');
       } finally {
         process.chdir(__dirname);
       }
