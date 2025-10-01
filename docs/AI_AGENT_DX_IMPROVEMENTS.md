@@ -206,6 +206,12 @@ npm install <dependencies>
 # 4. Start coding
 ```
 
+**What gets created:**
+- `.caws/working-spec.yaml` - Project specification
+- `.agent/provenance.json` - Agent provenance tracking
+- `agents.md` or `caws.md` - CAWS guide for AI agents
+- `.git/` - Git repository (if `--no-git` not specified)
+
 ### For Existing Projects:
 ```bash
 # 1. Add CAWS to existing project
@@ -214,6 +220,11 @@ caws init . --non-interactive --no-git
 
 # 2. Continue development with CAWS tracking
 ```
+
+**Conflict Resolution:**
+- If `agents.md` exists: CAWS guide is saved as `caws.md` (non-interactive)
+- If both exist: Guide copy is skipped
+- Interactive mode: Prompts to overwrite `agents.md`
 
 ---
 

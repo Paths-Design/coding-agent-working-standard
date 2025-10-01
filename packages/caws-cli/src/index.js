@@ -186,6 +186,22 @@ let cawsSetup = null;
 // Initialize global setup detection
 try {
   cawsSetup = detectCAWSSetup();
+
+  // If no template dir found in current directory, check CLI installation location
+  if (!cawsSetup.hasTemplateDir) {
+    const cliTemplatePaths = [
+      path.resolve(__dirname, '../templates'),
+      path.resolve(__dirname, 'templates'),
+    ];
+
+    for (const testPath of cliTemplatePaths) {
+      if (fs.existsSync(testPath)) {
+        cawsSetup.templateDir = testPath;
+        cawsSetup.hasTemplateDir = true;
+        break;
+      }
+    }
+  }
 } catch (error) {
   console.warn('⚠️  Failed to detect CAWS setup globally:', error.message);
   cawsSetup = {
@@ -364,73 +380,6 @@ const validateWorkingSpec = (spec) => {
 // Only log schema validation if not running quiet commands
 if (!process.argv.includes('--version') && !process.argv.includes('-V')) {
   console.log(chalk.green('✅ Schema validation initialized successfully'));
-}
-
-/**
- * Copy template files to destination
- * @param {string} templatePath - Source template path
- * @param {string} destPath - Destination path
- * @param {Object} replacements - Template variable replacements
- */
-async function copyTemplate(templatePath, destPath, replacements = {}) {
-  try {
-    // Ensure destination directory exists
-    await fs.ensureDir(destPath);
-
-    // Check if template directory exists
-    if (!fs.existsSync(templatePath)) {
-      console.error(chalk.red('❌ Template directory not found:'), templatePath);
-      console.error(chalk.blue("💡 Make sure you're running the CLI from the correct directory"));
-      throw new Error(`Template directory not found: ${templatePath}`);
-    }
-
-    // Copy all files and directories
-    await fs.copy(templatePath, destPath);
-
-    // Replace template variables in text files
-    const files = await fs.readdir(destPath, { recursive: true });
-
-    for (const file of files) {
-      const filePath = path.join(destPath, file);
-      const stat = await fs.stat(filePath);
-
-      if (
-        stat.isFile() &&
-        (file.endsWith('.md') || file.endsWith('.yml') || file.endsWith('.yaml'))
-      ) {
-        try {
-          let content = await fs.readFile(filePath, 'utf8');
-          Object.entries(replacements).forEach(([key, value]) => {
-            content = content.replace(new RegExp(`{{${key}}}`, 'g'), value);
-          });
-          await fs.writeFile(filePath, content);
-        } catch (fileError) {
-          console.warn(
-            chalk.yellow(`⚠️  Warning: Could not process template file ${file}:`),
-            fileError.message
-          );
-        }
-      }
-    }
-
-    console.log(chalk.green('✅ Template files copied successfully'));
-  } catch (error) {
-    console.error(chalk.red('❌ Error copying template:'), error.message);
-
-    if (error.code === 'EACCES') {
-      console.error(
-        chalk.blue('💡 This might be a permissions issue. Try running with elevated privileges.')
-      );
-    } else if (error.code === 'ENOENT') {
-      console.error(
-        chalk.blue('💡 Template directory not found. Make sure the caws-template directory exists.')
-      );
-    } else if (error.code === 'ENOSPC') {
-      console.error(chalk.blue('💡 Not enough disk space to copy template files.'));
-    }
-
-    process.exit(1);
-  }
 }
 
 /**
@@ -666,12 +615,20 @@ async function initProject(projectName, options) {
       process.exit(1);
     }
 
-    // Check if directory already exists
-    if (fs.existsSync(projectName)) {
+    // Check if directory already exists (skip check for current directory)
+    if (projectName !== '.' && fs.existsSync(projectName)) {
       console.error(chalk.red(`❌ Directory ${projectName} already exists`));
       console.error(chalk.blue('💡 Choose a different name or remove the existing directory'));
       process.exit(1);
     }
+
+    // Save the original template directory before changing directories
+    const originalTemplateDir = cawsSetup?.hasTemplateDir ? cawsSetup.templateDir : null;
+
+    // Check for existing agents.md/caws.md BEFORE changing directories
+    const targetDir = path.resolve(process.cwd(), projectName);
+    const existingAgentsMd = fs.existsSync(path.join(targetDir, 'agents.md'));
+    const existingCawsMd = fs.existsSync(path.join(targetDir, 'caws.md'));
 
     // Create project directory
     await fs.ensureDir(projectName);
@@ -683,25 +640,58 @@ async function initProject(projectName, options) {
     const currentSetup = detectCAWSSetup(process.cwd());
 
     if (currentSetup.type === 'new') {
-      // Copy template files from generic template
-      if (cawsSetup && cawsSetup.hasTemplateDir && cawsSetup.templateDir) {
+      // Create minimal CAWS structure
+      await fs.ensureDir('.caws');
+      await fs.ensureDir('.agent');
+      console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
+
+      // Copy agents.md guide if templates are available
+      if (originalTemplateDir) {
         try {
-          await copyTemplate(cawsSetup.templateDir, '.');
-          console.log(chalk.green('✅ Created CAWS project with templates'));
+          const agentsMdSource = path.join(originalTemplateDir, 'agents.md');
+          let targetFile = 'agents.md';
+
+          if (fs.existsSync(agentsMdSource)) {
+            // Use the pre-checked values for conflicts
+            if (existingAgentsMd) {
+              // Conflict: user already has agents.md
+              if (options.interactive && !options.nonInteractive) {
+                // Interactive mode: ask user
+                const overwriteAnswer = await inquirer.prompt([
+                  {
+                    type: 'confirm',
+                    name: 'overwrite',
+                    message: '⚠️  agents.md already exists. Overwrite with CAWS guide?',
+                    default: false,
+                  },
+                ]);
+
+                if (overwriteAnswer.overwrite) {
+                  targetFile = 'agents.md';
+                } else {
+                  targetFile = 'caws.md';
+                }
+              } else {
+                // Non-interactive mode: use caws.md instead
+                targetFile = 'caws.md';
+                console.log(chalk.blue('ℹ️  agents.md exists, using caws.md for CAWS guide'));
+              }
+            }
+
+            // If caws.md also exists and that's our target, skip
+            if (targetFile === 'caws.md' && existingCawsMd) {
+              console.log(
+                chalk.yellow('⚠️  Both agents.md and caws.md exist, skipping guide copy')
+              );
+            } else {
+              const agentsMdDest = path.join(process.cwd(), targetFile);
+              await fs.copyFile(agentsMdSource, agentsMdDest);
+              console.log(chalk.green(`✅ Added ${targetFile} guide`));
+            }
+          }
         } catch (templateError) {
-          console.warn(
-            chalk.yellow('⚠️  Template directory not available, creating basic structure')
-          );
-          // Create minimal CAWS structure
-          await fs.ensureDir('.caws');
-          await fs.ensureDir('.agent');
-          console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
+          console.warn(chalk.yellow('⚠️  Could not copy agents guide:'), templateError.message);
         }
-      } else {
-        // Create minimal CAWS structure
-        await fs.ensureDir('.caws');
-        await fs.ensureDir('.agent');
-        console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
       }
     } else {
       // Already has CAWS setup

@@ -206,6 +206,20 @@ module.exports = {
       expect(workingSpec).toHaveProperty('mode');
     });
 
+    test('should create agents.md guide', () => {
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
+      execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+        encoding: 'utf8',
+      });
+      const agentsMdPath = path.join(testProjectName, 'agents.md');
+      expect(fs.existsSync(agentsMdPath)).toBe(true);
+
+      // Verify it's not empty
+      const content = fs.readFileSync(agentsMdPath, 'utf8');
+      expect(content.length).toBeGreaterThan(1000);
+      expect(content).toContain('CAWS');
+    });
+
     test('should generate provenance manifest', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {
