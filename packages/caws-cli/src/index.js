@@ -147,24 +147,14 @@ function detectCAWSSetup(cwd = process.cwd()) {
     '/caws/packages/caws-template',
   ];
 
-  console.log(
-    `🔍 Searching for template directory in ${possibleTemplatePaths.length} locations...`
-  );
-
   for (const testPath of possibleTemplatePaths) {
     if (fs.existsSync(testPath)) {
       templateDir = testPath;
-      console.log(`✅ Found template directory: ${testPath}`);
+      if (!isQuietCommand) {
+        console.log(`✅ Found template directory: ${testPath}`);
+      }
       break;
-    } else {
-      console.log(`❌ Template directory not found: ${testPath}`);
     }
-  }
-
-  if (!templateDir) {
-    console.error('❌ Template directory not found in any of the expected locations');
-    console.error('💡 This might be a path resolution issue in the CI environment');
-    console.error('💡 Searched locations:', possibleTemplatePaths.join(', '));
   }
 
   const hasTemplateDir = templateDir !== null;
@@ -1414,18 +1404,20 @@ async function scaffoldProject(options) {
   const projectName = path.basename(currentDir);
 
   console.log(chalk.cyan(`🔧 Enhancing existing project with CAWS: ${projectName}`));
-  console.log(chalk.gray(`DEBUG: scaffoldProject called with options: ${JSON.stringify(options)}`));
-  console.log(chalk.gray(`DEBUG: currentDir: ${currentDir}`));
 
   try {
     // Detect existing CAWS setup with current directory context
     const setup = detectCAWSSetup(currentDir);
 
+    // Preserve the original template directory from global cawsSetup
+    // (needed because detectCAWSSetup from within a new project won't find the template)
+    if (cawsSetup?.templateDir && !setup.templateDir) {
+      setup.templateDir = cawsSetup.templateDir;
+      setup.hasTemplateDir = true;
+    }
+
     // Override global cawsSetup with current context for scaffold operations
     cawsSetup = setup;
-
-    console.log(chalk.gray(`DEBUG: setup.hasCAWSDir: ${setup.hasCAWSDir}`));
-    console.log(chalk.gray(`DEBUG: setup.cawsDir: ${setup.cawsDir}`));
 
     if (!setup.hasCAWSDir) {
       console.error(chalk.red('❌ No .caws directory found'));
@@ -1449,7 +1441,6 @@ async function scaffoldProject(options) {
     }
 
     // Generate provenance for scaffolding operation
-    console.log(chalk.gray('DEBUG: Generating provenance'));
     const scaffoldProvenance = {
       agent: 'caws-cli',
       model: 'cli-scaffold',
@@ -1474,43 +1465,21 @@ async function scaffoldProject(options) {
       .update(JSON.stringify(scaffoldProvenance))
       .digest('hex');
 
-    console.log(chalk.gray('DEBUG: About to determine enhancements'));
-
     // Determine what enhancements to add based on setup type
     const enhancements = [];
 
-    console.log(chalk.gray(`Current dir: ${currentDir}`));
-    console.log(chalk.gray(`Template dir: ${setup?.templateDir || 'not found'}`));
-    console.log(
-      chalk.gray(
-        `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
-      )
-    );
-
     // Add CAWS tools directory structure (matches test expectations)
-    console.log(chalk.gray('Adding CAWS tools enhancement'));
     enhancements.push({
       name: 'apps/tools/caws',
       description: 'CAWS tools directory',
       required: true,
     });
 
-    console.log(chalk.gray(`Enhancements count: ${enhancements.length}`));
-
     enhancements.push({
       name: 'codemod',
       description: 'Codemod transformation scripts',
       required: true,
     });
-
-    console.log(
-      chalk.gray(`Scaffolding enhancements: ${JSON.stringify(enhancements.map((e) => e.name))}`)
-    );
-    console.log(
-      chalk.gray(
-        `Setup type: ${setup.type}, isEnhanced: ${setup.isEnhanced}, isAdvanced: ${setup.isAdvanced}`
-      )
-    );
 
     // Also add automated publishing for enhanced setups
     if (setup.isEnhanced) {
@@ -1563,10 +1532,6 @@ async function scaffoldProject(options) {
       }
       const sourcePath = path.join(setup.templateDir, enhancement.name);
       const destPath = path.join(currentDir, enhancement.name);
-
-      console.log(chalk.gray(`Processing enhancement: ${enhancement.name}`));
-      console.log(chalk.gray(`  Source: ${sourcePath}`));
-      console.log(chalk.gray(`  Dest: ${destPath}`));
 
       if (!fs.existsSync(destPath)) {
         if (fs.existsSync(sourcePath)) {
