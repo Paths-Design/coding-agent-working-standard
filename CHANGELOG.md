@@ -1,3 +1,40 @@
+# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
+
+
+### Bug Fixes
+
+* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+
+
+### Features
+
+* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+
+
+### BREAKING CHANGES
+
+* Templates are now bundled with CLI package
+
+- Bundle all template files in CLI package for npm distribution
+- Update template detection to prioritize bundled templates
+- Add comprehensive AI agent documentation
+- Create test environment for AI agent workflows
+- Fix template directory not found error after npm install
+- Add templates directory to .eslintignore
+
+Fixes:
+- Templates now available when installed via npm
+- No external dependencies on @caws/template package
+- AI agents can use --non-interactive flag successfully
+- Clear documentation for AI agent usage patterns
+
+Package size increased from 70KB to 552KB (acceptable trade-off)
+
+Test environment available at /tmp/caws-agent-test
+Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
+
 ## [2.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.0...v2.0.1) (2025-10-01)
 
 
