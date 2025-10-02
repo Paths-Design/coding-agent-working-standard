@@ -433,17 +433,34 @@ module.exports = {
 
   describe('Error Handling', () => {
     test('should handle existing directory gracefully', () => {
-      fs.mkdirSync(testProjectName, { recursive: true });
+      // Create directory in the test directory
+      const testDir = path.join(__dirname, 'test-existing-dir');
+      fs.mkdirSync(testDir, { recursive: true });
+      // Create a file in the directory to make it non-empty
+      fs.writeFileSync(path.join(testDir, 'existing-file.txt'), 'test content');
 
       const cliPath = path.resolve(__dirname, '../dist/index.js');
-      const result = execSync(`node "${cliPath}" init ${testProjectName}`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-
-      // Should show helpful message and exit gracefully
-      expect(result).toContain('already exists');
-      expect(result).toContain('caws init .');
+      try {
+        execSync(`node "${cliPath}" init test-existing-dir`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+          cwd: __dirname,
+        });
+        // Should not reach here - command should fail
+        expect(true).toBe(false);
+      } catch (error) {
+        // Should show helpful error message
+        const output = error.stderr || error.stdout || '';
+        expect(output).toContain('already exists');
+        expect(output).toContain('caws init .');
+      } finally {
+        // Clean up
+        try {
+          fs.rmSync(testDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          // Ignore cleanup errors in tests
+        }
+      }
     });
 
     test('should handle template directory not found gracefully', () => {

@@ -19,12 +19,11 @@ function getTemplateToolPath(toolName) {
   if (!fs.existsSync(testToolsDir)) {
     console.log('🔧 Setting up template tools for testing...');
 
-    // Try to find the source template directory
+    // Try to find the source template directory (templates are now bundled in CLI)
     const possibleSourcePaths = [
-      path.join(__dirname, '../../caws-template/apps/tools/caws'),
-      path.join(__dirname, '../../../packages/caws-template/apps/tools/caws'),
-      path.join(process.cwd(), 'packages/caws-template/apps/tools/caws'),
-      path.join(__dirname, '../../../../packages/caws-template/apps/tools/caws'),
+      path.join(__dirname, '../templates/apps/tools/caws'),
+      path.join(__dirname, '../../packages/caws-cli/templates/apps/tools/caws'),
+      path.join(process.cwd(), 'packages/caws-cli/templates/apps/tools/caws'),
     ];
 
     let sourceDir = null;
@@ -51,9 +50,9 @@ function getTemplateToolPath(toolName) {
 
   // Fallback: try direct paths if copy didn't work
   const directPaths = [
-    path.join(__dirname, '../../caws-template/apps/tools/caws', toolName),
-    path.join(__dirname, '../../../packages/caws-template/apps/tools/caws', toolName),
-    path.join(process.cwd(), 'packages/caws-template/apps/tools/caws', toolName),
+    path.join(__dirname, '../templates/apps/tools/caws', toolName),
+    path.join(__dirname, '../../packages/caws-cli/templates/apps/tools/caws', toolName),
+    path.join(process.cwd(), 'packages/caws-cli/templates/apps/tools/caws', toolName),
   ];
 
   for (const directPath of directPaths) {
