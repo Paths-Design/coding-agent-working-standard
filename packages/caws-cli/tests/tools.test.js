@@ -10,8 +10,61 @@ const yaml = require('js-yaml');
 
 // Helper function to get template tool path via relative path
 function getTemplateToolPath(toolName) {
-  // Use relative path from cli package to template
-  return path.join(__dirname, '../../caws-template/apps/tools/caws', toolName);
+  // For testing, copy the template tools to the test directory
+  // This ensures they're available regardless of CI path structure
+  const testToolsDir = path.join(__dirname, 'test-tools-template');
+  const toolPath = path.join(testToolsDir, toolName);
+
+  // Check if we need to copy the template tools
+  if (!fs.existsSync(testToolsDir)) {
+    console.log('🔧 Setting up template tools for testing...');
+
+    // Try to find the source template directory
+    const possibleSourcePaths = [
+      path.join(__dirname, '../../caws-template/apps/tools/caws'),
+      path.join(__dirname, '../../../packages/caws-template/apps/tools/caws'),
+      path.join(process.cwd(), 'packages/caws-template/apps/tools/caws'),
+      path.join(__dirname, '../../../../packages/caws-template/apps/tools/caws'),
+    ];
+
+    let sourceDir = null;
+    for (const sourcePath of possibleSourcePaths) {
+      if (fs.existsSync(sourcePath)) {
+        sourceDir = sourcePath;
+        break;
+      }
+    }
+
+    if (sourceDir) {
+      // Copy the template tools to test directory
+      fs.cpSync(sourceDir, testToolsDir, { recursive: true });
+      console.log(`✅ Copied template tools from ${sourceDir} to ${testToolsDir}`);
+    } else {
+      console.warn(`⚠️  Could not find template tools source directory. Some tests may fail.`);
+      console.warn(`Tried: ${possibleSourcePaths.join(', ')}`);
+    }
+  }
+
+  if (fs.existsSync(toolPath)) {
+    return toolPath;
+  }
+
+  // Fallback: try direct paths if copy didn't work
+  const directPaths = [
+    path.join(__dirname, '../../caws-template/apps/tools/caws', toolName),
+    path.join(__dirname, '../../../packages/caws-template/apps/tools/caws', toolName),
+    path.join(process.cwd(), 'packages/caws-template/apps/tools/caws', toolName),
+  ];
+
+  for (const directPath of directPaths) {
+    if (fs.existsSync(directPath)) {
+      return directPath;
+    }
+  }
+
+  const errorMsg = `Cannot find template tool ${toolName}. Tried copying and direct paths.`;
+  console.error(`❌ ${errorMsg}`);
+  throw new Error(errorMsg);
 }
 
 describe('CAWS Tools', () => {
@@ -87,6 +140,12 @@ describe('CAWS Tools', () => {
   afterAll(() => {
     // Clean up test directory
     fs.rmSync(testDir, { recursive: true, force: true });
+
+    // Clean up copied template tools
+    const testToolsDir = path.join(__dirname, 'test-tools-template');
+    if (fs.existsSync(testToolsDir)) {
+      fs.rmSync(testToolsDir, { recursive: true, force: true });
+    }
   });
 
   describe('Validate Tool', () => {
