@@ -432,22 +432,21 @@ module.exports = {
   });
 
   describe('Error Handling', () => {
-    test('should handle existing directory', () => {
+    test('should handle existing directory gracefully', () => {
       fs.mkdirSync(testProjectName, { recursive: true });
 
       const cliPath = path.resolve(__dirname, '../dist/index.js');
-      expect(() => {
-        try {
-          execSync(`node "${cliPath}" init ${testProjectName}`, { encoding: 'utf8' });
-        } catch (error) {
-          // Error should contain directory exists message
-          expect(error.message).toContain('already exists');
-          throw error; // Re-throw to maintain test behavior
-        }
-      }).toThrow();
+      const result = execSync(`node "${cliPath}" init ${testProjectName}`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+
+      // Should show helpful message and exit gracefully
+      expect(result).toContain('already exists');
+      expect(result).toContain('caws init .');
     });
 
-    test('should handle template directory not found', () => {
+    test('should handle template directory not found gracefully', () => {
       const originalDir = path.join(__dirname, '../../caws-template');
       const backupDir = path.join(__dirname, '../../caws-template-backup');
 
@@ -456,15 +455,14 @@ module.exports = {
         fs.renameSync(originalDir, backupDir);
 
         const cliPath = path.resolve(__dirname, '../dist/index.js');
-        expect(() => {
-          try {
-            execSync(`node "${cliPath}" init ${testProjectName}`, { encoding: 'utf8' });
-          } catch (error) {
-            // Error should contain template not found message
-            expect(error.message).toContain('Template directory not found');
-            throw error; // Re-throw to maintain test behavior
-          }
-        }).toThrow();
+        const result = execSync(`node "${cliPath}" init ${testProjectName}`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
+
+        // Should show helpful message and exit gracefully
+        expect(result).toContain('No template directory available');
+        expect(result).toContain('caws-template package');
 
         // Restore template directory
         fs.renameSync(backupDir, originalDir);
