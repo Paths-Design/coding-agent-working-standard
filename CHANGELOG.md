@@ -1,17 +1,48 @@
-# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
+## [3.1.0] - 2025-10-02
 
+### Features
+
+* **Interactive Setup Wizard**: Guided project initialization with project type detection and tailored working specs
+* **Project-Type Templates**: Direct template commands for extension, library, api, cli, and monorepo projects
+* **Enhanced Validation**: Validation with actionable suggestions and auto-fix capabilities
+* **Opt-In Components**: Flexible scaffolding with --minimal, --with-oidc, --with-codemods options
+* **Getting Started Guides**: Auto-generated project-specific onboarding checklists
+* **Smart .gitignore**: Intelligent .gitignore generation with CAWS-specific patterns
+* **Layered Documentation**: Quick reference + full guide + tutorial + examples structure
+
+### Improved
+
+* **CLI UX**: Complete overhaul of developer experience based on comprehensive user feedback
+  * Add support for `caws init .` to initialize in current directory
+  * Implement smart project detection to warn about subdirectory creation
+  * Add early validation in scaffold command with helpful error messages
+  * Enhance template detection transparency with descriptive logging
+  * Improve error messages throughout with actionable recovery suggestions
+  * Add clear success messaging about initialization location
+  * Add dependency analysis for intelligent project type detection
+
+### Documentation
+
+* Add comprehensive AGENTS.md quick reference guide
+* Create docs/agents/FULL_GUIDE.md with complete framework documentation
+* Add docs/agents/TUTORIAL.md with hands-on step-by-step guide
+* Create docs/agents/EXAMPLES.md with real working spec examples
+* Add detailed feedback response and improvement roadmap documentation
+* Add comprehensive UX improvements roadmap based on user feedback
+* Create detailed response to Claude 4.5 setup experience feedback
+* Document planned improvements for v3.1.0 (interactive wizard, project templates, validation suggestions)
+
+# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
 
 ### Bug Fixes
 
 * current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-
 
 ### Features
 
 * add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
 * bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
 * bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-
 
 ### BREAKING CHANGES
 

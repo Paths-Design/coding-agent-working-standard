@@ -37,7 +37,9 @@ try {
     }
   }
 } catch (error) {
-  console.warn('⚠️  Language support tools not available');
+  console.warn(chalk.yellow('⚠️  Language support tools not available'));
+  console.warn(chalk.blue('💡 This may limit language-specific configuration features'));
+  console.warn(chalk.blue('💡 For full functionality, ensure caws-template package is available'));
 }
 
 const program = new Command();
@@ -125,39 +127,57 @@ function detectCAWSSetup(cwd = process.cwd()) {
   let templateDir = null;
   const possibleTemplatePaths = [
     // FIRST: Try bundled templates (for npm-installed CLI)
-    path.resolve(__dirname, '../templates'),
-    path.resolve(__dirname, 'templates'),
+    { path: path.resolve(__dirname, '../templates'), source: 'bundled with CLI' },
+    { path: path.resolve(__dirname, 'templates'), source: 'bundled with CLI (fallback)' },
     // Try relative to current working directory (for monorepo setups)
-    path.resolve(cwd, '../caws-template'),
-    path.resolve(cwd, '../../caws-template'),
-    path.resolve(cwd, '../../../caws-template'),
-    path.resolve(cwd, 'packages/caws-template'),
-    path.resolve(cwd, 'caws-template'),
+    { path: path.resolve(cwd, '../caws-template'), source: 'monorepo parent directory' },
+    { path: path.resolve(cwd, '../../caws-template'), source: 'monorepo grandparent' },
+    { path: path.resolve(cwd, '../../../caws-template'), source: 'workspace root' },
+    { path: path.resolve(cwd, 'packages/caws-template'), source: 'packages/ subdirectory' },
+    { path: path.resolve(cwd, 'caws-template'), source: 'caws-template/ subdirectory' },
     // Try relative to CLI location (for installed CLI)
-    path.resolve(__dirname, '../caws-template'),
-    path.resolve(__dirname, '../../caws-template'),
-    path.resolve(__dirname, '../../../caws-template'),
+    { path: path.resolve(__dirname, '../caws-template'), source: 'CLI installation' },
+    { path: path.resolve(__dirname, '../../caws-template'), source: 'CLI parent directory' },
+    { path: path.resolve(__dirname, '../../../caws-template'), source: 'CLI workspace root' },
     // Try absolute paths for CI environments
-    path.resolve(process.cwd(), 'packages/caws-template'),
-    path.resolve(process.cwd(), '../packages/caws-template'),
-    path.resolve(process.cwd(), '../../packages/caws-template'),
-    path.resolve(process.cwd(), '../../../packages/caws-template'),
+    { path: path.resolve(process.cwd(), 'packages/caws-template'), source: 'current packages/' },
+    { path: path.resolve(process.cwd(), '../packages/caws-template'), source: 'parent packages/' },
+    {
+      path: path.resolve(process.cwd(), '../../packages/caws-template'),
+      source: 'grandparent packages/',
+    },
+    {
+      path: path.resolve(process.cwd(), '../../../packages/caws-template'),
+      source: 'workspace packages/',
+    },
     // Try from workspace root
-    path.resolve(process.cwd(), 'caws-template'),
+    { path: path.resolve(process.cwd(), 'caws-template'), source: 'workspace caws-template/' },
     // Try various other common locations
-    '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
-    '/workspace/packages/caws-template',
-    '/caws/packages/caws-template',
+    {
+      path: '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
+      source: 'GitHub Actions CI',
+    },
+    { path: '/workspace/packages/caws-template', source: 'Docker workspace' },
+    { path: '/caws/packages/caws-template', source: 'Container workspace' },
   ];
 
-  for (const testPath of possibleTemplatePaths) {
+  for (const { path: testPath, source } of possibleTemplatePaths) {
     if (fs.existsSync(testPath)) {
       templateDir = testPath;
       if (!isQuietCommand) {
-        console.log(`✅ Found template directory: ${testPath}`);
+        console.log(`✅ Found CAWS templates in ${source}:`);
+        console.log(`   ${chalk.gray(testPath)}`);
       }
       break;
     }
+  }
+
+  if (!templateDir && !isQuietCommand) {
+    console.warn(chalk.yellow('⚠️  CAWS templates not found in standard locations'));
+    console.warn(chalk.blue('💡 This may limit available scaffolding features'));
+    console.warn(
+      chalk.blue('💡 For full functionality, ensure caws-template package is available')
+    );
   }
 
   const hasTemplateDir = templateDir !== null;
@@ -377,6 +397,514 @@ const validateWorkingSpec = (spec) => {
   }
 };
 
+/**
+ * Enhanced validation with suggestions and auto-fix
+ */
+function validateWorkingSpecWithSuggestions(spec, options = {}) {
+  const { autoFix = false, suggestions = true } = options;
+
+  try {
+    // Basic structural validation for essential fields
+    const requiredFields = [
+      'id',
+      'title',
+      'risk_tier',
+      'mode',
+      'change_budget',
+      'blast_radius',
+      'operational_rollback_slo',
+      'scope',
+      'invariants',
+      'acceptance',
+      'non_functional',
+      'contracts',
+    ];
+
+    let errors = [];
+    let warnings = [];
+    let fixes = [];
+
+    for (const field of requiredFields) {
+      if (!spec[field]) {
+        errors.push({
+          instancePath: `/${field}`,
+          message: `Missing required field: ${field}`,
+          suggestion: getFieldSuggestion(field, spec),
+          canAutoFix: canAutoFixField(field, spec),
+        });
+      }
+    }
+
+    // Validate specific field formats
+    if (spec.id && !/^[A-Z]+-\d+$/.test(spec.id)) {
+      errors.push({
+        instancePath: '/id',
+        message: 'Project ID should be in format: PREFIX-NUMBER (e.g., FEAT-1234)',
+        suggestion: 'Use format like: PROJ-001, FEAT-002, FIX-003',
+        canAutoFix: false,
+      });
+    }
+
+    // Validate risk tier
+    if (spec.risk_tier !== undefined && (spec.risk_tier < 1 || spec.risk_tier > 3)) {
+      errors.push({
+        instancePath: '/risk_tier',
+        message: 'Risk tier must be 1, 2, or 3',
+        suggestion:
+          'Tier 1: Critical (auth, billing), Tier 2: Standard (features), Tier 3: Low risk (UI)',
+        canAutoFix: true,
+      });
+      fixes.push({ field: 'risk_tier', value: Math.max(1, Math.min(3, spec.risk_tier || 2)) });
+    }
+
+    // Validate scope.in is not empty
+    if (!spec.scope || !spec.scope.in || spec.scope.in.length === 0) {
+      errors.push({
+        instancePath: '/scope/in',
+        message: 'Scope IN must not be empty',
+        suggestion: 'Specify directories/files that are included in changes',
+        canAutoFix: false,
+      });
+    }
+
+    // Check for common issues
+    if (!spec.invariants || spec.invariants.length === 0) {
+      warnings.push({
+        instancePath: '/invariants',
+        message: 'No system invariants defined',
+        suggestion: 'Add 1-3 statements about what must always remain true',
+      });
+    }
+
+    if (!spec.acceptance || spec.acceptance.length === 0) {
+      warnings.push({
+        instancePath: '/acceptance',
+        message: 'No acceptance criteria defined',
+        suggestion: 'Add acceptance criteria in GIVEN/WHEN/THEN format',
+      });
+    }
+
+    // Validate experimental mode
+    if (spec.experimental_mode) {
+      if (typeof spec.experimental_mode !== 'object') {
+        errors.push({
+          instancePath: '/experimental_mode',
+          message:
+            'Experimental mode must be an object with enabled, rationale, and expires_at fields',
+          suggestion: 'Fix experimental_mode structure',
+          canAutoFix: false,
+        });
+      } else {
+        const requiredExpFields = ['enabled', 'rationale', 'expires_at'];
+        for (const field of requiredExpFields) {
+          if (!(field in spec.experimental_mode)) {
+            errors.push({
+              instancePath: `/experimental_mode/${field}`,
+              message: `Missing required experimental mode field: ${field}`,
+              suggestion: `Add ${field} to experimental_mode`,
+              canAutoFix: field === 'enabled' ? true : false,
+            });
+            if (field === 'enabled') {
+              fixes.push({ field: `experimental_mode.${field}`, value: true });
+            }
+          }
+        }
+
+        if (spec.experimental_mode.enabled && spec.risk_tier < 3) {
+          warnings.push({
+            instancePath: '/experimental_mode',
+            message: 'Experimental mode can only be used with Tier 3 (low risk) changes',
+            suggestion: 'Either set risk_tier to 3 or disable experimental mode',
+          });
+        }
+      }
+    }
+
+    // Apply auto-fixes if requested
+    if (autoFix && fixes.length > 0) {
+      console.log(chalk.cyan('🔧 Applying auto-fixes...'));
+      for (const fix of fixes) {
+        if (fix.field.includes('.')) {
+          const [parent, child] = fix.field.split('.');
+          if (!spec[parent]) spec[parent] = {};
+          spec[parent][child] = fix.value;
+        } else {
+          spec[fix.field] = fix.value;
+        }
+        console.log(`   Fixed: ${fix.field} = ${JSON.stringify(fix.value)}`);
+      }
+    }
+
+    // Display results
+    if (errors.length > 0) {
+      console.error(chalk.red('❌ Validation failed with errors:'));
+      errors.forEach((error, index) => {
+        console.error(`${index + 1}. ${error.instancePath || 'root'}: ${error.message}`);
+        if (suggestions && error.suggestion) {
+          console.error(`   💡 ${error.suggestion}`);
+        }
+        if (error.canAutoFix) {
+          console.error(`   🔧 Can auto-fix: ${autoFix ? 'applied' : 'run with --auto-fix'}`);
+        }
+      });
+      return { valid: false, errors, warnings };
+    }
+
+    if (warnings.length > 0 && suggestions) {
+      console.warn(chalk.yellow('⚠️  Validation passed with warnings:'));
+      warnings.forEach((warning, index) => {
+        console.warn(`${index + 1}. ${warning.instancePath || 'root'}: ${warning.message}`);
+        if (warning.suggestion) {
+          console.warn(`   💡 ${warning.suggestion}`);
+        }
+      });
+    }
+
+    console.log(chalk.green('✅ Working specification is valid'));
+    return { valid: true, errors: [], warnings };
+  } catch (error) {
+    console.error(chalk.red('❌ Error during validation:'), error.message);
+    return {
+      valid: false,
+      errors: [{ instancePath: '', message: `Validation error: ${error.message}` }],
+      warnings: [],
+    };
+  }
+}
+
+function getFieldSuggestion(field, _spec) {
+  const suggestions = {
+    id: 'Use format like: PROJ-001, FEAT-002, FIX-003',
+    title: 'Add a descriptive project title',
+    risk_tier: 'Choose: 1 (critical), 2 (standard), or 3 (low risk)',
+    mode: 'Choose: feature, refactor, fix, doc, or chore',
+    change_budget: 'Set max_files and max_loc based on risk tier',
+    blast_radius: 'List affected modules and data migration needs',
+    operational_rollback_slo: 'Choose: 1m, 5m, 15m, or 1h',
+    scope: "Define what's included (in) and excluded (out) from changes",
+    invariants: 'Add 1-3 statements about what must always remain true',
+    acceptance: 'Add acceptance criteria in GIVEN/WHEN/THEN format',
+    non_functional: 'Define accessibility, performance, and security requirements',
+    contracts: 'Specify API contracts (OpenAPI, GraphQL, etc.)',
+  };
+  return suggestions[field] || `Add the ${field} field`;
+}
+
+function canAutoFixField(field, _spec) {
+  const autoFixable = ['risk_tier'];
+  return autoFixable.includes(field);
+}
+
+/**
+ * Generate a getting started guide based on project analysis
+ */
+function generateGettingStartedGuide(analysis) {
+  const { projectType, packageJson, hasTests, hasLinting } = analysis;
+
+  const projectName = packageJson.name || 'your-project';
+  const capitalizedType = projectType.charAt(0).toUpperCase() + projectType.slice(1);
+
+  let guide = `# Getting Started with CAWS - ${capitalizedType} Project
+
+**Project**: ${projectName}  
+**Type**: ${capitalizedType}  
+**Generated**: ${new Date().toLocaleDateString()}
+
+---
+
+## Phase 1: Setup Verification (15 mins)
+
+Complete these steps to ensure your CAWS setup is working:
+
+### ✅ Already Done
+- [x] Initialize CAWS project
+- [x] Generate working spec
+- [x] Set up basic structure
+
+### Next Steps
+- [ ] Review \`.caws/working-spec.yaml\` - customize for your needs
+- [ ] Run validation: \`caws validate --suggestions\`
+- [ ] Review tier policy in \`.caws/policy/\` (if applicable)
+- [ ] Update \`.caws/templates/\` with project-specific examples
+
+---
+
+## Phase 2: First Feature (30 mins)
+
+Time to create your first CAWS-managed feature:
+
+### Steps
+1. **Copy a template**:
+   \`\`\`bash
+   cp .caws/templates/feature.plan.md docs/plans/FEATURE-001.md
+   \`\`\`
+
+2. **Customize the plan**:
+   - Update title and description
+   - Fill in acceptance criteria (GIVEN/WHEN/THEN format)
+   - Set appropriate risk tier
+   - Define scope and invariants
+
+3. **Write tests first** (TDD approach):
+   \`\`\`bash
+   # For ${projectType} projects, focus on:
+   ${getTestingGuidance(projectType)}
+   \`\`\`
+
+4. **Implement the feature**:
+   - Stay within change budget limits
+   - Follow acceptance criteria
+   - Maintain system invariants
+
+5. **Run full verification**:
+   \`\`\`bash
+   caws validate --suggestions
+   ${hasTests ? 'npm test' : '# Add tests when ready'}
+   ${hasLinting ? 'npm run lint' : '# Add linting when ready'}
+   \`\`\`
+
+---
+
+## Phase 3: CI/CD Setup (20 mins)
+
+Set up automated quality gates:
+
+### GitHub Actions (Recommended)
+1. **Create workflow**: \`.github/workflows/caws.yml\`
+   \`\`\`yaml
+   name: CAWS Quality Gates
+   on: [pull_request]
+
+   jobs:
+     validate:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with:
+             node-version: '18'
+         - run: npm ci
+         - run: npx caws validate --quiet
+         - run: npm test  # Add when ready
+   \`\`\`
+
+2. **Configure branch protection**:
+   - Require PR validation
+   - Require tests to pass
+   - Require CAWS spec validation
+
+### Other CI Systems
+- **GitLab CI**: Use \`caws validate\` in \`.gitlab-ci.yml\`
+- **Jenkins**: Add validation step to pipeline
+- **CircleCI**: Include in \`.circleci/config.yml\`
+
+---
+
+## Phase 4: Team Onboarding (ongoing)
+
+### For Team Members
+1. **Read the basics**: Start with this guide
+2. **Learn by example**: Review completed features
+3. **Practice**: Create small features following the process
+4. **Contribute**: Help improve templates and processes
+
+### For Project Leads
+1. **Customize templates**: Adapt to team preferences
+2. **Set standards**: Define project-specific conventions
+3. **Monitor quality**: Review metrics and adjust gates
+4. **Scale practices**: Apply CAWS to more complex work
+
+---
+
+## Key Concepts Quick Reference
+
+### Risk Tiers
+- **Tier 1**: Critical (auth, billing, migrations) - Max rigor
+- **Tier 2**: Standard (features, APIs) - Standard rigor  
+- **Tier 3**: Low risk (UI, tooling) - Basic rigor
+
+### Change Budget
+- Limits help maintain quality and reviewability
+- Adjust based on risk tier and team experience
+- Track actual vs. budgeted changes
+
+### System Invariants
+- Core guarantees that must always hold true
+- Examples: "Data integrity maintained", "API contracts honored"
+- Define 2-4 key invariants for your system
+
+### Acceptance Criteria
+- Use GIVEN/WHEN/THEN format
+- Focus on observable behavior
+- Include edge cases and error conditions
+
+---
+
+## Common Pitfalls to Avoid
+
+### For ${capitalizedType} Projects
+${getProjectSpecificPitfalls(projectType)}
+
+### General Issues
+1. **Over-customization**: Start with defaults, customize gradually
+2. **Missing invariants**: Define what must never break
+3. **Vague acceptance**: Make criteria measurable and testable
+4. **Large changes**: Break big features into smaller, reviewable pieces
+
+---
+
+## Resources
+
+### Documentation
+- **Quick Reference**: This guide
+- **Templates**: \`.caws/templates/\`
+- **Examples**: \`.caws/examples/\` (when available)
+
+### Commands
+- \`caws validate --suggestions\` - Get help with issues
+- \`caws validate --auto-fix\` - Fix safe problems automatically
+- \`caws init --interactive\` - Customize existing setup
+
+### Community
+- **GitHub Issues**: Report problems and request features
+- **Discussions**: Share experiences and best practices
+- **Wiki**: Growing collection of examples and guides
+
+---
+
+## Next Steps
+
+1. **Right now**: Review your working spec and customize it
+2. **Today**: Create your first feature plan
+3. **This week**: Set up CI/CD and branch protection
+4. **Ongoing**: Refine processes based on team feedback
+
+Remember: CAWS is a framework, not a straightjacket. Adapt it to your team's needs while maintaining the core principles of determinism and quality.
+
+**Happy coding! 🎯**
+`;
+
+  return guide;
+}
+
+function getTestingGuidance(projectType) {
+  const guidance = {
+    extension: `- Webview rendering tests\n- Command registration tests\n- Extension activation tests`,
+    library: `- Component rendering tests\n- API function tests\n- Type export tests`,
+    api: `- Endpoint response tests\n- Error handling tests\n- Authentication tests`,
+    cli: `- Command parsing tests\n- Output formatting tests\n- Error code tests`,
+    monorepo: `- Cross-package integration tests\n- Shared module tests\n- Build pipeline tests`,
+    application: `- User interaction tests\n- State management tests\n- Integration tests`,
+  };
+  return (
+    guidance[projectType] || `- Unit tests for core functions\n- Integration tests for workflows`
+  );
+}
+
+function getProjectSpecificPitfalls(projectType) {
+  const pitfalls = {
+    extension: `1. **Webview security**: Never use \`vscode.executeCommand\` from untrusted content
+2. **Activation timing**: Test cold start performance
+3. **API compatibility**: Check VS Code API version compatibility`,
+    library: `1. **Bundle size**: Monitor and limit package size
+2. **Type exports**: Ensure all public APIs are typed
+3. **Peer dependencies**: Handle React/Angular versions carefully`,
+    api: `1. **Backward compatibility**: Version APIs carefully
+2. **Rate limiting**: Test and document limits
+3. **Data validation**: Validate all inputs thoroughly`,
+    cli: `1. **Exit codes**: Use standard codes (0=success, 1=error)
+2. **Help text**: Keep it concise and helpful
+3. **Error messages**: Make them actionable`,
+    monorepo: `1. **Dependency cycles**: Avoid circular imports
+2. **Version consistency**: Keep package versions aligned
+3. **Build order**: Ensure correct build dependencies`,
+    application: `1. **State consistency**: Prevent invalid state transitions
+2. **Performance**: Monitor and optimize critical paths
+3. **Accessibility**: Test with screen readers and keyboard navigation`,
+  };
+  return (
+    pitfalls[projectType] ||
+    `1. **Test coverage**: Maintain adequate test coverage
+2. **Documentation**: Keep code and APIs documented
+3. **Dependencies**: Review and update regularly`
+  );
+}
+
+/**
+ * Generate smart .gitignore patterns for CAWS projects
+ */
+function generateGitignorePatterns(existingGitignore = '') {
+  const cawsPatterns = `
+# CAWS Configuration (tracked - these should be versioned)
+# Note: .caws/ and .agent/ are tracked for provenance
+# But we exclude temporary/generated files:
+
+# CAWS temporary files (ignored)
+.agent/temp/
+.agent/cache/
+.caws/.cache/
+.caws/tmp/
+
+# Build outputs (common patterns)
+dist/
+build/
+*.tsbuildinfo
+.next/
+.nuxt/
+.vite/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Test results
+test-results/
+playwright-report/
+`;
+
+  // If there's an existing .gitignore, merge intelligently
+  if (existingGitignore.trim()) {
+    // Check if CAWS patterns are already present
+    if (existingGitignore.includes('# CAWS Configuration')) {
+      console.log(chalk.blue('ℹ️  .gitignore already contains CAWS patterns - skipping'));
+      return existingGitignore;
+    }
+
+    // Append CAWS patterns to existing .gitignore
+    return existingGitignore.trim() + '\n\n' + cawsPatterns.trim() + '\n';
+  }
+
+  return cawsPatterns.trim();
+}
+
 // Only log schema validation if not running quiet commands
 if (!process.argv.includes('--version') && !process.argv.includes('-V')) {
   console.log(chalk.green('✅ Schema validation initialized successfully'));
@@ -571,10 +1099,316 @@ function validateGeneratedSpec(specContent, _answers) {
 }
 
 /**
+ * Detect project type from existing files and structure
+ */
+function detectProjectType(cwd = process.cwd()) {
+  const files = fs.readdirSync(cwd);
+
+  // Check for various project indicators
+  const hasPackageJson = files.includes('package.json');
+  const hasPnpm = files.includes('pnpm-workspace.yaml');
+  const hasYarn = files.includes('yarn.lock');
+
+  let packageJson = {};
+  if (hasPackageJson) {
+    try {
+      packageJson = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    } catch (e) {
+      // Ignore parse errors
+    }
+  }
+
+  // VS Code Extension detection
+  const isVscodeExtension =
+    packageJson.engines?.vscode ||
+    packageJson.contributes ||
+    packageJson.activationEvents ||
+    packageJson.main?.includes('extension.js');
+
+  // Monorepo detection
+  const isMonorepo = hasPnpm || hasYarn || files.includes('packages') || files.includes('apps');
+
+  // Library detection
+  const isLibrary = packageJson.main || packageJson.module || packageJson.exports;
+
+  // CLI detection
+  const isCli = packageJson.bin || packageJson.name?.startsWith('@') === false;
+
+  // API detection
+  const isApi =
+    packageJson.scripts?.start ||
+    packageJson.dependencies?.express ||
+    packageJson.dependencies?.fastify ||
+    packageJson.dependencies?.['@types/express'];
+
+  // Determine primary type
+  if (isVscodeExtension) return 'extension';
+  if (isMonorepo) return 'monorepo';
+  if (isApi) return 'api';
+  if (isLibrary) return 'library';
+  if (isCli) return 'cli';
+
+  // Default fallback
+  return 'application';
+}
+
+/**
+ * Generate working spec from project analysis
+ */
+function generateWorkingSpecFromAnalysis(analysis) {
+  const { projectType, packageJson } = analysis;
+
+  const templates = {
+    extension: {
+      risk_tier: 2,
+      mode: 'feature',
+      change_budget: { max_files: 25, max_loc: 1000 },
+      invariants: [
+        'Webview only accesses workspace files via VS Code API',
+        'Extension activates in <1s on typical machine',
+        'All commands have keyboard shortcuts',
+      ],
+      scope: {
+        in: ['src/', 'package.json', 'tsconfig.json'],
+        out: ['node_modules/', '*.vsix'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'User has workspace open',
+          when: 'Extension activates',
+          then: 'Webview loads within 1 second',
+        },
+      ],
+      non_functional: {
+        a11y: ['keyboard navigation', 'screen reader support', 'high contrast theme'],
+        perf: { api_p95_ms: 100 },
+        security: ['CSP enforcement for webviews', 'No arbitrary filesystem access'],
+      },
+    },
+    library: {
+      risk_tier: 2,
+      mode: 'feature',
+      change_budget: { max_files: 20, max_loc: 800 },
+      invariants: [
+        'No runtime dependencies except React',
+        'Tree-shakeable exports',
+        'TypeScript types exported',
+      ],
+      scope: {
+        in: ['src/', 'lib/', 'package.json'],
+        out: ['examples/', 'docs/', 'node_modules/'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'Library is imported',
+          when: 'Component is rendered',
+          then: 'No runtime errors occur',
+        },
+      ],
+      non_functional: {
+        a11y: ['WCAG 2.1 AA compliance', 'Semantic HTML'],
+        perf: { bundle_size_kb: 50 },
+        security: ['Input validation', 'XSS prevention'],
+      },
+    },
+    api: {
+      risk_tier: 1,
+      mode: 'feature',
+      change_budget: { max_files: 40, max_loc: 1500 },
+      invariants: [
+        'API maintains backward compatibility',
+        'All endpoints respond within 100ms',
+        'Data consistency maintained across requests',
+      ],
+      scope: {
+        in: ['src/', 'routes/', 'models/', 'tests/'],
+        out: ['node_modules/', 'logs/', 'temp/'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'Valid request is made',
+          when: 'Endpoint is called',
+          then: 'Correct response returned within SLO',
+        },
+      ],
+      non_functional: {
+        a11y: ['API documentation accessible'],
+        perf: { api_p95_ms: 100 },
+        security: ['Input validation', 'Rate limiting', 'Authentication'],
+      },
+    },
+    cli: {
+      risk_tier: 3,
+      mode: 'feature',
+      change_budget: { max_files: 15, max_loc: 600 },
+      invariants: [
+        'CLI exits with appropriate codes',
+        'Help text is informative',
+        'Error messages are clear',
+      ],
+      scope: {
+        in: ['src/', 'bin/', 'lib/', 'tests/'],
+        out: ['node_modules/', 'dist/'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'User runs command with --help',
+          when: 'Help flag is provided',
+          then: 'Help text displays clearly',
+        },
+      ],
+      non_functional: {
+        a11y: ['Color contrast in terminal output'],
+        perf: { api_p95_ms: 50 },
+        security: ['Input validation', 'No arbitrary execution'],
+      },
+    },
+    monorepo: {
+      risk_tier: 1,
+      mode: 'feature',
+      change_budget: { max_files: 50, max_loc: 2000 },
+      invariants: [
+        'All packages remain compatible',
+        'Cross-package dependencies work',
+        'Build system remains stable',
+      ],
+      scope: {
+        in: ['packages/', 'apps/', 'tools/', 'scripts/'],
+        out: ['node_modules/', 'dist/', 'build/'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'Change is made to shared package',
+          when: 'All dependent packages build',
+          then: 'No breaking changes introduced',
+        },
+      ],
+      non_functional: {
+        a11y: ['Documentation accessible across packages'],
+        perf: { api_p95_ms: 200 },
+        security: ['Dependency audit passes', 'No vulnerable packages'],
+      },
+    },
+    application: {
+      risk_tier: 2,
+      mode: 'feature',
+      change_budget: { max_files: 30, max_loc: 1200 },
+      invariants: [
+        'Application remains functional',
+        'User data is preserved',
+        'Performance does not degrade',
+      ],
+      scope: {
+        in: ['src/', 'components/', 'pages/', 'lib/'],
+        out: ['node_modules/', 'build/', 'dist/'],
+      },
+      acceptance: [
+        {
+          id: 'A1',
+          given: 'User interacts with application',
+          when: 'Feature is used',
+          then: 'Expected behavior occurs',
+        },
+      ],
+      non_functional: {
+        a11y: ['WCAG 2.1 AA compliance', 'Keyboard navigation'],
+        perf: { api_p95_ms: 250 },
+        security: ['Input validation', 'Authentication', 'Authorization'],
+      },
+    },
+  };
+
+  const baseSpec = templates[projectType] || templates.application;
+
+  return {
+    id: `${packageJson.name?.toUpperCase().replace(/[^A-Z0-9]/g, '-') || 'PROJECT'}-001`,
+    title: packageJson.name || 'Project',
+    risk_tier: baseSpec.risk_tier,
+    mode: baseSpec.mode,
+    change_budget: baseSpec.change_budget,
+    blast_radius: {
+      modules: ['core', 'api', 'ui'],
+      data_migration: false,
+    },
+    operational_rollback_slo: '5m',
+    scope: baseSpec.scope,
+    invariants: baseSpec.invariants,
+    acceptance: baseSpec.acceptance,
+    non_functional: baseSpec.non_functional,
+    contracts: [
+      {
+        type: projectType === 'api' ? 'openapi' : 'none',
+        path: projectType === 'api' ? 'docs/api.yaml' : '',
+      },
+    ],
+    observability: {
+      logs: ['error', 'warn', 'info'],
+      metrics: ['requests_total', 'errors_total'],
+      traces: ['request_flow'],
+    },
+    ai_assessment: {
+      confidence_level: 8,
+      uncertainty_areas: [],
+      complexity_factors: [],
+      risk_factors: [],
+    },
+  };
+}
+
+/**
+ * Detect if current directory appears to be a project that should be initialized directly
+ */
+function shouldInitInCurrentDirectory(projectName, currentDir) {
+  // If explicitly '.', always init in current directory
+  if (projectName === '.') return true;
+
+  // Check for common project indicators
+  const projectIndicators = [
+    'package.json',
+    'tsconfig.json',
+    'jest.config.js',
+    'eslint.config.js',
+    'README.md',
+    'src/',
+    'lib/',
+    'app/',
+    'packages/',
+    '.git/',
+    'node_modules/', // Even if empty, suggests intent to be a project
+  ];
+
+  const files = fs.readdirSync(currentDir);
+  const hasProjectIndicators = projectIndicators.some((indicator) => {
+    if (indicator.endsWith('/')) {
+      return files.includes(indicator.slice(0, -1));
+    }
+    return files.includes(indicator);
+  });
+
+  return hasProjectIndicators;
+}
+
+/**
  * Initialize a new project with CAWS
  */
 async function initProject(projectName, options) {
-  console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
+  const currentDir = process.cwd();
+  const isCurrentDirInit = shouldInitInCurrentDirectory(projectName, currentDir);
+
+  if (!isCurrentDirInit && projectName !== '.') {
+    console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
+    console.log(chalk.gray(`   (Creating subdirectory: ${projectName}/)`));
+  } else {
+    console.log(
+      chalk.cyan(`🚀 Initializing CAWS in current project: ${path.basename(currentDir)}`)
+    );
+    console.log(chalk.gray(`   (Adding CAWS files to existing project)`));
+  }
 
   let answers; // Will be set either interactively or with defaults
 
@@ -622,11 +1456,33 @@ async function initProject(projectName, options) {
     const initInCurrentDir = projectName === '.';
     const targetDir = initInCurrentDir ? process.cwd() : path.resolve(process.cwd(), projectName);
 
-    // Check if directory already exists (skip check for current directory)
+    // Check if target directory already exists and has content (skip check for current directory)
     if (!initInCurrentDir && fs.existsSync(projectName)) {
-      console.error(chalk.red(`❌ Directory ${projectName} already exists`));
-      console.error(chalk.blue('💡 Choose a different name or remove the existing directory'));
-      process.exit(1);
+      const existingFiles = fs.readdirSync(projectName);
+      if (existingFiles.length > 0) {
+        console.error(chalk.red(`❌ Directory '${projectName}' already exists and contains files`));
+        console.error(chalk.blue('💡 To initialize CAWS in current directory instead:'));
+        console.error(`   ${chalk.cyan('caws init .')}`);
+        console.error(chalk.blue('💡 Or choose a different name/remove existing directory'));
+        process.exit(1);
+      }
+    }
+
+    // Check if current directory has project files when trying to init in subdirectory
+    if (!initInCurrentDir) {
+      const currentDirFiles = fs.readdirSync(process.cwd());
+      const hasProjectFiles = currentDirFiles.some(
+        (file) => !file.startsWith('.') && file !== 'node_modules' && file !== '.git'
+      );
+
+      if (hasProjectFiles) {
+        console.warn(chalk.yellow('⚠️  Current directory contains project files'));
+        console.warn(
+          chalk.blue('💡 You might want to initialize CAWS in current directory instead:')
+        );
+        console.warn(`   ${chalk.cyan('caws init .')}`);
+        console.warn(chalk.blue('   Or continue to create subdirectory (Ctrl+C to cancel)'));
+      }
     }
 
     // Save the original template directory before changing directories
@@ -700,11 +1556,364 @@ async function initProject(projectName, options) {
           }
         } catch (templateError) {
           console.warn(chalk.yellow('⚠️  Could not copy agents guide:'), templateError.message);
+          console.warn(
+            chalk.blue('💡 You can manually copy the guide from the caws-template package')
+          );
         }
       }
     } else {
       // Already has CAWS setup
       console.log(chalk.green('✅ CAWS project detected - skipping template copy'));
+    }
+
+    // Handle interactive wizard or template-based setup
+    if (options.interactive && !options.nonInteractive) {
+      console.log(chalk.cyan('🎯 CAWS Interactive Setup Wizard'));
+      console.log(chalk.blue('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+      console.log(chalk.gray('This wizard will guide you through creating a CAWS working spec\n'));
+
+      // Detect project type
+      const detectedType = detectProjectType(process.cwd());
+      console.log(chalk.blue(`📦 Detected project type: ${chalk.cyan(detectedType)}`));
+
+      // Get package.json info if available
+      let packageJson = {};
+      try {
+        packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+      } catch (e) {
+        // No package.json, that's fine
+      }
+
+      const wizardQuestions = [
+        {
+          type: 'list',
+          name: 'projectType',
+          message: '❓ What type of project is this?',
+          choices: [
+            {
+              name: '🔌 VS Code Extension (webview, commands, integrations)',
+              value: 'extension',
+              short: 'VS Code Extension',
+            },
+            {
+              name: '📚 Library/Package (reusable components, utilities)',
+              value: 'library',
+              short: 'Library',
+            },
+            {
+              name: '🌐 API Service (REST, GraphQL, microservices)',
+              value: 'api',
+              short: 'API Service',
+            },
+            {
+              name: '💻 CLI Tool (command-line interface)',
+              value: 'cli',
+              short: 'CLI Tool',
+            },
+            {
+              name: '🏗️  Monorepo (multiple packages/apps)',
+              value: 'monorepo',
+              short: 'Monorepo',
+            },
+            {
+              name: '📱 Application (standalone app)',
+              value: 'application',
+              short: 'Application',
+            },
+          ],
+          default: detectedType,
+        },
+        {
+          type: 'input',
+          name: 'projectTitle',
+          message: '📝 Project Title (descriptive name):',
+          default:
+            packageJson.name ||
+            projectName.charAt(0).toUpperCase() + projectName.slice(1).replace(/-/g, ' '),
+        },
+        {
+          type: 'list',
+          name: 'riskTier',
+          message: '⚠️  Risk Tier (higher tier = more rigor):',
+          choices: [
+            {
+              name: '🔴 Tier 1 - Critical (auth, billing, migrations) - Max rigor',
+              value: 1,
+              short: 'Critical',
+            },
+            {
+              name: '🟡 Tier 2 - Standard (features, APIs) - Standard rigor',
+              value: 2,
+              short: 'Standard',
+            },
+            {
+              name: '🟢 Tier 3 - Low Risk (UI, tooling) - Basic rigor',
+              value: 3,
+              short: 'Low Risk',
+            },
+          ],
+          default: (answers) => {
+            const typeDefaults = {
+              extension: 2,
+              library: 2,
+              api: 1,
+              cli: 3,
+              monorepo: 1,
+              application: 2,
+            };
+            return typeDefaults[answers.projectType] || 2;
+          },
+        },
+        {
+          type: 'list',
+          name: 'projectMode',
+          message: '🎯 Primary development mode:',
+          choices: [
+            { name: '✨ feature (new functionality)', value: 'feature' },
+            { name: '🔄 refactor (code restructuring)', value: 'refactor' },
+            { name: '🐛 fix (bug fixes)', value: 'fix' },
+            { name: '📚 doc (documentation)', value: 'doc' },
+            { name: '🧹 chore (maintenance)', value: 'chore' },
+          ],
+          default: 'feature',
+        },
+        {
+          type: 'number',
+          name: 'maxFiles',
+          message: '📊 Max files to change per feature:',
+          default: (answers) => {
+            const tierDefaults = { 1: 40, 2: 25, 3: 15 };
+            const typeAdjustments = {
+              extension: -5,
+              library: -10,
+              api: 10,
+              cli: -10,
+              monorepo: 25,
+              application: 0,
+            };
+            return Math.max(
+              5,
+              tierDefaults[answers.riskTier] + (typeAdjustments[answers.projectType] || 0)
+            );
+          },
+        },
+        {
+          type: 'number',
+          name: 'maxLoc',
+          message: '📏 Max lines of code to change per feature:',
+          default: (answers) => {
+            const tierDefaults = { 1: 1500, 2: 1000, 3: 600 };
+            const typeAdjustments = {
+              extension: -200,
+              library: -300,
+              api: 500,
+              cli: -400,
+              monorepo: 1000,
+              application: 0,
+            };
+            return Math.max(
+              50,
+              tierDefaults[answers.riskTier] + (typeAdjustments[answers.projectType] || 0)
+            );
+          },
+        },
+        {
+          type: 'input',
+          name: 'blastModules',
+          message: '💥 Affected modules (comma-separated):',
+          default: (answers) => {
+            const typeDefaults = {
+              extension: 'core,webview',
+              library: 'components,utils',
+              api: 'routes,models,controllers',
+              cli: 'commands,utils',
+              monorepo: 'shared,packages',
+              application: 'ui,logic,data',
+            };
+            return typeDefaults[answers.projectType] || 'core,ui';
+          },
+        },
+        {
+          type: 'confirm',
+          name: 'dataMigration',
+          message: '🗄️  Requires data migration?',
+          default: false,
+        },
+        {
+          type: 'list',
+          name: 'rollbackSlo',
+          message: '⏱️  Operational rollback SLO:',
+          choices: [
+            { name: '⚡ 1 minute (critical systems)', value: '1m' },
+            { name: '🟡 5 minutes (standard)', value: '5m' },
+            { name: '🟠 15 minutes (complex)', value: '15m' },
+            { name: '🔴 1 hour (data migration)', value: '1h' },
+          ],
+          default: '5m',
+        },
+      ];
+
+      console.log(chalk.cyan('⏳ Gathering project requirements...'));
+
+      let wizardAnswers;
+      try {
+        wizardAnswers = await inquirer.prompt(wizardQuestions);
+      } catch (error) {
+        if (error.isTtyError) {
+          console.error(chalk.red('❌ Interactive prompts not supported in this environment'));
+          console.error(chalk.blue('💡 Run with --non-interactive flag to use defaults'));
+          process.exit(1);
+        } else {
+          console.error(chalk.red('❌ Error during interactive setup:'), error.message);
+          process.exit(1);
+        }
+      }
+
+      console.log(chalk.green('✅ Project requirements gathered successfully!'));
+
+      // Show summary before generating spec
+      console.log(chalk.bold('\n📋 Configuration Summary:'));
+      console.log(`   ${chalk.cyan('Type')}: ${wizardAnswers.projectType}`);
+      console.log(`   ${chalk.cyan('Project')}: ${wizardAnswers.projectTitle}`);
+      console.log(
+        `   ${chalk.cyan('Mode')}: ${wizardAnswers.projectMode} | ${chalk.cyan('Tier')}: ${wizardAnswers.riskTier}`
+      );
+      console.log(
+        `   ${chalk.cyan('Budget')}: ${wizardAnswers.maxFiles} files, ${wizardAnswers.maxLoc} lines`
+      );
+      console.log(
+        `   ${chalk.cyan('Data Migration')}: ${wizardAnswers.dataMigration ? 'Yes' : 'No'}`
+      );
+      console.log(`   ${chalk.cyan('Rollback SLO')}: ${wizardAnswers.rollbackSlo}`);
+
+      // Generate working spec using the template system
+      const analysis = {
+        projectType: wizardAnswers.projectType,
+        packageJson: { name: wizardAnswers.projectTitle },
+        hasTests: false,
+        hasLinting: false,
+        hasCi: false,
+      };
+
+      const workingSpecContent = yaml.dump(generateWorkingSpecFromAnalysis(analysis));
+
+      // Override template-generated values with wizard answers
+      const spec = yaml.load(workingSpecContent);
+      spec.title = wizardAnswers.projectTitle;
+      spec.risk_tier = wizardAnswers.riskTier;
+      spec.mode = wizardAnswers.projectMode;
+      spec.change_budget = {
+        max_files: wizardAnswers.maxFiles,
+        max_loc: wizardAnswers.maxLoc,
+      };
+      spec.blast_radius = {
+        modules: wizardAnswers.blastModules
+          .split(',')
+          .map((m) => m.trim())
+          .filter((m) => m),
+        data_migration: wizardAnswers.dataMigration,
+      };
+      spec.operational_rollback_slo = wizardAnswers.rollbackSlo;
+
+      // Validate the generated spec
+      validateGeneratedSpec(yaml.dump(spec), wizardAnswers);
+
+      // Save the working spec
+      await fs.writeFile('.caws/working-spec.yaml', yaml.dump(spec, { indent: 2 }));
+
+      console.log(chalk.green('✅ Working spec generated and validated'));
+
+      // Generate getting started guide
+      const wizardAnalysis = {
+        projectType: wizardAnswers.projectType,
+        packageJson: { name: wizardAnswers.projectTitle },
+        hasTests: false,
+        hasLinting: false,
+        hasCi: false,
+      };
+
+      const guideContent = generateGettingStartedGuide(wizardAnalysis);
+      await fs.writeFile('.caws/GETTING_STARTED.md', guideContent);
+      console.log(chalk.green('✅ Getting started guide created'));
+
+      // Generate or update .gitignore with CAWS patterns
+      const existingGitignore = fs.existsSync('.gitignore')
+        ? fs.readFileSync('.gitignore', 'utf8')
+        : '';
+
+      const updatedGitignore = generateGitignorePatterns(existingGitignore);
+      if (updatedGitignore !== existingGitignore) {
+        await fs.writeFile('.gitignore', updatedGitignore);
+        const action = existingGitignore.trim() ? 'updated' : 'created';
+        console.log(chalk.green(`✅ .gitignore ${action} with CAWS patterns`));
+      }
+
+      // Finalize project with provenance and git initialization
+      await finalizeProject(projectName, options, wizardAnswers);
+
+      continueToSuccess();
+      return;
+    }
+
+    // Handle template-based setup
+    if (options.template) {
+      console.log(chalk.cyan(`🎯 Using ${options.template} template`));
+
+      const validTemplates = ['extension', 'library', 'api', 'cli', 'monorepo'];
+      if (!validTemplates.includes(options.template)) {
+        console.error(chalk.red(`❌ Invalid template: ${options.template}`));
+        console.error(chalk.blue(`💡 Valid templates: ${validTemplates.join(', ')}`));
+        process.exit(1);
+      }
+
+      const analysis = {
+        projectType: options.template,
+        packageJson: { name: projectName },
+        hasTests: false,
+        hasLinting: false,
+        hasCi: false,
+      };
+
+      const workingSpecContent = yaml.dump(generateWorkingSpecFromAnalysis(analysis));
+
+      // Validate the generated spec
+      validateGeneratedSpec(workingSpecContent, { projectType: options.template });
+
+      // Save the working spec
+      await fs.writeFile('.caws/working-spec.yaml', workingSpecContent);
+
+      console.log(chalk.green('✅ Working spec generated from template'));
+
+      // Generate getting started guide
+      const templateAnalysis = {
+        projectType: options.template,
+        packageJson: { name: projectName },
+        hasTests: false,
+        hasLinting: false,
+        hasCi: false,
+      };
+
+      const guideContent = generateGettingStartedGuide(templateAnalysis);
+      await fs.writeFile('.caws/GETTING_STARTED.md', guideContent);
+      console.log(chalk.green('✅ Getting started guide created'));
+
+      // Generate or update .gitignore with CAWS patterns
+      const existingGitignore = fs.existsSync('.gitignore')
+        ? fs.readFileSync('.gitignore', 'utf8')
+        : '';
+
+      const updatedGitignore = generateGitignorePatterns(existingGitignore);
+      if (updatedGitignore !== existingGitignore) {
+        await fs.writeFile('.gitignore', updatedGitignore);
+        const action = existingGitignore.trim() ? 'updated' : 'created';
+        console.log(chalk.green(`✅ .gitignore ${action} with CAWS patterns`));
+      }
+
+      // Finalize project
+      await finalizeProject(projectName, options, { projectType: options.template });
+
+      continueToSuccess();
+      return;
     }
 
     // Set default answers for non-interactive mode
@@ -761,6 +1970,32 @@ async function initProject(projectName, options) {
       await fs.writeFile('.caws/working-spec.yaml', workingSpecContent);
 
       console.log(chalk.green('✅ Working spec generated and validated'));
+
+      // Generate getting started guide (detect project type)
+      const detectedType = detectProjectType(process.cwd());
+      const defaultAnalysis = {
+        projectType: detectedType,
+        packageJson: { name: displayName },
+        hasTests: false,
+        hasLinting: false,
+        hasCi: false,
+      };
+
+      const guideContent = generateGettingStartedGuide(defaultAnalysis);
+      await fs.writeFile('.caws/GETTING_STARTED.md', guideContent);
+      console.log(chalk.green('✅ Getting started guide created'));
+
+      // Generate or update .gitignore with CAWS patterns
+      const existingGitignore = fs.existsSync('.gitignore')
+        ? fs.readFileSync('.gitignore', 'utf8')
+        : '';
+
+      const updatedGitignore = generateGitignorePatterns(existingGitignore);
+      if (updatedGitignore !== existingGitignore) {
+        await fs.writeFile('.gitignore', updatedGitignore);
+        const action = existingGitignore.trim() ? 'updated' : 'created';
+        console.log(chalk.green(`✅ .gitignore ${action} with CAWS patterns`));
+      }
 
       // Finalize project with provenance and git initialization
       await finalizeProject(projectName, options, answers);
@@ -1392,12 +2627,30 @@ async function finalizeProject(projectName, options, answers) {
 }
 
 function continueToSuccess() {
-  console.log(chalk.green('\n🎉 Project initialized successfully!'));
-  console.log(`📁 ${chalk.cyan('Project location')}: ${path.resolve(process.cwd())}`);
+  const isCurrentDir =
+    process.cwd() ===
+    path.resolve(process.argv[3] === '.' ? process.cwd() : process.argv[3] || 'caws-project');
+
+  console.log(chalk.green('\n🎉 CAWS project initialized successfully!'));
+
+  if (isCurrentDir) {
+    console.log(
+      `📁 ${chalk.cyan('Initialized in current directory')}: ${path.resolve(process.cwd())}`
+    );
+    console.log(chalk.gray('   (CAWS files added to your existing project)'));
+  } else {
+    console.log(`📁 ${chalk.cyan('Project location')}: ${path.resolve(process.cwd())}`);
+    console.log(chalk.gray('   (New subdirectory created with CAWS structure)'));
+  }
+
   console.log(chalk.bold('\nNext steps:'));
   console.log('1. Customize .caws/working-spec.yaml');
-  console.log('2. npm install (if using Node.js)');
-  console.log('3. Set up your CI/CD pipeline');
+  console.log('2. Review added CAWS tools and documentation');
+  if (!isCurrentDir) {
+    console.log('3. Move CAWS files to your main project if needed');
+  }
+  console.log('4. npm install (if using Node.js)');
+  console.log('5. Set up your CI/CD pipeline');
   console.log(chalk.blue('\nFor help: caws --help'));
 }
 
@@ -1408,11 +2661,22 @@ async function scaffoldProject(options) {
   const currentDir = process.cwd();
   const projectName = path.basename(currentDir);
 
-  console.log(chalk.cyan(`🔧 Enhancing existing project with CAWS: ${projectName}`));
-
   try {
-    // Detect existing CAWS setup with current directory context
+    // Detect existing CAWS setup FIRST before any logging
     const setup = detectCAWSSetup(currentDir);
+
+    // Check for CAWS setup immediately and exit with helpful message if not found
+    if (!setup.hasCAWSDir) {
+      console.log(chalk.red('❌ CAWS not initialized in this project'));
+      console.log(chalk.blue('\n💡 To get started:'));
+      console.log(`   1. Initialize CAWS: ${chalk.cyan('caws init <project-name>')}`);
+      console.log(`   2. Or initialize in current directory: ${chalk.cyan('caws init .')}`);
+      console.log(chalk.blue('\n📚 For more help:'));
+      console.log(`   ${chalk.cyan('caws --help')}`);
+      process.exit(1);
+    }
+
+    console.log(chalk.cyan(`🔧 Enhancing existing CAWS project: ${projectName}`));
 
     // Preserve the original template directory from global cawsSetup
     // (needed because detectCAWSSetup from within a new project won't find the template)
@@ -1440,6 +2704,12 @@ async function scaffoldProject(options) {
 
       if (!setup.templateDir) {
         console.log(chalk.red(`❌ No template directory available!`));
+        console.log(chalk.blue('💡 To fix this issue:'));
+        console.log(`   1. Ensure caws-template package is installed`);
+        console.log(`   2. Run from the monorepo root directory`);
+        console.log(`   3. Check that CAWS CLI was installed correctly`);
+        console.log(chalk.blue('\n📚 For installation help:'));
+        console.log(`   ${chalk.cyan('npm install -g @paths.design/caws-cli')}`);
       }
     }
 
@@ -1486,7 +2756,7 @@ async function scaffoldProject(options) {
       .update(JSON.stringify(scaffoldProvenance))
       .digest('hex');
 
-    // Determine what enhancements to add based on setup type
+    // Determine what enhancements to add based on setup type and options
     const enhancements = [];
 
     // Add CAWS tools directory structure (matches test expectations)
@@ -1496,11 +2766,14 @@ async function scaffoldProject(options) {
       required: true,
     });
 
-    enhancements.push({
-      name: 'codemod',
-      description: 'Codemod transformation scripts',
-      required: true,
-    });
+    // Add codemods if requested or not minimal
+    if (options.withCodemods || (!options.minimal && !options.withCodemods)) {
+      enhancements.push({
+        name: 'codemod',
+        description: 'Codemod transformation scripts',
+        required: true,
+      });
+    }
 
     // Also add automated publishing for enhanced setups
     if (setup.isEnhanced) {
@@ -1526,8 +2799,11 @@ async function scaffoldProject(options) {
       });
     }
 
-    // Add OIDC setup guide for setups that need it
-    if (!setup.isEnhanced || !fs.existsSync(path.join(currentDir, 'OIDC_SETUP.md'))) {
+    // Add OIDC setup guide if requested or not minimal
+    if (
+      (options.withOidc || (!options.minimal && !options.withOidc)) &&
+      (!setup.isEnhanced || !fs.existsSync(path.join(currentDir, 'OIDC_SETUP.md')))
+    ) {
       enhancements.push({
         name: 'OIDC_SETUP.md',
         description: 'OIDC trusted publisher setup guide',
@@ -1615,9 +2891,18 @@ async function scaffoldProject(options) {
     if (addedCount > 0) {
       console.log(chalk.bold('\n📝 Next steps:'));
       console.log('1. Review the added files');
-      console.log('2. Set up OIDC trusted publisher (see OIDC_SETUP.md)');
-      console.log('3. Push to trigger automated publishing');
-      console.log('4. Your existing CAWS tools remain unchanged');
+
+      // Check if OIDC was added
+      const oidcAdded = addedFiles.some((file) => file.includes('OIDC_SETUP'));
+      if (oidcAdded) {
+        console.log('2. Set up OIDC trusted publisher (see OIDC_SETUP.md)');
+        console.log('3. Push to trigger automated publishing');
+        console.log('4. Your existing CAWS tools remain unchanged');
+      } else {
+        console.log('2. Customize your working spec in .caws/working-spec.yaml');
+        console.log('3. Run validation: caws validate --suggestions');
+        console.log('4. Your existing CAWS tools remain unchanged');
+      }
     }
 
     if (setup.isEnhanced) {
@@ -1673,10 +2958,11 @@ program
   .alias('i')
   .description('Initialize a new project with CAWS')
   .argument('<project-name>', 'Name of the new project')
-  .option('-i, --interactive', 'Run interactive setup', true)
+  .option('-i, --interactive', 'Run interactive setup wizard')
   .option('-g, --git', 'Initialize git repository', true)
   .option('-n, --non-interactive', 'Skip interactive prompts')
   .option('--no-git', "Don't initialize git repository")
+  .option('-t, --template <type>', 'Use project template (extension|library|api|cli|monorepo)')
   .action(initProject);
 
 program
@@ -1684,7 +2970,58 @@ program
   .alias('s')
   .description('Add CAWS components to existing project')
   .option('-f, --force', 'Overwrite existing files')
+  .option('--with-oidc', 'Include OIDC trusted publisher setup')
+  .option('--with-codemods', 'Include codemod transformation scripts')
+  .option('--minimal', 'Only essential components (no OIDC, no codemods)')
   .action(scaffoldProject);
+
+program
+  .command('validate')
+  .alias('v')
+  .description('Validate CAWS working spec with suggestions')
+  .argument('[spec-file]', 'Path to working spec file', '.caws/working-spec.yaml')
+  .option('-s, --suggestions', 'Show helpful suggestions for issues', true)
+  .option('-f, --auto-fix', 'Automatically fix safe issues', false)
+  .option('-q, --quiet', 'Only show errors, no suggestions', false)
+  .action(async (specFile, options) => {
+    try {
+      // Check if spec file exists
+      if (!fs.existsSync(specFile)) {
+        console.error(chalk.red(`❌ Working spec file not found: ${specFile}`));
+        console.error(chalk.blue('💡 Initialize CAWS first:'));
+        console.error(`   ${chalk.cyan('caws init .')}`);
+        process.exit(1);
+      }
+
+      // Load and parse spec
+      const specContent = fs.readFileSync(specFile, 'utf8');
+      const spec = yaml.load(specContent);
+
+      if (!spec) {
+        console.error(chalk.red('❌ Failed to parse working spec YAML'));
+        process.exit(1);
+      }
+
+      // Validate with suggestions
+      const result = validateWorkingSpecWithSuggestions(spec, {
+        autoFix: options.autoFix,
+        suggestions: !options.quiet,
+      });
+
+      // Save auto-fixed spec if changes were made
+      if (options.autoFix && result.errors.length === 0) {
+        const fixedContent = yaml.dump(spec, { indent: 2 });
+        fs.writeFileSync(specFile, fixedContent);
+        console.log(chalk.green(`✅ Saved auto-fixed spec to ${specFile}`));
+      }
+
+      // Exit with appropriate code
+      process.exit(result.valid ? 0 : 1);
+    } catch (error) {
+      console.error(chalk.red('❌ Error during validation:'), error.message);
+      process.exit(1);
+    }
+  });
 
 // Error handling
 program.exitOverride((err) => {

@@ -24,6 +24,11 @@
       "inputs": ["src/**", "tests/**", "apps/**", ".caws/**"],
       "outputs": ["coverage/**"]
     },
+    "test:unit": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tests/**", "apps/**"],
+      "outputs": []
+    },
     "test:watch": {
       "dependsOn": [],
       "persistent": true,
