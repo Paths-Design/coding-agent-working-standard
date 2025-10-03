@@ -30,6 +30,28 @@ caws validate --auto-fix
 caws scaffold --minimal
 ```
 
+### Cursor Hooks (Real-Time Quality)
+
+CAWS integrates with Cursor IDE for real-time quality gates:
+
+```bash
+# Enabled automatically during `caws init --interactive`
+# Or add to existing project:
+caws scaffold
+```
+
+**What Cursor hooks provide**:
+- Real-time validation as you code
+- Blocks dangerous commands (`rm -rf /`, force push to main)
+- Prevents reading secrets (`.env`, private keys)
+- Auto-formats code after edits
+- Enforces naming conventions
+- Logs all AI interactions for provenance
+
+**Temporarily disable**: Cursor Settings → Hooks → Disable
+
+**Note**: Cursor hooks complement (don't replace) git hooks and CI/CD
+
 ---
 
 ## 🏗️ Core Framework

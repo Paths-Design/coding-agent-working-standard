@@ -13,22 +13,25 @@ Fast checks run early (pre-commit), comprehensive checks run before merge (CI/CD
 
 ## 📋 Hook Placement Matrix
 
-| Check Type | Pre-Commit | Pre-Push | PR (CI) | Pre-Deploy |
-|------------|:----------:|:--------:|:-------:|:----------:|
-| **Naming conventions** | ✅ | - | ✅ | - |
-| **Linting** | ✅ Staged | - | ✅ Full | - |
-| **Type checking** | ✅ | - | ✅ | - |
-| **Unit tests** | ❌ | ✅ | ✅ Full | - |
-| **Contract tests** | ❌ | ✅ | ✅ | - |
-| **Integration tests** | ❌ | ❌ | ✅ | - |
-| **E2E tests** | ❌ | ❌ | ✅ Smoke | ✅ Full |
-| **Mutation tests** | ❌ | ❌ | ✅ | - |
-| **A11y tests** | ❌ | ❌ | ✅ | - |
-| **CAWS validation** | ❌ | ✅ | ✅ | - |
-| **Scope guards** | ❌ | ⚠️  Warning | ✅ Hard fail | - |
-| **Budget guards** | ❌ | ❌ | ✅ | - |
-| **Build verification** | ❌ | ✅ | ✅ | ✅ |
-| **Performance budgets** | ❌ | ❌ | ✅ | ✅ |
+| Check Type | Cursor (Real-time) | Pre-Commit | Pre-Push | PR (CI) | Pre-Deploy |
+|------------|:------------------:|:----------:|:--------:|:-------:|:----------:|
+| **Naming conventions** | ✅ | ✅ | - | ✅ | - |
+| **Secret scanning** | ✅ Block | - | - | ✅ | - |
+| **Dangerous commands** | ✅ Block | - | - | - | - |
+| **Auto-formatting** | ✅ | - | - | - | - |
+| **Linting** | ⚠️  Fast | ✅ Staged | - | ✅ Full | - |
+| **Type checking** | ❌ | ✅ | - | ✅ | - |
+| **Unit tests** | ❌ | ❌ | ✅ | ✅ Full | - |
+| **Contract tests** | ❌ | ❌ | ✅ | ✅ | - |
+| **Integration tests** | ❌ | ❌ | ❌ | ✅ | - |
+| **E2E tests** | ❌ | ❌ | ❌ | ✅ Smoke | ✅ Full |
+| **Mutation tests** | ❌ | ❌ | ❌ | ✅ | - |
+| **A11y tests** | ❌ | ❌ | ❌ | ✅ | - |
+| **CAWS validation** | ✅ On edit | ❌ | ✅ | ✅ | - |
+| **Scope guards** | ⚠️  Warning | ❌ | ⚠️  Warning | ✅ Hard fail | - |
+| **Budget guards** | ❌ | ❌ | ❌ | ✅ | - |
+| **Build verification** | ❌ | ❌ | ✅ | ✅ | ✅ |
+| **Performance budgets** | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 **Legend**:
 - ✅ = Enforced (hard fail)
@@ -38,6 +41,32 @@ Fast checks run early (pre-commit), comprehensive checks run before merge (CI/CD
 ---
 
 ## 🔧 Implementation Details
+
+### 0. Cursor Hooks (Real-Time) - NEW!
+
+**Goal**: Instant feedback as AI codes
+
+```bash
+# .cursor/hooks.json
+- Secret scanning (beforeReadFile)
+- Dangerous command blocking (beforeShellExecution)
+- Auto-formatting (afterFileEdit)
+- Naming conventions (afterFileEdit)
+- CAWS spec validation (afterFileEdit)
+- Scope guards (beforeSubmitPrompt)
+- Audit logging (all events)
+```
+
+**Why**:
+- Immediate feedback during AI session
+- Prevents dangerous operations before they execute
+- Auto-formats code as it's written
+- Catches naming violations in real-time
+- Logs all AI interactions for provenance
+
+**When to skip**: Cursor Settings → Hooks → Disable
+
+**Speed target**: < 500ms per hook
 
 ### 1. Pre-Commit Hook (Client-Side)
 
@@ -153,14 +182,22 @@ On push to main:
 
 ```mermaid
 graph TD
-    A[PR Created] --> B[Sanity Checks]
-    B --> C[CAWS Guards]
-    B --> D[Test Suite]
-    B --> E[Quality Gates]
-    C --> F[PR Comment]
-    D --> F
-    E --> F
-    F --> G[Ready to Merge]
+    A[Cursor Session] -->|Real-time| B[Git Commit]
+    B -->|Pre-commit| C[Git Push]
+    C -->|Pre-push| D[PR Created]
+    D --> E[Sanity Checks]
+    E --> F[CAWS Guards]
+    E --> G[Test Suite]
+    E --> H[Quality Gates]
+    F --> I[PR Comment]
+    G --> I
+    H --> I
+    I --> J[Ready to Merge]
+    
+    style A fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#000
+    style B fill:#FF9800,stroke:#E65100,stroke-width:2px,color:#000
+    style C fill:#FF9800,stroke:#E65100,stroke-width:2px,color:#000
+    style D fill:#2196F3,stroke:#0D47A1,stroke-width:2px,color:#fff
 ```
 
 **Benefits**:
