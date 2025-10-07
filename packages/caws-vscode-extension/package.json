@@ -1,0 +1,134 @@
+{
+  "name": "caws-vscode-extension",
+  "displayName": "CAWS - Coding Agent Workflow System",
+  "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "workspaceContains:.caws/working-spec.yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "caws.evaluate",
+        "title": "CAWS: Evaluate Quality",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.iterate",
+        "title": "CAWS: Get Iterative Guidance",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.validate",
+        "title": "CAWS: Validate Working Spec",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.createWaiver",
+        "title": "CAWS: Create Waiver",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.showDashboard",
+        "title": "CAWS: Show Quality Dashboard",
+        "category": "CAWS"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "caws.evaluate",
+          "when": "workspaceContains:.caws/working-spec.yaml"
+        },
+        {
+          "command": "caws.iterate",
+          "when": "workspaceContains:.caws/working-spec.yaml"
+        },
+        {
+          "command": "caws.validate",
+          "when": "workspaceContains:.caws/working-spec.yaml"
+        },
+        {
+          "command": "caws.createWaiver",
+          "when": "workspaceContains:.caws/working-spec.yaml"
+        },
+        {
+          "command": "caws.showDashboard",
+          "when": "workspaceContains:.caws/working-spec.yaml"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "caws.evaluate",
+          "when": "resourceExtname =~ /\\.(js|ts|jsx|tsx)$/",
+          "group": "caws@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CAWS",
+      "properties": {
+        "caws.cli.path": {
+          "type": "string",
+          "default": "caws",
+          "description": "Path to CAWS CLI executable"
+        },
+        "caws.autoValidate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically validate on file save"
+        },
+        "caws.showQualityStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show quality status in status bar"
+        },
+        "caws.experimentalMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable experimental features"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run bundle && npm run compile",
+    "bundle": "node scripts/bundle-deps.js",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run bundle && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^6.4.1",
+    "@typescript-eslint/parser": "^6.4.1",
+    "eslint": "^8.47.0",
+    "glob": "^10.3.3",
+    "mocha": "^10.2.0",
+    "typescript": "^5.1.6",
+    "@vscode/test-electron": "^2.3.4"
+  },
+  "dependencies": {
+    "ws": "^8.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paths-design/caws.git",
+    "directory": "packages/caws-vscode-extension"
+  }
+}

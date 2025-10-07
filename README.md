@@ -37,8 +37,31 @@ caws init my-new-project
 # Scaffold an existing project
 caws scaffold
 
-# Validate working specification
+# Validate working specification (runs quality gates automatically)
 caws validate
+
+# Agent-oriented commands for programmatic evaluation
+caws agent evaluate .caws/working-spec.yaml    # Evaluate work quality (JSON output)
+caws agent iterate .caws/working-spec.yaml      # Get iterative development guidance
+
+# Waivers system for exceptional circumstances
+caws waivers create --title "Emergency fix" --gates coverage_threshold  # Create waiver
+caws waivers list                          # List active waivers
+caws waivers revoke WV-0001                # Revoke waiver
+caws waivers stats                         # Waiver statistics
+
+# Experimental features with dry-run support
+caws experimental --dry-run validate .caws/working-spec.yaml  # Dry run validation
+caws experimental quality-gates .caws/working-spec.yaml       # Experimental quality gates
+
+# CI/CD optimization and generation
+caws cicd analyze                           # Analyze project for optimizations
+caws cicd generate github                   # Generate optimized GitHub Actions
+caws cicd test-selection --from-commit HEAD~1  # Smart test selection
+
+# Manage CAWS tools
+caws tools list                    # List available tools
+caws tools run validate           # Execute specific tool
 ```
 
 #### Option 2: Local Development (Monorepo)
@@ -52,17 +75,25 @@ node packages/caws-cli/dist/index.js init my-new-project
 # Scaffold CAWS components
 node packages/caws-cli/dist/index.js scaffold
 
-# Validate working specification
+# Validate working specification (runs quality gates automatically)
 node packages/caws-cli/dist/index.js validate
+
+# Manage CAWS tools
+node packages/caws-cli/dist/index.js tools list        # List available tools
+node packages/caws-cli/dist/index.js tools run validate # Execute specific tool
 ```
 
 #### Option 3: npm Scripts (Project Context)
 ```bash
 # From the project root (when working in this monorepo)
 node apps/tools/caws/start.js        # Start a new change
-node .caws/validate.js .caws/working-spec.yaml  # Validate working spec
+npm run caws:validate                # Validate working spec (with tools)
 npm run caws:verify                  # Run full quality gates
 node apps/tools/caws/attest.js > .agent/attestation.json  # Generate attestations
+
+# Dynamic tool management
+npm run caws tools list              # List all available tools
+npm run caws tools run validate      # Execute specific tool
 ```
 
 **Note**: For scripts that need arguments, use direct node execution rather than npm run.
@@ -75,8 +106,169 @@ This is a Turborepo-managed monorepo with the following packages:
 packages/
 ├── caws-cli/           # CLI tool for scaffolding projects
 ├── caws-template/      # Project template with tools and configurations
-└── caws-test-project/  # Example project using CAWS
+├── caws-test-project/  # Example project using CAWS
+├── caws-mcp-server/    # Model Context Protocol server for agent integration
+└── caws-vscode-extension/ # VS Code extension with real-time CAWS integration
 ```
+
+## Agent Integration
+
+CAWS provides specialized commands for agents to use as quality bars during iterative development:
+
+### Agent Commands
+
+```bash
+# Evaluate work against CAWS quality standards (JSON output for parsing)
+caws agent evaluate .caws/working-spec.yaml
+
+# Get iterative development guidance based on current progress
+caws agent iterate --current-state '{"description": "Started implementation"}' .caws/working-spec.yaml
+
+# Validate spec readiness without running quality gates
+caws agent evaluate --feedback-only .caws/working-spec.yaml
+```
+
+### Agent Workflow Integration
+
+Agents can integrate CAWS into their development loops:
+
+```javascript
+// Example agent integration
+async function developWithCaws(specPath) {
+  let currentState = "Initial implementation";
+
+  while (true) {
+    // Evaluate current progress
+    const result = await runCommand(`caws agent evaluate ${specPath}`);
+
+    if (result.success && result.evaluation.overall_status === 'quality_passed') {
+      console.log('✅ Implementation complete!');
+      break;
+    }
+
+    // Get guidance for next iteration
+    const guidance = await runCommand(`caws agent iterate --current-state '{"description": "${currentState}"}' ${specPath}`);
+
+    // Execute recommended next steps
+    await implementSteps(guidance.iteration.next_steps);
+
+    currentState = `Completed: ${guidance.iteration.next_steps.join(', ')}`;
+  }
+}
+```
+
+### Quality Standards
+
+CAWS enforces risk-tiered quality standards:
+
+- **Tier 1** (High Risk): 90% coverage, 70% mutation, contracts required
+- **Tier 2** (Medium Risk): 80% coverage, 50% mutation, contracts required
+- **Tier 3** (Low Risk): 70% coverage, 30% mutation, contracts optional
+
+Agents receive structured feedback on failing criteria with actionable improvement suggestions.
+
+See [`docs/agent-integration-guide.md`](docs/agent-integration-guide.md) for comprehensive agent integration documentation.
+
+## Waivers System
+
+CAWS provides a waivers system for exceptional circumstances where quality gates need to be temporarily bypassed. Waivers are fully auditable and flagged for review.
+
+### Waiver Creation
+```bash
+caws waivers create \
+  --title "Emergency security fix" \
+  --reason emergency_hotfix \
+  --description "Critical vulnerability fix requiring immediate deployment" \
+  --gates coverage_threshold,contract_compliance \
+  --expires-at "2025-11-01T00:00:00Z" \
+  --approved-by "security-team" \
+  --impact-level critical \
+  --mitigation-plan "Manual security testing completed, automated tests temporarily waived"
+```
+
+### Waiver Management
+```bash
+# List active waivers
+caws waivers list
+
+# Revoke a waiver
+caws waivers revoke WV-0001 --reason "Issue resolved"
+
+# Extend waiver expiration
+caws waivers extend WV-0001 --new-expiry "2025-12-01T00:00:00Z" --approved-by "security-team"
+
+# Waiver statistics
+caws waivers stats
+```
+
+### Waiver Features
+- **Risk Assessment**: Required impact level and mitigation plan
+- **Expiration**: Automatic cleanup of expired waivers
+- **Audit Trail**: Complete logging of waiver lifecycle
+- **Review Flagging**: High-risk waivers create review files for code owners
+- **Context Awareness**: Environment-specific waiver application
+
+## Experimental Mode
+
+CAWS experimental mode provides access to cutting-edge features with built-in safety measures.
+
+### Dry Run Support
+```bash
+# Dry run validation without side effects
+caws experimental --dry-run validate .caws/working-spec.yaml --enhanced-analysis
+
+# Dry run quality gates
+caws experimental --dry-run quality-gates .caws/working-spec.yaml --parallel-execution
+```
+
+### Experimental Features
+- **Enhanced Analysis**: Advanced spec validation with AI assistance
+- **Predictive Scoring**: ML-based quality predictions
+- **Parallel Execution**: Experimental parallel quality gate processing
+- **Smart Selection**: AI-powered test selection algorithms
+
+## CI/CD Optimization
+
+CAWS provides intelligent CI/CD pipeline optimization based on project risk tier and characteristics.
+
+### Pipeline Analysis
+```bash
+# Analyze project for optimization opportunities
+caws cicd analyze
+
+# Example output:
+# 📊 Project Tier: 2
+# ⏱️  Estimated Savings: 64% faster builds
+# 💰 Monthly Time Savings: 8 hours
+```
+
+### Configuration Generation
+```bash
+# Generate optimized GitHub Actions workflow
+caws cicd generate github --output .github/workflows/caws-gates.yml
+
+# Generate GitLab CI configuration
+caws cicd generate gitlab --output .gitlab-ci.yml
+
+# Generate Jenkins pipeline
+caws cicd generate jenkins --output Jenkinsfile
+```
+
+### Smart Test Selection
+```bash
+# Analyze changed files for targeted testing
+caws cicd test-selection --changed-files "src/api.js,tests/unit/auth.test.js"
+
+# Analyze git changes since commit
+caws cicd test-selection --from-commit HEAD~1
+```
+
+### Optimization Features
+- **Tier-Based Execution**: Different rigor levels for T1/T2/T3 projects
+- **Parallel Processing**: Independent quality gates run simultaneously
+- **Smart Caching**: Framework-aware dependency and build caching
+- **Conditional Logic**: Skip unnecessary checks based on project characteristics
+- **Time Estimation**: Predict build times and optimization savings
 
 ## Development
 
@@ -146,10 +338,13 @@ npm run format       # Format code
 ### Core Components
 
 #### CAWS CLI
-- **Purpose**: Scaffolds new projects and adds CAWS components to existing projects
+- **Purpose**: Scaffolds new projects and provides dynamic tool execution and validation
 - **Features**:
   - Interactive project setup with validation
+  - Dynamic tool discovery and loading
+  - Automated quality gate execution
   - Schema-based configuration validation
+  - Tool security validation and allowlisting
   - Git repository initialization
   - Provenance tracking and attestation
   - Error handling and recovery
@@ -165,14 +360,55 @@ npm run format       # Format code
 
 ### Quality Gates
 
-The system enforces multiple quality gates:
+The system enforces multiple quality gates through dynamic tool execution:
 
 1. **Naming Guard**: Prevents shadow file patterns (copy, enhanced, v2, etc.)
 2. **Scope Guard**: Ensures changes stay within declared scope
 3. **Budget Guard**: Enforces file/line-of-code limits
 4. **Schema Validation**: Validates working specifications
 5. **Security Scanning**: Detects secrets and validates tool allowlists
-6. **Trust Scoring**: Automated quality assessment
+6. **Tool Validation**: Dynamic loading and security validation of tools
+7. **Quality Gate Tools**: Automated execution of validation, security, and testing tools
+8. **Trust Scoring**: Automated quality assessment with configurable thresholds
+
+### Dynamic Tool System
+
+CAWS provides a plugin-based architecture for extensible quality gates and development tools:
+
+#### Tool Discovery & Loading
+- **Automatic Discovery**: CLI automatically finds tools in `apps/tools/caws/` directory
+- **Dynamic Loading**: Tools are loaded securely with validation and error handling
+- **Security Validation**: All tools validated against allowlists and security scans
+- **Caching**: Loaded tools cached for performance with invalidation support
+
+#### Tool Categories
+- **Validation Tools**: Schema validation, configuration checking
+- **Security Tools**: Secret scanning, vulnerability assessment
+- **Quality Gate Tools**: Automated testing, coverage analysis
+- **Code Generation Tools**: Scaffolding, documentation generation
+- **Analysis Tools**: Performance monitoring, dependency checking
+
+#### Tool Interface
+All CAWS tools implement a standardized interface:
+
+```javascript
+class MyTool extends BaseTool {
+  getMetadata() {
+    return {
+      id: 'my-tool',
+      name: 'My Custom Tool',
+      version: '1.0.0',
+      capabilities: ['validation'],
+      author: 'Your Name'
+    };
+  }
+
+  async executeImpl(parameters, context) {
+    // Tool implementation
+    return { success: true, output: result };
+  }
+}
+```
 
 ### Risk Tiering
 
@@ -221,12 +457,20 @@ CAWS calculates a trust score (0-100) based on:
 
 - Test coverage and mutation adequacy
 - Contract compliance and versioning
+- Tool validation and security compliance
+- Dynamic quality gate execution results
 - Accessibility and performance compliance
 - Observability and rollback readiness
 - Mode and scope discipline
 - Supply chain attestations
 
 **Target**: ≥82/100 for production readiness
+
+### Tool Validation Scoring
+- **Security Validation**: 20 points - Tools must pass security scans
+- **Interface Compliance**: 10 points - Tools must implement required methods
+- **Execution Success**: 15 points - Tools must execute without errors
+- **Metadata Completeness**: 5 points - Tools must provide complete metadata
 
 ## Contributing
 
@@ -472,6 +716,16 @@ Add CAWS components to an existing project.
 #### `caws version` (alias: `v`)
 Show version and system information.
 
+#### `caws tools` - Tool Management
+Manage CAWS tools and plugins.
+
+**Commands:**
+- `caws tools list` (alias: `ls`): List all available tools
+  - `-v, --verbose`: Show detailed tool information
+- `caws tools run <tool-id>`: Execute a specific tool
+  - `-p, --params <json>`: JSON parameters for tool execution
+  - `-t, --timeout <ms>`: Execution timeout in milliseconds (default: 30000)
+
 ### CAWS Tools
 
 #### Validation Tool
@@ -511,9 +765,75 @@ node packages/caws-template/apps/tools/caws/attest.js <type> [options]
 
 Generates SBOM and SLSA attestations.
 
+### Developing CAWS Tools
+
+#### Tool Development Quick Start
+```bash
+# Create a new tool
+cat > apps/tools/caws/my-tool.js << 'EOF'
+const { BaseTool } = require('../../../src/tool-interface');
+
+class MyTool extends BaseTool {
+  getMetadata() {
+    return {
+      id: 'my-tool',
+      name: 'My Custom Tool',
+      version: '1.0.0',
+      description: 'A custom CAWS tool',
+      capabilities: ['validation'],
+      author: 'Your Name'
+    };
+  }
+
+  async executeImpl(parameters, context) {
+    // Your tool logic here
+    return {
+      success: true,
+      output: { message: 'Tool executed successfully' }
+    };
+  }
+}
+
+module.exports = MyTool;
+EOF
+
+# Test the tool
+node packages/caws-cli/dist/index.js tools run my-tool
+```
+
+#### Tool Categories and Capabilities
+- `validation`: Tools that validate code/configuration
+- `security`: Security scanning and vulnerability assessment
+- `quality-gates`: Automated quality checks and testing
+- `code-generation`: Code scaffolding and documentation
+- `analysis`: Performance monitoring and dependency analysis
+
+#### Tool Security Requirements
+- Tools must be validated against the `tools-allow.json` allowlist
+- No direct filesystem access outside working directory
+- No execution of arbitrary commands
+- No network access except for approved endpoints
+- Source code scanned for security vulnerabilities
+
 ## Changelog
 
-### v1.0.0 (Current)
+### v1.1.0 (Current)
+- ✅ **Dynamic Tool System**: Plugin-based architecture for extensible tools
+- ✅ **Tool Discovery & Loading**: Automatic discovery and secure loading of tools
+- ✅ **Quality Gate Integration**: Tools automatically executed during validation
+- ✅ **Tool Management CLI**: `caws tools` commands for tool management
+- ✅ **Security Validation**: Comprehensive tool validation and allowlisting
+- ✅ **Tool Interface**: Standardized interface for tool development
+- ✅ **Enhanced CLI**: Tool-aware validation with automated quality gates
+- ✅ **Waivers System**: Fast-lane escape hatches with full audit trails
+- ✅ **Experimental Mode**: Dry-run capabilities for cutting-edge features
+- ✅ **Agent Integration**: Programmatic evaluation and iterative guidance
+- ✅ **CI/CD Optimization**: Tier-based conditional execution and pipeline generation
+- ✅ **MCP Server**: Model Context Protocol server for AI agent integration
+- ✅ **VS Code Extension**: Real-time IDE integration with quality monitoring
+- ✅ **Workflow Extensions**: Extended agent feedback loops and guided development
+
+### v1.0.0 (Previous)
 - ✅ **Initial Release**: Complete CAWS framework implementation
 - ✅ **Turborepo Setup**: Monorepo structure with optimized build pipeline
 - ✅ **Core Components**: CLI, template, and test project packages
@@ -524,9 +844,9 @@ Generates SBOM and SLSA attestations.
 - ✅ **Documentation**: Comprehensive guides and examples
 
 ### Planned Features
-- **v1.1.0**: Enhanced IDE integrations and plugins
-- **v1.2.0**: Multi-language support (Python, Go, Rust)
-- **v1.3.0**: Advanced analytics and reporting dashboard
+- **v1.2.0**: Enhanced IDE integrations and plugins
+- **v1.3.0**: Multi-language support (Python, Go, Rust)
+- **v1.4.0**: Advanced analytics and reporting dashboard
 - **v2.0.0**: Distributed agent coordination and collaboration
 
 ## Roadmap
@@ -539,15 +859,26 @@ Generates SBOM and SLSA attestations.
 - [x] Comprehensive testing framework
 - [x] Documentation and examples
 
+### Dynamic Tool System (✅ Complete - v1.1.0)
+- [x] Plugin-based tool architecture with dynamic loading
+- [x] Tool discovery and secure validation system
+- [x] Quality gate integration with automated execution
+- [x] Tool management CLI commands (`caws tools`)
+- [x] Security validation and allowlist enforcement
+- [x] Standardized tool interface and base classes
+- [x] Enhanced CLI with tool-aware validation
+
 ### Strategic Enhancements (✅ Complete - v1.1.0)
-- [x] Fast-lane escape hatches (waivers, experimental mode, human override)
-- [x] Test meaningfulness analysis beyond coverage metrics
-- [x] AI self-assessment and confidence tracking
-- [x] Multi-language support (JS/TS, Python, Java, Go, Rust)
+- [x] Fast-lane escape hatches (waivers system with audit trails)
+- [x] Experimental mode with dry-run capabilities
+- [x] AI self-assessment and confidence tracking (agent integration)
 - [x] CI/CD optimization with tier-based conditional execution
-- [x] Legacy integration and assessment tools
-- [x] Enhanced trust score calculation
-- [x] Real-time dashboard and observability
+- [x] Enhanced trust score calculation with risk assessment
+- [ ] Test meaningfulness analysis beyond coverage metrics
+- [ ] Human override mechanisms
+- [ ] Multi-language support (JS/TS, Python, Java, Go, Rust)
+- [ ] Legacy integration and assessment tools
+- [ ] Real-time dashboard and observability
 
 ### IDE Integration & Developer Tools (🚧 In Progress - v1.2.0)
 - [ ] VS Code extension with inline CAWS validation
@@ -619,6 +950,6 @@ Yes! CAWS is released under the MIT License and welcomes community contributions
 ---
 
 **Organization**: Paths Design
-**Version**: 1.0.0
+**Version**: 1.1.0
 **License**: MIT
-**Built with**: Turborepo + CAWS v1.0
+**Built with**: Turborepo + CAWS v1.1.0

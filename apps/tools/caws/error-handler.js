@@ -130,10 +130,9 @@ function getFriendlyMessage(category, originalMessage) {
 /**
  * Get recovery suggestions based on error category
  * @param {string} category - Error category
- * @param {string} context - Additional context (command, file, etc.)
  * @returns {Array<string>} Array of recovery suggestions
  */
-function getRecoverySuggestions(category, context = '') {
+function getRecoverySuggestions(category) {
   const suggestions = {
     [ERROR_CATEGORIES.PERMISSION]: [
       'Try running with sudo/admin privileges',
@@ -198,7 +197,7 @@ function formatError(error, context = '', includeDebug = false) {
   const errorMessage = typeof error === 'string' ? error : error.message;
   const category = getErrorCategory(error);
   const friendlyMessage = getFriendlyMessage(category, errorMessage);
-  const suggestions = getRecoverySuggestions(category, context);
+  const suggestions = getRecoverySuggestions(category);
 
   let formatted = '';
   formatted += chalk.red(`❌ Error: ${friendlyMessage}\n`);

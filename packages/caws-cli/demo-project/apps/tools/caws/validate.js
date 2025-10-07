@@ -7,12 +7,51 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const { BaseTool } = require('../../../src/tool-interface');
 
 /**
- * Validate working specification file
- * @param {string} specPath - Path to working spec file
+ * CAWS Working Spec Validator Tool
  */
-async function validateWorkingSpec(specPath) {
+class ValidateTool extends BaseTool {
+  constructor() {
+    super();
+  }
+
+  /**
+   * Get tool metadata
+   * @returns {Object} Tool metadata
+   */
+  getMetadata() {
+    return {
+      id: 'validate',
+      name: 'Working Spec Validator',
+      version: '1.0.0',
+      description: 'Validates CAWS working specification against JSON schema and business rules',
+      capabilities: ['validation', 'quality-gates'],
+      author: '@darianrosebrook',
+      license: 'MIT'
+    };
+  }
+
+  /**
+   * Execute validation
+   * @param {Object} parameters - Validation parameters
+   * @param {Object} context - Execution context
+   * @returns {Promise<Object>} Validation result
+   */
+  async executeImpl(parameters, context) {
+    const specPath = parameters.specPath || context.specPath || '.caws/working-spec.yaml';
+
+    return await this.validateWorkingSpec(specPath);
+  }
+
+  /**
+   * Validate working specification file
+   * @param {string} specPath - Path to working spec file
+   * @returns {Promise<Object>} Validation result
+   */
+  async validateWorkingSpec(specPath) {
   try {
     // Read and parse the spec file
     if (!fs.existsSync(specPath)) {
@@ -122,13 +161,53 @@ async function validateWorkingSpec(specPath) {
     console.log(`   - Max Files: ${spec.change_budget.max_files}`);
     console.log(`   - Max LOC: ${spec.change_budget.max_loc}`);
     console.log(`   - Contracts: ${spec.contracts?.length || 0}`);
+
+    return {
+      success: true,
+      output: {
+        valid: true,
+        message: 'Working specification is valid',
+        summary: {
+          id: spec.id,
+          mode: spec.mode,
+          riskTier: spec.risk_tier,
+          maxFiles: spec.change_budget.max_files,
+          maxLoc: spec.change_budget.max_loc,
+          contracts: spec.contracts?.length || 0
+        }
+      }
+    };
   } catch (error) {
-    console.error('❌ Validation failed:', error.message);
-    process.exit(1);
+    return {
+      success: false,
+      errors: [error.message],
+      output: {
+        valid: false,
+        message: error.message
+      }
+    };
   }
 }
 
-// CLI interface
+// Export both new class interface and legacy function interface for backward compatibility
+const validateWorkingSpec = async (specPath) => {
+  const tool = new ValidateTool();
+  const result = await tool.execute({ specPath });
+  if (result.success) {
+    console.log('✅ Working specification is valid');
+    return result.output;
+  } else {
+    console.error('❌ Validation failed:', result.errors.join(', '));
+    throw new Error(result.errors.join(', '));
+  }
+};
+
+module.exports = {
+  ValidateTool,
+  validateWorkingSpec
+};
+
+// CLI usage (for backward compatibility)
 if (require.main === module) {
   const specPath = process.argv[2] || '.caws/working-spec.yaml';
 
@@ -138,7 +217,17 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  validateWorkingSpec(specPath);
+  const tool = new ValidateTool();
+  tool.execute({ specPath }).then(result => {
+    if (result.success) {
+      console.log('✅ Working specification is valid');
+      process.exit(0);
+    } else {
+      console.error('❌ Validation failed:', result.errors.join(', '));
+      process.exit(1);
+    }
+  }).catch(error => {
+    console.error('❌ Error during validation:', error.message);
+    process.exit(1);
+  });
 }
-
-module.exports = { validateWorkingSpec };

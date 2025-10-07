@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: CAWS CLI Tools Integration API
+  version: 1.0.0
+  description: API contract for dynamic tool loading and execution in CAWS CLI
+
+servers:
+  - url: 'caws://localhost'
+    description: CAWS CLI runtime environment
+
+paths:
+  /tools:
+    get:
+      summary: List available tools
+      operationId: listTools
+      responses:
+        '200':
+          description: List of discovered and loaded tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolMetadata'
+                  capabilities:
+                    type: array
+                    items:
+                      type: string
+                      enum: ['validation', 'security', 'quality-gates', 'code-generation']
+
+  /tools/{toolId}:
+    get:
+      summary: Get tool metadata
+      operationId: getTool
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tool metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolMetadata'
+        '404':
+          description: Tool not found
+
+    post:
+      summary: Execute tool
+      operationId: executeTool
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolExecutionRequest'
+      responses:
+        '200':
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolExecutionResult'
+        '400':
+          description: Invalid request or tool validation failed
+        '403':
+          description: Tool execution not allowed (security violation)
+        '500':
+          description: Tool execution failed
+
+  /tools/{toolId}/validate:
+    post:
+      summary: Validate tool against security and interface requirements
+      operationId: validateTool
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tool validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolValidationResult'
+        '400':
+          description: Tool validation failed
+
+components:
+  schemas:
+    ToolMetadata:
+      type: object
+      required:
+        - id
+        - name
+        - version
+        - capabilities
+      properties:
+        id:
+          type: string
+          description: Unique tool identifier
+        name:
+          type: string
+          description: Human-readable tool name
+        version:
+          type: string
+          description: Tool version (semver)
+        description:
+          type: string
+          description: Tool description
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: ['validation', 'security', 'quality-gates', 'code-generation', 'analysis']
+        author:
+          type: string
+          description: Tool author
+        license:
+          type: string
+          description: Tool license
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: Required Node.js dependencies
+
+    ToolExecutionRequest:
+      type: object
+      properties:
+        parameters:
+          type: object
+          description: Tool-specific execution parameters
+        context:
+          type: object
+          description: Execution context (working directory, environment, etc.)
+        timeout:
+          type: integer
+          minimum: 1000
+          maximum: 300000
+          default: 30000
+          description: Execution timeout in milliseconds
+
+    ToolExecutionResult:
+      type: object
+      required:
+        - success
+        - duration
+      properties:
+        success:
+          type: boolean
+          description: Whether tool execution succeeded
+        output:
+          type: object
+          description: Tool execution output
+        errors:
+          type: array
+          items:
+            type: string
+          description: Error messages if execution failed
+        duration:
+          type: integer
+          description: Execution duration in milliseconds
+        metadata:
+          type: object
+          description: Additional execution metadata
+
+    ToolValidationResult:
+      type: object
+      required:
+        - valid
+        - checks
+      properties:
+        valid:
+          type: boolean
+          description: Whether tool passed all validation checks
+        checks:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - passed
+            properties:
+              name:
+                type: string
+                description: Validation check name
+              passed:
+                type: boolean
+                description: Whether check passed
+              message:
+                type: string
+                description: Check result message
+              severity:
+                type: string
+                enum: ['error', 'warning', 'info']
+
+    ITool:
+      type: object
+      description: Tool interface contract
+      required:
+        - execute
+        - validate
+        - getMetadata
+      properties:
+        execute:
+          type: object
+          description: Execute method signature
+          properties:
+            parameters:
+              type: object
+            returns:
+              $ref: '#/components/schemas/ToolExecutionResult'
+        validate:
+          type: object
+          description: Validate method signature
+          properties:
+            returns:
+              $ref: '#/components/schemas/ToolValidationResult'
+        getMetadata:
+          type: object
+          description: Get metadata method signature
+          properties:
+            returns:
+              $ref: '#/components/schemas/ToolMetadata'

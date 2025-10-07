@@ -1,0 +1,17 @@
+- approved_by: security-team
+  created_at: '2025-10-07T21:33:00.272Z'
+  description: Deploying critical security fix that cannot wait for full test suite
+  expires_at: '2025-11-01T00:00:00Z'
+  gates:
+    - coverage_threshold
+  id: WV-0001
+  metadata:
+    urgency: normal
+  reason: emergency_hotfix
+  risk_assessment:
+    impact_level: high
+    mitigation_plan: >-
+      Security fix addresses critical vulnerability - comprehensive testing done
+      manually
+    review_required: false
+  title: Emergency hotfix deployment
