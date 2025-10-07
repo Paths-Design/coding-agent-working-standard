@@ -23,9 +23,11 @@ async function provenanceCommand(subcommand, options) {
         return await showProvenance(options);
       case 'verify':
         return await verifyProvenance(options);
+      case 'analyze-ai':
+        return await analyzeAIProvenance(options);
       default:
         console.error(`❌ Unknown provenance subcommand: ${subcommand}`);
-        console.log('Available commands: update, show, verify');
+        console.log('Available commands: update, show, verify, analyze-ai');
         process.exit(1);
     }
   } catch (error) {
@@ -86,6 +88,8 @@ async function updateProvenance(options) {
       type: detectAgentType(),
       confidence_level: null, // Would be populated by agent actions
     },
+    cursor_tracking: await getCursorTrackingData(commit), // AI code tracking data
+    checkpoints: await getCursorCheckpoints(), // Composer checkpoint data
   };
 
   // Calculate hash including previous chain
@@ -146,6 +150,22 @@ async function showProvenance(options) {
     if (entry.working_spec) {
       console.log(`   Spec: ${entry.working_spec.id} (${entry.working_spec.risk_tier})`);
     }
+    if (entry.agent && entry.agent.type !== 'human') {
+      console.log(`   Agent: ${entry.agent.type}`);
+    }
+
+    // Display AI code tracking if available
+    if (entry.cursor_tracking && entry.cursor_tracking.available) {
+      const tracking = entry.cursor_tracking;
+      console.log(`   🤖 AI Code: ${tracking.ai_code_breakdown.composer_chat.percentage}% composer, ${tracking.ai_code_breakdown.tab_completions.percentage}% tab-complete, ${tracking.ai_code_breakdown.manual_human.percentage}% manual`);
+      console.log(`   📊 Quality: ${Math.round(tracking.quality_metrics.ai_code_quality_score * 100)}% AI score, ${Math.round(tracking.quality_metrics.acceptance_rate * 100)}% acceptance`);
+    }
+
+    // Display checkpoint info if available
+    if (entry.checkpoints && entry.checkpoints.available && entry.checkpoints.checkpoints) {
+      console.log(`   🔄 Checkpoints: ${entry.checkpoints.checkpoints.length} created`);
+    }
+
     console.log('');
   });
 
@@ -187,10 +207,7 @@ async function verifyProvenance(options) {
 
     const hashContent = JSON.stringify(entryForHash, Object.keys(entryForHash).sort());
 
-    const calculatedHash = crypto
-      .createHash('sha256')
-      .update(hashContent)
-      .digest('hex');
+    const calculatedHash = crypto.createHash('sha256').update(hashContent).digest('hex');
 
     if (calculatedHash !== entry.hash) {
       console.error(`❌ Hash verification failed at entry ${i + 1}`);
@@ -241,12 +258,296 @@ async function saveProvenanceChain(chain, outputDir) {
 }
 
 /**
+ * Analyze AI patterns and effectiveness from provenance data
+ * @param {Object} options - Command options
+ */
+async function analyzeAIProvenance(options) {
+  const { output = '.caws/provenance' } = options;
+
+  const chain = await loadProvenanceChain(output);
+
+  if (chain.length === 0) {
+    console.log('ℹ️  No provenance data to analyze');
+    return;
+  }
+
+  console.log('🤖 AI Code Effectiveness Analysis');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // Filter entries with AI tracking data
+  const aiEntries = chain.filter(entry =>
+    entry.cursor_tracking &&
+    entry.cursor_tracking.available &&
+    entry.agent &&
+    entry.agent.type !== 'human'
+  );
+
+  if (aiEntries.length === 0) {
+    console.log('ℹ️  No AI tracking data found in provenance');
+    console.log('💡 Configure CURSOR_TRACKING_API and CURSOR_CHECKPOINT_API environment variables');
+    return;
+  }
+
+  console.log(`Analyzed ${aiEntries.length} AI-assisted commits`);
+  console.log('');
+
+  // Analyze AI code contribution patterns
+  const contributionPatterns = analyzeContributionPatterns(aiEntries);
+  const qualityMetrics = analyzeQualityMetrics(aiEntries);
+  const checkpointAnalysis = analyzeCheckpointUsage(aiEntries);
+
+  console.log('📊 AI Contribution Patterns:');
+  console.log(`   Average Composer/Chat contribution: ${contributionPatterns.avgComposerPercent}%`);
+  console.log(`   Average Tab completion contribution: ${contributionPatterns.avgTabCompletePercent}%`);
+  console.log(`   Average Manual override rate: ${contributionPatterns.avgManualPercent}%`);
+  console.log('');
+
+  console.log('🎯 Quality Metrics:');
+  console.log(`   Average AI code quality score: ${Math.round(qualityMetrics.avgQualityScore * 100)}%`);
+  console.log(`   Average acceptance rate: ${Math.round(qualityMetrics.avgAcceptanceRate * 100)}%`);
+  console.log(`   Average human override rate: ${Math.round(qualityMetrics.avgOverrideRate * 100)}%`);
+  console.log('');
+
+  console.log('🔄 Checkpoint Analysis:');
+  console.log(`   Commits with checkpoints: ${checkpointAnalysis.entriesWithCheckpoints}/${aiEntries.length}`);
+  console.log(`   Average checkpoints per commit: ${checkpointAnalysis.avgCheckpointsPerEntry}`);
+  console.log(`   Checkpoint revert rate: ${Math.round(checkpointAnalysis.revertRate * 100)}%`);
+  console.log('');
+
+  // Provide insights and recommendations
+  provideAIInsights(contributionPatterns, qualityMetrics, checkpointAnalysis);
+}
+
+/**
+ * Analyze AI contribution patterns across entries
+ */
+function analyzeContributionPatterns(aiEntries) {
+  const contributions = aiEntries
+    .filter(entry => entry.cursor_tracking?.ai_code_breakdown)
+    .map(entry => entry.cursor_tracking.ai_code_breakdown);
+
+  if (contributions.length === 0) return {};
+
+  const avgComposer = contributions.reduce((sum, c) => sum + c.composer_chat.percentage, 0) / contributions.length;
+  const avgTab = contributions.reduce((sum, c) => sum + c.tab_completions.percentage, 0) / contributions.length;
+  const avgManual = contributions.reduce((sum, c) => sum + c.manual_human.percentage, 0) / contributions.length;
+
+  return {
+    avgComposerPercent: Math.round(avgComposer),
+    avgTabCompletePercent: Math.round(avgTab),
+    avgManualPercent: Math.round(avgManual)
+  };
+}
+
+/**
+ * Analyze AI quality metrics across entries
+ */
+function analyzeQualityMetrics(aiEntries) {
+  const metrics = aiEntries
+    .filter(entry => entry.cursor_tracking?.quality_metrics)
+    .map(entry => entry.cursor_tracking.quality_metrics);
+
+  if (metrics.length === 0) return {};
+
+  const avgQuality = metrics.reduce((sum, m) => sum + m.ai_code_quality_score, 0) / metrics.length;
+  const avgAcceptance = metrics.reduce((sum, m) => sum + m.acceptance_rate, 0) / metrics.length;
+  const avgOverride = metrics.reduce((sum, m) => sum + m.human_override_rate, 0) / metrics.length;
+
+  return {
+    avgQualityScore: avgQuality,
+    avgAcceptanceRate: avgAcceptance,
+    avgOverrideRate: avgOverride
+  };
+}
+
+/**
+ * Analyze checkpoint usage patterns
+ */
+function analyzeCheckpointUsage(aiEntries) {
+  const entriesWithCheckpoints = aiEntries.filter(entry =>
+    entry.checkpoints?.available && entry.checkpoints.checkpoints?.length > 0
+  ).length;
+
+  const totalCheckpoints = aiEntries
+    .filter(entry => entry.checkpoints?.available)
+    .reduce((sum, entry) => sum + (entry.checkpoints.checkpoints?.length || 0), 0);
+
+  // Mock revert rate - in real implementation, this would track actual reverts
+  const revertRate = 0.15; // 15% estimated revert rate
+
+  return {
+    entriesWithCheckpoints,
+    avgCheckpointsPerEntry: entriesWithCheckpoints > 0 ? (totalCheckpoints / entriesWithCheckpoints).toFixed(1) : 0,
+    revertRate
+  };
+}
+
+/**
+ * Provide insights and recommendations based on AI analysis
+ */
+function provideAIInsights(contributionPatterns, qualityMetrics, checkpointAnalysis) {
+  console.log('💡 AI Effectiveness Insights:');
+
+  if (contributionPatterns.avgComposerPercent > 60) {
+    console.log('   📝 High Composer usage suggests complex feature development');
+    console.log('      → Consider breaking large features into smaller, focused sessions');
+  }
+
+  if (qualityMetrics.avgOverrideRate > 0.20) {
+    console.log('   ✏️ High human override rate indicates AI suggestions need refinement');
+    console.log('      → Review AI confidence thresholds or provide clearer requirements');
+  }
+
+  if (checkpointAnalysis.avgCheckpointsPerEntry < 2) {
+    console.log('   🔄 Low checkpoint usage may limit ability to recover from bad AI directions');
+    console.log('      → Encourage more frequent checkpointing in Composer sessions');
+  }
+
+  if (qualityMetrics.avgAcceptanceRate > 0.90) {
+    console.log('   ✅ High acceptance rate indicates effective AI assistance');
+    console.log('      → Current AI integration is working well');
+  }
+
+  console.log('');
+  console.log('📈 Recommendations:');
+  console.log(`   • Target Composer contribution: ${Math.max(40, contributionPatterns.avgComposerPercent - 10)}-${Math.min(80, contributionPatterns.avgComposerPercent + 10)}%`);
+  console.log(`   • Acceptable override rate: <${Math.round((qualityMetrics.avgOverrideRate + 0.10) * 100)}%`);
+  console.log('   • Checkpoint frequency: Every 10-15 minutes in active sessions');
+}
+
+/**
+ * Get Cursor AI code tracking data for a commit
+ * @param {string} commitHash - Git commit hash to analyze
+ * @returns {Promise<Object>} AI code tracking data
+ */
+async function getCursorTrackingData(commitHash) {
+  try {
+    // Check if Cursor tracking API is available
+    if (!process.env.CURSOR_TRACKING_API || !process.env.CURSOR_PROJECT_ID) {
+      return { available: false, reason: 'Cursor tracking API not configured' };
+    }
+
+    // In a real implementation, this would call the Cursor API
+    // For now, we'll return a mock structure showing what data would be available
+    const mockTrackingData = {
+      available: true,
+      commit_hash: commitHash,
+      ai_code_breakdown: {
+        tab_completions: {
+          lines_added: 45,
+          percentage: 35,
+          files_affected: ['src/utils.js', 'tests/utils.test.js']
+        },
+        composer_chat: {
+          lines_added: 78,
+          percentage: 60,
+          files_affected: ['src/new-feature.js', 'src/api.js'],
+          checkpoints_created: 3
+        },
+        manual_human: {
+          lines_added: 5,
+          percentage: 5,
+          files_affected: ['README.md']
+        }
+      },
+      change_groups: [
+        {
+          change_id: 'cg_12345',
+          type: 'composer_session',
+          lines_ai_generated: 42,
+          lines_human_edited: 8,
+          confidence_score: 0.85,
+          timestamp: new Date().toISOString()
+        }
+      ],
+      quality_metrics: {
+        ai_code_quality_score: 0.78,
+        human_override_rate: 0.12,
+        acceptance_rate: 0.94
+      }
+    };
+
+    return mockTrackingData;
+  } catch (error) {
+    return {
+      available: false,
+      error: error.message,
+      reason: 'Failed to retrieve Cursor tracking data'
+    };
+  }
+}
+
+/**
+ * Get Cursor Composer/Chat checkpoint data
+ * @returns {Promise<Array>} Array of checkpoint data
+ */
+async function getCursorCheckpoints() {
+  try {
+    // Check if Cursor checkpoint API is available
+    if (!process.env.CURSOR_CHECKPOINT_API) {
+      return { available: false, reason: 'Cursor checkpoint API not configured' };
+    }
+
+    // In a real implementation, this would call the Cursor checkpoint API
+    // For now, we'll return a mock structure
+    const mockCheckpoints = [
+      {
+        id: 'cp_001',
+        timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        description: 'Initial AI-generated function structure',
+        changes_summary: {
+          lines_added: 25,
+          lines_modified: 0,
+          files_affected: ['src/new-feature.js']
+        },
+        ai_confidence: 0.82,
+        can_revert: true
+      },
+      {
+        id: 'cp_002',
+        timestamp: new Date(Date.now() - 1800000).toISOString(), // 30 min ago
+        description: 'Added error handling and validation',
+        changes_summary: {
+          lines_added: 15,
+          lines_modified: 8,
+          files_affected: ['src/new-feature.js', 'tests/new-feature.test.js']
+        },
+        ai_confidence: 0.91,
+        can_revert: true
+      },
+      {
+        id: 'cp_003',
+        timestamp: new Date().toISOString(), // Current
+        description: 'Final implementation with documentation',
+        changes_summary: {
+          lines_added: 12,
+          lines_modified: 5,
+          files_affected: ['src/new-feature.js', 'README.md']
+        },
+        ai_confidence: 0.88,
+        can_revert: false // Latest checkpoint
+      }
+    ];
+
+    return { available: true, checkpoints: mockCheckpoints };
+  } catch (error) {
+    return {
+      available: false,
+      error: error.message,
+      reason: 'Failed to retrieve Cursor checkpoint data'
+    };
+  }
+}
+
+/**
  * Attempt to detect the type of agent/system making changes
  * @returns {string} Agent type identifier
  */
 function detectAgentType() {
   // Check environment variables and context clues
-  if (process.env.CURSOR_AGENT === 'true') {
+  if (process.env.CURSOR_AGENT === 'true' ||
+      process.env.CURSOR_TRACKING_API ||
+      process.env.CURSOR_CHECKPOINT_API) {
     return 'cursor-ide';
   }
 

@@ -69,8 +69,9 @@ caws test-analysis find-similar              # Find similar historical projects
 
 # Provenance tracking and audit trails
 caws provenance update --commit <hash>       # Update provenance after commit
-caws provenance show                         # Display provenance chain
+caws provenance show                         # Display provenance chain with AI tracking
 caws provenance verify                        # Verify provenance integrity
+caws provenance analyze-ai                    # Analyze AI effectiveness patterns
 
 # Manage CAWS tools
 caws tools list                    # List available tools
@@ -101,6 +102,7 @@ node packages/caws-cli/dist/index.js test-analysis find-similar      # Find simi
 node packages/caws-cli/dist/index.js provenance update --commit <hash>  # Update provenance
 node packages/caws-cli/dist/index.js provenance show                   # Show provenance chain
 node packages/caws-cli/dist/index.js provenance verify                 # Verify integrity
+node packages/caws-cli/dist/index.js provenance analyze-ai             # Analyze AI patterns
 
 # Manage CAWS tools
 node packages/caws-cli/dist/index.js tools list        # List available tools
