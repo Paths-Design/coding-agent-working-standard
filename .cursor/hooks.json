@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "./.cursor/hooks/block-dangerous.sh"
+      },
+      {
+        "command": "./.cursor/hooks/audit.sh"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "./.cursor/hooks/audit.sh"
+      },
+      {
+        "command": "./.cursor/hooks/caws-tool-validation.sh"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "./.cursor/hooks/scan-secrets.sh"
+      },
+      {
+        "command": "./.cursor/hooks/caws-scope-guard.sh"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "./.cursor/hooks/format.sh"
+      },
+      {
+        "command": "./.cursor/hooks/naming-check.sh"
+      },
+      {
+        "command": "./.cursor/hooks/validate-spec.sh"
+      },
+      {
+        "command": "./.cursor/hooks/caws-quality-check.sh"
+      },
+      {
+        "command": "./.cursor/hooks/audit.sh"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "./.cursor/hooks/caws-scope-guard.sh"
+      },
+      {
+        "command": "./.cursor/hooks/audit.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": "./.cursor/hooks/audit.sh"
+      }
+    ]
+  }
+}

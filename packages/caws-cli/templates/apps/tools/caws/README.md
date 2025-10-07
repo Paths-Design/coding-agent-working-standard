@@ -427,7 +427,7 @@ jobs:
 
 ## 📚 Documentation
 
-- [Quick Start Guide](../../docs/QUICK_START_HOOKS.md)
+- [Hooks & Agent Workflows Guide](../../docs/guides/hooks-and-agent-workflows.md)
 - [Hook Strategy](../../docs/HOOK_STRATEGY.md)
 - [Developer Guide](../../docs/caws-developer-guide.md)
 - [API Documentation](../../docs/api/)

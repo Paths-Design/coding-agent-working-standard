@@ -270,6 +270,41 @@ caws cicd test-selection --from-commit HEAD~1
 - **Conditional Logic**: Skip unnecessary checks based on project characteristics
 - **Time Estimation**: Predict build times and optimization savings
 
+## Agent Integration & Hooks
+
+CAWS provides comprehensive integration with AI coding agents across multiple platforms:
+
+### Integration Options
+
+- **Cursor IDE**: Real-time quality gates via native hooks
+- **VS Code**: Extension with live monitoring and dashboards
+- **Windsurf/Cascade**: Structured workflows for guided development
+- **MCP Protocol**: Standardized tool access for any MCP-compatible agent
+- **GitHub Copilot**: Preview SDK extensions for seamless tool integration
+
+### Getting Started
+
+```bash
+# Initialize project with agent integrations
+caws init my-project --interactive --enable-all-integrations
+
+# Use agent commands for quality-aware development
+caws agent evaluate .caws/working-spec.yaml     # Quality assessment
+caws agent iterate --current-state "Planning"   # Development guidance
+caws waivers create --title "Hotfix"            # Exception handling
+```
+
+### Platform-Specific Setup
+
+| Platform | Setup Command | Features |
+|----------|----------------|----------|
+| **Cursor** | `caws scaffold` | Real-time hooks, instant feedback |
+| **VS Code** | Extension install | Live dashboard, code actions |
+| **Windsurf** | `caws init --cascade` | Guided workflows, team sharing |
+| **MCP Server** | `npm run mcp:start` | Tool protocol, cross-platform |
+
+See [`docs/guides/hooks-and-agent-workflows.md`](docs/guides/hooks-and-agent-workflows.md) for comprehensive integration guide.
+
 ## Development
 
 ### Available Scripts
@@ -832,6 +867,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - ✅ **MCP Server**: Model Context Protocol server for AI agent integration
 - ✅ **VS Code Extension**: Real-time IDE integration with quality monitoring
 - ✅ **Workflow Extensions**: Extended agent feedback loops and guided development
+- ✅ **Unified Hooks Strategy**: Consolidated hooks and agent workflow documentation
 
 ### v1.0.0 (Previous)
 - ✅ **Initial Release**: Complete CAWS framework implementation

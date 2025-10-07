@@ -6,24 +6,27 @@ This directory contains comprehensive documentation for the CAWS (Coding Agent W
 
 ```
 docs/
-├── README.md           # This file - documentation overview
-├── api/                # API reference documentation
-│   ├── cli.md         # CLI tool documentation
-│   ├── tools.md       # CAWS tools documentation
-│   └── schema.md      # Schema specifications
-├── guides/             # Step-by-step guides
-│   ├── setup.md       # Setup and installation
-│   ├── development.md # Development workflow
-│   ├── deployment.md  # Deployment strategies
-│   └── troubleshooting.md # Common issues and solutions
-├── examples/           # Code examples and templates
-│   ├── basic-project.md # Basic project setup
-│   ├── advanced-usage.md # Advanced features
-│   └── integrations.md   # Third-party integrations
-└── internal/           # Internal documentation
-    ├── architecture.md # System architecture
-    ├── design-docs/   # Design documents
-    └── decisions/     # Architectural decisions
+├── README.md              # This file - documentation overview
+├── api/                   # API reference documentation
+│   ├── cli.md            # CLI tool documentation
+│   └── schema.md         # Schema specifications
+├── agents/                # Agent-specific guides and tutorials
+│   ├── EXAMPLES.md       # Agent examples
+│   ├── FULL_GUIDE.md     # Complete agent guide
+│   └── TUTORIAL.md       # Agent tutorial
+├── guides/                # General guides and documentation
+│   ├── agent-integration-guide.md    # Agent integration guide
+│   ├── agent-workflow-extensions.md  # Agent workflow extensions
+│   ├── caws-developer-guide.md       # Developer guide
+│   ├── hooks-and-agent-workflows.md  # Unified hooks and agent workflows
+│   └── NPM_PUBLISHING.md             # NPM publishing guide
+└── internal/             # Internal documentation (gitignored)
+    ├── COMPLETED_UX_IMPROVEMENTS.md
+    ├── CURRENT_DIR_INIT_FIX.md
+    ├── FEAT-CLI-TOOLS/
+    ├── FEEDBACK_RESPONSE_CLAUDE_4.5.md
+    ├── HOOK_STRATEGY.md
+    └── UX_IMPROVEMENTS_ROADMAP.md
 ```
 
 ## 📖 Core Documentation
@@ -97,7 +100,8 @@ docs/
 - **Main README**: Start with the root README.md for overview
 - **Package Documentation**: Check individual package READMEs
 - **API Reference**: Look in docs/api/ for technical details
-- **Examples**: Find practical examples in docs/examples/
+- **Agent Guides**: Find agent-specific documentation in docs/agents/
+- **General Guides**: Browse step-by-step guides in docs/guides/
 
 ### Search and Discovery
 - **Table of Contents**: Use TOC in long documents
@@ -125,9 +129,9 @@ If you find documentation issues:
 ### Current State
 - ✅ **Core Documentation**: Basic setup and usage guides
 - ✅ **API Reference**: Complete tool and command documentation
-- ✅ **Examples**: Basic examples and templates
-- 🔄 **Advanced Guides**: In development
-- 📋 **Internal Documentation**: Planned
+- ✅ **Agent Guides**: Comprehensive agent integration guides
+- ✅ **General Guides**: Step-by-step guides and tutorials
+- ✅ **Internal Documentation**: Implementation details and planning docs
 
 ### Future Enhancements
 - **Interactive Documentation**: Web-based documentation site
