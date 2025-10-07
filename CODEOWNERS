@@ -87,6 +87,10 @@ SECURITY.md @darianrosebrook
 docs/api/security.md @darianrosebrook
 packages/caws-template/apps/tools/caws/prompt-lint.js @darianrosebrook
 
+# CAWS Governance Files - Require dual control (Gatekeeper role)
+.caws/policy.yaml @darianrosebrook @darianrosebrook
+.caws/waivers/ @darianrosebrook @darianrosebrook
+
 # Infrastructure changes require infra team review
 .github/ @darianrosebrook
 turbo.json @darianrosebrook

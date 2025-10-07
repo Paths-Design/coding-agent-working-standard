@@ -1,0 +1,50 @@
+# CAWS Policy Configuration
+# Governed file - changes require dual control and CODEOWNERS approval
+# This file defines the quality gate policies for the entire project
+
+version: 1
+
+# Risk tier definitions with default budgets
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+    description: "Critical changes requiring manual review"
+  "2":
+    max_files: 100
+    max_loc: 10000
+    description: "Standard features with automated gates"
+  "3":
+    max_files: 500
+    max_loc: 40000
+    description: "Low-risk changes with minimal oversight"
+
+# Edit rules for policy changes
+edit_rules:
+  # Absolutely forbid policy edits in the same PR as code changes
+  policy_and_code_same_pr: false
+  # Raising limits requires 2 approvers with role "Gatekeeper"
+  min_approvers_for_budget_raise: 2
+  # Require signed commits for policy changes
+  require_signed_commits: true
+
+# Quality gate configurations
+gates:
+  budget_limit:
+    enabled: true
+    description: "Enforce change budget limits"
+  spec_completeness:
+    enabled: true
+    description: "Require complete working specifications"
+  contract_compliance:
+    enabled: true
+    description: "Validate API contracts"
+  coverage_threshold:
+    enabled: true
+    description: "Maintain test coverage requirements"
+  mutation_threshold:
+    enabled: true
+    description: "Require mutation testing for T1/T2 changes"
+  security_scan:
+    enabled: true
+    description: "Run security vulnerability scans"

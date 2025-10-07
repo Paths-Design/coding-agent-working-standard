@@ -1,0 +1,20 @@
+id: WV-0001
+applies_to: ARCH-0001
+gates: [budget_limit]
+delta:
+  max_files: 50
+  max_loc: 5000
+reason_code: architectural_refactor
+description: "Implementing policy separation architecture to prevent silent budget bypass. This change restructures CAWS governance to make quality gates truly enforceable by separating policy from work specifications and requiring waivers for exceptions."
+mitigation: "Complete migration to policy.yaml structure with schema validation and CODEOWNERS protection. Implement CI checks for path discipline and dual-control requirements."
+expires_at: 2025-12-31T23:59:59Z
+risk_owner: "darianrosebrook"
+approvers:
+  - handle: "darianrosebrook"
+    approved_at: "2025-01-07T00:00:00Z"
+status: active
+metadata:
+  related_pr: null
+  related_issue: null
+  environment: "development"
+  urgency: "high"
