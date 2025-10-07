@@ -1,69 +1,59 @@
 # CAWS Working Specification
 # This file defines the current change being worked on
 
-id: FEAT-0123
-title: Implement dynamic CLI tools integration and plugin system
-risk_tier: 2
+id: ARCH-0001
+title: Implement policy separation and waiver-based budget control
+risk_tier: 1
 mode: feature
-change_budget:
-  max_files: 100
-  max_loc: 10000
+# Budget derived from policy.yaml based on risk_tier
+# Waivers referenced by ID for exceptions
+waiver_ids: ["WV-0001"]  # Bootstrap waiver for this architectural change
 blast_radius:
-  modules: ["caws-cli"]
-  data_migration: false
-operational_rollback_slo: "5m"
-threats: []
+  modules: ["core", "caws-cli", "quality-gates"]
+  data_migration: true  # Restructuring governance files
+operational_rollback_slo: "10m"
+threats:
+  - "Temporary budget bypass during transition"
+  - "Existing working specs become invalid"
 scope:
-  in: ["docs/FEAT-CLI-TOOLS/", "packages/caws-cli/src/", "apps/tools/caws/"]
-  out: ["node_modules/", "dist/", ".git/", "packages/*/node_modules/"]
+  in: [".caws/", "packages/caws-cli/src/", "packages/caws-cli/templates/"]
+  out: ["node_modules/", "packages/*/dist/", "packages/*/node_modules/"]
 invariants:
-  - "CLI maintains backward compatibility with existing commands"
-  - "Tool execution remains secure through allowlist validation"
-  - "Quality gates continue to function without tools integration"
+  - "Quality gates remain enforceable after restructuring"
+  - "No silent policy bypass possible"
+  - "Waivers provide auditable exception path"
 acceptance:
   - id: "A1"
-    given: "CLI detects tools directory during setup"
-    when: "User runs caws validate"
-    then: "Tools are automatically loaded and executed as quality gates"
+    given: "Agent attempts budget overrun"
+    when: "Policy separation implemented"
+    then: "Only waiver creation allowed, not budget editing"
   - id: "A2"
-    given: "Tools are loaded dynamically"
-    when: "CLI commands are executed"
-    then: "Tool capabilities are available without manual execution"
+    given: "Code and policy changes in same PR"
+    when: "Path discipline enforced"
+    then: "CI rejects mixed changes"
   - id: "A3"
-    given: "Invalid tools are present"
-    when: "CLI validates tools"
-    then: "Security violations are caught and reported"
+    given: "Waiver expires"
+    when: "CI runs"
+    then: "Budget automatically reverts to policy limits"
 non_functional:
-  a11y: ["CLI maintains keyboard navigation", "Error messages are screen reader friendly"]
-  perf:
-    api_p95_ms: 250
-    cli_startup_ms: 2000
-  security: ["Tool allowlist validation", "No arbitrary code execution", "Safe tool discovery"]
+  a11y: ["keyboard", "screen-reader"]
+  perf: { api_p95_ms: 250 }
+  security: ["validation", "audit-trail", "dual-control"]
 contracts:
-  - type: "openapi"
-    path: "docs/FEAT-CLI-TOOLS/cli-contracts.yaml"
+  - type: "policy_schema"
+    path: ".caws/policy.schema.json"
 observability:
-  logs:
-    - "tools.discovered"
-    - "tools.loaded"
-    - "tools.executed"
-    - "tools.security_violation"
   metrics:
-    - "tools_discovery_duration"
-    - "tools_execution_count"
-    - "tools_security_violations"
-  traces:
-    - "tool_discovery_flow"
-    - "tool_execution_flow"
+    - "policy_violations_blocked"
+    - "waiver_expiration_enforced"
+    - "dual_control_compliance"
+  logs:
+    - "budget_derivation_audit"
+    - "waiver_validation_events"
 migrations:
-  - "Standard deployment process - CLI tools integration is additive"
+  - "Migrate existing change_budget fields to waiver_ids"
+  - "Create initial policy.yaml from current budgets"
+  - "Update validation logic to use derived budgets"
 rollback:
-  - "Feature flag disable via environment variable CAWS_TOOLS_ENABLED=false"
-human_override: null
-experimental_mode: null
-ai_assessment:
-  confidence_level: 8
-  uncertainty_areas: ["Tool sandboxing complexity"]
-  complexity_factors: ["Dynamic module loading", "Security validation"]
-  risk_factors: ["Potential security vulnerabilities in tool loading"]
-status: draft
+  strategy: "Revert to file-based budgets if derivation fails"
+  data_backup: "Export current working specs before migration"

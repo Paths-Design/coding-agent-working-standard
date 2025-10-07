@@ -30,26 +30,69 @@ async function scaffoldIDEIntegrations(targetDir, options) {
   // List of IDE integration templates to copy
   const ideTemplates = [
     // VS Code
-    { src: '.vscode/settings.json', dest: '.vscode/settings.json', desc: 'VS Code workspace settings' },
-    { src: '.vscode/launch.json', dest: '.vscode/launch.json', desc: 'VS Code debug configurations' },
+    {
+      src: '.vscode/settings.json',
+      dest: '.vscode/settings.json',
+      desc: 'VS Code workspace settings',
+    },
+    {
+      src: '.vscode/launch.json',
+      dest: '.vscode/launch.json',
+      desc: 'VS Code debug configurations',
+    },
 
     // IntelliJ IDEA
-    { src: '.idea/runConfigurations/CAWS_Validate.xml', dest: '.idea/runConfigurations/CAWS_Validate.xml', desc: 'IntelliJ run configuration for CAWS validate' },
-    { src: '.idea/runConfigurations/CAWS_Evaluate.xml', dest: '.idea/runConfigurations/CAWS_Evaluate.xml', desc: 'IntelliJ run configuration for CAWS evaluate' },
+    {
+      src: '.idea/runConfigurations/CAWS_Validate.xml',
+      dest: '.idea/runConfigurations/CAWS_Validate.xml',
+      desc: 'IntelliJ run configuration for CAWS validate',
+    },
+    {
+      src: '.idea/runConfigurations/CAWS_Evaluate.xml',
+      dest: '.idea/runConfigurations/CAWS_Evaluate.xml',
+      desc: 'IntelliJ run configuration for CAWS evaluate',
+    },
 
     // Windsurf
-    { src: '.windsurf/workflows/caws-guided-development.md', dest: '.windsurf/workflows/caws-guided-development.md', desc: 'Windsurf workflow for CAWS-guided development' },
+    {
+      src: '.windsurf/workflows/caws-guided-development.md',
+      dest: '.windsurf/workflows/caws-guided-development.md',
+      desc: 'Windsurf workflow for CAWS-guided development',
+    },
 
     // GitHub Copilot
-    { src: '.github/copilot/instructions.md', dest: '.github/copilot/instructions.md', desc: 'GitHub Copilot CAWS integration instructions' },
+    {
+      src: '.github/copilot/instructions.md',
+      dest: '.github/copilot/instructions.md',
+      desc: 'GitHub Copilot CAWS integration instructions',
+    },
 
     // Git hooks (only if not already present)
-    { src: '.git/hooks/pre-commit', dest: '.git/hooks/pre-commit', desc: 'Git pre-commit hook for CAWS validation', optional: true },
-    { src: '.git/hooks/pre-push', dest: '.git/hooks/pre-push', desc: 'Git pre-push hook for comprehensive checks', optional: true },
-    { src: '.git/hooks/post-commit', dest: '.git/hooks/post-commit', desc: 'Git post-commit hook for provenance', optional: true },
+    {
+      src: '.git/hooks/pre-commit',
+      dest: '.git/hooks/pre-commit',
+      desc: 'Git pre-commit hook for CAWS validation',
+      optional: true,
+    },
+    {
+      src: '.git/hooks/pre-push',
+      dest: '.git/hooks/pre-push',
+      desc: 'Git pre-push hook for comprehensive checks',
+      optional: true,
+    },
+    {
+      src: '.git/hooks/post-commit',
+      dest: '.git/hooks/post-commit',
+      desc: 'Git post-commit hook for provenance',
+      optional: true,
+    },
 
     // Cursor hooks (already handled by scaffoldCursorHooks, but ensure README is copied)
-    { src: '.cursor/README.md', dest: '.cursor/README.md', desc: 'Cursor integration documentation' }
+    {
+      src: '.cursor/README.md',
+      dest: '.cursor/README.md',
+      desc: 'Cursor integration documentation',
+    },
   ];
 
   for (const template of ideTemplates) {
@@ -58,7 +101,7 @@ async function scaffoldIDEIntegrations(targetDir, options) {
 
     try {
       // Check if source exists
-      if (!await fs.pathExists(srcPath)) {
+      if (!(await fs.pathExists(srcPath))) {
         if (!template.optional) {
           console.log(chalk.yellow(`⚠️  Template not found: ${template.src}`));
         }
@@ -91,7 +134,6 @@ async function scaffoldIDEIntegrations(targetDir, options) {
 
       console.log(chalk.green(`✅ Added ${template.desc}`));
       addedCount++;
-
     } catch (error) {
       console.log(chalk.red(`❌ Failed to add ${template.desc}: ${error.message}`));
     }
@@ -262,7 +304,7 @@ async function scaffoldProject(options) {
       required: false,
       customHandler: async (targetDir, options) => {
         return await scaffoldIDEIntegrations(targetDir, options);
-      }
+      },
     });
 
     // Add commit conventions for setups that don't have them
@@ -313,7 +355,10 @@ async function scaffoldProject(options) {
             addedFiles.push(enhancement.name);
           }
         } catch (error) {
-          console.warn(chalk.yellow(`⚠️  Custom handler failed for ${enhancement.name}:`), error.message);
+          console.warn(
+            chalk.yellow(`⚠️  Custom handler failed for ${enhancement.name}:`),
+            error.message
+          );
         }
         continue;
       }

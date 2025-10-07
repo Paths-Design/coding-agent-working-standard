@@ -227,19 +227,19 @@ describe('Cursor Hooks Integration', () => {
   });
 
   describe('Documentation', () => {
-    test('CURSOR_HOOKS.md should exist in docs', () => {
+    test('hooks-and-agent-workflows.md should exist in docs', () => {
       // Navigate up from packages/caws-cli/tests/integration to docs
-      const docsPath = path.join(__dirname, '../../../../docs/CURSOR_HOOKS.md');
+      const docsPath = path.join(__dirname, '../../../../docs/guides/hooks-and-agent-workflows.md');
 
       expect(fs.existsSync(docsPath)).toBe(true);
 
       const content = fs.readFileSync(docsPath, 'utf8');
-      expect(content).toContain('Cursor Hooks Integration Guide');
-      expect(content).toContain('Three-Tier Quality Approach');
+      expect(content).toContain('Agent Workflow Extensions & Hooks Strategy');
+      expect(content).toContain('Cursor IDE Hooks');
+      expect(content).toContain('Cascade Workflows');
+      expect(content).toContain('MCP Server Integration');
       expect(content).toContain('Safety Hooks');
       expect(content).toContain('Quality Hooks');
-      expect(content).toContain('Scope Hooks');
-      expect(content).toContain('Audit Hooks');
     });
 
     test('HOOK_STRATEGY.md should include Cursor hooks', () => {

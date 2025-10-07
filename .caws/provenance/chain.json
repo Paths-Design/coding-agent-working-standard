@@ -1,0 +1,452 @@
+[
+  {
+    "id": "prov-1759880654233",
+    "timestamp": "2025-10-07T23:44:14.233Z",
+    "commit": {
+      "hash": "abc123def456",
+      "message": "test: Add provenance tracking",
+      "author": "Test User <test@example.com>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:44:14.234Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "previous_hash": "",
+    "hash": "e44c2c95f479ceda0ce606eb07379c61404ecf3824959111f51619da86b0052d"
+  },
+  {
+    "id": "prov-1759880667272",
+    "timestamp": "2025-10-07T23:44:27.272Z",
+    "commit": {
+      "hash": "def789ghi012",
+      "message": "feat: Add statistical test analysis",
+      "author": "AI Agent <agent@caws.ai>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:44:27.273Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "previous_hash": "e44c2c95f479ceda0ce606eb07379c61404ecf3824959111f51619da86b0052d",
+    "hash": "f935033532dabf29c66ea670b63b875d139e4122d808c6dc58b1c594d3977f92"
+  },
+  {
+    "id": "prov-1759880680256",
+    "timestamp": "2025-10-07T23:44:40.256Z",
+    "commit": {
+      "hash": "4645e1ee6e8c9ef9c3c6c38783800f8adb226f2b",
+      "message": "feat: Add waiver schema and comprehensive agent guide",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:44:40.257Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "previous_hash": "f935033532dabf29c66ea670b63b875d139e4122d808c6dc58b1c594d3977f92",
+    "hash": "326468e5b39a3e5a9d26ead17a7263d74471d4eafb96888354e88dfdc06f69d8"
+  },
+  {
+    "id": "prov-1759880786045",
+    "timestamp": "2025-10-07T23:46:26.045Z",
+    "commit": {
+      "hash": "test-cursor-123",
+      "message": "feat: Add Cursor AI tracking integration",
+      "author": "Cursor IDE <ai@cursor.sh>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:46:26.046Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": true,
+      "commit_hash": "test-cursor-123",
+      "ai_code_breakdown": {
+        "tab_completions": {
+          "lines_added": 45,
+          "percentage": 35,
+          "files_affected": [
+            "src/utils.js",
+            "tests/utils.test.js"
+          ]
+        },
+        "composer_chat": {
+          "lines_added": 78,
+          "percentage": 60,
+          "files_affected": [
+            "src/new-feature.js",
+            "src/api.js"
+          ],
+          "checkpoints_created": 3
+        },
+        "manual_human": {
+          "lines_added": 5,
+          "percentage": 5,
+          "files_affected": [
+            "README.md"
+          ]
+        }
+      },
+      "change_groups": [
+        {
+          "change_id": "cg_12345",
+          "type": "composer_session",
+          "lines_ai_generated": 42,
+          "lines_human_edited": 8,
+          "confidence_score": 0.85,
+          "timestamp": "2025-10-07T23:46:26.046Z"
+        }
+      ],
+      "quality_metrics": {
+        "ai_code_quality_score": 0.78,
+        "human_override_rate": 0.12,
+        "acceptance_rate": 0.94
+      }
+    },
+    "checkpoints": {
+      "available": true,
+      "checkpoints": [
+        {
+          "id": "cp_001",
+          "timestamp": "2025-10-07T22:46:26.046Z",
+          "description": "Initial AI-generated function structure",
+          "changes_summary": {
+            "lines_added": 25,
+            "lines_modified": 0,
+            "files_affected": [
+              "src/new-feature.js"
+            ]
+          },
+          "ai_confidence": 0.82,
+          "can_revert": true
+        },
+        {
+          "id": "cp_002",
+          "timestamp": "2025-10-07T23:16:26.046Z",
+          "description": "Added error handling and validation",
+          "changes_summary": {
+            "lines_added": 15,
+            "lines_modified": 8,
+            "files_affected": [
+              "src/new-feature.js",
+              "tests/new-feature.test.js"
+            ]
+          },
+          "ai_confidence": 0.91,
+          "can_revert": true
+        },
+        {
+          "id": "cp_003",
+          "timestamp": "2025-10-07T23:46:26.046Z",
+          "description": "Final implementation with documentation",
+          "changes_summary": {
+            "lines_added": 12,
+            "lines_modified": 5,
+            "files_affected": [
+              "src/new-feature.js",
+              "README.md"
+            ]
+          },
+          "ai_confidence": 0.88,
+          "can_revert": false
+        }
+      ]
+    },
+    "previous_hash": "326468e5b39a3e5a9d26ead17a7263d74471d4eafb96888354e88dfdc06f69d8",
+    "hash": "8042a88e5e851be2cf03b9a8caf327e1421c2dc1816f4cbe0adc89d9cb417958"
+  },
+  {
+    "id": "prov-1759880847697",
+    "timestamp": "2025-10-07T23:47:27.697Z",
+    "commit": {
+      "hash": "ai-test-456",
+      "message": "feat: Add comprehensive AI tracking analysis",
+      "author": "Cursor AI <ai@cursor.sh>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:47:27.698Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": true,
+      "commit_hash": "ai-test-456",
+      "ai_code_breakdown": {
+        "tab_completions": {
+          "lines_added": 45,
+          "percentage": 35,
+          "files_affected": [
+            "src/utils.js",
+            "tests/utils.test.js"
+          ]
+        },
+        "composer_chat": {
+          "lines_added": 78,
+          "percentage": 60,
+          "files_affected": [
+            "src/new-feature.js",
+            "src/api.js"
+          ],
+          "checkpoints_created": 3
+        },
+        "manual_human": {
+          "lines_added": 5,
+          "percentage": 5,
+          "files_affected": [
+            "README.md"
+          ]
+        }
+      },
+      "change_groups": [
+        {
+          "change_id": "cg_12345",
+          "type": "composer_session",
+          "lines_ai_generated": 42,
+          "lines_human_edited": 8,
+          "confidence_score": 0.85,
+          "timestamp": "2025-10-07T23:47:27.698Z"
+        }
+      ],
+      "quality_metrics": {
+        "ai_code_quality_score": 0.78,
+        "human_override_rate": 0.12,
+        "acceptance_rate": 0.94
+      }
+    },
+    "checkpoints": {
+      "available": true,
+      "checkpoints": [
+        {
+          "id": "cp_001",
+          "timestamp": "2025-10-07T22:47:27.698Z",
+          "description": "Initial AI-generated function structure",
+          "changes_summary": {
+            "lines_added": 25,
+            "lines_modified": 0,
+            "files_affected": [
+              "src/new-feature.js"
+            ]
+          },
+          "ai_confidence": 0.82,
+          "can_revert": true
+        },
+        {
+          "id": "cp_002",
+          "timestamp": "2025-10-07T23:17:27.698Z",
+          "description": "Added error handling and validation",
+          "changes_summary": {
+            "lines_added": 15,
+            "lines_modified": 8,
+            "files_affected": [
+              "src/new-feature.js",
+              "tests/new-feature.test.js"
+            ]
+          },
+          "ai_confidence": 0.91,
+          "can_revert": true
+        },
+        {
+          "id": "cp_003",
+          "timestamp": "2025-10-07T23:47:27.698Z",
+          "description": "Final implementation with documentation",
+          "changes_summary": {
+            "lines_added": 12,
+            "lines_modified": 5,
+            "files_affected": [
+              "src/new-feature.js",
+              "README.md"
+            ]
+          },
+          "ai_confidence": 0.88,
+          "can_revert": false
+        }
+      ]
+    },
+    "previous_hash": "8042a88e5e851be2cf03b9a8caf327e1421c2dc1816f4cbe0adc89d9cb417958",
+    "hash": "392ef96e0ab9beb97cfb34e4879c062cceb36540f1ab5a2bc9a187486d3a8f74"
+  },
+  {
+    "id": "prov-1759880895791",
+    "timestamp": "2025-10-07T23:48:15.791Z",
+    "commit": {
+      "hash": "ai-analysis-789",
+      "message": "feat: Implement AI effectiveness analysis with Cursor tracking",
+      "author": "Cursor IDE <ai@cursor.sh>"
+    },
+    "working_spec": {
+      "id": "ARCH-0001",
+      "title": "Implement policy separation and waiver-based budget control",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0001"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-07T23:48:15.792Z"
+    },
+    "agent": {
+      "type": "cursor-ide",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": true,
+      "commit_hash": "ai-analysis-789",
+      "ai_code_breakdown": {
+        "tab_completions": {
+          "lines_added": 45,
+          "percentage": 35,
+          "files_affected": [
+            "src/utils.js",
+            "tests/utils.test.js"
+          ]
+        },
+        "composer_chat": {
+          "lines_added": 78,
+          "percentage": 60,
+          "files_affected": [
+            "src/new-feature.js",
+            "src/api.js"
+          ],
+          "checkpoints_created": 3
+        },
+        "manual_human": {
+          "lines_added": 5,
+          "percentage": 5,
+          "files_affected": [
+            "README.md"
+          ]
+        }
+      },
+      "change_groups": [
+        {
+          "change_id": "cg_12345",
+          "type": "composer_session",
+          "lines_ai_generated": 42,
+          "lines_human_edited": 8,
+          "confidence_score": 0.85,
+          "timestamp": "2025-10-07T23:48:15.792Z"
+        }
+      ],
+      "quality_metrics": {
+        "ai_code_quality_score": 0.78,
+        "human_override_rate": 0.12,
+        "acceptance_rate": 0.94
+      }
+    },
+    "checkpoints": {
+      "available": true,
+      "checkpoints": [
+        {
+          "id": "cp_001",
+          "timestamp": "2025-10-07T22:48:15.792Z",
+          "description": "Initial AI-generated function structure",
+          "changes_summary": {
+            "lines_added": 25,
+            "lines_modified": 0,
+            "files_affected": [
+              "src/new-feature.js"
+            ]
+          },
+          "ai_confidence": 0.82,
+          "can_revert": true
+        },
+        {
+          "id": "cp_002",
+          "timestamp": "2025-10-07T23:18:15.792Z",
+          "description": "Added error handling and validation",
+          "changes_summary": {
+            "lines_added": 15,
+            "lines_modified": 8,
+            "files_affected": [
+              "src/new-feature.js",
+              "tests/new-feature.test.js"
+            ]
+          },
+          "ai_confidence": 0.91,
+          "can_revert": true
+        },
+        {
+          "id": "cp_003",
+          "timestamp": "2025-10-07T23:48:15.792Z",
+          "description": "Final implementation with documentation",
+          "changes_summary": {
+            "lines_added": 12,
+            "lines_modified": 5,
+            "files_affected": [
+              "src/new-feature.js",
+              "README.md"
+            ]
+          },
+          "ai_confidence": 0.88,
+          "can_revert": false
+        }
+      ]
+    },
+    "previous_hash": "392ef96e0ab9beb97cfb34e4879c062cceb36540f1ab5a2bc9a187486d3a8f74",
+    "hash": "071eff7a5e1817210d79064649de1ad8c877f64cec509db7fde352baf64cd126"
+  }
+]

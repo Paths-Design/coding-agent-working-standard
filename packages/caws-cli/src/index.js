@@ -28,6 +28,7 @@ const { initProject } = require('./commands/init');
 const { validateCommand } = require('./commands/validate');
 const { burnupCommand } = require('./commands/burnup');
 const { testAnalysisCommand } = require('./test-analysis');
+const { provenanceCommand } = require('./commands/provenance');
 const { executeTool } = require('./commands/tool');
 
 // Import scaffold functionality
@@ -113,6 +114,18 @@ program
   .command('test-analysis <subcommand> [options...]')
   .description('Statistical analysis for budget prediction and test optimization')
   .action(testAnalysisCommand);
+
+// Provenance command
+program
+  .command('provenance')
+  .description('Manage CAWS provenance tracking and audit trails')
+  .argument('<subcommand>', 'Command: update, show, verify, analyze-ai')
+  .option('-c, --commit <hash>', 'Git commit hash')
+  .option('-m, --message <msg>', 'Commit message')
+  .option('-a, --author <info>', 'Author information')
+  .option('-q, --quiet', 'Suppress output')
+  .option('-o, --output <path>', 'Output path for provenance files')
+  .action(provenanceCommand);
 
 // Error handling
 program.exitOverride((err) => {

@@ -7,6 +7,7 @@
 ## 🎯 Quick Start
 
 ### Initialize CAWS
+
 ```bash
 # Interactive wizard (recommended)
 caws init --interactive
@@ -19,6 +20,7 @@ caws init .
 ```
 
 ### Validate & Verify
+
 ```bash
 # Check your working spec
 caws validate --suggestions
@@ -41,6 +43,7 @@ caws scaffold
 ```
 
 **What Cursor hooks provide**:
+
 - Real-time validation as you code
 - Blocks dangerous commands (`rm -rf /`, force push to main)
 - Prevents reading secrets (`.env`, private keys)
@@ -58,47 +61,49 @@ caws scaffold
 
 ### Risk Tiers (Choose Based on Impact)
 
-| Tier | Use Case | Coverage | Mutation | Contracts | Review |
-|------|----------|----------|----------|-----------|---------|
-| **🔴 T1** | Auth, billing, migrations | 90%+ | 70%+ | Required | Manual |
-| **🟡 T2** | Features, APIs, data writes | 80%+ | 50%+ | Required | Optional |
-| **🟢 T3** | UI, internal tools | 70%+ | 30%+ | Optional | Optional |
+| Tier      | Use Case                    | Coverage | Mutation | Contracts | Review   |
+| --------- | --------------------------- | -------- | -------- | --------- | -------- |
+| **🔴 T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
+| **🟡 T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
+| **🟢 T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
 
 ### Required Files
 
 #### `.caws/working-spec.yaml`
+
 ```yaml
 id: PROJ-001
-title: "Feature description"
-risk_tier: 2                    # 1, 2, or 3
-mode: feature                   # feature|refactor|fix|doc|chore
+title: 'Feature description'
+risk_tier: 2 # 1, 2, or 3
+mode: feature # feature|refactor|fix|doc|chore
 change_budget:
   max_files: 25
   max_loc: 1000
 blast_radius:
-  modules: ["core", "api"]
+  modules: ['core', 'api']
   data_migration: false
-operational_rollback_slo: "5m"
+operational_rollback_slo: '5m'
 scope:
-  in: ["src/", "package.json"]
-  out: ["node_modules/"]
+  in: ['src/', 'package.json']
+  out: ['node_modules/']
 invariants:
-  - "System maintains data consistency"
+  - 'System maintains data consistency'
 acceptance:
-  - id: "A1"
-    given: "Current state"
-    when: "Action occurs"
-    then: "Expected result"
+  - id: 'A1'
+    given: 'Current state'
+    when: 'Action occurs'
+    then: 'Expected result'
 non_functional:
-  a11y: ["keyboard", "screen-reader"]
+  a11y: ['keyboard', 'screen-reader']
   perf: { api_p95_ms: 250 }
-  security: ["validation", "auth"]
+  security: ['validation', 'auth']
 contracts:
-  - type: "openapi"
-    path: "docs/api.yaml"
+  - type: 'openapi'
+    path: 'docs/api.yaml'
 ```
 
 #### `.caws/policy/tier-policy.json`
+
 ```json
 {
   "packages": {
@@ -126,6 +131,7 @@ contracts:
 ## 🔧 CLI Commands
 
 ### Initialization
+
 ```bash
 caws init <name>           # Create new project
 caws init .               # Initialize in current directory
@@ -134,6 +140,7 @@ caws init --template=extension  # Use project template
 ```
 
 ### Development
+
 ```bash
 caws validate              # Check working spec
 caws validate --suggestions # Show helpful error messages
@@ -144,6 +151,7 @@ caws scaffold --with-oidc  # Include publishing setup
 ```
 
 ### Quality Gates
+
 ```bash
 # In CI: validate spec
 caws validate --quiet
@@ -162,24 +170,28 @@ npm run test:contract
 ## 📋 Development Workflow
 
 ### 1. Plan First
+
 - Create `.caws/working-spec.yaml`
 - Define acceptance criteria (GIVEN/WHEN/THEN)
 - Set risk tier and change budget
 - Identify scope and invariants
 
 ### 2. Implement with Tests
+
 - Write tests first (TDD)
 - Stay within change budget
 - Follow acceptance criteria
 - Maintain system invariants
 
 ### 3. Verify Quality
+
 - Run validation: `caws validate`
 - Execute tests: `npm test`
 - Check coverage and mutation scores
 - Manual review for Tier 1 changes
 
 ### 4. Document & Deploy
+
 - Update working spec if scope changes
 - Generate provenance manifest
 - Deploy with rollback plan ready
@@ -189,36 +201,44 @@ npm run test:contract
 ## 🎨 Project Templates
 
 ### VS Code Extension
+
 ```bash
 caws init my-extension --template=extension
 ```
+
 - Risk tier: 2 (high user impact)
 - Focus: Webview security, activation performance
 - Budget: 25 files, 1000 lines
 - Invariants: CSP enforcement, <1s activation
 
 ### React Library
+
 ```bash
 caws init my-lib --template=library
 ```
+
 - Risk tier: 2 (API stability)
 - Focus: Bundle size, TypeScript exports
 - Budget: 20 files, 800 lines
 - Invariants: Tree-shakeable, no runtime deps
 
 ### API Service
+
 ```bash
 caws init my-api --template=api
 ```
+
 - Risk tier: 1 (data integrity)
 - Focus: Backward compatibility, performance
 - Budget: 40 files, 1500 lines
 - Invariants: API contracts, data consistency
 
 ### CLI Tool
+
 ```bash
 caws init my-cli --template=cli
 ```
+
 - Risk tier: 3 (low risk)
 - Focus: Error handling, help text
 - Budget: 15 files, 600 lines
@@ -229,12 +249,14 @@ caws init my-cli --template=cli
 ## 🔍 Quality Gates
 
 ### Coverage Requirements
+
 - **Branch Coverage**: T1 ≥90%, T2 ≥80%, T3 ≥70%
 - **Mutation Score**: T1 ≥70%, T2 ≥50%, T3 ≥30%
 - **Contract Tests**: Required for T1/T2 with external APIs
 - **E2E Tests**: Required for T1, optional for T2/T3
 
 ### Validation Rules
+
 - ID format: `PREFIX-NUMBER` (e.g., `FEAT-123`)
 - Scope: Must specify `in` and `out` directories
 - Invariants: At least 2-4 system guarantees
@@ -242,6 +264,7 @@ caws init my-cli --template=cli
 - Contracts: Required for T1/T2 if external APIs
 
 ### Performance Budgets
+
 - API p95 latency: Default 250ms (configurable)
 - Bundle size: Library default 50KB
 - Accessibility: WCAG 2.1 AA compliance
@@ -252,6 +275,7 @@ caws init my-cli --template=cli
 ## 🚨 Common Issues & Fixes
 
 ### Validation Errors
+
 ```bash
 # Missing required field
 ❌ Validation failed: invariants is required
@@ -268,6 +292,7 @@ caws init my-cli --template=cli
 ```
 
 ### Scope Creep
+
 ```bash
 # PR touches files outside scope
 ❌ Gate failed: scope violation in src/unrelated.ts
@@ -279,6 +304,7 @@ scope:
 ```
 
 ### Budget Exceeded
+
 ```bash
 # Too many files changed
 ❌ Gate failed: 35 files > budget 25
@@ -293,16 +319,19 @@ change_budget:
 ## 📚 Additional Resources
 
 ### Full Documentation
-- **Complete Guide**: `docs/agents/FULL_GUIDE.md` (821 lines)
-- **Tutorial**: `docs/agents/TUTORIAL.md` (step-by-step)
-- **Examples**: `docs/agents/EXAMPLES.md` (real projects)
+
+- **Complete Guide**: `docs/agents/full-guide.md` (821 lines)
+- **Tutorial**: `docs/agents/tutorial.md` (step-by-step)
+- **Examples**: `docs/agents/examples.md` (real projects)
 
 ### Getting Started
+
 - **Your Guide**: `.caws/GETTING_STARTED.md` (generated per project)
 - **Templates**: `.caws/templates/` (feature plans, test plans, PR templates)
 - **Examples**: `.caws/examples/` (working specs for different project types)
 
 ### Tools & Scripts
+
 - **Validation**: `apps/tools/caws/validate.js`
 - **Gates**: `apps/tools/caws/gates.js`
 - **Provenance**: `apps/tools/caws/provenance.js`
@@ -322,7 +351,7 @@ change_budget:
 
 ---
 
-*This is the quick reference. For complete documentation, see `docs/agents/FULL_GUIDE.md`*
+_This is the quick reference. For complete documentation, see `docs/agents/full-guide.md`_
 
 **Version**: 3.1.0  
 **Last Updated**: October 2, 2025
