@@ -5,10 +5,12 @@ An engineering-grade operating system for coding agents that enforces quality, r
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js >= 18.0.0
 - npm >= 10.0.0
 
 ### Setup
+
 ```bash
 # Install dependencies
 npm install
@@ -26,6 +28,7 @@ npm run lint
 ### CLI Usage
 
 #### Option 1: Global Installation (Recommended)
+
 ```bash
 
 # Install globally for CLI usage
@@ -59,12 +62,18 @@ caws cicd analyze                           # Analyze project for optimizations
 caws cicd generate github                   # Generate optimized GitHub Actions
 caws cicd test-selection --from-commit HEAD~1  # Smart test selection
 
+# Statistical test analysis and learning
+caws test-analysis assess-budget             # Predict budget needs from historical data
+caws test-analysis analyze-patterns          # Analyze waiver patterns and trends
+caws test-analysis find-similar              # Find similar historical projects
+
 # Manage CAWS tools
 caws tools list                    # List available tools
 caws tools run validate           # Execute specific tool
 ```
 
 #### Option 2: Local Development (Monorepo)
+
 ```bash
 # Build and run CLI directly (development)
 node packages/caws-cli/dist/index.js --help
@@ -78,12 +87,18 @@ node packages/caws-cli/dist/index.js scaffold
 # Validate working specification (runs quality gates automatically)
 node packages/caws-cli/dist/index.js validate
 
+# Statistical test analysis and learning
+node packages/caws-cli/dist/index.js test-analysis assess-budget     # Predict budget needs
+node packages/caws-cli/dist/index.js test-analysis analyze-patterns  # Analyze waiver patterns
+node packages/caws-cli/dist/index.js test-analysis find-similar      # Find similar projects
+
 # Manage CAWS tools
 node packages/caws-cli/dist/index.js tools list        # List available tools
 node packages/caws-cli/dist/index.js tools run validate # Execute specific tool
 ```
 
 #### Option 3: npm Scripts (Project Context)
+
 ```bash
 # From the project root (when working in this monorepo)
 node apps/tools/caws/start.js        # Start a new change
@@ -135,7 +150,7 @@ Agents can integrate CAWS into their development loops:
 ```javascript
 // Example agent integration
 async function developWithCaws(specPath) {
-  let currentState = "Initial implementation";
+  let currentState = 'Initial implementation';
 
   while (true) {
     // Evaluate current progress
@@ -147,7 +162,9 @@ async function developWithCaws(specPath) {
     }
 
     // Get guidance for next iteration
-    const guidance = await runCommand(`caws agent iterate --current-state '{"description": "${currentState}"}' ${specPath}`);
+    const guidance = await runCommand(
+      `caws agent iterate --current-state '{"description": "${currentState}"}' ${specPath}`
+    );
 
     // Execute recommended next steps
     await implementSteps(guidance.iteration.next_steps);
@@ -174,6 +191,7 @@ See [`docs/agent-integration-guide.md`](docs/agent-integration-guide.md) for com
 CAWS provides a waivers system for exceptional circumstances where quality gates need to be temporarily bypassed. Waivers are fully auditable and flagged for review.
 
 ### Waiver Creation
+
 ```bash
 caws waivers create \
   --title "Emergency security fix" \
@@ -187,6 +205,7 @@ caws waivers create \
 ```
 
 ### Waiver Management
+
 ```bash
 # List active waivers
 caws waivers list
@@ -202,6 +221,7 @@ caws waivers stats
 ```
 
 ### Waiver Features
+
 - **Risk Assessment**: Required impact level and mitigation plan
 - **Expiration**: Automatic cleanup of expired waivers
 - **Audit Trail**: Complete logging of waiver lifecycle
@@ -213,6 +233,7 @@ caws waivers stats
 CAWS experimental mode provides access to cutting-edge features with built-in safety measures.
 
 ### Dry Run Support
+
 ```bash
 # Dry run validation without side effects
 caws experimental --dry-run validate .caws/working-spec.yaml --enhanced-analysis
@@ -222,6 +243,7 @@ caws experimental --dry-run quality-gates .caws/working-spec.yaml --parallel-exe
 ```
 
 ### Experimental Features
+
 - **Enhanced Analysis**: Advanced spec validation with AI assistance
 - **Predictive Scoring**: ML-based quality predictions
 - **Parallel Execution**: Experimental parallel quality gate processing
@@ -232,6 +254,7 @@ caws experimental --dry-run quality-gates .caws/working-spec.yaml --parallel-exe
 CAWS provides intelligent CI/CD pipeline optimization based on project risk tier and characteristics.
 
 ### Pipeline Analysis
+
 ```bash
 # Analyze project for optimization opportunities
 caws cicd analyze
@@ -243,6 +266,7 @@ caws cicd analyze
 ```
 
 ### Configuration Generation
+
 ```bash
 # Generate optimized GitHub Actions workflow
 caws cicd generate github --output .github/workflows/caws-gates.yml
@@ -255,6 +279,7 @@ caws cicd generate jenkins --output Jenkinsfile
 ```
 
 ### Smart Test Selection
+
 ```bash
 # Analyze changed files for targeted testing
 caws cicd test-selection --changed-files "src/api.js,tests/unit/auth.test.js"
@@ -264,6 +289,7 @@ caws cicd test-selection --from-commit HEAD~1
 ```
 
 ### Optimization Features
+
 - **Tier-Based Execution**: Different rigor levels for T1/T2/T3 projects
 - **Parallel Processing**: Independent quality gates run simultaneously
 - **Smart Caching**: Framework-aware dependency and build caching
@@ -296,12 +322,12 @@ caws waivers create --title "Hotfix"            # Exception handling
 
 ### Platform-Specific Setup
 
-| Platform | Setup Command | Features |
-|----------|----------------|----------|
-| **Cursor** | `caws scaffold` | Real-time hooks, instant feedback |
-| **VS Code** | Extension install | Live dashboard, code actions |
-| **Windsurf** | `caws init --cascade` | Guided workflows, team sharing |
-| **MCP Server** | `npm run mcp:start` | Tool protocol, cross-platform |
+| Platform       | Setup Command         | Features                          |
+| -------------- | --------------------- | --------------------------------- |
+| **Cursor**     | `caws scaffold`       | Real-time hooks, instant feedback |
+| **VS Code**    | Extension install     | Live dashboard, code actions      |
+| **Windsurf**   | `caws init --cascade` | Guided workflows, team sharing    |
+| **MCP Server** | `npm run mcp:start`   | Tool protocol, cross-platform     |
 
 See [`docs/guides/hooks-and-agent-workflows.md`](docs/guides/hooks-and-agent-workflows.md) for comprehensive integration guide.
 
@@ -341,6 +367,7 @@ npm run clean
 ### Package-Specific Scripts
 
 #### CAWS CLI (`@caws/cli`)
+
 ```bash
 cd packages/caws-cli
 npm run build        # Build TypeScript
@@ -352,6 +379,7 @@ npm run start        # Run CLI
 ```
 
 #### CAWS Template (`@caws/template`)
+
 ```bash
 cd packages/caws-template
 npm run build        # Build tools
@@ -373,6 +401,7 @@ npm run format       # Format code
 ### Core Components
 
 #### CAWS CLI
+
 - **Purpose**: Scaffolds new projects and provides dynamic tool execution and validation
 - **Features**:
   - Interactive project setup with validation
@@ -385,6 +414,7 @@ npm run format       # Format code
   - Error handling and recovery
 
 #### CAWS Template
+
 - **Purpose**: Provides the complete CAWS project structure and tools
 - **Features**:
   - Working specification schemas
@@ -411,12 +441,14 @@ The system enforces multiple quality gates through dynamic tool execution:
 CAWS provides a plugin-based architecture for extensible quality gates and development tools:
 
 #### Tool Discovery & Loading
+
 - **Automatic Discovery**: CLI automatically finds tools in `apps/tools/caws/` directory
 - **Dynamic Loading**: Tools are loaded securely with validation and error handling
 - **Security Validation**: All tools validated against allowlists and security scans
 - **Caching**: Loaded tools cached for performance with invalidation support
 
 #### Tool Categories
+
 - **Validation Tools**: Schema validation, configuration checking
 - **Security Tools**: Secret scanning, vulnerability assessment
 - **Quality Gate Tools**: Automated testing, coverage analysis
@@ -424,6 +456,7 @@ CAWS provides a plugin-based architecture for extensible quality gates and devel
 - **Analysis Tools**: Performance monitoring, dependency checking
 
 #### Tool Interface
+
 All CAWS tools implement a standardized interface:
 
 ```javascript
@@ -434,7 +467,7 @@ class MyTool extends BaseTool {
       name: 'My Custom Tool',
       version: '1.0.0',
       capabilities: ['validation'],
-      author: 'Your Name'
+      author: 'Your Name',
     };
   }
 
@@ -456,17 +489,20 @@ Projects are classified into risk tiers with appropriate rigor levels:
 ## Security & Compliance
 
 ### Provenance Tracking
+
 - Complete audit trail of all operations
 - SBOM (Software Bill of Materials) generation
 - SLSA (Supply chain Levels for Software Artifacts) attestations
 - Cryptographic signatures for integrity
 
 ### Tool Allowlisting
+
 - Restricted set of approved tools for agents
 - Security scanning of prompts and outputs
 - Secret detection and prevention
 
 ### Supply Chain Security
+
 - Dependency vulnerability scanning
 - Automated security analysis (SAST)
 - Containerized builds with provenance
@@ -474,6 +510,7 @@ Projects are classified into risk tiers with appropriate rigor levels:
 ## Testing Strategy
 
 ### Test Categories
+
 - **Unit Tests**: Individual functions and components
 - **Integration Tests**: Component interactions
 - **E2E Tests**: Complete user workflows
@@ -482,6 +519,7 @@ Projects are classified into risk tiers with appropriate rigor levels:
 - **Accessibility Tests**: WCAG compliance
 
 ### Coverage Requirements
+
 - **Tier 1**: ≥90% branch coverage, ≥70% mutation score
 - **Tier 2**: ≥80% branch coverage, ≥50% mutation score
 - **Tier 3**: ≥70% branch coverage, ≥30% mutation score
@@ -502,6 +540,7 @@ CAWS calculates a trust score (0-100) based on:
 **Target**: ≥82/100 for production readiness
 
 ### Tool Validation Scoring
+
 - **Security Validation**: 20 points - Tools must pass security scans
 - **Interface Compliance**: 10 points - Tools must implement required methods
 - **Execution Success**: 15 points - Tools must execute without errors
@@ -510,6 +549,7 @@ CAWS calculates a trust score (0-100) based on:
 ## Contributing
 
 ### Development Workflow
+
 1. Create a feature branch
 2. Make changes with comprehensive tests
 3. Ensure all quality gates pass
@@ -517,6 +557,7 @@ CAWS calculates a trust score (0-100) based on:
 5. Create pull request with working spec
 
 ### Code Standards
+
 - Use TypeScript for new code
 - Follow ESLint and Prettier configurations
 - Write comprehensive tests with property-based testing
@@ -524,6 +565,7 @@ CAWS calculates a trust score (0-100) based on:
 - Document all public APIs
 
 ### Pull Request Requirements
+
 - Working specification with scope and acceptance criteria
 - All tests passing with required coverage
 - Quality gates satisfied
@@ -533,12 +575,14 @@ CAWS calculates a trust score (0-100) based on:
 ## Requirements
 
 ### System Requirements
+
 - **Node.js**: >= 18.0.0
 - **npm**: >= 10.0.0
 - **Git**: For version control and provenance tracking
 - **CI/CD**: GitHub Actions (or adapt for other platforms)
 
 ### Development Tools
+
 - **Turbo**: Build system and task orchestration
 - **TypeScript**: Type safety and compilation
 - **Jest**: Testing framework
@@ -548,6 +592,7 @@ CAWS calculates a trust score (0-100) based on:
 ## Examples
 
 ### New Feature Project
+
 ```bash
 # Initialize a new feature project
 npm run init user-auth-service
@@ -562,6 +607,7 @@ npm run init user-auth-service
 ```
 
 ### Refactoring Existing Codebase
+
 ```bash
 # Initialize a refactoring project
 npm run init legacy-refactor --mode=refactor
@@ -571,6 +617,7 @@ npm run scaffold
 ```
 
 ### Documentation Project
+
 ```bash
 # Initialize documentation project
 npm run init api-docs --mode=doc
@@ -579,7 +626,9 @@ npm run init api-docs --mode=doc
 ## Configuration
 
 ### Working Specification Schema
+
 Projects include a comprehensive `.caws/working-spec.yaml` with:
+
 - Project metadata and scope
 - Risk tier and mode classification
 - Change budget constraints
@@ -589,7 +638,9 @@ Projects include a comprehensive `.caws/working-spec.yaml` with:
 - Migration and rollback strategies
 
 ### CI/CD Pipeline
+
 GitHub Actions workflows include:
+
 - **Automated Testing**: Comprehensive test suite execution
 - **Quality Gates**: Scope and budget validation with semantic versioning
 - **Static Analysis**: Security scanning and code quality checks
@@ -600,6 +651,7 @@ GitHub Actions workflows include:
 ## Automated Publishing
 
 ### Semantic Versioning
+
 This project uses [Conventional Commits](https://conventionalcommits.org/) for automated versioning:
 
 - `feat:` → Minor release (1.0.0 → 1.1.0)
@@ -607,6 +659,7 @@ This project uses [Conventional Commits](https://conventionalcommits.org/) for a
 - `BREAKING CHANGE:` → Major release (1.0.0 → 2.0.0)
 
 ### Release Process
+
 1. **Commit Analysis**: Commits analyzed for type and scope
 2. **Version Calculation**: Next version determined by commit types
 3. **Changelog Generation**: Release notes created from commit messages
@@ -614,9 +667,11 @@ This project uses [Conventional Commits](https://conventionalcommits.org/) for a
 5. **Git Tagging**: Release tagged and pushed to repository
 
 ### Commit Conventions
+
 See [COMMIT_CONVENTIONS.md](COMMIT_CONVENTIONS.md) for detailed guidelines.
 
 ### OIDC Setup
+
 For automated publishing with OIDC (OpenID Connect), see [OIDC_SETUP.md](OIDC_SETUP.md).
 
 ## Documentation
@@ -630,6 +685,7 @@ For automated publishing with OIDC (OpenID Connect), see [OIDC_SETUP.md](OIDC_SE
 ## Support
 
 ### Getting Help
+
 - **📖 Documentation**: Comprehensive guides and examples in this README and package docs
 - **🛠️ Tools**: Complete utility suite with built-in help
 - **🎯 Examples**: Implementation patterns and sample projects
@@ -637,12 +693,14 @@ For automated publishing with OIDC (OpenID Connect), see [OIDC_SETUP.md](OIDC_SE
 - **🐛 Issues**: Report bugs or request features on GitHub
 
 ### Support Channels
+
 - **GitHub Issues**: Bug reports, feature requests, and technical questions
 - **Documentation**: Inline help with `caws --help` and tool-specific guides
 - **Examples**: Review sample projects and documentation files
 - **Community Guidelines**: Follow agent conduct rules for collaboration
 
 ### Troubleshooting
+
 If you encounter issues:
 
 1. **Check Prerequisites**: Ensure Node.js >= 18.0.0 and npm >= 10.0.0
@@ -682,6 +740,7 @@ SOFTWARE.
 We welcome contributions from the community! Here's how to get involved:
 
 #### Development Setup
+
 ```bash
 # Fork the repository
 git clone https://github.com/your-username/caws.git
@@ -695,6 +754,7 @@ npm run dev
 ```
 
 #### Contribution Process
+
 1. **Create Issue**: Open a GitHub issue for bugs, features, or questions
 2. **Fork Repository**: Create your own fork of the project
 3. **Create Branch**: Use descriptive branch names (e.g., `feat/cli-improvements`)
@@ -704,6 +764,7 @@ npm run dev
 7. **Create Pull Request**: Submit PR with detailed description
 
 #### Code Standards
+
 - **TypeScript First**: Use TypeScript for new code and APIs
 - **Testing**: Write comprehensive tests with property-based testing where applicable
 - **Documentation**: Update JSDoc comments and README sections
@@ -734,27 +795,34 @@ When collaborating with CAWS agents, follow these guidelines:
 ### CAWS CLI
 
 #### `caws init <project-name>` (alias: `i`)
+
 Initialize a new project with CAWS scaffolding.
 
 **Options:**
+
 - `-i, --interactive`: Run interactive setup (default: true)
 - `-g, --git`: Initialize git repository (default: true)
 - `-n, --non-interactive`: Skip interactive prompts
 - `--no-git`: Don't initialize git repository
 
 #### `caws scaffold` (alias: `s`)
+
 Add CAWS components to an existing project.
 
 **Options:**
+
 - `-f, --force`: Overwrite existing files
 
 #### `caws version` (alias: `v`)
+
 Show version and system information.
 
 #### `caws tools` - Tool Management
+
 Manage CAWS tools and plugins.
 
 **Commands:**
+
 - `caws tools list` (alias: `ls`): List all available tools
   - `-v, --verbose`: Show detailed tool information
 - `caws tools run <tool-id>`: Execute a specific tool
@@ -764,6 +832,7 @@ Manage CAWS tools and plugins.
 ### CAWS Tools
 
 #### Validation Tool
+
 ```bash
 node packages/caws-template/apps/tools/caws/validate.js <spec-file>
 ```
@@ -771,6 +840,7 @@ node packages/caws-template/apps/tools/caws/validate.js <spec-file>
 Validates working specifications against JSON schema.
 
 #### Quality Gates
+
 ```bash
 node packages/caws-template/apps/tools/caws/gates.js <gate-type> <tier> <value>
 ```
@@ -778,6 +848,7 @@ node packages/caws-template/apps/tools/caws/gates.js <gate-type> <tier> <value>
 Enforces quality thresholds based on risk tier.
 
 #### Provenance Generator
+
 ```bash
 node packages/caws-template/apps/tools/caws/provenance.js generate [options]
 node packages/caws-template/apps/tools/caws/provenance.js sbom [project-path]
@@ -787,6 +858,7 @@ node packages/caws-template/apps/tools/caws/provenance.js slsa [provenance-path]
 Generates provenance manifests and attestations.
 
 #### Prompt Linter
+
 ```bash
 node packages/caws-template/apps/tools/caws/prompt-lint.js <prompt-files> [options]
 ```
@@ -794,6 +866,7 @@ node packages/caws-template/apps/tools/caws/prompt-lint.js <prompt-files> [optio
 Validates prompts for security and compliance.
 
 #### Attestation Generator
+
 ```bash
 node packages/caws-template/apps/tools/caws/attest.js <type> [options]
 ```
@@ -803,6 +876,7 @@ Generates SBOM and SLSA attestations.
 ### Developing CAWS Tools
 
 #### Tool Development Quick Start
+
 ```bash
 # Create a new tool
 cat > apps/tools/caws/my-tool.js << 'EOF'
@@ -837,6 +911,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 ```
 
 #### Tool Categories and Capabilities
+
 - `validation`: Tools that validate code/configuration
 - `security`: Security scanning and vulnerability assessment
 - `quality-gates`: Automated quality checks and testing
@@ -844,6 +919,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - `analysis`: Performance monitoring and dependency analysis
 
 #### Tool Security Requirements
+
 - Tools must be validated against the `tools-allow.json` allowlist
 - No direct filesystem access outside working directory
 - No execution of arbitrary commands
@@ -853,6 +929,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 ## Changelog
 
 ### v1.1.0 (Current)
+
 - ✅ **Dynamic Tool System**: Plugin-based architecture for extensible tools
 - ✅ **Tool Discovery & Loading**: Automatic discovery and secure loading of tools
 - ✅ **Quality Gate Integration**: Tools automatically executed during validation
@@ -870,6 +947,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - ✅ **Unified Hooks Strategy**: Consolidated hooks and agent workflow documentation
 
 ### v1.0.0 (Previous)
+
 - ✅ **Initial Release**: Complete CAWS framework implementation
 - ✅ **Turborepo Setup**: Monorepo structure with optimized build pipeline
 - ✅ **Core Components**: CLI, template, and test project packages
@@ -880,6 +958,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - ✅ **Documentation**: Comprehensive guides and examples
 
 ### Planned Features
+
 - **v1.2.0**: Enhanced IDE integrations and plugins
 - **v1.3.0**: Multi-language support (Python, Go, Rust)
 - **v1.4.0**: Advanced analytics and reporting dashboard
@@ -888,6 +967,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 ## Roadmap
 
 ### Foundation (✅ Complete - v1.0.0)
+
 - [x] Core CAWS framework implementation
 - [x] Turborepo monorepo setup
 - [x] Quality gates and validation system
@@ -896,6 +976,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - [x] Documentation and examples
 
 ### Dynamic Tool System (✅ Complete - v1.1.0)
+
 - [x] Plugin-based tool architecture with dynamic loading
 - [x] Tool discovery and secure validation system
 - [x] Quality gate integration with automated execution
@@ -905,6 +986,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - [x] Enhanced CLI with tool-aware validation
 
 ### Strategic Enhancements (✅ Complete - v1.1.0)
+
 - [x] Fast-lane escape hatches (waivers system with audit trails)
 - [x] Experimental mode with dry-run capabilities
 - [x] AI self-assessment and confidence tracking (agent integration)
@@ -917,6 +999,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - [ ] Real-time dashboard and observability
 
 ### IDE Integration & Developer Tools (🚧 In Progress - v1.2.0)
+
 - [ ] VS Code extension with inline CAWS validation
 - [ ] IntelliJ IDEA plugin
 - [ ] Real-time spec validation in editor
@@ -924,6 +1007,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - [ ] AI confidence indicators in IDE
 
 ### Enterprise & Collaboration (📋 Planned - v1.3.0)
+
 - [ ] Advanced analytics and reporting dashboard
 - [ ] Enterprise security and compliance features
 - [ ] LDAP/SSO integration
@@ -932,6 +1016,7 @@ node packages/caws-cli/dist/index.js tools run my-tool
 - [ ] Audit logging and compliance reporting
 
 ### Agent Intelligence & Autonomy (🔮 Future - v2.0.0)
+
 - [ ] Distributed agent coordination
 - [ ] Multi-agent workflow orchestration
 - [ ] AI-powered code analysis and improvements
@@ -942,10 +1027,13 @@ node packages/caws-cli/dist/index.js tools run my-tool
 ## FAQ
 
 ### What is CAWS?
+
 CAWS (Coding Agent Workflow System) is an engineering-grade operating system for coding agents that enforces quality, reliability, and maintainability through automated validation, provenance tracking, and comprehensive tooling.
 
 ### Why use CAWS?
+
 CAWS provides:
+
 - **Quality Assurance**: Automated validation and testing
 - **Transparency**: Complete provenance and audit trails
 - **Security**: Tool allowlisting and secret detection
@@ -953,7 +1041,9 @@ CAWS provides:
 - **Collaboration**: Standardized workflows and documentation
 
 ### How does CAWS compare to other tools?
+
 Unlike simple linting or testing tools, CAWS provides:
+
 - **Comprehensive Framework**: End-to-end workflow management
 - **Risk-Based Approach**: Tiered quality requirements
 - **Provenance Tracking**: Complete audit trails
@@ -961,13 +1051,17 @@ Unlike simple linting or testing tools, CAWS provides:
 - **Agent Ready**: Designed for AI coding agents
 
 ### Can I use CAWS with existing projects?
+
 Yes! Use `npm run scaffold` to add CAWS components to existing projects. The system is designed to integrate with existing codebases while enforcing quality standards.
 
 ### What programming languages does CAWS support?
+
 Currently optimized for Node.js/TypeScript projects, but the framework is designed to be extensible to other languages. Multi-language support is planned for future versions.
 
 ### How do I contribute to CAWS?
+
 Follow the Contributing Guidelines above:
+
 1. Open an issue for discussion
 2. Fork the repository
 3. Create a feature branch
@@ -975,9 +1069,11 @@ Follow the Contributing Guidelines above:
 5. Submit a pull request
 
 ### Is CAWS open source?
+
 Yes! CAWS is released under the MIT License and welcomes community contributions.
 
 ### Where can I get help?
+
 - **Documentation**: This comprehensive README
 - **Issues**: GitHub issues for bugs and questions
 - **Examples**: Sample projects and documentation

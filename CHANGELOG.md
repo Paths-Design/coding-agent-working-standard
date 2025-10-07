@@ -1,35 +1,54 @@
-# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-07)
-
-
-### Bug Fixes
-
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
-* update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
-
+# [3.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.0.0...v3.1.0) (2025-01-07)
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
-* Add git author configuration for proper commit attribution ([1831c6b](https://github.com/Paths-Design/coding-agent-working-standard/commit/1831c6b53f1acb1f4156f7b723f66bf95d22f9dc))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-* major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
+- **Policy Separation Architecture**: Implemented governed policy.yaml with CODEOWNERS protection, removing editable budgets from working specs and making waivers the only sanctioned exception path
+- **Statistical Test Analysis v0.1**: Added learning system that analyzes waiver patterns to predict budget overruns and find similar historical projects (70-80% accuracy target)
+- **Agent Guardrails**: Enhanced Cursor IDE hooks with actionable guidance messages showing specific CAWS commands to resolve blocking situations
+- **Defense in Depth**: Added pre-commit, CI, and agent-level validation preventing policy bypass with clear remediation steps
 
+### Bug Fixes
+
+- Fixed budget validation to derive limits from policy.yaml instead of requiring change_budget fields
+- Updated working spec schema to use waiver_ids instead of mutable budgets
+- Enhanced error messages to provide specific command guidance for agents
 
 ### BREAKING CHANGES
 
-* Templates are now bundled with CLI package
+- Working specs no longer accept `change_budget` fields - budgets are derived from policy.yaml
+- New waiver_ids field required for budget exceptions
+- Policy files (.caws/policy.yaml) now require dual approval and CODEOWNERS protection
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-07)
+
+### Bug Fixes
+
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
+- update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
+
+### Features
+
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
+- Add git author configuration for proper commit attribution ([1831c6b](https://github.com/Paths-Design/coding-agent-working-standard/commit/1831c6b53f1acb1f4156f7b723f66bf95d22f9dc))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
+
+### BREAKING CHANGES
+
+- Templates are now bundled with CLI package
+
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully
@@ -42,35 +61,33 @@ Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
 
 # [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-03)
 
-
 ### Bug Fixes
 
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
-* update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
-
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
+- update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-* major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
-
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
 
 ### BREAKING CHANGES
 
-* Templates are now bundled with CLI package
+- Templates are now bundled with CLI package
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully
@@ -83,34 +100,32 @@ Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
 
 # [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
 
-
 ### Bug Fixes
 
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
-* update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
-
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
+- update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-* major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
-
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
 
 ### BREAKING CHANGES
 
-* Templates are now bundled with CLI package
+- Templates are now bundled with CLI package
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully
@@ -123,34 +138,32 @@ Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
 
 # [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
 
-
 ### Bug Fixes
 
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
-* update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
-
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
+- update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-* major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
-
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
 
 ### BREAKING CHANGES
 
-* Templates are now bundled with CLI package
+- Templates are now bundled with CLI package
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully
@@ -165,60 +178,61 @@ Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
 
 ### Features
 
-* **Interactive Setup Wizard**: Guided project initialization with project type detection and tailored working specs
-* **Project-Type Templates**: Direct template commands for extension, library, api, cli, and monorepo projects
-* **Enhanced Validation**: Validation with actionable suggestions and auto-fix capabilities
-* **Opt-In Components**: Flexible scaffolding with --minimal, --with-oidc, --with-codemods options
-* **Getting Started Guides**: Auto-generated project-specific onboarding checklists
-* **Smart .gitignore**: Intelligent .gitignore generation with CAWS-specific patterns
-* **Layered Documentation**: Quick reference + full guide + tutorial + examples structure
+- **Interactive Setup Wizard**: Guided project initialization with project type detection and tailored working specs
+- **Project-Type Templates**: Direct template commands for extension, library, api, cli, and monorepo projects
+- **Enhanced Validation**: Validation with actionable suggestions and auto-fix capabilities
+- **Opt-In Components**: Flexible scaffolding with --minimal, --with-oidc, --with-codemods options
+- **Getting Started Guides**: Auto-generated project-specific onboarding checklists
+- **Smart .gitignore**: Intelligent .gitignore generation with CAWS-specific patterns
+- **Layered Documentation**: Quick reference + full guide + tutorial + examples structure
 
 ### Improved
 
-* **CLI UX**: Complete overhaul of developer experience based on comprehensive user feedback
-  * Add support for `caws init .` to initialize in current directory
-  * Implement smart project detection to warn about subdirectory creation
-  * Add early validation in scaffold command with helpful error messages
-  * Enhance template detection transparency with descriptive logging
-  * Improve error messages throughout with actionable recovery suggestions
-  * Add clear success messaging about initialization location
-  * Add dependency analysis for intelligent project type detection
+- **CLI UX**: Complete overhaul of developer experience based on comprehensive user feedback
+  - Add support for `caws init .` to initialize in current directory
+  - Implement smart project detection to warn about subdirectory creation
+  - Add early validation in scaffold command with helpful error messages
+  - Enhance template detection transparency with descriptive logging
+  - Improve error messages throughout with actionable recovery suggestions
+  - Add clear success messaging about initialization location
+  - Add dependency analysis for intelligent project type detection
 
 ### Documentation
 
-* Add comprehensive AGENTS.md quick reference guide
-* Create docs/agents/FULL_GUIDE.md with complete framework documentation
-* Add docs/agents/TUTORIAL.md with hands-on step-by-step guide
-* Create docs/agents/EXAMPLES.md with real working spec examples
-* Add detailed feedback response and improvement roadmap documentation
-* Add comprehensive UX improvements roadmap based on user feedback
-* Create detailed response to Claude 4.5 setup experience feedback
-* Document planned improvements for v3.1.0 (interactive wizard, project templates, validation suggestions)
+- Add comprehensive AGENTS.md quick reference guide
+- Create docs/agents/full-guide.md with complete framework documentation
+- Add docs/agents/tutorial.md with hands-on step-by-step guide
+- Create docs/agents/examples.md with real working spec examples
+- Add detailed feedback response and improvement roadmap documentation
+- Add comprehensive UX improvements roadmap based on user feedback
+- Create detailed response to Claude 4.5 setup experience feedback
+- Document planned improvements for v3.1.0 (interactive wizard, project templates, validation suggestions)
 
 # [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-02)
 
 ### Bug Fixes
 
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
 
 ### BREAKING CHANGES
 
-* Templates are now bundled with CLI package
+- Templates are now bundled with CLI package
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully
@@ -231,57 +245,51 @@ Documentation: docs/AI_AGENT_DX_IMPROVEMENTS.md
 
 ## [2.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.0...v2.0.1) (2025-10-01)
 
-
 ### Bug Fixes
 
-* remove unnecessary @caws/template dependency from CLI package ([dde6502](https://github.com/Paths-Design/coding-agent-working-standard/commit/dde65028a5e587f141c7278ede4617c6b89979e1))
+- remove unnecessary @caws/template dependency from CLI package ([dde6502](https://github.com/Paths-Design/coding-agent-working-standard/commit/dde65028a5e587f141c7278ede4617c6b89979e1))
 
 # [2.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v1.0.0...v2.0.0) (2025-10-01)
 
-
 ### Features
 
-* enable OIDC trusted publishing with NPM provenance ([93545ea](https://github.com/Paths-Design/coding-agent-working-standard/commit/93545ea2b420b7ca2fe6493039e3ea6abb2a0760))
-
+- enable OIDC trusted publishing with NPM provenance ([93545ea](https://github.com/Paths-Design/coding-agent-working-standard/commit/93545ea2b420b7ca2fe6493039e3ea6abb2a0760))
 
 ### BREAKING CHANGES
 
-* First production release with complete CI/CD automation
+- First production release with complete CI/CD automation
 
 # 1.0.0 (2025-10-01)
 
-
 ### Bug Fixes
 
-* CLI accessibility, error handling, and comprehensive test cleanup ([08fb690](https://github.com/Paths-Design/coding-agent-working-standard/commit/08fb6902de3b1d85fe675ca8b84f16ca6b0c8f75))
-* resolve all ESLint issues for production readiness ([56bbbc6](https://github.com/Paths-Design/coding-agent-working-standard/commit/56bbbc6a99013a5f0fe8f3eaf67d9ea6d24bd832))
-* resolve all test suite failures and achieve 100% test pass rate ([d103bf6](https://github.com/Paths-Design/coding-agent-working-standard/commit/d103bf6398212edeaa0c443040fb6ac218d1f4d3))
-* resolve lock file and chalk compatibility issues ([4f00360](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f00360e7941b7d564a8fbf7c8295fd94d797ab7))
-* Resolve remaining linting errors ([ad32019](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad320192a2a9c038b8775cf91c81e0f210d91cef))
-* resolve remaining test issues and CLI argument parsing ([d926623](https://github.com/Paths-Design/coding-agent-working-standard/commit/d92662358e5b949259bda849072d10dfe0df5126))
-* sync package-lock.json and add CI/CD improvements ([ebd74e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/ebd74e35e883fe62d53b4966a4f5b17b484de486))
-* update release workflow to use npx semantic-release directly ([100e4b7](https://github.com/Paths-Design/coding-agent-working-standard/commit/100e4b7d07450ff5ee7702d4eb6f67b33ac0b218))
-
+- CLI accessibility, error handling, and comprehensive test cleanup ([08fb690](https://github.com/Paths-Design/coding-agent-working-standard/commit/08fb6902de3b1d85fe675ca8b84f16ca6b0c8f75))
+- resolve all ESLint issues for production readiness ([56bbbc6](https://github.com/Paths-Design/coding-agent-working-standard/commit/56bbbc6a99013a5f0fe8f3eaf67d9ea6d24bd832))
+- resolve all test suite failures and achieve 100% test pass rate ([d103bf6](https://github.com/Paths-Design/coding-agent-working-standard/commit/d103bf6398212edeaa0c443040fb6ac218d1f4d3))
+- resolve lock file and chalk compatibility issues ([4f00360](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f00360e7941b7d564a8fbf7c8295fd94d797ab7))
+- Resolve remaining linting errors ([ad32019](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad320192a2a9c038b8775cf91c81e0f210d91cef))
+- resolve remaining test issues and CLI argument parsing ([d926623](https://github.com/Paths-Design/coding-agent-working-standard/commit/d92662358e5b949259bda849072d10dfe0df5126))
+- sync package-lock.json and add CI/CD improvements ([ebd74e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/ebd74e35e883fe62d53b4966a4f5b17b484de486))
+- update release workflow to use npx semantic-release directly ([100e4b7](https://github.com/Paths-Design/coding-agent-working-standard/commit/100e4b7d07450ff5ee7702d4eb6f67b33ac0b218))
 
 ### Features
 
-* comprehensive CAWS CLI operationalization ([4ba1a14](https://github.com/Paths-Design/coding-agent-working-standard/commit/4ba1a1417596954c5adc7fd6f1dc4f2599ebb4cc))
-* configure OIDC automated publishing and fix linting issues ([165d0f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/165d0f34a88986c48343f3c7e605fe1dc069b9a2))
-* enhance CAWS CLI with Chalk styling and improved validation ([f58f205](https://github.com/Paths-Design/coding-agent-working-standard/commit/f58f20520cefcd23c5fa2a852194ff551c69a924))
-* implement automated publishing with OIDC and semantic versioning ([eadb9cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/eadb9cffdd8c36d78407dea79fc46f88974dd45e))
-* implement automated publishing with semantic versioning and OIDC ([fcd7461](https://github.com/Paths-Design/coding-agent-working-standard/commit/fcd7461266f874fb630a4be858868e6974dd8806))
-* Implement complete CAWS toolchain and testing framework ([819fe83](https://github.com/Paths-Design/coding-agent-working-standard/commit/819fe835ee096d6edd67f4c16594d289c86f5835))
-* Implement comprehensive CAWS framework enhancements ([8ee395d](https://github.com/Paths-Design/coding-agent-working-standard/commit/8ee395dfe4fda6c5fbc3b65716180e09de729e55))
-* update CAWS CLI for [@paths](https://github.com/paths).design publication ([9b28ed4](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b28ed4cd61b1b363b0f8661fbb486dfc1027013))
-
+- comprehensive CAWS CLI operationalization ([4ba1a14](https://github.com/Paths-Design/coding-agent-working-standard/commit/4ba1a1417596954c5adc7fd6f1dc4f2599ebb4cc))
+- configure OIDC automated publishing and fix linting issues ([165d0f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/165d0f34a88986c48343f3c7e605fe1dc069b9a2))
+- enhance CAWS CLI with Chalk styling and improved validation ([f58f205](https://github.com/Paths-Design/coding-agent-working-standard/commit/f58f20520cefcd23c5fa2a852194ff551c69a924))
+- implement automated publishing with OIDC and semantic versioning ([eadb9cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/eadb9cffdd8c36d78407dea79fc46f88974dd45e))
+- implement automated publishing with semantic versioning and OIDC ([fcd7461](https://github.com/Paths-Design/coding-agent-working-standard/commit/fcd7461266f874fb630a4be858868e6974dd8806))
+- Implement complete CAWS toolchain and testing framework ([819fe83](https://github.com/Paths-Design/coding-agent-working-standard/commit/819fe835ee096d6edd67f4c16594d289c86f5835))
+- Implement comprehensive CAWS framework enhancements ([8ee395d](https://github.com/Paths-Design/coding-agent-working-standard/commit/8ee395dfe4fda6c5fbc3b65716180e09de729e55))
+- update CAWS CLI for [@paths](https://github.com/paths).design publication ([9b28ed4](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b28ed4cd61b1b363b0f8661fbb486dfc1027013))
 
 ### BREAKING CHANGES
 
-* Migrated to automated publishing with OIDC authentication
-* Updated CLI argument parsing for gates tool
-* Updated error handling to throw exceptions instead of process.exit
-* Updated to use OIDC for automated publishing
-* Repository moved to Paths-Design organization with automated publishing
+- Migrated to automated publishing with OIDC authentication
+- Updated CLI argument parsing for gates tool
+- Updated error handling to throw exceptions instead of process.exit
+- Updated to use OIDC for automated publishing
+- Repository moved to Paths-Design organization with automated publishing
 
 # Changelog
 
@@ -294,6 +302,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### 🚀 Initial Release
 
 #### Added
+
 - **Complete CAWS Framework**: Engineering-grade operating system for coding agents
 - **Turborepo Setup**: Optimized monorepo structure with build pipeline
 - **Core Components**:
@@ -302,6 +311,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `@caws/test-project`: Example project demonstrating CAWS usage
 
 #### 🛠️ Core Features
+
 - **Interactive Project Setup**: Guided configuration with validation
 - **Quality Gates System**: Automated validation and enforcement
   - Naming guard (prevents shadow file patterns)
@@ -335,6 +345,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Error recovery with helpful guidance
 
 #### 📚 Documentation
+
 - **Comprehensive README**: Complete setup and usage guide
 - **API Documentation**: Full reference for all tools and commands
 - **Examples**: Practical implementation patterns
@@ -343,6 +354,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Code of Conduct**: Community standards and guidelines
 
 #### 🔧 Technical Implementation
+
 - **TypeScript Support**: Full type safety across all packages
 - **Turborepo Optimization**: Parallel builds with smart caching
 - **Shared Configurations**: Consistent tooling across packages
@@ -350,9 +362,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Package Management**: npm workspaces with proper dependency resolution
 
 ### Breaking Changes
+
 - None - This is the initial release
 
 ### Security
+
 - **Security Scanning**: Built-in secret detection and tool validation
 - **Input Sanitization**: Comprehensive validation of all user inputs
 - **Provenance Tracking**: Cryptographic verification of all operations
@@ -360,12 +374,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Access Control**: Tool allowlisting and permission restrictions
 
 ### Performance
+
 - **Turborepo Optimization**: 3x faster builds with parallel execution
 - **Smart Caching**: Incremental builds for changed packages only
 - **Dependency Optimization**: Shared dependencies across packages
 - **Build Pipeline**: Optimized task execution order
 
 ### Compatibility
+
 - **Node.js**: >= 18.0.0
 - **npm**: >= 10.0.0
 - **Operating Systems**: Linux, macOS, Windows
@@ -380,6 +396,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🛡️ Fast-Lane Escape Hatches (Proposal #1)
 
 **NEW: Time-Boxed Waiver System**
+
 - Complete waiver management tool (`waivers.js`) for bypassing quality gates
 - Support for multiple waiver reasons: `urgent_fix`, `experimental`, `legacy_code`, `resource_constraints`
 - Automatic expiration enforcement (default 7 days, configurable)
@@ -388,6 +405,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - CLI commands: `create`, `list`, `remove`, `cleanup`, `check`
 
 **NEW: Human Override in Working Spec**
+
 - Schema support for `human_override` section with:
   - Approver identification (GitHub username/email)
   - Detailed rationale requirement
@@ -396,6 +414,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Integrated into CLI prompts for emergency scenarios
 
 **NEW: Experimental Mode**
+
 - Reduced requirements for prototype/sandbox code
 - Automatic containment verification (sandbox location required)
 - Time-boxed expiration (default 14 days)
@@ -405,6 +424,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🧪 Test Meaningfulness Over Coverage (Proposal #2)
 
 **NEW: Test Quality Analyzer** (`test-quality.js`)
+
 - Multi-dimensional test quality scoring (0-100):
   - **Assertion Density** (25%): Ratio of assertions to test functions
   - **Edge Case Coverage** (20%): Error conditions, null/undefined, boundaries
@@ -418,6 +438,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Spec-to-test traceability verification
 
 **NEW: Mutant Analyzer** (`mutant-analyzer.js`)
+
 - Classification of mutations as trivial vs meaningful
 - Domain-specific mutation pattern detection
 - Surviving mutant analysis and justification requirements
@@ -426,6 +447,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🤖 AI Self-Assessment & Human Oversight (Proposal #3)
 
 **NEW: AI Confidence Tracking**
+
 - Schema support for `ai_assessment` in working specs:
   - `confidence_level` (1-10 scale)
   - `uncertainty_areas` (list of unclear aspects)
@@ -438,6 +460,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🌍 Multi-Language Support (Proposal #5)
 
 **NEW: Language Support System** (`language-support.js`)
+
 - Comprehensive language configurations:
   - **JavaScript/TypeScript**: Jest, Stryker, ESLint, Prettier, Pact
   - **Python**: pytest, mutmut, pylint, black, schemathesis
@@ -453,6 +476,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### ⚡ CI/CD Pipeline Optimization (Proposal #6)
 
 **NEW: CI Optimizer** (`ci-optimizer.js`)
+
 - **Tier-Based Conditional Execution**:
   - Skip mutation tests for Tier 3 changes
   - Skip contract tests for Tier 3 without external APIs
@@ -467,6 +491,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 📊 Legacy Integration & Assessment (Proposal #7)
 
 **NEW: Legacy Assessor** (`legacy-assessor.js`)
+
 - Comprehensive codebase assessment without enforcement
 - Multi-category scoring:
   - Testing infrastructure and coverage
@@ -482,6 +507,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🎯 Enhanced Trust Score & Quality Metrics
 
 **NEW: Advanced Trust Score Calculation**
+
 - Weighted composite scoring across 9 dimensions:
   - Coverage (20%), Mutation (20%), Contracts (16%)
   - Accessibility (8%), Performance (8%), Flake Rate (8%)
@@ -491,18 +517,21 @@ This release implements a comprehensive set of strategic improvements based on A
 - Historical trend tracking capabilities
 
 **NEW: Performance Budget System** (`perf-budgets.ts`)
+
 - Configurable performance budgets per tier
 - Automated enforcement in CI/CD
 - Budget compliance tracking
 - Performance regression detection
 
 **NEW: Flake Detector** (`flake-detector.ts`)
+
 - Automatic flaky test detection
 - Quarantine system for unreliable tests
 - Historical flake rate tracking
 - Impact on trust score calculation
 
 **NEW: Spec-Test Mapper** (`spec-test-mapper.ts`)
+
 - Links acceptance criteria to test cases
 - Ensures 1:1 mapping of requirements to tests
 - Gap detection for untested requirements
@@ -511,6 +540,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 📈 Dashboard & Observability
 
 **NEW: Real-Time Dashboard** (`dashboard.js`)
+
 - Live provenance data visualization
 - Compliance status across all gates
 - Performance budget tracking
@@ -522,6 +552,7 @@ This release implements a comprehensive set of strategic improvements based on A
 #### 🔧 Property-Based Testing Support
 
 **NEW: Property Testing Generator** (`property-testing.js`)
+
 - Multi-language property test templates
 - Common property patterns (idempotency, commutativity, invariants)
 - Integration with fast-check (JS), Hypothesis (Python), QuickCheck (Haskell)
@@ -593,17 +624,21 @@ This release implements a comprehensive set of strategic improvements based on A
   - Multi-agent workflow orchestration
 
 ### Known Issues
+
 - None reported
 
 ## Development Process
 
 ### Versioning Strategy
+
 CAWS follows semantic versioning:
+
 - **Major** (x.y.z): Breaking changes or major feature additions
 - **Minor** (x.y.z): New features that are backward compatible
 - **Patch** (x.y.z): Bug fixes and security updates
 
 ### Release Process
+
 1. **Development**: Features developed on feature branches
 2. **Testing**: Comprehensive testing and quality gate validation
 3. **Staging**: Integration testing and documentation updates
@@ -611,6 +646,7 @@ CAWS follows semantic versioning:
 5. **Monitoring**: Post-release monitoring and issue tracking
 
 ### Quality Gates for Releases
+
 - All tests must pass with required coverage thresholds
 - Security scans must be clean
 - Documentation must be updated
@@ -628,6 +664,7 @@ When contributing to CAWS:
 5. **Quality Gates**: Ensure all validation checks pass
 
 ### Change Types
+
 - **Features**: New functionality and capabilities
 - **Improvements**: Enhancements to existing features
 - **Bug Fixes**: Corrections to existing functionality
