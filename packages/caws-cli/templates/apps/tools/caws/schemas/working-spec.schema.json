@@ -6,6 +6,9 @@
     "id",
     "title",
     "risk_tier",
+    "mode",
+    "blast_radius",
+    "operational_rollback_slo",
     "scope",
     "invariants",
     "acceptance",
@@ -13,9 +16,24 @@
     "contracts"
   ],
   "properties": {
-    "id": { "type": "string", "pattern": "^[A-Z]+-\\d+$" },
-    "title": { "type": "string", "minLength": 8 },
-    "risk_tier": { "type": "integer", "enum": [1, 2, 3] },
+    "id": { "type": "string", "pattern": "^(PROJ|FEAT|FIX|ARCH)-\\d{4}$" },
+    "title": { "type": "string", "minLength": 10, "maxLength": 200 },
+    "risk_tier": { "type": ["integer", "string"], "enum": [1, 2, 3, "1", "2", "3"] },
+    "mode": { "type": "string", "enum": ["feature", "refactor", "fix", "doc", "chore"] },
+    "waiver_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^WV-\\d{4}$" },
+      "description": "IDs of active waivers applying to this spec"
+    },
+    "blast_radius": {
+      "type": "object",
+      "required": ["modules"],
+      "properties": {
+        "modules": { "type": "array", "items": { "type": "string" } },
+        "data_migration": { "type": "boolean" }
+      }
+    },
+    "operational_rollback_slo": { "type": "string" },
     "scope": {
       "type": "object",
       "required": ["in", "out"],

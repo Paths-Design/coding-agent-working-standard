@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "title", "risk_tier", "mode"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(PROJ|FEAT|FIX|ARCH)-\\d{4}$",
+      "description": "Unique identifier for the change"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200,
+      "description": "Clear, descriptive title"
+    },
+    "risk_tier": {
+      "type": ["integer", "string"],
+      "enum": [1, 2, 3, "1", "2", "3"],
+      "description": "Risk level (1=high, 2=medium, 3=low)"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["feature", "refactor", "fix", "doc", "chore"],
+      "description": "Type of change being made"
+    },
+    "waiver_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^WV-\\d{4}$"
+      },
+      "description": "IDs of active waivers applying to this spec"
+    }
+  },
+  "additionalProperties": true
+}

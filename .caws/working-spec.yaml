@@ -6,8 +6,8 @@ title: Implement dynamic CLI tools integration and plugin system
 risk_tier: 2
 mode: feature
 change_budget:
-  max_files: 200
-  max_loc: 20000
+  max_files: 100
+  max_loc: 10000
 blast_radius:
   modules: ["caws-cli"]
   data_migration: false

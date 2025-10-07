@@ -1,0 +1,70 @@
+# CAWS Agent Operating Specification
+# Defines behavioral constraints and guardrails for AI agents
+# @author @darianrosebrook
+
+version: 1
+
+# Core behavioral invariants - agents MUST follow these
+invariants:
+  - "Agents MUST NOT edit .caws/policy.yaml or introduce change_budget keys in working-spec.yaml"
+  - "Agents MUST NOT bypass CAWS quality gates without creating proper waivers"
+  - "Agents MUST pause and request human approval for any scope expansion beyond derived budget"
+  - "Agents MUST maintain audit trail transparency in all CAWS-related actions"
+
+# Decision framework for budget overruns
+budget_overrun_protocol:
+  detection: "When CAWS validation fails due to budget limits"
+  assessment:
+    - "Calculate exact overage amount"
+    - "Identify specific gates violated (files vs LOC)"
+    - "Determine if overage is temporary or structural"
+  response:
+    - "STOP all implementation work immediately"
+    - "Generate waiver draft with justification and mitigation"
+    - "Present waiver draft to human for approval"
+    - "Only resume work after waiver is approved and active"
+
+# Prohibited actions (will trigger immediate stop)
+prohibited_actions:
+  - "Editing .caws/policy.yaml"
+  - "Adding change_budget fields to any YAML file"
+  - "Modifying CODEOWNERS file"
+  - "Bypassing pre-commit hooks"
+  - "Creating waivers without proper approval workflow"
+
+# Required transparency measures
+transparency_requirements:
+  - "Log all CAWS validation results"
+  - "Report budget status in every status update"
+  - "Include CAWS compliance status in all proposals"
+  - "Document waiver requests with full context"
+
+# Emergency override protocol (human-initiated only)
+emergency_override:
+  conditions: ["Critical security fix", "System outage mitigation"]
+  requirements:
+    - "Human explicitly initiates override"
+    - "Override logged with full audit trail"
+    - "Override expires within 24 hours"
+    - "Post-mortem review required"
+
+# Quality gate compliance matrix
+quality_gates:
+  working_spec_validation: "MUST pass before any code changes"
+  budget_compliance: "MUST be within derived limits or have active waiver"
+  path_discipline: "Policy changes isolated from code changes"
+  dual_control: "Policy/waiver changes require multiple approvals"
+
+# Agent self-monitoring requirements
+self_monitoring:
+  - "Run CAWS validation after every significant change"
+  - "Check budget status before proposing new work"
+  - "Validate waiver status before applying changes"
+  - "Report any quality gate failures immediately"
+
+# Communication protocols
+communication:
+  budget_warnings: "Alert human when usage exceeds 80% of budget"
+  gate_failures: "Stop work and explain failure clearly"
+  waiver_requests: "Provide complete context and mitigation plan"
+  status_updates: "Include CAWS compliance status"
