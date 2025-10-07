@@ -67,6 +67,11 @@ caws test-analysis assess-budget             # Predict budget needs from histori
 caws test-analysis analyze-patterns          # Analyze waiver patterns and trends
 caws test-analysis find-similar              # Find similar historical projects
 
+# Provenance tracking and audit trails
+caws provenance update --commit <hash>       # Update provenance after commit
+caws provenance show                         # Display provenance chain
+caws provenance verify                        # Verify provenance integrity
+
 # Manage CAWS tools
 caws tools list                    # List available tools
 caws tools run validate           # Execute specific tool
@@ -91,6 +96,11 @@ node packages/caws-cli/dist/index.js validate
 node packages/caws-cli/dist/index.js test-analysis assess-budget     # Predict budget needs
 node packages/caws-cli/dist/index.js test-analysis analyze-patterns  # Analyze waiver patterns
 node packages/caws-cli/dist/index.js test-analysis find-similar      # Find similar projects
+
+# Provenance tracking and audit trails
+node packages/caws-cli/dist/index.js provenance update --commit <hash>  # Update provenance
+node packages/caws-cli/dist/index.js provenance show                   # Show provenance chain
+node packages/caws-cli/dist/index.js provenance verify                 # Verify integrity
 
 # Manage CAWS tools
 node packages/caws-cli/dist/index.js tools list        # List available tools
