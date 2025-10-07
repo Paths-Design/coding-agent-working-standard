@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "applies_to", "gates", "delta", "reason_code", "expires_at", "risk_owner", "approvers", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^WV-\\d{4}$",
+      "description": "Waiver ID in format WV-XXXX"
+    },
+    "applies_to": {
+      "type": "string",
+      "description": "Spec ID or PR number this waiver applies to"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["budget_limit", "spec_completeness", "contract_compliance", "coverage_threshold", "mutation_threshold", "security_scan", "accessibility_check", "performance_budget", "scope_boundary"]
+      },
+      "minItems": 1,
+      "description": "Quality gates to waive"
+    },
+    "delta": {
+      "type": "object",
+      "description": "Additive budget deltas (only positive values allowed)",
+      "properties": {
+        "max_files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Additional files allowed"
+        },
+        "max_loc": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Additional lines of code allowed"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": ["emergency_hotfix", "legacy_integration", "experimental_feature", "third_party_constraint", "performance_critical", "security_patch", "infrastructure_limitation", "architectural_refactor", "other"],
+      "description": "Controlled vocabulary for waiver reasons"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 1000,
+      "description": "Detailed explanation of why waiver is needed"
+    },
+    "mitigation": {
+      "type": "string",
+      "minLength": 50,
+      "description": "Plan to address the underlying issue"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 datetime when waiver expires"
+    },
+    "risk_owner": {
+      "type": "string",
+      "description": "Person/entity responsible for managing this risk"
+    },
+    "approvers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["handle"],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "GitHub handle or email of approver"
+          },
+          "approved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this approval was given"
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "description": "List of people who approved this waiver"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "active", "expired", "revoked"],
+      "description": "Current status of the waiver"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "related_pr": { "type": "string" },
+        "related_issue": { "type": "string" },
+        "environment": { "type": "string", "enum": ["development", "staging", "production"] },
+        "urgency": { "type": "string", "enum": ["low", "normal", "high", "critical"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
