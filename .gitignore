@@ -88,6 +88,16 @@ html-report/
 *.emacs.d/
 *~
 
+# CAWS Template Exceptions
+# ========================
+# Allow IDE configuration files in CAWS templates
+!packages/caws-cli/templates/.vscode/
+!packages/caws-cli/templates/.idea/
+!packages/caws-cli/templates/.cursor/
+!packages/caws-cli/templates/.windsurf/
+!packages/caws-cli/templates/.github/
+!packages/caws-cli/templates/.git/
+
 # OS files
 # =========
 .DS_Store

@@ -1,0 +1,56 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run CAWS Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/caws-vscode-extension"],
+      "outFiles": ["${workspaceFolder}/packages/caws-vscode-extension/out/**/*.js"],
+      "preLaunchTask": "${workspaceFolder}/packages/caws-vscode-extension:watch"
+    },
+    {
+      "name": "Run CAWS Extension (Host Workspace)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/caws-vscode-extension", "${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/packages/caws-vscode-extension/out/**/*.js"],
+      "preLaunchTask": "${workspaceFolder}/packages/caws-vscode-extension:watch"
+    },
+    {
+      "name": "Debug CAWS Extension",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/packages/caws-vscode-extension/out/extension.js",
+      "args": ["--inspect=6009"],
+      "env": {
+        "CAWS_DEBUG": "true"
+      },
+      "preLaunchTask": "${workspaceFolder}/packages/caws-vscode-extension:compile"
+    },
+    {
+      "name": "Debug MCP Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/packages/caws-mcp-server/index.js",
+      "args": [],
+      "env": {
+        "NODE_ENV": "development",
+        "CAWS_DEBUG": "true"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug CAWS CLI",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/packages/caws-cli/src/index.js",
+      "args": ["validate", ".caws/working-spec.yaml"],
+      "env": {
+        "NODE_ENV": "development",
+        "CAWS_DEBUG": "true"
+      },
+      "console": "integratedTerminal"
+    }
+  ]
+}

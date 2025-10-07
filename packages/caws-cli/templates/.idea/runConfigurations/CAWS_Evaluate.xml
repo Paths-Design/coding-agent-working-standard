@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CAWS: Evaluate Quality" type="NodeJSConfigurationType" factoryName="Node.js" path-to-js-file="$PROJECT_DIR$/packages/caws-cli/dist/index.js" working-dir="$PROJECT_DIR$" application-parameters="agent evaluate .caws/working-spec.yaml">
+    <method v="2" />
+  </configuration>
+</component>

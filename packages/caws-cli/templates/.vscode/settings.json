@@ -1,0 +1,93 @@
+{
+  // CAWS VS Code Extension Settings
+  "caws.cli.path": "caws",
+  "caws.autoValidate": true,
+  "caws.showQualityStatus": true,
+  "caws.experimentalMode": false,
+
+  // General IDE settings that work well with CAWS
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
+
+  // File associations for CAWS files
+  "files.associations": {
+    ".caws/working-spec.yaml": "yaml",
+    ".caws/waivers/*.yaml": "yaml",
+    "apps/tools/caws/*.js": "javascript"
+  },
+
+  // Exclude CAWS-generated files from search and navigation
+  "files.exclude": {
+    ".caws/cache/": true,
+    ".caws/waivers/review-*.md": true
+  },
+
+  // Search excludes for CAWS artifacts
+  "search.exclude": {
+    ".caws/cache/**": true,
+    "packages/*/dist/**": true,
+    "packages/*/node_modules/**": true
+  },
+
+  // CAWS-aware task definitions
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "CAWS: Validate",
+        "type": "shell",
+        "command": "caws",
+        "args": ["validate"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "CAWS: Evaluate Quality",
+        "type": "shell",
+        "command": "caws",
+        "args": ["agent", "evaluate", ".caws/working-spec.yaml"],
+        "group": "test",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        }
+      },
+      {
+        "label": "CAWS: Create Waiver",
+        "type": "shell",
+        "command": "caws",
+        "args": ["waivers", "create"],
+        "group": "build"
+      }
+    ]
+  },
+
+  // Recommended extensions for CAWS development
+  "recommendations": [
+    "ms-vscode.vscode-json",
+    "redhat.vscode-yaml",
+    "ms-vscode.vscode-typescript-next",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint"
+  ],
+
+  // Workspace-specific settings
+  "yaml.schemas": {
+    "./.caws/schema/working-spec.schema.json": ".caws/working-spec.yaml",
+    "./.caws/schema/waiver.schema.json": ".caws/waivers/*.yaml"
+  }
+}
