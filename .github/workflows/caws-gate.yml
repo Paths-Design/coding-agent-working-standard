@@ -1,0 +1,105 @@
+name: CAWS Gate
+on: [pull_request]
+
+jobs:
+    caws-gate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "18"
+                  cache: "npm"
+
+            - name: Install CAWS CLI
+              run: npm install -g @caws/cli
+
+            - name: Validate working spec
+              run: caws validate .caws/working-spec.yaml --quiet
+
+            - name: Enforce path discipline
+              run: |
+                  # Check if PR contains both policy and code changes
+                  POLICY_CHANGES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '^\.caws/policy\.yaml$' || true)
+                  CODE_CHANGES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -vE '^\.caws/' || true)
+
+          if [[ -n "$POLICY_CHANGES" && -n "$CODE_CHANGES" ]]; then
+            echo "❌ POLICY VIOLATION: Policy changes cannot be combined with code changes"
+            echo "Policy changes: $POLICY_CHANGES"
+            echo "Code changes: $CODE_CHANGES"
+            echo "💡 Fix this by:"
+            echo "   1. Create separate PR for policy changes only"
+            echo "   2. For budget exceptions: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit"
+            echo "   3. Add waiver_ids to working spec instead of editing policy directly"
+            echo "   4. Get dual approval from @gatekeepers before merging policy changes"
+            exit 1
+          fi
+
+            - name: Check budget immutability
+              run: |
+                  # Ensure working spec doesn't contain change_budget
+                  if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^\.caws/working-spec\.yaml$'; then
+                  if git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- .caws/working-spec.yaml | grep -q "change_budget"; then
+                    echo "❌ POLICY VIOLATION: working-spec.yaml cannot contain change_budget"
+                    echo "💡 Fix this by:"
+                    echo "   1. Check current budget: caws burnup"
+                    echo "   2. Create waiver: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit --expires-at='2025-12-31T23:59:59Z'"
+                    echo "   3. Add waiver_ids to working spec: ['WV-XXXX']"
+                    echo "   4. Validate: caws validate .caws/working-spec.yaml"
+                    exit 1
+                  fi
+                  fi
+
+            - name: Validate waivers
+              run: |
+                  # Check waiver files against schema
+                  for waiver_file in .caws/waivers/*.yaml; do
+                    if [[ -f "$waiver_file" ]]; then
+                      echo "Validating waiver: $waiver_file"
+                      # Basic YAML validation
+                      if ! python3 -c "import yaml; yaml.safe_load(open('$waiver_file'))"; then
+                        echo "❌ Invalid YAML in waiver: $waiver_file"
+                        exit 1
+                      fi
+
+                      # Check waiver ID format
+                      WAIVER_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$waiver_file'))['id'])")
+                      if [[ ! "$WAIVER_ID" =~ ^WV-[0-9]{4}$ ]]; then
+                        echo "❌ Invalid waiver ID format: $WAIVER_ID"
+                        exit 1
+                      fi
+                    fi
+                  done
+
+            - name: Require dual control for policy changes
+              run: |
+                  if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^\.caws/policy\.yaml$'; then
+                    # Count approvals from CODEOWNERS
+                    APPROVALS=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews | map(select(.state == "APPROVED")) | length')
+
+                    if [[ "$APPROVALS" -lt 2 ]]; then
+                      echo "❌ POLICY REQUIREMENT: Policy changes require 2 approvals"
+                      echo "Current approvals: $APPROVALS"
+                      exit 1
+                    fi
+                  fi
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Generate burn-up report
+              run: |
+                  echo "## 📊 CAWS Budget Burn-up Report" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+
+                  # This would integrate with the burn-up reporting function
+                  # For now, just show that the gate passed
+                  echo "✅ All CAWS quality gates passed" >> $GITHUB_STEP_SUMMARY
+                  echo "- Working spec validation: ✅" >> $GITHUB_STEP_SUMMARY
+                  echo "- Path discipline: ✅" >> $GITHUB_STEP_SUMMARY
+                  echo "- Budget immutability: ✅" >> $GITHUB_STEP_SUMMARY
+                  echo "- Waiver validation: ✅" >> $GITHUB_STEP_SUMMARY
+                  echo "- Dual control: ✅" >> $GITHUB_STEP_SUMMARY

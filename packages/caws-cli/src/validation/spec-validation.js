@@ -4,12 +4,15 @@
  * @author @darianrosebrook
  */
 
+const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
+
 /**
  * Basic validation of working spec
  * @param {Object} spec - Working spec object
+ * @param {Object} options - Validation options
  * @returns {Object} Validation result
  */
-const validateWorkingSpec = (spec) => {
+const validateWorkingSpec = (spec, options = {}) => {
   try {
     // Basic structural validation for essential fields
     const requiredFields = [
@@ -17,7 +20,6 @@ const validateWorkingSpec = (spec) => {
       'title',
       'risk_tier',
       'mode',
-      'change_budget',
       'blast_radius',
       'operational_rollback_slo',
       'scope',
@@ -26,6 +28,9 @@ const validateWorkingSpec = (spec) => {
       'non_functional',
       'contracts',
     ];
+
+    // For new policy-based specs, change_budget is not required
+    // It's derived from policy.yaml + waivers
 
     for (const field of requiredFields) {
       if (!spec[field]) {
@@ -142,7 +147,7 @@ const validateWorkingSpec = (spec) => {
  * @returns {Object} Enhanced validation result
  */
 function validateWorkingSpecWithSuggestions(spec, options = {}) {
-  const { autoFix = false } = options;
+  const { autoFix = false, checkBudget = false, projectRoot } = options;
 
   try {
     // Basic structural validation for essential fields
@@ -151,7 +156,6 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       'title',
       'risk_tier',
       'mode',
-      'change_budget',
       'blast_radius',
       'operational_rollback_slo',
       'scope',
@@ -237,6 +241,63 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
+    // Validate waiver_ids format if present
+    if (spec.waiver_ids) {
+      if (!Array.isArray(spec.waiver_ids)) {
+        errors.push({
+          instancePath: '/waiver_ids',
+          message: 'waiver_ids must be an array of waiver IDs',
+          suggestion: 'Use format: ["WV-0001", "WV-0002"]',
+          canAutoFix: false,
+        });
+      } else {
+        for (const waiverId of spec.waiver_ids) {
+          if (!/^WV-\d{4}$/.test(waiverId)) {
+            errors.push({
+              instancePath: '/waiver_ids',
+              message: `Invalid waiver ID format: ${waiverId}`,
+              suggestion: 'Use format: WV-XXXX (e.g., WV-0001)',
+              canAutoFix: false,
+            });
+          }
+        }
+      }
+    }
+
+    // Derive and check budget if requested
+    let budgetCheck = null;
+    if (checkBudget && projectRoot) {
+      try {
+        const derivedBudget = deriveBudget(spec, projectRoot);
+
+        // Mock current stats for now - in real implementation this would analyze git changes
+        const mockStats = {
+          files_changed: 50, // This would be calculated from actual changes
+          lines_changed: 5000,
+          risk_tier: spec.risk_tier
+        };
+
+        budgetCheck = checkBudgetCompliance(derivedBudget, mockStats);
+
+        if (!budgetCheck.compliant) {
+          for (const violation of budgetCheck.violations) {
+            errors.push({
+              instancePath: '/budget',
+              message: violation.message,
+              suggestion: 'Create a waiver or reduce scope to fit within budget',
+              canAutoFix: false,
+            });
+          }
+        }
+      } catch (error) {
+        warnings.push({
+          instancePath: '/budget',
+          message: `Budget derivation failed: ${error.message}`,
+          suggestion: 'Check that .caws/policy.yaml exists and is valid',
+        });
+      }
+    }
+
     // Apply auto-fixes if requested
     if (autoFix && fixes.length > 0) {
       console.log('🔧 Applying auto-fixes...');
@@ -257,6 +318,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       errors,
       warnings,
       fixes: fixes.length > 0 ? fixes : undefined,
+      budget_check: budgetCheck,
     };
   } catch (error) {
     return {
@@ -283,7 +345,7 @@ function getFieldSuggestion(field, _spec) {
     title: 'Add a descriptive project title',
     risk_tier: 'Choose: 1 (critical), 2 (standard), or 3 (low risk)',
     mode: 'Choose: feature, refactor, fix, doc, or chore',
-    change_budget: 'Set max_files and max_loc based on risk tier',
+    waiver_ids: 'Reference active waivers by ID (e.g., ["WV-0001"]) if budget exceptions needed',
     blast_radius: 'List affected modules and data migration needs',
     operational_rollback_slo: 'Choose: 1m, 5m, 15m, or 1h',
     scope: "Define what's included (in) and excluded (out) from changes",
