@@ -290,6 +290,21 @@ The working specification defines the complete project requirements and constrai
         }
       },
       "description": "AI self-assessment of confidence and uncertainty"
+    },
+    "git_config": {
+      "type": "object",
+      "properties": {
+        "author_name": {
+          "type": "string",
+          "description": "Git author name for commits"
+        },
+        "author_email": {
+          "type": "string",
+          "format": "email",
+          "description": "Git author email for commits"
+        }
+      },
+      "description": "Git configuration for commit attribution"
     }
   },
   "additionalProperties": false
@@ -340,6 +355,10 @@ interface WorkingSpec {
   rollback?: string[];           // Rollback steps
   human_override?: HumanOverride; // Optional human override
   ai_assessment?: AIAssessment;   // Optional AI self-assessment
+  git_config?: {
+    author_name: string;         // Git author name
+    author_email: string;        // Git author email
+  };                             // Optional git configuration
 }
 
 interface AcceptanceCriteria {

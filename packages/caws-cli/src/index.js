@@ -1774,6 +1774,47 @@ async function initProject(projectName, options) {
           ],
           default: ['safety', 'quality', 'scope', 'audit'],
         },
+        {
+          type: 'confirm',
+          name: 'configureGit',
+          message: '🔧 Configure git author information for commits?',
+          default: true,
+        },
+        {
+          type: 'input',
+          name: 'gitAuthorName',
+          message: '👤 Git author name:',
+          when: (answers) => answers.configureGit,
+          default: () => {
+            try {
+              return require('child_process')
+                .execSync('git config user.name', { encoding: 'utf8' })
+                .trim();
+            } catch {
+              return '';
+            }
+          },
+          validate: (input) => input.length > 0 || 'Git author name is required',
+        },
+        {
+          type: 'input',
+          name: 'gitAuthorEmail',
+          message: '📧 Git author email:',
+          when: (answers) => answers.configureGit,
+          default: () => {
+            try {
+              return require('child_process')
+                .execSync('git config user.email', { encoding: 'utf8' })
+                .trim();
+            } catch {
+              return '';
+            }
+          },
+          validate: (input) => {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(input) || 'Please enter a valid email address';
+          },
+        },
       ];
 
       console.log(chalk.cyan('⏳ Gathering project requirements...'));
@@ -1837,6 +1878,18 @@ async function initProject(projectName, options) {
         data_migration: wizardAnswers.dataMigration,
       };
       spec.operational_rollback_slo = wizardAnswers.rollbackSlo;
+
+      // Add git configuration if provided
+      if (
+        wizardAnswers.configureGit &&
+        wizardAnswers.gitAuthorName &&
+        wizardAnswers.gitAuthorEmail
+      ) {
+        spec.git_config = {
+          author_name: wizardAnswers.gitAuthorName,
+          author_email: wizardAnswers.gitAuthorEmail,
+        };
+      }
 
       // Validate the generated spec
       validateGeneratedSpec(yaml.dump(spec), wizardAnswers);
@@ -2619,6 +2672,21 @@ async function finalizeProject(projectName, options, answers) {
           console.warn(chalk.yellow('⚠️  Git not found. Skipping git initialization.'));
           console.warn(chalk.blue('💡 Install git to enable automatic repository setup.'));
           return;
+        }
+
+        // Configure git author information
+        const gitConfig = answers.git_config || {};
+        const authorName = process.env.GIT_AUTHOR_NAME || gitConfig.author_name;
+        const authorEmail = process.env.GIT_AUTHOR_EMAIL || gitConfig.author_email;
+
+        if (authorName && authorEmail) {
+          require('child_process').execSync(`git config user.name "${authorName}"`, {
+            stdio: 'inherit',
+          });
+          require('child_process').execSync(`git config user.email "${authorEmail}"`, {
+            stdio: 'inherit',
+          });
+          console.log(chalk.green(`✅ Git configured: ${authorName} <${authorEmail}>`));
         }
 
         require('child_process').execSync('git init', { stdio: 'inherit' });

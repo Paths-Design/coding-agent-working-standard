@@ -260,10 +260,21 @@ If the CLI fails, you can set up a CAWS project manually:
 - `CAWS_TEMPLATE_PATH`: Custom template directory path
 
 ### Git Configuration
-- `GIT_AUTHOR_NAME`: Git author name for commits
-- `GIT_AUTHOR_EMAIL`: Git author email for commits
+- `GIT_AUTHOR_NAME`: Git author name for commits (overrides working-spec.yaml)
+- `GIT_AUTHOR_EMAIL`: Git author email for commits (overrides working-spec.yaml)
 - `GIT_COMMITTER_NAME`: Git committer name
 - `GIT_COMMITTER_EMAIL`: Git committer email
+
+### Working Spec Git Configuration
+Projects can specify git author information in `.caws/working-spec.yaml`:
+
+```yaml
+git_config:
+  author_name: "CAWS Agent"
+  author_email: "agent@your-project.com"
+```
+
+This is automatically configured during `caws init` or can be set manually.
 
 ## Integration
 
