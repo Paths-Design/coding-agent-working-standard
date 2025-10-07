@@ -16,6 +16,7 @@ const { shouldInitInCurrentDirectory } = require('../utils/project-analysis');
 const { generateWorkingSpec } = require('../generators/working-spec');
 const { finalizeProject } = require('../utils/finalization');
 const { scaffoldCursorHooks } = require('../scaffold/cursor-hooks');
+const { scaffoldIDEIntegrations } = require('../scaffold/index');
 
 /**
  * Initialize a new project with CAWS
@@ -404,6 +405,10 @@ Happy coding! 🎯
         await scaffoldCursorHooks(process.cwd());
       }
 
+      // Setup IDE integrations for comprehensive development experience
+      console.log(chalk.blue('🎨 Setting up IDE integrations...'));
+      await scaffoldIDEIntegrations(process.cwd(), { force: false });
+
       // Finalize project
       await finalizeProject(projectName, options, answers);
     } else {
@@ -429,6 +434,10 @@ Happy coding! 🎯
       // Setup Cursor hooks by default in non-interactive mode
       console.log(chalk.blue('🎯 Setting up Cursor hooks...'));
       await scaffoldCursorHooks(process.cwd());
+
+      // Setup IDE integrations by default in non-interactive mode
+      console.log(chalk.blue('🎨 Setting up IDE integrations...'));
+      await scaffoldIDEIntegrations(process.cwd(), { force: false });
 
       // Finalize project
       await finalizeProject(projectName, options, defaultAnswers);

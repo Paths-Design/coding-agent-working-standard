@@ -1,223 +1,311 @@
-# Cursor Hooks for CAWS
+# CAWS Cursor IDE Integration
 
-This directory contains Cursor IDE hooks that provide real-time quality gates during AI-assisted coding sessions.
+This directory contains Cursor IDE hooks that provide real-time CAWS quality assurance integration during development.
 
-## What Are Cursor Hooks?
+## Overview
 
-Cursor hooks are scripts that run automatically at specific points in the AI coding loop:
+Cursor hooks enable seamless integration between CAWS and the Cursor IDE, providing:
 
-- **Before** dangerous commands execute
-- **After** files are edited
-- **Before** files are read (to prevent leaking secrets)
-- **When** you submit prompts
-- **When** the AI session ends
+- **Real-time quality validation** as you code
+- **Automatic spec validation** when editing working specs
+- **Scope enforcement** preventing out-of-scope file access
+- **Tool validation** for safe MCP execution
+- **Quality monitoring** after file edits
 
-## How Hooks Complement Git Hooks
+## Hook Configuration
 
-CAWS uses a **three-tier quality approach**:
+The `hooks.json` file defines when each hook runs:
 
-1. **Cursor Hooks** (Real-time) - Instant feedback as you code
-2. **Git Hooks** (Commit/Push) - Validation before sharing code
-3. **CI/CD** (PR/Release) - Comprehensive gates before merge
-
-Cursor hooks are **not a replacement** for git hooks - they work together to catch issues earlier in the development flow.
+```json
+{
+  "beforeShellExecution": ["block-dangerous.sh", "audit.sh"],
+  "beforeMCPExecution": ["audit.sh", "caws-tool-validation.sh"],
+  "beforeReadFile": ["scan-secrets.sh", "caws-scope-guard.sh"],
+  "afterFileEdit": ["format.sh", "naming-check.sh", "validate-spec.sh", "caws-quality-check.sh", "audit.sh"],
+  "beforeSubmitPrompt": ["caws-scope-guard.sh", "audit.sh"],
+  "stop": ["audit.sh"]
+}
+```
 
 ## Available Hooks
 
-### Safety Hooks
+### CAWS-Specific Hooks
+
+#### `caws-quality-check.sh`
+- **Trigger**: `afterFileEdit`
+- **Purpose**: Runs CAWS quality evaluation after code changes
+- **Blocks**: No (provides warnings and suggestions)
+- **Fallback**: Graceful degradation if CAWS CLI unavailable
+
+#### `caws-scope-guard.sh`
+- **Trigger**: `beforeReadFile`, `beforeSubmitPrompt`
+- **Purpose**: Prevents access to files outside CAWS-defined scope
+- **Blocks**: Yes (for out-of-scope file access)
+- **Requires**: `.caws/working-spec.yaml`
+
+#### `caws-tool-validation.sh`
+- **Trigger**: `beforeMCPExecution`
+- **Purpose**: Validates CAWS MCP tool calls for security
+- **Blocks**: Yes (for dangerous operations or invalid waivers)
+- **Validates**: Waiver creation, tool permissions, command safety
+
+### General Security Hooks
 
 #### `block-dangerous.sh`
-
-**Event**: `beforeShellExecution`
-
-Blocks or requires permission for dangerous commands:
-
-- ⛔ **Hard blocks**: `rm -rf /`, `DROP DATABASE`, disk formatting
-- ⚠️ **Asks permission**: `git push --force`, `npm publish`, `docker system prune`
-- ⚠️ **Warns**: Commands that skip git hooks (`--no-verify`)
+- **Trigger**: `beforeShellExecution`
+- **Purpose**: Prevents execution of dangerous shell commands
+- **Blocks**: `rm -rf /`, `sudo`, destructive operations
 
 #### `scan-secrets.sh`
+- **Trigger**: `beforeReadFile`
+- **Purpose**: Scans for potential secrets before file access
+- **Blocks**: Files containing password/token patterns
 
-**Event**: `beforeReadFile`
-
-Prevents AI from reading sensitive files:
-
-- ⛔ **Blocks**: `.env` files, certificates, private keys
-- ⚠️ **Warns**: Files containing API keys, passwords, PII patterns
-
-### Quality Hooks
+### Code Quality Hooks
 
 #### `format.sh`
-
-**Event**: `afterFileEdit`
-
-Auto-formats edited files using:
-
-- Prettier (JS, TS, JSON, MD, YAML)
-- ESLint (with `--fix` flag)
-
-#### `validate-spec.sh`
-
-**Event**: `afterFileEdit`
-
-Validates `working-spec.yaml` when edited:
-
-- Runs `caws validate` automatically
-- Shows validation errors with suggestions
-
-### Scope Hooks
+- **Trigger**: `afterFileEdit`
+- **Purpose**: Auto-formats code using Prettier/ESLint
+- **Blocks**: No (formats in background)
 
 #### `naming-check.sh`
+- **Trigger**: `afterFileEdit`
+- **Purpose**: Enforces CAWS naming conventions
+- **Blocks**: No (provides warnings)
 
-**Event**: `afterFileEdit`
-
-Enforces CAWS naming conventions:
-
-- ⛔ **Blocks**: `enhanced-*`, `*-copy`, `*-new`, `final-*`, etc.
-- Detects duplicate modules (e.g., both `processor.ts` and `enhanced-processor.ts`)
-
-#### `scope-guard.sh`
-
-**Event**: `beforeSubmitPrompt`
-
-Checks if attached files are within `working-spec.yaml` scope:
-
-- ⚠️ **Warns**: Files outside defined scope
-- Non-blocking (you can proceed with warning)
+#### `validate-spec.sh`
+- **Trigger**: `afterFileEdit`
+- **Purpose**: Validates CAWS working specs in real-time
+- **Blocks**: No (shows validation errors)
 
 ### Audit Hooks
 
 #### `audit.sh`
+- **Trigger**: Multiple events
+- **Purpose**: Logs all hook executions for debugging
+- **Blocks**: No (passive logging)
 
-**Event**: All events
+## Installation
 
-Logs all AI interactions for provenance:
+### Automatic Setup
 
-- Creates daily audit logs in `.cursor/logs/`
-- Tracks conversation IDs and generation IDs
-- Integrates with CAWS provenance system
+```bash
+# CAWS init automatically sets up Cursor hooks
+caws init my-project --interactive
+
+# Or manually scaffold hooks
+caws scaffold
+```
+
+### Manual Setup
+
+1. Copy `.cursor/` directory to your project root
+2. Ensure hook scripts are executable: `chmod +x .cursor/hooks/*.sh`
+3. Restart Cursor IDE
+4. Verify hooks are active in Cursor settings
 
 ## Configuration
 
-### Enable/Disable Specific Hooks
+### Environment Variables
 
-Edit `hooks.json` to control which hooks run:
+```bash
+# Enable debug logging
+export CURSOR_HOOKS_DEBUG=1
+
+# CAWS CLI path override
+export CAWS_CLI_PATH=/custom/path/to/caws
+
+# Disable specific hooks
+export CURSOR_DISABLE_HOOKS=audit.sh,format.sh
+```
+
+### Hook Customization
+
+Modify `hooks.json` to customize hook behavior:
 
 ```json
 {
-  "version": 1,
-  "hooks": {
-    "afterFileEdit": [
-      { "command": "./.cursor/hooks/format.sh" }
-      // Comment out hooks you don't want
-    ]
-  }
+  "afterFileEdit": [
+    {
+      "command": "./.cursor/hooks/caws-quality-check.sh",
+      "timeout": 5000,
+      "background": true
+    }
+  ]
 }
 ```
 
-### Temporarily Disable All Hooks
+## Troubleshooting
 
-1. **Via Cursor UI**: Settings → Hooks → Disable
-2. **Via config**: Rename `hooks.json` to `hooks.json.disabled`
+### Hooks Not Running
 
-### Debug Hooks
+```bash
+# Check hook permissions
+ls -la .cursor/hooks/
 
-View hook execution details:
+# Verify Cursor hooks are enabled
+# Cursor Settings → Hooks → Enable hooks
 
-1. Open Cursor Settings → Hooks tab
-2. Check the Hooks output channel for errors
-3. Review audit logs: `.cursor/logs/audit-*.log`
-
-## Hook Responses
-
-Hooks communicate with Cursor using JSON:
-
-### Permission Decisions
-
-```json
-{
-  "permission": "allow", // or "deny", "ask"
-  "userMessage": "Visible to you",
-  "agentMessage": "Sent to AI"
-}
+# Check Cursor logs
+# Help → Toggle Developer Tools → Console
 ```
 
-### Prompt Control
+### CAWS CLI Not Found
 
-```json
-{
-  "continue": true, // or false
-  "userMessage": "Optional warning"
-}
+```bash
+# Install CAWS CLI
+npm install -g @caws/cli
+
+# Or use bundled version (VS Code extension)
+code --install-extension caws.caws-vscode-extension
+
+# Verify PATH
+which caws
 ```
 
-## Customizing Hooks
+### False Positives
 
-All hooks are bash scripts that:
+```bash
+# Temporarily disable hooks
+export CURSOR_DISABLE_HOOKS=caws-scope-guard.sh
 
-1. Read JSON input from stdin
-2. Process the input (call CAWS tools, check patterns, etc.)
-3. Return JSON output to stdout
-4. Exit with code 0
+# Or modify hook logic
+vim .cursor/hooks/caws-scope-guard.sh
+```
 
-Example custom hook:
+### Performance Issues
+
+```bash
+# Run hooks in background
+# Edit hooks.json to add "background": true
+
+# Increase timeouts
+# Edit hooks.json to add "timeout": 10000
+
+# Disable slow hooks
+export CURSOR_DISABLE_HOOKS=format.sh,naming-check.sh
+```
+
+## Development
+
+### Creating New Hooks
+
+1. **Create script** in `.cursor/hooks/`
+2. **Make executable**: `chmod +x .cursor/hooks/your-hook.sh`
+3. **Add to configuration** in `hooks.json`
+4. **Test manually**: `echo '{}' | ./cursor/hooks/your-hook.sh`
+
+### Hook Script Template
 
 ```bash
 #!/bin/bash
+# CAWS Hook: Description
+# @author @darianrosebrook
+
+set -e
+
+# Read Cursor input
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // ""')
+DATA=$(echo "$INPUT" | jq -r '.data // ""')
 
-# Your custom logic here
+# Your hook logic here
+if [[ -n "$DATA" ]]; then
+  # Process data
+  echo '{"userMessage": "Hook executed", "agentMessage": "Details"}'
+fi
 
-echo '{"permission":"allow"}' 2>/dev/null
 exit 0
 ```
 
-## Common Issues
+### Testing Hooks
 
-### Hook not executing?
+```bash
+# Test with sample input
+echo '{"action": "edit_file", "file_path": "test.js"}' | ./cursor/hooks/caws-quality-check.sh
 
-- Restart Cursor after editing `hooks.json`
-- Check that scripts are executable: `chmod +x .cursor/hooks/*.sh`
-- Verify paths in `hooks.json` are relative to project root
+# Test error conditions
+echo '{}' | ./cursor/hooks/caws-scope-guard.sh
 
-### Hook blocking valid operations?
+# Debug with verbose output
+export CURSOR_HOOKS_DEBUG=1
+```
 
-- Temporarily disable: Cursor Settings → Hooks → Disable
-- Edit the specific hook script to adjust rules
-- Report false positives as CAWS issues
+## Integration with CAWS Ecosystem
 
-### Hooks too slow?
+### Relationship to Other Tools
 
-- Remove expensive checks from real-time hooks
-- Move comprehensive validation to git hooks or CI
-- Use `--quiet` flags for faster tool execution
+```
+Cursor Hooks ←→ CAWS CLI ←→ VS Code Extension
+     ↓              ↓              ↓
+  Real-time      Command-line    Rich IDE
+  Validation     Interface       Integration
+```
 
-## Integration with CAWS Tools
+### Complementary Tools
 
-Hooks leverage existing CAWS tools:
+- **Git Hooks**: `.git/hooks/` for commit/push validation
+- **VS Code Extension**: Rich UI for CAWS operations
+- **MCP Server**: Agent tool integration
+- **CAWS CLI**: Core functionality
 
-| Hook               | CAWS Tool        | Purpose             |
-| ------------------ | ---------------- | ------------------- |
-| `validate-spec.sh` | `validate.js`    | Spec validation     |
-| `scope-guard.sh`   | `scope-guard.js` | File scope checking |
-| `audit.sh`         | `provenance.js`  | Audit logging       |
+### Data Flow
 
-## Best Practices
+```
+File Edit → Cursor Hook → CAWS CLI → Quality Check → User Feedback
+                             ↓
+                      Audit Log → Provenance Tracking
+```
 
-1. **Don't block everything** - Use warnings for edge cases
-2. **Keep hooks fast** - Real-time means < 500ms
-3. **Fail gracefully** - Exit 0 even on errors to avoid breaking Cursor
-4. **Log for debugging** - Write to `.cursor/logs/` when investigating issues
-5. **Test manually** - Run hooks with sample JSON before committing
+## Security Considerations
 
-## Resources
+### Safe Execution
 
-- [Cursor Hooks Documentation](https://docs.cursor.com/advanced/hooks)
-- [CAWS Hook Strategy](../../docs/HOOK_STRATEGY.md)
-- [CAWS Developer Guide](../../docs/caws-developer-guide.md)
+- Hooks run in isolated processes
+- No access to sensitive Cursor data
+- Input validation on all hook data
+- Timeout protection against hanging hooks
 
----
+### Privacy Protection
 
-**Last Updated**: October 3, 2025  
-**Author**: @darianrosebrook
+- File contents not sent to external services
+- Local CAWS CLI execution only
+- No telemetry or data collection
+- User-controlled hook execution
+
+## Performance Optimization
+
+### Hook Design Principles
+
+1. **Fast Execution**: < 2 seconds for real-time feedback
+2. **Background Processing**: Non-blocking operations
+3. **Selective Running**: Only run relevant hooks
+4. **Caching**: Avoid redundant operations
+
+### Optimization Strategies
+
+- **Debounced execution** for file edit hooks
+- **Incremental validation** for large codebases
+- **Parallel processing** for independent checks
+- **Result caching** for repeated operations
+
+## Contributing
+
+### Hook Development Guidelines
+
+- **Clear naming**: `caws-*` prefix for CAWS-specific hooks
+- **Comprehensive logging**: Debug-friendly output
+- **Error handling**: Graceful failure modes
+- **Documentation**: Inline comments and README updates
+- **Testing**: Manual and automated test coverage
+
+### Pull Request Process
+
+1. **Test locally** in Cursor IDE
+2. **Update documentation** in this README
+3. **Add configuration examples** if needed
+4. **Consider performance impact** on large codebases
+5. **Test with different project types** (CAWS/non-CAWS)
+
+## License
+
+MIT License - see main project LICENSE file.

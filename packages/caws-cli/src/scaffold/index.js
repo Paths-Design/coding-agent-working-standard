@@ -14,6 +14,97 @@ const { detectCAWSSetup } = require('../utils/detection');
 // CLI version from package.json
 const CLI_VERSION = require('../../package.json').version;
 
+/**
+ * Scaffold IDE integrations for comprehensive CAWS development experience
+ * @param {string} targetDir - Target directory for scaffolding
+ * @param {Object} options - Scaffold options
+ */
+async function scaffoldIDEIntegrations(targetDir, options) {
+  const templateDir = path.join(__dirname, '../../templates');
+
+  console.log(chalk.cyan('🎨 Setting up IDE integrations...'));
+
+  let addedCount = 0;
+  let skippedCount = 0;
+
+  // List of IDE integration templates to copy
+  const ideTemplates = [
+    // VS Code
+    { src: '.vscode/settings.json', dest: '.vscode/settings.json', desc: 'VS Code workspace settings' },
+    { src: '.vscode/launch.json', dest: '.vscode/launch.json', desc: 'VS Code debug configurations' },
+
+    // IntelliJ IDEA
+    { src: '.idea/runConfigurations/CAWS_Validate.xml', dest: '.idea/runConfigurations/CAWS_Validate.xml', desc: 'IntelliJ run configuration for CAWS validate' },
+    { src: '.idea/runConfigurations/CAWS_Evaluate.xml', dest: '.idea/runConfigurations/CAWS_Evaluate.xml', desc: 'IntelliJ run configuration for CAWS evaluate' },
+
+    // Windsurf
+    { src: '.windsurf/workflows/caws-guided-development.md', dest: '.windsurf/workflows/caws-guided-development.md', desc: 'Windsurf workflow for CAWS-guided development' },
+
+    // GitHub Copilot
+    { src: '.github/copilot/instructions.md', dest: '.github/copilot/instructions.md', desc: 'GitHub Copilot CAWS integration instructions' },
+
+    // Git hooks (only if not already present)
+    { src: '.git/hooks/pre-commit', dest: '.git/hooks/pre-commit', desc: 'Git pre-commit hook for CAWS validation', optional: true },
+    { src: '.git/hooks/pre-push', dest: '.git/hooks/pre-push', desc: 'Git pre-push hook for comprehensive checks', optional: true },
+    { src: '.git/hooks/post-commit', dest: '.git/hooks/post-commit', desc: 'Git post-commit hook for provenance', optional: true },
+
+    // Cursor hooks (already handled by scaffoldCursorHooks, but ensure README is copied)
+    { src: '.cursor/README.md', dest: '.cursor/README.md', desc: 'Cursor integration documentation' }
+  ];
+
+  for (const template of ideTemplates) {
+    const srcPath = path.join(templateDir, template.src);
+    const destPath = path.join(targetDir, template.dest);
+
+    try {
+      // Check if source exists
+      if (!await fs.pathExists(srcPath)) {
+        if (!template.optional) {
+          console.log(chalk.yellow(`⚠️  Template not found: ${template.src}`));
+        }
+        continue;
+      }
+
+      // Check if destination already exists
+      const destExists = await fs.pathExists(destPath);
+
+      if (destExists && !options.force) {
+        console.log(chalk.gray(`⏭️  Skipped ${template.desc} (already exists)`));
+        skippedCount++;
+        continue;
+      }
+
+      // Ensure destination directory exists
+      await fs.ensureDir(path.dirname(destPath));
+
+      // Copy the file
+      await fs.copy(srcPath, destPath);
+
+      // Make scripts executable if they're in hooks or cursor directories
+      if (destPath.includes('.git/hooks/') || destPath.includes('.cursor/hooks/')) {
+        try {
+          await fs.chmod(destPath, '755');
+        } catch (error) {
+          // Ignore chmod errors on some systems
+        }
+      }
+
+      console.log(chalk.green(`✅ Added ${template.desc}`));
+      addedCount++;
+
+    } catch (error) {
+      console.log(chalk.red(`❌ Failed to add ${template.desc}: ${error.message}`));
+    }
+  }
+
+  if (addedCount > 0) {
+    console.log(chalk.green(`\n🎨 IDE integrations: ${addedCount} added, ${skippedCount} skipped`));
+    console.log(chalk.blue('💡 Restart your IDE to activate the new integrations'));
+  }
+
+  return { added: addedCount, skipped: skippedCount };
+}
+
 // TODO: These need to be injected or imported properly
 let cawsSetup = null;
 let loadProvenanceTools = null;
@@ -164,6 +255,16 @@ async function scaffoldProject(options) {
       });
     }
 
+    // Add IDE integrations for comprehensive development experience
+    enhancements.push({
+      name: 'ide-integrations',
+      description: 'IDE integrations (VS Code, IntelliJ, Windsurf, Git hooks)',
+      required: false,
+      customHandler: async (targetDir, options) => {
+        return await scaffoldIDEIntegrations(targetDir, options);
+      }
+    });
+
     // Add commit conventions for setups that don't have them
     if (!setup.hasTemplates || !fs.existsSync(path.join(currentDir, 'COMMIT_CONVENTIONS.md'))) {
       enhancements.push({
@@ -195,6 +296,28 @@ async function scaffoldProject(options) {
     const addedFiles = [];
 
     for (const enhancement of enhancements) {
+      // Handle custom enhancement handlers (like IDE integrations)
+      if (enhancement.customHandler) {
+        try {
+          const result = await enhancement.customHandler(currentDir, options);
+          if (result && typeof result.added === 'number') {
+            addedCount += result.added;
+            skippedCount += result.skipped || 0;
+            // Add enhancement name to provenance if it was processed
+            if (result.added > 0) {
+              addedFiles.push(enhancement.name);
+            }
+          } else {
+            console.log(chalk.green(`✅ Added ${enhancement.description}`));
+            addedCount++;
+            addedFiles.push(enhancement.name);
+          }
+        } catch (error) {
+          console.warn(chalk.yellow(`⚠️  Custom handler failed for ${enhancement.name}:`), error.message);
+        }
+        continue;
+      }
+
       if (!setup?.templateDir) {
         console.warn(
           chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)
