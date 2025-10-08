@@ -696,7 +696,7 @@ module.exports = { runCodemod };`
       const workingSpec = yaml.load(fs.readFileSync(workingSpecPath, 'utf8'));
 
       // Basic validation checks - adjust for actual generated format
-      expect(workingSpec.id).toMatch(/^[A-Z]+-[A-Z]+-[A-Z]+-\d+$/); // TEST-CAWS-PROJECT-001 format
+      expect(workingSpec.id).toMatch(/^[A-Z]+-\d+$/); // PROJ-315 format
       expect([1, 2, 3]).toContain(workingSpec.risk_tier);
       expect(['feature', 'refactor', 'fix', 'doc', 'chore']).toContain(workingSpec.mode);
       expect(workingSpec.scope).toHaveProperty('in');

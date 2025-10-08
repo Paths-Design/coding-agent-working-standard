@@ -100,7 +100,7 @@ async function initProject(projectName, options) {
         (file) => !file.startsWith('.') && file !== 'node_modules' && file !== '.git'
       );
 
-      if (hasProjectFiles) {
+      if (hasProjectFiles && !options.nonInteractive) {
         console.warn(chalk.yellow('⚠️  Current directory contains project files'));
         console.warn(
           chalk.blue('💡 You might want to initialize CAWS in current directory instead:')
@@ -424,6 +424,39 @@ Happy coding! 🎯
         projectId: `PROJ-${Math.floor(Math.random() * 1000) + 1}`,
         useCursorHooks: true,
         generateExamples: false,
+        projectMode: 'feature',
+        maxFiles: 25,
+        maxLoc: 1000,
+        blastModules: 'src, tests',
+        dataMigration: false,
+        rollbackSlo: '5m',
+        projectThreats: '',
+        scopeIn: 'src/, tests/',
+        scopeOut: 'node_modules/, dist/, build/',
+        projectInvariants: 'System maintains data consistency',
+        acceptanceCriteria: 'Given current state, when action occurs, then expected result',
+        a11yRequirements: 'keyboard',
+        perfBudget: 250,
+        securityRequirements: 'validation',
+        contractType: '',
+        contractPath: '',
+        observabilityLogs: '',
+        observabilityMetrics: '',
+        observabilityTraces: '',
+        migrationPlan: '',
+        rollbackPlan: '',
+        needsOverride: false,
+        overrideApprover: '',
+        overrideRationale: '',
+        waivedGates: [],
+        overrideExpiresDays: 7,
+        isExperimental: false,
+        experimentalRationale: '',
+        experimentalExpiresDays: 30,
+        experimentalSandbox: '',
+        aiConfidence: 0.8,
+        uncertaintyAreas: '',
+        complexityFactors: ''
       };
 
       const specContent = generateWorkingSpec(defaultAnswers);
@@ -454,6 +487,11 @@ Happy coding! 🎯
     }
     console.log('5. Start implementing your features!');
   } catch (error) {
+    console.error(chalk.red('❌ Error during initialization:'), error.message);
+    if (error.stack) {
+      console.error(chalk.gray(error.stack));
+    }
+    
     // Cleanup on error (only for new directory creation)
     if (projectName && projectName !== '.' && fs.existsSync(projectName)) {
       try {

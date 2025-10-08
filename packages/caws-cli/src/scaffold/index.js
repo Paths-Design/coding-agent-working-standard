@@ -481,5 +481,6 @@ async function scaffoldProject(options) {
 
 module.exports = {
   scaffoldProject,
+  scaffoldIDEIntegrations,
   setScaffoldDependencies,
 };
