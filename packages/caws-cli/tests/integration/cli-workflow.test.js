@@ -16,9 +16,6 @@ describe('CLI Workflow Integration', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
     // Create a clean temporary directory for tests to avoid conflicts with monorepo
     testTempDir = path.join(__dirname, '..', 'test-integration-temp');
     if (fs.existsSync(testTempDir)) {
@@ -26,11 +23,8 @@ describe('CLI Workflow Integration', () => {
     }
     fs.mkdirSync(testTempDir, { recursive: true });
 
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
-
-    // Set test project path relative to current working directory (temp dir)
-    testProjectPath = path.join(process.cwd(), testProjectName);
+    // Set test project path
+    testProjectPath = path.join(testTempDir, testProjectName);
 
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
@@ -39,11 +33,6 @@ describe('CLI Workflow Integration', () => {
   });
 
   afterAll(() => {
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
-
     // Clean up temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {
@@ -84,24 +73,22 @@ describe('CLI Workflow Integration', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);
       expect(fs.existsSync(path.join(testProjectPath, '.caws'))).toBe(true);
 
       // Step 2: Scaffold CAWS components
-      const originalDir = process.cwd();
+      // Capture scaffold output for debugging
+      let scaffoldOutput = '';
       try {
-        process.chdir(testProjectPath);
-
-        // Capture scaffold output for debugging
-        let scaffoldOutput = '';
-        try {
-          scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
-            encoding: 'utf8',
-            stdio: 'pipe',
-          });
-        } catch (scaffoldError) {
+        scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+          cwd: testProjectPath,
+        });
+      } catch (scaffoldError) {
           console.log('Scaffold command failed with error:', scaffoldError.message);
           console.log('Scaffold stderr:', scaffoldError.stderr);
           console.log('Scaffold stdout:', scaffoldError.stdout);
@@ -126,19 +113,13 @@ describe('CLI Workflow Integration', () => {
             console.log('apps directory does not exist');
           }
         }
-      } finally {
-        process.chdir(originalDir);
       }
 
       // Integration Contract: Scaffolding should create complete tool structure
       expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/validate.js'))).toBe(
-        true
-      );
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/validate.js'))).toBe(true);
       expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/gates.js'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/provenance.js'))).toBe(
-        true
-      );
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/provenance.js'))).toBe(true);
       expect(fs.existsSync(path.join(testProjectPath, '.agent'))).toBe(true);
 
       // Step 3: Validate the project setup
@@ -152,8 +133,6 @@ describe('CLI Workflow Integration', () => {
       const spec = yaml.load(specContent);
       expect(spec).toBeDefined();
       expect(spec.id).toBeDefined(); // The working spec has 'id' not 'project'
-
-      process.chdir(__dirname);
     });
 
     test('should handle project modifications and re-validation', () => {
@@ -163,7 +142,7 @@ describe('CLI Workflow Integration', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
-        cwd: path.join(__dirname, '../..'), // Run from CLI package directory
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);
@@ -217,8 +196,6 @@ describe('CLI Workflow Integration', () => {
       expect(() => {
         validateTool(workingSpecPath);
       }).not.toThrow();
-
-      process.chdir(__dirname);
     });
   });
 
@@ -229,7 +206,7 @@ describe('CLI Workflow Integration', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
-        cwd: path.join(__dirname, '../..'), // Run from CLI package directory
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);
@@ -276,26 +253,21 @@ describe('CLI Workflow Integration', () => {
       }).not.toThrow();
 
       // Step 2: Generate provenance
-      const provenanceTool = require(
-        path.join(testProjectPath, 'apps/tools/caws/provenance.js')
-      );
+      const provenanceTool = require(path.join(testProjectPath, 'apps/tools/caws/provenance.js'));
 
       // Change to project directory for provenance tool
-      const originalDir = process.cwd();
-      process.chdir(testProjectPath);
-
+      const originalCwd = process.cwd();
       try {
+        process.chdir(testProjectPath);
         expect(() => {
           provenanceTool.generateProvenance();
         }).not.toThrow();
       } finally {
-        process.chdir(originalDir);
+        process.chdir(originalCwd);
       }
 
       // Integration Contract: Provenance should be generated after validation
       expect(fs.existsSync(path.join(testProjectPath, '.agent/provenance.json'))).toBe(true);
-
-      process.chdir(__dirname);
     });
 
     test('should integrate gates tool with project structure', () => {
@@ -304,7 +276,7 @@ describe('CLI Workflow Integration', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
-        cwd: path.join(__dirname, '../..'), // Run from CLI package directory
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);
@@ -321,8 +293,6 @@ describe('CLI Workflow Integration', () => {
       expect(() => {
         gatesTool.enforceCoverageGate(0.8, 0.7);
       }).not.toThrow();
-
-      process.chdir(__dirname);
     });
   });
 
@@ -334,7 +304,7 @@ describe('CLI Workflow Integration', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
-        cwd: path.join(__dirname, '../..'), // Run from CLI package directory
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);

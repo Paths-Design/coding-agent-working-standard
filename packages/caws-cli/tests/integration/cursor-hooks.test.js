@@ -14,17 +14,12 @@ describe('Cursor Hooks Integration', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
     // Create a temporary directory for tests to avoid conflicts with monorepo
     testTempDir = path.join(__dirname, '..', '..', 'test-cursor-temp');
     if (!fs.existsSync(testTempDir)) {
-      fs.mkdirSync(testTempDir, { recursive: true });
+      fs.rmSync(testTempDir, { recursive: true, force: true });
     }
-
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
+    fs.mkdirSync(testTempDir, { recursive: true });
 
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
@@ -47,11 +42,6 @@ describe('Cursor Hooks Integration', () => {
   });
 
   afterAll(() => {
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
-
     // Clean up test temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {
@@ -66,6 +56,7 @@ describe('Cursor Hooks Integration', () => {
     test('should create .cursor directory structure on init', () => {
       // Initialize project (non-interactive, which should enable hooks by default)
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+        cwd: testTempDir,
         encoding: 'utf8',
         stdio: 'pipe',
       });
@@ -272,8 +263,8 @@ describe('Cursor Hooks Integration', () => {
     });
 
     test('HOOK_STRATEGY.md should include Cursor hooks', () => {
-      // Navigate up from packages/caws-cli/tests/integration to docs
-      const strategyPath = path.join(__dirname, '../../../../docs/HOOK_STRATEGY.md');
+      // Use absolute path from original working directory
+      const strategyPath = path.join(originalCwd, 'docs/internal/HOOK_STRATEGY.md');
 
       expect(fs.existsSync(strategyPath)).toBe(true);
 
