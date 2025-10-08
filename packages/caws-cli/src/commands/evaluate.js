@@ -1,9 +1,9 @@
 /**
  * CAWS Evaluate Command
- * 
+ *
  * Evaluates work against CAWS quality standards and provides
  * actionable feedback on meeting acceptance criteria.
- * 
+ *
  * @author @darianrosebrook
  */
 
@@ -15,7 +15,7 @@ const { initializeGlobalSetup } = require('../config');
 
 /**
  * Evaluate command handler
- * 
+ *
  * @param {string} specFile - Path to working spec file
  * @param {object} options - Command options
  */
@@ -23,7 +23,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
   try {
     console.log('🔍 Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
-    
+
     if (setup.hasWorkingSpec) {
       console.log(`✅ Detected ${setup.setupType} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
@@ -31,7 +31,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // Load working spec
     const specPath = path.isAbsolute(specFile) ? specFile : path.join(process.cwd(), specFile);
-    
+
     if (!fs.existsSync(specPath)) {
       console.error(chalk.red(`\n❌ Working spec not found: ${specFile}`));
       console.error(chalk.yellow('💡 Run: caws init to create a working spec'));
@@ -66,18 +66,20 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     // 2. Check acceptance criteria
     results.maxScore += 15;
     if (spec.acceptance && spec.acceptance.length > 0) {
-      const validCriteria = spec.acceptance.filter(a => a.id && a.given && a.when && a.then);
+      const validCriteria = spec.acceptance.filter((a) => a.id && a.given && a.when && a.then);
       const criteriaScore = Math.floor((validCriteria.length / spec.acceptance.length) * 15);
       results.score += criteriaScore;
-      results.checks.push({ 
-        name: 'Acceptance Criteria', 
-        status: criteriaScore === 15 ? 'pass' : 'partial', 
+      results.checks.push({
+        name: 'Acceptance Criteria',
+        status: criteriaScore === 15 ? 'pass' : 'partial',
         points: criteriaScore,
-        detail: `${validCriteria.length}/${spec.acceptance.length} complete`
+        detail: `${validCriteria.length}/${spec.acceptance.length} complete`,
       });
-      
+
       if (criteriaScore < 15) {
-        results.recommendations.push('Complete all acceptance criteria with Given-When-Then format');
+        results.recommendations.push(
+          'Complete all acceptance criteria with Given-When-Then format'
+        );
       }
     } else {
       results.checks.push({ name: 'Acceptance Criteria', status: 'fail', points: 0 });
@@ -123,12 +125,12 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
       if (spec.non_functional.security && spec.non_functional.security.length > 0) nfrScore += 5;
     }
     results.score += nfrScore;
-    results.checks.push({ 
-      name: 'Non-Functional Requirements', 
-      status: nfrScore === 15 ? 'pass' : 'partial', 
-      points: nfrScore 
+    results.checks.push({
+      name: 'Non-Functional Requirements',
+      status: nfrScore === 15 ? 'pass' : 'partial',
+      points: nfrScore,
     });
-    
+
     if (nfrScore < 15) {
       results.recommendations.push('Define a11y, performance, and security requirements');
     }
@@ -145,9 +147,12 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // 8. Check observability
     results.maxScore += 10;
-    if (spec.observability && (spec.observability.logs?.length > 0 || 
-                               spec.observability.metrics?.length > 0 || 
-                               spec.observability.traces?.length > 0)) {
+    if (
+      spec.observability &&
+      (spec.observability.logs?.length > 0 ||
+        spec.observability.metrics?.length > 0 ||
+        spec.observability.traces?.length > 0)
+    ) {
       results.score += 10;
       results.checks.push({ name: 'Observability', status: 'pass', points: 10 });
     } else {
@@ -157,11 +162,11 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // 9. Risk tier appropriateness
     results.maxScore += 10;
-    const hasCriticalScope = spec.blast_radius?.modules?.some(m => 
-      m.includes('auth') || m.includes('payment') || m.includes('billing')
+    const hasCriticalScope = spec.blast_radius?.modules?.some(
+      (m) => m.includes('auth') || m.includes('payment') || m.includes('billing')
     );
     const hasDataMigration = spec.blast_radius?.data_migration === true;
-    
+
     if (hasCriticalScope || hasDataMigration) {
       if (spec.risk_tier === 1) {
         results.score += 10;
@@ -177,23 +182,38 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // Display results
     console.log('\n📋 Quality Checks:\n');
-    results.checks.forEach(check => {
+    results.checks.forEach((check) => {
       const icon = check.status === 'pass' ? '✅' : check.status === 'partial' ? '⚠️' : '❌';
       const detail = check.detail ? ` (${check.detail})` : '';
-      console.log(`${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`);
+      console.log(
+        `${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`
+      );
     });
 
     // Calculate percentage
     const percentage = Math.round((results.score / results.maxScore) * 100);
-    const grade = percentage >= 90 ? 'A' : percentage >= 80 ? 'B' : percentage >= 70 ? 'C' : percentage >= 60 ? 'D' : 'F';
-    
+    const grade =
+      percentage >= 90
+        ? 'A'
+        : percentage >= 80
+          ? 'B'
+          : percentage >= 70
+            ? 'C'
+            : percentage >= 60
+              ? 'D'
+              : 'F';
+
     console.log('\n' + '─'.repeat(60));
-    console.log(chalk.bold(`\n📊 Overall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}\n`));
+    console.log(
+      chalk.bold(
+        `\n📊 Overall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}\n`
+      )
+    );
 
     // Display warnings
     if (results.warnings.length > 0) {
       console.log(chalk.yellow('⚠️  Warnings:\n'));
-      results.warnings.forEach(warning => {
+      results.warnings.forEach((warning) => {
         console.log(chalk.yellow(`   • ${warning}`));
       });
       console.log();
@@ -202,7 +222,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     // Display recommendations
     if (results.recommendations.length > 0) {
       console.log(chalk.blue('💡 Recommendations:\n'));
-      results.recommendations.forEach(rec => {
+      results.recommendations.forEach((rec) => {
         console.log(chalk.blue(`   • ${rec}`));
       });
       console.log();
@@ -210,7 +230,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // Risk tier specific guidance
     console.log(chalk.bold(`\n🎯 Risk Tier ${spec.risk_tier} Requirements:\n`));
-    
+
     const tierRequirements = {
       1: {
         coverage: '90%+',
@@ -247,14 +267,15 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     // Exit with appropriate code
     if (percentage < 70) {
-      console.log(chalk.red('\n⚠️  Quality score below 70% - improvements needed before proceeding\n'));
+      console.log(
+        chalk.red('\n⚠️  Quality score below 70% - improvements needed before proceeding\n')
+      );
       process.exit(1);
     } else if (percentage < 90) {
       console.log(chalk.yellow('\n⚠️  Quality score acceptable but improvements recommended\n'));
     } else {
       console.log(chalk.green('\n✅ Excellent quality score - ready to proceed!\n'));
     }
-
   } catch (error) {
     console.error(chalk.red(`\n❌ Evaluation failed: ${error.message}`));
     if (options.verbose) {
@@ -265,4 +286,3 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 }
 
 module.exports = { evaluateCommand };
-
