@@ -91,32 +91,33 @@ async function main() {
       await fs.copy(cliTemplates, path.join(cliDest, 'templates'));
     }
 
-    // Copy essential CLI dependencies from monorepo root
+    // Copy ALL CLI dependencies (recursive, includes transitive deps)
     console.log('  Copying CLI dependencies...');
     const cliDestModules = path.join(cliDest, 'node_modules');
     await fs.ensureDir(cliDestModules);
 
-    const essentialDeps = [
-      'ajv',
-      'ajv-formats',
-      'commander',
-      'fs-extra',
-      'js-yaml',
-      'chalk',
-      'ansi-styles',
-      'universalify',
-      'graceful-fs',
-      'jsonfile',
-      '@inquirer'
-    ];
+    // Copy CLI's local node_modules entirely (includes all transitive deps)
+    const cliLocalNodeModules = path.join(cliSource, 'node_modules');
+    if (await fs.pathExists(cliLocalNodeModules)) {
+      console.log('    Copying CLI node_modules (all dependencies)...');
+      await fs.copy(cliLocalNodeModules, cliDestModules);
+      console.log('    ✅ Copied all CLI dependencies');
+    } else {
+      console.warn('    ⚠️  CLI node_modules not found');
+      
+      // Fallback: try to copy from monorepo root
+      console.log('    Falling back to monorepo root dependencies...');
+      const cliPackageJson = require(path.join(cliSource, 'package.json'));
+      const cliDeps = Object.keys(cliPackageJson.dependencies || {});
 
-    for (const dep of essentialDeps) {
-      const depPath = path.join(monorepoNodeModules, dep);
-      if (await fs.pathExists(depPath)) {
-        await fs.copy(depPath, path.join(cliDestModules, dep));
-        console.log(`    ✅ Copied ${dep}`);
-      } else {
-        console.warn(`    ⚠️  ${dep} not found in monorepo node_modules`);
+      for (const dep of cliDeps) {
+        const depPath = path.join(monorepoNodeModules, dep);
+        if (await fs.pathExists(depPath)) {
+          await fs.copy(depPath, path.join(cliDestModules, dep));
+          console.log(`    ✅ Copied ${dep}`);
+        } else {
+          console.warn(`    ⚠️  ${dep} not found`);
+        }
       }
     }
 
