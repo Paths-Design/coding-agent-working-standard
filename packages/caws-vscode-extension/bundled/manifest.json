@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "bundled_at": "2025-10-08T03:16:08.508Z",
+  "bundled_at": "2025-10-08T03:19:55.587Z",
   "components": {
     "mcp-server": {
       "version": "1.0.0",
@@ -28,5 +28,5 @@
       "description": "Project scaffolding templates"
     }
   },
-  "total_size_mb": 0.8896865844726562
+  "total_size_mb": 0.8897037506103516
 }
