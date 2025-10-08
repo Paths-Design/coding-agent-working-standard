@@ -42,15 +42,26 @@ async function main() {
     console.log('  Copying MCP server dependencies...');
     const mcpDestModules = path.join(mcpServerDest, 'node_modules');
     await fs.ensureDir(mcpDestModules);
-    
+
     // Copy from monorepo root (where the dependencies are actually installed)
     const monorepoNodeModules = path.join(MONOREPO_ROOT, 'node_modules');
     if (await fs.pathExists(monorepoNodeModules)) {
-      // Copy @modelcontextprotocol
-      const mcpSdkPath = path.join(monorepoNodeModules, '@modelcontextprotocol');
-      if (await fs.pathExists(mcpSdkPath)) {
-        await fs.copy(mcpSdkPath, path.join(mcpDestModules, '@modelcontextprotocol'));
-        console.log('    ✅ Copied @modelcontextprotocol/sdk');
+      // Copy @modelcontextprotocol and its dependencies
+      const mcpDeps = [
+        '@modelcontextprotocol',
+        'zod',
+        'content-type',
+        'raw-body'
+      ];
+
+      for (const dep of mcpDeps) {
+        const depPath = path.join(monorepoNodeModules, dep);
+        if (await fs.pathExists(depPath)) {
+          await fs.copy(depPath, path.join(mcpDestModules, dep));
+          console.log(`    ✅ Copied ${dep}`);
+        } else {
+          console.warn(`    ⚠️  ${dep} not found in monorepo node_modules`);
+        }
       }
     }
 
