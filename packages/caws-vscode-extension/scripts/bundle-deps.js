@@ -91,33 +91,72 @@ async function main() {
       await fs.copy(cliTemplates, path.join(cliDest, 'templates'));
     }
 
-    // Copy ALL CLI dependencies (recursive, includes transitive deps)
+    // Copy ALL CLI dependencies (handles monorepo hoisting)
     console.log('  Copying CLI dependencies...');
     const cliDestModules = path.join(cliDest, 'node_modules');
     await fs.ensureDir(cliDestModules);
 
-    // Copy CLI's local node_modules entirely (includes all transitive deps)
+    const cliPackageJson = require(path.join(cliSource, 'package.json'));
+    const cliDeps = Object.keys(cliPackageJson.dependencies || {});
+
+    // First, copy from CLI's local node_modules (non-hoisted packages)
     const cliLocalNodeModules = path.join(cliSource, 'node_modules');
     if (await fs.pathExists(cliLocalNodeModules)) {
-      console.log('    Copying CLI node_modules (all dependencies)...');
-      await fs.copy(cliLocalNodeModules, cliDestModules);
-      console.log('    ✅ Copied all CLI dependencies');
-    } else {
-      console.warn('    ⚠️  CLI node_modules not found');
-      
-      // Fallback: try to copy from monorepo root
-      console.log('    Falling back to monorepo root dependencies...');
-      const cliPackageJson = require(path.join(cliSource, 'package.json'));
-      const cliDeps = Object.keys(cliPackageJson.dependencies || {});
+      const localDeps = await fs.readdir(cliLocalNodeModules);
+      for (const dep of localDeps) {
+        await fs.copy(path.join(cliLocalNodeModules, dep), path.join(cliDestModules, dep));
+        console.log(`    ✅ Copied ${dep} (from CLI)`);
+      }
+    }
 
-      for (const dep of cliDeps) {
-        const depPath = path.join(monorepoNodeModules, dep);
-        if (await fs.pathExists(depPath)) {
-          await fs.copy(depPath, path.join(cliDestModules, dep));
-          console.log(`    ✅ Copied ${dep}`);
-        } else {
-          console.warn(`    ⚠️  ${dep} not found`);
+    // Then, copy ALL packages from monorepo root (includes all transitive deps)
+    console.log('    Copying all hoisted dependencies from monorepo root...');
+    if (await fs.pathExists(monorepoNodeModules)) {
+      const allPackages = await fs.readdir(monorepoNodeModules);
+      let copiedCount = 0;
+      let skippedCount = 0;
+
+      for (const pkg of allPackages) {
+        // Skip hidden files and non-directories
+        if (pkg.startsWith('.')) continue;
+
+        const pkgPath = path.join(monorepoNodeModules, pkg);
+        const stat = await fs.stat(pkgPath);
+        if (!stat.isDirectory()) continue;
+
+        // Skip if already copied from CLI local node_modules
+        const destPath = path.join(cliDestModules, pkg);
+        if (await fs.pathExists(destPath)) {
+          skippedCount++;
+          continue;
         }
+
+        await fs.copy(pkgPath, destPath);
+        copiedCount++;
+      }
+
+      console.log(`    ✅ Copied ${copiedCount} packages, skipped ${skippedCount} existing`);
+    }
+
+    // Also copy common transitive dependencies that might be hoisted
+    const commonTransitiveDeps = [
+      'universalify',
+      'graceful-fs',
+      'jsonfile',
+      'ansi-styles',
+      '@types'
+    ];
+
+    for (const dep of commonTransitiveDeps) {
+      const depDestPath = path.join(cliDestModules, dep);
+      if (await fs.pathExists(depDestPath)) {
+        continue;
+      }
+
+      const depPath = path.join(monorepoNodeModules, dep);
+      if (await fs.pathExists(depPath)) {
+        await fs.copy(depPath, depDestPath);
+        console.log(`    ✅ Copied ${dep} (transitive)`);
       }
     }
 
