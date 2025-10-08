@@ -91,17 +91,32 @@ async function main() {
       await fs.copy(cliTemplates, path.join(cliDest, 'templates'));
     }
 
-    // Copy essential CLI dependencies
-    const cliNodeModules = path.join(cliSource, 'node_modules');
-    if (await fs.pathExists(cliNodeModules)) {
-      console.log('  Copying CLI dependencies...');
-      const essentialDeps = ['ajv', 'commander', 'fs-extra', 'inquirer'];
+    // Copy essential CLI dependencies from monorepo root
+    console.log('  Copying CLI dependencies...');
+    const cliDestModules = path.join(cliDest, 'node_modules');
+    await fs.ensureDir(cliDestModules);
 
-      for (const dep of essentialDeps) {
-        const depPath = path.join(cliNodeModules, dep);
-        if (await fs.pathExists(depPath)) {
-          await fs.copy(depPath, path.join(cliDest, 'node_modules', dep));
-        }
+    const essentialDeps = [
+      'ajv',
+      'ajv-formats',
+      'commander',
+      'fs-extra',
+      'js-yaml',
+      'chalk',
+      'ansi-styles',
+      'universalify',
+      'graceful-fs',
+      'jsonfile',
+      '@inquirer'
+    ];
+
+    for (const dep of essentialDeps) {
+      const depPath = path.join(monorepoNodeModules, dep);
+      if (await fs.pathExists(depPath)) {
+        await fs.copy(depPath, path.join(cliDestModules, dep));
+        console.log(`    ✅ Copied ${dep}`);
+      } else {
+        console.warn(`    ⚠️  ${dep} not found in monorepo node_modules`);
       }
     }
 
