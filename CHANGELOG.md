@@ -1,3 +1,10 @@
+## [3.2.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.1...v3.2.2) (2025-10-08)
+
+
+### Bug Fixes
+
+* add safety checks for ai_assessment fields in working spec ([05f1f20](https://github.com/Paths-Design/coding-agent-working-standard/commit/05f1f20025303660b3bdc87d670514d83ffc9705))
+
 ## [3.2.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.0...v3.2.1) (2025-10-08)
 
 
