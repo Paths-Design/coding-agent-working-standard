@@ -30,7 +30,7 @@ function generateJestConfig(options = {}) {
       },
     },
   } = options;
-  
+
   const config = {
     preset,
     testEnvironment,
@@ -40,15 +40,18 @@ function generateJestConfig(options = {}) {
     collectCoverageFrom,
     coverageThreshold,
     transform: {
-      '^.+\\.tsx?$': ['ts-jest', {
-        tsconfig: 'tsconfig.json',
-      }],
+      '^.+\\.tsx?$': [
+        'ts-jest',
+        {
+          tsconfig: 'tsconfig.json',
+        },
+      ],
     },
     moduleNameMapper: {
       '^@/(.*)$': '<rootDir>/src/$1',
     },
   };
-  
+
   return `module.exports = ${JSON.stringify(config, null, 2)};\n`;
 }
 
@@ -80,20 +83,16 @@ afterAll(() => {
  * @returns {Promise<Object>} Installation result
  */
 async function installJestDependencies(projectDir, packageJson) {
-  const dependencies = [
-    'jest',
-    '@types/jest',
-    'ts-jest',
-  ];
-  
+  const dependencies = ['jest', '@types/jest', 'ts-jest'];
+
   // Check which dependencies are already installed
   const allDeps = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
   };
-  
+
   const toInstall = dependencies.filter((dep) => !(dep in allDeps));
-  
+
   if (toInstall.length === 0) {
     return {
       installed: false,
@@ -101,7 +100,7 @@ async function installJestDependencies(projectDir, packageJson) {
       dependencies: [],
     };
   }
-  
+
   return {
     installed: false,
     needsInstall: true,
@@ -118,7 +117,7 @@ async function installJestDependencies(projectDir, packageJson) {
  */
 async function configureJestForTypeScript(projectDir = process.cwd(), options = {}) {
   const { force = false, quiet = false } = options;
-  
+
   // Check if Jest config already exists
   const jestConfigPath = path.join(projectDir, 'jest.config.js');
   if (fs.existsSync(jestConfigPath) && !force) {
@@ -129,46 +128,46 @@ async function configureJestForTypeScript(projectDir = process.cwd(), options = 
       path: jestConfigPath,
     };
   }
-  
+
   // Generate Jest config
   const jestConfig = generateJestConfig();
   await fs.writeFile(jestConfigPath, jestConfig);
-  
+
   if (!quiet) {
     console.log(chalk.green('✅ Created jest.config.js'));
   }
-  
+
   // Generate test setup file
   const setupPath = path.join(projectDir, 'tests', 'setup.ts');
   await fs.ensureDir(path.join(projectDir, 'tests'));
   await fs.writeFile(setupPath, generateTestSetup());
-  
+
   if (!quiet) {
     console.log(chalk.green('✅ Created tests/setup.ts'));
   }
-  
+
   // Update package.json with test script if needed
   const packageJsonPath = path.join(projectDir, 'package.json');
   if (fs.existsSync(packageJsonPath)) {
     const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
-    
+
     if (!packageJson.scripts) {
       packageJson.scripts = {};
     }
-    
+
     if (!packageJson.scripts.test) {
       packageJson.scripts.test = 'jest';
       packageJson.scripts['test:coverage'] = 'jest --coverage';
       packageJson.scripts['test:watch'] = 'jest --watch';
-      
+
       await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
-      
+
       if (!quiet) {
         console.log(chalk.green('✅ Added test scripts to package.json'));
       }
     }
   }
-  
+
   return {
     configured: true,
     files: [jestConfigPath, setupPath],
@@ -189,14 +188,14 @@ function getJestRecommendations(projectDir = process.cwd()) {
   const recommendations = [];
   const hasJestConfig = fs.existsSync(path.join(projectDir, 'jest.config.js'));
   const packageJsonPath = path.join(projectDir, 'package.json');
-  
+
   if (fs.existsSync(packageJsonPath)) {
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const allDeps = {
       ...packageJson.dependencies,
       ...packageJson.devDependencies,
     };
-    
+
     if (!hasJestConfig && !('jest' in allDeps)) {
       recommendations.push({
         type: 'missing_framework',
@@ -206,7 +205,7 @@ function getJestRecommendations(projectDir = process.cwd()) {
         autoFixable: false,
       });
     }
-    
+
     if ('typescript' in allDeps && 'jest' in allDeps && !('ts-jest' in allDeps)) {
       recommendations.push({
         type: 'missing_ts_jest',
@@ -216,7 +215,7 @@ function getJestRecommendations(projectDir = process.cwd()) {
         autoFixable: false,
       });
     }
-    
+
     if (!hasJestConfig && 'jest' in allDeps) {
       recommendations.push({
         type: 'missing_config',
@@ -227,7 +226,7 @@ function getJestRecommendations(projectDir = process.cwd()) {
       });
     }
   }
-  
+
   return {
     hasIssues: recommendations.length > 0,
     recommendations,
@@ -235,12 +234,9 @@ function getJestRecommendations(projectDir = process.cwd()) {
 }
 
 module.exports = {
-  detectTypeScript,
-  detectTestFramework,
   configureJestForTypeScript,
   generateJestConfig,
   generateTestSetup,
   installJestDependencies,
   getJestRecommendations,
 };
-

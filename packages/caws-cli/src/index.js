@@ -34,6 +34,8 @@ const { testAnalysisCommand } = require('./test-analysis');
 const { provenanceCommand } = require('./commands/provenance');
 const { executeTool } = require('./commands/tool');
 const { statusCommand } = require('./commands/status');
+const { templatesCommand } = require('./commands/templates');
+const { diagnoseCommand } = require('./commands/diagnose');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -117,6 +119,20 @@ program
   .description('Show project health overview')
   .option('-s, --spec <path>', 'Path to working spec file', '.caws/working-spec.yaml')
   .action(statusCommand);
+
+// Templates command
+program
+  .command('templates [subcommand]')
+  .description('Discover and manage project templates')
+  .option('-n, --name <template>', 'Template name (for info subcommand)')
+  .action(templatesCommand);
+
+// Diagnose command
+program
+  .command('diagnose')
+  .description('Run health checks and suggest fixes')
+  .option('--fix', 'Apply automatic fixes', false)
+  .action(diagnoseCommand);
 
 // Tool command
 program
@@ -264,50 +280,74 @@ program.exitOverride((err) => {
   ) {
     process.exit(0);
   }
-  
+
   const commandName = process.argv[2];
-  
+
   // Check for unknown command
   if (err.code === 'commander.unknownCommand') {
-    const validCommands = ['init', 'validate', 'scaffold', 'provenance', 'hooks', 'burnup', 'tool'];
+    const validCommands = [
+      'init',
+      'validate',
+      'scaffold',
+      'status',
+      'templates',
+      'provenance',
+      'hooks',
+      'burnup',
+      'tool',
+    ];
     const similar = findSimilarCommand(commandName, validCommands);
-    
+
     console.error(chalk.red(`\n❌ Unknown command: ${commandName}`));
-    
+
     if (similar) {
       console.error(chalk.yellow(`\n💡 Did you mean: caws ${similar}?`));
     }
-    
-    console.error(chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks'));
+
+    console.error(
+      chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks')
+    );
     console.error(chalk.yellow('💡 Try: caws --help for full command list'));
-    console.error(chalk.blue('\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'));
-    
+    console.error(
+      chalk.blue(
+        '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+      )
+    );
+
     process.exit(1);
   }
-  
+
   // Check for unknown option
   if (err.code === 'commander.unknownOption' || err.message.includes('unknown option')) {
     const optionMatch = err.message.match(/unknown option ['"]([^'"]+)['"]/i);
     const option = optionMatch ? optionMatch[1] : '';
-    
+
     console.error(chalk.red(`\n❌ Unknown option: ${option}`));
     console.error(chalk.yellow(`\n💡 Try: caws ${commandName || ''} --help for available options`));
-    
+
     // Provide specific suggestions for common mistakes
     if (option === '--suggestions' || option === '--suggest') {
       console.error(chalk.yellow('💡 Note: Validation includes suggestions by default'));
       console.error(chalk.yellow('   Just run: caws validate'));
     }
-    
-    console.error(chalk.blue('\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'));
-    
+
+    console.error(
+      chalk.blue(
+        '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+      )
+    );
+
     process.exit(1);
   }
-  
+
   // Generic Commander error
   console.error(chalk.red('\n❌ Error:'), err.message);
   console.error(chalk.yellow('\n💡 Try: caws --help for usage information'));
-  console.error(chalk.blue('\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/agents/full-guide.md'));
+  console.error(
+    chalk.blue(
+      '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/agents/full-guide.md'
+    )
+  );
   process.exit(1);
 });
 
@@ -324,51 +364,71 @@ if (require.main === module) {
     ) {
       process.exit(0);
     }
-    
+
     // Enhanced error handling for Commander.js errors
     const commandName = process.argv[2];
     const context = {
       command: commandName,
       option: process.argv[3],
     };
-    
+
     // Check for unknown command
     if (error.code === 'commander.unknownCommand') {
-      const validCommands = ['init', 'validate', 'scaffold', 'provenance', 'hooks', 'burnup', 'tool'];
+      const validCommands = [
+        'init',
+        'validate',
+        'scaffold',
+        'provenance',
+        'hooks',
+        'burnup',
+        'tool',
+      ];
       const similar = findSimilarCommand(commandName, validCommands);
-      
+
       console.error(chalk.red(`\n❌ Unknown command: ${commandName}`));
-      
+
       if (similar) {
         console.error(chalk.yellow(`\n💡 Did you mean: caws ${similar}?`));
       }
-      
-      console.error(chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks'));
+
+      console.error(
+        chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks')
+      );
       console.error(chalk.yellow('💡 Try: caws --help for full command list'));
-      console.error(chalk.blue('\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'));
-      
+      console.error(
+        chalk.blue(
+          '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+        )
+      );
+
       process.exit(1);
     }
-    
+
     // Check for unknown option
     if (error.code === 'commander.unknownOption' || error.message.includes('unknown option')) {
       const optionMatch = error.message.match(/unknown option ['"]([^'"]+)['"]/i);
       const option = optionMatch ? optionMatch[1] : '';
-      
+
       console.error(chalk.red(`\n❌ Unknown option: ${option}`));
-      console.error(chalk.yellow(`\n💡 Try: caws ${commandName || ''} --help for available options`));
-      
+      console.error(
+        chalk.yellow(`\n💡 Try: caws ${commandName || ''} --help for available options`)
+      );
+
       // Provide specific suggestions for common mistakes
       if (option === '--suggestions' || option === '--suggest') {
         console.error(chalk.yellow('💡 Note: Validation includes suggestions by default'));
         console.error(chalk.yellow('   Just run: caws validate'));
       }
-      
-      console.error(chalk.blue('\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'));
-      
+
+      console.error(
+        chalk.blue(
+          '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+        )
+      );
+
       process.exit(1);
     }
-    
+
     // Generic error with enhanced handling
     handleCliError(error, context, true);
   }

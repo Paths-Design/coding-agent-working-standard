@@ -143,7 +143,7 @@ async function safeAsync(operation, context = '') {
 const COMMAND_SUGGESTIONS = {
   'unknown option': (option, command) => {
     const suggestions = [];
-    
+
     // Common typos and alternatives
     const optionMap = {
       '--suggestions': 'Validation includes suggestions by default. Try: caws validate',
@@ -152,36 +152,48 @@ const COMMAND_SUGGESTIONS = {
       '--json': 'For JSON output, try: caws provenance show --format=json',
       '--dashboard': 'Try: caws provenance show --format=dashboard',
     };
-    
+
     if (optionMap[option]) {
       suggestions.push(optionMap[option]);
     } else {
       suggestions.push(`Try: caws ${command || ''} --help for available options`);
     }
-    
+
     return suggestions;
   },
-  
+
   'unknown command': (command) => {
-    const validCommands = ['init', 'validate', 'scaffold', 'provenance', 'hooks'];
+    const validCommands = [
+      'init',
+      'validate',
+      'scaffold',
+      'status',
+      'templates',
+      'provenance',
+      'hooks',
+      'burnup',
+      'tool',
+    ];
     const similar = findSimilarCommand(command, validCommands);
     
     const suggestions = [];
     if (similar) {
       suggestions.push(`Did you mean: caws ${similar}?`);
     }
-    suggestions.push('Available commands: init, validate, scaffold, provenance, hooks');
+    suggestions.push(
+      'Available commands: init, validate, scaffold, status, templates, provenance, hooks'
+    );
     suggestions.push('Try: caws --help for full command list');
     
     return suggestions;
   },
-  
+
   'template not found': () => [
     'Templates are bundled with CAWS CLI',
     'Try: caws scaffold (should work automatically)',
     'If issue persists: npm i -g @paths.design/caws-cli@latest',
   ],
-  
+
   'not a caws project': () => [
     'Initialize CAWS first: caws init .',
     'Or create new project: caws init <project-name>',
@@ -197,10 +209,10 @@ const COMMAND_SUGGESTIONS = {
  */
 function findSimilarCommand(input, validCommands) {
   if (!input) return null;
-  
+
   let minDistance = Infinity;
   let closestMatch = null;
-  
+
   for (const cmd of validCommands) {
     const distance = levenshteinDistance(input.toLowerCase(), cmd.toLowerCase());
     if (distance < minDistance && distance <= 2) {
@@ -208,7 +220,7 @@ function findSimilarCommand(input, validCommands) {
       closestMatch = cmd;
     }
   }
-  
+
   return closestMatch;
 }
 
@@ -220,15 +232,15 @@ function findSimilarCommand(input, validCommands) {
  */
 function levenshteinDistance(a, b) {
   const matrix = [];
-  
+
   for (let i = 0; i <= b.length; i++) {
     matrix[i] = [i];
   }
-  
+
   for (let j = 0; j <= a.length; j++) {
     matrix[0][j] = j;
   }
-  
+
   for (let i = 1; i <= b.length; i++) {
     for (let j = 1; j <= a.length; j++) {
       if (b.charAt(i - 1) === a.charAt(j - 1)) {
@@ -242,7 +254,7 @@ function levenshteinDistance(a, b) {
       }
     }
   }
-  
+
   return matrix[b.length][a.length];
 }
 
@@ -317,7 +329,7 @@ function getRecoverySuggestions(error, category, context = {}) {
  */
 function getDocumentationLink(category, context = {}) {
   const baseUrl = 'https://github.com/Paths-Design/coding-agent-working-standard/blob/main';
-  
+
   const categoryLinks = {
     validation: `${baseUrl}/docs/api/schema.md`,
     configuration: `${baseUrl}/docs/guides/caws-developer-guide.md`,
@@ -325,7 +337,7 @@ function getDocumentationLink(category, context = {}) {
     permission: `${baseUrl}/SECURITY.md`,
     network: `${baseUrl}/README.md#requirements`,
   };
-  
+
   if (context.command) {
     const commandLinks = {
       init: `${baseUrl}/docs/agents/tutorial.md#initialization`,
@@ -334,12 +346,12 @@ function getDocumentationLink(category, context = {}) {
       provenance: `${baseUrl}/docs/api/cli.md#provenance`,
       hooks: `${baseUrl}/docs/guides/hooks-and-agent-workflows.md`,
     };
-    
+
     if (commandLinks[context.command]) {
       return commandLinks[context.command];
     }
   }
-  
+
   return categoryLinks[category] || `${baseUrl}/docs/agents/full-guide.md`;
 }
 
