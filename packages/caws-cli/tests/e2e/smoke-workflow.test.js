@@ -40,20 +40,21 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
 
   describe('Complete Project Creation Workflow', () => {
     const testProjectName = `test-e2e-complete-project-${Date.now()}`;
-    const testProjectPath = path.join(testTempDir, testProjectName);
 
     beforeEach(() => {
       // Clean up any existing test project
-      if (fs.existsSync(testProjectPath)) {
-        fs.rmSync(testProjectPath, { recursive: true, force: true });
+      const projectPath = path.join(testTempDir, testProjectName);
+      if (fs.existsSync(projectPath)) {
+        fs.rmSync(projectPath, { recursive: true, force: true });
         console.log(`🧹 Cleaned up: ${testProjectName}`);
       }
     });
 
     afterEach(() => {
       // Clean up test project
-      if (fs.existsSync(testProjectPath)) {
-        fs.rmSync(testProjectPath, { recursive: true, force: true });
+      const projectPath = path.join(testTempDir, testProjectName);
+      if (fs.existsSync(projectPath)) {
+        fs.rmSync(projectPath, { recursive: true, force: true });
       }
     });
 
@@ -67,11 +68,12 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         cwd: testTempDir,
       });
 
-      expect(fs.existsSync(testProjectPath)).toBe(true);
-      expect(fs.existsSync(path.join(testProjectPath, '.caws'))).toBe(true);
+      const projectPath = path.join(testTempDir, testProjectName);
+      expect(fs.existsSync(projectPath)).toBe(true);
+      expect(fs.existsSync(path.join(projectPath, '.caws'))).toBe(true);
 
       // Step 2: Scaffold CAWS components
-      process.chdir(testProjectPath);
+      process.chdir(projectPath);
 
       execSync(`node "${cliPath}" scaffold`, {
         encoding: 'utf8',
@@ -86,7 +88,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       expect(fs.existsSync('.agent')).toBe(true);
 
       // Step 3: Validate working spec
-      const validateToolPath = path.join(testProjectPath, 'apps/tools/caws/validate.js');
+      const validateToolPath = path.join(projectPath, 'apps/tools/caws/validate.js');
       const validateTool = require(validateToolPath);
       const workingSpecPath = '.caws/working-spec.yaml';
 
@@ -95,7 +97,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       }).not.toThrow();
 
       // Step 4: Generate provenance
-      const provenanceToolPath = path.join(testProjectPath, 'apps/tools/caws/provenance.js');
+      const provenanceToolPath = path.join(projectPath, 'apps/tools/caws/provenance.js');
       const provenanceTool = require(provenanceToolPath);
 
       expect(() => {
@@ -106,7 +108,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       expect(fs.existsSync('.agent/provenance.json')).toBe(true);
 
       // Step 5: Run gates
-      const gatesToolPath = path.join(testProjectPath, 'apps/tools/caws/gates.js');
+      const gatesToolPath = path.join(projectPath, 'apps/tools/caws/gates.js');
       const gatesTool = require(gatesToolPath);
 
       expect(() => {
@@ -121,8 +123,8 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       }
 
       // E2E Contract: Project should be fully functional after workflow
-      expect(fs.existsSync(path.join(testProjectPath, '.caws/working-spec.yaml'))).toBe(true);
-      expect(fs.existsSync(path.join(testProjectPath, '.agent/provenance.json'))).toBe(true);
+      expect(fs.existsSync(path.join(projectPath, '.caws/working-spec.yaml'))).toBe(true);
+      expect(fs.existsSync(path.join(projectPath, '.agent/provenance.json'))).toBe(true);
     });
 
     test('should handle iterative project development', () => {
@@ -135,7 +137,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         cwd: testTempDir,
       });
 
-      process.chdir(testProjectPath);
+      process.chdir(projectPath);
       execSync(`node "${cliPath}" scaffold`, {
         encoding: 'utf8',
         stdio: 'pipe',
@@ -157,9 +159,9 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       fs.writeFileSync(workingSpecPath, yaml.dump(spec));
 
       // Step 3: Re-run full workflow
-      const validateToolPath = path.join(testProjectPath, 'apps/tools/caws/validate.js');
-      const provenanceToolPath = path.join(testProjectPath, 'apps/tools/caws/provenance.js');
-      const gatesToolPath = path.join(testProjectPath, 'apps/tools/caws/gates.js');
+      const validateToolPath = path.join(projectPath, 'apps/tools/caws/validate.js');
+      const provenanceToolPath = path.join(projectPath, 'apps/tools/caws/provenance.js');
+      const gatesToolPath = path.join(projectPath, 'apps/tools/caws/gates.js');
 
       const validateTool = require(validateToolPath);
       const provenanceTool = require(provenanceToolPath);
@@ -421,12 +423,13 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       // Test with a single representative project mode to avoid complexity
 
       const testProjectName = `test-e2e-multi-mode-${Date.now()}`;
-      const testProjectPath = path.join(testTempDir, testProjectName);
 
       try {
+        const projectPath = path.join(testTempDir, testProjectName);
+
         // Clean up
-        if (fs.existsSync(testProjectPath)) {
-          fs.rmSync(testProjectPath, { recursive: true, force: true });
+        if (fs.existsSync(projectPath)) {
+          fs.rmSync(projectPath, { recursive: true, force: true });
         }
 
         // Create project
@@ -438,11 +441,11 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: testProjectPath,
+          cwd: projectPath,
         });
 
         // E2E Contract: Project modes should work
-        const validateToolPath = path.join(testProjectPath, 'apps/tools/caws/validate.js');
+        const validateToolPath = path.join(projectPath, 'apps/tools/caws/validate.js');
         const validateTool = require(validateToolPath);
         const workingSpecPath = '.caws/working-spec.yaml';
 
@@ -465,8 +468,8 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         }
 
         // Clean up
-        if (fs.existsSync(testProjectPath)) {
-          fs.rmSync(testProjectPath, { recursive: true, force: true });
+        if (fs.existsSync(projectPath)) {
+          fs.rmSync(projectPath, { recursive: true, force: true });
         }
       }
     });
