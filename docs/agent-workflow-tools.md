@@ -21,7 +21,7 @@ caws waivers create \
   --description="Detailed explanation of why budget increase needed" \
   --gates=budget_limit \
   --expires-at="2025-12-31T23:59:59Z" \
-  --approved-by="your-handle" \
+  --approved-by="developer-name" \
   --impact-level=medium \
   --mitigation-plan="How you'll address the underlying issue"
 

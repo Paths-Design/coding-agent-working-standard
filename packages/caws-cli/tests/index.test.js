@@ -13,8 +13,22 @@ const mockTemplateDir = path.join(__dirname, 'mock-template');
 
 describe('CAWS CLI', () => {
   const testProjectName = 'test-caws-project';
+  let originalCwd;
+  let testTempDir;
 
   beforeAll(() => {
+    // Store original working directory
+    originalCwd = process.cwd();
+
+    // Create a temporary directory for tests to avoid conflicts with monorepo
+    testTempDir = path.join(__dirname, '..', 'test-temp');
+    if (!fs.existsSync(testTempDir)) {
+      fs.mkdirSync(testTempDir, { recursive: true });
+    }
+
+    // Change to temp directory for tests
+    process.chdir(testTempDir);
+
     // Clean up any existing test projects and mock directories
     if (fs.existsSync(testProjectName)) {
       fs.rmSync(testProjectName, { recursive: true, force: true });
@@ -82,13 +96,190 @@ process.exit(0);`
     fs.writeFileSync(
       path.join(mockTemplateDir, 'apps/tools/caws/provenance.js'),
       `#!/usr/bin/env node
-console.log("mock provenance");
+
+/**
+ * CAWS Provenance Tool
+ * Generates audit trails for AI-assisted code changes
+ * @author CAWS Framework
+ */
+
+const crypto = require('crypto');
+const fs = require('fs-extra');
+const path = require('path');
+
+class ProvenanceTool {
+  constructor() {
+    this.provenanceDir = '.caws/provenance';
+  }
+
+  async generateProvenance(commitHash, options = {}) {
+    const entry = {
+      id: \`prov-\${Date.now()}\`,
+      timestamp: new Date().toISOString(),
+      commit: {
+        hash: commitHash,
+        message: options.message || 'Code changes',
+        author: options.author || 'developer@example.com'
+      },
+      working_spec: {
+        id: 'TEST-001',
+        title: 'Test Implementation',
+        risk_tier: 2,
+        mode: 'feature'
+      },
+      quality_gates: {
+        status: 'passed',
+        last_validated: new Date().toISOString()
+      },
+      agent: {
+        type: options.agentType || 'human',
+        confidence_level: options.confidence || 0.95
+      }
+    };
+
+    // Calculate hash for integrity
+    const content = JSON.stringify(entry, Object.keys(entry).sort());
+    entry.hash = crypto.createHash('sha256').update(content).digest('hex');
+
+    return entry;
+  }
+
+  async saveProvenance(entry) {
+    await fs.ensureDir(this.provenanceDir);
+    const chainPath = path.join(this.provenanceDir, 'chain.json');
+
+    let chain = [];
+    if (await fs.pathExists(chainPath)) {
+      chain = await fs.readJson(chainPath);
+    }
+
+    chain.push(entry);
+    await fs.writeJson(chainPath, chain, { spaces: 2 });
+  }
+
+  async verifyChain() {
+    const chainPath = path.join(this.provenanceDir, 'chain.json');
+
+    if (!(await fs.pathExists(chainPath))) {
+      return { valid: false, reason: 'No provenance chain found' };
+    }
+
+    const chain = await fs.readJson(chainPath);
+
+    for (let i = 0; i < chain.length; i++) {
+      const entry = chain[i];
+      const expectedPreviousHash = i > 0 ? chain[i - 1].hash : '';
+
+      if (entry.previous_hash !== expectedPreviousHash) {
+        return {
+          valid: false,
+          reason: \`Hash chain broken at entry \${i}\`,
+          entry: entry.id
+        };
+      }
+
+      // Recalculate hash to verify integrity
+      const content = JSON.stringify(
+        { ...entry, hash: undefined },
+        Object.keys(entry).sort()
+      );
+      const recalculatedHash = crypto.createHash('sha256').update(content).digest('hex');
+
+      if (entry.hash !== recalculatedHash) {
+        return {
+          valid: false,
+          reason: \`Hash integrity failed at entry \${i}\`,
+          entry: entry.id
+        };
+      }
+    }
+
+    return { valid: true, entries: chain.length };
+  }
+}
+
 module.exports = {
-  generateProvenance: () => ({ agent: 'caws-cli', version: '1.0.0' }),
-  saveProvenance: () => Promise.resolve()
+  ProvenanceTool,
+  generateProvenance: (commitHash, options) => new ProvenanceTool().generateProvenance(commitHash, options),
+  saveProvenance: (entry) => new ProvenanceTool().saveProvenance(entry),
+  verifyChain: () => new ProvenanceTool().verifyChain()
 };`
     );
-    fs.writeFileSync(path.join(mockTemplateDir, 'codemod/test.js'), 'console.log("mock codemod");');
+    fs.writeFileSync(
+      path.join(mockTemplateDir, 'codemod/test.js'),
+      `#!/usr/bin/env node
+
+/**
+ * Test Codemod for CAWS Framework
+ * Demonstrates automated code transformations
+ * @author CAWS Framework
+ */
+
+const tsMorph = require('ts-morph');
+
+function runCodemod(dryRun = true) {
+  console.log('🔧 Running test codemod...');
+
+  const project = new tsMorph.Project();
+  const sourceFiles = project.addSourceFilesAtPaths('src/**/*.ts');
+
+  console.log(\`📁 Found \${sourceFiles.length} source files\`);
+
+  let changes = 0;
+
+  for (const sourceFile of sourceFiles) {
+    const filePath = sourceFile.getFilePath();
+    console.log(\`Processing: \${filePath}\`);
+
+    // Example transformation: add JSDoc to exported functions
+    const exportedFunctions = sourceFile.getExportedDeclarations()
+      .filter(decl => tsMorph.Node.isFunctionDeclaration(decl.getFirstChild()));
+
+    for (const funcDecl of exportedFunctions) {
+      if (!funcDecl.getJsDocs().length) {
+        // Add basic JSDoc comment
+        funcDecl.addJsDoc({
+          description: \`Test codemod transformation applied to \${funcDecl.getName()}\`,
+          tags: [
+            { tagName: 'param', text: 'options - Transformation options' },
+            { tagName: 'returns', text: 'Result of transformation' }
+          ]
+        });
+        changes++;
+        console.log(\`  ✅ Added JSDoc to \${funcDecl.getName()}\`);
+      }
+    }
+  }
+
+  console.log(\`📊 Codemod complete: \${changes} transformations applied\`);
+
+  if (!dryRun) {
+    project.saveSync();
+    console.log('💾 Changes saved to disk');
+  } else {
+    console.log('🔍 Dry run - no files modified');
+  }
+
+  return { filesProcessed: sourceFiles.length, changesApplied: changes };
+}
+
+// CLI interface
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const dryRun = !args.includes('--apply');
+
+  try {
+    const result = runCodemod(dryRun);
+    console.log('✅ Codemod executed successfully');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Codemod failed:', error.message);
+    process.exit(1);
+  }
+}
+
+module.exports = { runCodemod };`
+    );
     fs.writeFileSync(path.join(mockTemplateDir, '.github/workflows/caws.yml'), 'name: test');
 
     // Check if template dependency is available
@@ -485,5 +676,21 @@ module.exports = {
         fs.renameSync(backupDir, originalDir);
       }
     });
+  });
+
+  afterAll(() => {
+    // Restore original working directory
+    if (originalCwd) {
+      process.chdir(originalCwd);
+    }
+
+    // Clean up test temp directory
+    try {
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      // Ignore cleanup errors in tests
+    }
   });
 });

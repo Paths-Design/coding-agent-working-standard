@@ -101,12 +101,13 @@
     }
   },
   "scripts": {
+    "build": "npm run bundle && npm run compile",
     "vscode:prepublish": "npm run bundle && npm run compile",
     "bundle": "node scripts/bundle-deps.js",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run bundle && npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "test": "node ./out/test/runTest.js",
     "package": "vsce package"
   },

@@ -14,7 +14,7 @@ const CLI_VERSION = require('../../package.json').version;
 // Import scaffold utilities
 const { scaffoldCursorHooks } = require('../scaffold/cursor-hooks');
 
-// TODO: These need to be injected or imported properly
+// Dependencies injected via setFinalizationDependencies()
 let languageSupport = null;
 let loadProvenanceTools = null;
 

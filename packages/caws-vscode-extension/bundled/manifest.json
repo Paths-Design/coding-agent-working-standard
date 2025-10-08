@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "bundled_at": "2025-10-08T02:55:34.577Z",
+  "components": {
+    "mcp-server": {
+      "version": "1.0.0",
+      "files": [
+        "index.js",
+        "package.json",
+        "README.md"
+      ]
+    },
+    "cli": {
+      "version": "3.0.0",
+      "files": [
+        "dist/index.js",
+        "dist/waivers-manager.js",
+        "dist/cicd-optimizer.js",
+        "dist/tool-loader.js",
+        "dist/tool-validator.js",
+        "dist/tool-interface.js",
+        "package.json",
+        "README.md"
+      ]
+    },
+    "templates": {
+      "source": "cli/templates",
+      "description": "Project scaffolding templates"
+    }
+  },
+  "total_size_mb": 0.8895673751831055
+}

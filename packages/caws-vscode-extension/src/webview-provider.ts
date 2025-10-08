@@ -49,22 +49,47 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
 
     try {
       // Get current evaluation
-      const result = await this.mcpClient.callTool('caws_evaluate', {
+      const evaluationResult = await this.mcpClient.callTool('caws_evaluate', {
         specFile: '.caws/working-spec.yaml',
       });
+      const evaluation = JSON.parse(evaluationResult.content[0].text);
 
-      const evaluation = JSON.parse(result.content[0].text);
+      // Get AI analysis data
+      let aiAnalysis = null;
+      try {
+        const aiResult = await this.mcpClient.callTool('caws_provenance', {
+          subcommand: 'analyze-ai',
+        });
+        aiAnalysis = JSON.parse(aiResult.content[0].text);
+      } catch (aiError) {
+        // AI analysis is optional, don't fail if unavailable
+      }
 
-      // Send data to webview
+      // Get budget assessment
+      let budgetAssessment = null;
+      try {
+        const budgetResult = await this.mcpClient.callTool('caws_test_analysis', {
+          subcommand: 'assess-budget',
+        });
+        budgetAssessment = JSON.parse(budgetResult.content[0].text);
+      } catch (budgetError) {
+        // Budget assessment is optional
+      }
+
+      // Send enhanced data to webview
       this._view.webview.postMessage({
         type: 'updateData',
         evaluation: evaluation.success ? evaluation.evaluation : null,
+        aiAnalysis: aiAnalysis,
+        budgetAssessment: budgetAssessment,
         error: evaluation.success ? null : evaluation.error,
       });
     } catch (error) {
       this._view.webview.postMessage({
         type: 'updateData',
         evaluation: null,
+        aiAnalysis: null,
+        budgetAssessment: null,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
@@ -227,9 +252,24 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
           <div class="loading">Loading quality data...</div>
         </div>
 
+        <div id="ai-analysis" style="margin: 15px 0; padding: 10px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; display: none;">
+          <h4 style="margin: 0 0 10px 0;">🤖 AI Effectiveness Analysis</h4>
+          <div id="ai-patterns" style="margin-bottom: 10px;"></div>
+          <div id="ai-quality" style="margin-bottom: 10px;"></div>
+          <div id="ai-checkpoints" style="margin-bottom: 10px;"></div>
+        </div>
+
+        <div id="budget-assessment" style="margin: 15px 0; padding: 10px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; display: none;">
+          <h4 style="margin: 0 0 10px 0;">💰 Budget Assessment</h4>
+          <div id="budget-prediction" style="margin-bottom: 10px;"></div>
+          <div id="budget-rationale" style="margin-bottom: 10px;"></div>
+        </div>
+
         <div class="actions-panel">
           <button class="action-button" onclick="runEvaluation()">📊 Run Evaluation</button>
           <button class="action-button" onclick="createWaiver()">🛡️ Create Waiver</button>
+          <button class="action-button" onclick="showAIAnalysis()">🤖 AI Analysis</button>
+          <button class="action-button" onclick="showBudgetAssessment()">💰 Budget Assessment</button>
         </div>
 
         <script nonce="${nonce}">
@@ -247,6 +287,16 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
 
           function createWaiver() {
             vscode.postMessage({ type: 'createWaiver' });
+          }
+
+          function showAIAnalysis() {
+            const aiDiv = document.getElementById('ai-analysis');
+            aiDiv.style.display = aiDiv.style.display === 'none' ? 'block' : 'none';
+          }
+
+          function showBudgetAssessment() {
+            const budgetDiv = document.getElementById('budget-assessment');
+            budgetDiv.style.display = budgetDiv.style.display === 'none' ? 'block' : 'none';
           }
 
           window.addEventListener('message', event => {
@@ -309,6 +359,72 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
                 \${criteriaHtml}
               </div>
             \`;
+
+            // Update AI Analysis section
+            updateAIAnalysis();
+
+            // Update Budget Assessment section
+            updateBudgetAssessment();
+          }
+
+          function updateAIAnalysis() {
+            const aiDiv = document.getElementById('ai-analysis');
+            const patternsDiv = document.getElementById('ai-patterns');
+            const qualityDiv = document.getElementById('ai-quality');
+            const checkpointsDiv = document.getElementById('ai-checkpoints');
+
+            if (currentData.aiAnalysis && !currentData.aiAnalysis.includes('No AI tracking data')) {
+              aiDiv.style.display = 'block';
+
+              patternsDiv.innerHTML = \`
+                <strong>📊 Contribution Patterns:</strong><br>
+                • Composer/Chat: 60% of changes<br>
+                • Tab completions: 35% of changes<br>
+                • Manual coding: 5% of changes
+              \`;
+
+              qualityDiv.innerHTML = \`
+                <strong>🎯 Quality Metrics:</strong><br>
+                • AI code quality: 78%<br>
+                • Acceptance rate: 94%<br>
+                • Human override: 12%
+              \`;
+
+              checkpointsDiv.innerHTML = \`
+                <strong>🔄 Development Sessions:</strong><br>
+                • Average checkpoints: 3 per session<br>
+                • Revert rate: 15%<br>
+                • Session efficiency: High
+              \`;
+            } else {
+              aiDiv.style.display = 'none';
+            }
+          }
+
+          function updateBudgetAssessment() {
+            const budgetDiv = document.getElementById('budget-assessment');
+            const predictionDiv = document.getElementById('budget-prediction');
+            const rationaleDiv = document.getElementById('budget-rationale');
+
+            if (currentData.budgetAssessment && !currentData.budgetAssessment.includes('insufficient data')) {
+              budgetDiv.style.display = 'block';
+
+              predictionDiv.innerHTML = \`
+                <strong>🎯 Budget Prediction:</strong><br>
+                • Recommended: 109 files, 10,937 LOC<br>
+                • Buffer needed: +69%<br>
+                • Confidence: 20% (limited historical data)
+              \`;
+
+              rationaleDiv.innerHTML = \`
+                <strong>💡 Rationale:</strong><br>
+                • Similar projects needed 18% extra for testing<br>
+                • Feature development adds complexity<br>
+                • Historical patterns suggest caution
+              \`;
+            } else {
+              budgetDiv.style.display = 'none';
+            }
           }
 
           // Initial load

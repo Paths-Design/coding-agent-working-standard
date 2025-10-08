@@ -66,27 +66,33 @@ const workingSpecTemplate = {
 const featurePlanTemplate = `# ${changeTitle}
 
 ## Overview
-TODO: Brief description of the feature and its business value.
+Brief description of the feature and its business value. Explain why this feature is needed and what problem it solves for users.
 
 ## Requirements
-- TODO: List specific requirements
+- Functional requirements for the feature
+- Non-functional requirements (performance, security, etc.)
+- Acceptance criteria
 
 ## Implementation Plan
-- TODO: Step-by-step implementation plan
+1. Step-by-step implementation plan
+2. Dependencies and prerequisites
+3. Risk mitigation strategies
 
 ## Blast Radius
-- Modules: TODO: List affected modules
-- Data migration: TODO: yes/no
-- Cross-service contracts: TODO: List affected contracts
+- Modules: List of modules that will be affected
+- Data migration: yes/no - whether data changes are required
+- Cross-service contracts: List of contracts that need updates
 
 ## Operational Rollback SLO
-- TODO: Time and method to rollback if needed
+- Time and method to rollback if needed (e.g., feature flags, database rollbacks)
 
 ## Testing Strategy
-- TODO: How this will be tested
+- Unit tests for new functionality
+- Integration tests for cross-module interactions
+- E2E tests for user workflows
 
 ## Success Metrics
-- TODO: How success will be measured
+- How success will be measured (e.g., user adoption, performance improvements)
 `;
 
 const testPlanTemplate = `# Test Plan for ${changeTitle}
@@ -102,36 +108,40 @@ const testPlanTemplate = `# Test Plan for ${changeTitle}
 | A11y/Perf | Yes | Accessibility and performance |
 
 ## Test Cases
-TODO: Specific test cases to implement
+- Specific test cases to implement for this feature
+- Include happy path, error conditions, and boundary cases
 
 ## Edge Cases
-TODO: Edge cases to cover
+- Edge cases to cover (null values, large inputs, race conditions)
+- Error handling scenarios
 
 ## Regression Tests
-TODO: Existing functionality to verify
+- Existing functionality to verify hasn't been broken
+- Integration points with other systems
 `;
 
 const refactorPlanTemplate = `# Refactor Plan for ${changeTitle}
 
 ## Overview
-TODO: What is being refactored and why.
+What is being refactored and why. Explain the business or technical drivers for this refactoring.
 
 ## Current State
-TODO: Describe current implementation issues.
+Describe current implementation issues. What problems does the current code have?
 
 ## Target State
-TODO: Describe desired architecture after refactor.
+Describe desired architecture after refactor. What will the code look like after refactoring?
 
 ## Migration Strategy
-TODO: How to migrate without breaking changes.
+How to migrate without breaking changes. Feature flags, gradual rollout, etc.
 
 ## Codemod Plan
-- TODO: What transformations are needed
-- TODO: Files to be modified
-- TODO: Rollback strategy
+- What transformations are needed to update the codebase
+- Files to be modified and in what order
+- Rollback strategy if something goes wrong
 
 ## Testing Strategy
-- TODO: How to verify behavior preservation
+- How to verify behavior preservation during and after refactoring
+- Regression testing approach
 `;
 
 const codemodTemplate = `/**
@@ -146,15 +156,23 @@ const tsMorph = require('ts-morph');
 function applyCodemod(dryRun = true) {
   const project = new tsMorph.Project();
 
-  // TODO: Add your transformation logic here
-  // Example: project.addSourceFilesAtPaths("src/**/*.ts");
+  // Load source files to transform
+  project.addSourceFilesAtPaths("src/**/*.ts");
 
   console.log('Codemod transformations:');
-  console.log('TODO: Implement specific transformations');
+  console.log('- Analyzing source files...');
+
+  // Example transformation: find and update specific patterns
+  const sourceFiles = project.getSourceFiles();
+
+  for (const sourceFile of sourceFiles) {
+    // Add your specific transformation logic here
+    console.log(`Processing: ${sourceFile.getFilePath()}`);
+  }
 
   if (!dryRun) {
     project.saveSync();
-    console.log('✅ Transformations applied');
+    console.log('✅ Transformations applied successfully');
   } else {
     console.log('🔍 Dry run - no changes made');
   }

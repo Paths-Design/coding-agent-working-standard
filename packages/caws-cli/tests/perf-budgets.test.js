@@ -9,11 +9,25 @@ const path = require('path');
 
 describe('Performance Budget Tests', () => {
   const cliPath = path.join(__dirname, '../dist/index.js');
+  let originalCwd;
+  let testTempDir;
 
   beforeAll(() => {
+    // Store original working directory
+    originalCwd = process.cwd();
+
+    // Create a temporary directory for tests to avoid conflicts with monorepo
+    testTempDir = path.join(__dirname, '..', 'test-perf-temp');
+    if (!fs.existsSync(testTempDir)) {
+      fs.mkdirSync(testTempDir, { recursive: true });
+    }
+
+    // Change to temp directory for tests
+    process.chdir(testTempDir);
+
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
-      execSync('npm run build', { cwd: __dirname, stdio: 'pipe' });
+      execSync('npm run build', { cwd: path.join(__dirname, '..'), stdio: 'pipe' });
     }
   });
 
@@ -26,10 +40,10 @@ describe('Performance Budget Tests', () => {
       /^test-cpu-monitor$/,
     ];
     try {
-      const items = fs.readdirSync(__dirname);
+      const items = fs.readdirSync(process.cwd());
       items.forEach((item) => {
         if (testDirPatterns.some((pattern) => pattern.test(item))) {
-          const itemPath = path.join(__dirname, item);
+          const itemPath = path.join(process.cwd(), item);
           try {
             if (fs.statSync(itemPath).isDirectory()) {
               fs.rmSync(itemPath, { recursive: true, force: true });
@@ -41,6 +55,20 @@ describe('Performance Budget Tests', () => {
       });
     } catch (_error) {
       // Ignore errors if directory doesn't exist
+    }
+
+    // Restore original working directory
+    if (originalCwd) {
+      process.chdir(originalCwd);
+    }
+
+    // Clean up test temp directory
+    try {
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      // Ignore cleanup errors in tests
     }
   });
 
@@ -257,9 +285,13 @@ describe('Performance Budget Tests', () => {
   });
 
   describe('Performance Regression Detection', () => {
-    test.skip('should detect performance regressions in core operations', () => {
+    test('should detect performance regressions in core operations', () => {
       // Performance Contract: Core operations should not regress significantly
-      // TODO: Re-enable when baseline performance is established in CI environment
+      // Skip in CI until baseline performance is established
+      if (process.env.CI || process.env.GITHUB_ACTIONS) {
+        console.log('⏭️  Skipping performance regression test in CI environment');
+        return;
+      }
 
       const baselineTimes = {
         startup: 120, // 120ms baseline (adjusted for realistic performance)

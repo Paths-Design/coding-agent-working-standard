@@ -755,7 +755,7 @@ We welcome contributions from the community! Here's how to get involved:
 
 ```bash
 # Fork the repository
-git clone https://github.com/your-username/caws.git
+git clone https://github.com/your-organization/caws.git
 cd caws
 
 # Install dependencies

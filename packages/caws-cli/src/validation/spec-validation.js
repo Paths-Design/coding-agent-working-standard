@@ -12,7 +12,7 @@ const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
  * @param {Object} options - Validation options
  * @returns {Object} Validation result
  */
-const validateWorkingSpec = (spec, options = {}) => {
+const validateWorkingSpec = (spec, _options = {}) => {
   try {
     // Basic structural validation for essential fields
     const requiredFields = [
@@ -274,7 +274,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
         const mockStats = {
           files_changed: 50, // This would be calculated from actual changes
           lines_changed: 5000,
-          risk_tier: spec.risk_tier
+          risk_tier: spec.risk_tier,
         };
 
         budgetCheck = checkBudgetCompliance(derivedBudget, mockStats);

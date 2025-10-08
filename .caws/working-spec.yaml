@@ -5,6 +5,9 @@ id: ARCH-0001
 title: Implement policy separation and waiver-based budget control
 risk_tier: 1
 mode: feature
+change_budget:
+  max_files: 50  # Tier 1 base (10) + waiver delta (50)
+  max_loc: 5000  # Tier 1 base (250) + waiver delta (5000)
 # Budget derived from policy.yaml based on risk_tier
 # Waivers referenced by ID for exceptions
 waiver_ids: ["WV-0001"]  # Bootstrap waiver for this architectural change

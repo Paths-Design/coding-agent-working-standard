@@ -147,7 +147,7 @@ async function scaffoldIDEIntegrations(targetDir, options) {
   return { added: addedCount, skipped: skippedCount };
 }
 
-// TODO: These need to be injected or imported properly
+// Dependencies injected via setScaffoldDependencies()
 let cawsSetup = null;
 let loadProvenanceTools = null;
 
