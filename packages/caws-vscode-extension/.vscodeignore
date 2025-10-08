@@ -17,12 +17,9 @@ vsc-extension-quickstart.md
 **/node_modules/**/tests/**
 **/node_modules/**/*.md
 
-# Bundled node_modules (already minified/included)
-bundled/*/node_modules/**
-
-# Parent directory exclusions
-../**
-!../LICENSE
+# Exclude monorepo root completely
+../../**
+!../../LICENSE
 
 # Environment and secrets
 **/.env
@@ -31,3 +28,11 @@ bundled/*/node_modules/**
 
 # Turbo cache
 **/.turbo/**
+
+# Specific problematic paths
+**/@caws/**
+**/packages/**
+**/apps/**
+**/docs/**
+**/examples/**
+**/codemod/**
