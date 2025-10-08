@@ -11,45 +11,68 @@ const yaml = require('js-yaml');
 describe('CLI Workflow Integration', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
   const testProjectName = 'test-integration-workflow';
-  const testProjectPath = path.join(__dirname, testProjectName);
-  const cliTestProjectPath = path.join(__dirname, '../../', testProjectName);
+  let testProjectPath;
+  let originalCwd;
+  let testTempDir;
 
   beforeAll(() => {
+    // Store original working directory
+    originalCwd = process.cwd();
+
+    // Create a clean temporary directory for tests to avoid conflicts with monorepo
+    testTempDir = path.join(__dirname, '..', 'test-integration-temp');
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(testTempDir, { recursive: true });
+
+    // Change to temp directory for tests
+    process.chdir(testTempDir);
+
+    // Set test project path relative to current working directory (temp dir)
+    testProjectPath = path.join(process.cwd(), testProjectName);
+
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
       execSync('npm run build', { cwd: path.join(__dirname, '../..'), stdio: 'pipe' });
     }
   });
 
+  afterAll(() => {
+    // Restore original working directory
+    if (originalCwd) {
+      process.chdir(originalCwd);
+    }
+
+    // Clean up temp directory
+    try {
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      // Ignore cleanup errors
+    }
+  });
+
   beforeEach(() => {
-    // Clean up any existing test project (both locations)
+    // Clean up any existing test project
     if (fs.existsSync(testProjectPath)) {
       fs.rmSync(testProjectPath, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up: ${testProjectName} (test dir)`);
-    }
-    if (fs.existsSync(cliTestProjectPath)) {
-      fs.rmSync(cliTestProjectPath, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up: ${testProjectName} (cli dir)`);
+      console.log(`🧹 Cleaned up: ${testProjectName}`);
     }
   });
 
   afterEach(() => {
-    // Clean up test project (both locations)
+    // Clean up test project
     if (fs.existsSync(testProjectPath)) {
       fs.rmSync(testProjectPath, { recursive: true, force: true });
-    }
-    if (fs.existsSync(cliTestProjectPath)) {
-      fs.rmSync(cliTestProjectPath, { recursive: true, force: true });
     }
   });
 
   afterAll(() => {
-    // Final cleanup: Remove test directory if it still exists (both locations)
+    // Final cleanup: Remove test directory if it still exists
     if (fs.existsSync(testProjectPath)) {
       fs.rmSync(testProjectPath, { recursive: true, force: true });
-    }
-    if (fs.existsSync(cliTestProjectPath)) {
-      fs.rmSync(cliTestProjectPath, { recursive: true, force: true });
     }
   });
 

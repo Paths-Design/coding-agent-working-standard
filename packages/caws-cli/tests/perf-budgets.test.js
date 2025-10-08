@@ -16,11 +16,12 @@ describe('Performance Budget Tests', () => {
     // Store original working directory
     originalCwd = process.cwd();
 
-    // Create a temporary directory for tests to avoid conflicts with monorepo
+    // Create a clean temporary directory for tests to avoid conflicts with monorepo
     testTempDir = path.join(__dirname, '..', 'test-perf-temp');
-    if (!fs.existsSync(testTempDir)) {
-      fs.mkdirSync(testTempDir, { recursive: true });
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
     }
+    fs.mkdirSync(testTempDir, { recursive: true });
 
     // Change to temp directory for tests
     process.chdir(testTempDir);

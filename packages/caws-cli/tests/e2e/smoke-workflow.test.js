@@ -10,8 +10,23 @@ const yaml = require('js-yaml');
 
 describe('E2E Smoke Tests - Critical User Workflows', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
+  let originalCwd;
+  let testTempDir;
 
   beforeAll(() => {
+    // Store original working directory
+    originalCwd = process.cwd();
+
+    // Create a clean temporary directory for tests to avoid conflicts with monorepo
+    testTempDir = path.join(__dirname, '..', 'test-e2e-temp');
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(testTempDir, { recursive: true });
+
+    // Change to temp directory for tests
+    process.chdir(testTempDir);
+
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
       execSync('npm run build', { cwd: path.join(__dirname, '../..'), stdio: 'pipe' });
@@ -19,40 +34,26 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   });
 
   afterAll(() => {
-    // Clean up all e2e test directories
-    const testDirPattern = /^test-e2e-/;
+    // Restore original working directory
+    if (originalCwd) {
+      process.chdir(originalCwd);
+    }
+
+    // Clean up temp directory
     try {
-      const items = fs.readdirSync(__dirname);
-      items.forEach((item) => {
-        if (testDirPattern.test(item)) {
-          const itemPath = path.join(__dirname, item);
-          try {
-            if (fs.statSync(itemPath).isDirectory()) {
-              fs.rmSync(itemPath, { recursive: true, force: true });
-            }
-          } catch (_err) {
-            // Ignore errors during cleanup
-          }
-        }
-      });
-    } catch (_error) {
-      // Ignore errors if directory doesn't exist
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      // Ignore cleanup errors
     }
   });
 
   describe('Complete Project Creation Workflow', () => {
     const testProjectName = 'test-e2e-complete-project';
-    const testProjectPath = path.join(__dirname, testProjectName);
-    const originalCwd = process.cwd();
+    const testProjectPath = path.join(process.cwd(), testProjectName);
 
     beforeEach(() => {
-      // Ensure we're in the test directory
-      try {
-        process.chdir(__dirname);
-      } catch (err) {
-        // Already in correct directory
-      }
-
       // Clean up any existing test project
       if (fs.existsSync(testProjectPath)) {
         fs.rmSync(testProjectPath, { recursive: true, force: true });
@@ -61,17 +62,6 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
     });
 
     afterEach(() => {
-      // Restore working directory before cleanup
-      try {
-        process.chdir(originalCwd);
-      } catch (err) {
-        try {
-          process.chdir(__dirname);
-        } catch (err2) {
-          // Can't restore, continue
-        }
-      }
-
       // Clean up test project
       if (fs.existsSync(testProjectPath)) {
         fs.rmSync(testProjectPath, { recursive: true, force: true });
@@ -440,12 +430,9 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       // Test with a single representative project mode to avoid complexity
 
       const testProjectName = 'test-e2e-multi-mode';
-      const testProjectPath = path.join(__dirname, testProjectName);
+      const testProjectPath = path.join(process.cwd(), testProjectName);
 
       try {
-        // Ensure we're in test directory before starting
-        process.chdir(__dirname);
-
         // Clean up
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
@@ -455,7 +442,6 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: __dirname,
         });
 
         process.chdir(testProjectPath);
