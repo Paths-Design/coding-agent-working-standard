@@ -236,7 +236,7 @@ describe('CLI Accessibility Tests', () => {
       // Accessibility Contract: Generated specs should be readable and well-formatted
 
       const testProjectName = `test-accessibility-spec-${Date.now()}`;
-      const testProjectPath = path.join(__dirname, testProjectName);
+      const testProjectPath = path.join(testTempDir, testProjectName);
 
       try {
         // Clean up any existing test project (force cleanup)

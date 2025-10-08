@@ -39,8 +39,8 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   });
 
   describe('Complete Project Creation Workflow', () => {
-    const testProjectName = 'test-e2e-complete-project';
-    const testProjectPath = path.join(process.cwd(), testProjectName);
+    const testProjectName = `test-e2e-complete-project-${Date.now()}`;
+    const testProjectPath = path.join(testTempDir, testProjectName);
 
     beforeEach(() => {
       // Clean up any existing test project
@@ -420,8 +420,8 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       // E2E Contract: CAWS should work with different project structures
       // Test with a single representative project mode to avoid complexity
 
-      const testProjectName = 'test-e2e-multi-mode';
-      const testProjectPath = path.join(process.cwd(), testProjectName);
+      const testProjectName = `test-e2e-multi-mode-${Date.now()}`;
+      const testProjectPath = path.join(testTempDir, testProjectName);
 
       try {
         // Clean up

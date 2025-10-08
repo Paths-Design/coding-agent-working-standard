@@ -10,7 +10,7 @@ const yaml = require('js-yaml');
 
 describe('CLI Interface Contracts', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
-  const testProjectName = 'test-cli-contract';
+  const testProjectName = `test-cli-contract-${Date.now()}`;
   let testTempDir;
 
   beforeAll(() => {
@@ -40,18 +40,40 @@ describe('CLI Interface Contracts', () => {
 
   beforeEach(() => {
     // Clean up any existing test project in temp directory
-    const projectPath = path.join(testTempDir, testProjectName);
-    if (fs.existsSync(projectPath)) {
-      fs.rmSync(projectPath, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up: ${testProjectName}`);
+    try {
+      const tempItems = fs.readdirSync(testTempDir);
+      tempItems.forEach((item) => {
+        const itemPath = path.join(testTempDir, item);
+        try {
+          if (fs.statSync(itemPath).isDirectory()) {
+            fs.rmSync(itemPath, { recursive: true, force: true });
+            console.log(`🧹 Cleaned up: ${item} (temp dir)`);
+          }
+        } catch (_err) {
+          // Ignore errors during cleanup
+        }
+      });
+    } catch (_error) {
+      // Ignore errors if directory doesn't exist or can't be read
     }
   });
 
   afterEach(() => {
     // Clean up test project in temp directory
-    const projectPath = path.join(testTempDir, testProjectName);
-    if (fs.existsSync(projectPath)) {
-      fs.rmSync(projectPath, { recursive: true, force: true });
+    try {
+      const tempItems = fs.readdirSync(testTempDir);
+      tempItems.forEach((item) => {
+        const itemPath = path.join(testTempDir, item);
+        try {
+          if (fs.statSync(itemPath).isDirectory()) {
+            fs.rmSync(itemPath, { recursive: true, force: true });
+          }
+        } catch (_err) {
+          // Ignore errors during cleanup
+        }
+      });
+    } catch (_error) {
+      // Ignore errors if directory doesn't exist or can't be read
     }
   });
 

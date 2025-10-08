@@ -10,7 +10,6 @@ const path = require('path');
 describe('Cursor Hooks Integration', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
   const testProjectName = 'test-cursor-hooks';
-  let originalCwd;
   let testTempDir;
 
   beforeAll(() => {
@@ -266,7 +265,7 @@ describe('Cursor Hooks Integration', () => {
 
     test('HOOK_STRATEGY.md should include Cursor hooks', () => {
       // Use absolute path from original working directory
-      const strategyPath = path.join(originalCwd, 'docs/internal/HOOK_STRATEGY.md');
+      const strategyPath = path.join(process.cwd(), 'docs/internal/HOOK_STRATEGY.md');
 
       expect(fs.existsSync(strategyPath)).toBe(true);
 
