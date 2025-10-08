@@ -13,9 +13,11 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema,
+  InitializeRequestSchema,
+  InitializedNotificationSchema,
   ListResourcesRequestSchema,
-  ReadResourceRequestSchema
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -46,8 +48,38 @@ class CawsMcpServer extends Server {
   }
 
   setupToolHandlers() {
+    // Handle MCP initialization
+    this.setRequestHandler(InitializeRequestSchema, async (request) => {
+      const { protocolVersion, capabilities, clientInfo } = request.params;
+
+      console.error(`MCP Initialize: protocol=${protocolVersion}, client=${clientInfo?.name}`);
+
+      return {
+        protocolVersion,
+        capabilities: {
+          tools: {
+            listChanged: false,
+          },
+          resources: {
+            listChanged: false,
+          },
+          logging: {},
+        },
+        serverInfo: {
+          name: 'caws-mcp-server',
+          version: '1.0.0',
+        },
+      };
+    });
+
+    // Handle client initialized notification
+    this.setNotificationHandler(InitializedNotificationSchema, () => {
+      console.error('MCP Client initialized - ready for requests');
+    });
+
     // List available tools
-    this.setRequestHandler(ListToolsRequestSchema, async () => {
+    this.setRequestHandler(ListToolsRequestSchema, () => {
+      console.error('MCP: Listing tools');
       return { tools: CAWS_TOOLS };
     });
 
@@ -90,7 +122,8 @@ class CawsMcpServer extends Server {
 
   setupResourceHandlers() {
     // List available resources
-    this.setRequestHandler(ListResourcesRequestSchema, async () => {
+    this.setRequestHandler(ListResourcesRequestSchema, () => {
+      console.error('MCP: Listing resources');
       const resources = [];
 
       // Working specs
@@ -102,21 +135,6 @@ class CawsMcpServer extends Server {
             name: `Working Spec: ${path.basename(specPath, '.yaml')}`,
             description: 'CAWS working specification',
             mimeType: 'application/yaml',
-          });
-        });
-      } catch (error) {
-        // Ignore errors in resource listing
-      }
-
-      // Active waivers
-      try {
-        const waivers = await this.getActiveWaivers();
-        waivers.forEach((waiver) => {
-          resources.push({
-            uri: `caws://waivers/${waiver.id}`,
-            name: `Waiver: ${waiver.id}`,
-            description: waiver.title,
-            mimeType: 'application/json',
           });
         });
       } catch (error) {
