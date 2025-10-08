@@ -12,8 +12,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { execSync } from 'child_process';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +24,6 @@ class CawsMcpServer extends Server {
     super({
       name: 'caws-mcp-server',
       version: '1.0.0',
-      description: 'CAWS quality assurance tools for AI agents',
     });
 
     this.setupToolHandlers();
@@ -485,7 +484,14 @@ class CawsMcpServer extends Server {
   }
 
   async handleProvenance(args) {
-    const { subcommand, commit, message, author, quiet = false, workingDirectory = process.cwd() } = args;
+    const {
+      subcommand,
+      commit,
+      message,
+      author,
+      quiet = false,
+      workingDirectory = process.cwd(),
+    } = args;
 
     try {
       let command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} provenance ${subcommand}`;
@@ -799,7 +805,12 @@ class CawsMcpServer extends Server {
   }
 
   async handleHooks(args) {
-    const { subcommand = 'status', force = false, backup = false, workingDirectory = process.cwd() } = args;
+    const {
+      subcommand = 'status',
+      force = false,
+      backup = false,
+      workingDirectory = process.cwd(),
+    } = args;
 
     try {
       let command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} hooks ${subcommand}`;

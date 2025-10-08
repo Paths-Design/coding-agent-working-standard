@@ -1,65 +1,56 @@
 ## [3.3.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.3.1) (2025-10-08)
 
-
 ### Bug Fixes
 
-* move js-yaml and chalk from devDependencies to dependencies to fix MODULE_NOT_FOUND error on global install
+- move js-yaml and chalk from devDependencies to dependencies to fix MODULE_NOT_FOUND error on global install
 
 # [3.3.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.4...v3.3.0) (2025-10-08)
 
-
 ### Bug Fixes
 
-* remove unused imports in diagnose and status commands ([f22b108](https://github.com/Paths-Design/coding-agent-working-standard/commit/f22b10802ad0e080d0bab7b72c0adcaccf9dc062))
-
+- remove unused imports in diagnose and status commands ([f22b108](https://github.com/Paths-Design/coding-agent-working-standard/commit/f22b10802ad0e080d0bab7b72c0adcaccf9dc062))
 
 ### Features
 
-* add enhanced error handling and TypeScript auto-detection (DX-001 T1+T2) ([0301996](https://github.com/Paths-Design/coding-agent-working-standard/commit/0301996253f8bd9de5e56f60bcb6b02fa4d964f8))
-* add status command for project health overview (DX-001 T3) ([b7dfa1c](https://github.com/Paths-Design/coding-agent-working-standard/commit/b7dfa1ccddcaaba32640b77a663a962f30947ccc))
-* complete DX improvements - diagnose and templates commands (DX-001 T4+T5) ([4f207a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f207a180b26f9ba59901de8e2a77ecdd1438e6d))
+- add enhanced error handling and TypeScript auto-detection (DX-001 T1+T2) ([0301996](https://github.com/Paths-Design/coding-agent-working-standard/commit/0301996253f8bd9de5e56f60bcb6b02fa4d964f8))
+- add status command for project health overview (DX-001 T3) ([b7dfa1c](https://github.com/Paths-Design/coding-agent-working-standard/commit/b7dfa1ccddcaaba32640b77a663a962f30947ccc))
+- complete DX improvements - diagnose and templates commands (DX-001 T4+T5) ([4f207a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f207a180b26f9ba59901de8e2a77ecdd1438e6d))
 
 ## [3.2.4](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.3...v3.2.4) (2025-10-08)
 
-
 ### Bug Fixes
 
-* scaffold command now uses bundled templates ([ceff5e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/ceff5e4e007fde38500f627422320c93acc4b441))
+- scaffold command now uses bundled templates ([ceff5e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/ceff5e4e007fde38500f627422320c93acc4b441))
 
 ## [3.2.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.2...v3.2.3) (2025-10-08)
 
-
 ### Bug Fixes
 
-* update provenance tools loader to use bundled templates ([a58996f](https://github.com/Paths-Design/coding-agent-working-standard/commit/a58996fd4fc22eea0f9c2f3d67870ea45df0327c))
+- update provenance tools loader to use bundled templates ([a58996f](https://github.com/Paths-Design/coding-agent-working-standard/commit/a58996fd4fc22eea0f9c2f3d67870ea45df0327c))
 
 ## [3.2.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.1...v3.2.2) (2025-10-08)
 
-
 ### Bug Fixes
 
-* add safety checks for ai_assessment fields in working spec ([05f1f20](https://github.com/Paths-Design/coding-agent-working-standard/commit/05f1f20025303660b3bdc87d670514d83ffc9705))
+- add safety checks for ai_assessment fields in working spec ([05f1f20](https://github.com/Paths-Design/coding-agent-working-standard/commit/05f1f20025303660b3bdc87d670514d83ffc9705))
 
 ## [3.2.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.0...v3.2.1) (2025-10-08)
 
-
 ### Bug Fixes
 
-* add safety checks for undefined values in working spec generation ([3fbb9c8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3fbb9c892fff97535c98d8d5c9e2e9833b7d41fc))
+- add safety checks for undefined values in working spec generation ([3fbb9c8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3fbb9c892fff97535c98d8d5c9e2e9833b7d41fc))
 
 # [3.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.1.1...v3.2.0) (2025-10-08)
 
-
 ### Bug Fixes
 
-* adjust performance regression threshold for CI environment ([52dc6fd](https://github.com/Paths-Design/coding-agent-working-standard/commit/52dc6fd166a62eb6a199b39e1242887106425e60))
-* resolve CI test failures and false positive in pre-commit hook ([3b7171c](https://github.com/Paths-Design/coding-agent-working-standard/commit/3b7171c858dfcdde6647443231151da9c38aeff8))
-* resolve CI test failures with ENOENT uv_cwd errors ([6aed7fe](https://github.com/Paths-Design/coding-agent-working-standard/commit/6aed7fe74d80464050067a12a13a8f5013cc7304))
-
+- adjust performance regression threshold for CI environment ([52dc6fd](https://github.com/Paths-Design/coding-agent-working-standard/commit/52dc6fd166a62eb6a199b39e1242887106425e60))
+- resolve CI test failures and false positive in pre-commit hook ([3b7171c](https://github.com/Paths-Design/coding-agent-working-standard/commit/3b7171c858dfcdde6647443231151da9c38aeff8))
+- resolve CI test failures with ENOENT uv_cwd errors ([6aed7fe](https://github.com/Paths-Design/coding-agent-working-standard/commit/6aed7fe74d80464050067a12a13a8f5013cc7304))
 
 ### Features
 
-* major UX improvements for CAWS provenance tracking ([d9095ee](https://github.com/Paths-Design/coding-agent-working-standard/commit/d9095ee5e65313b71ebf4ae5796bb5876139c1fb))
+- major UX improvements for CAWS provenance tracking ([d9095ee](https://github.com/Paths-Design/coding-agent-working-standard/commit/d9095ee5e65313b71ebf4ae5796bb5876139c1fb))
 
 # [3.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.0.0...v3.1.1) (2025-10-08)
 
