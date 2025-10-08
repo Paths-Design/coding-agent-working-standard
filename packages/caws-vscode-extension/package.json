@@ -107,7 +107,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run bundle && npm run compile && npm run lint",
-    "lint": "eslint src",
+    "lint": "npx eslint src",
     "test": "node ./out/test/runTest.js",
     "package": "vsce package"
   },
