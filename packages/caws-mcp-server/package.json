@@ -10,7 +10,7 @@
     "build": "echo 'MCP Server does not require building'",
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint index.js",
     "format": "prettier --write index.js"
   },
