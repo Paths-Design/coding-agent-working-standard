@@ -290,8 +290,8 @@ describe('Performance Budget Tests', () => {
       const helpEnd = performance.now();
       currentTimes.help = helpEnd - helpStart;
 
-    // Performance Contract: Current performance should not regress > 200% from baseline
-    const regressionThreshold = 3.5; // 250% slower is acceptable for test environment with other tests
+      // Performance Contract: Current performance should not regress > 200% from baseline
+      const regressionThreshold = 3.5; // 250% slower is acceptable for test environment with other tests
 
       Object.entries(currentTimes).forEach(([operation, time]) => {
         const baseline = baselineTimes[operation];
