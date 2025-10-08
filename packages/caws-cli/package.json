@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "CAWS CLI - Coding Agent Workflow System command line tools",
   "main": "dist/index.js",
   "bin": {
@@ -52,9 +52,11 @@
   },
   "dependencies": {
     "ajv": "^8.12.0",
+    "chalk": "4.1.2",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
-    "inquirer": "8.2.7"
+    "inquirer": "8.2.7",
+    "js-yaml": "4.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -66,10 +68,8 @@
     "@types/inquirer": "^8.2.6",
     "@types/js-yaml": "^4.0.0",
     "@types/node": "^20.0.0",
-    "chalk": "4.1.2",
     "eslint": "^9.0.0",
     "jest": "30.1.3",
-    "js-yaml": "4.1.0",
     "lint-staged": "15.5.2",
     "prettier": "^3.0.0",
     "semantic-release": "25.0.0-beta.6",

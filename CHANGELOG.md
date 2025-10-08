@@ -1,3 +1,10 @@
+## [3.3.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.3.1) (2025-10-08)
+
+
+### Bug Fixes
+
+* move js-yaml and chalk from devDependencies to dependencies to fix MODULE_NOT_FOUND error on global install
+
 # [3.3.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.4...v3.3.0) (2025-10-08)
 
 
