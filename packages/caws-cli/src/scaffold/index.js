@@ -193,9 +193,13 @@ async function scaffoldProject(options) {
     } else if (!setup.templateDir) {
       // Try to find template directory using absolute paths that work in CI
       const possiblePaths = [
+        // 1. Bundled templates in CLI package (for global installs) - CHECK THIS FIRST!
+        path.join(__dirname, '../../templates'),
+        // 2. CI paths
         '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
         '/workspace/packages/caws-template',
         '/caws/packages/caws-template',
+        // 3. Monorepo relative paths
         path.resolve(process.cwd(), '../../../packages/caws-template'),
         path.resolve(process.cwd(), '../../packages/caws-template'),
         path.resolve(process.cwd(), '../packages/caws-template'),

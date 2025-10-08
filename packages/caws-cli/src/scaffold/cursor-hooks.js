@@ -26,9 +26,12 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
     await fs.ensureDir(cursorHooksDir);
     await fs.ensureDir(path.join(cursorDir, 'logs'));
 
-    // Determine template directory
+    // Determine template directory - prefer bundled templates
     const setup = detectCAWSSetup(projectDir);
-    const templateDir = setup.templateDir || path.resolve(__dirname, '../templates');
+    const bundledTemplateDir = path.join(__dirname, '../../templates');
+    const templateDir = fs.existsSync(bundledTemplateDir)
+      ? bundledTemplateDir
+      : setup.templateDir || path.resolve(__dirname, '../templates');
 
     const cursorTemplateDir = path.join(templateDir, '.cursor');
     const cursorHooksTemplateDir = path.join(cursorTemplateDir, 'hooks');
