@@ -880,5 +880,41 @@
     },
     "previous_hash": "94bac5475575c4b2ce7b0ca75fd0af8201df5b09ac75bb7057de8ca365215de3",
     "hash": "ed0270e0cf9073bb908a8c8ed6fc589600c2fa154faaa688cacaf548a7ce9929"
+  },
+  {
+    "id": "prov-1759918718857",
+    "timestamp": "2025-10-08T10:18:38.857Z",
+    "commit": {
+      "hash": "4f207a180b26f9ba59901de8e2a77ecdd1438e6d",
+      "message": "feat: complete DX improvements - diagnose and templates commands (DX-001 T4+T5)",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-08T10:18:38.858Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "ed0270e0cf9073bb908a8c8ed6fc589600c2fa154faaa688cacaf548a7ce9929",
+    "hash": "1db23b6034046847e1ec39d948ccde99dfb8db2e733ec10132e9f07caa85b99f"
   }
 ]
