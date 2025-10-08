@@ -148,12 +148,12 @@ function generateWorkingSpec(answers) {
         }
       : undefined,
     ai_assessment: {
-      confidence_level: answers.aiConfidence,
-      uncertainty_areas: answers.uncertaintyAreas
+      confidence_level: answers.aiConfidence || 0.8,
+      uncertainty_areas: (answers.uncertaintyAreas || '')
         .split(',')
         .map((a) => a.trim())
         .filter((a) => a),
-      complexity_factors: answers.complexityFactors
+      complexity_factors: (answers.complexityFactors || '')
         .split(',')
         .map((f) => f.trim())
         .filter((f) => f),
