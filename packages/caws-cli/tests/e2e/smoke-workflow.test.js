@@ -14,18 +14,12 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
-    // Create a clean temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', 'test-e2e-temp');
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-e2e-tests-' + Date.now());
     if (fs.existsSync(testTempDir)) {
       fs.rmSync(testTempDir, { recursive: true, force: true });
     }
     fs.mkdirSync(testTempDir, { recursive: true });
-
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
 
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
@@ -34,11 +28,6 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
   });
 
   afterAll(() => {
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
-
     // Clean up temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {
@@ -75,6 +64,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectPath)).toBe(true);
@@ -142,6 +132,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       process.chdir(testProjectPath);
@@ -442,12 +433,12 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
+          cwd: testTempDir,
         });
-
-        process.chdir(testProjectPath);
         execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
           stdio: 'pipe',
+          cwd: testProjectPath,
         });
 
         // E2E Contract: Project modes should work

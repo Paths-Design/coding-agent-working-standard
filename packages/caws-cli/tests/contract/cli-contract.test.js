@@ -11,26 +11,47 @@ const yaml = require('js-yaml');
 describe('CLI Interface Contracts', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
   const testProjectName = 'test-cli-contract';
+  let testTempDir;
 
   beforeAll(() => {
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-contract-tests-' + Date.now());
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(testTempDir, { recursive: true });
+
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
       execSync('npm run build', { cwd: path.join(__dirname, '../..'), stdio: 'pipe' });
     }
   });
 
+  afterAll(() => {
+    // Clean up temp directory
+    try {
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+    } catch (_error) {
+      // Ignore errors if directory doesn't exist
+    }
+  });
+
   beforeEach(() => {
-    // Clean up any existing test project
-    if (fs.existsSync(testProjectName)) {
-      fs.rmSync(testProjectName, { recursive: true, force: true });
+    // Clean up any existing test project in temp directory
+    const projectPath = path.join(testTempDir, testProjectName);
+    if (fs.existsSync(projectPath)) {
+      fs.rmSync(projectPath, { recursive: true, force: true });
       console.log(`🧹 Cleaned up: ${testProjectName}`);
     }
   });
 
-  afterAll(() => {
-    // Clean up test project
-    if (fs.existsSync(testProjectName)) {
-      fs.rmSync(testProjectName, { recursive: true, force: true });
+  afterEach(() => {
+    // Clean up test project in temp directory
+    const projectPath = path.join(testTempDir, testProjectName);
+    if (fs.existsSync(projectPath)) {
+      fs.rmSync(projectPath, { recursive: true, force: true });
     }
   });
 
@@ -40,6 +61,7 @@ describe('CLI Interface Contracts', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       expect(fs.existsSync(testProjectName)).toBe(true);
@@ -76,6 +98,7 @@ describe('CLI Interface Contracts', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       process.chdir(testProjectName);
@@ -124,6 +147,7 @@ describe('CLI Interface Contracts', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       const workingSpecPath = path.join(testProjectName, '.caws/working-spec.yaml');
@@ -149,6 +173,7 @@ describe('CLI Interface Contracts', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       process.chdir(testProjectName);
@@ -210,6 +235,7 @@ describe('CLI Interface Contracts', () => {
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         encoding: 'utf8',
         stdio: 'pipe',
+        cwd: testTempDir,
       });
 
       const workingSpecPath = path.join(testProjectName, '.caws/working-spec.yaml');

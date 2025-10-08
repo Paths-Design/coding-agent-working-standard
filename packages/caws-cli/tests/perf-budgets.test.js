@@ -13,18 +13,12 @@ describe('Performance Budget Tests', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
-    // Create a clean temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', 'test-perf-temp');
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-perf-tests-' + Date.now());
     if (fs.existsSync(testTempDir)) {
       fs.rmSync(testTempDir, { recursive: true, force: true });
     }
     fs.mkdirSync(testTempDir, { recursive: true });
-
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
 
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
@@ -33,35 +27,15 @@ describe('Performance Budget Tests', () => {
   });
 
   afterAll(() => {
-    // Clean up test directories
-    const testDirPatterns = [
-      /^test-perf-init$/,
-      /^test-perf-scaffold$/,
-      /^test-memory-check$/,
-      /^test-cpu-monitor$/,
-    ];
+    // Clean up test temp directory
     try {
-      const items = fs.readdirSync(process.cwd());
-      items.forEach((item) => {
-        if (testDirPatterns.some((pattern) => pattern.test(item))) {
-          const itemPath = path.join(process.cwd(), item);
-          try {
-            if (fs.statSync(itemPath).isDirectory()) {
-              fs.rmSync(itemPath, { recursive: true, force: true });
-            }
-          } catch (_err) {
-            // Ignore errors during cleanup
-          }
-        }
-      });
+      if (testTempDir && fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
     } catch (_error) {
       // Ignore errors if directory doesn't exist
     }
 
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
 
     // Clean up test temp directory
     try {
@@ -127,7 +101,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: Project initialization should be fast (< 2s)
 
       const testProjectName = 'test-perf-init';
-      const testProjectPath = path.join(__dirname, testProjectName);
+      const testProjectPath = path.join(testTempDir, testProjectName);
 
       // Clean up any existing test project
       if (fs.existsSync(testProjectPath)) {
@@ -140,7 +114,7 @@ describe('Performance Budget Tests', () => {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: __dirname, // Explicitly set working directory
+          cwd: testTempDir,
         });
       } finally {
         // Clean up
@@ -164,7 +138,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: Project scaffolding should be fast (< 3s)
 
       const testProjectName = 'test-perf-scaffold';
-      const testProjectPath = path.join(__dirname, testProjectName);
+      const testProjectPath = path.join(testTempDir, testProjectName);
 
       // Clean up any existing test project
       if (fs.existsSync(testProjectPath)) {
@@ -176,7 +150,7 @@ describe('Performance Budget Tests', () => {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: __dirname, // Explicitly set working directory
+          cwd: testTempDir,
         });
 
         const startTime = performance.now();
@@ -226,6 +200,7 @@ describe('Performance Budget Tests', () => {
         execSync(`node "${cliPath}" init test-memory-check --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
+          cwd: testTempDir,
         });
 
         const finalMemory = process.memoryUsage().heapUsed / 1024 / 1024;
@@ -237,7 +212,7 @@ describe('Performance Budget Tests', () => {
         console.log(`🧠 Memory usage: ${memoryUsed.toFixed(2)}MB (budget: ${maxMemoryMB}MB)`);
       } finally {
         // Clean up test project
-        const testProjectPath = path.join(__dirname, 'test-memory-check');
+        const testProjectPath = path.join(testTempDir, 'test-memory-check');
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
         }
@@ -338,7 +313,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: CLI should not consume excessive CPU
 
       const testProjectName = 'test-cpu-monitor';
-      const testProjectPath = path.join(__dirname, testProjectName);
+      const testProjectPath = path.join(testTempDir, testProjectName);
 
       try {
         // Clean up any existing test project

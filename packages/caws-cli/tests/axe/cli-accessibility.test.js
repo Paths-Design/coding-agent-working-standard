@@ -23,17 +23,12 @@ describe('CLI Accessibility Tests', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
-    // Create a temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', '..', 'test-accessibility-temp');
-    if (!fs.existsSync(testTempDir)) {
-      fs.mkdirSync(testTempDir, { recursive: true });
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-accessibility-tests-' + Date.now());
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
     }
-
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
+    fs.mkdirSync(testTempDir, { recursive: true });
 
     // Ensure CLI is built
     if (!fs.existsSync(cliPath)) {
@@ -42,38 +37,13 @@ describe('CLI Accessibility Tests', () => {
   });
 
   afterAll(() => {
-    // Clean up all test directories created during accessibility tests
-    const testDirPattern = /^test-accessibility-spec-\d+$/;
-    try {
-      const items = fs.readdirSync(process.cwd());
-      items.forEach((item) => {
-        if (testDirPattern.test(item)) {
-          const itemPath = path.join(process.cwd(), item);
-          try {
-            if (fs.statSync(itemPath).isDirectory()) {
-              fs.rmSync(itemPath, { recursive: true, force: true });
-            }
-          } catch (_err) {
-            // Ignore errors during cleanup
-          }
-        }
-      });
-    } catch (_error) {
-      // Ignore errors if directory doesn't exist
-    }
-
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
-
-    // Clean up test temp directory
+    // Clean up temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {
         fs.rmSync(testTempDir, { recursive: true, force: true });
       }
-    } catch (cleanupError) {
-      // Ignore cleanup errors in tests
+    } catch (_error) {
+      // Ignore errors if directory doesn't exist
     }
   });
 
@@ -283,6 +253,7 @@ describe('CLI Accessibility Tests', () => {
         execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
           encoding: 'utf8',
           stdio: 'pipe',
+          cwd: testTempDir,
         });
 
         const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
