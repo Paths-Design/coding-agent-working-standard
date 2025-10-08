@@ -79,8 +79,15 @@ class CawsMcpServer extends Server {
 
     // List available tools
     this.setRequestHandler(ListToolsRequestSchema, () => {
-      console.error('MCP: Listing tools');
-      return { tools: CAWS_TOOLS };
+      try {
+        console.error('MCP: Listing tools - returning', CAWS_TOOLS.length, 'tools');
+        const result = { tools: CAWS_TOOLS };
+        console.error('MCP: Tools result prepared');
+        return result;
+      } catch (error) {
+        console.error('MCP: Error listing tools:', error.message);
+        throw error;
+      }
     });
 
     // Handle tool calls
@@ -123,25 +130,32 @@ class CawsMcpServer extends Server {
   setupResourceHandlers() {
     // List available resources
     this.setRequestHandler(ListResourcesRequestSchema, () => {
-      console.error('MCP: Listing resources');
-      const resources = [];
-
-      // Working specs
       try {
-        const specFiles = this.findWorkingSpecs();
-        specFiles.forEach((specPath) => {
-          resources.push({
-            uri: `caws://working-spec/${specPath}`,
-            name: `Working Spec: ${path.basename(specPath, '.yaml')}`,
-            description: 'CAWS working specification',
-            mimeType: 'application/yaml',
-          });
-        });
-      } catch (error) {
-        // Ignore errors in resource listing
-      }
+        console.error('MCP: Listing resources');
+        const resources = [];
 
-      return { resources };
+        // Working specs
+        try {
+          const specFiles = this.findWorkingSpecs();
+          specFiles.forEach((specPath) => {
+            resources.push({
+              uri: `caws://working-spec/${specPath}`,
+              name: `Working Spec: ${path.basename(specPath, '.yaml')}`,
+              description: 'CAWS working specification',
+              mimeType: 'application/yaml',
+            });
+          });
+        } catch (error) {
+          console.error('MCP: Error finding working specs:', error.message);
+          // Ignore errors in resource listing
+        }
+
+        console.error('MCP: Returning', resources.length, 'resources');
+        return { resources };
+      } catch (error) {
+        console.error('MCP: Error listing resources:', error.message);
+        throw error;
+      }
     });
 
     // Read resource content
