@@ -19,7 +19,7 @@ function stripAnsiCodes(str) {
 
 describe('CLI Accessibility Tests', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
-  let originalCwd;
+  // let originalCwd;
   let testTempDir;
 
   beforeAll(() => {

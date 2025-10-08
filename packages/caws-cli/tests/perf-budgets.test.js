@@ -36,7 +36,6 @@ describe('Performance Budget Tests', () => {
       // Ignore errors if directory doesn't exist
     }
 
-
     // Clean up test temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {

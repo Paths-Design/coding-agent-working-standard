@@ -10,7 +10,7 @@ const yaml = require('js-yaml');
 
 describe('E2E Smoke Tests - Critical User Workflows', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
-  let originalCwd;
+  // let originalCwd;
   let testTempDir;
 
   beforeAll(() => {
