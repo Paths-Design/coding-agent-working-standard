@@ -24,6 +24,12 @@ class CawsMcpServer extends Server {
     super({
       name: 'caws-mcp-server',
       version: '1.0.0',
+    }, {
+      capabilities: {
+        tools: {},
+        resources: {},
+        logging: {},
+      },
     });
 
     this.setupToolHandlers();
