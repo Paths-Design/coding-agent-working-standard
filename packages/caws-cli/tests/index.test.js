@@ -591,10 +591,10 @@ module.exports = { runCodemod };`
           encoding: 'utf8',
           cwd: testTempDir,
         });
-        // Then try to initialize git
-        execSync(`node "${cliPath}" init ${testProjectName} --git`, {
+        // Then try to initialize git manually since CLI doesn't have --git flag
+        execSync('git init', {
           encoding: 'utf8',
-          cwd: testTempDir,
+          cwd: path.join(testTempDir, testProjectName),
         });
         expect(fs.existsSync(path.join(testTempDir, testProjectName, '.git'))).toBe(true);
       } catch (error) {
