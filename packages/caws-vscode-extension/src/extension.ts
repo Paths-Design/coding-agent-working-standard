@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CawsMcpClient } from './mcp-client';
+import { CawsProvenancePanel } from './provenance-panel';
 import { CawsQualityMonitor } from './quality-monitor';
 import { CawsStatusBar } from './status-bar';
 import { CawsWebviewProvider } from './webview-provider';
@@ -24,6 +25,18 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Register commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.init', async () => {
+      await runCawsInit();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.scaffold', async () => {
+      await runCawsScaffold();
+    })
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand('caws.evaluate', async () => {
       await runCawsEvaluation();
@@ -51,6 +64,24 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('caws.showDashboard', async () => {
       await showQualityDashboard();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.hooksInstall', async () => {
+      await installHooks();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.hooksStatus', async () => {
+      await checkHooksStatus();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.showProvenance', async () => {
+      CawsProvenancePanel.createOrShow(context.extensionUri, mcpClient);
     })
   );
 
@@ -102,6 +133,184 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log('CAWS VS Code extension deactivated');
+}
+
+async function runCawsInit(): Promise<void> {
+  try {
+    const projectName = await vscode.window.showInputBox({
+      prompt: 'Enter project name (use "." for current directory)',
+      placeHolder: '.',
+      value: '.',
+    });
+
+    if (!projectName) return;
+
+    const templates = ['extension', 'library', 'api', 'cli', 'none'];
+    const template = await vscode.window.showQuickPick(templates, {
+      placeHolder: 'Select project template (or none for manual setup)',
+    });
+
+    if (!template) return;
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Initialization',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Initializing CAWS project...' });
+
+        const result = await mcpClient.callTool('caws_init', {
+          projectName,
+          template: template === 'none' ? undefined : template,
+          interactive: false,
+        });
+
+        if (!result.content || !result.content[0]) {
+          throw new Error('Invalid init result: missing content');
+        }
+        const initResult = JSON.parse(result.content[0].text);
+
+        if (initResult.success) {
+          vscode.window.showInformationMessage(
+            `CAWS initialized successfully: ${initResult.projectName}`
+          );
+
+          // Refresh workspace
+          const workspaceFolders = vscode.workspace.workspaceFolders;
+          if (workspaceFolders?.[0]) {
+            const specUri = vscode.Uri.joinPath(
+              workspaceFolders[0].uri,
+              '.caws',
+              'working-spec.yaml'
+            );
+            await vscode.window.showTextDocument(specUri);
+          }
+        } else {
+          vscode.window.showErrorMessage(`CAWS init failed: ${initResult.error}`);
+        }
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`CAWS init failed: ${error}`);
+  }
+}
+
+async function runCawsScaffold(): Promise<void> {
+  try {
+    const options = await vscode.window.showQuickPick(
+      [
+        { label: 'Full Setup', value: 'full' },
+        { label: 'Minimal Setup', value: 'minimal' },
+        { label: 'With Codemods', value: 'codemods' },
+        { label: 'With OIDC', value: 'oidc' },
+      ],
+      {
+        placeHolder: 'Select scaffolding options',
+        canPickMany: false,
+      }
+    );
+
+    if (!options) return;
+
+    const force = await vscode.window.showQuickPick(['No', 'Yes'], {
+      placeHolder: 'Overwrite existing files?',
+    });
+
+    if (!force) return;
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Scaffold',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Scaffolding CAWS components...' });
+
+        const result = await mcpClient.callTool('caws_scaffold', {
+          minimal: options.value === 'minimal',
+          withCodemods: options.value === 'codemods',
+          withOIDC: options.value === 'oidc',
+          force: force === 'Yes',
+        });
+
+        if (!result.content || !result.content[0]) {
+          throw new Error('Invalid scaffold result: missing content');
+        }
+        const scaffoldResult = JSON.parse(result.content[0].text);
+
+        if (scaffoldResult.success) {
+          vscode.window.showInformationMessage('CAWS components scaffolded successfully');
+        } else {
+          vscode.window.showErrorMessage(`CAWS scaffold failed: ${scaffoldResult.error}`);
+        }
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`CAWS scaffold failed: ${error}`);
+  }
+}
+
+async function installHooks(): Promise<void> {
+  try {
+    const backup = await vscode.window.showQuickPick(['Yes', 'No'], {
+      placeHolder: 'Backup existing hooks before installing?',
+    });
+
+    if (!backup) return;
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Hooks',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Installing git hooks...' });
+
+        const result = await mcpClient.callTool('caws_hooks', {
+          subcommand: 'install',
+          backup: backup === 'Yes',
+          force: false,
+        });
+
+        if (!result.content || !result.content[0]) {
+          throw new Error('Invalid hooks result: missing content');
+        }
+        const hooksResult = JSON.parse(result.content[0].text);
+
+        if (hooksResult.success) {
+          vscode.window.showInformationMessage('CAWS git hooks installed successfully');
+        } else {
+          vscode.window.showErrorMessage(`Hooks installation failed: ${hooksResult.error}`);
+        }
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Hooks installation failed: ${error}`);
+  }
+}
+
+async function checkHooksStatus(): Promise<void> {
+  try {
+    const result = await mcpClient.callTool('caws_hooks', {
+      subcommand: 'status',
+    });
+
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid hooks status result: missing content');
+    }
+    const statusResult = JSON.parse(result.content[0].text);
+
+    const outputChannel = vscode.window.createOutputChannel('CAWS Hooks Status');
+    outputChannel.clear();
+    outputChannel.append(statusResult.output);
+    outputChannel.show();
+  } catch (error) {
+    vscode.window.showErrorMessage(`Hooks status check failed: ${error}`);
+  }
 }
 
 async function runCawsEvaluation(): Promise<void> {

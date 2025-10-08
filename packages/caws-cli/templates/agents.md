@@ -1,820 +1,1046 @@
-# CAWS v1.0 — Engineering-Grade Operating System for Coding Agents
+# CAWS - Agent Workflow Guide
 
-## Purpose
+**Coding Agent Workflow System** - Engineering-grade operating system for AI-assisted development
 
-Our "engineering-grade" operating system for coding agents that (1) forces planning before code, (2) bakes in tests as first-class artifacts, (3) creates explainable provenance, and (4) enforces quality via automated CI gates. It's expressed as a Working Spec + Ruleset the agent must follow, with schemas, templates, scripts, and verification hooks that enable better collaboration between agent and our human in the loop.
+**Version**: 3.1.0  
+**Last Updated**: October 8, 2025
 
-## 1) Core Framework
+---
 
-### Risk Tiering → Drives Rigor
+## Purpose & Philosophy
 
-• **Tier 1** (Core/critical path, auth/billing, migrations): highest rigor; mutation ≥ 70, branch cov ≥ 90, contract tests mandatory, chaos tests optional, manual review required.
-• **Tier 2** (Common features, data writes, cross-service APIs): mutation ≥ 50, branch cov ≥ 80, contracts mandatory if any external API, e2e smoke required.
-• **Tier 3** (Low risk, read-only UI, internal tooling): mutation ≥ 30, branch cov ≥ 70, integration happy-path + unit thoroughness, e2e optional.
+CAWS is an engineering-grade operating system for coding agents that:
 
-Agent must infer and declare tier in the plan; human reviewer may bump it up, never down.
+1. **Forces planning before code** - No implementation without a validated working spec
+2. **Treats tests as first-class artifacts** - Tests drive implementation, not the other way around
+3. **Creates explainable provenance** - Every change is tracked and attributable
+4. **Enforces quality via automated gates** - CI/CD validates coverage, mutation scores, and contracts
 
-### New Invariants (Repository-Level "Operating Envelope")
+This guide teaches agents how to collaborate effectively with humans using CAWS tooling and conventions.
 
-1. **Atomic Change Budget**
-   - _Invariant:_ "A PR must fit into one of: `refactor`, `feature`, `fix`, `doc`, `chore`—and must touch only files that the Working Spec's `scope.in` names."
-   - _Reason:_ Kills scope-creep; enables deterministic review.
-   - _Gate:_ CI rejects PRs that modify files outside `scope.in` unless `spec_delta` is present.
+---
 
-2. **In-place Refactor (No Shadow Copies)**
-   - _Invariant:_ Refactors perform **in-place** edits with AST codemods; **no parallel files** (e.g., `enhanced-*.ts`).
-   - _Gate:_ a naming linter blocks new files that share stem with suffix/prefix (`enhanced|new|v2|copy|final`).
+## Quick Start for Agents
 
-3. **Determinism & Idempotency**
-   - _Invariant:_ All new code must be testable with injected clock/uuid/random; repeated requests must be safe (where applicable) and asserted in tests.
-   - _Gate:_ mutation tests + property tests include at least one idempotency predicate for Tier ≥2.
+### Your First CAWS Project
 
-4. **Prompt & Tool Security Envelope** (for agent workflows)
-   - _Invariant:_ Agents operate with **tool allow-lists**, **redacted secrets**, and **context firebreaks** (no raw secrets in model context; never post `.env`, keys, or tokens back into diffs).
-   - _Gate:_ prompt-lint and secret-scan on the agent prompt files + PR diffs.
+When you encounter a CAWS project, follow this sequence:
 
-5. **Supply-chain Provenance**
-   - _Invariant:_ Every CI build produces an SBOM + SLSA-style attestation attached to the PR.
-   - _Gate:_ trust score requires valid SBOM/attestation.
+1. **Check for working spec**: Look for `.caws/working-spec.yaml`
+2. **Understand the scope**: Read the `scope.in` and `scope.out` to know boundaries
+3. **Check risk tier**: Tier 1 (critical), Tier 2 (standard), Tier 3 (low risk)
+4. **Review acceptance criteria**: These are your implementation targets
+5. **Validate before starting**: Run `caws validate` to ensure spec is valid
 
-### Required Inputs (No Code Until Present)
+### The Golden Rule
 
-• **Working Spec YAML** (see schema below) with user story, scope, invariants, acceptance tests, non-functional budgets, risk tier.
-• **Interface Contracts**: OpenAPI/GraphQL SDL/proto/Pact provider/consumer stubs.
-• **Test Plan**: unit cases, properties, fixtures, integration flows, e2e smokes; data setup/teardown; flake controls.
-• **Change Impact Map**: touched modules, migrations, roll-forward/rollback.
-• **A11y/Perf/Sec budgets**: keyboard path(s), axe rules to enforce; perf budget (TTI/LCP/API latency); SAST/secret scanning & deps policy.
+**Never write implementation code until:**
 
-If any are missing, agent must generate a draft and request confirmation inside the PR description before implementing.
+- Working spec exists and validates
+- Test plan is defined
+- Acceptance criteria are clear
+- Scope boundaries are understood
 
-### The Loop: Plan → Implement → Verify → Document
+---
 
-#### 2.1 Plan (agent output, committed as feature.plan.md)
+## Core Concepts
 
-• **Design sketch**: sequence diagram or pseudo-API table.
-• **Test matrix**: aligned to user intent (unit/contract/integration/e2e) with edge cases and property predicates.
-• **Data plan**: factories/fixtures, seed strategy, anonymized sample payloads.
-• **Observability plan**: logs/metrics/traces; which spans and attributes will verify correctness in prod.
+### Risk Tiers - Your Quality Contract
 
-#### 2.2 Implement (rules)
+Risk tiers drive rigor and determine quality gates:
 
-• **Contract-first**: generate/validate types from OpenAPI/SDL; add contract tests (Pact/WireMock/MSW) before impl.
-• **Unit focus**: pure logic isolated; mocks only at boundaries you own (clock, fs, network).
-• **State seams**: inject time/uuid/random; ensure determinism; guard for idempotency where relevant.
-• **Migration discipline**: forwards-compatible; provide up/down, dry-run, and backfill strategy.
+| Tier      | Use Case                    | Coverage | Mutation | Contracts | Review   |
+| --------- | --------------------------- | -------- | -------- | --------- | -------- |
+| **🔴 T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
+| **🟡 T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
+| **🟢 T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
 
-### Mode Matrix
+**As an agent, you must:**
 
-| Mode         | Contracts                                                           | New Files                                                                      | Required Artifacts                               |
-| ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
-| **refactor** | Must not change                                                     | Discouraged; only when splitting modules with 1:1 mapping and codemod provided | Codemod script + semantic diff report            |
-| **feature**  | Required first; consumer/provider tests green before implementation | Allowed; must be listed in scope.in                                            | Migration plan, feature flag, performance budget |
-| **fix**      | Unchanged                                                           | Discouraged; prefer in-place edits                                             | Red test → green; root cause note in PR          |
-| **doc**      | N/A                                                                 | Allowed for documentation files                                                | Updated README/usage snippets                    |
-| **chore**    | N/A                                                                 | Limited to build/tooling changes                                               | Version updates, dependency changes              |
+- Infer and declare the tier in your plan
+- Meet or exceed tier requirements
+- Request human review for Tier 1 changes
+- Never downgrade a tier without human approval
 
-### Cursor/Codex Execution Guard
+### Key Invariants (Never Violate These)
 
-Add a commit policy hook to reject commit sets that introduce duplicate stems:
+1. **Atomic Change Budget**: Stay within `max_files` and `max_loc` limits
+2. **In-Place Refactors**: No shadow files (`enhanced-*`, `new-*`, `v2-*`, etc.)
+3. **Deterministic Code**: Use injected time/uuid/random for testability
+4. **Secure Prompts**: Never include secrets, `.env` files, or keys in context
+5. **Provenance**: All changes are tracked and attributable
+
+### The Working Spec - Your Blueprint
+
+Every task needs a working spec at `.caws/working-spec.yaml`:
+
+```yaml
+id: FEAT-001
+title: 'Add user authentication flow'
+risk_tier: 1
+mode: feature
+change_budget:
+  max_files: 25
+  max_loc: 1000
+blast_radius:
+  modules: ['auth', 'api']
+  data_migration: false
+operational_rollback_slo: '5m'
+scope:
+  in: ['src/auth/', 'tests/auth/', 'package.json']
+  out: ['src/billing/', 'node_modules/']
+invariants:
+  - 'System maintains data consistency during rollback'
+  - 'Authentication state is never stored in localStorage'
+  - 'All auth tokens expire within 24h'
+acceptance:
+  - id: 'A1'
+    given: 'User is logged out'
+    when: 'User submits valid credentials'
+    then: 'User is logged in and redirected to dashboard'
+  - id: 'A2'
+    given: 'User has invalid session token'
+    when: 'User attempts to access protected route'
+    then: 'User is redirected to login with error message'
+non_functional:
+  a11y: ['keyboard-navigation', 'screen-reader-labels']
+  perf: { api_p95_ms: 250, lcp_ms: 2500 }
+  security: ['input-validation', 'csrf-protection', 'rate-limiting']
+contracts:
+  - type: 'openapi'
+    path: 'docs/api/auth.yaml'
+```
+
+---
+
+## Your Development Workflow
+
+### Phase 1: Plan (Before Any Code)
+
+**Goal**: Create a validated working spec and test plan.
 
 ```bash
-# .git/hooks/pre-commit (or CI script)
-PATTERN='/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.'
-git diff --cached --name-only | grep -E "$PATTERN" && {
-  echo "❌ Disallowed filename pattern. Use in-place refactor or codemod."
-  exit 1
-}
+# 1. Create or validate working spec
+caws validate --suggestions
+
+# 2. If issues exist, use auto-fix for safe corrections
+caws validate --auto-fix
+
+# 3. Review acceptance criteria - these are your targets
+cat .caws/working-spec.yaml | grep -A 20 "acceptance:"
 ```
 
-#### 2.3 Verify (must pass locally and in CI)
+**What to include in your plan:**
 
-• **Static checks**: typecheck, lint (code + tests), import hygiene, dead-code scan, secret scan.
-• **Tests**:
-• **Unit**: fast, deterministic; cover branches and edge conditions; property-based where feasible.
-• **Contract**: consumer/provider; versioned and stored under apps/contracts/.
-• **Integration**: real DB or Testcontainers; seed data via factories; verify persistence, transactions, retries/timeouts.
-• **E2E smoke**: Playwright/Cypress; critical user paths only; semantic selectors; screenshot+trace on failure.
-• **Mutation testing**: minimum scores per tier; non-conformant builds fail.
-• **Non-functional checks**: axe rules; Lighthouse CI budgets or API latency budgets; SAST/dep scan clean.
-• **Flake policy**: tests that intermittently fail are quarantined within 24h with an open ticket; no retries as policy, only as temporary band-aid with expiry.
+1. **Design sketch**: Sequence diagram or API table
+2. **Test matrix**: Unit/contract/integration/e2e with edge cases
+3. **Data plan**: Fixtures, factories, seed strategy
+4. **Observability**: Logs/metrics/traces for production verification
 
-#### 2.4 Document & Deliver
+**Output**: `feature.plan.md` committed to repo
 
-• **PR bundle** (template below) with:
-• Working Spec YAML
-• Test Plan & Coverage/Mutation summary, Contract artifacts
-• Risk assessment, Rollback plan, Observability notes (dashboards/queries)
-• Changelog (semver impact), Migration notes
-• Traceability: PR title references ticket; commits follow conventional commits; each test cites the requirement ID in test name or annotation.
-• Explainability: agent includes a 10-line "rationale" and "known-limits" section.
+### Phase 2: Implement (Test-Driven)
 
-## 2) Machine-Enforceable Implementation
+**Goal**: Write tests first, then implementation.
 
-### A) Executable Schemas & Validation
+**Order of operations:**
 
-#### Working Spec JSON Schema
+1. **Contracts first** (if applicable)
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Working Spec",
-  "type": "object",
-  "required": [
-    "id",
-    "title",
-    "risk_tier",
-    "mode",
-    "change_budget",
-    "blast_radius",
-    "operational_rollback_slo",
-    "scope",
-    "invariants",
-    "acceptance",
-    "non_functional",
-    "contracts"
-  ],
-  "properties": {
-    "id": { "type": "string", "pattern": "^[A-Z]+-\\d+$" },
-    "title": { "type": "string", "minLength": 8 },
-    "risk_tier": { "type": "integer", "enum": [1, 2, 3] },
-    "mode": { "type": "string", "enum": ["refactor", "feature", "fix", "doc", "chore"] },
-    "change_budget": {
-      "type": "object",
-      "properties": {
-        "max_files": { "type": "integer", "minimum": 1 },
-        "max_loc": { "type": "integer", "minimum": 1 }
-      },
-      "required": ["max_files", "max_loc"],
-      "additionalProperties": false
-    },
-    "blast_radius": {
-      "type": "object",
-      "properties": {
-        "modules": { "type": "array", "items": { "type": "string" } },
-        "data_migration": { "type": "boolean" }
-      },
-      "required": ["modules", "data_migration"],
-      "additionalProperties": false
-    },
-    "operational_rollback_slo": { "type": "string", "pattern": "^[0-9]+m$|^[0-9]+h$" },
-    "threats": { "type": "array", "items": { "type": "string" } },
-    "scope": {
-      "type": "object",
-      "required": ["in", "out"],
-      "properties": {
-        "in": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-        "out": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "invariants": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-    "acceptance": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "required": ["id", "given", "when", "then"],
-        "properties": {
-          "id": { "type": "string", "pattern": "^A\\d+$" },
-          "given": { "type": "string" },
-          "when": { "type": "string" },
-          "then": { "type": "string" }
-        }
-      }
-    },
-    "non_functional": {
-      "type": "object",
-      "properties": {
-        "a11y": { "type": "array", "items": { "type": "string" } },
-        "perf": {
-          "type": "object",
-          "properties": {
-            "api_p95_ms": { "type": "integer", "minimum": 1 },
-            "lcp_ms": { "type": "integer", "minimum": 1 }
-          },
-          "additionalProperties": false
-        },
-        "security": { "type": "array", "items": { "type": "string" } }
-      },
-      "additionalProperties": false
-    },
-    "contracts": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "required": ["type", "path"],
-        "properties": {
-          "type": { "type": "string", "enum": ["openapi", "graphql", "proto", "pact"] },
-          "path": { "type": "string" }
-        }
-      }
-    },
-    "observability": {
-      "type": "object",
-      "properties": {
-        "logs": { "type": "array", "items": { "type": "string" } },
-        "metrics": { "type": "array", "items": { "type": "string" } },
-        "traces": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "migrations": { "type": "array", "items": { "type": "string" } },
-    "rollback": { "type": "array", "items": { "type": "string" } }
-  },
-  "additionalProperties": false
-}
+   ```bash
+   # Generate types from OpenAPI/GraphQL
+   npm run generate:types
+
+   # Add contract tests before implementation
+   # Location: tests/contract/
+   ```
+
+2. **Unit tests next**
+
+   ```bash
+   # Write failing tests for each acceptance criterion
+   # Location: tests/unit/
+
+   # Run tests to confirm they fail
+   npm test
+   ```
+
+3. **Implementation**
+
+   ```bash
+   # Implement to make tests pass
+   # Stay within scope.in boundaries
+   # Keep files under max_loc budget
+   ```
+
+4. **Integration/E2E tests**
+
+   ```bash
+   # Add integration tests for persistence/transactions
+   # Location: tests/integration/
+
+   # Add E2E smoke tests for critical paths
+   # Location: tests/e2e/
+   ```
+
+**Implementation rules:**
+
+- ✅ **DO**: Edit existing modules, use injected dependencies, write deterministic code
+- ❌ **DON'T**: Create shadow files, hardcode timestamps/UUIDs, exceed change budget
+
+### Phase 3: Verify (Must Pass Before PR)
+
+**Goal**: Ensure all quality gates pass locally.
+
+```bash
+# Run full verification suite
+npm run verify
+
+# Or run individual checks
+npm run lint              # Code style
+npm run typecheck         # Type safety
+npm test                  # All tests
+npm run test:coverage     # Coverage thresholds
+npm run test:mutation     # Mutation testing
+npm run test:contract     # Contract validation
+npm run test:e2e          # End-to-end smoke tests
 ```
 
-#### Provenance Manifest Schema
+**Quality gates by tier:**
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "required": [
-    "agent",
-    "model",
-    "model_hash",
-    "tool_allowlist",
-    "commit",
-    "artifacts",
-    "results",
-    "approvals",
-    "sbom",
-    "attestation"
-  ],
-  "properties": {
-    "agent": { "type": "string" },
-    "model": { "type": "string" },
-    "model_hash": { "type": "string" },
-    "tool_allowlist": { "type": "array", "items": { "type": "string" } },
-    "prompts": { "type": "array", "items": { "type": "string" } },
-    "commit": { "type": "string" },
-    "artifacts": { "type": "array", "items": { "type": "string" } },
-    "results": {
-      "type": "object",
-      "properties": {
-        "coverage_branch": { "type": "number" },
-        "mutation_score": { "type": "number" },
-        "tests_passed": { "type": "integer" },
-        "contracts": {
-          "type": "object",
-          "properties": { "consumer": { "type": "boolean" }, "provider": { "type": "boolean" } }
-        },
-        "a11y": { "type": "string" },
-        "perf": { "type": "object" }
-      },
-      "additionalProperties": true
-    },
-    "approvals": { "type": "array", "items": { "type": "string" } },
-    "sbom": { "type": "string" },
-    "attestation": { "type": "string" }
-  }
-}
-```
+**Tier 1:**
 
-#### Tier Policy Configuration
+- Branch coverage ≥ 90%
+- Mutation score ≥ 70%
+- All contract tests pass
+- Manual code review completed
+- No SAST/secret scan violations
 
-```json
-{
-  "1": {
-    "min_branch": 0.9,
-    "min_mutation": 0.7,
-    "requires_contracts": true,
-    "requires_manual_review": true,
-    "max_files": 40,
-    "max_loc": 1500,
-    "allowed_modes": ["feature", "refactor", "fix"]
-  },
-  "2": {
-    "min_branch": 0.8,
-    "min_mutation": 0.5,
-    "requires_contracts": true,
-    "max_files": 25,
-    "max_loc": 1000,
-    "allowed_modes": ["feature", "refactor", "fix"]
-  },
-  "3": {
-    "min_branch": 0.7,
-    "min_mutation": 0.3,
-    "requires_contracts": false,
-    "max_files": 15,
-    "max_loc": 600,
-    "allowed_modes": ["feature", "refactor", "fix", "doc", "chore"]
-  }
-}
-```
+**Tier 2:**
 
-### B) CI/CD Quality Gates (Automated)
+- Branch coverage ≥ 80%
+- Mutation score ≥ 50%
+- Contract tests pass (if external APIs)
+- E2E smoke tests pass
 
-#### Complete GitHub Actions Pipeline
+**Tier 3:**
 
-```yaml
-name: CAWS Quality Gates
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+- Branch coverage ≥ 70%
+- Mutation score ≥ 30%
+- Integration happy-path tests pass
 
-jobs:
-  naming_guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Block shadow file patterns
-        run: |
-          BAD=$(git diff --name-only origin/${{ github.base_ref }}... | \
-            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)|(^|/)_.+\.| - copy\.' || true)
-          if [ -n "$BAD" ]; then
-            echo "❌ Shadow/duplicate filename patterns detected:"
-            echo "$BAD"
-            exit 1
-          fi
+### Phase 4: Document & Deliver
 
-  scope_guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Ensure changes are within scope.in
-        run: |
-          yq -o=json '.caws/working-spec.yaml' > .caws/ws.json
-          jq -r '.scope.in[]' .caws/ws.json | sed 's|^|^|; s|$|/|' > .caws/paths.txt
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...)
-          OUT=""
-          for f in $CHANGED; do
-            if ! grep -q -E -f .caws/paths.txt <<< "$f"; then OUT="$OUT\n$f"; fi
-          done
-          if [ -n "$OUT" ]; then
-            echo -e "❌ Files outside scope.in:\n$OUT"
-            echo "If intentional, add a Spec Delta to .caws/working-spec.yaml and include affected paths."
-            exit 1
-          fi
+**Goal**: Create comprehensive PR with all artifacts.
 
-  budget_guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Enforce max files/LOC from change_budget
-        run: |
-          yq -o=json '.caws/working-spec.yaml' > .caws/ws.json
-          MAXF=$(jq -r '.change_budget.max_files' .caws/ws.json)
-          MAXL=$(jq -r '.change_budget.max_loc' .caws/ws.json)
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}... | wc -l)
-          LOC=$(git diff --unified=0 origin/${{ github.base_ref }}... | grep -E '^\+|^-' | wc -l)
-          echo "Files:$FILES LOC:$LOC (budget Files:$MAXF LOC:$MAXL)"
-          [ "$FILES" -le "$MAXF" ] && [ "$LOC" -le "$MAXL" ] || (echo "❌ Budget exceeded"; exit 1)
-
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      risk: ${{ steps.risk.outputs.tier }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - name: Parse Working Spec
-        id: risk
-        run: |
-          pipx install yq
-          yq -o=json '.caws/working-spec.yaml' > .caws/working-spec.json
-          echo "tier=$(jq -r .risk_tier .caws/working-spec.json)" >> $GITHUB_OUTPUT
-      - name: Validate Spec
-        run: node apps/tools/caws/validate.js .caws/working-spec.json
-
-  static:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run typecheck && npm run lint && npm run dep:policy && npm run sast && npm run secret:scan
-
-  unit:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run test:unit -- --coverage
-      - name: Enforce Branch Coverage
-        run: node apps/tools/caws/gates.js coverage --tier ${{ needs.setup.outputs.risk }}
-
-  mutation:
-    needs: unit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run test:mutation
-      - run: node apps/tools/caws/gates.js mutation --tier ${{ needs.setup.outputs.risk }}
-
-  contracts:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run test:contract
-      - run: node apps/tools/caws/gates.js contracts --tier ${{ needs.setup.outputs.risk }}
-
-  integration:
-    needs: [setup]
-    runs-on: ubuntu-latest
-    services:
-      postgres: { image: postgres:16, env: { POSTGRES_PASSWORD: pass }, ports: ["5432:5432"], options: >-
-        --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=5 }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run test:integration
-
-  e2e_a11y:
-    needs: [integration]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run test:e2e:smoke
-      - run: npm run test:axe
-
-  perf:
-    if: needs.setup.outputs.risk != '3'
-    needs: [integration]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run perf:budgets
-
-  provenance_trust:
-    needs: [naming_guard, scope_guard, budget_guard, static, unit, mutation, contracts, integration, e2e_a11y, perf]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - name: Generate SBOM
-        run: npx @cyclonedx/cyclonedx-npm --output-file .agent/sbom.json
-      - name: Create Attestation
-        run: node apps/tools/caws/attest.js > .agent/attestation.json
-      - name: Prompt/Tool lint
-        run: node apps/tools/caws/prompt-lint.js .agent/prompts/*.md --allowlist .agent/tools-allow.json
-      - name: Generate Provenance
-        run: node apps/tools/caws/provenance.js > .agent/provenance.json
-      - name: Validate Provenance
-        run: node apps/tools/caws/validate-prov.js .agent/provenance.json
-      - name: Compute Trust Score
-        run: node apps/tools/caws/gates.js trust --tier ${{ needs.setup.outputs.risk }}
-```
-
-### C) Repository Scaffold
-
-```
-.caws/
-  policy/tier-policy.json
-  schemas/{working-spec.schema.json, provenance.schema.json}
-  templates/{pr.md, feature.plan.md, test-plan.md}
-apps/contracts/     # OpenAPI/GraphQL/Pact
-docs/                # human docs; ADRs
-src/
-tests/
-  unit/
-  contract/
-  integration/
-  e2e/
-  axe/
-  mutation/
-apps/tools/caws/
-  validate.ts
-  gates.ts          # thresholds, trust score
-  provenance.ts
-  prompt-lint.js    # prompt hygiene & tool allowlist
-  attest.js         # SBOM + SLSA attestation generator
-  tools-allow.json  # allowed tools for agents
-codemod/            # AST transformation scripts for refactor mode
-  rename.ts         # example codemod for renaming modules
-.agent/             # provenance artifacts (generated)
-  sbom.json
-  attestation.json
-  provenance.json
-  tools-allow.json
-.github/
-  workflows/caws.yml
-CODEOWNERS
-```
-
-## 3) Templates & Examples
-
-### Working Spec YAML Template
-
-```yaml
-id: { { PROJECT_ID } }
-title: '{{PROJECT_TITLE}}'
-risk_tier: { { PROJECT_TIER } }
-mode: { { PROJECT_MODE } }
-change_budget:
-  max_files: { { MAX_FILES } }
-  max_loc: { { MAX_LOC } }
-blast_radius:
-  modules: [{ { BLAST_MODULES } }]
-  data_migration: { { DATA_MIGRATION } }
-operational_rollback_slo: '{{ROLLBACK_SLO}}'
-threats: { { PROJECT_THREATS } }
-scope:
-  in: [{ { SCOPE_IN } }]
-  out: [{ { SCOPE_OUT } }]
-invariants: { { PROJECT_INVARIANTS } }
-acceptance: { { ACCEPTANCE_CRITERIA } }
-non_functional:
-  a11y: [{ { A11Y_REQUIREMENTS } }]
-  perf: { api_p95_ms: { { PERF_BUDGET } } }
-  security: [{ { SECURITY_REQUIREMENTS } }]
-contracts:
-  - type: { { CONTRACT_TYPE } }
-    path: '{{CONTRACT_PATH}}'
-observability:
-  logs: [{ { OBSERVABILITY_LOGS } }]
-  metrics: [{ { OBSERVABILITY_METRICS } }]
-  traces: [{ { OBSERVABILITY_TRACES } }]
-migrations: { { MIGRATION_PLAN } }
-rollback: [{ { ROLLBACK_PLAN } }]
-```
-
-### PR Description Template
+**PR checklist:**
 
 ```markdown
-## Summary
-
-{{PR_SUMMARY}}
-
 ## Working Spec
 
-- Risk Tier: {{RISK_TIER}}
-- Mode: {{PR_MODE}}
-- Invariants: {{INVARIANTS}}
+- [ ] `.caws/working-spec.yaml` attached and validates
+- [ ] Risk tier appropriate for change impact
+- [ ] Acceptance criteria met
 
 ## Tests
 
-- Unit: {{UNIT_COVERAGE}}% (target {{TARGET_COVERAGE}}%)
-- Mutation: {{MUTATION_SCORE}}% (target {{TARGET_MUTATION}}%)
-- Integration: {{INTEGRATION_TESTS}} flows
-- E2E smoke: {{E2E_TESTS}} ({{E2E_STATUS}})
-- A11y: {{A11Y_SCORE}} ({{A11Y_STATUS}})
+- [ ] Test plan documented
+- [ ] Coverage meets tier requirements
+- [ ] Mutation score meets tier requirements
+- [ ] Contract tests pass (if applicable)
+- [ ] E2E smoke tests pass (if applicable)
 
-## Non-functional
+## Documentation
 
-- API p95: {{API_PERF}}ms (budget {{API_BUDGET}}ms)
-- Security: {{SAST_STATUS}}
+- [ ] README updated (if public API changed)
+- [ ] Migration notes (if database changes)
+- [ ] Rollback plan documented
+- [ ] Changelog updated (semver impact noted)
 
-## Migration & Rollback
+## Quality Gates
 
-{{MIGRATION_NOTES}}
+- [ ] All lints pass
+- [ ] Type checks pass
+- [ ] No secret scan violations
+- [ ] No SAST violations
+- [ ] Performance budgets met
 
-## Known Limits
+## Provenance
 
-{{KNOWN_LIMITS}}
+- [ ] Commits follow conventional commits format
+- [ ] PR title references ticket ID
+- [ ] Provenance updated: `caws provenance update`
 ```
 
-## 4) Agent Conduct Rules (Hard Constraints)
+---
 
-1. **Spec adherence**: Do not implement beyond scope.in; if discovered dependency changes spec, open "Spec delta" in PR and update tests first.
-2. **No hidden state/time/net**: All non-determinism injected and controlled in tests.
-3. **Explainable mocks**: Only mock boundaries; never mock the function under test; document any mock behavior in comments.
-4. **Idempotency & error paths**: Provide tests for retries/timeouts/cancel; assert invariants on error.
-5. **Observability parity**: Every key acceptance path emits logs/metrics/traces; tests assert on them when feasible (e.g., fake exporter assertions).
-6. **Data safety**: No real PII in fixtures; factories generate realistic but synthetic data.
-7. **Accessibility required**: For UI changes: keyboard path test + axe scan; for API: error messages human-readable and localizable.
-8. **Performance ownership**: Include micro-bench (where hot path) or budget check; document algorithmic complexity if changed.
-9. **Docs as code**: Update README/usage snippets; add example code; regenerate typed clients from contracts.
-10. **Rollback ready**: Feature-flag new behavior; write a reversible migration or provide kill-switch.
+## CLI Commands Reference
 
-## 5) Trust & Telemetry
+### Project Initialization
 
-• **Provenance manifest** (.agent/provenance.json): agent name/version, prompts, model, commit SHAs, test results hashes, generated files list, and human approvals. Stored with the PR for auditability.
-• **Trust score per PR**: composite of rubric + gates + historical flake rate; expose in a PR check and weekly dashboard.
-• **Drift watch**: monitor contract usage in prod; alert if undocumented fields appear.
+```bash
+# Interactive wizard (recommended for new projects)
+caws init --interactive
 
-## 6) Operational Excellence
+# Initialize in existing directory
+caws init .
 
-### Flake Management
+# Use project template
+caws init my-project --template=extension
+```
 
-• **Detector**: compute week-over-week pass variance per spec ID.
-• **Policy**: >0.5% variance → auto-label flake:quarantine, open ticket with owner + expiry (7 days).
-• **Implementation**: Store test run hashes in .agent/provenance.json; nightly job aggregates and posts a table to dashboard.
+### Validation
 
-### Waivers & Escalation
+```bash
+# Check working spec validity
+caws validate
 
-• **Temporary waiver requires**:
-• waivers.yml with: gate, reason, owner, expiry ISO date (≤ 14 days), compensating control.
-• PR must link to ticket; trust score maximum capped at 79 with active waivers.
-• **Escalation**: unresolved flake/waiver past expiry auto-blocks merges across the repo until cleared.
+# Get helpful suggestions for fixing issues
+caws validate --suggestions
 
-### Security & Performance Checks
+# Auto-fix safe validation issues
+caws validate --auto-fix
 
-• **Secrets**: run gitleaks/trufflehog on changed files; CAWS gate blocks any hit above low severity.
-• **SAST**: language-appropriate tools; gate requires zero criticals.
-• **Performance**: k6 scripts for API budgets; LHCI for web budgets; regressions fail gate.
-• **Migrations**: lint for reversibility; dry-run in CI; forward-compat contract tests.
+# Quiet mode for CI
+caws validate --quiet
+```
 
-## 7) Language & Tooling Ecosystem
+### Scaffolding
 
-### TypeScript Stack (Recommended)
+```bash
+# Add CAWS components to existing project
+caws scaffold
 
-• **Testing**: Jest/Vitest, fast-check, Playwright, Testcontainers, Stryker, MSW or Pact
-• **Quality**: ESLint + types, LHCI, axe-core
-• **CI**: GitHub Actions with Node 20
+# Only essential components
+caws scaffold --minimal
 
-### Python Stack
+# Include specific features
+caws scaffold --with-codemods
+caws scaffold --with-oidc
+```
 
-• **Testing**: pytest, hypothesis, Playwright (Python), Testcontainers-py, mutmut, Schemathesis
-• **Quality**: bandit/semgrep, Lighthouse CI, axe-core
+### Provenance Tracking
 
-### JVM Stack
+```bash
+# Initialize provenance tracking
+caws provenance init
 
-• **Testing**: JUnit5, jqwik, Testcontainers, PIT (mutation), Pact-JVM
-• **Quality**: OWASP dependency check, SonarQube, axe-core
+# Install git hooks for automatic tracking
+caws hooks install --backup
 
-**Note**: Mutation testing is non-negotiable for tiers ≥2; it's the only reliable guard against assertion theater.
+# Update provenance manually
+caws provenance update --commit <hash>
 
-## 8) Review Rubric (Scriptable Scoring)
+# View beautiful dashboard
+caws provenance show --format=dashboard
 
-| Category                          | Weight | Criteria                            | 0                 | 1                  | 2                           |
-| --------------------------------- | ------ | ----------------------------------- | ----------------- | ------------------ | --------------------------- |
-| Spec clarity & invariants         | ×5     | Clear, testable invariants          | Missing/unclear   | Basic coverage     | Comprehensive + edge cases  |
-| Contract correctness & versioning | ×5     | Schema accuracy + versioning        | Errors present    | Minor issues       | Perfect + versioned         |
-| Unit thoroughness & edge coverage | ×5     | Branch coverage + property tests    | <70% coverage     | Meets tier minimum | >90% + properties           |
-| Integration realism               | ×4     | Real containers + seeds             | Mocked heavily    | Basic containers   | Full stack + realistic data |
-| E2E relevance & stability         | ×3     | Critical paths + semantic selectors | Brittle selectors | Basic coverage     | Semantic + stable           |
-| Mutation adequacy                 | ×4     | Score vs tier threshold             | <50%              | Meets minimum      | >80%                        |
-| A11y pathways & results           | ×3     | Keyboard + axe clean                | Major issues      | Basic compliance   | Full WCAG + keyboard        |
-| Perf/Resilience                   | ×3     | Budgets + timeouts/retries          | No checks         | Basic budgets      | Full resilience             |
-| Observability                     | ×3     | Logs/metrics/traces asserted        | Missing           | Basic emission     | Asserted in tests           |
-| Migration safety & rollback       | ×3     | Reversible + kill-switch            | No rollback       | Basic revert       | Full rollback + testing     |
-| Docs & PR explainability          | ×3     | Clear rationale + limits            | Minimal           | Basic docs         | Comprehensive + ADR         |
-| **Mode compliance**               | ×3     | Changes match declared `mode`       | Violations        | Minor drift        | Full compliance             |
-| **Scope & budget discipline**     | ×3     | Diff within `scope.in` & budget     | Exceeded          | Near limit         | Within limits               |
-| **Supply-chain attestations**     | ×2     | SBOM + SLSA attestation             | Missing           | Partial            | Complete & valid            |
+# Analyze AI effectiveness
+caws provenance analyze-ai
+```
 
-**Target**: ≥ 82/100 (weighted sum). Calculator in `apps/tools/caws/rubric.ts`.
+---
 
-## 9) Anti-patterns (Explicitly Rejected)
+## Mode Matrix - Know Your Context
 
-• **Over-mocked integration tests**: mocking ORM or HTTP client where containerized integration is feasible.
-• **UI tests keyed on CSS classes**: brittle selectors instead of semantic roles/labels.
-• **Coupling tests to implementation details**: private method calls, internal sequence assertions.
-• **"Retry until green" CI culture**: quarantines without expiry or owner.
-• **100% coverage mandates**: without mutation testing or risk awareness.
+Different modes have different rules:
 
-## 13) Failure-Mode Cards (Common Traps & Recovery)
+| Mode         | Contracts       | New Files              | Required Artifacts                        |
+| ------------ | --------------- | ---------------------- | ----------------------------------------- |
+| **feature**  | Required first  | Allowed in scope.in    | Migration plan, feature flag, perf budget |
+| **refactor** | Must not change | Discouraged (use mods) | Codemod script + semantic diff report     |
+| **fix**      | Unchanged       | Discouraged            | Red test → green; root cause note         |
+| **doc**      | N/A             | Allowed (docs only)    | Updated README/usage snippets             |
+| **chore**    | N/A             | Limited (build/tools)  | Version updates, dependency changes       |
 
-Add a small section of "If you see X, do Y":
+### Feature Mode (Most Common)
 
-1. **Symptom:** Large rename + re-exports create `*-copy.ts` or `enhanced-*.ts`.
-   **Action:** Switch to **refactor mode**. Generate `codemod/rename.ts` that updates imports/exports in place. Validate with `tsc --noEmit` and run mutation tests to ensure unchanged behavior.
+**When to use**: Adding new functionality
 
-2. **Symptom:** Contract change proliferates across services.
-   **Action:** Declare **blast_radius.modules**; create consumer **Pact** tests first. Stage changes behind a feature flag; ship provider compatibility for both old/new fields.
+**Requirements**:
 
-3. **Symptom:** Flaky time-based tests.
-   **Action:** Inject `Clock` and use fixed timestamps; assert **idempotency** with property tests.
+1. Define contracts first (OpenAPI/GraphQL/etc.)
+2. Write consumer/provider tests before implementation
+3. Include migration plan if database changes
+4. Add feature flag for gradual rollout
+5. Set performance budgets
 
-4. **Symptom:** Agent proposes new external tool/library.
-   **Action:** Fail unless added to `tool_allowlist`. Require SBOM delta review and perf/a11y/security notes in the PR.
+**Example workflow**:
 
-## 10) Cursor/Codex Agent Integration
+```bash
+# 1. Define contract
+vim docs/api/new-feature.yaml
 
-### Agent Commands
+# 2. Generate types
+npm run generate:types
 
-• `agent plan` → emits plan + test matrix
-• `agent verify` → runs local gates; generates provenance
-• `agent prove` → creates provenance manifest
-• `agent doc` → updates README/changelog from spec
+# 3. Write contract tests
+vim tests/contract/new-feature.test.ts
 
-### Guardrails
+# 4. Implement
+vim src/features/new-feature.ts
 
-• **Templates**: Inject Working Spec YAML + PR template on "New Feature" command
-• **Scaffold**: Pre-wire tests/\* skeletons with containers and contracts
-• **Context discipline**: Restrict writes to spec-touched modules; deny outside scope unless spec updated
-• **Feedback loop**: PR comments show coverage, mutation diff, contract verification summary
+# 5. Verify
+npm run verify
+```
 
-## 11) Adoption Roadmap
+### Refactor Mode (High Risk)
 
-### Foundation Setup
+**When to use**: Restructuring without behavior change
 
-- [ ] Add .caws/ directory with schemas and templates
-- [ ] Create apps/tools/caws/ validation scripts
-- [ ] Wire basic GitHub Actions workflow
-- [ ] Add CODEOWNERS for Tier-1 paths
+**Requirements**:
 
-### Quality Gates Implementation
+1. Contracts must not change
+2. Provide codemod script for automatic transformation
+3. Include semantic diff report
+4. Prove no behavior change with tests
+5. Update all imports automatically
 
-- [ ] Enable Testcontainers for integration tests
-- [ ] Add mutation testing with tier thresholds
-- [ ] Implement trust score calculation
-- [ ] Add axe + Playwright smoke for UI changes
+**Example workflow**:
 
-### Operational Excellence
+```bash
+# 1. Write codemod
+vim codemod/rename-user-service.ts
 
-- [ ] Publish provenance manifest with PRs
-- [ ] Implement flake detector and quarantine process
-- [ ] Add waiver system with trust score caps
-- [ ] Socialize review rubric and block merges <80
+# 2. Dry run
+npx jscodeshift -d -t codemod/rename-user-service.ts src/
 
-### Continuous Improvement
+# 3. Apply
+npx jscodeshift -t codemod/rename-user-service.ts src/
 
-- [ ] Monitor drift in contract usage
-- [ ] Refine tooling based on feedback
-- [ ] Expand language support as needed
-- [ ] Track trust score trends and flake rates
+# 4. Verify tests still pass
+npm test
 
-## 12) Trust Score Formula
+# 5. Generate semantic diff
+npm run semver-check
+```
+
+### Fix Mode (Urgent)
+
+**When to use**: Fixing bugs
+
+**Requirements**:
+
+1. Write failing test that reproduces bug
+2. Implement minimal fix
+3. Document root cause in PR
+4. Avoid new files - prefer in-place edits
+
+**Example workflow**:
+
+```bash
+# 1. Write failing test
+vim tests/unit/user-service.test.ts
+npm test # Should fail
+
+# 2. Fix
+vim src/services/user-service.ts
+npm test # Should pass
+
+# 3. Document
+vim .caws/working-spec.yaml # Add root cause note
+```
+
+---
+
+## Common Patterns & Best Practices
+
+### Pattern: Deterministic Testing
+
+**Problem**: Tests that use `Date.now()`, `Math.random()`, or `crypto.randomUUID()` are non-deterministic.
+
+**Solution**: Inject time/random/UUID generators.
 
 ```typescript
-const weights = {
-  coverage: 0.2,
-  mutation: 0.2,
-  contracts: 0.16,
-  a11y: 0.08,
-  perf: 0.08,
-  flake: 0.08,
-  mode: 0.06,
-  scope: 0.06,
-  supplychain: 0.04,
-};
+// ❌ Bad - Non-deterministic
+class OrderService {
+  createOrder(items) {
+    return {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      items,
+    };
+  }
+}
 
-function trustScore(tier: string, prov: Provenance) {
-  const wsum = Object.values(weights).reduce((a, b) => a + b, 0);
-  const score =
-    weights.coverage * normalize(prov.results.coverage_branch, tiers[tier].min_branch, 0.95) +
-    weights.mutation * normalize(prov.results.mutation_score, tiers[tier].min_mutation, 0.9) +
-    weights.contracts *
-      (tiers[tier].requires_contracts
-        ? prov.results.contracts.consumer && prov.results.contracts.provider
-          ? 1
-          : 0
-        : 1) +
-    weights.a11y * (prov.results.a11y === 'pass' ? 1 : 0) +
-    weights.perf * budgetOk(prov.results.perf) +
-    weights.flake * (prov.results.flake_rate <= 0.005 ? 1 : 0.5) +
-    weights.mode * (prov.results.mode_compliance === 'full' ? 1 : 0.5) +
-    weights.scope * (prov.results.scope_within_budget ? 1 : 0) +
-    weights.supplychain * (prov.results.sbom_valid && prov.results.attestation_valid ? 1 : 0);
-  return Math.round((score / wsum) * 100);
+// ✅ Good - Deterministic
+class OrderService {
+  constructor(
+    private clock: Clock,
+    private idGenerator: IdGenerator
+  ) {}
+
+  createOrder(items) {
+    return {
+      id: this.idGenerator.generate(),
+      timestamp: this.clock.now(),
+      items,
+    };
+  }
+}
+
+// Test with injected dependencies
+test('createOrder generates valid order', () => {
+  const clock = new FixedClock('2025-01-01T00:00:00Z');
+  const idGen = new SequentialIdGenerator();
+  const service = new OrderService(clock, idGen);
+
+  const order = service.createOrder([item1, item2]);
+
+  expect(order.id).toBe('00000001');
+  expect(order.timestamp).toBe('2025-01-01T00:00:00Z');
+});
+```
+
+### Pattern: Guard Clauses for Safety
+
+**Problem**: Deep nesting makes code hard to read and error-prone.
+
+**Solution**: Use guard clauses and early returns.
+
+```typescript
+// ❌ Bad - Deep nesting
+function processOrder(order) {
+  if (order) {
+    if (order.items && order.items.length > 0) {
+      if (order.user) {
+        if (order.user.active) {
+          // Process order
+          return calculateTotal(order.items);
+        } else {
+          throw new Error('User not active');
+        }
+      } else {
+        throw new Error('No user');
+      }
+    } else {
+      throw new Error('No items');
+    }
+  } else {
+    throw new Error('No order');
+  }
+}
+
+// ✅ Good - Guard clauses
+function processOrder(order) {
+  if (!order) {
+    throw new Error('No order');
+  }
+
+  if (!order.items || order.items.length === 0) {
+    throw new Error('No items');
+  }
+
+  if (!order.user) {
+    throw new Error('No user');
+  }
+
+  if (!order.user.active) {
+    throw new Error('User not active');
+  }
+
+  // Now safe to process
+  return calculateTotal(order.items);
 }
 ```
 
-This v1.0 combines the philosophical foundation of our system with the practical, executable implementation details needed for immediate adoption. The framework provides both the "why" (quality principles) and the "how" (automated enforcement) needed for engineering-grade AI coding agents.
+### Pattern: Contract-First Development
+
+**Problem**: API changes break consumers unexpectedly.
+
+**Solution**: Define contracts first, generate types, test before implementing.
+
+```bash
+# 1. Define OpenAPI contract
+cat > docs/api/users.yaml << EOF
+openapi: 3.0.0
+paths:
+  /users:
+    get:
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  \$ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email, name]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+EOF
+
+# 2. Generate TypeScript types
+npx openapi-typescript docs/api/users.yaml -o src/types/api.ts
+
+# 3. Write contract test
+cat > tests/contract/users.test.ts << EOF
+import { validateAgainstSchema } from '@pact-foundation/pact';
+
+test('GET /users returns valid user array', async () => {
+  const response = await fetch('/api/users');
+  const data = await response.json();
+
+  await validateAgainstSchema(data, 'docs/api/users.yaml', '/users');
+});
+EOF
+
+# 4. Implement
+# src/api/users.ts now has type safety and contract validation
+```
 
 ---
 
-## 🚀 Quick Start Guide
+## Troubleshooting Common Issues
 
-### For New Projects
+### Validation Errors
 
-1. Copy this template to your project root
-2. Run `caws init` to scaffold the project structure
-3. Customize the Working Spec YAML for your project
-4. Set up your CI/CD pipeline with the provided GitHub Actions
+#### Error: `risk_tier is required`
 
-### For Existing Projects
+**Cause**: Working spec missing risk tier.
 
-1. Copy the relevant sections to your existing project
-2. Run `caws scaffold` to add missing components
-3. Update your existing workflows to include the CAWS gates
+**Fix**:
 
-### Customization
+```yaml
+# Add to .caws/working-spec.yaml
+risk_tier: 2 # Choose 1, 2, or 3 based on impact
+```
 
-- **Project ID**: Update `{{PROJECT_ID}}` with your ticket system prefix
-- **Title**: Describe your project in `{{PROJECT_TITLE}}`
-- **Tier**: Set appropriate risk tier (1-3) in `{{PROJECT_TIER}}`
-- **Mode**: Choose from `refactor`, `feature`, `fix`, `doc`, `chore`
-- **Budget**: Set reasonable file/LOC limits in `change_budget`
-- **Scope**: Define what files/features are in/out of scope
-- **Contracts**: Specify API contracts (OpenAPI, GraphQL, etc.)
+#### Error: `Invalid ID format`
 
-### Support
+**Cause**: ID doesn't match `PREFIX-NUMBER` pattern.
 
-- 📖 Full documentation: See sections above
-- 🛠️ Tools: `apps/tools/caws/` contains all utilities
-- 🎯 Examples: Check `docs/` for implementation examples
-- 🤝 Community: Follow the agent conduct rules for collaboration
+**Fix**:
+
+```yaml
+# ❌ Bad
+id: feature-001
+id: FEAT001
+id: feat_001
+
+# ✅ Good
+id: FEAT-001
+id: FIX-042
+id: REFACTOR-003
+```
+
+#### Error: `scope.in is required`
+
+**Cause**: Missing scope definition.
+
+**Fix**:
+
+```yaml
+scope:
+  in: ['src/features/auth/', 'tests/auth/']
+  out: ['node_modules/', 'dist/']
+```
+
+### Scope Violations
+
+#### Error: `File outside scope: src/unrelated.ts`
+
+**Cause**: PR touches files not listed in `scope.in`.
+
+**Fix Option 1 - Update scope**:
+
+```yaml
+scope:
+  in:
+    - 'src/features/auth/'
+    - 'src/unrelated.ts' # Add file to scope
+```
+
+**Fix Option 2 - Split PR**:
+Split changes into separate PRs with different scopes.
+
+### Budget Exceeded
+
+#### Error: `35 files changed, exceeds budget of 25`
+
+**Cause**: Change is too large.
+
+**Fix Option 1 - Split PR**:
+Break into smaller, focused PRs.
+
+**Fix Option 2 - Increase budget**:
+
+```yaml
+change_budget:
+  max_files: 40 # Only if justified
+  max_loc: 1200
+```
+
+**Note**: Prefer splitting over increasing budget.
+
+### Test Coverage Failures
+
+#### Error: `Branch coverage 75% below tier 2 requirement of 80%`
+
+**Cause**: Insufficient test coverage.
+
+**Fix**:
+
+1. Run coverage report: `npm run test:coverage`
+2. Identify untested branches in HTML report
+3. Add tests for uncovered paths
+4. Re-run: `npm run test:coverage`
+
+#### Error: `Mutation score 45% below tier 2 requirement of 50%`
+
+**Cause**: Tests aren't strong enough (mutants survive).
+
+**Fix**:
+
+1. Run mutation report: `npm run test:mutation`
+2. Review surviving mutants
+3. Add assertions that would catch those mutations
+4. Re-run: `npm run test:mutation`
 
 ---
 
-**Author**: @darianrosebrook
-**Version**: 1.0.0
-**License**: MIT
+## Provenance & AI Tracking
+
+CAWS automatically tracks all AI-assisted changes for transparency and quality analysis.
+
+### Automatic Tracking via Git Hooks
+
+When you commit, hooks automatically:
+
+1. Detect if change was AI-assisted (Cursor Composer, Chat, Tab)
+2. Extract quality metrics (coverage, mutation score)
+3. Link commits to working spec
+4. Update provenance journal
+
+### Viewing Provenance
+
+```bash
+# Beautiful dashboard with insights
+caws provenance show --format=dashboard
+
+# JSON output for tooling
+caws provenance show --format=json
+
+# Analyze AI effectiveness
+caws provenance analyze-ai
+```
+
+### Dashboard Insights
+
+The provenance dashboard shows:
+
+- Total commits and AI-assisted percentage
+- Quality score trends over time
+- AI contribution breakdown (Composer vs Tab completions)
+- Acceptance rate for AI-assisted changes
+- Recent activity timeline
+- Smart recommendations for improvement
+
+---
+
+## Integration with Cursor IDE
+
+CAWS provides deep Cursor IDE integration via hooks and rules.
+
+### Cursor Rules (`.cursor/rules/`)
+
+CAWS includes modular MDC rule files:
+
+1. **01-working-style.mdc** - Working style and risk limits
+2. **02-quality-gates.mdc** - Tests, linting, commit discipline
+3. **03-naming-and-refactor.mdc** - Naming conventions, anti-duplication
+4. **04-logging-language-style.mdc** - Logging clarity, emoji policy
+5. **05-safe-defaults-guards.mdc** - Defensive coding patterns
+6. **06-typescript-conventions.mdc** - TS/JS specific rules
+7. **07-process-ops.mdc** - Server and process management
+8. **08-solid-and-architecture.mdc** - SOLID principles
+9. **09-docstrings.mdc** - Cross-language documentation
+10. **10-authorship-and-attribution.mdc** - File attribution
+
+**These rules guide your behavior in Cursor automatically.**
+
+### Cursor Hooks (`.cursor/hooks/`)
+
+Real-time quality enforcement:
+
+- **validate-command** - Blocks dangerous commands (`rm -rf /`, force push)
+- **validate-file-read** - Prevents reading secrets (`.env`, keys)
+- **validate-file-write** - Enforces naming conventions
+- **post-edit** - Auto-formats code after changes
+
+### Disabling Temporarily
+
+```bash
+# If you need to bypass hooks temporarily
+# Cursor Settings → Hooks → Disable
+
+# Note: --no-verify is BANNED for git commits
+# Fix the issue instead of bypassing hooks
+```
+
+---
+
+## Project Templates
+
+CAWS includes templates for common project types.
+
+### VS Code Extension
+
+```bash
+caws init my-extension --template=extension
+```
+
+**Optimized for:**
+
+- Risk tier: 2 (high user impact)
+- Webview security (CSP enforcement)
+- Activation performance (<1s)
+- Budget: 25 files, 1000 lines
+
+### React Library
+
+```bash
+caws init my-lib --template=library
+```
+
+**Optimized for:**
+
+- Risk tier: 2 (API stability)
+- Bundle size limits
+- Tree-shakeable exports
+- Budget: 20 files, 800 lines
+
+### API Service
+
+```bash
+caws init my-api --template=api
+```
+
+**Optimized for:**
+
+- Risk tier: 1 (data integrity)
+- Backward compatibility
+- Performance budgets
+- Budget: 40 files, 1500 lines
+
+### CLI Tool
+
+```bash
+caws init my-cli --template=cli
+```
+
+**Optimized for:**
+
+- Risk tier: 3 (low risk)
+- Error handling
+- Help text and UX
+- Budget: 15 files, 600 lines
+
+---
+
+## Advanced Topics
+
+### Codemods for Refactoring
+
+When refactoring, use codemods instead of manual edits:
+
+```bash
+# Install jscodeshift
+npm install -g jscodeshift
+
+# Create codemod
+vim codemod/rename-function.ts
+
+# Dry run to preview changes
+jscodeshift -d -t codemod/rename-function.ts src/
+
+# Apply transformation
+jscodeshift -t codemod/rename-function.ts src/
+
+# Verify tests pass
+npm test
+```
+
+**Example codemod:**
+
+```typescript
+// codemod/rename-function.ts
+export default function transformer(file, api) {
+  const j = api.jscodeshift;
+  const root = j(file.source);
+
+  // Find all calls to oldFunction
+  root
+    .find(j.CallExpression, {
+      callee: { name: 'oldFunction' },
+    })
+    .forEach((path) => {
+      // Rename to newFunction
+      path.value.callee.name = 'newFunction';
+    });
+
+  return root.toSource();
+}
+```
+
+### Feature Flags
+
+For gradual rollouts, use feature flags:
+
+```typescript
+// Define flags
+const flags = {
+  newAuthFlow: process.env.FEATURE_NEW_AUTH === 'true',
+};
+
+// Use in code
+if (flags.newAuthFlow) {
+  return handleAuthV2(credentials);
+} else {
+  return handleAuthV1(credentials);
+}
+```
+
+### Performance Budgets
+
+Set budgets in working spec:
+
+```yaml
+non_functional:
+  perf:
+    api_p95_ms: 250 # API latency budget
+    lcp_ms: 2500 # Largest Contentful Paint
+    tti_ms: 3500 # Time to Interactive
+    bundle_kb: 50 # JavaScript bundle size
+```
+
+**Enforce in CI:**
+
+```bash
+# Lighthouse CI
+npm run lighthouse:ci
+
+# Bundle size check
+npm run build
+du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
+```
+
+---
+
+## FAQ for Agents
+
+### Q: Can I skip writing tests if the change is small?
+
+**A: No.** Tests are required regardless of change size. Even a one-line fix needs:
+
+1. A failing test that reproduces the bug
+2. The fix
+3. The passing test
+
+### Q: Can I create `enhanced-foo.ts` alongside `foo.ts` for refactoring?
+
+**A: No.** Shadow files are forbidden. Instead:
+
+1. Edit `foo.ts` in place
+2. Or create a codemod to transform `foo.ts`
+3. Or refactor with a different canonical name
+
+### Q: What if the working spec doesn't exist?
+
+**A: Create one.** Before any implementation:
+
+1. Create `.caws/working-spec.yaml`
+2. Fill in all required fields
+3. Run `caws validate --suggestions`
+4. Request human approval
+5. Then implement
+
+### Q: Can I exceed the change budget if the task requires it?
+
+**A: Split the task.** If you need more than `max_files` or `max_loc`:
+
+1. Break into multiple smaller PRs
+2. Each with its own working spec
+3. Each staying within budget
+
+Only increase budget with human approval and strong justification.
+
+### Q: What if lints fail but I think they're wrong?
+
+**A: Fix the lints.** Never use `--no-verify`. If the lint rule is incorrect:
+
+1. Fix the code to satisfy the lint
+2. Or request human discussion of the lint rule
+3. Human can update lint config if appropriate
+
+### Q: Can I commit without updating provenance?
+
+**A: Hooks do it automatically.** If hooks are installed, provenance updates on every commit. If hooks aren't installed:
+
+1. Install them: `caws hooks install`
+2. Or manually update: `caws provenance update`
+
+---
+
+## Additional Resources
+
+### Documentation
+
+- **Complete Guide**: `docs/agents/full-guide.md` - Comprehensive CAWS reference
+- **Tutorial**: `docs/agents/tutorial.md` - Step-by-step learning path
+- **Examples**: `docs/agents/examples.md` - Real-world project examples
+
+### Project-Specific
+
+- **Getting Started**: `.caws/GETTING_STARTED.md` - Generated per project
+- **Templates**: `.caws/templates/` - Feature plans, test plans, PR templates
+- **Examples**: `.caws/examples/` - Working spec examples
+
+### Cursor Rules
+
+- **Rules Directory**: `.cursor/rules/` - Modular MDC rule files
+- **Rules README**: `.cursor/rules/README.md` - Rule system documentation
+
+---
+
+## Summary Checklist
+
+Before starting any work:
+
+- [ ] Working spec exists and validates
+- [ ] Risk tier is appropriate
+- [ ] Acceptance criteria are clear
+- [ ] Scope boundaries are defined
+- [ ] Test plan is documented
+
+During implementation:
+
+- [ ] Write tests first (TDD)
+- [ ] Stay within scope.in boundaries
+- [ ] Keep under change budget
+- [ ] Use guard clauses and safe defaults
+- [ ] Inject dependencies for testability
+- [ ] No shadow files (no enhanced-_, new-_, v2-\*)
+
+Before submitting PR:
+
+- [ ] All tests pass: `npm test`
+- [ ] Coverage meets tier requirements
+- [ ] Mutation score meets tier requirements
+- [ ] Lints pass: `npm run lint`
+- [ ] Types check: `npm run typecheck`
+- [ ] Contracts validate (if applicable)
+- [ ] Performance budgets met
+- [ ] No secret scan violations
+- [ ] Provenance updated
+
+**Questions?** Check the full guide or ask your human collaborator.
+
+---
+
+_This guide is your companion for CAWS-driven development. Bookmark it, reference it often, and use it to deliver high-quality, well-tested, explainable code._

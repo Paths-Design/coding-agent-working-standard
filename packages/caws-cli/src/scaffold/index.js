@@ -320,6 +320,19 @@ async function scaffoldProject(options) {
       });
     }
 
+    // Add AGENTS.md guide for agent workflow instructions
+    if (
+      !fs.existsSync(path.join(currentDir, 'agents.md')) &&
+      !fs.existsSync(path.join(currentDir, 'AGENTS.md')) &&
+      !fs.existsSync(path.join(currentDir, 'caws.md'))
+    ) {
+      enhancements.push({
+        name: 'agents.md',
+        description: 'CAWS agent workflow guide',
+        required: false,
+      });
+    }
+
     // Add OIDC setup guide if requested or not minimal
     if (
       (options.withOidc || (!options.minimal && !options.withOidc)) &&

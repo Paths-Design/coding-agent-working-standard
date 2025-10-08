@@ -3,6 +3,7 @@
   "displayName": "CAWS - Coding Agent Workflow System",
   "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
   "version": "1.0.0",
+  "publisher": "paths-design",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -17,6 +18,16 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "caws.init",
+        "title": "CAWS: Initialize Project",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.scaffold",
+        "title": "CAWS: Scaffold Components",
+        "category": "CAWS"
+      },
       {
         "command": "caws.evaluate",
         "title": "CAWS: Evaluate Quality",
@@ -40,6 +51,21 @@
       {
         "command": "caws.showDashboard",
         "title": "CAWS: Show Quality Dashboard",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.hooksInstall",
+        "title": "CAWS: Install Git Hooks",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.hooksStatus",
+        "title": "CAWS: Check Hooks Status",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.showProvenance",
+        "title": "CAWS: Show Provenance Dashboard",
         "category": "CAWS"
       }
     ],
@@ -101,15 +127,15 @@
     }
   },
   "scripts": {
-    "build": "npm run bundle && npm run compile",
-    "vscode:prepublish": "npm run bundle && npm run compile",
-    "bundle": "node scripts/bundle-deps.js",
+    "build": "npm run bundle-deps && npm run compile",
+    "vscode:prepublish": "npm run bundle-deps && npm run compile",
+    "bundle-deps": "node scripts/bundle-deps.js",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run bundle && npm run compile && npm run lint",
+    "pretest": "npm run bundle-deps && npm run compile && npm run lint",
     "lint": "npx eslint src",
     "test": "node ./out/test/runTest.js",
-    "package": "vsce package"
+    "package": "npm run build && vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",

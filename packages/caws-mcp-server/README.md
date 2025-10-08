@@ -53,6 +53,49 @@ npm start
 
 The server exposes the following tools to agents:
 
+### Project Initialization (`caws_init`)
+
+Initialize a new project with CAWS setup.
+
+```javascript
+// Agent calls the tool
+const result = await callTool('caws_init', {
+  projectName: '.',  // or 'my-project' to create subdirectory
+  template: 'extension',  // optional: extension, library, api, cli
+  interactive: false,  // recommended for AI agents
+  workingDirectory: '/path/to/parent'
+});
+
+// Returns initialization result
+{
+  "success": true,
+  "message": "Project initialized successfully",
+  "output": "...",
+  "projectName": "my-project"
+}
+```
+
+### Project Scaffolding (`caws_scaffold`)
+
+Add CAWS components to an existing project.
+
+```javascript
+const result = await callTool('caws_scaffold', {
+  minimal: false,  // only essential components
+  withCodemods: false,  // include codemod scripts
+  withOIDC: false,  // include OIDC publisher setup
+  force: false,  // overwrite existing files
+  workingDirectory: '/path/to/project'
+});
+
+// Returns scaffolding result
+{
+  "success": true,
+  "message": "CAWS components scaffolded successfully",
+  "output": "..."
+}
+```
+
 ### Quality Evaluation (`caws_evaluate`)
 
 Evaluate work against CAWS quality standards.
@@ -179,6 +222,104 @@ const monitoring = await callTool('caws_quality_monitor', {
     "Run CAWS validation: caws agent evaluate",
     "Check for linting issues"
   ]
+}
+```
+
+### Git Hooks Management (`caws_hooks`)
+
+Manage CAWS git hooks for provenance tracking and quality gates.
+
+```javascript
+// Install hooks
+const install = await callTool('caws_hooks', {
+  subcommand: 'install',
+  force: false,  // overwrite existing hooks
+  backup: true,  // backup existing hooks first
+  workingDirectory: '/path/to/project'
+});
+
+// Check status
+const status = await callTool('caws_hooks', {
+  subcommand: 'status',
+  workingDirectory: '/path/to/project'
+});
+
+// Remove hooks
+const remove = await callTool('caws_hooks', {
+  subcommand: 'remove',
+  workingDirectory: '/path/to/project'
+});
+
+// Returns operation result
+{
+  "success": true,
+  "subcommand": "install",
+  "output": "Successfully installed 4 git hooks"
+}
+```
+
+### Provenance Management (`caws_provenance`)
+
+Manage CAWS provenance tracking and audit trails. Now includes `init` subcommand.
+
+```javascript
+// Initialize provenance tracking
+const init = await callTool('caws_provenance', {
+  subcommand: 'init',
+  workingDirectory: '/path/to/project'
+});
+
+// Update provenance
+const update = await callTool('caws_provenance', {
+  subcommand: 'update',
+  commit: 'abc123',
+  message: 'feat: add new feature',
+  author: 'user@example.com',
+  workingDirectory: '/path/to/project'
+});
+
+// Other subcommands: 'show', 'verify', 'analyze-ai'
+```
+
+### Project Status (`caws_status`)
+
+Get project health overview and status summary.
+
+```javascript
+const status = await callTool('caws_status', {
+  specFile: '.caws/working-spec.yaml',
+  workingDirectory: '/path/to/project'
+});
+
+// Returns project status
+{
+  "success": true,
+  "output": "Project Health: GOOD\n..."
+}
+```
+
+### Diagnostics (`caws_diagnose`)
+
+Run health checks and optionally apply automatic fixes.
+
+```javascript
+// Check only
+const check = await callTool('caws_diagnose', {
+  fix: false,
+  workingDirectory: '/path/to/project'
+});
+
+// Check and fix
+const fix = await callTool('caws_diagnose', {
+  fix: true,
+  workingDirectory: '/path/to/project'
+});
+
+// Returns diagnostics result
+{
+  "success": true,
+  "output": "Running diagnostics...\n...",
+  "fixesApplied": true
 }
 ```
 

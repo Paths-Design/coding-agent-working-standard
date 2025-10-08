@@ -33,6 +33,10 @@ class CawsMcpServer extends Server {
       const { name, arguments: args } = request.params;
 
       switch (name) {
+        case 'caws_init':
+          return await this.handleCawsInit(args);
+        case 'caws_scaffold':
+          return await this.handleCawsScaffold(args);
         case 'caws_evaluate':
           return await this.handleCawsEvaluate(args);
         case 'caws_iterate':
@@ -49,6 +53,12 @@ class CawsMcpServer extends Server {
           return await this.handleTestAnalysis(args);
         case 'caws_provenance':
           return await this.handleProvenance(args);
+        case 'caws_hooks':
+          return await this.handleHooks(args);
+        case 'caws_status':
+          return await this.handleStatus(args);
+        case 'caws_diagnose':
+          return await this.handleDiagnose(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -109,6 +119,133 @@ class CawsMcpServer extends Server {
 
       return { resources };
     });
+  }
+
+  async handleCawsInit(args) {
+    const {
+      projectName = '.',
+      template,
+      interactive = false,
+      workingDirectory = process.cwd(),
+    } = args;
+
+    try {
+      const cliArgs = ['init', projectName];
+
+      if (template) {
+        cliArgs.push(`--template=${template}`);
+      }
+
+      if (interactive) {
+        cliArgs.push('--interactive');
+      } else {
+        cliArgs.push('--non-interactive');
+      }
+
+      const command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} ${cliArgs.join(' ')}`;
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                message: 'Project initialized successfully',
+                output: result,
+                projectName: projectName === '.' ? path.basename(workingDirectory) : projectName,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws init',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleCawsScaffold(args) {
+    const {
+      minimal = false,
+      withCodemods = false,
+      withOIDC = false,
+      force = false,
+      workingDirectory = process.cwd(),
+    } = args;
+
+    try {
+      const cliArgs = ['scaffold'];
+
+      if (minimal) cliArgs.push('--minimal');
+      if (withCodemods) cliArgs.push('--with-codemods');
+      if (withOIDC) cliArgs.push('--with-oidc');
+      if (force) cliArgs.push('--force');
+
+      const command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} ${cliArgs.join(' ')}`;
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                message: 'CAWS components scaffolded successfully',
+                output: result,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws scaffold',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   async handleCawsEvaluate(args) {
@@ -344,16 +481,10 @@ class CawsMcpServer extends Server {
   }
 
   async handleProvenance(args) {
-    const { subcommand, commit, message, author, quiet = false } = args;
+    const { subcommand, commit, message, author, quiet = false, workingDirectory = process.cwd() } = args;
 
     try {
-      let command = 'node packages/caws-cli/dist/index.js provenance';
-
-      if (subcommand === 'generate') {
-        command += ' generate';
-      } else if (subcommand === 'validate') {
-        command += ' validate';
-      }
+      let command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} provenance ${subcommand}`;
 
       if (commit) command += ` --commit "${commit}"`;
       if (message) command += ` --message "${message}"`;
@@ -361,16 +492,42 @@ class CawsMcpServer extends Server {
       if (quiet) command += ' --quiet';
 
       const result = await execCommand(command, {
-        cwd: process.cwd(),
+        cwd: workingDirectory,
         timeout: 30000,
       });
 
       return {
-        content: [{ type: 'text', text: result.stdout || 'Provenance operation completed' }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                subcommand,
+                output: result.stdout || 'Provenance operation completed',
+              },
+              null,
+              2
+            ),
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{ type: 'text', text: `Provenance operation failed: ${error.message}` }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: `caws provenance ${subcommand}`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
         isError: true,
       };
     }
@@ -636,10 +793,218 @@ class CawsMcpServer extends Server {
       throw new Error(`Failed to read waiver: ${error.message}`);
     }
   }
+
+  async handleHooks(args) {
+    const { subcommand = 'status', force = false, backup = false, workingDirectory = process.cwd() } = args;
+
+    try {
+      let command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} hooks ${subcommand}`;
+
+      if (subcommand === 'install') {
+        if (force) command += ' --force';
+        if (backup) command += ' --backup';
+      }
+
+      const result = await execCommand(command, {
+        cwd: workingDirectory,
+        timeout: 30000,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                subcommand,
+                output: result.stdout || result.stderr || 'Hooks operation completed',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: `caws hooks ${subcommand}`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleStatus(args) {
+    const { specFile = '.caws/working-spec.yaml', workingDirectory = process.cwd() } = args;
+
+    try {
+      const command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} status --spec ${specFile}`;
+      const result = await execCommand(command, {
+        cwd: workingDirectory,
+        timeout: 30000,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                output: result.stdout || 'Status check completed',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws status',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleDiagnose(args) {
+    const { fix = false, workingDirectory = process.cwd() } = args;
+
+    try {
+      let command = `node ${path.join(__dirname, '../caws-cli/dist/index.js')} diagnose`;
+      if (fix) command += ' --fix';
+
+      const result = await execCommand(command, {
+        cwd: workingDirectory,
+        timeout: 60000, // Longer timeout for diagnose with fixes
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                output: result.stdout || 'Diagnostics completed',
+                fixesApplied: fix,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws diagnose',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
 }
 
 // Tool definitions for MCP
 const CAWS_TOOLS = [
+  {
+    name: 'caws_init',
+    description: 'Initialize a new project with CAWS setup',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectName: {
+          type: 'string',
+          description: 'Name of the project to create (use "." for current directory)',
+          default: '.',
+        },
+        template: {
+          type: 'string',
+          description: 'Project template to use (extension, library, api, cli)',
+        },
+        interactive: {
+          type: 'boolean',
+          description: 'Run interactive setup wizard (not recommended for AI agents)',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for initialization',
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_scaffold',
+    description: 'Add CAWS components to an existing project',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        minimal: {
+          type: 'boolean',
+          description: 'Only install essential components',
+          default: false,
+        },
+        withCodemods: {
+          type: 'boolean',
+          description: 'Include codemod scripts',
+          default: false,
+        },
+        withOIDC: {
+          type: 'boolean',
+          description: 'Include OIDC trusted publisher setup',
+          default: false,
+        },
+        force: {
+          type: 'boolean',
+          description: 'Overwrite existing files',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for scaffolding',
+        },
+      },
+    },
+  },
   {
     name: 'caws_evaluate',
     description: 'Evaluate work against CAWS quality standards',
@@ -826,7 +1191,7 @@ const CAWS_TOOLS = [
       properties: {
         subcommand: {
           type: 'string',
-          enum: ['update', 'show', 'verify', 'analyze-ai'],
+          enum: ['init', 'update', 'show', 'verify', 'analyze-ai'],
           description: 'Provenance command to execute',
         },
         commit: {
@@ -854,6 +1219,72 @@ const CAWS_TOOLS = [
       required: ['subcommand'],
     },
   },
+  {
+    name: 'caws_hooks',
+    description: 'Manage CAWS git hooks for provenance tracking and quality gates',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subcommand: {
+          type: 'string',
+          enum: ['install', 'remove', 'status'],
+          description: 'Hooks command to execute',
+          default: 'status',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Force overwrite existing hooks (for install)',
+          default: false,
+        },
+        backup: {
+          type: 'boolean',
+          description: 'Backup existing hooks before installing',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for hooks operations',
+        },
+      },
+      required: ['subcommand'],
+    },
+  },
+  {
+    name: 'caws_status',
+    description: 'Get project health overview and status summary',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        specFile: {
+          type: 'string',
+          description: 'Path to working spec file',
+          default: '.caws/working-spec.yaml',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for status check',
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_diagnose',
+    description: 'Run health checks and optionally apply automatic fixes',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fix: {
+          type: 'boolean',
+          description: 'Automatically apply fixes for detected issues',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for diagnostics',
+        },
+      },
+    },
+  },
 ];
 
 // Handler implementations for new tools are defined as class methods above
@@ -866,7 +1297,7 @@ function execCommand(command, options = {}) {
     } catch (error) {
       // Log command execution errors for debugging
       // eslint-disable-next-line no-console
-      console.error(`Command execution failed: ${command}`, error.message); // eslint-disable-line no-console
+      console.error(`Command execution failed: ${command}`, error.message);
       throw error;
     }
   });

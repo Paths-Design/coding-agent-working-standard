@@ -1,161 +1,134 @@
 #!/usr/bin/env node
 
 /**
- * Bundle CAWS dependencies for VS Code extension
+ * Bundle Dependencies Script for CAWS VS Code Extension
  *
- * This script bundles the CAWS MCP server and CLI tools into the extension
- * for seamless out-of-the-box functionality (similar to ESLint's approach).
+ * This script bundles the CAWS MCP server and CLI into the extension
+ * so they can be used without external installation.
+ *
+ * @author @darianrosebrook
  */
 
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
-const { execSync } = require('child_process');
 
-console.log('🔧 Bundling CAWS dependencies for VS Code extension...');
+const EXTENSION_ROOT = path.resolve(__dirname, '..');
+const MONOREPO_ROOT = path.resolve(EXTENSION_ROOT, '../..');
+const BUNDLED_DIR = path.join(EXTENSION_ROOT, 'bundled');
 
-// Paths
-const rootDir = path.join(__dirname, '..', '..', '..');
-const mcpServerDir = path.join(rootDir, 'packages', 'caws-mcp-server');
-const cliDir = path.join(rootDir, 'packages', 'caws-cli');
-const bundleDir = path.join(__dirname, '..', 'bundled');
+async function main() {
+  console.log('Starting CAWS extension dependency bundling...\n');
 
-// Ensure bundle directory exists
-if (!fs.existsSync(bundleDir)) {
-  fs.mkdirSync(bundleDir, { recursive: true });
-}
+  try {
+    // Clean bundled directory
+    console.log('Cleaning bundled directory...');
+    await fs.remove(BUNDLED_DIR);
+    await fs.ensureDir(BUNDLED_DIR);
+    console.log('✅ Cleaned bundled directory\n');
 
-// Bundle MCP Server
-console.log('📦 Bundling CAWS MCP Server...');
-const mcpBundleDir = path.join(bundleDir, 'mcp-server');
+    // Bundle MCP Server
+    console.log('Bundling MCP server...');
+    const mcpServerSource = path.join(MONOREPO_ROOT, 'packages/caws-mcp-server');
+    const mcpServerDest = path.join(BUNDLED_DIR, 'mcp-server');
 
-if (!fs.existsSync(mcpBundleDir)) {
-  fs.mkdirSync(mcpBundleDir, { recursive: true });
-}
+    await fs.ensureDir(mcpServerDest);
+    await fs.copy(path.join(mcpServerSource, 'index.js'), path.join(mcpServerDest, 'index.js'));
+    await fs.copy(
+      path.join(mcpServerSource, 'package.json'),
+      path.join(mcpServerDest, 'package.json')
+    );
 
-// Copy MCP server files
-const mcpFiles = ['index.js', 'package.json', 'README.md'];
-
-mcpFiles.forEach((file) => {
-  const src = path.join(mcpServerDir, file);
-  const dest = path.join(mcpBundleDir, file);
-
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, dest);
-    console.log(`  ✓ ${file}`);
-  }
-});
-
-// Bundle CAWS CLI (compiled version)
-console.log('📦 Bundling CAWS CLI...');
-const cliBundleDir = path.join(bundleDir, 'cli');
-
-if (!fs.existsSync(cliBundleDir)) {
-  fs.mkdirSync(cliBundleDir, { recursive: true });
-}
-
-// Build CLI first
-try {
-  console.log('  Building CAWS CLI...');
-  execSync('npm run build', { cwd: cliDir, stdio: 'inherit' });
-} catch (error) {
-  console.warn('Warning: CLI build failed, using existing build');
-}
-
-// Copy CLI files
-const cliFiles = [
-  'dist/index.js',
-  'dist/waivers-manager.js',
-  'dist/cicd-optimizer.js',
-  'dist/tool-loader.js',
-  'dist/tool-validator.js',
-  'dist/tool-interface.js',
-  'package.json',
-  'README.md',
-];
-
-cliFiles.forEach((file) => {
-  const src = path.join(cliDir, file);
-  const dest = path.join(cliBundleDir, path.basename(file));
-
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, dest);
-    console.log(`  ✓ ${file}`);
-  }
-});
-
-// Bundle essential templates
-console.log('📦 Bundling CAWS templates...');
-const templatesDir = path.join(cliDir, 'templates');
-const templatesBundleDir = path.join(bundleDir, 'templates');
-
-if (fs.existsSync(templatesDir)) {
-  // Simple recursive copy
-  function copyDir(src, dest) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-
-    const files = fs.readdirSync(src);
-    files.forEach((file) => {
-      const srcPath = path.join(src, file);
-      const destPath = path.join(dest, file);
-      const stat = fs.statSync(srcPath);
-
-      if (stat.isDirectory()) {
-        copyDir(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    });
-  }
-
-  copyDir(templatesDir, templatesBundleDir);
-  console.log('  ✓ Templates copied');
-}
-
-// Create bundle manifest
-const manifest = {
-  version: '1.0.0',
-  bundled_at: new Date().toISOString(),
-  components: {
-    'mcp-server': {
-      version: require(path.join(mcpServerDir, 'package.json')).version,
-      files: mcpFiles,
-    },
-    cli: {
-      version: require(path.join(cliDir, 'package.json')).version,
-      files: cliFiles,
-    },
-    templates: {
-      source: 'cli/templates',
-      description: 'Project scaffolding templates',
-    },
-  },
-  total_size_mb: getDirectorySize(bundleDir) / (1024 * 1024),
-};
-
-fs.writeFileSync(path.join(bundleDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-
-console.log('📋 Bundle manifest created');
-console.log(`📊 Total bundle size: ${manifest.total_size_mb.toFixed(2)} MB`);
-console.log('✅ CAWS dependencies bundled successfully!');
-
-function getDirectorySize(dirPath) {
-  let totalSize = 0;
-
-  function calculateSize(itemPath) {
-    const stats = fs.statSync(itemPath);
-
-    if (stats.isDirectory()) {
-      const files = fs.readdirSync(itemPath);
-      files.forEach((file) => {
-        calculateSize(path.join(itemPath, file));
+    // Copy MCP server node_modules (only production dependencies)
+    const mcpNodeModules = path.join(mcpServerSource, 'node_modules');
+    if (await fs.pathExists(mcpNodeModules)) {
+      console.log('  Copying MCP server dependencies...');
+      await fs.copy(mcpNodeModules, path.join(mcpServerDest, 'node_modules'), {
+        filter: (src) => {
+          // Only copy @modelcontextprotocol/sdk
+          return (
+            !src.includes('node_modules') ||
+            src.includes('@modelcontextprotocol') ||
+            src === mcpNodeModules
+          );
+        },
       });
-    } else {
-      totalSize += stats.size;
     }
-  }
 
-  calculateSize(dirPath);
-  return totalSize;
+    console.log('✅ Bundled MCP server\n');
+
+    // Bundle CLI
+    console.log('Bundling CAWS CLI...');
+    const cliSource = path.join(MONOREPO_ROOT, 'packages/caws-cli');
+    const cliDest = path.join(BUNDLED_DIR, 'cli');
+
+    await fs.ensureDir(cliDest);
+
+    // Copy CLI dist directory
+    const cliDist = path.join(cliSource, 'dist');
+    if (await fs.pathExists(cliDist)) {
+      await fs.copy(cliDist, path.join(cliDest, 'dist'));
+    } else {
+      console.warn('  ⚠️  CLI dist directory not found. Run `npm run build` in caws-cli first.');
+    }
+
+    // Copy CLI package.json
+    await fs.copy(path.join(cliSource, 'package.json'), path.join(cliDest, 'package.json'));
+
+    // Copy CLI templates
+    const cliTemplates = path.join(cliSource, 'templates');
+    if (await fs.pathExists(cliTemplates)) {
+      await fs.copy(cliTemplates, path.join(cliDest, 'templates'));
+    }
+
+    // Copy essential CLI dependencies
+    const cliNodeModules = path.join(cliSource, 'node_modules');
+    if (await fs.pathExists(cliNodeModules)) {
+      console.log('  Copying CLI dependencies...');
+      const essentialDeps = ['ajv', 'commander', 'fs-extra', 'inquirer'];
+
+      for (const dep of essentialDeps) {
+        const depPath = path.join(cliNodeModules, dep);
+        if (await fs.pathExists(depPath)) {
+          await fs.copy(depPath, path.join(cliDest, 'node_modules', dep));
+        }
+      }
+    }
+
+    console.log('✅ Bundled CAWS CLI\n');
+
+    // Create bundled info file
+    const bundledInfo = {
+      bundledAt: new Date().toISOString(),
+      mcpServer: {
+        version: require(path.join(mcpServerSource, 'package.json')).version,
+        path: 'bundled/mcp-server',
+      },
+      cli: {
+        version: require(path.join(cliSource, 'package.json')).version,
+        path: 'bundled/cli',
+      },
+    };
+
+    await fs.writeJSON(path.join(BUNDLED_DIR, 'bundle-info.json'), bundledInfo, { spaces: 2 });
+    console.log('✅ Created bundle info\n');
+
+    // Generate summary
+    console.log('Bundle Summary:');
+    console.log('─'.repeat(50));
+    console.log(`MCP Server v${bundledInfo.mcpServer.version} → ${bundledInfo.mcpServer.path}`);
+    console.log(`CAWS CLI v${bundledInfo.cli.version} → ${bundledInfo.cli.path}`);
+    console.log('─'.repeat(50));
+    console.log('\n✅ Bundling complete!');
+    console.log('\nBundled files are ready for extension packaging.');
+  } catch (error) {
+    console.error('❌ Bundling failed:', error.message);
+    console.error(error.stack);
+    process.exit(1);
+  }
 }
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = { main };

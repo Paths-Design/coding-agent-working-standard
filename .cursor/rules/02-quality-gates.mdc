@@ -1,0 +1,38 @@
+---
+description: Quality gates and execution discipline
+globs:
+alwaysApply: true
+---
+
+# Quality Gates
+
+## Execution
+
+- Run unit tests and lints after any major change; iterate until green.
+- If the project defines an engine, confirm Node version via console before running scripts.
+- `.env` files exist; do **not** attempt to cat protected dotfiles. Use framework tooling or documented env loaders.
+
+## Commits
+
+- `--no-verify` is **not allowed**. If hooks fail, **fix the cause** or split work into smaller audited commits.
+- Commit subjects: **what + why** in one sentence. Bodies for context only when needed.
+
+## TODOs & Placeholders
+
+Tag placeholders explicitly in code:
+
+- `// TODO: ...` (critical, must block if reached)
+- `// PLACEHOLDER: ...` (non-critical placeholder, warn)
+- `// MOCK DATA: ...` (remove before release)
+
+**Critical TODOs**: throw at execution site with clear message.
+
+## Diagrams/Charts
+
+- In Markdown, use **Mermaid** only. Ensure contrast (dark text on light, light on dark backgrounds).
+
+## Acceptance
+
+- `test`, `lint`, `typecheck` succeed.
+- No TODOs executed at runtime.
+- No style violations flagged by project linters.
