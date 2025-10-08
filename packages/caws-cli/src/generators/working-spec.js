@@ -17,41 +17,41 @@ const { validateWorkingSpec } = require('../validation/spec-validation');
  */
 function generateWorkingSpec(answers) {
   const template = {
-    id: answers.projectId,
-    title: answers.projectTitle,
-    risk_tier: answers.riskTier,
-    mode: answers.projectMode,
+    id: answers.projectId || 'PROJ-001',
+    title: answers.projectTitle || 'New CAWS Project',
+    risk_tier: answers.riskTier || 2,
+    mode: answers.projectMode || 'feature',
     change_budget: {
-      max_files: answers.maxFiles,
-      max_loc: answers.maxLoc,
+      max_files: answers.maxFiles || 25,
+      max_loc: answers.maxLoc || 1000,
     },
     blast_radius: {
-      modules: answers.blastModules
+      modules: (answers.blastModules || 'src, tests')
         .split(',')
         .map((m) => m.trim())
         .filter((m) => m),
-      data_migration: answers.dataMigration,
+      data_migration: answers.dataMigration ?? false,
     },
-    operational_rollback_slo: answers.rollbackSlo,
+    operational_rollback_slo: answers.rollbackSlo || '5m',
     threats: (answers.projectThreats || '')
       .split('\n')
       .map((t) => t.trim())
       .filter((t) => t && !t.startsWith('-') === false), // Allow lines starting with -
     scope: {
-      in: (answers.scopeIn || '')
+      in: (answers.scopeIn || 'src/, tests/')
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s),
-      out: (answers.scopeOut || '')
+      out: (answers.scopeOut || 'node_modules/, dist/')
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s),
     },
-    invariants: (answers.projectInvariants || '')
+    invariants: (answers.projectInvariants || 'System maintains data consistency')
       .split('\n')
       .map((i) => i.trim())
       .filter((i) => i),
-    acceptance: answers.acceptanceCriteria
+    acceptance: (answers.acceptanceCriteria || 'Given current state, when action occurs, then expected result')
       .split('\n')
       .filter((a) => a.trim())
       .map((criteria, index) => {
@@ -87,32 +87,32 @@ function generateWorkingSpec(answers) {
         };
       }),
     non_functional: {
-      a11y: answers.a11yRequirements
+      a11y: (answers.a11yRequirements || 'keyboard')
         .split(',')
         .map((a) => a.trim())
         .filter((a) => a),
-      perf: { api_p95_ms: answers.perfBudget },
-      security: answers.securityRequirements
+      perf: { api_p95_ms: answers.perfBudget || 250 },
+      security: (answers.securityRequirements || 'validation')
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s),
     },
     contracts: [
       {
-        type: answers.contractType,
-        path: answers.contractPath,
+        type: answers.contractType || '',
+        path: answers.contractPath || '',
       },
     ],
     observability: {
-      logs: answers.observabilityLogs
+      logs: (answers.observabilityLogs || '')
         .split(',')
         .map((l) => l.trim())
         .filter((l) => l),
-      metrics: answers.observabilityMetrics
+      metrics: (answers.observabilityMetrics || '')
         .split(',')
         .map((m) => m.trim())
         .filter((m) => m),
-      traces: answers.observabilityTraces
+      traces: (answers.observabilityTraces || '')
         .split(',')
         .map((t) => t.trim())
         .filter((t) => t),
