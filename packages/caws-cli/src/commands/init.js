@@ -6,7 +6,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const inquirer = require('inquirer').default || require('inquirer');
+const inquirer = require('inquirer');
 const chalk = require('chalk');
 
 // Import shared utilities
