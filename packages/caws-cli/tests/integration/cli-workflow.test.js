@@ -86,13 +86,13 @@ describe('CLI Workflow Integration', () => {
         stdio: 'pipe',
       });
 
-      expect(fs.existsSync(cliTestProjectPath)).toBe(true);
-      expect(fs.existsSync(path.join(cliTestProjectPath, '.caws'))).toBe(true);
+      expect(fs.existsSync(testProjectPath)).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, '.caws'))).toBe(true);
 
       // Step 2: Scaffold CAWS components
       const originalDir = process.cwd();
       try {
-        process.chdir(cliTestProjectPath);
+        process.chdir(testProjectPath);
 
         // Capture scaffold output for debugging
         let scaffoldOutput = '';
@@ -112,8 +112,8 @@ describe('CLI Workflow Integration', () => {
         if (process.env.CI) {
           console.log('Scaffold output (test 1):', scaffoldOutput);
           console.log('Working directory:', process.cwd());
-          console.log('Files in project directory:', fs.readdirSync(cliTestProjectPath));
-          const appsDir = path.join(cliTestProjectPath, 'apps');
+          console.log('Files in project directory:', fs.readdirSync(testProjectPath));
+          const appsDir = path.join(testProjectPath, 'apps');
           if (fs.existsSync(appsDir)) {
             console.log('Files in apps directory:', fs.readdirSync(appsDir));
             const toolsDir = path.join(appsDir, 'tools');
@@ -131,18 +131,18 @@ describe('CLI Workflow Integration', () => {
       }
 
       // Integration Contract: Scaffolding should create complete tool structure
-      expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws'))).toBe(true);
-      expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'))).toBe(
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/validate.js'))).toBe(
         true
       );
-      expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws/gates.js'))).toBe(true);
-      expect(fs.existsSync(path.join(cliTestProjectPath, 'apps/tools/caws/provenance.js'))).toBe(
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/gates.js'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, 'apps/tools/caws/provenance.js'))).toBe(
         true
       );
-      expect(fs.existsSync(path.join(cliTestProjectPath, '.agent'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, '.agent'))).toBe(true);
 
       // Step 3: Validate the project setup
-      const workingSpecPath = path.join(cliTestProjectPath, '.caws/working-spec.yaml');
+      const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
 
       // Check that the working spec exists and is valid
       expect(fs.existsSync(workingSpecPath)).toBe(true);
@@ -166,7 +166,7 @@ describe('CLI Workflow Integration', () => {
         cwd: path.join(__dirname, '../..'), // Run from CLI package directory
       });
 
-      expect(fs.existsSync(cliTestProjectPath)).toBe(true);
+      expect(fs.existsSync(testProjectPath)).toBe(true);
 
       // Capture scaffold output for debugging
       let scaffoldOutput = '';
@@ -174,7 +174,7 @@ describe('CLI Workflow Integration', () => {
         scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: cliTestProjectPath, // Scaffold in project directory
+          cwd: testProjectPath, // Scaffold in project directory
         });
       } catch (scaffoldError) {
         console.log('Scaffold command failed with error (test 2):', scaffoldError.message);
@@ -186,8 +186,8 @@ describe('CLI Workflow Integration', () => {
       // Log scaffold output for debugging in CI
       if (process.env.CI) {
         console.log('Scaffold output (test 2):', scaffoldOutput);
-        console.log('Files in project directory (test 2):', fs.readdirSync(cliTestProjectPath));
-        const appsDir = path.join(cliTestProjectPath, 'apps');
+        console.log('Files in project directory (test 2):', fs.readdirSync(testProjectPath));
+        const appsDir = path.join(testProjectPath, 'apps');
         if (fs.existsSync(appsDir)) {
           console.log('Files in apps directory (test 2):', fs.readdirSync(appsDir));
           const toolsDir = path.join(appsDir, 'tools');
@@ -202,7 +202,7 @@ describe('CLI Workflow Integration', () => {
       }
 
       // Step 2: Modify working spec
-      const workingSpecPath = path.join(cliTestProjectPath, '.caws/working-spec.yaml');
+      const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
       const specContent = fs.readFileSync(workingSpecPath, 'utf8');
       const spec = yaml.load(specContent);
 
@@ -211,7 +211,7 @@ describe('CLI Workflow Integration', () => {
       fs.writeFileSync(workingSpecPath, yaml.dump(spec));
 
       // Step 3: Re-validate
-      const validateTool = require(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'));
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
 
       // Integration Contract: Modified spec should still validate
       expect(() => {
@@ -232,7 +232,7 @@ describe('CLI Workflow Integration', () => {
         cwd: path.join(__dirname, '../..'), // Run from CLI package directory
       });
 
-      expect(fs.existsSync(cliTestProjectPath)).toBe(true);
+      expect(fs.existsSync(testProjectPath)).toBe(true);
 
       // Capture scaffold output for debugging
       let scaffoldOutput = '';
@@ -240,7 +240,7 @@ describe('CLI Workflow Integration', () => {
         scaffoldOutput = execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: cliTestProjectPath, // Scaffold in project directory
+          cwd: testProjectPath, // Scaffold in project directory
         });
       } catch (scaffoldError) {
         console.log('Scaffold command failed with error (test 3):', scaffoldError.message);
@@ -252,8 +252,8 @@ describe('CLI Workflow Integration', () => {
       // Log scaffold output for debugging in CI
       if (process.env.CI) {
         console.log('Scaffold output (test 3):', scaffoldOutput);
-        console.log('Files in project directory (test 3):', fs.readdirSync(cliTestProjectPath));
-        const appsDir = path.join(cliTestProjectPath, 'apps');
+        console.log('Files in project directory (test 3):', fs.readdirSync(testProjectPath));
+        const appsDir = path.join(testProjectPath, 'apps');
         if (fs.existsSync(appsDir)) {
           console.log('Files in apps directory (test 3):', fs.readdirSync(appsDir));
           const toolsDir = path.join(appsDir, 'tools');
@@ -268,8 +268,8 @@ describe('CLI Workflow Integration', () => {
       }
 
       // Step 1: Validate the working spec
-      const validateTool = require(path.join(cliTestProjectPath, 'apps/tools/caws/validate.js'));
-      const workingSpecPath = path.join(cliTestProjectPath, '.caws/working-spec.yaml');
+      const validateTool = require(path.join(testProjectPath, 'apps/tools/caws/validate.js'));
+      const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
 
       expect(() => {
         validateTool(workingSpecPath);
@@ -277,12 +277,12 @@ describe('CLI Workflow Integration', () => {
 
       // Step 2: Generate provenance
       const provenanceTool = require(
-        path.join(cliTestProjectPath, 'apps/tools/caws/provenance.js')
+        path.join(testProjectPath, 'apps/tools/caws/provenance.js')
       );
 
       // Change to project directory for provenance tool
       const originalDir = process.cwd();
-      process.chdir(cliTestProjectPath);
+      process.chdir(testProjectPath);
 
       try {
         expect(() => {
@@ -293,7 +293,7 @@ describe('CLI Workflow Integration', () => {
       }
 
       // Integration Contract: Provenance should be generated after validation
-      expect(fs.existsSync(path.join(cliTestProjectPath, '.agent/provenance.json'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, '.agent/provenance.json'))).toBe(true);
 
       process.chdir(__dirname);
     });
@@ -307,15 +307,15 @@ describe('CLI Workflow Integration', () => {
         cwd: path.join(__dirname, '../..'), // Run from CLI package directory
       });
 
-      expect(fs.existsSync(cliTestProjectPath)).toBe(true);
+      expect(fs.existsSync(testProjectPath)).toBe(true);
 
       execSync(`node "${cliPath}" scaffold`, {
         encoding: 'utf8',
         stdio: 'pipe',
-        cwd: cliTestProjectPath, // Scaffold in project directory
+        cwd: testProjectPath, // Scaffold in project directory
       });
 
-      const gatesTool = require(path.join(cliTestProjectPath, 'apps/tools/caws/gates.js'));
+      const gatesTool = require(path.join(testProjectPath, 'apps/tools/caws/gates.js'));
 
       // Integration Contract: Gates should analyze project structure
       expect(() => {
@@ -337,16 +337,16 @@ describe('CLI Workflow Integration', () => {
         cwd: path.join(__dirname, '../..'), // Run from CLI package directory
       });
 
-      expect(fs.existsSync(cliTestProjectPath)).toBe(true);
+      expect(fs.existsSync(testProjectPath)).toBe(true);
 
       // Step 2: Start scaffolding but interrupt it
       // (In a real scenario, this might be interrupted by user or system)
 
       // Integration Contract: Project should still be usable after interruption
-      expect(fs.existsSync(path.join(cliTestProjectPath, '.caws/working-spec.yaml'))).toBe(true);
+      expect(fs.existsSync(path.join(testProjectPath, '.caws/working-spec.yaml'))).toBe(true);
 
       // Should be able to continue with validation even without full scaffolding
-      const workingSpecPath = path.join(cliTestProjectPath, '.caws/working-spec.yaml');
+      const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
 
       // This should work even without full scaffolding
       expect(fs.existsSync(workingSpecPath)).toBe(true);
