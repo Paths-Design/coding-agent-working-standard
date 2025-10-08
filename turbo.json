@@ -51,7 +51,7 @@
   "globalDependencies": [
     "package.json",
     "turbo.json",
-    ".eslintrc.js",
+    "eslint.config.js",
     ".prettierrc"
   ]
 }
