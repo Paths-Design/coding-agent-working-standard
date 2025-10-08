@@ -1,3 +1,10 @@
+## [3.2.4](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.3...v3.2.4) (2025-10-08)
+
+
+### Bug Fixes
+
+* scaffold command now uses bundled templates ([ceff5e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/ceff5e4e007fde38500f627422320c93acc4b441))
+
 ## [3.2.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.2...v3.2.3) (2025-10-08)
 
 
