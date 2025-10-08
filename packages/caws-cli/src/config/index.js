@@ -49,21 +49,43 @@ function initializeGlobalSetup() {
 function loadProvenanceTools() {
   if (provenanceTools) return provenanceTools; // Already loaded
 
+  // Try multiple possible locations for provenance tools
+  const possiblePaths = [
+    // 1. Bundled templates in CLI package (for global installs)
+    path.join(__dirname, '../../templates/apps/tools/caws/provenance.js'),
+    // 2. Local project templates
+    path.join(process.cwd(), 'apps/tools/caws/provenance.js'),
+    // 3. Template package in monorepo
+    path.join(__dirname, '../../../caws-template/apps/tools/caws/provenance.js'),
+    // 4. Detected setup template directory
+    null, // Will be set from setup if available
+  ];
+
+  // Add detected template directory if available
   try {
     const setup = cawsSetup || initializeGlobalSetup();
     if (setup?.hasTemplateDir && setup?.templateDir) {
-      const { generateProvenance, saveProvenance } = require(
-        path.join(setup.templateDir, 'apps/tools/caws/provenance.js')
-      );
-      provenanceTools = { generateProvenance, saveProvenance };
-      console.log('✅ Loaded provenance tools from:', setup.templateDir);
+      possiblePaths[3] = path.join(setup.templateDir, 'apps/tools/caws/provenance.js');
     }
-  } catch (error) {
-    // Fallback for environments without template
-    provenanceTools = null;
-    console.warn('⚠️  Provenance tools not available:', error.message);
+  } catch (setupError) {
+    // Continue without detected setup
   }
 
+  // Try each path until one works
+  for (const testPath of possiblePaths) {
+    if (!testPath) continue;
+
+    try {
+      const { generateProvenance, saveProvenance } = require(testPath);
+      provenanceTools = { generateProvenance, saveProvenance };
+      return provenanceTools;
+    } catch (pathError) {
+      // Continue to next path
+    }
+  }
+
+  // If all paths fail, return null (don't warn during init - templates aren't ready yet)
+  provenanceTools = null;
   return provenanceTools;
 }
 
