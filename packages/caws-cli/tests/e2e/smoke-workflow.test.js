@@ -137,6 +137,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         cwd: testTempDir,
       });
 
+      const projectPath = path.join(testTempDir, testProjectName);
       process.chdir(projectPath);
       execSync(`node "${cliPath}" scaffold`, {
         encoding: 'utf8',
@@ -159,6 +160,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       fs.writeFileSync(workingSpecPath, yaml.dump(spec));
 
       // Step 3: Re-run full workflow
+      // const projectPath = path.join(testTempDir, testProjectName);
       const validateToolPath = path.join(projectPath, 'apps/tools/caws/validate.js');
       const provenanceToolPath = path.join(projectPath, 'apps/tools/caws/provenance.js');
       const gatesToolPath = path.join(projectPath, 'apps/tools/caws/gates.js');
@@ -468,6 +470,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
         }
 
         // Clean up
+        const projectPath = path.join(testTempDir, testProjectName);
         if (fs.existsSync(projectPath)) {
           fs.rmSync(projectPath, { recursive: true, force: true });
         }

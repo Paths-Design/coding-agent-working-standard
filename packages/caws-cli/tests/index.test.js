@@ -13,7 +13,7 @@ const mockTemplateDir = path.join(__dirname, 'mock-template');
 
 describe('CAWS CLI', () => {
   const testProjectName = 'test-caws-project';
-  let originalCwd;
+  // let originalCwd;
   let testTempDir;
 
   beforeAll(() => {
@@ -399,7 +399,7 @@ module.exports = { runCodemod };`
       // Check if working spec exists, if not, create a basic one for testing
       if (!fs.existsSync(workingSpecPath)) {
         const basicSpec = {
-          id: 'TEST-CAWS-PROJECT',
+          id: 'TEST-CAWS-PROJECT-001',
           title: 'Test CAWS Project',
           risk_tier: 2,
           mode: 'feature',
@@ -408,14 +408,16 @@ module.exports = { runCodemod };`
           operational_rollback_slo: '5m',
           scope: { in: ['src/', 'tests/'], out: ['node_modules/'] },
           invariants: ['System maintains data consistency'],
-          acceptance: [{
-            id: 'A1',
-            given: 'Current state',
-            when: 'Action occurs',
-            then: 'Expected result'
-          }],
+          acceptance: [
+            {
+              id: 'A1',
+              given: 'Current state',
+              when: 'Action occurs',
+              then: 'Expected result',
+            },
+          ],
           non_functional: { a11y: ['keyboard'], perf: { api_p95_ms: 250 } },
-          contracts: []
+          contracts: [],
         };
         fs.ensureDirSync(path.dirname(workingSpecPath));
         fs.writeFileSync(workingSpecPath, yaml.dump(basicSpec));
@@ -667,8 +669,8 @@ module.exports = { runCodemod };`
       // Check if working spec exists, if not, create a basic one for testing
       if (!fs.existsSync(workingSpecPath)) {
         const basicSpec = {
-          id: 'TEST-SCAFFOLD',
-          title: 'Test Scaffold Project',
+          id: 'TEST-CAWS-PROJECT-001',
+          title: 'Test CAWS Project',
           risk_tier: 2,
           mode: 'feature',
           change_budget: { max_files: 25, max_loc: 1000 },
@@ -676,14 +678,16 @@ module.exports = { runCodemod };`
           operational_rollback_slo: '5m',
           scope: { in: ['src/', 'tests/'], out: ['node_modules/'] },
           invariants: ['System maintains data consistency'],
-          acceptance: [{
-            id: 'A1',
-            given: 'Current state',
-            when: 'Action occurs',
-            then: 'Expected result'
-          }],
+          acceptance: [
+            {
+              id: 'A1',
+              given: 'Current state',
+              when: 'Action occurs',
+              then: 'Expected result',
+            },
+          ],
           non_functional: { a11y: ['keyboard'], perf: { api_p95_ms: 250 } },
-          contracts: []
+          contracts: [],
         };
         fs.ensureDirSync(path.dirname(workingSpecPath));
         fs.writeFileSync(workingSpecPath, yaml.dump(basicSpec));

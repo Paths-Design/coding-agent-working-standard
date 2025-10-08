@@ -9,7 +9,7 @@ const path = require('path');
 
 describe('Performance Budget Tests', () => {
   const cliPath = path.join(__dirname, '../dist/index.js');
-  let originalCwd;
+  // let originalCwd;
   let testTempDir;
 
   beforeAll(() => {

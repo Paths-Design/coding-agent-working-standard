@@ -111,7 +111,7 @@ async function initProject(projectName, options) {
     }
 
     // Save the original template directory before changing directories
-    const cawsSetup = detectCAWSSetup();
+    const cawsSetup = detectCAWSSetup(targetDir);
     const originalTemplateDir = cawsSetup?.hasTemplateDir ? cawsSetup.templateDir : null;
 
     // Check for existing agents.md/caws.md in target directory

@@ -98,7 +98,7 @@ describe('CLI Interface Contracts', () => {
       // Check if working spec exists, if not, create a basic one for testing
       if (!fs.existsSync(workingSpecPath)) {
         const basicSpec = {
-          id: 'TEST-CLI-CONTRACT',
+          id: 'TEST-CAWS-PROJECT-001',
           title: 'Test CLI Contract Project',
           risk_tier: 2,
           mode: 'feature',
@@ -107,14 +107,16 @@ describe('CLI Interface Contracts', () => {
           operational_rollback_slo: '5m',
           scope: { in: ['src/', 'tests/'], out: ['node_modules/'] },
           invariants: ['System maintains data consistency'],
-          acceptance: [{
-            id: 'A1',
-            given: 'Current state',
-            when: 'Action occurs',
-            then: 'Expected result'
-          }],
+          acceptance: [
+            {
+              id: 'A1',
+              given: 'Current state',
+              when: 'Action occurs',
+              then: 'Expected result',
+            },
+          ],
           non_functional: { a11y: ['keyboard'], perf: { api_p95_ms: 250 } },
-          contracts: []
+          contracts: [],
         };
         fs.ensureDirSync(path.dirname(workingSpecPath));
         fs.writeFileSync(workingSpecPath, yaml.dump(basicSpec));
