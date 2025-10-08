@@ -1,3 +1,17 @@
+# [3.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.1.1...v3.2.0) (2025-10-08)
+
+
+### Bug Fixes
+
+* adjust performance regression threshold for CI environment ([52dc6fd](https://github.com/Paths-Design/coding-agent-working-standard/commit/52dc6fd166a62eb6a199b39e1242887106425e60))
+* resolve CI test failures and false positive in pre-commit hook ([3b7171c](https://github.com/Paths-Design/coding-agent-working-standard/commit/3b7171c858dfcdde6647443231151da9c38aeff8))
+* resolve CI test failures with ENOENT uv_cwd errors ([6aed7fe](https://github.com/Paths-Design/coding-agent-working-standard/commit/6aed7fe74d80464050067a12a13a8f5013cc7304))
+
+
+### Features
+
+* major UX improvements for CAWS provenance tracking ([d9095ee](https://github.com/Paths-Design/coding-agent-working-standard/commit/d9095ee5e65313b71ebf4ae5796bb5876139c1fb))
+
 # [3.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.0.0...v3.1.1) (2025-10-08)
 
 ### Features
