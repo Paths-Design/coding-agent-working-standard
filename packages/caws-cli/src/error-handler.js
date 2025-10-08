@@ -175,7 +175,7 @@ const COMMAND_SUGGESTIONS = {
       'tool',
     ];
     const similar = findSimilarCommand(command, validCommands);
-    
+
     const suggestions = [];
     if (similar) {
       suggestions.push(`Did you mean: caws ${similar}?`);
@@ -184,7 +184,7 @@ const COMMAND_SUGGESTIONS = {
       'Available commands: init, validate, scaffold, status, templates, provenance, hooks'
     );
     suggestions.push('Try: caws --help for full command list');
-    
+
     return suggestions;
   },
 
