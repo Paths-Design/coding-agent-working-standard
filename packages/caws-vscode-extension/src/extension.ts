@@ -13,8 +13,13 @@ let webviewProvider: CawsWebviewProvider;
 export function activate(context: vscode.ExtensionContext) {
   console.log('CAWS VS Code extension activated');
 
-  // Initialize components
+  // Initialize MCP server first - it will auto-start
   mcpClient = new CawsMcpClient();
+  
+  // Register MCP server with Cursor if in Cursor environment
+  registerMcpServerWithCursor(context);
+
+  // Initialize other components
   qualityMonitor = new CawsQualityMonitor(mcpClient);
   statusBar = new CawsStatusBar();
   webviewProvider = new CawsWebviewProvider(context.extensionUri);
@@ -133,6 +138,86 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log('CAWS VS Code extension deactivated');
+  
+  // Clean up MCP client
+  if (mcpClient) {
+    mcpClient.dispose();
+  }
+}
+
+/**
+ * Register CAWS MCP server with Cursor IDE
+ * This makes CAWS tools available to Cursor's AI features automatically
+ */
+async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    // Get bundled MCP server path
+    const mcpServerPath = path.join(context.extensionPath, 'bundled', 'mcp-server', 'index.js');
+    
+    if (!fs.existsSync(mcpServerPath)) {
+      console.warn('CAWS MCP server not found in bundle, skipping auto-registration');
+      return;
+    }
+
+    // Cursor MCP configuration path (similar to VS Code settings)
+    const cursorConfigDir = path.join(os.homedir(), '.cursor');
+    const mcpConfigPath = path.join(cursorConfigDir, 'mcp.json');
+
+    // Create config directory if it doesn't exist
+    if (!fs.existsSync(cursorConfigDir)) {
+      fs.mkdirSync(cursorConfigDir, { recursive: true });
+    }
+
+    // Read existing MCP config or create new one
+    let mcpConfig: any = { mcpServers: {} };
+    if (fs.existsSync(mcpConfigPath)) {
+      try {
+        const configContent = fs.readFileSync(mcpConfigPath, 'utf8');
+        mcpConfig = JSON.parse(configContent);
+      } catch (error) {
+        console.warn('Failed to parse existing MCP config, will create new one');
+      }
+    }
+
+    // Ensure mcpServers object exists
+    if (!mcpConfig.mcpServers) {
+      mcpConfig.mcpServers = {};
+    }
+
+    // Register CAWS MCP server
+    mcpConfig.mcpServers.caws = {
+      command: 'node',
+      args: [mcpServerPath],
+      env: {},
+      disabled: false,
+      alwaysAllow: []
+    };
+
+    // Write updated config
+    fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf8');
+
+    console.log('CAWS MCP server registered with Cursor at:', mcpConfigPath);
+    
+    // Show notification to user
+    vscode.window.showInformationMessage(
+      'CAWS MCP server is now available to Cursor AI! Restart Cursor to activate all 13 CAWS tools.',
+      'Open MCP Config'
+    ).then(selection => {
+      if (selection === 'Open MCP Config') {
+        vscode.workspace.openTextDocument(mcpConfigPath).then(doc => {
+          vscode.window.showTextDocument(doc);
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('Failed to register CAWS MCP server with Cursor:', error);
+    // Don't show error to user - this is a nice-to-have feature
+  }
 }
 
 async function runCawsInit(): Promise<void> {

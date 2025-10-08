@@ -11,9 +11,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:typescript",
-    "onLanguage:javascript",
-    "workspaceContains:.caws/working-spec.yaml"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
