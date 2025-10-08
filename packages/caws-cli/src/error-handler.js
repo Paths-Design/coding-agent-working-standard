@@ -138,18 +138,139 @@ async function safeAsync(operation, context = '') {
 }
 
 /**
+ * Command-specific error suggestions
+ */
+const COMMAND_SUGGESTIONS = {
+  'unknown option': (option, command) => {
+    const suggestions = [];
+    
+    // Common typos and alternatives
+    const optionMap = {
+      '--suggestions': 'Validation includes suggestions by default. Try: caws validate',
+      '--suggest': 'Validation includes suggestions by default. Try: caws validate',
+      '--help': 'Try: caws --help or caws <command> --help',
+      '--json': 'For JSON output, try: caws provenance show --format=json',
+      '--dashboard': 'Try: caws provenance show --format=dashboard',
+    };
+    
+    if (optionMap[option]) {
+      suggestions.push(optionMap[option]);
+    } else {
+      suggestions.push(`Try: caws ${command || ''} --help for available options`);
+    }
+    
+    return suggestions;
+  },
+  
+  'unknown command': (command) => {
+    const validCommands = ['init', 'validate', 'scaffold', 'provenance', 'hooks'];
+    const similar = findSimilarCommand(command, validCommands);
+    
+    const suggestions = [];
+    if (similar) {
+      suggestions.push(`Did you mean: caws ${similar}?`);
+    }
+    suggestions.push('Available commands: init, validate, scaffold, provenance, hooks');
+    suggestions.push('Try: caws --help for full command list');
+    
+    return suggestions;
+  },
+  
+  'template not found': () => [
+    'Templates are bundled with CAWS CLI',
+    'Try: caws scaffold (should work automatically)',
+    'If issue persists: npm i -g @paths.design/caws-cli@latest',
+  ],
+  
+  'not a caws project': () => [
+    'Initialize CAWS first: caws init .',
+    'Or create new project: caws init <project-name>',
+    'Check for .caws/working-spec.yaml file',
+  ],
+};
+
+/**
+ * Find similar command using Levenshtein distance
+ * @param {string} input - User's input command
+ * @param {string[]} validCommands - List of valid commands
+ * @returns {string|null} Most similar command or null
+ */
+function findSimilarCommand(input, validCommands) {
+  if (!input) return null;
+  
+  let minDistance = Infinity;
+  let closestMatch = null;
+  
+  for (const cmd of validCommands) {
+    const distance = levenshteinDistance(input.toLowerCase(), cmd.toLowerCase());
+    if (distance < minDistance && distance <= 2) {
+      minDistance = distance;
+      closestMatch = cmd;
+    }
+  }
+  
+  return closestMatch;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ * @param {string} a - First string
+ * @param {string} b - Second string
+ * @returns {number} Edit distance
+ */
+function levenshteinDistance(a, b) {
+  const matrix = [];
+  
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[b.length][a.length];
+}
+
+/**
  * Get recovery suggestions based on error category
  * @param {Error} error - Original error
  * @param {string} category - Error category
+ * @param {Object} context - Additional context (command, options, etc.)
  * @returns {string[]} Array of recovery suggestions
  */
-function getRecoverySuggestions(error, category) {
+function getRecoverySuggestions(error, category, context = {}) {
   const suggestions = [];
+  const errorMessage = error.message || '';
 
+  // Check for command-specific suggestions first
+  for (const [pattern, suggestionFn] of Object.entries(COMMAND_SUGGESTIONS)) {
+    if (errorMessage.toLowerCase().includes(pattern)) {
+      const commandSuggestions = suggestionFn(context.option, context.command);
+      suggestions.push(...commandSuggestions);
+      return suggestions;
+    }
+  }
+
+  // Fall back to category-based suggestions
   switch (category) {
     case ERROR_CATEGORIES.PERMISSION:
       suggestions.push('Try running the command with elevated privileges (sudo)');
-      suggestions.push('Check file/directory permissions with `ls -la`');
+      suggestions.push('Check file/directory permissions with: ls -la');
       break;
 
     case ERROR_CATEGORIES.FILESYSTEM:
@@ -163,52 +284,87 @@ function getRecoverySuggestions(error, category) {
       break;
 
     case ERROR_CATEGORIES.VALIDATION:
-      suggestions.push('Run `caws validate --suggestions` for detailed validation help');
-      suggestions.push('Check your working spec format against the documentation');
+      suggestions.push('Run: caws validate for detailed validation help');
+      suggestions.push('Check your working spec format against the schema');
+      suggestions.push('See: docs/api/schema.md for specification details');
       break;
 
     case ERROR_CATEGORIES.CONFIGURATION:
-      suggestions.push('Run `caws init --interactive` to reconfigure your project');
+      suggestions.push('Run: caws init --interactive to reconfigure');
       suggestions.push('Check your .caws directory and configuration files');
+      suggestions.push('Try: caws diagnose to identify configuration issues');
       break;
 
     case ERROR_CATEGORIES.NETWORK:
       suggestions.push('Check your internet connection');
       suggestions.push('Verify the URL/service is accessible');
+      suggestions.push('Try again in a few moments');
       break;
 
     default:
-      suggestions.push('Run the command with --help for usage information');
-      suggestions.push('Check the CAWS documentation at docs/README.md');
+      suggestions.push('Run: caws --help for usage information');
+      suggestions.push('See: docs/agents/full-guide.md for detailed documentation');
   }
 
   return suggestions;
 }
 
 /**
+ * Get documentation link for error category
+ * @param {string} category - Error category
+ * @param {Object} context - Additional context
+ * @returns {string} Documentation URL
+ */
+function getDocumentationLink(category, context = {}) {
+  const baseUrl = 'https://github.com/Paths-Design/coding-agent-working-standard/blob/main';
+  
+  const categoryLinks = {
+    validation: `${baseUrl}/docs/api/schema.md`,
+    configuration: `${baseUrl}/docs/guides/caws-developer-guide.md`,
+    filesystem: `${baseUrl}/docs/agents/tutorial.md`,
+    permission: `${baseUrl}/SECURITY.md`,
+    network: `${baseUrl}/README.md#requirements`,
+  };
+  
+  if (context.command) {
+    const commandLinks = {
+      init: `${baseUrl}/docs/agents/tutorial.md#initialization`,
+      validate: `${baseUrl}/docs/api/cli.md#validate`,
+      scaffold: `${baseUrl}/docs/api/cli.md#scaffold`,
+      provenance: `${baseUrl}/docs/api/cli.md#provenance`,
+      hooks: `${baseUrl}/docs/guides/hooks-and-agent-workflows.md`,
+    };
+    
+    if (commandLinks[context.command]) {
+      return commandLinks[context.command];
+    }
+  }
+  
+  return categoryLinks[category] || `${baseUrl}/docs/agents/full-guide.md`;
+}
+
+/**
  * Handle CLI errors with consistent formatting and user guidance
  * @param {Error} error - Error to handle
+ * @param {Object} context - Error context (command, option, etc.)
  * @param {boolean} exit - Whether to exit the process (default: true)
  */
-function handleCliError(error, exit = true) {
+function handleCliError(error, context = {}, exit = true) {
   const category = error.category || getErrorCategory(error);
-  const suggestions = error.suggestions || getRecoverySuggestions(error, category);
+  const suggestions = error.suggestions || getRecoverySuggestions(error, category, context);
+  const docLink = getDocumentationLink(category, context);
 
   // Format error output
-  console.error(chalk.red(`\n❌ Error (${category}): ${error.message}`));
+  console.error(chalk.red(`\n❌ ${error.message}`));
 
   if (suggestions && suggestions.length > 0) {
     console.error(chalk.yellow('\n💡 Suggestions:'));
     suggestions.forEach((suggestion) => {
-      console.error(chalk.yellow(`   • ${suggestion}`));
+      console.error(chalk.yellow(`   ${suggestion}`));
     });
   }
 
-  console.error(
-    chalk.gray(
-      '\n📖 For more help, visit: https://github.com/Paths-Design/coding-agent-working-standard'
-    )
-  );
+  console.error(chalk.blue(`\n📚 Documentation: ${docLink}`));
 
   if (exit) {
     process.exit(1);
@@ -250,4 +406,7 @@ module.exports = {
   handleCliError,
   validateEnvironment,
   getRecoverySuggestions,
+  getDocumentationLink,
+  findSimilarCommand,
+  COMMAND_SUGGESTIONS,
 };
