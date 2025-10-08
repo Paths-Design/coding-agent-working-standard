@@ -450,7 +450,7 @@ function getConfiguration(key: string): any {
 }
 
 class CawsCodeActionProvider implements vscode.CodeActionProvider {
-  provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] {
+  provideCodeActions(_document: vscode.TextDocument, _range: vscode.Range): vscode.CodeAction[] {
     const actions: vscode.CodeAction[] = [];
 
     // Suggest CAWS validation after code changes

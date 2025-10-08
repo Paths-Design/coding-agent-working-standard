@@ -230,7 +230,7 @@ export class CawsMcpClient {
           return;
       }
 
-      const child = cp.execFile(command, args, { cwd: workingDir }, (error, stdout, stderr) => {
+      const _child = cp.execFile(command, args, { cwd: workingDir }, (error, stdout, stderr) => {
         if (error) {
           reject(new Error(`CLI command failed: ${error.message}\n${stderr}`));
           return;
