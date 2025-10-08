@@ -33,6 +33,7 @@ const { burnupCommand } = require('./commands/burnup');
 const { testAnalysisCommand } = require('./test-analysis');
 const { provenanceCommand } = require('./commands/provenance');
 const { executeTool } = require('./commands/tool');
+const { statusCommand } = require('./commands/status');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -109,6 +110,13 @@ program
   .option('-q, --quiet', 'Suppress suggestions and warnings', false)
   .option('--auto-fix', 'Automatically fix safe validation issues', false)
   .action(validateCommand);
+
+// Status command
+program
+  .command('status')
+  .description('Show project health overview')
+  .option('-s, --spec <path>', 'Path to working spec file', '.caws/working-spec.yaml')
+  .action(statusCommand);
 
 // Tool command
 program
