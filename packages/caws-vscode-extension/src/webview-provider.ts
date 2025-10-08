@@ -52,6 +52,9 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
       const evaluationResult = await this.mcpClient.callTool('caws_evaluate', {
         specFile: '.caws/working-spec.yaml',
       });
+      if (!evaluationResult.content || !evaluationResult.content[0]) {
+        throw new Error('Invalid evaluation result: missing content');
+      }
       const evaluation = JSON.parse(evaluationResult.content[0].text);
 
       // Get AI analysis data
@@ -60,7 +63,9 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
         const aiResult = await this.mcpClient.callTool('caws_provenance', {
           subcommand: 'analyze-ai',
         });
-        aiAnalysis = JSON.parse(aiResult.content[0].text);
+        if (aiResult.content && aiResult.content[0]) {
+          aiAnalysis = JSON.parse(aiResult.content[0].text);
+        }
       } catch (aiError) {
         // AI analysis is optional, don't fail if unavailable
       }
@@ -71,7 +76,9 @@ export class CawsWebviewProvider implements vscode.WebviewViewProvider {
         const budgetResult = await this.mcpClient.callTool('caws_test_analysis', {
           subcommand: 'assess-budget',
         });
-        budgetAssessment = JSON.parse(budgetResult.content[0].text);
+        if (budgetResult.content && budgetResult.content[0]) {
+          budgetAssessment = JSON.parse(budgetResult.content[0].text);
+        }
       } catch (budgetError) {
         // Budget assessment is optional
       }

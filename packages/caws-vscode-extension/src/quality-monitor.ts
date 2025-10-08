@@ -27,6 +27,10 @@ export class CawsQualityMonitor {
         },
       });
 
+      if (!result.content || !result.content[0]) {
+        console.warn('Invalid quality monitoring result: missing content');
+        return;
+      }
       const monitoring = JSON.parse(result.content[0].text);
 
       // Show recommendations if quality impact is detected
@@ -78,6 +82,10 @@ export class CawsQualityMonitor {
         },
       });
 
+      if (!result.content || !result.content[0]) {
+        console.warn('Invalid code edit monitoring result: missing content');
+        return;
+      }
       const monitoring = JSON.parse(result.content[0].text);
 
       // Provide real-time feedback

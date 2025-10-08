@@ -119,6 +119,9 @@ async function runCawsEvaluation(): Promise<void> {
           specFile: '.caws/working-spec.yaml',
         });
 
+        if (!result.content || !result.content[0]) {
+          throw new Error('Invalid evaluation result: missing content');
+        }
         const evaluation = JSON.parse(result.content[0].text);
 
         if (evaluation.success) {
@@ -164,6 +167,9 @@ async function runCawsIteration(): Promise<void> {
       currentState,
     });
 
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid iteration result: missing content');
+    }
     const guidance = JSON.parse(result.content[0].text);
 
     if (guidance.success) {
@@ -182,6 +188,9 @@ async function runCawsValidation(): Promise<void> {
       specFile: '.caws/working-spec.yaml',
     });
 
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid validation result: missing content');
+    }
     const output = result.content[0].text;
 
     // Show validation results in output channel
@@ -203,6 +212,9 @@ async function createWaiver(): Promise<void> {
   try {
     const result = await mcpClient.callTool('caws_waiver_create', waiverData);
 
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid waiver creation result: missing content');
+    }
     const output = result.content[0].text;
     vscode.window.showInformationMessage('CAWS waiver created successfully');
 
@@ -432,6 +444,9 @@ async function updateQualityStatus(): Promise<void> {
       specFile: '.caws/working-spec.yaml',
     });
 
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid quality evaluation result: missing content');
+    }
     const evaluation = JSON.parse(result.content[0].text);
 
     if (evaluation.success) {
