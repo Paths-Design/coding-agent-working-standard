@@ -17,17 +17,12 @@ describe('CAWS CLI', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Store original working directory
-    originalCwd = process.cwd();
-
-    // Create a temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', 'test-temp');
-    if (!fs.existsSync(testTempDir)) {
-      fs.mkdirSync(testTempDir, { recursive: true });
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-tests-' + Date.now());
+    if (fs.existsSync(testTempDir)) {
+      fs.rmSync(testTempDir, { recursive: true, force: true });
     }
-
-    // Change to temp directory for tests
-    process.chdir(testTempDir);
+    fs.mkdirSync(testTempDir, { recursive: true });
 
     // Clean up any existing test projects and mock directories
     if (fs.existsSync(testProjectName)) {
@@ -420,7 +415,7 @@ module.exports = { runCodemod };`
       } catch (error) {
         // CLI may "fail" due to stderr warnings but still create files
       }
-      const agentsMdPath = path.join(testProjectName, 'agents.md');
+      const agentsMdPath = path.join(testTempDir, testProjectName, 'agents.md');
       expect(fs.existsSync(agentsMdPath)).toBe(true);
 
       // Verify it's not empty
@@ -448,14 +443,14 @@ module.exports = { runCodemod };`
         // CLI may "fail" due to stderr warnings but still create files
       }
 
-        // Should create CAWS files in current directory, not subdirectory
-        expect(fs.existsSync(path.join(currentDirTest, '.caws'))).toBe(true);
-        expect(fs.existsSync(path.join(currentDirTest, '.agent'))).toBe(true);
-        expect(fs.existsSync(path.join(currentDirTest, 'agents.md'))).toBe(true);
-        expect(fs.existsSync(path.join(currentDirTest, 'existing.js'))).toBe(true);
+      // Should create CAWS files in current directory, not subdirectory
+      expect(fs.existsSync(path.join(currentDirTest, '.caws'))).toBe(true);
+      expect(fs.existsSync(path.join(currentDirTest, '.agent'))).toBe(true);
+      expect(fs.existsSync(path.join(currentDirTest, 'agents.md'))).toBe(true);
+      expect(fs.existsSync(path.join(currentDirTest, 'existing.js'))).toBe(true);
 
-        // Should NOT create a subdirectory named '-'
-        expect(fs.existsSync(path.join(currentDirTest, '-'))).toBe(false);
+      // Should NOT create a subdirectory named '-'
+      expect(fs.existsSync(path.join(currentDirTest, '-'))).toBe(false);
     });
 
     test('should handle agents.md conflict with caws.md fallback', () => {
@@ -713,11 +708,6 @@ module.exports = { runCodemod };`
   });
 
   afterAll(() => {
-    // Restore original working directory
-    if (originalCwd) {
-      process.chdir(originalCwd);
-    }
-
     // Clean up test temp directory
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {

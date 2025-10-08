@@ -16,8 +16,8 @@ describe('CLI Workflow Integration', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Create a clean temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', 'test-integration-temp');
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-integration-tests-' + Date.now());
     if (fs.existsSync(testTempDir)) {
       fs.rmSync(testTempDir, { recursive: true, force: true });
     }
@@ -89,29 +89,28 @@ describe('CLI Workflow Integration', () => {
           cwd: testProjectPath,
         });
       } catch (scaffoldError) {
-          console.log('Scaffold command failed with error:', scaffoldError.message);
-          console.log('Scaffold stderr:', scaffoldError.stderr);
-          console.log('Scaffold stdout:', scaffoldError.stdout);
-          throw scaffoldError;
-        }
+        console.log('Scaffold command failed with error:', scaffoldError.message);
+        console.log('Scaffold stderr:', scaffoldError.stderr);
+        console.log('Scaffold stdout:', scaffoldError.stdout);
+        throw scaffoldError;
+      }
 
-        // Log scaffold output for debugging in CI
-        if (process.env.CI) {
-          console.log('Scaffold output (test 1):', scaffoldOutput);
-          console.log('Working directory:', process.cwd());
-          console.log('Files in project directory:', fs.readdirSync(testProjectPath));
-          const appsDir = path.join(testProjectPath, 'apps');
-          if (fs.existsSync(appsDir)) {
-            console.log('Files in apps directory:', fs.readdirSync(appsDir));
-            const toolsDir = path.join(appsDir, 'tools');
-            if (fs.existsSync(toolsDir)) {
-              console.log('Files in apps/tools directory:', fs.readdirSync(toolsDir));
-            } else {
-              console.log('apps/tools directory does not exist');
-            }
+      // Log scaffold output for debugging in CI
+      if (process.env.CI) {
+        console.log('Scaffold output (test 1):', scaffoldOutput);
+        console.log('Working directory:', process.cwd());
+        console.log('Files in project directory:', fs.readdirSync(testProjectPath));
+        const appsDir = path.join(testProjectPath, 'apps');
+        if (fs.existsSync(appsDir)) {
+          console.log('Files in apps directory:', fs.readdirSync(appsDir));
+          const toolsDir = path.join(appsDir, 'tools');
+          if (fs.existsSync(toolsDir)) {
+            console.log('Files in apps/tools directory:', fs.readdirSync(toolsDir));
           } else {
-            console.log('apps directory does not exist');
+            console.log('apps/tools directory does not exist');
           }
+        } else {
+          console.log('apps directory does not exist');
         }
       }
 

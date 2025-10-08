@@ -14,9 +14,9 @@ describe('Cursor Hooks Integration', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Create a temporary directory for tests to avoid conflicts with monorepo
-    testTempDir = path.join(__dirname, '..', '..', 'test-cursor-temp');
-    if (!fs.existsSync(testTempDir)) {
+    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-cursor-tests-' + Date.now());
+    if (fs.existsSync(testTempDir)) {
       fs.rmSync(testTempDir, { recursive: true, force: true });
     }
     fs.mkdirSync(testTempDir, { recursive: true });
@@ -28,16 +28,18 @@ describe('Cursor Hooks Integration', () => {
   });
 
   beforeEach(() => {
-    // Clean up any existing test project
-    if (fs.existsSync(testProjectName)) {
-      fs.rmSync(testProjectName, { recursive: true, force: true });
+    // Clean up any existing test project in temp directory
+    const projectPath = path.join(testTempDir, testProjectName);
+    if (fs.existsSync(projectPath)) {
+      fs.rmSync(projectPath, { recursive: true, force: true });
     }
   });
 
   afterEach(() => {
-    // Clean up test project
-    if (fs.existsSync(testProjectName)) {
-      fs.rmSync(testProjectName, { recursive: true, force: true });
+    // Clean up test project in temp directory
+    const projectPath = path.join(testTempDir, testProjectName);
+    if (fs.existsSync(projectPath)) {
+      fs.rmSync(projectPath, { recursive: true, force: true });
     }
   });
 
