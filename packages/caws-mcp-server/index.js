@@ -197,7 +197,7 @@ class CawsMcpServer extends Server {
         cliArgs.push('--non-interactive');
       }
 
-      const command = `node ${path.join(__dirname, '../cli/dist/index.js')} ${cliArgs.join(' ')}`;
+      const command = `node ${path.join(__dirname, '../cli/index.js')} ${cliArgs.join(' ')}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -259,7 +259,7 @@ class CawsMcpServer extends Server {
       if (withOIDC) cliArgs.push('--with-oidc');
       if (force) cliArgs.push('--force');
 
-      const command = `node ${path.join(__dirname, '../cli/dist/index.js')} ${cliArgs.join(' ')}`;
+      const command = `node ${path.join(__dirname, '../cli/index.js')} ${cliArgs.join(' ')}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,

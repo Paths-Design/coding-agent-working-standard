@@ -1,0 +1,30 @@
+# Source files
+src/**
+tsconfig.json
+
+# Scripts
+scripts/**
+
+# Development files
+.gitignore
+.eslintrc.json
+eslint.config.js
+*.md
+!README.md
+
+# Build artifacts
+*.vsix
+
+# Dependencies (keep bundled, exclude packages)
+node_modules/**
+packages/**
+
+# Exclude parent directories (monorepo root)
+../**
+
+# Tests
+out/test/**
+
+# Git
+.git/**
+.github/**

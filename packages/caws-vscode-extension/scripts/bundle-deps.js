@@ -47,12 +47,7 @@ async function main() {
     const monorepoNodeModules = path.join(MONOREPO_ROOT, 'node_modules');
     if (await fs.pathExists(monorepoNodeModules)) {
       // Copy @modelcontextprotocol and its dependencies
-      const mcpDeps = [
-        '@modelcontextprotocol',
-        'zod',
-        'content-type',
-        'raw-body'
-      ];
+      const mcpDeps = ['@modelcontextprotocol', 'zod', 'content-type', 'raw-body'];
 
       for (const dep of mcpDeps) {
         const depPath = path.join(monorepoNodeModules, dep);
@@ -67,100 +62,46 @@ async function main() {
 
     console.log('✅ Bundled MCP server\n');
 
-    // Bundle CLI
-    console.log('Bundling CAWS CLI...');
+    // Bundle CLI with esbuild (dramatically smaller!)
+    console.log('Bundling CAWS CLI with esbuild...');
     const cliSource = path.join(MONOREPO_ROOT, 'packages/caws-cli');
     const cliDest = path.join(BUNDLED_DIR, 'cli');
 
     await fs.ensureDir(cliDest);
 
-    // Copy CLI dist directory
-    const cliDist = path.join(cliSource, 'dist');
-    if (await fs.pathExists(cliDist)) {
-      await fs.copy(cliDist, path.join(cliDest, 'dist'));
-    } else {
-      console.warn('  ⚠️  CLI dist directory not found. Run `npm run build` in caws-cli first.');
+    // Check if bundled CLI exists, if not build it
+    const cliBundleSource = path.join(cliSource, 'dist-bundle/index.js');
+    if (!(await fs.pathExists(cliBundleSource))) {
+      console.log('  Building CLI bundle with esbuild...');
+      const { execSync } = require('child_process');
+      execSync('node esbuild.config.js', { cwd: cliSource, stdio: 'inherit' });
     }
 
-    // Copy CLI package.json
-    await fs.copy(path.join(cliSource, 'package.json'), path.join(cliDest, 'package.json'));
+    // Copy the bundled CLI (single 2MB file!)
+    await fs.copy(cliBundleSource, path.join(cliDest, 'index.js'));
+    await fs.copy(
+      path.join(cliSource, 'dist-bundle/index.js.map'),
+      path.join(cliDest, 'index.js.map')
+    );
+    console.log('  ✅ Copied bundled CLI (2 MB)');
 
-    // Copy CLI templates
+    // Copy CLI templates (still needed for scaffolding)
     const cliTemplates = path.join(cliSource, 'templates');
     if (await fs.pathExists(cliTemplates)) {
       await fs.copy(cliTemplates, path.join(cliDest, 'templates'));
+      console.log('  ✅ Copied templates');
     }
 
-    // Copy ALL CLI dependencies (handles monorepo hoisting)
-    console.log('  Copying CLI dependencies...');
-    const cliDestModules = path.join(cliDest, 'node_modules');
-    await fs.ensureDir(cliDestModules);
-
+    // Copy minimal package.json (just for version info)
     const cliPackageJson = require(path.join(cliSource, 'package.json'));
-    const cliDeps = Object.keys(cliPackageJson.dependencies || {});
+    const minimalPackageJson = {
+      name: cliPackageJson.name,
+      version: cliPackageJson.version,
+      description: cliPackageJson.description,
+    };
+    await fs.writeJSON(path.join(cliDest, 'package.json'), minimalPackageJson, { spaces: 2 });
 
-    // First, copy from CLI's local node_modules (non-hoisted packages)
-    const cliLocalNodeModules = path.join(cliSource, 'node_modules');
-    if (await fs.pathExists(cliLocalNodeModules)) {
-      const localDeps = await fs.readdir(cliLocalNodeModules);
-      for (const dep of localDeps) {
-        await fs.copy(path.join(cliLocalNodeModules, dep), path.join(cliDestModules, dep));
-        console.log(`    ✅ Copied ${dep} (from CLI)`);
-      }
-    }
-
-    // Then, copy ALL packages from monorepo root (includes all transitive deps)
-    console.log('    Copying all hoisted dependencies from monorepo root...');
-    if (await fs.pathExists(monorepoNodeModules)) {
-      const allPackages = await fs.readdir(monorepoNodeModules);
-      let copiedCount = 0;
-      let skippedCount = 0;
-
-      for (const pkg of allPackages) {
-        // Skip hidden files and non-directories
-        if (pkg.startsWith('.')) continue;
-
-        const pkgPath = path.join(monorepoNodeModules, pkg);
-        const stat = await fs.stat(pkgPath);
-        if (!stat.isDirectory()) continue;
-
-        // Skip if already copied from CLI local node_modules
-        const destPath = path.join(cliDestModules, pkg);
-        if (await fs.pathExists(destPath)) {
-          skippedCount++;
-          continue;
-        }
-
-        await fs.copy(pkgPath, destPath);
-        copiedCount++;
-      }
-
-      console.log(`    ✅ Copied ${copiedCount} packages, skipped ${skippedCount} existing`);
-    }
-
-    // Also copy common transitive dependencies that might be hoisted
-    const commonTransitiveDeps = [
-      'universalify',
-      'graceful-fs',
-      'jsonfile',
-      'ansi-styles',
-      '@types'
-    ];
-
-    for (const dep of commonTransitiveDeps) {
-      const depDestPath = path.join(cliDestModules, dep);
-      if (await fs.pathExists(depDestPath)) {
-        continue;
-      }
-
-      const depPath = path.join(monorepoNodeModules, dep);
-      if (await fs.pathExists(depPath)) {
-        await fs.copy(depPath, depDestPath);
-        console.log(`    ✅ Copied ${dep} (transitive)`);
-      }
-    }
-
-    console.log('✅ Bundled CAWS CLI\n');
+    console.log('✅ Bundled CAWS CLI (esbuild)\n');
 
     // Create bundled info file
     const bundledInfo = {
