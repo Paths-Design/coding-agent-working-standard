@@ -12,7 +12,7 @@ const yaml = require('js-yaml');
 const mockTemplateDir = path.join(__dirname, 'mock-template');
 
 describe('CAWS CLI', () => {
-  const testProjectName = 'test-caws-project';
+  const testProjectName = `test-caws-project-${Date.now()}`;
   // let originalCwd;
   let testTempDir;
 
