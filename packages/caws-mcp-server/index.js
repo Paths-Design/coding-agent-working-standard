@@ -760,28 +760,19 @@ class CawsMcpServer extends Server {
   }
 
   findWorkingSpecs() {
-    // Find all .caws/working-spec.yaml files in current directory and subdirectories
+    // Only check the current project's .caws directory (fast, no recursion)
     const specs = [];
+    const cawsDir = path.join(process.cwd(), '.caws');
+    const specPath = path.join(cawsDir, 'working-spec.yaml');
 
-    function findSpecs(dir) {
-      try {
-        const files = fs.readdirSync(dir);
-        for (const file of files) {
-          const fullPath = path.join(dir, file);
-          const stat = fs.statSync(fullPath);
-
-          if (stat.isDirectory() && !file.startsWith('.') && file !== 'node_modules') {
-            findSpecs(fullPath);
-          } else if (file === 'working-spec.yaml' && dir.includes('.caws')) {
-            specs.push(path.relative(process.cwd(), fullPath));
-          }
-        }
-      } catch (error) {
-        // Ignore directories we can't read
+    try {
+      if (fs.existsSync(specPath)) {
+        specs.push('.caws/working-spec.yaml');
       }
+    } catch (error) {
+      // Ignore if we can't read the spec
     }
 
-    findSpecs(process.cwd());
     return specs;
   }
 
