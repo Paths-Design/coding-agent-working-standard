@@ -11,6 +11,12 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
+} from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -21,24 +27,32 @@ const __dirname = path.dirname(__filename);
 
 class CawsMcpServer extends Server {
   constructor() {
-    super({
-      name: 'caws-mcp-server',
-      version: '1.0.0',
-    }, {
-      capabilities: {
-        tools: {},
-        resources: {},
-        logging: {},
+    super(
+      {
+        name: 'caws-mcp-server',
+        version: '1.0.0',
       },
-    });
+      {
+        capabilities: {
+          tools: {},
+          resources: {},
+          logging: {},
+        },
+      }
+    );
 
     this.setupToolHandlers();
     this.setupResourceHandlers();
   }
 
   setupToolHandlers() {
-    // Quality Evaluation Tool
-    this.setRequestHandler('tools/call', async (request) => {
+    // List available tools
+    this.setRequestHandler(ListToolsRequestSchema, async () => {
+      return { tools: CAWS_TOOLS };
+    });
+
+    // Handle tool calls
+    this.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
       switch (name) {
@@ -75,25 +89,8 @@ class CawsMcpServer extends Server {
   }
 
   setupResourceHandlers() {
-    // Working spec resource
-    this.setRequestHandler('resources/read', async (request) => {
-      const { uri } = request.params;
-
-      if (uri.startsWith('caws://working-spec/')) {
-        const specPath = uri.replace('caws://working-spec/', '');
-        return await this.readWorkingSpec(specPath);
-      }
-
-      if (uri.startsWith('caws://waivers/')) {
-        const waiverId = uri.replace('caws://waivers/', '');
-        return await this.readWaiver(waiverId);
-      }
-
-      throw new Error(`Unknown resource: ${uri}`);
-    });
-
     // List available resources
-    this.setRequestHandler('resources/list', async () => {
+    this.setRequestHandler(ListResourcesRequestSchema, async () => {
       const resources = [];
 
       // Working specs
@@ -127,6 +124,23 @@ class CawsMcpServer extends Server {
       }
 
       return { resources };
+    });
+
+    // Read resource content
+    this.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const { uri } = request.params;
+
+      if (uri.startsWith('caws://working-spec/')) {
+        const specPath = uri.replace('caws://working-spec/', '');
+        return await this.readWorkingSpec(specPath);
+      }
+
+      if (uri.startsWith('caws://waivers/')) {
+        const waiverId = uri.replace('caws://waivers/', '');
+        return await this.readWaiver(waiverId);
+      }
+
+      throw new Error(`Unknown resource: ${uri}`);
     });
   }
 
@@ -1327,11 +1341,6 @@ function execCommand(command, options = {}) {
 // Main execution
 async function main() {
   const server = new CawsMcpServer();
-
-  // Register tools
-  server.setRequestHandler('tools/list', async () => {
-    return { tools: CAWS_TOOLS };
-  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
