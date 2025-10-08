@@ -13,12 +13,17 @@ describe('CAWS Tools Integration', () => {
   let testTempDir;
 
   beforeAll(() => {
-    // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
-    testTempDir = path.join(require('os').tmpdir(), 'caws-cli-tools-integration-tests-' + Date.now());
-    if (fs.existsSync(testTempDir)) {
-      fs.rmSync(testTempDir, { recursive: true, force: true });
+    try {
+      // Create a temporary directory OUTSIDE the monorepo to avoid conflicts
+      testTempDir = path.join(require('os').tmpdir(), 'caws-cli-tools-integration-tests-' + Date.now());
+      if (fs.existsSync(testTempDir)) {
+        fs.rmSync(testTempDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(testTempDir, { recursive: true });
+    } catch (error) {
+      console.log('⚠️  Tools integration test setup failed:', error.message);
+      testTempDir = null;
     }
-    fs.mkdirSync(testTempDir, { recursive: true });
   });
 
   afterAll(() => {
