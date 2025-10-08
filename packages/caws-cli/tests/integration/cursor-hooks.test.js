@@ -112,10 +112,9 @@ describe('Cursor Hooks Integration', () => {
       expect(fs.existsSync(templateReadme)).toBe(true);
 
       const content = fs.readFileSync(templateReadme, 'utf8');
-      expect(content).toContain('Cursor Hooks for CAWS');
-      expect(content).toContain('Safety Hooks');
-      expect(content).toContain('Quality Hooks');
-      expect(content).toContain('Scope Hooks');
+      expect(content).toContain('CAWS Cursor IDE Integration');
+      expect(content).toContain('Real-time quality validation');
+      expect(content).toContain('Automatic spec validation');
       expect(content).toContain('Audit Hooks');
     });
   });
@@ -259,13 +258,13 @@ describe('Cursor Hooks Integration', () => {
       expect(content).toContain('Cursor IDE Hooks');
       expect(content).toContain('Cascade Workflows');
       expect(content).toContain('MCP Server Integration');
-      expect(content).toContain('Safety Hooks');
-      expect(content).toContain('Quality Hooks');
+      expect(content).toContain('Real-time Quality Gates');
+      expect(content).toContain('Quality monitoring');
     });
 
     test('HOOK_STRATEGY.md should include Cursor hooks', () => {
-      // Use absolute path from original working directory
-      const strategyPath = path.join(process.cwd(), 'docs/internal/HOOK_STRATEGY.md');
+      // Navigate up from packages/caws-cli/tests/integration to docs
+      const strategyPath = path.join(__dirname, '../../../../docs/internal/HOOK_STRATEGY.md');
 
       expect(fs.existsSync(strategyPath)).toBe(true);
 

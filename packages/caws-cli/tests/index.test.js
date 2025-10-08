@@ -581,9 +581,15 @@ module.exports = { runCodemod };`
   });
 
   describe('Project Scaffolding', () => {
+    let scaffoldProjectName;
+    let scaffoldTestDir;
+
     beforeEach(() => {
+      // Create a unique project name for scaffold tests
+      scaffoldProjectName = `test-scaffold-${Date.now()}`;
+      scaffoldTestDir = path.join(testTempDir, scaffoldProjectName);
+      
       // Create a basic project structure with .caws directory
-      const scaffoldTestDir = path.join(testTempDir, testProjectName);
       fs.mkdirSync(scaffoldTestDir, { recursive: true });
       fs.mkdirSync(path.join(scaffoldTestDir, '.caws'), { recursive: true });
       fs.writeFileSync(
@@ -594,7 +600,6 @@ module.exports = { runCodemod };`
 
     test('should scaffold CAWS components', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
-      const scaffoldTestDir = path.join(testTempDir, testProjectName);
       try {
         execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
