@@ -36,6 +36,9 @@ const { executeTool } = require('./commands/tool');
 const { statusCommand } = require('./commands/status');
 const { templatesCommand } = require('./commands/templates');
 const { diagnoseCommand } = require('./commands/diagnose');
+const { evaluateCommand } = require('./commands/evaluate');
+const { iterateCommand } = require('./commands/iterate');
+const { waiversCommand } = require('./commands/waivers');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -133,6 +136,61 @@ program
   .description('Run health checks and suggest fixes')
   .option('--fix', 'Apply automatic fixes', false)
   .action(diagnoseCommand);
+
+// Evaluate command
+program
+  .command('evaluate [spec-file]')
+  .description('Evaluate work against CAWS quality standards')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action(evaluateCommand);
+
+// Iterate command
+program
+  .command('iterate [spec-file]')
+  .description('Get iterative development guidance based on current progress')
+  .option('--current-state <json>', 'Current implementation state as JSON', '{}')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action(iterateCommand);
+
+// Waivers command group
+const waiversCmd = program
+  .command('waivers')
+  .description('Manage CAWS quality gate waivers');
+
+// Waivers subcommands
+waiversCmd
+  .command('create')
+  .description('Create a new quality gate waiver')
+  .requiredOption('--title <title>', 'Waiver title')
+  .requiredOption('--reason <reason>', 'Reason for waiver (emergency_hotfix, legacy_integration, etc.)')
+  .requiredOption('--description <description>', 'Detailed description')
+  .requiredOption('--gates <gates>', 'Comma-separated list of gates to waive')
+  .requiredOption('--expires-at <date>', 'Expiration date (ISO 8601)')
+  .requiredOption('--approved-by <approver>', 'Approver name')
+  .requiredOption('--impact-level <level>', 'Impact level (low, medium, high, critical)')
+  .requiredOption('--mitigation-plan <plan>', 'Risk mitigation plan')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((options) => waiversCommand('create', options));
+
+waiversCmd
+  .command('list')
+  .description('List all waivers')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((options) => waiversCommand('list', options));
+
+waiversCmd
+  .command('show <id>')
+  .description('Show waiver details')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((id, options) => waiversCommand('show', { ...options, id }));
+
+waiversCmd
+  .command('revoke <id>')
+  .description('Revoke a waiver')
+  .option('--revoked-by <name>', 'Person revoking the waiver')
+  .option('--reason <reason>', 'Revocation reason')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((id, options) => waiversCommand('revoke', { ...options, id }));
 
 // Tool command
 program

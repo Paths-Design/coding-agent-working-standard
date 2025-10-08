@@ -47350,6 +47350,692 @@ var require_diagnose = __commonJS({
   }
 });
 
+// src/commands/evaluate.js
+var require_evaluate = __commonJS({
+  "src/commands/evaluate.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var chalk2 = require_source();
+    var { initializeGlobalSetup: initializeGlobalSetup2 } = require_config();
+    async function evaluateCommand2(specFile = ".caws/working-spec.yaml", options = {}) {
+      try {
+        console.log("\u{1F50D} Detecting CAWS setup...");
+        const setup = initializeGlobalSetup2();
+        if (setup.hasWorkingSpec) {
+          console.log(`\u2705 Detected ${setup.setupType} CAWS setup`);
+          console.log(`   Capabilities: ${setup.capabilities.join(", ")}`);
+        }
+        const specPath = path2.isAbsolute(specFile) ? specFile : path2.join(process.cwd(), specFile);
+        if (!fs2.existsSync(specPath)) {
+          console.error(chalk2.red(`
+\u274C Working spec not found: ${specFile}`));
+          console.error(chalk2.yellow("\u{1F4A1} Run: caws init to create a working spec"));
+          process.exit(1);
+        }
+        const specContent = fs2.readFileSync(specPath, "utf8");
+        const spec = yaml2.load(specContent);
+        console.log(chalk2.blue("\n\u{1F4CA} Evaluating CAWS Quality Standards\n"));
+        console.log("\u2500".repeat(60));
+        const results = {
+          score: 0,
+          maxScore: 0,
+          checks: [],
+          recommendations: [],
+          warnings: []
+        };
+        results.maxScore += 10;
+        if (spec.id && spec.title && spec.risk_tier && spec.mode) {
+          results.score += 10;
+          results.checks.push({ name: "Working Spec Structure", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "Working Spec Structure", status: "fail", points: 0 });
+          results.warnings.push("Working spec missing required fields");
+        }
+        results.maxScore += 15;
+        if (spec.acceptance && spec.acceptance.length > 0) {
+          const validCriteria = spec.acceptance.filter((a) => a.id && a.given && a.when && a.then);
+          const criteriaScore = Math.floor(validCriteria.length / spec.acceptance.length * 15);
+          results.score += criteriaScore;
+          results.checks.push({
+            name: "Acceptance Criteria",
+            status: criteriaScore === 15 ? "pass" : "partial",
+            points: criteriaScore,
+            detail: `${validCriteria.length}/${spec.acceptance.length} complete`
+          });
+          if (criteriaScore < 15) {
+            results.recommendations.push("Complete all acceptance criteria with Given-When-Then format");
+          }
+        } else {
+          results.checks.push({ name: "Acceptance Criteria", status: "fail", points: 0 });
+          results.warnings.push("No acceptance criteria defined");
+        }
+        results.maxScore += 10;
+        if (spec.scope && spec.scope.in && spec.scope.in.length > 0) {
+          results.score += 10;
+          results.checks.push({ name: "Scope Definition", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "Scope Definition", status: "fail", points: 0 });
+          results.warnings.push("Scope not clearly defined");
+        }
+        results.maxScore += 10;
+        if (spec.change_budget && spec.change_budget.max_files && spec.change_budget.max_loc) {
+          results.score += 10;
+          results.checks.push({ name: "Change Budget", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "Change Budget", status: "fail", points: 0 });
+          results.recommendations.push("Define change budget (max_files, max_loc)");
+        }
+        results.maxScore += 10;
+        if (spec.invariants && spec.invariants.length > 0) {
+          results.score += 10;
+          results.checks.push({ name: "System Invariants", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "System Invariants", status: "partial", points: 5 });
+          results.recommendations.push("Define system invariants to maintain");
+        }
+        results.maxScore += 15;
+        let nfrScore = 0;
+        if (spec.non_functional) {
+          if (spec.non_functional.a11y && spec.non_functional.a11y.length > 0) nfrScore += 5;
+          if (spec.non_functional.perf && spec.non_functional.perf.api_p95_ms) nfrScore += 5;
+          if (spec.non_functional.security && spec.non_functional.security.length > 0) nfrScore += 5;
+        }
+        results.score += nfrScore;
+        results.checks.push({
+          name: "Non-Functional Requirements",
+          status: nfrScore === 15 ? "pass" : "partial",
+          points: nfrScore
+        });
+        if (nfrScore < 15) {
+          results.recommendations.push("Define a11y, performance, and security requirements");
+        }
+        results.maxScore += 10;
+        if (spec.rollback && spec.rollback.length > 0) {
+          results.score += 10;
+          results.checks.push({ name: "Rollback Plan", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "Rollback Plan", status: "fail", points: 0 });
+          results.recommendations.push("Document rollback procedures");
+        }
+        results.maxScore += 10;
+        if (spec.observability && (spec.observability.logs?.length > 0 || spec.observability.metrics?.length > 0 || spec.observability.traces?.length > 0)) {
+          results.score += 10;
+          results.checks.push({ name: "Observability", status: "pass", points: 10 });
+        } else {
+          results.checks.push({ name: "Observability", status: "partial", points: 3 });
+          results.recommendations.push("Define logging, metrics, and tracing strategy");
+        }
+        results.maxScore += 10;
+        const hasCriticalScope = spec.blast_radius?.modules?.some(
+          (m) => m.includes("auth") || m.includes("payment") || m.includes("billing")
+        );
+        const hasDataMigration = spec.blast_radius?.data_migration === true;
+        if (hasCriticalScope || hasDataMigration) {
+          if (spec.risk_tier === 1) {
+            results.score += 10;
+            results.checks.push({ name: "Risk Tier Appropriateness", status: "pass", points: 10 });
+          } else {
+            results.checks.push({ name: "Risk Tier Appropriateness", status: "fail", points: 0 });
+            results.warnings.push(`Risk tier ${spec.risk_tier} may be too low for critical changes`);
+          }
+        } else {
+          results.score += 10;
+          results.checks.push({ name: "Risk Tier Appropriateness", status: "pass", points: 10 });
+        }
+        console.log("\n\u{1F4CB} Quality Checks:\n");
+        results.checks.forEach((check) => {
+          const icon = check.status === "pass" ? "\u2705" : check.status === "partial" ? "\u26A0\uFE0F" : "\u274C";
+          const detail = check.detail ? ` (${check.detail})` : "";
+          console.log(`${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`);
+        });
+        const percentage = Math.round(results.score / results.maxScore * 100);
+        const grade = percentage >= 90 ? "A" : percentage >= 80 ? "B" : percentage >= 70 ? "C" : percentage >= 60 ? "D" : "F";
+        console.log("\n" + "\u2500".repeat(60));
+        console.log(chalk2.bold(`
+\u{1F4CA} Overall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}
+`));
+        if (results.warnings.length > 0) {
+          console.log(chalk2.yellow("\u26A0\uFE0F  Warnings:\n"));
+          results.warnings.forEach((warning) => {
+            console.log(chalk2.yellow(`   \u2022 ${warning}`));
+          });
+          console.log();
+        }
+        if (results.recommendations.length > 0) {
+          console.log(chalk2.blue("\u{1F4A1} Recommendations:\n"));
+          results.recommendations.forEach((rec) => {
+            console.log(chalk2.blue(`   \u2022 ${rec}`));
+          });
+          console.log();
+        }
+        console.log(chalk2.bold(`
+\u{1F3AF} Risk Tier ${spec.risk_tier} Requirements:
+`));
+        const tierRequirements = {
+          1: {
+            coverage: "90%+",
+            mutation: "70%+",
+            contracts: "Required",
+            review: "Manual code review required"
+          },
+          2: {
+            coverage: "80%+",
+            mutation: "50%+",
+            contracts: "Required for external APIs",
+            review: "Optional"
+          },
+          3: {
+            coverage: "70%+",
+            mutation: "30%+",
+            contracts: "Optional",
+            review: "Optional"
+          }
+        };
+        const req = tierRequirements[spec.risk_tier] || tierRequirements[2];
+        console.log(`   Branch Coverage: ${req.coverage}`);
+        console.log(`   Mutation Score: ${req.mutation}`);
+        console.log(`   Contract Tests: ${req.contracts}`);
+        console.log(`   Code Review: ${req.review}`);
+        console.log(chalk2.blue("\n\u{1F4DA} Next Steps:\n"));
+        console.log("   1. Address warnings and recommendations above");
+        console.log("   2. Implement acceptance criteria with tests");
+        console.log("   3. Run: caws validate to check spec validity");
+        console.log("   4. Run: caws diagnose for health checks");
+        console.log("   5. Ensure test coverage meets risk tier requirements");
+        if (percentage < 70) {
+          console.log(chalk2.red("\n\u26A0\uFE0F  Quality score below 70% - improvements needed before proceeding\n"));
+          process.exit(1);
+        } else if (percentage < 90) {
+          console.log(chalk2.yellow("\n\u26A0\uFE0F  Quality score acceptable but improvements recommended\n"));
+        } else {
+          console.log(chalk2.green("\n\u2705 Excellent quality score - ready to proceed!\n"));
+        }
+      } catch (error) {
+        console.error(chalk2.red(`
+\u274C Evaluation failed: ${error.message}`));
+        if (options.verbose) {
+          console.error(error.stack);
+        }
+        process.exit(1);
+      }
+    }
+    module2.exports = { evaluateCommand: evaluateCommand2 };
+  }
+});
+
+// src/commands/iterate.js
+var require_iterate = __commonJS({
+  "src/commands/iterate.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var chalk2 = require_source();
+    var { initializeGlobalSetup: initializeGlobalSetup2 } = require_config();
+    async function iterateCommand2(specFile = ".caws/working-spec.yaml", options = {}) {
+      try {
+        console.log("\u{1F50D} Detecting CAWS setup...");
+        const setup = initializeGlobalSetup2();
+        if (setup.hasWorkingSpec) {
+          console.log(`\u2705 Detected ${setup.setupType} CAWS setup`);
+          console.log(`   Capabilities: ${setup.capabilities.join(", ")}`);
+        }
+        const specPath = path2.isAbsolute(specFile) ? specFile : path2.join(process.cwd(), specFile);
+        if (!fs2.existsSync(specPath)) {
+          console.error(chalk2.red(`
+\u274C Working spec not found: ${specFile}`));
+          console.error(chalk2.yellow("\u{1F4A1} Run: caws init to create a working spec"));
+          process.exit(1);
+        }
+        const specContent = fs2.readFileSync(specPath, "utf8");
+        const spec = yaml2.load(specContent);
+        const currentState = options.currentState ? JSON.parse(options.currentState) : {};
+        const stateDescription = currentState.description || "Starting implementation";
+        console.log(chalk2.blue("\n\u{1F504} Iterative Development Guidance\n"));
+        console.log("\u2500".repeat(60));
+        console.log(chalk2.bold(`
+Project: ${spec.title}`));
+        console.log(`ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`);
+        console.log(`Current State: ${stateDescription}
+`);
+        const guidance = generateGuidance(spec, currentState, options);
+        console.log(chalk2.blue("\u{1F4CB} Current Phase:\n"));
+        console.log(`   ${guidance.phase}
+`);
+        console.log(chalk2.blue("\u2705 Completed Steps:\n"));
+        guidance.completed.forEach((step) => {
+          console.log(chalk2.green(`   \u2713 ${step}`));
+        });
+        console.log(chalk2.blue("\n\u{1F3AF} Next Actions:\n"));
+        guidance.nextActions.forEach((action, index) => {
+          console.log(chalk2.yellow(`   ${index + 1}. ${action}`));
+        });
+        if (guidance.blockers.length > 0) {
+          console.log(chalk2.red("\n\u26A0\uFE0F  Blockers:\n"));
+          guidance.blockers.forEach((blocker) => {
+            console.log(chalk2.red(`   \u26A0\uFE0F  ${blocker}`));
+          });
+        }
+        console.log(chalk2.blue("\n\u{1F4A1} Recommendations:\n"));
+        guidance.recommendations.forEach((rec) => {
+          console.log(chalk2.blue(`   \u2022 ${rec}`));
+        });
+        if (spec.acceptance && spec.acceptance.length > 0) {
+          console.log(chalk2.blue("\n\u{1F4CA} Acceptance Criteria Progress:\n"));
+          spec.acceptance.forEach((criterion, index) => {
+            const status = criterion.completed ? "\u2705" : "\u2B1C";
+            console.log(`   ${status} ${criterion.id}: ${criterion.then}`);
+          });
+          const completed = spec.acceptance.filter((a) => a.completed).length;
+          const total = spec.acceptance.length;
+          const progress = Math.round(completed / total * 100);
+          console.log(chalk2.bold(`
+   Progress: ${completed}/${total} (${progress}%)`));
+        }
+        console.log(chalk2.blue("\n\u{1F512} Quality Gates (Risk Tier " + spec.risk_tier + "):\n"));
+        const gates = getQualityGates(spec.risk_tier);
+        gates.forEach((gate) => {
+          console.log(`   \u25A1 ${gate}`);
+        });
+        console.log(chalk2.blue("\n\u{1F4DA} Useful Commands:\n"));
+        console.log("   caws evaluate       - Check quality score");
+        console.log("   caws validate       - Validate working spec");
+        console.log("   caws status         - View project health");
+        console.log("   caws diagnose       - Run health checks");
+        console.log("   npm test            - Run test suite");
+        console.log("   npm run coverage    - Check test coverage\n");
+      } catch (error) {
+        console.error(chalk2.red(`
+\u274C Iteration guidance failed: ${error.message}`));
+        if (options.verbose) {
+          console.error(error.stack);
+        }
+        process.exit(1);
+      }
+    }
+    function generateGuidance(spec, currentState, options) {
+      const mode = spec.mode;
+      const riskTier = spec.risk_tier;
+      const guidance = {
+        phase: "Implementation",
+        completed: [],
+        nextActions: [],
+        blockers: [],
+        recommendations: []
+      };
+      if (mode === "feature") {
+        guidance.phase = "Feature Development";
+        guidance.completed = [
+          "Working specification created",
+          "Acceptance criteria defined"
+        ];
+        guidance.nextActions = [
+          "Write failing tests for first acceptance criterion",
+          "Implement minimum code to pass tests",
+          "Refactor and ensure all tests pass",
+          "Move to next acceptance criterion"
+        ];
+        guidance.recommendations = [
+          "Follow TDD cycle: Red \u2192 Green \u2192 Refactor",
+          "Keep changes within scope boundaries",
+          "Update working spec as requirements evolve",
+          `Maintain ${riskTier === 1 ? "90%+" : riskTier === 2 ? "80%+" : "70%+"} test coverage`
+        ];
+      } else if (mode === "refactor") {
+        guidance.phase = "Refactoring";
+        guidance.completed = [
+          "Working specification created",
+          "Baseline tests established"
+        ];
+        guidance.nextActions = [
+          "Ensure all existing tests pass",
+          "Make small, incremental refactoring changes",
+          "Run tests after each change",
+          "Update documentation as needed"
+        ];
+        guidance.recommendations = [
+          "No behavior changes - tests must still pass",
+          "Use codemod scripts for large-scale changes",
+          "Generate semantic diff report",
+          "Keep commits small and atomic"
+        ];
+        guidance.blockers = [
+          !spec.contracts?.length ? "No contracts defined to prove unchanged behavior" : null
+        ].filter(Boolean);
+      } else if (mode === "fix") {
+        guidance.phase = "Bug Fix";
+        guidance.completed = [
+          "Working specification created",
+          "Bug reproduced"
+        ];
+        guidance.nextActions = [
+          "Write failing test that reproduces the bug",
+          "Implement minimal fix",
+          "Verify test passes",
+          "Add regression tests"
+        ];
+        guidance.recommendations = [
+          "Keep fix scope minimal",
+          "Document root cause in working spec",
+          "Add edge case tests to prevent recurrence",
+          "Consider if similar bugs exist elsewhere"
+        ];
+      } else if (mode === "doc") {
+        guidance.phase = "Documentation";
+        guidance.completed = [
+          "Working specification created"
+        ];
+        guidance.nextActions = [
+          "Update README with current information",
+          "Add code examples and usage snippets",
+          "Update API documentation",
+          "Review and update troubleshooting guides"
+        ];
+        guidance.recommendations = [
+          "Use Mermaid for diagrams",
+          "Include code examples that actually work",
+          "Keep docs in sync with code",
+          "Add links to related documentation"
+        ];
+      } else if (mode === "chore") {
+        guidance.phase = "Maintenance";
+        guidance.completed = [
+          "Working specification created"
+        ];
+        guidance.nextActions = [
+          "Update dependencies to latest versions",
+          "Run tests to ensure compatibility",
+          "Update CI/CD configurations",
+          "Commit changes with descriptive message"
+        ];
+        guidance.recommendations = [
+          "Review changelogs for breaking changes",
+          "Test locally before committing",
+          "Update lockfiles",
+          "Document any configuration changes"
+        ];
+      }
+      if (!fs2.existsSync(path2.join(process.cwd(), "package.json"))) {
+        guidance.blockers.push("No package.json found");
+      }
+      if (spec.change_budget && !spec.change_budget.max_files) {
+        guidance.blockers.push("Change budget not defined");
+      }
+      return guidance;
+    }
+    function getQualityGates(riskTier) {
+      const gates = {
+        1: [
+          "Branch coverage \u2265 90%",
+          "Mutation score \u2265 70%",
+          "All contract tests passing",
+          "Manual code review completed",
+          "No SAST/secret scan violations",
+          "Performance budgets met"
+        ],
+        2: [
+          "Branch coverage \u2265 80%",
+          "Mutation score \u2265 50%",
+          "Contract tests passing (if external APIs)",
+          "E2E smoke tests passing",
+          "No security violations"
+        ],
+        3: [
+          "Branch coverage \u2265 70%",
+          "Mutation score \u2265 30%",
+          "Integration happy-path tests passing",
+          "Linting passing"
+        ]
+      };
+      return gates[riskTier] || gates[2];
+    }
+    module2.exports = { iterateCommand: iterateCommand2 };
+  }
+});
+
+// src/commands/waivers.js
+var require_waivers = __commonJS({
+  "src/commands/waivers.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var chalk2 = require_source();
+    var { initializeGlobalSetup: initializeGlobalSetup2 } = require_config();
+    var WAIVER_DIR = ".caws/waivers";
+    async function waiversCommand2(subcommand = "list", options = {}) {
+      try {
+        console.log("\u{1F50D} Detecting CAWS setup...");
+        const setup = initializeGlobalSetup2();
+        if (setup.hasWorkingSpec) {
+          console.log(`\u2705 Detected ${setup.setupType} CAWS setup`);
+          console.log(`   Capabilities: ${setup.capabilities.join(", ")}`);
+        }
+        const waiversDir = path2.join(process.cwd(), WAIVER_DIR);
+        if (!fs2.existsSync(waiversDir)) {
+          fs2.mkdirSync(waiversDir, { recursive: true });
+        }
+        switch (subcommand) {
+          case "create":
+            await createWaiver(options);
+            break;
+          case "list":
+            await listWaivers(options);
+            break;
+          case "show":
+            await showWaiver(options.id, options);
+            break;
+          case "revoke":
+            await revokeWaiver(options.id, options);
+            break;
+          default:
+            console.error(chalk2.red(`
+\u274C Unknown waiver subcommand: ${subcommand}`));
+            console.log(chalk2.yellow("\n\u{1F4A1} Available subcommands: create, list, show, revoke"));
+            process.exit(1);
+        }
+      } catch (error) {
+        console.error(chalk2.red(`
+\u274C Waiver command failed: ${error.message}`));
+        if (options.verbose) {
+          console.error(error.stack);
+        }
+        process.exit(1);
+      }
+    }
+    async function createWaiver(options) {
+      const required = ["title", "reason", "description", "gates", "expiresAt", "approvedBy", "impactLevel", "mitigationPlan"];
+      const missing = required.filter((field) => !options[field]);
+      if (missing.length > 0) {
+        console.error(chalk2.red(`
+\u274C Missing required fields: ${missing.join(", ")}`));
+        console.log(chalk2.yellow("\n\u{1F4A1} Example:"));
+        console.log("   caws waivers create \\");
+        console.log('     --title="Emergency hotfix waiver" \\');
+        console.log("     --reason=emergency_hotfix \\");
+        console.log('     --description="Critical production bug requires immediate fix" \\');
+        console.log("     --gates=coverage,mutation \\");
+        console.log("     --expires-at=2025-12-31T23:59:59Z \\");
+        console.log('     --approved-by="@manager" \\');
+        console.log("     --impact-level=high \\");
+        console.log('     --mitigation-plan="Will add tests in follow-up PR within 48h"');
+        process.exit(1);
+      }
+      const waiverId = `WV-${Date.now().toString().slice(-4)}`;
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+      const gates = typeof options.gates === "string" ? options.gates.split(",").map((g) => g.trim()) : options.gates;
+      const waiver = {
+        id: waiverId,
+        title: options.title,
+        reason: options.reason,
+        description: options.description,
+        gates,
+        created_at: timestamp,
+        expires_at: options.expiresAt,
+        approved_by: options.approvedBy,
+        impact_level: options.impactLevel,
+        mitigation_plan: options.mitigationPlan,
+        status: "active"
+      };
+      const waiverPath = path2.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
+      fs2.writeFileSync(waiverPath, yaml2.dump(waiver, { lineWidth: -1 }));
+      console.log(chalk2.green(`
+\u2705 Waiver created: ${waiverId}`));
+      console.log(`   Title: ${waiver.title}`);
+      console.log(`   Reason: ${waiver.reason}`);
+      console.log(`   Gates: ${waiver.gates.join(", ")}`);
+      console.log(`   Expires: ${waiver.expires_at}`);
+      console.log(`   Approved by: ${waiver.approved_by}`);
+      console.log(`   Impact: ${waiver.impact_level}`);
+      console.log(chalk2.yellow(`
+\u26A0\uFE0F  Remember: This waiver expires on ${waiver.expires_at}`));
+      console.log(chalk2.yellow(`\u26A0\uFE0F  Mitigation plan: ${waiver.mitigation_plan}
+`));
+    }
+    async function listWaivers(options) {
+      const waiversDir = path2.join(process.cwd(), WAIVER_DIR);
+      if (!fs2.existsSync(waiversDir)) {
+        console.log(chalk2.yellow("\n\u2139\uFE0F  No waivers found\n"));
+        return;
+      }
+      const waiverFiles = fs2.readdirSync(waiversDir).filter((f) => f.endsWith(".yaml"));
+      if (waiverFiles.length === 0) {
+        console.log(chalk2.yellow("\n\u2139\uFE0F  No waivers found\n"));
+        return;
+      }
+      const waivers = waiverFiles.map((file) => {
+        const content = fs2.readFileSync(path2.join(waiversDir, file), "utf8");
+        return yaml2.load(content);
+      });
+      const activeWaivers = waivers.filter((w) => w.status === "active" && new Date(w.expires_at) > /* @__PURE__ */ new Date());
+      const expiredWaivers = waivers.filter((w) => w.status === "active" && new Date(w.expires_at) <= /* @__PURE__ */ new Date());
+      const revokedWaivers = waivers.filter((w) => w.status === "revoked");
+      console.log(chalk2.blue("\n\u{1F516} CAWS Quality Gate Waivers\n"));
+      console.log("\u2500".repeat(60));
+      if (activeWaivers.length > 0) {
+        console.log(chalk2.green("\n\u2705 Active Waivers:\n"));
+        activeWaivers.forEach((waiver) => {
+          const daysLeft = Math.ceil((new Date(waiver.expires_at) - /* @__PURE__ */ new Date()) / (1e3 * 60 * 60 * 24));
+          console.log(`\u{1F516} ${chalk2.bold(waiver.id)}: ${waiver.title}`);
+          console.log(`   Reason: ${waiver.reason}`);
+          console.log(`   Gates: ${waiver.gates.join(", ")}`);
+          console.log(`   Expires: ${waiver.expires_at} (${daysLeft} days)`);
+          console.log(`   Impact: ${waiver.impact_level}`);
+          console.log();
+        });
+      }
+      if (expiredWaivers.length > 0) {
+        console.log(chalk2.yellow("\n\u26A0\uFE0F  Expired Waivers:\n"));
+        expiredWaivers.forEach((waiver) => {
+          console.log(`\u{1F516} ${chalk2.bold(waiver.id)}: ${waiver.title}`);
+          console.log(`   Expired: ${waiver.expires_at}`);
+          console.log();
+        });
+      }
+      if (revokedWaivers.length > 0) {
+        console.log(chalk2.red("\n\u274C Revoked Waivers:\n"));
+        revokedWaivers.forEach((waiver) => {
+          console.log(`\u{1F516} ${chalk2.bold(waiver.id)}: ${waiver.title}`);
+          console.log(`   Revoked: ${waiver.revoked_at}`);
+          console.log();
+        });
+      }
+      console.log(chalk2.blue("\u{1F4CA} Summary:\n"));
+      console.log(`   Active: ${activeWaivers.length}`);
+      console.log(`   Expired: ${expiredWaivers.length}`);
+      console.log(`   Revoked: ${revokedWaivers.length}`);
+      console.log(`   Total: ${waivers.length}
+`);
+    }
+    async function showWaiver(waiverId, options) {
+      if (!waiverId) {
+        console.error(chalk2.red("\n\u274C Waiver ID required"));
+        console.log(chalk2.yellow("\u{1F4A1} Usage: caws waivers show WV-1234\n"));
+        process.exit(1);
+      }
+      const waiverPath = path2.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
+      if (!fs2.existsSync(waiverPath)) {
+        console.error(chalk2.red(`
+\u274C Waiver not found: ${waiverId}
+`));
+        process.exit(1);
+      }
+      const content = fs2.readFileSync(waiverPath, "utf8");
+      const waiver = yaml2.load(content);
+      const isExpired = new Date(waiver.expires_at) <= /* @__PURE__ */ new Date();
+      const isActive = waiver.status === "active" && !isExpired;
+      const statusIcon = isActive ? "\u2705" : isExpired ? "\u26A0\uFE0F" : "\u274C";
+      console.log(chalk2.blue("\n\u{1F516} Waiver Details\n"));
+      console.log("\u2500".repeat(60));
+      console.log(`
+${statusIcon} Status: ${chalk2.bold(isActive ? "Active" : isExpired ? "Expired" : waiver.status)}`);
+      console.log(`
+\u{1F4CB} ${chalk2.bold(waiver.title)}`);
+      console.log(`   ID: ${waiver.id}`);
+      console.log(`   Reason: ${waiver.reason}`);
+      console.log(`   Impact Level: ${waiver.impact_level}`);
+      console.log(`
+\u{1F4DD} Description:`);
+      console.log(`   ${waiver.description}`);
+      console.log(`
+\u{1F512} Waived Quality Gates:`);
+      waiver.gates.forEach((gate) => {
+        console.log(`   \u2022 ${gate}`);
+      });
+      console.log(`
+\u{1F6E1}\uFE0F Mitigation Plan:`);
+      console.log(`   ${waiver.mitigation_plan}`);
+      console.log(`
+\u{1F4C5} Timeline:`);
+      console.log(`   Created: ${waiver.created_at}`);
+      console.log(`   Expires: ${waiver.expires_at}`);
+      if (waiver.revoked_at) {
+        console.log(`   Revoked: ${waiver.revoked_at}`);
+      }
+      console.log(`
+\u270D\uFE0F  Approved by: ${waiver.approved_by}
+`);
+      if (isExpired && waiver.status === "active") {
+        console.log(chalk2.yellow("\u26A0\uFE0F  This waiver has expired. Consider revoking it.\n"));
+      }
+    }
+    async function revokeWaiver(waiverId, options) {
+      if (!waiverId) {
+        console.error(chalk2.red("\n\u274C Waiver ID required"));
+        console.log(chalk2.yellow("\u{1F4A1} Usage: caws waivers revoke WV-1234\n"));
+        process.exit(1);
+      }
+      const waiverPath = path2.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
+      if (!fs2.existsSync(waiverPath)) {
+        console.error(chalk2.red(`
+\u274C Waiver not found: ${waiverId}
+`));
+        process.exit(1);
+      }
+      const content = fs2.readFileSync(waiverPath, "utf8");
+      const waiver = yaml2.load(content);
+      if (waiver.status === "revoked") {
+        console.log(chalk2.yellow(`
+\u2139\uFE0F  Waiver ${waiverId} is already revoked
+`));
+        return;
+      }
+      waiver.status = "revoked";
+      waiver.revoked_at = (/* @__PURE__ */ new Date()).toISOString();
+      waiver.revoked_by = options.revokedBy || "system";
+      waiver.revocation_reason = options.reason || "Manual revocation";
+      fs2.writeFileSync(waiverPath, yaml2.dump(waiver, { lineWidth: -1 }));
+      console.log(chalk2.green(`
+\u2705 Waiver revoked: ${waiverId}`));
+      console.log(`   Title: ${waiver.title}`);
+      console.log(`   Revoked at: ${waiver.revoked_at}`);
+      console.log(`   Revoked by: ${waiver.revoked_by}`);
+      console.log(`   Reason: ${waiver.revocation_reason}
+`);
+    }
+    module2.exports = { waiversCommand: waiversCommand2 };
+  }
+});
+
 // src/index.js
 var { Command } = require_commander();
 var fs = require_lib();
@@ -47372,6 +48058,9 @@ var { executeTool } = require_tool();
 var { statusCommand } = require_status();
 var { templatesCommand } = require_templates4();
 var { diagnoseCommand } = require_diagnose();
+var { evaluateCommand } = require_evaluate();
+var { iterateCommand } = require_iterate();
+var { waiversCommand } = require_waivers();
 var { scaffoldProject, setScaffoldDependencies } = require_scaffold();
 var { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require_git_hooks();
 var { validateWorkingSpecWithSuggestions } = require_spec_validation();
@@ -47401,6 +48090,13 @@ program.command("validate").description("Validate CAWS working spec with suggest
 program.command("status").description("Show project health overview").option("-s, --spec <path>", "Path to working spec file", ".caws/working-spec.yaml").action(statusCommand);
 program.command("templates [subcommand]").description("Discover and manage project templates").option("-n, --name <template>", "Template name (for info subcommand)").action(templatesCommand);
 program.command("diagnose").description("Run health checks and suggest fixes").option("--fix", "Apply automatic fixes", false).action(diagnoseCommand);
+program.command("evaluate [spec-file]").description("Evaluate work against CAWS quality standards").option("-v, --verbose", "Show detailed error information", false).action(evaluateCommand);
+program.command("iterate [spec-file]").description("Get iterative development guidance based on current progress").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(iterateCommand);
+var waiversCmd = program.command("waivers").description("Manage CAWS quality gate waivers");
+waiversCmd.command("create").description("Create a new quality gate waiver").requiredOption("--title <title>", "Waiver title").requiredOption("--reason <reason>", "Reason for waiver (emergency_hotfix, legacy_integration, etc.)").requiredOption("--description <description>", "Detailed description").requiredOption("--gates <gates>", "Comma-separated list of gates to waive").requiredOption("--expires-at <date>", "Expiration date (ISO 8601)").requiredOption("--approved-by <approver>", "Approver name").requiredOption("--impact-level <level>", "Impact level (low, medium, high, critical)").requiredOption("--mitigation-plan <plan>", "Risk mitigation plan").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("create", options));
+waiversCmd.command("list").description("List all waivers").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("list", options));
+waiversCmd.command("show <id>").description("Show waiver details").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("show", { ...options, id }));
+waiversCmd.command("revoke <id>").description("Revoke a waiver").option("--revoked-by <name>", "Person revoking the waiver").option("--reason <reason>", "Revocation reason").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("revoke", { ...options, id }));
 program.command("tool").description("Execute CAWS tools programmatically").argument("<tool-id>", "ID of the tool to execute").option("-p, --params <json>", "Parameters as JSON string", "{}").option("-t, --timeout <ms>", "Execution timeout in milliseconds", parseInt, 3e4).action(executeTool);
 program.command("test-analysis <subcommand> [options...]").description("Statistical analysis for budget prediction and test optimization").action(testAnalysisCommand);
 var provenanceCmd = program.command("provenance").description("Manage CAWS provenance tracking and audit trails");

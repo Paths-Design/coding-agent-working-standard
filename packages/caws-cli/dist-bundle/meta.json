@@ -12325,8 +12325,101 @@
       ],
       "format": "cjs"
     },
+    "src/commands/evaluate.js": {
+      "bytes": 9993,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/config/index.js",
+          "kind": "require-call",
+          "original": "../config"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/iterate.js": {
+      "bytes": 8854,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/config/index.js",
+          "kind": "require-call",
+          "original": "../config"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/waivers.js": {
+      "bytes": 9950,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/config/index.js",
+          "kind": "require-call",
+          "original": "../config"
+        }
+      ],
+      "format": "cjs"
+    },
     "src/index.js": {
-      "bytes": 14021,
+      "bytes": 16443,
       "imports": [
         {
           "path": "../../node_modules/commander/index.js",
@@ -12409,6 +12502,21 @@
           "original": "./commands/diagnose"
         },
         {
+          "path": "src/commands/evaluate.js",
+          "kind": "require-call",
+          "original": "./commands/evaluate"
+        },
+        {
+          "path": "src/commands/iterate.js",
+          "kind": "require-call",
+          "original": "./commands/iterate"
+        },
+        {
+          "path": "src/commands/waivers.js",
+          "kind": "require-call",
+          "original": "./commands/waivers"
+        },
+        {
           "path": "src/scaffold/index.js",
           "kind": "require-call",
           "original": "./scaffold"
@@ -12442,7 +12550,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 3299040
+      "bytes": 3350788
     },
     "dist-bundle/index.js": {
       "imports": [
@@ -12898,6 +13006,36 @@
         },
         {
           "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "fs",
           "kind": "require-call",
           "external": true
         },
@@ -14784,11 +14922,20 @@
         "src/commands/diagnose.js": {
           "bytesInOutput": 12350
         },
+        "src/commands/evaluate.js": {
+          "bytesInOutput": 10046
+        },
+        "src/commands/iterate.js": {
+          "bytesInOutput": 9224
+        },
+        "src/commands/waivers.js": {
+          "bytesInOutput": 10476
+        },
         "src/index.js": {
-          "bytesInOutput": 11829
+          "bytesInOutput": 14002
         }
       },
-      "bytes": 2061953
+      "bytes": 2093957
     }
   }
 }
