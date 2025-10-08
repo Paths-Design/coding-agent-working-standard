@@ -1,3 +1,17 @@
+# [3.3.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.4...v3.3.0) (2025-10-08)
+
+
+### Bug Fixes
+
+* remove unused imports in diagnose and status commands ([f22b108](https://github.com/Paths-Design/coding-agent-working-standard/commit/f22b10802ad0e080d0bab7b72c0adcaccf9dc062))
+
+
+### Features
+
+* add enhanced error handling and TypeScript auto-detection (DX-001 T1+T2) ([0301996](https://github.com/Paths-Design/coding-agent-working-standard/commit/0301996253f8bd9de5e56f60bcb6b02fa4d964f8))
+* add status command for project health overview (DX-001 T3) ([b7dfa1c](https://github.com/Paths-Design/coding-agent-working-standard/commit/b7dfa1ccddcaaba32640b77a663a962f30947ccc))
+* complete DX improvements - diagnose and templates commands (DX-001 T4+T5) ([4f207a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/4f207a180b26f9ba59901de8e2a77ecdd1438e6d))
+
 ## [3.2.4](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.3...v3.2.4) (2025-10-08)
 
 
