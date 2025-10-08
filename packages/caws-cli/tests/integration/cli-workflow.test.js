@@ -12,7 +12,6 @@ describe('CLI Workflow Integration', () => {
   const cliPath = path.join(__dirname, '../../dist/index.js');
   const testProjectName = 'test-integration-workflow';
   let testProjectPath;
-  let originalCwd;
   let testTempDir;
 
   beforeAll(() => {
