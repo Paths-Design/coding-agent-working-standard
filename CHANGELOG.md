@@ -1,3 +1,10 @@
+## [3.2.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.0...v3.2.1) (2025-10-08)
+
+
+### Bug Fixes
+
+* add safety checks for undefined values in working spec generation ([3fbb9c8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3fbb9c892fff97535c98d8d5c9e2e9833b7d41fc))
+
 # [3.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.1.1...v3.2.0) (2025-10-08)
 
 
