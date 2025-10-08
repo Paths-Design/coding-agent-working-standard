@@ -556,5 +556,41 @@
     },
     "previous_hash": "3a87391b84c5ef2f937399653b4e951fdf1ab79a0950a79e167ef2704e852b5f",
     "hash": "27a7e75f0eb68596728ecd8c7bddf0b025bf6d391ea5c9265f04b87963290cf2"
+  },
+  {
+    "id": "prov-1759913290038",
+    "timestamp": "2025-10-08T08:48:10.038Z",
+    "commit": {
+      "hash": "52dc6fd166a62eb6a199b39e1242887106425e60",
+      "message": "fix: adjust performance regression threshold for CI environment",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-08T08:48:10.039Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "27a7e75f0eb68596728ecd8c7bddf0b025bf6d391ea5c9265f04b87963290cf2",
+    "hash": "084ef98aa90599368dda477c447c5129858cefaa616bb90c28499bfcf8fe7e7c"
   }
 ]
