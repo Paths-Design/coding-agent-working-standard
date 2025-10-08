@@ -1,3 +1,10 @@
+## [3.2.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.2...v3.2.3) (2025-10-08)
+
+
+### Bug Fixes
+
+* update provenance tools loader to use bundled templates ([a58996f](https://github.com/Paths-Design/coding-agent-working-standard/commit/a58996fd4fc22eea0f9c2f3d67870ea45df0327c))
+
 ## [3.2.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.2.1...v3.2.2) (2025-10-08)
 
 
