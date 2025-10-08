@@ -772,5 +772,77 @@
     },
     "previous_hash": "e33627df6bee424d14cf7e43688dd0a99fe75383299d5599bf118f470ab4d1d3",
     "hash": "6c4f5165de3dd5dc3d5e0bb1ee1f478b6caab84817164a95b42b14e5ed26b64f"
+  },
+  {
+    "id": "prov-1759918000082",
+    "timestamp": "2025-10-08T10:06:40.082Z",
+    "commit": {
+      "hash": "0301996253f8bd9de5e56f60bcb6b02fa4d964f8",
+      "message": "feat: add enhanced error handling and TypeScript auto-detection (DX-001 T1+T2)",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-08T10:06:40.083Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "6c4f5165de3dd5dc3d5e0bb1ee1f478b6caab84817164a95b42b14e5ed26b64f",
+    "hash": "f4c41e513a9e11ade1d5a72ac05d9c9011915f896ad705c53ab1ae397de4251c"
+  },
+  {
+    "id": "prov-1759918116248",
+    "timestamp": "2025-10-08T10:08:36.248Z",
+    "commit": {
+      "hash": "b7dfa1ccddcaaba32640b77a663a962f30947ccc",
+      "message": "feat: add status command for project health overview (DX-001 T3)",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-08T10:08:36.249Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "f4c41e513a9e11ade1d5a72ac05d9c9011915f896ad705c53ab1ae397de4251c",
+    "hash": "94bac5475575c4b2ce7b0ca75fd0af8201df5b09ac75bb7057de8ca365215de3"
   }
 ]
