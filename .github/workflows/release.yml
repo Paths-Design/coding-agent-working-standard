@@ -57,7 +57,7 @@ jobs:
           done
 
       - name: Run linting
-        run: npm run lint
+        run: npx turbo run lint
 
       - name: Run tests
         run: |
@@ -81,7 +81,7 @@ jobs:
           npm test
 
       - name: Build packages
-        run: npm run build
+        run: npx turbo run build
 
       - name: Setup NPM authentication with OIDC
         uses: actions/setup-node@v4

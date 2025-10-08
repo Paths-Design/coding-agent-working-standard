@@ -1,207 +1,76 @@
-#!/usr/bin/env tsx
-"use strict";
 /**
- * CAWS Validation Tool
- * CLI wrapper for CawsValidator with schema validation
- *
+ * @fileoverview CAWS Validation Tool
  * @author @darianrosebrook
+ *
+ * Note: For enhanced TypeScript version with schema validation, use validate.ts
+ * This .js version provides basic validation for backward compatibility
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ValidateCLI = void 0;
-const validator_js_1 = require("./shared/validator.js");
-class ValidateCLI {
-    constructor() {
-        this.validator = new validator_js_1.CawsValidator();
+
+/**
+ * Validates a working specification file
+ * @param {string} specPath - Path to the working specification file
+ * @returns {Object} Validation result with valid boolean and errors array
+ */
+function validateWorkingSpec(specPath) {
+  try {
+    const fs = require('fs');
+    const yaml = require('js-yaml');
+
+    if (!fs.existsSync(specPath)) {
+      return {
+        valid: false,
+        errors: [{ message: `Specification file not found: ${specPath}` }],
+      };
     }
-    /**
-     * Validate a working specification file
-     */
-    validateWorkingSpec(specPath) {
-        try {
-            const result = this.validator.validateWorkingSpec(specPath);
-            if (result.passed) {
-                console.log('✅ Working specification is valid');
-                console.log(`   Score: ${(result.score * 100).toFixed(0)}%`);
-                if (result.warnings && result.warnings.length > 0) {
-                    console.log('\n⚠️  Warnings:');
-                    result.warnings.forEach((warning) => console.log(`  - ${warning}`));
-                }
-                if (result.details) {
-                    console.log('\n📊 Details:');
-                    if (result.details.risk_tier) {
-                        console.log(`  Tier: ${result.details.risk_tier}`);
-                    }
-                    if (result.details.acceptance_count) {
-                        console.log(`  Acceptance Criteria: ${result.details.acceptance_count}`);
-                    }
-                    if (result.details.contract_count) {
-                        console.log(`  Contracts: ${result.details.contract_count}`);
-                    }
-                }
-            }
-            else {
-                console.error('❌ Working specification is invalid:');
-                if (result.errors && result.errors.length > 0) {
-                    result.errors.forEach((error) => console.error(`  - ${error}`));
-                }
-            }
-            return result;
-        }
-        catch (error) {
-            console.error(`❌ Validation failed: ${error}`);
-            return {
-                passed: false,
-                errors: [`Validation error: ${error}`],
-                score: 0,
-                details: {},
-            };
-        }
+
+    const specContent = fs.readFileSync(specPath, 'utf8');
+    const spec = yaml.load(specContent);
+
+    // Basic validation
+    const errors = [];
+
+    if (!spec.id) errors.push({ message: 'Missing required field: id' });
+    if (!spec.title) errors.push({ message: 'Missing required field: title' });
+    if (!spec.risk_tier) errors.push({ message: 'Missing required field: risk_tier' });
+
+    if (spec.risk_tier && (spec.risk_tier < 1 || spec.risk_tier > 3)) {
+      errors.push({ message: 'Risk tier must be 1, 2, or 3' });
     }
-    /**
-     * Validate a provenance file
-     */
-    validateProvenance(provenancePath) {
-        try {
-            const result = this.validator.validateProvenance(provenancePath);
-            if (result.passed) {
-                console.log('✅ Provenance file is valid');
-                console.log(`   Score: ${(result.score * 100).toFixed(0)}%`);
-                if (result.details) {
-                    console.log('\n📊 Provenance Details:');
-                    if (result.details.agent) {
-                        console.log(`  Agent: ${result.details.agent}`);
-                    }
-                    if (result.details.model) {
-                        console.log(`  Model: ${result.details.model}`);
-                    }
-                    if (result.details.commit) {
-                        console.log(`  Commit: ${result.details.commit}`);
-                    }
-                }
-            }
-            else {
-                console.error('❌ Provenance file is invalid:');
-                if (result.errors && result.errors.length > 0) {
-                    result.errors.forEach((error) => console.error(`  - ${error}`));
-                }
-            }
-            return result;
-        }
-        catch (error) {
-            console.error(`❌ Provenance validation failed: ${error}`);
-            return {
-                passed: false,
-                errors: [`Validation error: ${error}`],
-                score: 0,
-                details: {},
-            };
-        }
+
+    if (!spec.scope || !spec.scope.in || spec.scope.in.length === 0) {
+      errors.push({ message: 'Scope IN must not be empty' });
     }
-    /**
-     * Validate a JSON file against a schema
-     */
-    validateJsonSchema(jsonPath, schemaPath) {
-        try {
-            const result = this.validator.validateJsonAgainstSchema(jsonPath, schemaPath);
-            if (result.passed) {
-                console.log('✅ JSON file is valid against schema');
-            }
-            else {
-                console.error('❌ JSON file is invalid:');
-                if (result.errors && result.errors.length > 0) {
-                    result.errors.forEach((error) => console.error(`  - ${error}`));
-                }
-            }
-            return result;
-        }
-        catch (error) {
-            console.error(`❌ Schema validation failed: ${error}`);
-            return {
-                passed: false,
-                errors: [`Validation error: ${error}`],
-                score: 0,
-                details: {},
-            };
-        }
-    }
-    /**
-     * Validate a YAML file against a schema
-     */
-    validateYamlSchema(yamlPath, schemaPath) {
-        try {
-            const result = this.validator.validateYamlAgainstSchema(yamlPath, schemaPath);
-            if (result.passed) {
-                console.log('✅ YAML file is valid against schema');
-            }
-            else {
-                console.error('❌ YAML file is invalid:');
-                if (result.errors && result.errors.length > 0) {
-                    result.errors.forEach((error) => console.error(`  - ${error}`));
-                }
-            }
-            return result;
-        }
-        catch (error) {
-            console.error(`❌ Schema validation failed: ${error}`);
-            return {
-                passed: false,
-                errors: [`Validation error: ${error}`],
-                score: 0,
-                details: {},
-            };
-        }
-    }
+
+    return {
+      valid: errors.length === 0,
+      errors: errors,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      errors: [{ message: `Validation error: ${error.message}` }],
+    };
+  }
 }
-exports.ValidateCLI = ValidateCLI;
-// Main CLI handler
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const command = process.argv[2];
-    const cli = new ValidateCLI();
-    switch (command) {
-        case 'spec': {
-            const specPath = process.argv[3] || '.caws/working-spec.yaml';
-            const result = cli.validateWorkingSpec(specPath);
-            process.exit(result.passed ? 0 : 1);
-        }
-        case 'provenance': {
-            const provenancePath = process.argv[3] || '.agent/provenance.json';
-            const result = cli.validateProvenance(provenancePath);
-            process.exit(result.passed ? 0 : 1);
-        }
-        case 'json': {
-            const jsonPath = process.argv[3];
-            const schemaPath = process.argv[4];
-            if (!jsonPath || !schemaPath) {
-                console.error('Usage: validate.ts json <json-file> <schema-file>');
-                process.exit(1);
-            }
-            const result = cli.validateJsonSchema(jsonPath, schemaPath);
-            process.exit(result.passed ? 0 : 1);
-        }
-        case 'yaml': {
-            const yamlPath = process.argv[3];
-            const schemaPath = process.argv[4];
-            if (!yamlPath || !schemaPath) {
-                console.error('Usage: validate.ts yaml <yaml-file> <schema-file>');
-                process.exit(1);
-            }
-            const result = cli.validateYamlSchema(yamlPath, schemaPath);
-            process.exit(result.passed ? 0 : 1);
-        }
-        default:
-            console.log('CAWS Validation Tool');
-            console.log('');
-            console.log('Commands:');
-            console.log('  spec [path]              - Validate working specification');
-            console.log('  provenance [path]        - Validate provenance file');
-            console.log('  json <file> <schema>     - Validate JSON against schema');
-            console.log('  yaml <file> <schema>     - Validate YAML against schema');
-            console.log('');
-            console.log('Examples:');
-            console.log('  validate.ts spec .caws/working-spec.yaml');
-            console.log('  validate.ts provenance .agent/provenance.json');
-            console.log('  validate.ts yaml .caws/waivers.yml schemas/waivers.schema.json');
-            process.exit(1);
-    }
+
+// Handle direct script execution
+if (require.main === module) {
+  const specPath = process.argv[2];
+  if (!specPath) {
+    console.error('Usage: node validate.js <spec-path>');
+    console.log('');
+    console.log('Note: For enhanced schema validation, use: npx tsx validate.ts spec <spec-path>');
+    process.exit(1);
+  }
+
+  const result = validateWorkingSpec(specPath);
+  if (result.valid) {
+    console.log('✅ Working specification is valid');
+  } else {
+    console.error('❌ Working specification is invalid:');
+    result.errors.forEach((error) => console.error(`  - ${error.message}`));
+    process.exit(1);
+  }
 }
-//# sourceMappingURL=validate.js.map
+
+module.exports = validateWorkingSpec;

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The CAWS CLI (`@caws/cli`) is the primary interface for interacting with the Coding Agent Workflow System. It provides commands for project initialization, scaffolding, and management.
+The CAWS CLI (`@paths.design/caws-cli`) is the primary interface for interacting with the Coding Agent Workflow System. It provides commands for project initialization, scaffolding, and management.
 
 ## Installation
 

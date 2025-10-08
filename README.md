@@ -378,7 +378,7 @@ npm run clean
 
 ### Package-Specific Scripts
 
-#### CAWS CLI (`@caws/cli`)
+#### CAWS CLI (`@paths.design/caws-cli`)
 
 ```bash
 cd packages/caws-cli
