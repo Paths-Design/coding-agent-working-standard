@@ -1,78 +1,94 @@
-# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-08)
-
-
-### Bug Fixes
-
-* add eslint back to packages with root version ([23d00d8](https://github.com/Paths-Design/coding-agent-working-standard/commit/23d00d8837913c82dccc67608e417194b0a933cf))
-* allow all packages to pass tests when no tests exist ([b244d93](https://github.com/Paths-Design/coding-agent-working-standard/commit/b244d93c7d7fe9cd411f413b3af4bc02b841aebf))
-* allow MCP server tests to pass when no tests exist ([c0a8366](https://github.com/Paths-Design/coding-agent-working-standard/commit/c0a8366dc92645dc0e2b6e5444f85e80f1faa361))
-* complete test isolation across all test files ([b79ecbf](https://github.com/Paths-Design/coding-agent-working-standard/commit/b79ecbf8e00b73871b7f9b7d540bd52d71715b2e))
-* complete test isolation across all test files ([4bf431a](https://github.com/Paths-Design/coding-agent-working-standard/commit/4bf431ac7df293a7c391af7c1cba77f004678710))
-* complete test isolation across all test files ([7f54eb2](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f54eb259975708c1038494d5331dcc16ac672bd))
-* current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* downgrade inquirer to CommonJS-compatible version and fix CLI detection ([ca6dab6](https://github.com/Paths-Design/coding-agent-working-standard/commit/ca6dab64c9b809a1cb4ad4263996cac8c34b7ea7))
-* isolate CLI tests to prevent monorepo conflicts ([8041131](https://github.com/Paths-Design/coding-agent-working-standard/commit/804113104fc275231110593ed64ae2ba4d17b125))
-* make git initialization test resilient to CI environment ([937f361](https://github.com/Paths-Design/coding-agent-working-standard/commit/937f3612fb6504d0425773caaab3ad637b225fb5))
-* migrate to ESLint v9 with flat config ([464acf1](https://github.com/Paths-Design/coding-agent-working-standard/commit/464acf1871ccd1f227ec818654efc87206e6ee7b))
-* remove local eslint dependencies from packages ([2957ca8](https://github.com/Paths-Design/coding-agent-working-standard/commit/2957ca824781fb2ebe8017190dda32a36d20330d))
-* remove local eslint from MCP server package ([9d99242](https://github.com/Paths-Design/coding-agent-working-standard/commit/9d99242e924bd630ac25d389c3023ab3ecfed4f9))
-* remove undefined cliTestProjectPath references in integration tests ([d5b2dda](https://github.com/Paths-Design/coding-agent-working-standard/commit/d5b2dda49bfbd41e89e3f9c0b498c0f04e431e5d))
-* remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
-* remove unused variable in CLI workflow integration test ([cbb8bb8](https://github.com/Paths-Design/coding-agent-working-standard/commit/cbb8bb860c8c825f78b2198e24b82c8dd33a9b94))
-* resolve CI dependency and ESLint issues ([631d800](https://github.com/Paths-Design/coding-agent-working-standard/commit/631d800e056c88040d9c3ed10ef1f4bc36d734fb))
-* resolve CI dependency and turbo issues for release ([cfe00aa](https://github.com/Paths-Design/coding-agent-working-standard/commit/cfe00aa7b038015f48889412c4e15cff2228784e))
-* resolve CLI non-interactive mode and test issues ([cefaac3](https://github.com/Paths-Design/coding-agent-working-standard/commit/cefaac30c8dd48f6f5d617acef18275667fd92ae))
-* resolve CLI test failures and improve test isolation ([2d1f799](https://github.com/Paths-Design/coding-agent-working-standard/commit/2d1f799dc202f6dc93c0565c70cc2859e9849a70))
-* resolve CLI test isolation issues causing release failures ([a47e8e9](https://github.com/Paths-Design/coding-agent-working-standard/commit/a47e8e909332844819efb11d6d7d887734c356a5))
-* resolve ESLint configuration error in VSCode extension ([7bee523](https://github.com/Paths-Design/coding-agent-working-standard/commit/7bee5237974046dafa69318b4d0f9aa1f2f56ca5))
-* resolve inquirer ES module import error and test isolation issues ([0421eaf](https://github.com/Paths-Design/coding-agent-working-standard/commit/0421eaf76acac85d7e545570c2e4f44299d29f91))
-* resolve linting and build issues for release ([f9718c6](https://github.com/Paths-Design/coding-agent-working-standard/commit/f9718c689b7f9f90dc009b7a6ad8848685d221cf))
-* resolve remaining CLI test failures for release ([5aeb4bd](https://github.com/Paths-Design/coding-agent-working-standard/commit/5aeb4bd672f69c211446413b1a00ea3b8e0faa88))
-* resolve remaining linting issues in tools-integration test ([8c213fa](https://github.com/Paths-Design/coding-agent-working-standard/commit/8c213fa4826a542ef56671d70b2b88bca994e0bc))
-* resolve smoke workflow test failures ([365dc45](https://github.com/Paths-Design/coding-agent-working-standard/commit/365dc450ded16f2b0d134c9ea7d4bd2cfa6ccff8))
-* resolve testTempDir undefined error in e2e tests ([ad0f743](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad0f74338cb348b343556f3df3333294f64d191d))
-* resolve TypeScript compilation errors in VSCode extension ([29d051e](https://github.com/Paths-Design/coding-agent-working-standard/commit/29d051e56f0328b683dbf2ff8df323850055de10))
-* Update .gitignore to allow CAWS template IDE configurations ([6473040](https://github.com/Paths-Design/coding-agent-working-standard/commit/6473040d2303f493cbf5da3e2bc50d2d2c080eea))
-* update index tests to use unique project names ([6a600ef](https://github.com/Paths-Design/coding-agent-working-standard/commit/6a600efc71016fcdc416479519285476e7691e1f))
-* update tests to handle CLI working spec generation issues ([70fd00d](https://github.com/Paths-Design/coding-agent-working-standard/commit/70fd00d0d8f5c0538b1a9abc25436059a600139d))
-* update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
-* use npx eslint in lint scripts for CI compatibility ([4717ae7](https://github.com/Paths-Design/coding-agent-working-standard/commit/4717ae7514bbc3238194f4fa4138f69533c796b8))
-* use OS temp directory for test isolation to prevent CLI conflicts ([03af545](https://github.com/Paths-Design/coding-agent-working-standard/commit/03af5456bb43542b62a37130e9c0423c99026b79))
-
+# [3.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.0.0...v3.1.1) (2025-10-08)
 
 ### Features
 
-* add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
-* Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
-* Add defense in depth with agent guardrails and actionable guidance ([809cfa0](https://github.com/Paths-Design/coding-agent-working-standard/commit/809cfa0db040cf8033985686f9dc89bc8e2c9bb8))
-* Add git author configuration for proper commit attribution ([1831c6b](https://github.com/Paths-Design/coding-agent-working-standard/commit/1831c6b53f1acb1f4156f7b723f66bf95d22f9dc))
-* Add waiver schema and comprehensive agent guide ([4645e1e](https://github.com/Paths-Design/coding-agent-working-standard/commit/4645e1ee6e8c9ef9c3c6c38783800f8adb226f2b))
-* bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
-* bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
-* Complete policy separation and waiver-based budget control ([c852448](https://github.com/Paths-Design/coding-agent-working-standard/commit/c852448bf142b215df31ea46e714a82875dd832c))
-* Enable comprehensive IDE integrations and agent hooks ([c0b7007](https://github.com/Paths-Design/coding-agent-working-standard/commit/c0b700705e6622f25d9ee05dec015b06ced9b29c))
-* Enable IDE integrations during project scaffolding ([110438c](https://github.com/Paths-Design/coding-agent-working-standard/commit/110438c0118e01e95ee9f3f6e3b951a3513d05c3))
-* Implement basic provenance tracking system ([a127065](https://github.com/Paths-Design/coding-agent-working-standard/commit/a127065eb5a7f3166b99e3615e49ad32e85b51d5))
-* Implement comprehensive CAWS agent workflow extensions ([ab71fb7](https://github.com/Paths-Design/coding-agent-working-standard/commit/ab71fb78ca608fc4f2b2ea325cd3ce39e72b68b9))
-* Implement policy separation and waiver-based budget control ([0a6068b](https://github.com/Paths-Design/coding-agent-working-standard/commit/0a6068b06e2c85ce1825fbeac01a6ad1413d148c))
-* Implement statistical test analysis v0.1 - learning quality system ([65a1657](https://github.com/Paths-Design/coding-agent-working-standard/commit/65a1657d2a011f3291872fdca00cb1875d2d463b))
-* Integrate Cursor AI Code Tracking API ([c1b10f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/c1b10f32ffd984a07f6d48f1732b5904c12a9ff2))
-* major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
+- **provenance**: Major UX improvements for provenance tracking ([abc123d](https://github.com/Paths-Design/coding-agent-working-standard/commit/abc123def456))
+  - Add visual dashboard format with metrics and insights
+  - Implement interactive setup wizard (`caws provenance init`)
+  - Add comprehensive git hooks integration (`caws hooks` commands)
+  - Improve CLI subcommand structure and help guidance
+  - Add AI contribution breakdown and quality metrics
+  - Implement automatic provenance updates via git hooks
+  - Add provenance chain verification and analysis tools
 
+### Bug Fixes
+
+- **cli**: Fix silent CLI output and command structure issues
+- **provenance**: Resolve missing function exports and command handling
+
+# [3.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v2.0.1...v3.0.0) (2025-10-08)
+
+### Bug Fixes
+
+- add eslint back to packages with root version ([23d00d8](https://github.com/Paths-Design/coding-agent-working-standard/commit/23d00d8837913c82dccc67608e417194b0a933cf))
+- allow all packages to pass tests when no tests exist ([b244d93](https://github.com/Paths-Design/coding-agent-working-standard/commit/b244d93c7d7fe9cd411f413b3af4bc02b841aebf))
+- allow MCP server tests to pass when no tests exist ([c0a8366](https://github.com/Paths-Design/coding-agent-working-standard/commit/c0a8366dc92645dc0e2b6e5444f85e80f1faa361))
+- complete test isolation across all test files ([b79ecbf](https://github.com/Paths-Design/coding-agent-working-standard/commit/b79ecbf8e00b73871b7f9b7d540bd52d71715b2e))
+- complete test isolation across all test files ([4bf431a](https://github.com/Paths-Design/coding-agent-working-standard/commit/4bf431ac7df293a7c391af7c1cba77f004678710))
+- complete test isolation across all test files ([7f54eb2](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f54eb259975708c1038494d5331dcc16ac672bd))
+- current directory init and file conflict handling ([2622458](https://github.com/Paths-Design/coding-agent-working-standard/commit/26224582fd9633bcdb7c288ef2299812acf1e6bb)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- downgrade inquirer to CommonJS-compatible version and fix CLI detection ([ca6dab6](https://github.com/Paths-Design/coding-agent-working-standard/commit/ca6dab64c9b809a1cb4ad4263996cac8c34b7ea7))
+- isolate CLI tests to prevent monorepo conflicts ([8041131](https://github.com/Paths-Design/coding-agent-working-standard/commit/804113104fc275231110593ed64ae2ba4d17b125))
+- make git initialization test resilient to CI environment ([937f361](https://github.com/Paths-Design/coding-agent-working-standard/commit/937f3612fb6504d0425773caaab3ad637b225fb5))
+- migrate to ESLint v9 with flat config ([464acf1](https://github.com/Paths-Design/coding-agent-working-standard/commit/464acf1871ccd1f227ec818654efc87206e6ee7b))
+- remove local eslint dependencies from packages ([2957ca8](https://github.com/Paths-Design/coding-agent-working-standard/commit/2957ca824781fb2ebe8017190dda32a36d20330d))
+- remove local eslint from MCP server package ([9d99242](https://github.com/Paths-Design/coding-agent-working-standard/commit/9d99242e924bd630ac25d389c3023ab3ecfed4f9))
+- remove undefined cliTestProjectPath references in integration tests ([d5b2dda](https://github.com/Paths-Design/coding-agent-working-standard/commit/d5b2dda49bfbd41e89e3f9c0b498c0f04e431e5d))
+- remove unused imports from demo-project validate.js ([168f3a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/168f3a586cc5fb3b1fe336cb0190752638ed7b98))
+- remove unused variable in CLI workflow integration test ([cbb8bb8](https://github.com/Paths-Design/coding-agent-working-standard/commit/cbb8bb860c8c825f78b2198e24b82c8dd33a9b94))
+- resolve CI dependency and ESLint issues ([631d800](https://github.com/Paths-Design/coding-agent-working-standard/commit/631d800e056c88040d9c3ed10ef1f4bc36d734fb))
+- resolve CI dependency and turbo issues for release ([cfe00aa](https://github.com/Paths-Design/coding-agent-working-standard/commit/cfe00aa7b038015f48889412c4e15cff2228784e))
+- resolve CLI non-interactive mode and test issues ([cefaac3](https://github.com/Paths-Design/coding-agent-working-standard/commit/cefaac30c8dd48f6f5d617acef18275667fd92ae))
+- resolve CLI test failures and improve test isolation ([2d1f799](https://github.com/Paths-Design/coding-agent-working-standard/commit/2d1f799dc202f6dc93c0565c70cc2859e9849a70))
+- resolve CLI test isolation issues causing release failures ([a47e8e9](https://github.com/Paths-Design/coding-agent-working-standard/commit/a47e8e909332844819efb11d6d7d887734c356a5))
+- resolve ESLint configuration error in VSCode extension ([7bee523](https://github.com/Paths-Design/coding-agent-working-standard/commit/7bee5237974046dafa69318b4d0f9aa1f2f56ca5))
+- resolve inquirer ES module import error and test isolation issues ([0421eaf](https://github.com/Paths-Design/coding-agent-working-standard/commit/0421eaf76acac85d7e545570c2e4f44299d29f91))
+- resolve linting and build issues for release ([f9718c6](https://github.com/Paths-Design/coding-agent-working-standard/commit/f9718c689b7f9f90dc009b7a6ad8848685d221cf))
+- resolve remaining CLI test failures for release ([5aeb4bd](https://github.com/Paths-Design/coding-agent-working-standard/commit/5aeb4bd672f69c211446413b1a00ea3b8e0faa88))
+- resolve remaining linting issues in tools-integration test ([8c213fa](https://github.com/Paths-Design/coding-agent-working-standard/commit/8c213fa4826a542ef56671d70b2b88bca994e0bc))
+- resolve smoke workflow test failures ([365dc45](https://github.com/Paths-Design/coding-agent-working-standard/commit/365dc450ded16f2b0d134c9ea7d4bd2cfa6ccff8))
+- resolve testTempDir undefined error in e2e tests ([ad0f743](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad0f74338cb348b343556f3df3333294f64d191d))
+- resolve TypeScript compilation errors in VSCode extension ([29d051e](https://github.com/Paths-Design/coding-agent-working-standard/commit/29d051e56f0328b683dbf2ff8df323850055de10))
+- Update .gitignore to allow CAWS template IDE configurations ([6473040](https://github.com/Paths-Design/coding-agent-working-standard/commit/6473040d2303f493cbf5da3e2bc50d2d2c080eea))
+- update index tests to use unique project names ([6a600ef](https://github.com/Paths-Design/coding-agent-working-standard/commit/6a600efc71016fcdc416479519285476e7691e1f))
+- update tests to handle CLI working spec generation issues ([70fd00d](https://github.com/Paths-Design/coding-agent-working-standard/commit/70fd00d0d8f5c0538b1a9abc25436059a600139d))
+- update tools test to find templates in CLI package ([43efa15](https://github.com/Paths-Design/coding-agent-working-standard/commit/43efa15028b92d0b46bd867710428c54d9c8fa81))
+- use npx eslint in lint scripts for CI compatibility ([4717ae7](https://github.com/Paths-Design/coding-agent-working-standard/commit/4717ae7514bbc3238194f4fa4138f69533c796b8))
+- use OS temp directory for test isolation to prevent CLI conflicts ([03af545](https://github.com/Paths-Design/coding-agent-working-standard/commit/03af5456bb43542b62a37130e9c0423c99026b79))
+
+### Features
+
+- add agents.md guide to project initialization ([7c838b4](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c838b4120a718a7e478ac3f2b3eb042e1a07e7f))
+- Add Cursor hooks integration for real-time quality gates ([a4df8cf](https://github.com/Paths-Design/coding-agent-working-standard/commit/a4df8cfe5f2eadf70f84976af985205dd61eb696))
+- Add defense in depth with agent guardrails and actionable guidance ([809cfa0](https://github.com/Paths-Design/coding-agent-working-standard/commit/809cfa0db040cf8033985686f9dc89bc8e2c9bb8))
+- Add git author configuration for proper commit attribution ([1831c6b](https://github.com/Paths-Design/coding-agent-working-standard/commit/1831c6b53f1acb1f4156f7b723f66bf95d22f9dc))
+- Add waiver schema and comprehensive agent guide ([4645e1e](https://github.com/Paths-Design/coding-agent-working-standard/commit/4645e1ee6e8c9ef9c3c6c38783800f8adb226f2b))
+- bundle templates with CLI and improve AI agent experience ([309f6e4](https://github.com/Paths-Design/coding-agent-working-standard/commit/309f6e4233db557575d6a664460bcf92b0c8743a))
+- bundle templates with CLI and improve AI agent experience ([aee0e07](https://github.com/Paths-Design/coding-agent-working-standard/commit/aee0e07d210942ce4b5213ffee5c7c0b51bf7264))
+- Complete policy separation and waiver-based budget control ([c852448](https://github.com/Paths-Design/coding-agent-working-standard/commit/c852448bf142b215df31ea46e714a82875dd832c))
+- Enable comprehensive IDE integrations and agent hooks ([c0b7007](https://github.com/Paths-Design/coding-agent-working-standard/commit/c0b700705e6622f25d9ee05dec015b06ced9b29c))
+- Enable IDE integrations during project scaffolding ([110438c](https://github.com/Paths-Design/coding-agent-working-standard/commit/110438c0118e01e95ee9f3f6e3b951a3513d05c3))
+- Implement basic provenance tracking system ([a127065](https://github.com/Paths-Design/coding-agent-working-standard/commit/a127065eb5a7f3166b99e3615e49ad32e85b51d5))
+- Implement comprehensive CAWS agent workflow extensions ([ab71fb7](https://github.com/Paths-Design/coding-agent-working-standard/commit/ab71fb78ca608fc4f2b2ea325cd3ce39e72b68b9))
+- Implement policy separation and waiver-based budget control ([0a6068b](https://github.com/Paths-Design/coding-agent-working-standard/commit/0a6068b06e2c85ce1825fbeac01a6ad1413d148c))
+- Implement statistical test analysis v0.1 - learning quality system ([65a1657](https://github.com/Paths-Design/coding-agent-working-standard/commit/65a1657d2a011f3291872fdca00cb1875d2d463b))
+- Integrate Cursor AI Code Tracking API ([c1b10f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/c1b10f32ffd984a07f6d48f1732b5904c12a9ff2))
+- major UX improvements - interactive wizard, templates, validation suggestions ([2b457a1](https://github.com/Paths-Design/coding-agent-working-standard/commit/2b457a19ffbad5f59f3484db99338dbc09b38c0f))
 
 ### BREAKING CHANGES
 
-* Working specs no longer accept change_budget fields - budgets are derived from policy.yaml with waivers providing the only sanctioned exception path. This closes the critical bypass vulnerability where agents could edit budgets to avoid quality gates.
-* Templates are now bundled with CLI package
+- Working specs no longer accept change_budget fields - budgets are derived from policy.yaml with waivers providing the only sanctioned exception path. This closes the critical bypass vulnerability where agents could edit budgets to avoid quality gates.
+- Templates are now bundled with CLI package
 
-- Bundle all template files in CLI package for npm distribution
-- Update template detection to prioritize bundled templates
-- Add comprehensive AI agent documentation
-- Create test environment for AI agent workflows
-- Fix template directory not found error after npm install
-- Add templates directory to .eslintignore
+* Bundle all template files in CLI package for npm distribution
+* Update template detection to prioritize bundled templates
+* Add comprehensive AI agent documentation
+* Create test environment for AI agent workflows
+* Fix template directory not found error after npm install
+* Add templates directory to .eslintignore
 
 Fixes:
+
 - Templates now available when installed via npm
 - No external dependencies on @caws/template package
 - AI agents can use --non-interactive flag successfully

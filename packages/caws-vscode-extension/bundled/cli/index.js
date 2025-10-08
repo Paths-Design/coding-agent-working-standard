@@ -34,6 +34,9 @@ const { executeTool } = require('./commands/tool');
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
 
+// Import git hooks functionality
+const { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require('./scaffold/git-hooks');
+
 // Import validation functionality
 // eslint-disable-next-line no-unused-vars
 const { validateWorkingSpecWithSuggestions } = require('./validation/spec-validation');
@@ -115,17 +118,120 @@ program
   .description('Statistical analysis for budget prediction and test optimization')
   .action(testAnalysisCommand);
 
-// Provenance command
-program
+// Provenance command group
+const provenanceCmd = program
   .command('provenance')
-  .description('Manage CAWS provenance tracking and audit trails')
-  .argument('<subcommand>', 'Command: update, show, verify, analyze-ai')
-  .option('-c, --commit <hash>', 'Git commit hash')
+  .description('Manage CAWS provenance tracking and audit trails');
+
+// Subcommands
+provenanceCmd
+  .command('update')
+  .description('Add new commit to provenance chain')
+  .requiredOption('-c, --commit <hash>', 'Git commit hash')
   .option('-m, --message <msg>', 'Commit message')
   .option('-a, --author <info>', 'Author information')
   .option('-q, --quiet', 'Suppress output')
-  .option('-o, --output <path>', 'Output path for provenance files')
-  .action(provenanceCommand);
+  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
+  .action(async (options) => {
+    await provenanceCommand('update', options);
+  });
+
+provenanceCmd
+  .command('show')
+  .description('Display current provenance history')
+  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
+  .option('--format <type>', 'Output format: text, json, dashboard', 'text')
+  .action(async (options) => {
+    await provenanceCommand('show', options);
+  });
+
+provenanceCmd
+  .command('verify')
+  .description('Validate provenance chain integrity')
+  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
+  .action(async (options) => {
+    await provenanceCommand('verify', options);
+  });
+
+provenanceCmd
+  .command('analyze-ai')
+  .description('Analyze AI-assisted development patterns')
+  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
+  .action(async (options) => {
+    await provenanceCommand('analyze-ai', options);
+  });
+
+provenanceCmd
+  .command('init')
+  .description('Initialize provenance tracking for the project')
+  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
+  .option('--cursor-api <url>', 'Cursor tracking API endpoint')
+  .option('--cursor-key <key>', 'Cursor API key')
+  .action(async (options) => {
+    await provenanceCommand('init', options);
+  });
+
+// Git hooks command
+const hooksCmd = program
+  .command('hooks')
+  .description('Manage CAWS git hooks for provenance tracking');
+
+hooksCmd
+  .command('install')
+  .description('Install CAWS git hooks')
+  .option('--no-provenance', 'Skip provenance tracking hooks')
+  .option('--no-validation', 'Skip validation hooks')
+  .option('--no-quality-gates', 'Skip quality gate hooks')
+  .option('--force', 'Overwrite existing hooks')
+  .option('--backup', 'Backup existing hooks before replacing')
+  .action(async (options) => {
+    const hookOptions = {
+      provenance: options.provenance !== false,
+      validation: options.validation !== false,
+      qualityGates: options.qualityGates !== false,
+      force: options.force,
+      backup: options.backup,
+    };
+
+    try {
+      const result = await scaffoldGitHooks(process.cwd(), hookOptions);
+      if (result.added > 0) {
+        console.log(`✅ Successfully installed ${result.added} git hooks`);
+        if (result.skipped > 0) {
+          console.log(`⏭️  Skipped ${result.skipped} existing hooks`);
+        }
+      } else {
+        console.log('ℹ️  All hooks already configured');
+      }
+    } catch (error) {
+      console.error(`❌ Failed to install git hooks: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+hooksCmd
+  .command('remove')
+  .description('Remove CAWS git hooks')
+  .action(async () => {
+    try {
+      await removeGitHooks(process.cwd());
+    } catch (error) {
+      console.error(`❌ Failed to remove git hooks: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+hooksCmd
+  .command('status')
+  .description('Check git hooks status')
+  .action(async () => {
+    try {
+      await checkGitHooksStatus(process.cwd());
+    } catch (error) {
+      console.error(`❌ Failed to check git hooks status: ${error.message}`);
+      process.exit(1);
+    }
+  });
 
 // Error handling
 program.exitOverride((err) => {

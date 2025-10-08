@@ -170,7 +170,7 @@ describe('CLI Interface Contracts', () => {
 
         // Contract: .agent directory should exist (created during init)
         expect(fs.existsSync('.agent')).toBe(true);
-        
+
         // Contract: IDE integrations should be enhanced (scaffold adds these)
         // Note: apps/tools/caws structure requires templates which aren't available in test env
         // This is expected behavior - scaffold gracefully handles missing templates
@@ -345,6 +345,76 @@ describe('CLI Interface Contracts', () => {
       expect(typeof spec.mode).toBe('string');
       expect(Array.isArray(spec.invariants)).toBe(true);
       expect(Array.isArray(spec.acceptance)).toBe(true);
+    });
+  });
+
+  describe('Provenance Command Contracts', () => {
+    test('provenance init should create provenance directory', () => {
+      // Contract: init should create .caws/provenance directory and config
+      const projectDir = path.join(testTempDir, 'provenance-test-init');
+      fs.mkdirSync(projectDir);
+      process.chdir(projectDir);
+
+      // Initialize git repo first
+      execSync('git init --quiet', { stdio: 'pipe' });
+      execSync('git config user.email "test@example.com"', { stdio: 'pipe' });
+      execSync('git config user.name "Test User"', { stdio: 'pipe' });
+
+      // Initialize CAWS project
+      execSync(`node "${cliPath}" init . --non-interactive`, { stdio: 'pipe' });
+
+      // Test provenance init
+      execSync(`node "${cliPath}" provenance init`, { stdio: 'pipe' });
+
+      // Contract: Should create provenance directory
+      expect(fs.existsSync('.caws/provenance')).toBe(true);
+      expect(fs.existsSync('.caws/provenance/chain.json')).toBe(true);
+      expect(fs.existsSync('.caws/provenance/config.json')).toBe(true);
+
+      // Contract: Chain should be initialized as empty array
+      const chain = JSON.parse(fs.readFileSync('.caws/provenance/chain.json', 'utf8'));
+      expect(Array.isArray(chain)).toBe(true);
+      expect(chain.length).toBe(0);
+    });
+
+    test('provenance show should handle empty chain gracefully', () => {
+      // Contract: show command should not crash on empty provenance
+      const output = execSync(`node "${cliPath}" provenance show`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+
+      // Contract: Should contain user-friendly message
+      expect(output).toContain('No provenance data found');
+    });
+
+    test('hooks install should create git hooks', () => {
+      // Contract: hooks install should create executable git hooks
+      // Create a test project directory for this test
+      const hooksTestDir = path.join(testTempDir, 'hooks-test');
+      fs.mkdirSync(hooksTestDir);
+      process.chdir(hooksTestDir);
+
+      // Initialize git repo
+      execSync('git init --quiet', { stdio: 'pipe' });
+      execSync('git config user.email "test@example.com"', { stdio: 'pipe' });
+      execSync('git config user.name "Test User"', { stdio: 'pipe' });
+
+      // Initialize CAWS project
+      execSync(`node "${cliPath}" init . --non-interactive`, { stdio: 'pipe' });
+
+      // Test hooks install
+      execSync(`node "${cliPath}" hooks install --force`, { stdio: 'pipe' });
+
+      // Contract: Should create hook files
+      expect(fs.existsSync('.git/hooks/pre-commit')).toBe(true);
+      expect(fs.existsSync('.git/hooks/post-commit')).toBe(true);
+      expect(fs.existsSync('.git/hooks/pre-push')).toBe(true);
+      expect(fs.existsSync('.git/hooks/commit-msg')).toBe(true);
+
+      // Contract: Hooks should be executable
+      const preCommitStats = fs.statSync('.git/hooks/pre-commit');
+      expect(preCommitStats.mode & 0o111).toBeTruthy(); // executable bit set
     });
   });
 });

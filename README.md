@@ -68,10 +68,16 @@ caws test-analysis analyze-patterns          # Analyze waiver patterns and trend
 caws test-analysis find-similar              # Find similar historical projects
 
 # Provenance tracking and audit trails
+caws provenance init                          # Initialize provenance tracking
 caws provenance update --commit <hash>       # Update provenance after commit
-caws provenance show                         # Display provenance chain with AI tracking
+caws provenance show --format=dashboard      # Display provenance chain with AI tracking
 caws provenance verify                        # Verify provenance integrity
 caws provenance analyze-ai                    # Analyze AI effectiveness patterns
+
+# Git hooks for automatic provenance
+caws hooks install --backup                   # Install automatic git hooks
+caws hooks status                             # Check hook configuration
+caws hooks remove                             # Remove CAWS hooks
 
 # Manage CAWS tools
 caws tools list                    # List available tools
@@ -99,10 +105,16 @@ node packages/caws-cli/dist/index.js test-analysis analyze-patterns  # Analyze w
 node packages/caws-cli/dist/index.js test-analysis find-similar      # Find similar projects
 
 # Provenance tracking and audit trails
-node packages/caws-cli/dist/index.js provenance update --commit <hash>  # Update provenance
-node packages/caws-cli/dist/index.js provenance show                   # Show provenance chain
+node packages/caws-cli/dist/index.js provenance init                   # Initialize tracking
+node packages/caws-cli/dist/index.js provenance update --commit <hash> # Update provenance
+node packages/caws-cli/dist/index.js provenance show --format=dashboard # Show provenance chain
 node packages/caws-cli/dist/index.js provenance verify                 # Verify integrity
 node packages/caws-cli/dist/index.js provenance analyze-ai             # Analyze AI patterns
+
+# Git hooks for automatic provenance
+node packages/caws-cli/dist/index.js hooks install --backup            # Install hooks
+node packages/caws-cli/dist/index.js hooks status                      # Check status
+node packages/caws-cli/dist/index.js hooks remove                      # Remove hooks
 
 # Manage CAWS tools
 node packages/caws-cli/dist/index.js tools list        # List available tools
@@ -502,10 +514,13 @@ Projects are classified into risk tiers with appropriate rigor levels:
 
 ### Provenance Tracking
 
-- Complete audit trail of all operations
+- Complete audit trail of all operations with AI code tracking
+- Visual dashboard with metrics and insights (`caws provenance show --format=dashboard`)
+- Automatic git hooks for seamless provenance updates
 - SBOM (Software Bill of Materials) generation
 - SLSA (Supply chain Levels for Software Artifacts) attestations
 - Cryptographic signatures for integrity
+- AI effectiveness analysis and patterns
 
 ### Tool Allowlisting
 

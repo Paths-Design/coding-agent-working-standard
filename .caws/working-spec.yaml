@@ -1,62 +1,59 @@
 # CAWS Working Specification
 # This file defines the current change being worked on
 
-id: ARCH-0001
-title: Implement policy separation and waiver-based budget control
+id: PROV-0001
+title: Major UX improvements for CAWS provenance tracking system
 risk_tier: 1
 mode: feature
-change_budget:
-  max_files: 50  # Tier 1 base (10) + waiver delta (50)
-  max_loc: 5000  # Tier 1 base (250) + waiver delta (5000)
-# Budget derived from policy.yaml based on risk_tier
-# Waivers referenced by ID for exceptions
-waiver_ids: ["WV-0001"]  # Bootstrap waiver for this architectural change
+# Budget managed via waiver WV-0002 for comprehensive UX improvements
+waiver_ids: ["WV-0002"]  # Provenance UX improvements waiver
 blast_radius:
-  modules: ["core", "caws-cli", "quality-gates"]
-  data_migration: true  # Restructuring governance files
-operational_rollback_slo: "10m"
+  modules: ["caws-cli", "provenance", "git-hooks"]
+  data_migration: false
+operational_rollback_slo: "5m"
 threats:
-  - "Temporary budget bypass during transition"
-  - "Existing working specs become invalid"
+  - "Breaking changes to CLI command structure"
+  - "Git hooks may conflict with existing workflows"
+  - "Increased complexity in provenance tracking"
 scope:
-  in: [".caws/", "packages/caws-cli/src/", "packages/caws-cli/templates/"]
-  out: ["node_modules/", "packages/*/dist/", "packages/*/node_modules/"]
+  in: ["packages/caws-cli/src/", "packages/caws-cli/templates/", "docs/", "*.md"]
+  out: ["node_modules/", "packages/*/dist/", "packages/*/node_modules/", ".git/"]
 invariants:
-  - "Quality gates remain enforceable after restructuring"
-  - "No silent policy bypass possible"
-  - "Waivers provide auditable exception path"
+  - "Provenance tracking remains secure and tamper-proof"
+  - "CLI commands provide clear feedback and guidance"
+  - "Git hooks are optional and don't break existing workflows"
 acceptance:
   - id: "A1"
-    given: "Agent attempts budget overrun"
-    when: "Policy separation implemented"
-    then: "Only waiver creation allowed, not budget editing"
+    given: "User runs caws provenance --help"
+    when: "UX improvements implemented"
+    then: "Clear subcommand structure and descriptions shown"
   - id: "A2"
-    given: "Code and policy changes in same PR"
-    when: "Path discipline enforced"
-    then: "CI rejects mixed changes"
+    given: "User runs caws provenance show --format=dashboard"
+    when: "Provenance data exists"
+    then: "Visual dashboard with metrics and insights displayed"
   - id: "A3"
-    given: "Waiver expires"
-    when: "CI runs"
-    then: "Budget automatically reverts to policy limits"
+    given: "User runs caws hooks install"
+    when: "Git repository exists"
+    then: "Automatic git hooks configured for provenance tracking"
 non_functional:
   a11y: ["keyboard", "screen-reader"]
-  perf: { api_p95_ms: 250 }
-  security: ["validation", "audit-trail", "dual-control"]
+  perf: { api_p95_ms: 250, cli_response_ms: 1000 }
+  security: ["validation", "audit-trail", "provenance-integrity"]
 contracts:
-  - type: "policy_schema"
-    path: ".caws/policy.schema.json"
+  - type: "cli_interface"
+    path: "packages/caws-cli/tests/contract/cli-contract.test.js"
 observability:
   metrics:
-    - "policy_violations_blocked"
-    - "waiver_expiration_enforced"
-    - "dual_control_compliance"
+    - "provenance_entries_created"
+    - "dashboard_views_served"
+    - "git_hooks_installed"
   logs:
-    - "budget_derivation_audit"
-    - "waiver_validation_events"
+    - "provenance_update_events"
+    - "dashboard_render_events"
 migrations:
-  - "Migrate existing change_budget fields to waiver_ids"
-  - "Create initial policy.yaml from current budgets"
-  - "Update validation logic to use derived budgets"
+  - "Migrate CLI command structure to subcommands"
+  - "Add git hooks templates and scaffolding"
+  - "Update documentation with new UX features"
 rollback:
-  strategy: "Revert to file-based budgets if derivation fails"
-  data_backup: "Export current working specs before migration"
+  strategy: "Revert CLI changes, keep provenance data intact"
+  data_backup: "Export existing provenance chains before migration"

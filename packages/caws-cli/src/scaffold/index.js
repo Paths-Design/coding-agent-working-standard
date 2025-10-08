@@ -11,6 +11,9 @@ const chalk = require('chalk');
 // Import detection utilities
 const { detectCAWSSetup } = require('../utils/detection');
 
+// Import git hooks scaffolding
+const { scaffoldGitHooks } = require('./git-hooks');
+
 // CLI version from package.json
 const CLI_VERSION = require('../../package.json').version;
 
@@ -26,6 +29,21 @@ async function scaffoldIDEIntegrations(targetDir, options) {
 
   let addedCount = 0;
   let skippedCount = 0;
+
+  // Setup git hooks with provenance integration
+  try {
+    const gitHooksResult = await scaffoldGitHooks(targetDir, {
+      provenance: true,
+      validation: true,
+      qualityGates: true,
+      force: options.force,
+      backup: options.backup,
+    });
+    addedCount += gitHooksResult.added;
+    skippedCount += gitHooksResult.skipped;
+  } catch (error) {
+    console.log(chalk.yellow(`⚠️  Git hooks setup failed: ${error.message}`));
+  }
 
   // List of IDE integration templates to copy
   const ideTemplates = [
@@ -67,25 +85,7 @@ async function scaffoldIDEIntegrations(targetDir, options) {
       desc: 'GitHub Copilot CAWS integration instructions',
     },
 
-    // Git hooks (only if not already present)
-    {
-      src: '.git/hooks/pre-commit',
-      dest: '.git/hooks/pre-commit',
-      desc: 'Git pre-commit hook for CAWS validation',
-      optional: true,
-    },
-    {
-      src: '.git/hooks/pre-push',
-      dest: '.git/hooks/pre-push',
-      desc: 'Git pre-push hook for comprehensive checks',
-      optional: true,
-    },
-    {
-      src: '.git/hooks/post-commit',
-      dest: '.git/hooks/post-commit',
-      desc: 'Git post-commit hook for provenance',
-      optional: true,
-    },
+    // Git hooks are handled separately by scaffoldGitHooks
 
     // Cursor hooks (already handled by scaffoldCursorHooks, but ensure README is copied)
     {

@@ -193,8 +193,51 @@ npm run test:contract
 ### 4. Document & Deploy
 
 - Update working spec if scope changes
-- Generate provenance manifest
+- Update provenance: `caws provenance update --commit <hash>`
+- View progress: `caws provenance show --format=dashboard`
 - Deploy with rollback plan ready
+
+---
+
+## 📊 Provenance & AI Tracking
+
+### Initialize Provenance
+
+```bash
+# Setup provenance tracking
+caws provenance init
+
+# Install automatic git hooks
+caws hooks install --backup
+```
+
+### Daily Workflow
+
+```bash
+# Hooks run automatically on commit
+git commit -m "feat: add new feature"
+
+# View beautiful dashboard
+caws provenance show --format=dashboard
+
+# Analyze AI effectiveness
+caws provenance analyze-ai
+```
+
+### Dashboard Features
+
+- 📊 Total entries and AI-assisted commits
+- 🎯 Quality scores and acceptance rates
+- 🤖 AI contribution breakdown (Composer/Chat vs Tab completions)
+- ✅ Recent activity timeline
+- 💡 Smart insights and recommendations
+
+### Git Hooks
+
+- **pre-commit**: Validation and quality checks
+- **post-commit**: Automatic provenance updates
+- **pre-push**: Security and comprehensive checks
+- **commit-msg**: Message format validation
 
 ---
 

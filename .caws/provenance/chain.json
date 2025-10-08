@@ -448,5 +448,41 @@
     },
     "previous_hash": "392ef96e0ab9beb97cfb34e4879c062cceb36540f1ab5a2bc9a187486d3a8f74",
     "hash": "071eff7a5e1817210d79064649de1ad8c877f64cec509db7fde352baf64cd126"
+  },
+  {
+    "id": "prov-1759910651679",
+    "timestamp": "2025-10-08T08:04:11.679Z",
+    "commit": {
+      "hash": "057272bf168cbda4e3768c64fa77cb0fca03ab78",
+      "message": "feat: major UX improvements for CAWS provenance tracking",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-10-08T08:04:11.680Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "071eff7a5e1817210d79064649de1ad8c877f64cec509db7fde352baf64cd126",
+    "hash": "3e891df72ee6973075a3269efe727b527eb7ad92ca94c34a0b57eaf858bc22ab"
   }
 ]
