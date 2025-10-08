@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Initialize MCP server first - it will auto-start
   mcpClient = new CawsMcpClient();
-  
+
   // Register MCP server with Cursor if in Cursor environment
   registerMcpServerWithCursor(context);
 
@@ -138,7 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log('CAWS VS Code extension deactivated');
-  
+
   // Clean up MCP client
   if (mcpClient) {
     mcpClient.dispose();
@@ -157,7 +157,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
 
     // Get bundled MCP server path
     const mcpServerPath = path.join(context.extensionPath, 'bundled', 'mcp-server', 'index.js');
-    
+
     if (!fs.existsSync(mcpServerPath)) {
       console.warn('CAWS MCP server not found in bundle, skipping auto-registration');
       return;
@@ -194,26 +194,27 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
       args: [mcpServerPath],
       env: {},
       disabled: false,
-      alwaysAllow: []
+      alwaysAllow: [],
     };
 
     // Write updated config
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf8');
 
     console.log('CAWS MCP server registered with Cursor at:', mcpConfigPath);
-    
-    // Show notification to user
-    vscode.window.showInformationMessage(
-      'CAWS MCP server is now available to Cursor AI! Restart Cursor to activate all 13 CAWS tools.',
-      'Open MCP Config'
-    ).then(selection => {
-      if (selection === 'Open MCP Config') {
-        vscode.workspace.openTextDocument(mcpConfigPath).then(doc => {
-          vscode.window.showTextDocument(doc);
-        });
-      }
-    });
 
+    // Show notification to user
+    vscode.window
+      .showInformationMessage(
+        'CAWS MCP server is now available to Cursor AI! Restart Cursor to activate all 13 CAWS tools.',
+        'Open MCP Config'
+      )
+      .then((selection) => {
+        if (selection === 'Open MCP Config') {
+          vscode.workspace.openTextDocument(mcpConfigPath).then((doc) => {
+            vscode.window.showTextDocument(doc);
+          });
+        }
+      });
   } catch (error) {
     console.error('Failed to register CAWS MCP server with Cursor:', error);
     // Don't show error to user - this is a nice-to-have feature

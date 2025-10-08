@@ -38,20 +38,20 @@ async function main() {
       path.join(mcpServerDest, 'package.json')
     );
 
-    // Copy MCP server node_modules (only production dependencies)
-    const mcpNodeModules = path.join(mcpServerSource, 'node_modules');
-    if (await fs.pathExists(mcpNodeModules)) {
-      console.log('  Copying MCP server dependencies...');
-      await fs.copy(mcpNodeModules, path.join(mcpServerDest, 'node_modules'), {
-        filter: (src) => {
-          // Only copy @modelcontextprotocol/sdk
-          return (
-            !src.includes('node_modules') ||
-            src.includes('@modelcontextprotocol') ||
-            src === mcpNodeModules
-          );
-        },
-      });
+    // Copy MCP server dependencies
+    console.log('  Copying MCP server dependencies...');
+    const mcpDestModules = path.join(mcpServerDest, 'node_modules');
+    await fs.ensureDir(mcpDestModules);
+    
+    // Copy from monorepo root (where the dependencies are actually installed)
+    const monorepoNodeModules = path.join(MONOREPO_ROOT, 'node_modules');
+    if (await fs.pathExists(monorepoNodeModules)) {
+      // Copy @modelcontextprotocol
+      const mcpSdkPath = path.join(monorepoNodeModules, '@modelcontextprotocol');
+      if (await fs.pathExists(mcpSdkPath)) {
+        await fs.copy(mcpSdkPath, path.join(mcpDestModules, '@modelcontextprotocol'));
+        console.log('    ✅ Copied @modelcontextprotocol/sdk');
+      }
     }
 
     console.log('✅ Bundled MCP server\n');

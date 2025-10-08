@@ -9,11 +9,15 @@
  * @author @darianrosebrook
  */
 
-const { Server } = require('@modelcontextprotocol/sdk/server');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/stdio');
-const { execSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { execSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class CawsMcpServer extends Server {
   constructor() {
@@ -1319,7 +1323,7 @@ async function main() {
   console.error('CAWS MCP Server started');
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
     // eslint-disable-next-line no-console
     console.error('CAWS MCP Server error:', error);
@@ -1327,4 +1331,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = CawsMcpServer;
+export default CawsMcpServer;
