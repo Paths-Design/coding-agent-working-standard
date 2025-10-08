@@ -8,7 +8,6 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
-const { execSync } = require('child_process');
 
 /**
  * Load working specification

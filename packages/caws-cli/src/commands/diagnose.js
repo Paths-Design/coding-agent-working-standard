@@ -8,7 +8,6 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
-const inquirer = require('inquirer');
 
 // Import utilities
 const { checkTypeScriptTestConfig } = require('../utils/typescript-detector');
@@ -20,7 +19,7 @@ const { configureJestForTypeScript } = require('../generators/jest-config');
  */
 async function checkWorkingSpec() {
   const specPath = '.caws/working-spec.yaml';
-  
+
   if (!(await fs.pathExists(specPath))) {
     return {
       passed: false,
@@ -30,11 +29,11 @@ async function checkWorkingSpec() {
       autoFixable: false,
     };
   }
-  
+
   try {
     const content = await fs.readFile(specPath, 'utf8');
     const spec = yaml.load(content);
-    
+
     // Basic validation
     if (!spec.id || !spec.title || !spec.risk_tier) {
       return {
@@ -45,7 +44,7 @@ async function checkWorkingSpec() {
         autoFixable: false,
       };
     }
-    
+
     return {
       passed: true,
       message: 'Working spec is valid',
@@ -75,7 +74,7 @@ async function checkGitSetup() {
       autoFixable: false,
     };
   }
-  
+
   return {
     passed: true,
     message: 'Git repository initialized',
@@ -88,7 +87,7 @@ async function checkGitSetup() {
  */
 async function checkGitHooks() {
   const hooksDir = '.git/hooks';
-  
+
   if (!(await fs.pathExists(hooksDir))) {
     return {
       passed: false,
@@ -98,10 +97,10 @@ async function checkGitHooks() {
       autoFixable: false,
     };
   }
-  
+
   const cawsHooks = ['pre-commit', 'post-commit', 'pre-push'];
   let installedCount = 0;
-  
+
   for (const hook of cawsHooks) {
     const hookPath = path.join(hooksDir, hook);
     if (await fs.pathExists(hookPath)) {
@@ -111,7 +110,7 @@ async function checkGitHooks() {
       }
     }
   }
-  
+
   if (installedCount === 0) {
     return {
       passed: false,
@@ -121,7 +120,7 @@ async function checkGitHooks() {
       autoFixable: false,
     };
   }
-  
+
   return {
     passed: true,
     message: `${installedCount}/${cawsHooks.length} CAWS hooks installed`,
@@ -134,7 +133,7 @@ async function checkGitHooks() {
  */
 async function checkTypeScriptConfig() {
   const tsConfig = checkTypeScriptTestConfig('.');
-  
+
   if (!tsConfig.isTypeScript) {
     return {
       passed: true,
@@ -142,7 +141,7 @@ async function checkTypeScriptConfig() {
       skipped: true,
     };
   }
-  
+
   if (tsConfig.needsJestConfig) {
     return {
       passed: false,
@@ -160,7 +159,7 @@ async function checkTypeScriptConfig() {
       },
     };
   }
-  
+
   if (tsConfig.needsTsJest) {
     return {
       passed: false,
@@ -170,7 +169,7 @@ async function checkTypeScriptConfig() {
       autoFixable: false,
     };
   }
-  
+
   return {
     passed: true,
     message: 'TypeScript configuration is correct',
@@ -184,14 +183,14 @@ async function checkTypeScriptConfig() {
 async function checkTestFiles() {
   const testsDirs = ['tests', 'test', '__tests__', 'spec'];
   let testsDir = null;
-  
+
   for (const dir of testsDirs) {
     if (await fs.pathExists(dir)) {
       testsDir = dir;
       break;
     }
   }
-  
+
   if (!testsDir) {
     return {
       passed: false,
@@ -210,7 +209,7 @@ async function checkTestFiles() {
       },
     };
   }
-  
+
   return {
     passed: true,
     message: `Tests directory exists: ${testsDir}/`,
@@ -223,7 +222,7 @@ async function checkTestFiles() {
  */
 async function checkCAWSTools() {
   const toolsPath = 'apps/tools/caws';
-  
+
   if (!(await fs.pathExists(toolsPath))) {
     return {
       passed: false,
@@ -233,17 +232,17 @@ async function checkCAWSTools() {
       autoFixable: false,
     };
   }
-  
+
   // Check for essential tools
   const essentialTools = ['validate.js', 'gates.js', 'provenance.js'];
   let missingTools = [];
-  
+
   for (const tool of essentialTools) {
     if (!(await fs.pathExists(path.join(toolsPath, tool)))) {
       missingTools.push(tool);
     }
   }
-  
+
   if (missingTools.length > 0) {
     return {
       passed: false,
@@ -253,7 +252,7 @@ async function checkCAWSTools() {
       autoFixable: false,
     };
   }
-  
+
   return {
     passed: true,
     message: 'All essential CAWS tools present',
@@ -273,18 +272,18 @@ async function runDiagnosis() {
     { name: 'Test files', fn: checkTestFiles },
     { name: 'CAWS tools', fn: checkCAWSTools },
   ];
-  
+
   console.log(chalk.cyan('\n🔍 Diagnosing CAWS Project...\n'));
   console.log(chalk.gray('Running checks:'));
-  
+
   const results = [];
-  
+
   for (const check of checks) {
     process.stdout.write(chalk.gray(`   ${check.name}... `));
-    
+
     try {
       const result = await check.fn();
-      
+
       if (result.skipped) {
         console.log(chalk.gray('skipped'));
       } else if (result.passed) {
@@ -293,7 +292,7 @@ async function runDiagnosis() {
         const icon = result.severity === 'high' ? chalk.red('❌') : chalk.yellow('⚠️');
         console.log(icon);
       }
-      
+
       results.push({
         name: check.name,
         ...result,
@@ -310,7 +309,7 @@ async function runDiagnosis() {
       });
     }
   }
-  
+
   return results;
 }
 
@@ -320,26 +319,28 @@ async function runDiagnosis() {
  */
 function displayResults(results) {
   const issues = results.filter((r) => !r.passed && !r.skipped);
-  
+
   if (issues.length === 0) {
     console.log(chalk.green('\n✅ No issues found! Your CAWS project is healthy.\n'));
     return;
   }
-  
-  console.log(chalk.bold.yellow(`\n⚠️  Found ${issues.length} issue${issues.length > 1 ? 's' : ''}:\n`));
-  
+
+  console.log(
+    chalk.bold.yellow(`\n⚠️  Found ${issues.length} issue${issues.length > 1 ? 's' : ''}:\n`)
+  );
+
   issues.forEach((issue, index) => {
     const icon = issue.severity === 'high' ? chalk.red('❌') : chalk.yellow('⚠️');
     const severity = chalk.gray(`[${issue.severity.toUpperCase()}]`);
-    
+
     console.log(`${index + 1}. ${icon} ${issue.name} ${severity}`);
     console.log(chalk.white(`   Issue: ${issue.message}`));
     console.log(chalk.cyan(`   Fix: ${issue.fix}`));
-    
+
     if (issue.autoFixable) {
       console.log(chalk.green('   ✨ Auto-fix available'));
     }
-    
+
     console.log('');
   });
 }
@@ -351,7 +352,7 @@ function displayResults(results) {
  */
 async function applyAutoFixes(results) {
   const fixableIssues = results.filter((r) => !r.passed && r.autoFixable && r.autoFix);
-  
+
   if (fixableIssues.length === 0) {
     console.log(chalk.yellow('\n⚠️  No auto-fixable issues found\n'));
     return {
@@ -360,22 +361,22 @@ async function applyAutoFixes(results) {
       failed: 0,
     };
   }
-  
+
   console.log(chalk.cyan(`\n🔧 Applying ${fixableIssues.length} automatic fixes...\n`));
-  
+
   let applied = 0;
   let failed = 0;
-  
+
   for (const issue of fixableIssues) {
     process.stdout.write(chalk.gray(`   Fixing: ${issue.name}... `));
-    
+
     try {
       const result = await issue.autoFix();
-      
+
       if (result.success) {
         console.log(chalk.green('✅'));
         applied++;
-        
+
         if (result.nextSteps && result.nextSteps.length > 0) {
           console.log(chalk.blue('   Next steps:'));
           result.nextSteps.forEach((step) => {
@@ -391,9 +392,9 @@ async function applyAutoFixes(results) {
       failed++;
     }
   }
-  
+
   console.log(chalk.bold.green(`\n📊 Results: ${applied} fixed, ${failed} failed\n`));
-  
+
   return {
     applied,
     skipped: results.filter((r) => !r.passed && !r.autoFixable).length,
@@ -409,39 +410,46 @@ async function diagnoseCommand(options = {}) {
   try {
     // Run all health checks
     const results = await runDiagnosis();
-    
+
     // Display results
     displayResults(results);
-    
+
     // Check if there are auto-fixable issues
     const fixableCount = results.filter((r) => !r.passed && r.autoFixable).length;
-    
+
     if (fixableCount > 0 && !options.fix) {
-      console.log(chalk.yellow(`💡 ${fixableCount} issue${fixableCount > 1 ? 's' : ''} can be fixed automatically`));
+      console.log(
+        chalk.yellow(
+          `💡 ${fixableCount} issue${fixableCount > 1 ? 's' : ''} can be fixed automatically`
+        )
+      );
       console.log(chalk.yellow('   Run: caws diagnose --fix to apply fixes\n'));
     } else if (options.fix) {
       const fixResults = await applyAutoFixes(results);
-      
+
       if (fixResults.applied > 0) {
         console.log(chalk.green('✅ Auto-fixes applied successfully'));
         console.log(chalk.blue('💡 Run: caws validate to verify fixes\n'));
       }
-      
+
       if (fixResults.skipped > 0) {
-        console.log(chalk.yellow(`⚠️  ${fixResults.skipped} issue${fixResults.skipped > 1 ? 's' : ''} require manual intervention\n`));
+        console.log(
+          chalk.yellow(
+            `⚠️  ${fixResults.skipped} issue${fixResults.skipped > 1 ? 's' : ''} require manual intervention\n`
+          )
+        );
       }
     }
-    
+
     // Provide next steps
     const issueCount = results.filter((r) => !r.passed && !r.skipped).length;
-    
+
     if (issueCount === 0) {
       console.log(chalk.blue('📚 Next steps:'));
       console.log(chalk.blue('   • Run: caws status to view project health'));
       console.log(chalk.blue('   • Run: caws validate to check working spec'));
       console.log(chalk.blue('   • Run: node apps/tools/caws/gates.js for quality gates'));
     }
-    
   } catch (error) {
     console.error(chalk.red('\n❌ Error running diagnosis:'), error.message);
     console.error(chalk.yellow('\n💡 Try: caws status for basic health check'));
@@ -462,4 +470,3 @@ module.exports = {
   checkTestFiles,
   checkCAWSTools,
 };
-

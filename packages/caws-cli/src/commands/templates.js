@@ -72,13 +72,13 @@ function getTemplateDir() {
     path.join(process.cwd(), 'packages/caws-cli/templates'),
     path.join(process.cwd(), 'templates'),
   ];
-  
+
   for (const testPath of possiblePaths) {
     if (fs.existsSync(testPath)) {
       return testPath;
     }
   }
-  
+
   return null;
 }
 
@@ -89,19 +89,19 @@ function getTemplateDir() {
 function getAvailableTemplates() {
   const templateDir = getTemplateDir();
   const available = {};
-  
+
   for (const [id, template] of Object.entries(BUILTIN_TEMPLATES)) {
-    const templatePath = templateDir 
+    const templatePath = templateDir
       ? path.join(templateDir, template.path.replace('templates/', ''))
       : null;
-    
+
     available[id] = {
       ...template,
       available: templatePath ? fs.existsSync(templatePath) : false,
       fullPath: templatePath,
     };
   }
-  
+
   return available;
 }
 
@@ -111,7 +111,7 @@ function getAvailableTemplates() {
 function listTemplates() {
   const templates = getAvailableTemplates();
   const categories = {};
-  
+
   // Group by category
   for (const [id, template] of Object.entries(templates)) {
     if (!categories[template.category]) {
@@ -119,13 +119,13 @@ function listTemplates() {
     }
     categories[template.category].push({ id, ...template });
   }
-  
+
   console.log(chalk.bold.cyan('\n📦 Available CAWS Templates\n'));
-  
+
   // Display by category
   for (const [category, categoryTemplates] of Object.entries(categories)) {
     console.log(chalk.bold.white(`${category}:`));
-    
+
     for (const template of categoryTemplates) {
       const status = template.available ? chalk.green('✅') : chalk.gray('⏳');
       console.log(`${status} ${chalk.bold(template.id.padEnd(25))} - ${template.description}`);
@@ -134,18 +134,18 @@ function listTemplates() {
       console.log('');
     }
   }
-  
+
   const totalAvailable = Object.values(templates).filter((t) => t.available).length;
   const totalTemplates = Object.keys(templates).length;
-  
+
   if (totalAvailable < totalTemplates) {
     console.log(chalk.yellow(`\n⏳ ${totalTemplates - totalAvailable} templates coming soon`));
   }
-  
+
   console.log(chalk.blue('\n📚 Learn more:'));
   console.log(chalk.blue('   caws templates --help'));
   console.log(chalk.blue('   docs/guides/template-usage.md'));
-  
+
   console.log('');
 }
 
@@ -156,7 +156,7 @@ function listTemplates() {
 function showTemplateInfo(templateId) {
   const templates = getAvailableTemplates();
   const template = templates[templateId];
-  
+
   if (!template) {
     console.error(chalk.red(`\n❌ Template not found: ${templateId}`));
     console.error(chalk.yellow('\n💡 Available templates:'));
@@ -164,29 +164,33 @@ function showTemplateInfo(templateId) {
     console.error(chalk.yellow('\n💡 Try: caws templates list'));
     process.exit(1);
   }
-  
+
   console.log(chalk.bold.cyan(`\n📦 Template: ${template.name}\n`));
   console.log(chalk.white(`Description: ${template.description}`));
   console.log(chalk.white(`Category: ${template.category}`));
   console.log(chalk.white(`Risk Tier: ${template.tier}`));
-  console.log(chalk.white(`Status: ${template.available ? chalk.green('Available') : chalk.yellow('Coming Soon')}`));
-  
+  console.log(
+    chalk.white(
+      `Status: ${template.available ? chalk.green('Available') : chalk.yellow('Coming Soon')}`
+    )
+  );
+
   console.log(chalk.bold.white('\nFeatures:'));
   template.features.forEach((feature) => {
     console.log(chalk.gray(`   • ${feature}`));
   });
-  
+
   console.log(chalk.bold.white('\nUsage:'));
   console.log(chalk.cyan(`   caws init --template=${templateId} my-project`));
   console.log(chalk.cyan(`   cd my-project`));
   console.log(chalk.cyan(`   npm install`));
   console.log(chalk.cyan(`   npm test`));
-  
+
   if (template.available && template.fullPath) {
     console.log(chalk.bold.white('\nTemplate Location:'));
     console.log(chalk.gray(`   ${template.fullPath}`));
   }
-  
+
   console.log('');
 }
 
@@ -201,7 +205,7 @@ async function templatesCommand(subcommand = 'list', options = {}) {
       case 'list':
         listTemplates();
         break;
-        
+
       case 'info':
         if (!options.name) {
           console.error(chalk.red('\n❌ Template name required'));
@@ -211,7 +215,7 @@ async function templatesCommand(subcommand = 'list', options = {}) {
         }
         showTemplateInfo(options.name);
         break;
-        
+
       default:
         listTemplates();
     }
@@ -229,4 +233,3 @@ module.exports = {
   getAvailableTemplates,
   BUILTIN_TEMPLATES,
 };
-
