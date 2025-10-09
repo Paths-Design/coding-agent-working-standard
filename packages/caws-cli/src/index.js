@@ -39,6 +39,8 @@ const { diagnoseCommand } = require('./commands/diagnose');
 const { evaluateCommand } = require('./commands/evaluate');
 const { iterateCommand } = require('./commands/iterate');
 const { waiversCommand } = require('./commands/waivers');
+const { workflowCommand } = require('./commands/workflow');
+const { qualityMonitorCommand } = require('./commands/quality-monitor');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -191,6 +193,24 @@ waiversCmd
   .option('--reason <reason>', 'Revocation reason')
   .option('-v, --verbose', 'Show detailed error information', false)
   .action((id, options) => waiversCommand('revoke', { ...options, id }));
+
+// Workflow command group
+const workflowCmd = program
+  .command('workflow <type>')
+  .description('Get workflow-specific guidance for development tasks')
+  .option('--step <number>', 'Current step in workflow', '1')
+  .option('--current-state <json>', 'Current implementation state as JSON', '{}')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((type, options) => workflowCommand(type, options));
+
+// Quality Monitor command
+program
+  .command('quality-monitor <action>')
+  .description('Monitor code quality impact in real-time')
+  .option('--files <files>', 'Files affected (comma-separated)')
+  .option('--context <json>', 'Additional context as JSON', '{}')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action(qualityMonitorCommand);
 
 // Tool command
 program

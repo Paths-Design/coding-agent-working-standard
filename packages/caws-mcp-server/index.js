@@ -121,6 +121,14 @@ class CawsMcpServer extends Server {
           return await this.handleStatus(args);
         case 'caws_diagnose':
           return await this.handleDiagnose(args);
+        case 'caws_progress_update':
+          return await this.handleProgressUpdate(args);
+        case 'caws_waiver_create':
+          return await this.handleWaiverCreate(args);
+        case 'caws_waivers_list':
+          return await this.handleWaiversList(args);
+        case 'caws_help':
+          return await this.handleHelp(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -465,34 +473,53 @@ class CawsMcpServer extends Server {
 
   async handleWorkflowGuidance(args) {
     const { workflowType, currentStep, context } = args;
+    const workingDirectory = args.workingDirectory || process.cwd();
 
-    // Generate workflow-specific guidance
-    const guidance = this.generateWorkflowGuidance(workflowType, currentStep, context);
+    try {
+      const contextArg = context ? `--current-state ${JSON.stringify(JSON.stringify(context))}` : '';
+      const command = `node ${path.join(__dirname, '../cli/index.js')} workflow ${workflowType} --step ${currentStep} ${contextArg}`;
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(guidance, null, 2),
-        },
-      ],
-    };
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [{ type: 'text', text: result }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: `Workflow guidance failed: ${error.message}` }],
+        isError: true,
+      };
+    }
   }
 
   async handleQualityMonitor(args) {
     const { action, files, context } = args;
+    const workingDirectory = args.workingDirectory || process.cwd();
 
-    // Analyze the action and provide quality monitoring feedback
-    const feedback = await this.analyzeQualityImpact(action, files, context);
+    try {
+      const filesArg = files?.length ? `--files ${files.join(',')}` : '';
+      const contextArg = context ? `--context ${JSON.stringify(JSON.stringify(context))}` : '';
+      const command = `node ${path.join(__dirname, '../cli/index.js')} quality-monitor ${action} ${filesArg} ${contextArg}`;
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(feedback, null, 2),
-        },
-      ],
-    };
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [{ type: 'text', text: result }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: `Quality monitoring failed: ${error.message}` }],
+        isError: true,
+      };
+    }
   }
 
   async handleTestAnalysis(args) {
@@ -504,16 +531,16 @@ class CawsMcpServer extends Server {
 
     try {
       // Execute test analysis command and return results
-      const result = await execCommand(
-        `node packages/caws-cli/dist/index.js test-analysis ${subcommand}`,
-        {
-          cwd: workingDirectory,
-          timeout: 30000,
-        }
-      );
+      const command = `node ${path.join(__dirname, '../cli/index.js')} test-analysis ${subcommand}`;
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+        timeout: 30000,
+      });
 
       return {
-        content: [{ type: 'text', text: result.stdout || result.stderr || 'Analysis completed' }],
+        content: [{ type: 'text', text: result }],
       };
     } catch (error) {
       return {
@@ -581,170 +608,6 @@ class CawsMcpServer extends Server {
         isError: true,
       };
     }
-  }
-
-  generateWorkflowGuidance(workflowType, currentStep, _context) {
-    const workflowTemplates = {
-      tdd: {
-        steps: [
-          'Define requirements and acceptance criteria',
-          'Write failing test',
-          'Implement minimal code to pass test',
-          'Run CAWS validation',
-          'Refactor while maintaining tests',
-          'Repeat for next requirement',
-        ],
-        guidance: {
-          1: 'Start by clearly defining what the code should do. Use CAWS working spec to document requirements.',
-          2: 'Write a test that captures the desired behavior but will initially fail.',
-          3: 'Implement only the minimal code needed to make the test pass.',
-          4: 'Run CAWS evaluation to ensure quality standards are maintained.',
-          5: 'Improve code structure while keeping all tests passing.',
-          6: 'Move to the next requirement and repeat the cycle.',
-        },
-      },
-      refactor: {
-        steps: [
-          'Establish baseline quality metrics',
-          'Apply refactoring changes',
-          'Run comprehensive validation',
-          'Address any quality gate failures',
-          'Document changes and rationale',
-        ],
-        guidance: {
-          1: 'Run CAWS evaluation to establish current quality baseline.',
-          2: 'Make your refactoring changes incrementally.',
-          3: 'Run full CAWS validation to ensure no quality degradation.',
-          4: 'Address any failing quality gates with waivers if necessary.',
-          5: 'Update documentation and provenance records.',
-        },
-      },
-      feature: {
-        steps: [
-          'Create working specification',
-          'Design and plan implementation',
-          'Implement core functionality',
-          'Add comprehensive testing',
-          'Run full quality validation',
-          'Prepare for integration',
-        ],
-        guidance: {
-          1: 'Define clear requirements, acceptance criteria, and risk assessment.',
-          2: 'Break down the feature into manageable tasks.',
-          3: 'Implement core functionality with error handling.',
-          4: 'Add unit, integration, and contract tests.',
-          5: 'Run complete CAWS validation and address issues.',
-          6: 'Ensure documentation and provenance are complete.',
-        },
-      },
-    };
-
-    const template = workflowTemplates[workflowType];
-    if (!template) {
-      return {
-        error: `Unknown workflow type: ${workflowType}`,
-        available_types: Object.keys(workflowTemplates),
-      };
-    }
-
-    const currentGuidance =
-      template.guidance[currentStep] || 'Continue with the next logical step.';
-    const nextStep = currentStep < template.steps.length ? currentStep + 1 : null;
-
-    return {
-      workflow_type: workflowType,
-      current_step: currentStep,
-      total_steps: template.steps.length,
-      step_description: template.steps[currentStep - 1] || 'Unknown step',
-      guidance: currentGuidance,
-      next_step: nextStep,
-      next_step_description: nextStep ? template.steps[nextStep - 1] : null,
-      all_steps: template.steps,
-      caws_recommendations: this.getWorkflowCawsRecommendations(workflowType, currentStep),
-    };
-  }
-
-  getWorkflowCawsRecommendations(workflowType, currentStep) {
-    const recommendations = {
-      tdd: {
-        1: ['caws agent evaluate --feedback-only', 'Ensure spec completeness'],
-        2: ['Write failing test first', 'caws validate for basic checks'],
-        3: ['Implement minimal solution', 'Run tests to verify'],
-        4: ['caws agent evaluate', 'Address any quality issues'],
-        5: ['Refactor safely', 'Re-run CAWS validation'],
-        6: ['caws agent iterate for next steps', 'Continue TDD cycle'],
-      },
-      refactor: {
-        1: ['caws agent evaluate', 'Establish quality baseline'],
-        2: ['Apply changes incrementally', 'caws validate frequently'],
-        3: ['caws agent evaluate', 'Full quality assessment'],
-        4: ['Create waivers if needed', 'Document rationale'],
-        5: ['Update provenance', 'caws provenance update'],
-      },
-      feature: {
-        1: ['caws init --interactive', 'Create comprehensive spec'],
-        2: ['caws agent iterate', 'Get implementation guidance'],
-        3: ['caws agent evaluate', 'Validate progress'],
-        4: ['Add comprehensive tests', 'caws cicd analyze'],
-        5: ['caws validate', 'Final quality gates'],
-        6: ['caws provenance generate', 'Prepare for integration'],
-      },
-    };
-
-    return recommendations[workflowType]?.[currentStep] || ['caws agent evaluate'];
-  }
-
-  async analyzeQualityImpact(action, files, context) {
-    const analysis = {
-      action,
-      files_affected: files?.length || 0,
-      quality_impact: 'unknown',
-      recommendations: [],
-      risk_level: 'low',
-    };
-
-    // Analyze based on action type
-    switch (action) {
-      case 'file_saved':
-        analysis.quality_impact = 'code_change';
-        analysis.recommendations = [
-          'Run CAWS validation: caws agent evaluate',
-          'Check for linting issues',
-          'Verify test coverage if applicable',
-        ];
-        break;
-
-      case 'code_edited':
-        analysis.quality_impact = 'implementation_change';
-        analysis.recommendations = [
-          'Run unit tests for affected files',
-          'Check CAWS quality gates',
-          'Update documentation if public APIs changed',
-        ];
-        analysis.risk_level = files?.length > 5 ? 'medium' : 'low';
-        break;
-
-      case 'test_run':
-        analysis.quality_impact = 'validation_complete';
-        analysis.recommendations = [
-          'Review test results',
-          'Address any failing tests',
-          'Update CAWS working spec if needed',
-        ];
-        break;
-
-      default:
-        analysis.quality_impact = 'unknown_action';
-        analysis.recommendations = ['Run CAWS evaluation to assess impact'];
-    }
-
-    // Add context-specific recommendations
-    if (context?.project_tier <= 2) {
-      analysis.recommendations.unshift('High-quality project: Run comprehensive validation');
-      analysis.risk_level = 'high';
-    }
-
-    return analysis;
   }
 
   findWorkingSpecs() {
@@ -987,6 +850,326 @@ class CawsMcpServer extends Server {
       };
     }
   }
+
+  async handleProgressUpdate(args) {
+    const {
+      specFile = '.caws/working-spec.yaml',
+      criterionId,
+      status,
+      testsWritten,
+      testsPassing,
+      coverage,
+      workingDirectory = process.cwd(),
+    } = args;
+
+    try {
+      // Read the current working spec
+      const specPath = path.isAbsolute(specFile) ? specFile : path.join(workingDirectory, specFile);
+
+      if (!fs.existsSync(specPath)) {
+        throw new Error(`Working spec not found: ${specPath}`);
+      }
+
+      const specContent = fs.readFileSync(specPath, 'utf8');
+      const spec = JSON.parse(specContent); // Assume JSON for now, can extend to YAML
+
+      // Find and update the acceptance criterion
+      const criterion = spec.acceptance?.find((a) => a.id === criterionId);
+      if (!criterion) {
+        throw new Error(`Acceptance criterion not found: ${criterionId}`);
+      }
+
+      // Update the criterion with new progress data
+      if (status) criterion.status = status;
+      if (testsWritten !== undefined || testsPassing !== undefined) {
+        criterion.tests = criterion.tests || {};
+        if (testsWritten !== undefined) criterion.tests.written = testsWritten;
+        if (testsPassing !== undefined) criterion.tests.passing = testsPassing;
+      }
+      if (coverage !== undefined) criterion.coverage = coverage;
+      criterion.last_updated = new Date().toISOString();
+
+      // Write back the updated spec
+      fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                message: `Updated progress for acceptance criterion ${criterionId}`,
+                updatedFields: {
+                  status,
+                  testsWritten,
+                  testsPassing,
+                  coverage,
+                  lastUpdated: criterion.last_updated,
+                },
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws progress update',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleWaiversList(args) {
+    const { status = 'active', workingDirectory = process.cwd() } = args;
+
+    try {
+      const command = `node ${path.join(__dirname, '../cli/index.js')} waivers list`;
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                waivers: this.parseWaiversOutput(result),
+                filter: status,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws waivers list',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  parseWaiversOutput(output) {
+    // Parse the text output from waivers list command
+    const waivers = [];
+    const lines = output.split('\n');
+
+    let currentWaiver = null;
+    for (const line of lines) {
+      if (line.includes('🔖 ') && line.includes(':')) {
+        if (currentWaiver) {
+          waivers.push(currentWaiver);
+        }
+        const match = line.match(/🔖 ([^:]+): (.+)/);
+        if (match) {
+          currentWaiver = {
+            id: match[1],
+            title: match[2],
+            status: line.includes('✅') ? 'active' : line.includes('⚠️') ? 'expired' : 'revoked',
+          };
+        }
+      } else if (currentWaiver && line.includes('Reason:')) {
+        currentWaiver.reason = line.split('Reason:')[1].trim();
+      } else if (currentWaiver && line.includes('Gates:')) {
+        currentWaiver.gates = line.split('Gates:')[1].trim().split(', ');
+      } else if (currentWaiver && line.includes('Expires:')) {
+        currentWaiver.expires = line.split('Expires:')[1].trim().split(' ')[0];
+      }
+    }
+
+    if (currentWaiver) {
+      waivers.push(currentWaiver);
+    }
+
+    return waivers;
+  }
+
+  async handleHelp(args) {
+    const { tool, category } = args;
+
+    if (tool) {
+      // Show help for specific tool
+      const toolDef = CAWS_TOOLS.find((t) => t.name === tool);
+      if (!toolDef) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  error: `Tool not found: ${tool}`,
+                  available_tools: CAWS_TOOLS.map((t) => t.name),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                tool: toolDef.name,
+                description: toolDef.description,
+                parameters: toolDef.inputSchema.properties,
+                required: toolDef.inputSchema.required || [],
+                examples: this.getToolExamples(toolDef.name),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    if (category) {
+      // Show tools by category
+      const categories = {
+        'project-management': ['caws_init', 'caws_scaffold', 'caws_status'],
+        validation: ['caws_validate', 'caws_evaluate', 'caws_iterate'],
+        'quality-gates': ['caws_diagnose', 'caws_hooks', 'caws_provenance'],
+        development: ['caws_workflow_guidance', 'caws_quality_monitor', 'caws_progress_update'],
+        testing: ['caws_test_analysis'],
+        compliance: ['caws_waiver_create'],
+      };
+
+      const tools = categories[category] || [];
+      const toolDetails = CAWS_TOOLS.filter((t) => tools.includes(t.name));
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                category,
+                tools: toolDetails.map((t) => ({
+                  name: t.name,
+                  description: t.description,
+                })),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    // Show all tools overview
+    const categories = {
+      '🚀 Project Setup': ['caws_init', 'caws_scaffold'],
+      '🔍 Validation & Status': ['caws_validate', 'caws_evaluate', 'caws_iterate', 'caws_status'],
+      '🩺 Health & Diagnostics': ['caws_diagnose', 'caws_hooks', 'caws_provenance'],
+      '⚙️ Development Workflow': [
+        'caws_workflow_guidance',
+        'caws_quality_monitor',
+        'caws_progress_update',
+      ],
+      '🧪 Testing & Analysis': ['caws_test_analysis'],
+      '📋 Compliance & Waivers': ['caws_waiver_create'],
+    };
+
+    const help = {
+      overview: 'CAWS MCP Server provides comprehensive development workflow management tools',
+      categories: Object.entries(categories).map(([categoryName, toolNames]) => ({
+        category: categoryName,
+        tools: toolNames.map((name) => {
+          const tool = CAWS_TOOLS.find((t) => t.name === name);
+          return {
+            name,
+            description: tool?.description || 'Unknown tool',
+          };
+        }),
+      })),
+      usage: {
+        get_all_tools: 'Call without parameters to see this overview',
+        get_tool_help: 'Use tool parameter to get detailed help for a specific tool',
+        get_category_help: 'Use category parameter to see tools by category',
+        available_categories: [
+          'project-management',
+          'validation',
+          'quality-gates',
+          'development',
+          'testing',
+          'compliance',
+        ],
+      },
+    };
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(help, null, 2),
+        },
+      ],
+    };
+  }
+
+  getToolExamples(toolName) {
+    const examples = {
+      caws_validate: [
+        'caws_validate({ specFile: ".caws/working-spec.yaml" })',
+        'caws_validate({ workingDirectory: "/path/to/project" })',
+      ],
+      caws_iterate: [
+        'caws_iterate({ currentState: "Starting implementation" })',
+        'caws_iterate({ specFile: "custom-spec.yaml", currentState: "Tests written" })',
+      ],
+      caws_progress_update: [
+        'caws_progress_update({ criterionId: "A1", status: "in_progress" })',
+        'caws_progress_update({ criterionId: "A1", testsWritten: 5, testsPassing: 3, coverage: 75.5 })',
+      ],
+      caws_diagnose: [
+        'caws_diagnose({})',
+        'caws_diagnose({ fix: true, workingDirectory: "/path/to/project" })',
+      ],
+    };
+
+    return examples[toolName] || ['No examples available'];
+  }
 }
 
 // Tool definitions for MCP
@@ -1159,6 +1342,25 @@ const CAWS_TOOLS = [
     },
   },
   {
+    name: 'caws_waivers_list',
+    description: 'List all quality gate waivers',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['active', 'expired', 'revoked', 'all'],
+          description: 'Filter waivers by status',
+          default: 'active',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for waivers',
+        },
+      },
+    },
+  },
+  {
     name: 'caws_workflow_guidance',
     description: 'Get workflow-specific guidance for development tasks',
     inputSchema: {
@@ -1327,6 +1529,71 @@ const CAWS_TOOLS = [
         workingDirectory: {
           type: 'string',
           description: 'Working directory for diagnostics',
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_progress_update',
+    description: 'Update progress on acceptance criteria in working spec',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        specFile: {
+          type: 'string',
+          description: 'Path to working spec file',
+          default: '.caws/working-spec.yaml',
+        },
+        criterionId: {
+          type: 'string',
+          description: 'ID of the acceptance criterion to update (e.g., "A1")',
+        },
+        status: {
+          type: 'string',
+          enum: ['pending', 'in_progress', 'completed'],
+          description: 'Current status of the criterion',
+        },
+        testsWritten: {
+          type: 'number',
+          description: 'Number of tests written for this criterion',
+        },
+        testsPassing: {
+          type: 'number',
+          description: 'Number of tests currently passing',
+        },
+        coverage: {
+          type: 'number',
+          description: 'Code coverage percentage for this criterion',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for the update',
+        },
+      },
+      required: ['criterionId'],
+    },
+  },
+  {
+    name: 'caws_help',
+    description: 'Get help and documentation for CAWS MCP tools',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool: {
+          type: 'string',
+          description: 'Specific tool name to get detailed help for',
+        },
+        category: {
+          type: 'string',
+          enum: [
+            'project-management',
+            'validation',
+            'quality-gates',
+            'development',
+            'testing',
+            'compliance',
+          ],
+          description: 'Category of tools to show',
         },
       },
     },
