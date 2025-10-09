@@ -90,7 +90,9 @@ function analyzeQualityImpact(action, files = [], context = {}) {
 
       // Add context-specific recommendations for high-risk projects
       if (projectTier <= 2) {
-        analysis.recommendations.unshift('High-risk project (Tier ' + projectTier + '): Run comprehensive validation');
+        analysis.recommendations.unshift(
+          'High-risk project (Tier ' + projectTier + '): Run comprehensive validation'
+        );
         if (analysis.risk_level === 'low') {
           analysis.risk_level = 'medium';
         } else if (analysis.risk_level === 'medium') {
@@ -113,10 +115,7 @@ function analyzeQualityImpact(action, files = [], context = {}) {
           'Contract tests passing (if applicable)',
         ];
       } else {
-        analysis.quality_gates = [
-          'Branch coverage ≥ 70%',
-          'Mutation score ≥ 30%',
-        ];
+        analysis.quality_gates = ['Branch coverage ≥ 70%', 'Mutation score ≥ 30%'];
       }
     }
   } catch (error) {
@@ -142,18 +141,18 @@ async function qualityMonitorCommand(action, options = {}) {
     // Parse files if provided
     let files = [];
     if (options.files) {
-      files = typeof options.files === 'string' 
-        ? options.files.split(',').map((f) => f.trim())
-        : options.files;
+      files =
+        typeof options.files === 'string'
+          ? options.files.split(',').map((f) => f.trim())
+          : options.files;
     }
 
     // Parse context if provided
     let context = {};
     if (options.context) {
       try {
-        context = typeof options.context === 'string' 
-          ? JSON.parse(options.context)
-          : options.context;
+        context =
+          typeof options.context === 'string' ? JSON.parse(options.context) : options.context;
       } catch (e) {
         console.warn(chalk.yellow('⚠️  Invalid context JSON, ignoring'));
       }
@@ -264,4 +263,3 @@ module.exports = {
   qualityMonitorCommand,
   analyzeQualityImpact,
 };
-
