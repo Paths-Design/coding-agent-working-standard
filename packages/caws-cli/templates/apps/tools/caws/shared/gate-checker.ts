@@ -61,6 +61,134 @@ export class CawsGateChecker extends CawsBaseTool {
   }
 
   /**
+   * Auto-detect the correct working directory for coverage/mutation reports in monorepos
+   */
+  private findReportDirectory(startPath: string = this.getWorkingDirectory()): string {
+    // Priority 1: Check if the current directory has the reports or test results
+    if (this.hasCoverageReports(startPath) || this.hasMutationReports(startPath) || this.hasTestResults(startPath)) {
+      return startPath;
+    }
+
+    // Priority 2: Check for npm workspaces configuration
+    const packageJsonPath = path.join(startPath, 'package.json');
+    if (this.pathExists(packageJsonPath)) {
+      try {
+        const packageJson = this.readJsonFile<any>(packageJsonPath);
+        if (packageJson?.workspaces) {
+          const workspaces = packageJson.workspaces;
+
+          // Handle workspace patterns (e.g., ["packages/*", "iterations/*"])
+          for (const wsPattern of workspaces) {
+            if (wsPattern.includes('*')) {
+              const baseDir = wsPattern.split('*')[0];
+              const fullBaseDir = path.join(startPath, baseDir);
+
+              if (this.pathExists(fullBaseDir)) {
+                const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+                for (const entry of entries) {
+                  if (entry.isDirectory()) {
+                    const wsPath = path.join(fullBaseDir, entry.name);
+                    if (this.hasCoverageReports(wsPath) || this.hasMutationReports(wsPath) || this.hasTestResults(wsPath)) {
+                      return wsPath;
+                    }
+                  }
+                }
+              }
+            } else {
+              // Direct workspace path
+              const wsPath = path.join(startPath, wsPattern);
+              if (this.hasCoverageReports(wsPath) || this.hasMutationReports(wsPath) || this.hasTestResults(wsPath)) {
+                return wsPath;
+              }
+            }
+          }
+        }
+
+        // Priority 3: If no reports found in workspaces, look for workspaces with test scripts
+        if (packageJson?.workspaces) {
+          for (const wsPattern of workspaces) {
+            if (wsPattern.includes('*')) {
+              const baseDir = wsPattern.split('*')[0];
+              const fullBaseDir = path.join(startPath, baseDir);
+
+              if (this.pathExists(fullBaseDir)) {
+                const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+                for (const entry of entries) {
+                  if (entry.isDirectory()) {
+                    const wsPath = path.join(fullBaseDir, entry.name);
+                    if (this.hasTestScript(wsPath)) {
+                      // Found a workspace with tests, prefer this even without reports
+                      return wsPath;
+                    }
+                  }
+                }
+              }
+            } else {
+              const wsPath = path.join(startPath, wsPattern);
+              if (this.hasTestScript(wsPath)) {
+                return wsPath;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Ignore workspace parsing errors
+      }
+    }
+
+    // Fall back to original working directory
+    return startPath;
+  }
+
+  /**
+   * Check if a directory has coverage reports
+   */
+  private hasCoverageReports(dirPath: string): boolean {
+    const coveragePath = path.join(dirPath, 'coverage', 'coverage-final.json');
+    return this.pathExists(coveragePath);
+  }
+
+  /**
+   * Check if a directory has mutation reports
+   */
+  private hasMutationReports(dirPath: string): boolean {
+    const mutationPath = path.join(dirPath, 'reports', 'mutation', 'mutation.json');
+    return this.pathExists(mutationPath);
+  }
+
+  /**
+   * Check if a directory has test results
+   */
+  private hasTestResults(dirPath: string): boolean {
+    const testResultsPath = path.join(dirPath, 'test-results');
+    if (this.pathExists(testResultsPath)) {
+      try {
+        const entries = fs.readdirSync(testResultsPath);
+        return entries.some(entry => entry.endsWith('.json') || entry.endsWith('.xml'));
+      } catch (error) {
+        // Ignore read errors
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Check if a directory has a package.json with test scripts
+   */
+  private hasTestScript(dirPath: string): boolean {
+    const packageJsonPath = path.join(dirPath, 'package.json');
+    if (this.pathExists(packageJsonPath)) {
+      try {
+        const packageJson = this.readJsonFile<any>(packageJsonPath);
+        return !!(packageJson?.scripts?.test);
+      } catch (error) {
+        // Ignore parse errors
+      }
+    }
+    return false;
+  }
+
+  /**
    * Check if a waiver applies to the given gate
    */
   private async checkWaiver(
@@ -223,10 +351,11 @@ export class CawsGateChecker extends CawsBaseTool {
         };
       }
 
-      const coveragePath = path.join(
-        options.workingDirectory || this.getWorkingDirectory(),
-        'coverage/coverage-final.json'
+      // Auto-detect the correct directory for coverage reports
+      const reportDir = this.findReportDirectory(
+        options.workingDirectory || this.getWorkingDirectory()
       );
+      const coveragePath = path.join(reportDir, 'coverage', 'coverage-final.json');
 
       if (!this.pathExists(coveragePath)) {
         return {
@@ -234,8 +363,42 @@ export class CawsGateChecker extends CawsBaseTool {
           score: 0,
           details: {
             error: 'Coverage report not found. Run tests with coverage first.',
+            searched_paths: [
+              path.join(reportDir, 'coverage', 'coverage-final.json'),
+              path.join(this.getWorkingDirectory(), 'coverage', 'coverage-final.json'),
+            ],
+            expected_format: 'Istanbul coverage format (coverage-final.json)',
+            expected_schema: {
+              description: 'JSON object with coverage data by file',
+              example: {
+                '/path/to/file.js': {
+                  statementMap: { /* ... */ },
+                  fnMap: { /* ... */ },
+                  branchMap: { /* ... */ },
+                  s: { /* hit counts */ },
+                  f: { /* function hits */ },
+                  b: { /* branch hits */ },
+                }
+              }
+            },
+            run_command: 'npm test -- --coverage --coverageReporters=json',
+            alternative_commands: [
+              'npm run test:coverage',
+              'jest --coverage --coverageReporters=json',
+              'vitest run --coverage'
+            ],
+            workspace_hint: reportDir !== this.getWorkingDirectory()
+              ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
+              : 'Run from workspace directory if using monorepo',
+            waiver_available: true,
+            waiver_suggestion:
+              'If this is an exceptional case, consider creating a coverage waiver',
+            waiver_command:
+              'caws waivers create --title="Coverage waiver" --reason=emergency_hotfix --gates=coverage',
           },
-          errors: ['Coverage report not found'],
+          errors: [
+            `Coverage report not found at ${path.relative(this.getWorkingDirectory(), coveragePath)}`,
+          ],
         };
       }
 
@@ -356,10 +519,11 @@ export class CawsGateChecker extends CawsBaseTool {
         };
       }
 
-      const mutationPath = path.join(
-        options.workingDirectory || this.getWorkingDirectory(),
-        'reports/mutation/mutation.json'
+      // Auto-detect the correct directory for mutation reports
+      const reportDir = this.findReportDirectory(
+        options.workingDirectory || this.getWorkingDirectory()
       );
+      const mutationPath = path.join(reportDir, 'reports', 'mutation', 'mutation.json');
 
       if (!this.pathExists(mutationPath)) {
         return {
@@ -367,8 +531,40 @@ export class CawsGateChecker extends CawsBaseTool {
           score: 0,
           details: {
             error: 'Mutation report not found. Run mutation tests first.',
+            searched_paths: [
+              path.join(reportDir, 'reports', 'mutation', 'mutation.json'),
+              path.join(this.getWorkingDirectory(), 'reports', 'mutation', 'mutation.json'),
+            ],
+            expected_format: 'Stryker mutation testing JSON report',
+            expected_schema: {
+              description: 'JSON object with mutation testing results',
+              example: {
+                files: { /* file-specific results */ },
+                testFiles: { /* test file results */ },
+                mutants: [{ /* mutant details */ }],
+                metrics: {
+                  killed: 85,
+                  survived: 5,
+                  timeout: 2,
+                  totalDetected: 92,
+                  totalUndetected: 0,
+                  totalValid: 92
+                }
+              }
+            },
+            run_command: 'npx stryker run',
+            alternative_commands: [
+              'npm run test:mutation',
+              'npx stryker run --configFile stryker.conf.json',
+              'yarn mutation:test'
+            ],
+            workspace_hint: reportDir !== this.getWorkingDirectory()
+              ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
+              : 'Run from workspace directory if using monorepo',
           },
-          errors: ['Mutation report not found'],
+          errors: [
+            `Mutation report not found at ${path.relative(this.getWorkingDirectory(), mutationPath)}`,
+          ],
         };
       }
 
@@ -439,17 +635,39 @@ export class CawsGateChecker extends CawsBaseTool {
         };
       }
 
-      const contractResultsPath = path.join(
-        options.workingDirectory || this.getWorkingDirectory(),
-        'test-results/contract-results.json'
+      // Auto-detect the correct directory for contract test results
+      const reportDir = this.findReportDirectory(
+        options.workingDirectory || this.getWorkingDirectory()
       );
+      const contractResultsPath = path.join(reportDir, 'test-results', 'contract-results.json');
 
       if (!this.pathExists(contractResultsPath)) {
         return {
           passed: false,
           score: 0,
-          details: { error: 'Contract test results not found' },
-          errors: ['Contract tests not run or results not found'],
+          details: {
+            error: 'Contract test results not found',
+            searched_paths: [
+              path.join(reportDir, 'test-results', 'contract-results.json'),
+              path.join(this.getWorkingDirectory(), 'test-results', 'contract-results.json'),
+              path.join(reportDir, '.caws', 'contract-results.json'),
+              path.join(this.getWorkingDirectory(), '.caws', 'contract-results.json'),
+            ],
+            expected_format:
+              'JSON with { tests: [], passed: boolean, numPassed: number, numTotal: number }',
+            example_command:
+              'npm run test:contract -- --json --outputFile=test-results/contract-results.json',
+          },
+          errors: [
+            `Contract test results not found. Searched in: ${[
+              path.relative(
+                this.getWorkingDirectory(),
+                path.join(reportDir, 'test-results', 'contract-results.json')
+              ),
+              'test-results/contract-results.json',
+              '.caws/contract-results.json',
+            ].join(', ')}`,
+          ],
         };
       }
 

@@ -254,6 +254,17 @@ function getLernaWorkspaces(projectDir) {
   }
 }
 
+/**
+ * Check if a dependency exists in hoisted node_modules
+ * @param {string} depName - Dependency name to check
+ * @param {string} projectDir - Project directory path
+ * @returns {boolean} True if dependency found in hoisted node_modules
+ */
+function checkHoistedDependency(depName, projectDir) {
+  const hoistedPath = path.join(projectDir, 'node_modules', depName, 'package.json');
+  return fs.existsSync(hoistedPath);
+}
+
 function getWorkspaceDirectories(projectDir = process.cwd()) {
   const workspaceDirs = [
     ...getNpmWorkspaces(projectDir),
@@ -310,10 +321,23 @@ function checkTypeScriptTestConfig(projectDir = process.cwd()) {
     }
   }
 
+  // Check for ts-jest in workspaces and hoisted node_modules
+  let hasTsJestAnywhere = primaryTestDetection.hasTsJest;
+
+  // If not found in primary workspace, check all workspaces
+  if (!hasTsJestAnywhere) {
+    hasTsJestAnywhere = workspaceResults.some(ws => ws.testDetection.hasTsJest);
+  }
+
+  // If still not found, check hoisted node_modules
+  if (!hasTsJestAnywhere) {
+    hasTsJestAnywhere = checkHoistedDependency('ts-jest', projectDir);
+  }
+
   const needsConfig =
     primaryTsDetection.isTypeScript &&
     primaryTestDetection.framework === 'jest' &&
-    !primaryTestDetection.hasTsJest;
+    !hasTsJestAnywhere;
 
   return {
     ...primaryTsDetection,
@@ -392,6 +416,7 @@ module.exports = {
   getNpmWorkspaces,
   getPnpmWorkspaces,
   getLernaWorkspaces,
+  checkHoistedDependency,
   checkTypeScriptTestConfig,
   generateRecommendations,
   displayTypeScriptDetection,
