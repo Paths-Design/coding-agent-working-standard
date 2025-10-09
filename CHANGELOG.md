@@ -1,3 +1,40 @@
+# [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-09)
+
+
+### Bug Fixes
+
+* **mcp:** add error handling and debug logging to tool/resource handlers ([4cac334](https://github.com/Paths-Design/coding-agent-working-standard/commit/4cac3340d96b73c34b6c1e45fffc1223410dc428))
+* **mcp:** add initialize handler and make tool listing synchronous ([8722e95](https://github.com/Paths-Design/coding-agent-working-standard/commit/8722e952905a1efaa2948bccaaad4899faed4fa0))
+* **mcp:** add server capabilities to MCP SDK constructor ([fb1309b](https://github.com/Paths-Design/coding-agent-working-standard/commit/fb1309b2de08413135456c6dcecd38c179f6d867))
+* **mcp:** convert MCP server to ES modules and fix bundling ([06900d0](https://github.com/Paths-Design/coding-agent-working-standard/commit/06900d026eb5ba8a70050e2eb759e5593131c679))
+* **mcp:** correct bundled CLI path for extension deployment ([2480327](https://github.com/Paths-Design/coding-agent-working-standard/commit/24803271359215ad3b5d8ed1a2b31f71f6db1fbd))
+* **mcp:** update all CLI command paths and names ([2afc486](https://github.com/Paths-Design/coding-agent-working-standard/commit/2afc486cd42796f20645d0d946f1f3d13c559839))
+* **mcp:** use proper MCP SDK schemas for request handlers ([8bbe6b8](https://github.com/Paths-Design/coding-agent-working-standard/commit/8bbe6b82b49ee7e1de59ec7c43fe19191e9274ea))
+* move js-yaml and chalk to dependencies for global install ([3e05031](https://github.com/Paths-Design/coding-agent-working-standard/commit/3e05031139ec046c53ba5e2d9220dcc3c3b73c1c))
+* **vscode:** bundle CLI dependencies from monorepo root ([f1fe37f](https://github.com/Paths-Design/coding-agent-working-standard/commit/f1fe37faa2be19b86699f0cb716f39f8dee9c594))
+* **vscode:** bundle complete CLI node_modules with all transitive deps ([9b9dd8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b9dd8c0a63ea835c2a53f133666e843e7a55f8c))
+* **vscode:** bundle MCP SDK dependencies and fix packaging ([39ac8e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/39ac8e354e4c6b8ca532acb1a84544486c775d30))
+* **vscode:** copy all monorepo node_modules for complete dependency resolution ([1125ddf](https://github.com/Paths-Design/coding-agent-working-standard/commit/1125ddf8bcaf5278dc32974f120db351ab300efb))
+* **vscode:** improve .vscodeignore to prevent monorepo file inclusion ([bfe9a34](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfe9a34b8fa9990f7bff1b307f5368343c31d205))
+
+
+### Features
+
+* add pnpm & lerna workspace support for complete monorepo coverage ([fdc6479](https://github.com/Paths-Design/coding-agent-working-standard/commit/fdc6479f452fa7f8fd6475fccedb0d2e66bc2af0))
+* **cli:** implement esbuild bundling for 95.8% size reduction ([3ef4ee8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3ef4ee881ed17a6ad3b0b0bd84860a87e09db819))
+* **cli:** implement missing CLI commands (evaluate, iterate, waivers) ([7377a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7377a0e27f220e774f2db8f6ba592ec79e0f7a2d))
+* complete P1 Sprint 2 - Trust & Reliability fixes ([a9e8400](https://github.com/Paths-Design/coding-agent-working-standard/commit/a9e84003f9d5430be9619235183edf401c13fcec))
+* complete P1 Sprint 3 - Enhanced Error Context ([6ed118b](https://github.com/Paths-Design/coding-agent-working-standard/commit/6ed118b1933f26153f603ec7e6bed8c7bd4b7b1a))
+* implement comprehensive monitoring system for CAWS ([3d45b49](https://github.com/Paths-Design/coding-agent-working-standard/commit/3d45b498b1b0a64d0a14c6807f156f35c80eae9a))
+* **p1:** achieve true 100% CLI/MCP parity with workflow and quality-monitor commands ([81aa370](https://github.com/Paths-Design/coding-agent-working-standard/commit/81aa3702de31248e563d89537c7063ef81fc579d))
+* **vscode:** add publisher field and improve .vscodeignore for packaging ([7b6ba7e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7b6ba7e1234b75c8a47796bf615845e8926043a8))
+* **vscode:** auto-register MCP server with Cursor on extension activation ([c28b6c9](https://github.com/Paths-Design/coding-agent-working-standard/commit/c28b6c9f27516c02f8d1a15ab346b2a9b57a0a7b))
+
+
+### Performance Improvements
+
+* **mcp:** optimize findWorkingSpecs to eliminate timeout ([436ab63](https://github.com/Paths-Design/coding-agent-working-standard/commit/436ab635438e61e50d78477f2180573b7388739b))
+
 ## [3.3.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.3.1) (2025-10-08)
 
 ### Bug Fixes
