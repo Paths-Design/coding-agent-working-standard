@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
+const { safeAsync, outputResult } = require('../error-handler');
 
 /**
  * Load working specification
@@ -99,6 +100,68 @@ async function loadProvenanceChain() {
 }
 
 /**
+ * Load waiver status
+ * @returns {Promise<Object>} Waiver status
+ */
+async function loadWaiverStatus() {
+  const waiversDir = '.caws/waivers';
+
+  if (!(await fs.pathExists(waiversDir))) {
+    return {
+      exists: false,
+      active: 0,
+      expired: 0,
+      revoked: 0,
+      total: 0,
+    };
+  }
+
+  try {
+    const waiverFiles = await fs.readdir(waiversDir);
+    const yamlFiles = waiverFiles.filter((f) => f.endsWith('.yaml'));
+
+    let active = 0;
+    let expired = 0;
+    let revoked = 0;
+
+    for (const file of yamlFiles) {
+      const waiverPath = path.join(waiversDir, file);
+      const content = await fs.readFile(waiverPath, 'utf8');
+      const waiver = yaml.load(content);
+
+      if (waiver.status === 'revoked') {
+        revoked++;
+      } else if (waiver.status === 'active') {
+        const now = new Date();
+        const expiresAt = new Date(waiver.expires_at);
+        if (now > expiresAt) {
+          expired++;
+        } else {
+          active++;
+        }
+      }
+    }
+
+    return {
+      exists: true,
+      active,
+      expired,
+      revoked,
+      total: active + expired + revoked,
+    };
+  } catch (error) {
+    return {
+      exists: false,
+      active: 0,
+      expired: 0,
+      revoked: 0,
+      total: 0,
+      error: error.message,
+    };
+  }
+}
+
+/**
  * Check quality gates status (simplified)
  * @returns {Promise<Object>} Quality gates status
  */
@@ -138,7 +201,7 @@ function getTimeSince(timestamp) {
  * @param {Object} data - Status data
  */
 function displayStatus(data) {
-  const { spec, hooks, provenance, gates } = data;
+  const { spec, hooks, provenance, waivers, gates } = data;
 
   console.log(chalk.bold.cyan('\n📊 CAWS Project Status'));
   console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
@@ -183,6 +246,26 @@ function displayStatus(data) {
 
   console.log('');
 
+  // Waivers Status
+  if (waivers.exists && waivers.total > 0) {
+    console.log(chalk.green('✅ Quality Gate Waivers'));
+    console.log(
+      chalk.gray(
+        `   ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
+      )
+    );
+    console.log(chalk.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? 's' : ''}`));
+  } else if (waivers.exists) {
+    console.log(chalk.blue('ℹ️  Quality Gate Waivers'));
+    console.log(chalk.gray('   No waivers configured'));
+  } else {
+    console.log(chalk.yellow('⚠️  Quality Gate Waivers'));
+    console.log(chalk.gray('   Waiver system not initialized'));
+    console.log(chalk.yellow('   💡 Run: caws waivers create (when needed)'));
+  }
+
+  console.log('');
+
   // Quality Gates Status
   console.log(chalk.blue('ℹ️  Quality Gates'));
   console.log(chalk.gray(`   ${gates.message}`));
@@ -206,6 +289,9 @@ function displayStatus(data) {
   }
   if (provenance.exists) {
     console.log(chalk.blue('   View provenance: caws provenance show --format=dashboard'));
+  }
+  if (waivers.exists && waivers.total > 0) {
+    console.log(chalk.blue('   View waivers: caws waivers list'));
   }
   console.log(chalk.blue('   Full documentation: docs/agents/full-guide.md'));
 
@@ -244,11 +330,12 @@ function generateSuggestions(data) {
  * @param {Object} options - Command options
  */
 async function statusCommand(options = {}) {
-  try {
+  return safeAsync(async () => {
     // Load all status data
     const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
     const hooks = await checkGitHooks();
     const provenance = await loadProvenanceChain();
+    const waivers = await loadWaiverStatus();
     const gates = await checkQualityGates();
 
     // Display status
@@ -256,13 +343,21 @@ async function statusCommand(options = {}) {
       spec,
       hooks,
       provenance,
+      waivers,
       gates,
     });
-  } catch (error) {
-    console.error(chalk.red('❌ Error checking project status:'), error.message);
-    console.error(chalk.yellow('\n💡 Try: caws validate to check your setup'));
-    process.exit(1);
-  }
+
+    const result = outputResult({
+      command: 'status',
+      spec: spec ? 'loaded' : 'not found',
+      hooks: hooks.installed,
+      provenance: provenance.entries?.length || 0,
+      waivers: waivers.active?.length || 0,
+      gates: gates.passed ? 'passed' : 'failed',
+    });
+
+    return result;
+  }, 'status check', true);
 }
 
 module.exports = {
@@ -270,6 +365,7 @@ module.exports = {
   loadWorkingSpec,
   checkGitHooks,
   loadProvenanceChain,
+  loadWaiverStatus,
   checkQualityGates,
   displayStatus,
   generateSuggestions,

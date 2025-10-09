@@ -41,6 +41,7 @@ const { iterateCommand } = require('./commands/iterate');
 const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
+const { troubleshootCommand } = require('./commands/troubleshoot');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -123,6 +124,7 @@ program
   .command('status')
   .description('Show project health overview')
   .option('-s, --spec <path>', 'Path to working spec file', '.caws/working-spec.yaml')
+  .option('--json', 'Output in JSON format', false)
   .action(statusCommand);
 
 // Templates command
@@ -155,16 +157,17 @@ program
   .action(iterateCommand);
 
 // Waivers command group
-const waiversCmd = program
-  .command('waivers')
-  .description('Manage CAWS quality gate waivers');
+const waiversCmd = program.command('waivers').description('Manage CAWS quality gate waivers');
 
 // Waivers subcommands
 waiversCmd
   .command('create')
   .description('Create a new quality gate waiver')
   .requiredOption('--title <title>', 'Waiver title')
-  .requiredOption('--reason <reason>', 'Reason for waiver (emergency_hotfix, legacy_integration, etc.)')
+  .requiredOption(
+    '--reason <reason>',
+    'Reason for waiver (emergency_hotfix, legacy_integration, etc.)'
+  )
   .requiredOption('--description <description>', 'Detailed description')
   .requiredOption('--gates <gates>', 'Comma-separated list of gates to waive')
   .requiredOption('--expires-at <date>', 'Expiration date (ISO 8601)')
@@ -211,6 +214,13 @@ program
   .option('--context <json>', 'Additional context as JSON', '{}')
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(qualityMonitorCommand);
+
+// Troubleshoot command - temporarily disabled due to registration issue
+// program
+//   .command('troubleshoot [guide]')
+//   .description('Display troubleshooting guides for common CAWS issues')
+//   .option('-l, --list', 'List all available troubleshooting guides', false)
+//   .action(troubleshootCommand);
 
 // Tool command
 program
@@ -369,6 +379,13 @@ program.exitOverride((err) => {
       'scaffold',
       'status',
       'templates',
+      'diagnose',
+      'evaluate',
+      'iterate',
+      'waivers',
+      'workflow',
+      'quality-monitor',
+      'troubleshoot',
       'provenance',
       'hooks',
       'burnup',

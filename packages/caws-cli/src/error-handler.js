@@ -113,19 +113,69 @@ class CAWSError extends Error {
     this.name = 'CAWSError';
     this.category = category || getErrorCategory(message);
     this.suggestions = Array.isArray(suggestions) ? suggestions : [suggestions].filter(Boolean);
+    this.timestamp = new Date();
+    this.executionTime = null;
   }
 }
 
 /**
- * Wrap async operations with consistent error handling
+ * Execution timing utilities
+ */
+class ExecutionTimer {
+  constructor() {
+    this.startTime = null;
+    this.endTime = null;
+  }
+
+  start() {
+    this.startTime = process.hrtime.bigint();
+  }
+
+  end() {
+    this.endTime = process.hrtime.bigint();
+    return this.getDuration();
+  }
+
+  getDuration() {
+    if (!this.startTime || !this.endTime) return 0;
+    const durationNs = Number(this.endTime - this.startTime);
+    return durationNs / 1_000_000; // Convert to milliseconds
+  }
+
+  formatDuration() {
+    const ms = this.getDuration();
+    if (ms < 1000) {
+      return `${Math.round(ms)}ms`;
+    }
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+}
+
+/**
+ * Wrap async operations with consistent error handling and timing
  * @param {Function} operation - Async operation to wrap
  * @param {string} context - Context for error messages
+ * @param {boolean} includeTiming - Whether to include timing in results
  * @returns {Promise<any>} Operation result or throws handled error
  */
-async function safeAsync(operation, context = '') {
+async function safeAsync(operation, context = '', includeTiming = false) {
+  const timer = includeTiming ? new ExecutionTimer() : null;
+  if (timer) timer.start();
+
   try {
-    return await operation();
+    const result = await operation();
+
+    if (includeTiming && timer) {
+      const duration = timer.formatDuration();
+      console.log(chalk.gray(`   (completed in ${duration})`));
+    }
+
+    return result;
   } catch (error) {
+    if (timer) {
+      error.executionTime = timer.formatDuration();
+    }
+
     const category = getErrorCategory(error);
     const enhancedError = new CAWSError(
       `${context}: ${error.message}`,
@@ -133,6 +183,44 @@ async function safeAsync(operation, context = '') {
       getRecoverySuggestions(error, category)
     );
     enhancedError.originalError = error;
+    enhancedError.executionTime = error.executionTime;
+    throw enhancedError;
+  }
+}
+
+/**
+ * Wrap sync operations with timing
+ * @param {Function} operation - Sync operation to wrap
+ * @param {string} context - Context for error messages
+ * @param {boolean} includeTiming - Whether to include timing in results
+ * @returns {any} Operation result or throws handled error
+ */
+function safeSync(operation, context = '', includeTiming = false) {
+  const timer = includeTiming ? new ExecutionTimer() : null;
+  if (timer) timer.start();
+
+  try {
+    const result = operation();
+
+    if (includeTiming && timer) {
+      const duration = timer.formatDuration();
+      console.log(chalk.gray(`   (completed in ${duration})`));
+    }
+
+    return result;
+  } catch (error) {
+    if (timer) {
+      error.executionTime = timer.formatDuration();
+    }
+
+    const category = getErrorCategory(error);
+    const enhancedError = new CAWSError(
+      `${context}: ${error.message}`,
+      category,
+      getRecoverySuggestions(error, category)
+    );
+    enhancedError.originalError = error;
+    enhancedError.executionTime = error.executionTime;
     throw enhancedError;
   }
 }
@@ -168,11 +256,16 @@ const COMMAND_SUGGESTIONS = {
       'validate',
       'scaffold',
       'status',
+      'diagnose',
+      'evaluate',
+      'iterate',
+      'waivers',
       'templates',
       'provenance',
       'hooks',
-      'burnup',
-      'tool',
+      'workflow',
+      'quality-monitor',
+      'test-analysis',
     ];
     const similar = findSimilarCommand(command, validCommands);
 
@@ -180,10 +273,27 @@ const COMMAND_SUGGESTIONS = {
     if (similar) {
       suggestions.push(`Did you mean: caws ${similar}?`);
     }
-    suggestions.push(
-      'Available commands: init, validate, scaffold, status, templates, provenance, hooks'
-    );
-    suggestions.push('Try: caws --help for full command list');
+
+    // Context-aware suggestions based on command type
+    const commandCategories = {
+      setup: ['init', 'scaffold', 'templates'],
+      validation: ['validate', 'status', 'diagnose'],
+      analysis: ['evaluate', 'iterate', 'test-analysis'],
+      compliance: ['waivers', 'workflow', 'quality-monitor'],
+      history: ['provenance', 'hooks'],
+    };
+
+    // Suggest category based on what user might be trying to do
+    if (command.includes('setup') || command.includes('start') || command.includes('create')) {
+      suggestions.push('For project setup: caws init');
+    } else if (command.includes('check') || command.includes('verify') || command.includes('test')) {
+      suggestions.push('For validation: caws validate');
+    } else if (command.includes('list') || command.includes('show') || command.includes('get')) {
+      suggestions.push('For status: caws status');
+    }
+
+    suggestions.push('Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor');
+    suggestions.push('Try: caws --help for full command list with descriptions');
 
     return suggestions;
   },
@@ -356,6 +466,44 @@ function getDocumentationLink(category, context = {}) {
 }
 
 /**
+ * JSON output formatter for programmatic use
+ * @param {Object} data - Data to format as JSON
+ * @param {boolean} pretty - Whether to pretty-print (default: true)
+ */
+function formatJsonOutput(data, pretty = true) {
+  return JSON.stringify(data, null, pretty ? 2 : 0);
+}
+
+/**
+ * Check if user requested JSON output
+ * @returns {boolean} True if --json flag is present
+ */
+function isJsonOutput() {
+  return process.argv.includes('--json') ||
+         process.argv.includes('-j') ||
+         process.env.CAWS_OUTPUT_FORMAT === 'json';
+}
+
+/**
+ * Output data in appropriate format (JSON or human-readable)
+ * @param {Object} data - Data to output
+ * @param {boolean} success - Whether this is a success response
+ */
+function outputResult(data, success = true) {
+  if (isJsonOutput()) {
+    const jsonData = {
+      success,
+      timestamp: new Date().toISOString(),
+      ...data,
+    };
+    console.log(formatJsonOutput(jsonData));
+  } else {
+    // Human-readable output (existing behavior)
+    return data;
+  }
+}
+
+/**
  * Handle CLI errors with consistent formatting and user guidance
  * @param {Error} error - Error to handle
  * @param {Object} context - Error context (command, option, etc.)
@@ -365,22 +513,199 @@ function handleCliError(error, context = {}, exit = true) {
   const category = error.category || getErrorCategory(error);
   const suggestions = error.suggestions || getRecoverySuggestions(error, category, context);
   const docLink = getDocumentationLink(category, context);
+  const troubleshootingGuide = suggestTroubleshootingGuide(error.message);
 
-  // Format error output
-  console.error(chalk.red(`\n❌ ${error.message}`));
+  if (isJsonOutput()) {
+    // JSON output mode
+    const jsonError = {
+      success: false,
+      error: {
+        message: error.message,
+        category,
+        suggestions,
+        documentation: docLink,
+        executionTime: error.executionTime,
+        timestamp: error.timestamp?.toISOString(),
+        troubleshootingGuide: troubleshootingGuide ? getTroubleshootingGuide(troubleshootingGuide) : null,
+      },
+    };
+    console.log(formatJsonOutput(jsonError));
+  } else {
+    // Human-readable output
+    console.error(chalk.red(`\n❌ ${error.message}`));
 
-  if (suggestions && suggestions.length > 0) {
-    console.error(chalk.yellow('\n💡 Suggestions:'));
-    suggestions.forEach((suggestion) => {
-      console.error(chalk.yellow(`   ${suggestion}`));
-    });
+    if (suggestions && suggestions.length > 0) {
+      console.error(chalk.yellow('\n💡 Suggestions:'));
+      suggestions.forEach((suggestion) => {
+        console.error(chalk.yellow(`   ${suggestion}`));
+      });
+    }
+
+    // Add troubleshooting guide suggestion if available
+    if (troubleshootingGuide) {
+      const guide = getTroubleshootingGuide(troubleshootingGuide);
+      console.error(chalk.cyan(`\n🔍 Troubleshooting Guide: ${guide.title}`));
+      console.error(chalk.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`));
+    }
+
+    console.error(chalk.blue(`\n📚 Documentation: ${docLink}`));
   }
-
-  console.error(chalk.blue(`\n📚 Documentation: ${docLink}`));
 
   if (exit) {
     process.exit(1);
   }
+}
+
+/**
+ * Troubleshooting guide system
+ */
+const TROUBLESHOOTING_GUIDES = {
+  'coverage-report-not-found': {
+    title: 'Coverage Report Not Found',
+    symptoms: [
+      'Coverage check fails with "report not found"',
+      'Tests pass but coverage reports missing',
+      'Jest/Vitest coverage not generating files',
+    ],
+    rootCauses: [
+      'Tests not run with coverage flag',
+      'Coverage output directory misconfigured',
+      'Test framework not configured for coverage',
+      'Working directory detection issue',
+    ],
+    solutions: [
+      'Run tests with coverage: npm test -- --coverage --coverageReporters=json',
+      'Check coverage configuration in package.json or jest.config.js',
+      'Ensure coverage output directory exists',
+      'Run from workspace directory in monorepos',
+    ],
+    commands: [
+      'npm test -- --coverage --coverageReporters=json',
+      'jest --coverage --coverageReporters=json',
+      'vitest run --coverage',
+      'caws status --verbose',
+    ],
+  },
+
+  'mutation-report-not-found': {
+    title: 'Mutation Report Not Found',
+    symptoms: [
+      'Mutation check fails with "report not found"',
+      'Stryker mutation tests not generating reports',
+      'Mutation testing configured but no results',
+    ],
+    rootCauses: [
+      'Mutation tests not run',
+      'Stryker configuration incorrect',
+      'Report output path misconfigured',
+      'Working directory detection issue',
+    ],
+    solutions: [
+      'Run mutation tests: npx stryker run',
+      'Check stryker.conf.json configuration',
+      'Verify report output paths',
+      'Run from workspace directory in monorepos',
+    ],
+    commands: [
+      'npx stryker run',
+      'npx stryker run --configFile stryker.conf.json',
+      'caws status --verbose',
+    ],
+  },
+
+  'working-spec-validation': {
+    title: 'Working Spec Validation Errors',
+    symptoms: [
+      'Working spec fails validation',
+      'Schema errors in .caws/working-spec.yaml',
+      'Invalid risk tier or scope configuration',
+    ],
+    rootCauses: [
+      'Invalid YAML syntax',
+      'Missing required fields',
+      'Incorrect schema structure',
+      'Invalid scope paths',
+    ],
+    solutions: [
+      'Run validation with suggestions: caws validate --suggestions',
+      'Auto-fix safe issues: caws validate --auto-fix',
+      'Check schema documentation',
+      'Use caws init to generate valid spec',
+    ],
+    commands: [
+      'caws validate --suggestions',
+      'caws validate --auto-fix',
+      'caws init --interactive',
+    ],
+  },
+
+  'monorepo-detection': {
+    title: 'Monorepo Detection Issues',
+    symptoms: [
+      'CAWS not detecting workspace structure',
+      'False positives about missing dependencies',
+      'Commands fail from workspace directories',
+    ],
+    rootCauses: [
+      'Unsupported monorepo tool (not npm/yarn/pnpm/lerna)',
+      'Invalid workspace configuration',
+      'Running from wrong directory',
+      'Missing package.json files in workspaces',
+    ],
+    solutions: [
+      'Verify workspace configuration in root package.json',
+      'Ensure workspace directories contain package.json',
+      'Run commands from workspace directories',
+      'Check for supported monorepo tools',
+    ],
+    commands: [
+      'cat package.json | grep workspaces',
+      'find packages -name package.json',
+      'caws diagnose',
+      'caws status',
+    ],
+  },
+};
+
+/**
+ * Get troubleshooting guide for a specific issue
+ * @param {string} issueKey - Key for the troubleshooting guide
+ * @returns {Object|null} Troubleshooting guide or null if not found
+ */
+function getTroubleshootingGuide(issueKey) {
+  return TROUBLESHOOTING_GUIDES[issueKey] || null;
+}
+
+/**
+ * Get all available troubleshooting guides
+ * @returns {Object} All troubleshooting guides
+ */
+function getAllTroubleshootingGuides() {
+  return TROUBLESHOOTING_GUIDES;
+}
+
+/**
+ * Suggest troubleshooting guide based on error message
+ * @param {string} errorMessage - Error message to analyze
+ * @returns {string|null} Issue key if match found, null otherwise
+ */
+function suggestTroubleshootingGuide(errorMessage) {
+  const lowerMessage = errorMessage.toLowerCase();
+
+  if (lowerMessage.includes('coverage') && lowerMessage.includes('not found')) {
+    return 'coverage-report-not-found';
+  }
+  if (lowerMessage.includes('mutation') && lowerMessage.includes('not found')) {
+    return 'mutation-report-not-found';
+  }
+  if (lowerMessage.includes('working spec') || lowerMessage.includes('validation')) {
+    return 'working-spec-validation';
+  }
+  if (lowerMessage.includes('workspace') || lowerMessage.includes('monorepo')) {
+    return 'monorepo-detection';
+  }
+
+  return null;
 }
 
 /**
@@ -413,12 +738,21 @@ function validateEnvironment() {
 module.exports = {
   CAWSError,
   ERROR_CATEGORIES,
+  ExecutionTimer,
   getErrorCategory,
   safeAsync,
+  safeSync,
   handleCliError,
   validateEnvironment,
   getRecoverySuggestions,
   getDocumentationLink,
   findSimilarCommand,
   COMMAND_SUGGESTIONS,
+  formatJsonOutput,
+  isJsonOutput,
+  outputResult,
+  TROUBLESHOOTING_GUIDES,
+  getTroubleshootingGuide,
+  getAllTroubleshootingGuides,
+  suggestTroubleshootingGuide,
 };
