@@ -216,7 +216,7 @@ class CawsMcpServer extends Server {
         cliArgs.push('--non-interactive');
       }
 
-      const command = `node ${path.join(__dirname, '../cli/index.js')} ${cliArgs.join(' ')}`;
+      const command = `npx @paths.design/caws-cli ${cliArgs.join(' ')}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -278,7 +278,7 @@ class CawsMcpServer extends Server {
       if (withOIDC) cliArgs.push('--with-oidc');
       if (force) cliArgs.push('--force');
 
-      const command = `node ${path.join(__dirname, '../cli/index.js')} ${cliArgs.join(' ')}`;
+      const command = `npx @paths.design/caws-cli ${cliArgs.join(' ')}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -327,7 +327,7 @@ class CawsMcpServer extends Server {
     const workingDirectory = args.workingDirectory || process.cwd();
 
     try {
-      const command = `node ${path.join(__dirname, '../cli/index.js')} evaluate ${specFile}`;
+      const command = `npx @paths.design/caws-cli evaluate ${specFile}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -370,7 +370,7 @@ class CawsMcpServer extends Server {
 
     try {
       const stateArg = JSON.stringify({ description: currentState });
-      const command = `node ${path.join(__dirname, '../cli/index.js')} iterate --current-state ${JSON.stringify(stateArg)} ${specFile}`;
+      const command = `npx @paths.design/caws-cli iterate --current-state ${JSON.stringify(stateArg)} ${specFile}`;
 
       const result = execSync(command, {
         encoding: 'utf8',
@@ -412,7 +412,7 @@ class CawsMcpServer extends Server {
     const workingDirectory = args.workingDirectory || process.cwd();
 
     try {
-      const command = `node ${path.join(__dirname, '../cli/index.js')} validate ${specFile}`;
+      const command = `npx @paths.design/caws-cli validate ${specFile}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -455,7 +455,7 @@ class CawsMcpServer extends Server {
         `--mitigation-plan=${JSON.stringify(args.mitigationPlan)}`,
       ];
 
-      const command = `node ${path.join(__dirname, '../cli/index.js')} ${waiverArgs.join(' ')}`;
+      const command = `npx @paths.design/caws-cli ${waiverArgs.join(' ')}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: args.workingDirectory || process.cwd(),
@@ -490,7 +490,7 @@ class CawsMcpServer extends Server {
       const contextArg = context
         ? `--current-state ${JSON.stringify(JSON.stringify(context))}`
         : '';
-      const command = `node ${path.join(__dirname, '../cli/index.js')} workflow ${workflowType} --step ${currentStep} ${contextArg}`;
+      const command = `npx @paths.design/caws-cli workflow ${workflowType} --step ${currentStep} ${contextArg}`;
 
       const result = execSync(command, {
         encoding: 'utf8',
@@ -516,7 +516,7 @@ class CawsMcpServer extends Server {
     try {
       const filesArg = files?.length ? `--files ${files.join(',')}` : '';
       const contextArg = context ? `--context ${JSON.stringify(JSON.stringify(context))}` : '';
-      const command = `node ${path.join(__dirname, '../cli/index.js')} quality-monitor ${action} ${filesArg} ${contextArg}`;
+      const command = `npx @paths.design/caws-cli quality-monitor ${action} ${filesArg} ${contextArg}`;
 
       const result = execSync(command, {
         encoding: 'utf8',
@@ -544,7 +544,7 @@ class CawsMcpServer extends Server {
 
     try {
       // Execute test analysis command and return results
-      const command = `node ${path.join(__dirname, '../cli/index.js')} test-analysis ${subcommand}`;
+      const command = `npx @paths.design/caws-cli test-analysis ${subcommand}`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -574,7 +574,7 @@ class CawsMcpServer extends Server {
     } = args;
 
     try {
-      let command = `node ${path.join(__dirname, '../cli/index.js')} provenance ${subcommand}`;
+      let command = `npx @paths.design/caws-cli provenance ${subcommand}`;
 
       if (commit) command += ` --commit "${commit}"`;
       if (message) command += ` --message "${message}"`;
@@ -642,7 +642,7 @@ class CawsMcpServer extends Server {
 
   async getActiveWaivers() {
     try {
-      const command = `node ${path.join(__dirname, '../cli/index.js')} waivers list`;
+      const command = `npx @paths.design/caws-cli waivers list`;
       const result = execSync(command, { encoding: 'utf8' });
 
       // Parse the output to extract waiver information
@@ -720,7 +720,7 @@ class CawsMcpServer extends Server {
     } = args;
 
     try {
-      let command = `node ${path.join(__dirname, '../cli/index.js')} hooks ${subcommand}`;
+      let command = `npx @paths.design/caws-cli hooks ${subcommand}`;
 
       if (subcommand === 'install') {
         if (force) command += ' --force';
@@ -773,7 +773,7 @@ class CawsMcpServer extends Server {
     const { specFile = '.caws/working-spec.yaml', workingDirectory = process.cwd() } = args;
 
     try {
-      const command = `node ${path.join(__dirname, '../cli/index.js')} status --spec ${specFile}`;
+      const command = `npx @paths.design/caws-cli status --spec ${specFile}`;
       const result = await execCommand(command, {
         cwd: workingDirectory,
         timeout: 30000,
@@ -819,7 +819,7 @@ class CawsMcpServer extends Server {
     const { fix = false, workingDirectory = process.cwd() } = args;
 
     try {
-      let command = `node ${path.join(__dirname, '../cli/index.js')} diagnose`;
+      let command = `npx @paths.design/caws-cli diagnose`;
       if (fix) command += ' --fix';
 
       const result = await execCommand(command, {
@@ -952,7 +952,7 @@ class CawsMcpServer extends Server {
     const { status = 'active', workingDirectory = process.cwd() } = args;
 
     try {
-      const command = `node ${path.join(__dirname, '../cli/index.js')} waivers list`;
+      const command = `npx @paths.design/caws-cli waivers list`;
       const result = execSync(command, {
         encoding: 'utf8',
         cwd: workingDirectory,
@@ -1899,14 +1899,18 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Start monitoring system
-  try {
-    await server.monitor.start();
-  } catch (error) {
-    console.error('Failed to start monitoring:', error.message);
+  // Start monitoring system (unless disabled for testing)
+  if (process.env.CAWS_DISABLE_MONITORING !== 'true') {
+    try {
+      await server.monitor.start();
+      console.error('CAWS MCP Server started with monitoring');
+    } catch (error) {
+      console.error('Failed to start monitoring:', error.message);
+      console.error('CAWS MCP Server started without monitoring');
+    }
+  } else {
+    console.error('CAWS MCP Server started (monitoring disabled)');
   }
-
-  console.error('CAWS MCP Server started with monitoring');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
