@@ -101,23 +101,232 @@ function detectTestFramework(projectDir = process.cwd(), packageJson = null) {
 }
 
 /**
+ * Get workspace directories from package.json
+ * @param {string} projectDir - Project directory path
+ * @returns {string[]} Array of workspace directories
+ */
+/**
+ * Get workspace directories from npm/yarn package.json workspaces
+ * @param {string} projectDir - Project directory path
+ * @returns {string[]} Array of workspace directories
+ */
+function getNpmWorkspaces(projectDir) {
+  const packageJsonPath = path.join(projectDir, 'package.json');
+
+  if (!fs.existsSync(packageJsonPath)) {
+    return [];
+  }
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    const workspaces = packageJson.workspaces || [];
+
+    // Convert glob patterns to actual directories (simple implementation)
+    const workspaceDirs = [];
+    for (const ws of workspaces) {
+      // Handle simple patterns like "packages/*" or "iterations/*"
+      if (ws.includes('*')) {
+        const baseDir = ws.split('*')[0];
+        const fullBaseDir = path.join(projectDir, baseDir);
+
+        if (fs.existsSync(fullBaseDir)) {
+          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const wsPath = path.join(fullBaseDir, entry.name);
+              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+                workspaceDirs.push(wsPath);
+              }
+            }
+          }
+        }
+      } else {
+        // Direct path
+        const wsPath = path.join(projectDir, ws);
+        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+          workspaceDirs.push(wsPath);
+        }
+      }
+    }
+
+    return workspaceDirs;
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * Get workspace directories from pnpm-workspace.yaml
+ * @param {string} projectDir - Project directory path
+ * @returns {string[]} Array of workspace directories
+ */
+function getPnpmWorkspaces(projectDir) {
+  const pnpmFile = path.join(projectDir, 'pnpm-workspace.yaml');
+
+  if (!fs.existsSync(pnpmFile)) {
+    return [];
+  }
+
+  try {
+    const yaml = require('js-yaml');
+    const config = yaml.load(fs.readFileSync(pnpmFile, 'utf8'));
+    const workspacePatterns = config.packages || [];
+
+    // Convert glob patterns to actual directories
+    const workspaceDirs = [];
+    for (const pattern of workspacePatterns) {
+      if (pattern.includes('*')) {
+        const baseDir = pattern.split('*')[0];
+        const fullBaseDir = path.join(projectDir, baseDir);
+
+        if (fs.existsSync(fullBaseDir)) {
+          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const wsPath = path.join(fullBaseDir, entry.name);
+              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+                workspaceDirs.push(wsPath);
+              }
+            }
+          }
+        }
+      } else {
+        // Direct path
+        const wsPath = path.join(projectDir, pattern);
+        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+          workspaceDirs.push(wsPath);
+        }
+      }
+    }
+
+    return workspaceDirs;
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * Get workspace directories from lerna.json
+ * @param {string} projectDir - Project directory path
+ * @returns {string[]} Array of workspace directories
+ */
+function getLernaWorkspaces(projectDir) {
+  const lernaFile = path.join(projectDir, 'lerna.json');
+
+  if (!fs.existsSync(lernaFile)) {
+    return [];
+  }
+
+  try {
+    const config = JSON.parse(fs.readFileSync(lernaFile, 'utf8'));
+    const workspacePatterns = config.packages || ['packages/*'];
+
+    // Convert glob patterns to actual directories
+    const workspaceDirs = [];
+    for (const pattern of workspacePatterns) {
+      if (pattern.includes('*')) {
+        const baseDir = pattern.split('*')[0];
+        const fullBaseDir = path.join(projectDir, baseDir);
+
+        if (fs.existsSync(fullBaseDir)) {
+          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const wsPath = path.join(fullBaseDir, entry.name);
+              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+                workspaceDirs.push(wsPath);
+              }
+            }
+          }
+        }
+      } else {
+        // Direct path
+        const wsPath = path.join(projectDir, pattern);
+        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+          workspaceDirs.push(wsPath);
+        }
+      }
+    }
+
+    return workspaceDirs;
+  } catch (error) {
+    return [];
+  }
+}
+
+function getWorkspaceDirectories(projectDir = process.cwd()) {
+  const workspaceDirs = [
+    ...getNpmWorkspaces(projectDir),
+    ...getPnpmWorkspaces(projectDir),
+    ...getLernaWorkspaces(projectDir),
+  ];
+
+  // Remove duplicates
+  return [...new Set(workspaceDirs)];
+}
+
+/**
  * Check if TypeScript project needs test configuration
  * @param {string} projectDir - Project directory path
  * @returns {Object} Configuration status
  */
 function checkTypeScriptTestConfig(projectDir = process.cwd()) {
-  const tsDetection = detectTypeScript(projectDir);
-  const testDetection = detectTestFramework(projectDir, tsDetection.packageJson);
+  // First check root directory
+  const rootTsDetection = detectTypeScript(projectDir);
+  const rootTestDetection = detectTestFramework(projectDir, rootTsDetection.packageJson);
+
+  // Get workspace directories and check them too
+  const workspaceDirs = getWorkspaceDirectories(projectDir);
+  const workspaceResults = [];
+
+  for (const wsDir of workspaceDirs) {
+    const wsTsDetection = detectTypeScript(wsDir);
+    const wsTestDetection = detectTestFramework(wsDir, wsTsDetection.packageJson);
+
+    workspaceResults.push({
+      directory: path.relative(projectDir, wsDir),
+      tsDetection: wsTsDetection,
+      testDetection: wsTestDetection,
+    });
+  }
+
+  // Determine overall status - prefer workspace results if they exist
+  let primaryTsDetection = rootTsDetection;
+  let primaryTestDetection = rootTestDetection;
+  let primaryWorkspace = null;
+
+  // Find the workspace with the most complete TypeScript setup
+  for (const wsResult of workspaceResults) {
+    if (wsResult.tsDetection.isTypeScript) {
+      if (
+        !primaryTsDetection.isTypeScript ||
+        (wsResult.tsDetection.hasTsConfig && !primaryTsDetection.hasTsConfig) ||
+        (wsResult.testDetection.framework !== 'none' && primaryTestDetection.framework === 'none')
+      ) {
+        primaryTsDetection = wsResult.tsDetection;
+        primaryTestDetection = wsResult.testDetection;
+        primaryWorkspace = wsResult.directory;
+      }
+    }
+  }
 
   const needsConfig =
-    tsDetection.isTypeScript && testDetection.framework === 'jest' && !testDetection.hasTsJest;
+    primaryTsDetection.isTypeScript &&
+    primaryTestDetection.framework === 'jest' &&
+    !primaryTestDetection.hasTsJest;
 
   return {
-    ...tsDetection,
-    testFramework: testDetection,
-    needsJestConfig: tsDetection.isTypeScript && !testDetection.isConfigured,
+    ...primaryTsDetection,
+    testFramework: primaryTestDetection,
+    needsJestConfig: primaryTsDetection.isTypeScript && !primaryTestDetection.isConfigured,
     needsTsJest: needsConfig,
-    recommendations: generateRecommendations(tsDetection, testDetection),
+    recommendations: generateRecommendations(primaryTsDetection, primaryTestDetection),
+    workspaceInfo: {
+      hasWorkspaces: workspaceDirs.length > 0,
+      workspaceCount: workspaceDirs.length,
+      primaryWorkspace,
+      allWorkspaces: workspaceResults.map((ws) => ws.directory),
+    },
   };
 }
 
@@ -179,6 +388,10 @@ function displayTypeScriptDetection(detection) {
 module.exports = {
   detectTypeScript,
   detectTestFramework,
+  getWorkspaceDirectories,
+  getNpmWorkspaces,
+  getPnpmWorkspaces,
+  getLernaWorkspaces,
   checkTypeScriptTestConfig,
   generateRecommendations,
   displayTypeScriptDetection,
