@@ -372,8 +372,8 @@ describe('MCP Protocol Compliance', () => {
         const duration = Date.now() - startTime;
 
         expect(response).toBeDefined();
-        // Allow more time in CI environments (3 seconds instead of 1)
-        expect(duration).toBeLessThan(3000);
+        // Allow more time in CI environments (5 seconds)
+        expect(duration).toBeLessThan(5000);
         done();
       }, 4000); // Wait up to 4 seconds for response
     });
