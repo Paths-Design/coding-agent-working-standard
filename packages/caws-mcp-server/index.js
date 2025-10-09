@@ -22,11 +22,7 @@ import {
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { CawsMonitor } from './src/monitoring/index.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 class CawsMcpServer extends Server {
   constructor() {
