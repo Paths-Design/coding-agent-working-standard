@@ -1,0 +1,850 @@
+openapi: 3.0.3
+info:
+  title: Agent Agency API
+  description: |
+    Complete API specification for the Agent Agency platform.
+    Provides unified access to MCP server, agent orchestration, data layer, memory system, and AI model services.
+  version: 1.0.0
+  contact:
+    name: Agent Agency Team
+    email: team@agent-agency.dev
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.agent-agency.dev
+    description: Production API
+
+paths:
+  /health:
+    get:
+      summary: Platform health check
+      description: Get comprehensive health status of all Agent Agency services
+      operationId: getPlatformHealth
+      responses:
+        '200':
+          description: Platform health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealth'
+        '503':
+          description: Platform partially or fully unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealth'
+
+  /agents:
+    get:
+      summary: List all agents
+      description: Retrieve all registered agents across the platform
+      operationId: listAllAgents
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, busy, error]
+          description: Filter by agent status
+        - name: capability
+          in: query
+          schema:
+            type: string
+          description: Filter by agent capability
+      responses:
+        '200':
+          description: Agent list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - agents
+                  - total
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentSummary'
+                  total:
+                    type: integer
+                    minimum: 0
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks:
+    post:
+      summary: Submit platform task
+      description: Submit a task to be intelligently routed across available agents
+      operationId: submitPlatformTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformTaskRequest'
+      responses:
+        '202':
+          description: Task accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformTask'
+          headers:
+            Location:
+              description: URL to track task status
+              schema:
+                type: string
+                format: uri
+        '400':
+          description: Invalid task request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No agents available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    get:
+      summary: List platform tasks
+      description: Retrieve tasks submitted to the platform
+      operationId: listPlatformTasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, assigned, in-progress, completed, failed, cancelled]
+          description: Filter by task status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Maximum number of tasks to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of tasks to skip
+      responses:
+        '200':
+          description: Tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - tasks
+                  - total
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlatformTask'
+                  total:
+                    type: integer
+                    minimum: 0
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks/{taskId}:
+    get:
+      summary: Get platform task details
+      description: Retrieve detailed information about a platform task
+      operationId: getPlatformTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformTask'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Cancel platform task
+      description: Cancel a running or queued platform task
+      operationId: cancelPlatformTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformTask'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Task cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memory/search:
+    post:
+      summary: Search platform memory
+      description: Perform semantic search across all tenant memories
+      operationId: searchPlatformMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemorySearchRequest'
+      responses:
+        '200':
+          description: Memory search completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemorySearchResult'
+        '400':
+          description: Invalid search request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /data/query:
+    post:
+      summary: Execute platform data query
+      description: Execute query across unified data layer (PostgreSQL + Redis + Vector)
+      operationId: executePlatformQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformQueryRequest'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformQueryResult'
+        '400':
+          description: Invalid query request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /ai/inference:
+    post:
+      summary: Platform AI inference
+      description: Execute AI inference using available models
+      operationId: executePlatformInference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformInferenceRequest'
+      responses:
+        '200':
+          description: Inference completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformInferenceResult'
+        '400':
+          description: Invalid inference request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No AI models available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /quality/assess:
+    post:
+      summary: Platform quality assessment
+      description: Run comprehensive quality assessment across platform
+      operationId: assessPlatformQuality
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformAssessmentRequest'
+      responses:
+        '200':
+          description: Quality assessment completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAssessmentResult'
+        '400':
+          description: Invalid assessment request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /mcp:
+    post:
+      summary: MCP server proxy
+      description: Proxy requests to MCP server for agent interactions
+      operationId: proxyMCPRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: JSON-RPC 2.0 request for MCP server
+              additionalProperties: true
+      responses:
+        '200':
+          description: MCP request processed
+          content:
+            application/json:
+              schema:
+                description: JSON-RPC 2.0 response from MCP server
+                additionalProperties: true
+        '400':
+          description: Invalid MCP request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    PlatformHealth:
+      type: object
+      required:
+        - status
+        - services
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall platform health
+        services:
+          type: object
+          required:
+            - mcp
+            - orchestrator
+            - data
+            - memory
+            - ai
+            - quality
+          properties:
+            mcp:
+              $ref: '#/components/schemas/ServiceHealth'
+            orchestrator:
+              $ref: '#/components/schemas/ServiceHealth'
+            data:
+              $ref: '#/components/schemas/ServiceHealth'
+            memory:
+              $ref: '#/components/schemas/ServiceHealth'
+            ai:
+              $ref: '#/components/schemas/ServiceHealth'
+            quality:
+              $ref: '#/components/schemas/ServiceHealth'
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Platform version
+
+    ServiceHealth:
+      type: object
+      required:
+        - status
+        - responseTime
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Service health status
+        responseTime:
+          type: number
+          description: Service response time in milliseconds
+        message:
+          type: string
+          description: Health check details
+        version:
+          type: string
+          description: Service version
+
+    AgentSummary:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - capabilities
+      properties:
+        id:
+          type: string
+          description: Agent unique identifier
+        name:
+          type: string
+          description: Agent display name
+        status:
+          type: string
+          enum: [active, inactive, busy, error]
+          description: Current agent status
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Agent capabilities
+        performance:
+          type: object
+          properties:
+            successRate:
+              type: number
+              minimum: 0
+              maximum: 1
+            averageResponseTime:
+              type: number
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last agent activity
+
+    PlatformTaskRequest:
+      type: object
+      required:
+        - type
+        - description
+      properties:
+        type:
+          type: string
+          enum:
+            - feature-development
+            - bug-fix
+            - refactor
+            - documentation
+            - testing
+            - research
+            - design
+            - analysis
+          description: Task type
+        description:
+          type: string
+          description: Task description
+        priority:
+          type: string
+          enum: [low, normal, high, critical]
+          default: "normal"
+          description: Task priority
+        requirements:
+          type: object
+          description: Task-specific requirements
+          additionalProperties: true
+        deadline:
+          type: string
+          format: date-time
+          description: Optional task deadline
+        context:
+          type: object
+          description: Additional context for task routing
+          additionalProperties: true
+
+    PlatformTask:
+      type: object
+      required:
+        - id
+        - type
+        - status
+        - submittedAt
+      properties:
+        id:
+          type: string
+          description: Task unique identifier
+        type:
+          type: string
+          description: Task type
+        status:
+          type: string
+          enum: [pending, assigned, in-progress, completed, failed, cancelled]
+          description: Task execution status
+        priority:
+          type: string
+          description: Task priority
+        description:
+          type: string
+          description: Task description
+        assignedAgent:
+          type: string
+          description: Assigned agent ID
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Task completion progress (0-1)
+        submittedAt:
+          type: string
+          format: date-time
+          description: Task submission timestamp
+        startedAt:
+          type: string
+          format: date-time
+          description: Task start timestamp
+        completedAt:
+          type: string
+          format: date-time
+          description: Task completion timestamp
+        result:
+          type: object
+          description: Task execution result
+          additionalProperties: true
+        error:
+          type: string
+          description: Error message if task failed
+
+    MemorySearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Search query text
+          example: "user authentication preferences"
+        tenantIds:
+          type: array
+          items:
+            type: string
+          description: Specific tenants to search (admin only)
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          description: Maximum results to return
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.7
+          description: Similarity threshold
+
+    MemorySearchResult:
+      type: object
+      required:
+        - results
+        - total
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - tenantId
+              - memory
+              - score
+            properties:
+              tenantId:
+                type: string
+                description: Tenant that owns the memory
+              memory:
+                type: object
+                description: Memory item data
+                additionalProperties: true
+              score:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Search relevance score
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching memories found
+
+    PlatformQueryRequest:
+      type: object
+      required:
+        - sql
+      properties:
+        sql:
+          type: string
+          description: SQL query to execute
+        params:
+          type: array
+          description: Query parameters
+          items:
+            description: Parameter value
+        useCache:
+          type: boolean
+          default: true
+          description: Whether to use query caching
+        tenantId:
+          type: string
+          description: Tenant context for multi-tenant queries
+
+    PlatformQueryResult:
+      type: object
+      required:
+        - success
+        - executionTime
+      properties:
+        success:
+          type: boolean
+          description: Query execution success
+        rows:
+          type: array
+          description: Query result rows
+          items:
+            type: object
+            additionalProperties: true
+        rowCount:
+          type: integer
+          minimum: 0
+          description: Number of rows affected
+        executionTime:
+          type: number
+          description: Query execution time in milliseconds
+        cached:
+          type: boolean
+          description: Whether result came from cache
+
+    PlatformInferenceRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          description: Inference prompt
+        model:
+          type: string
+          description: Preferred model (auto-selected if not specified)
+          example: "gemma-3n"
+        parameters:
+          type: object
+          description: Model-specific parameters
+          properties:
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              default: 0.7
+            maxTokens:
+              type: integer
+              minimum: 1
+              default: 512
+            stream:
+              type: boolean
+              default: false
+        context:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+          description: Conversation context
+
+    PlatformInferenceResult:
+      type: object
+      required:
+        - success
+        - output
+      properties:
+        success:
+          type: boolean
+          description: Inference success
+        output:
+          type: string
+          description: Generated output
+        model:
+          type: string
+          description: Model used for inference
+        tokensUsed:
+          type: integer
+          description: Tokens consumed
+        executionTime:
+          type: number
+          description: Inference execution time in milliseconds
+
+    PlatformAssessmentRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum: [platform, service, tenant, task]
+              description: Assessment target type
+            id:
+              type: string
+              description: Target identifier
+        checks:
+          type: array
+          items:
+            type: string
+            enum: [tests, coverage, mutation, contract, lint, security, performance]
+          default: ["tests", "coverage", "lint"]
+          description: Quality checks to run
+
+    PlatformAssessmentResult:
+      type: object
+      required:
+        - overallScore
+        - services
+      properties:
+        overallScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Platform-wide quality score
+        services:
+          type: object
+          description: Assessment results by service
+          additionalProperties:
+            type: object
+            properties:
+              score:
+                type: number
+                minimum: 0
+                maximum: 1
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              checks:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    score:
+                      type: number
+                      minimum: 0
+                      maximum: 1
+                    status:
+                      type: string
+                      enum: [pass, fail, warn]
+        recommendations:
+          type: array
+          items:
+            type: string
+          description: Platform improvement recommendations
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "PLATFORM_UNAVAILABLE"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for service authentication
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []

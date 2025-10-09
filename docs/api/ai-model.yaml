@@ -1,0 +1,924 @@
+openapi: 3.0.3
+info:
+  title: CAWS AI Model API
+  description: |
+    API specification for the CAWS AI Model service.
+    Provides local AI model management, evaluation, and satisficing logic.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3004
+    description: AI Model service
+  - url: https://ai.caws.dev
+    description: Production AI service
+
+paths:
+  /health:
+    get:
+      summary: Service health check
+      description: Check AI model service status and model availability
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /models:
+    get:
+      summary: List available models
+      description: Get all configured and available AI models
+      operationId: listModels
+      responses:
+        '200':
+          description: Model list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - models
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Model'
+                  total:
+                    type: integer
+                    minimum: 0
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /models/{modelId}:
+    get:
+      summary: Get model details
+      description: Retrieve detailed information about a specific model
+      operationId: getModel
+      parameters:
+        - name: modelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /inference:
+    post:
+      summary: Run inference
+      description: Execute inference on a specified model with given input
+      operationId: runInference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: Inference completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResult'
+        '400':
+          description: Invalid inference request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Model not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /evaluate:
+    post:
+      summary: Evaluate output quality
+      description: Evaluate the quality of AI-generated output against criteria
+      operationId: evaluateOutput
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationRequest'
+      responses:
+        '200':
+          description: Evaluation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResult'
+        '400':
+          description: Invalid evaluation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /satisfice:
+    post:
+      summary: Run satisficing algorithm
+      description: Execute satisficing logic to find acceptable solution within constraints
+      operationId: runSatisficing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SatisficingRequest'
+      responses:
+        '200':
+          description: Satisficing completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SatisficingResult'
+        '400':
+          description: Invalid satisficing request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '408':
+          description: Satisficing timeout exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /models/{modelId}/load:
+    post:
+      summary: Load model
+      description: Load a model into memory for inference
+      operationId: loadModel
+      parameters:
+        - name: modelId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelLoadRequest'
+      responses:
+        '200':
+          description: Model loaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - loaded
+                  - loadTime
+                properties:
+                  loaded:
+                    type: boolean
+                    example: true
+                  loadTime:
+                    type: number
+                    description: Load time in milliseconds
+                  memoryUsage:
+                    type: number
+                    description: Memory usage in MB
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Model already loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Insufficient resources to load model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /models/{modelId}/unload:
+    post:
+      summary: Unload model
+      description: Unload a model from memory
+      operationId: unloadModel
+      parameters:
+        - name: modelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model unloaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - unloaded
+                properties:
+                  unloaded:
+                    type: boolean
+                    example: true
+                  memoryFreed:
+                    type: number
+                    description: Memory freed in MB
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Model not loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /metrics:
+    get:
+      summary: Get service metrics
+      description: Retrieve performance and usage metrics
+      operationId: getMetrics
+      parameters:
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start time for metrics (ISO 8601)
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End time for metrics (ISO 8601)
+        - name: modelId
+          in: query
+          schema:
+            type: string
+          description: Filter metrics by model ID
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metrics'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    Model:
+      type: object
+      required:
+        - id
+        - name
+        - provider
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          description: Unique model identifier
+          example: "gemma-3n"
+        name:
+          type: string
+          description: Human-readable model name
+          example: "Gemma 3N 4B"
+        provider:
+          type: string
+          enum:
+            - ollama
+            - openai
+            - anthropic
+            - local
+          description: Model provider/platform
+          example: "ollama"
+        type:
+          type: string
+          enum:
+            - text-generation
+            - embedding
+            - multimodal
+          description: Model type/capability
+          example: "text-generation"
+        status:
+          $ref: '#/components/schemas/ModelStatus'
+        parameters:
+          type: integer
+          description: Model parameter count
+          example: 4000000000
+        contextWindow:
+          type: integer
+          description: Maximum context window size
+          example: 4096
+        loaded:
+          type: boolean
+          description: Whether model is currently loaded in memory
+          default: false
+        performance:
+          $ref: '#/components/schemas/ModelPerformance'
+        metadata:
+          type: object
+          description: Additional model metadata
+          additionalProperties: true
+
+    ModelStatus:
+      type: string
+      enum:
+        - available
+        - downloading
+        - loading
+        - ready
+        - error
+        - unavailable
+      description: Model operational status
+      example: "ready"
+
+    ModelPerformance:
+      type: object
+      properties:
+        averageResponseTime:
+          type: number
+          description: Average inference time in milliseconds
+          example: 2500
+        tokensPerSecond:
+          type: number
+          description: Token generation speed
+          example: 15.5
+        totalRequests:
+          type: integer
+          minimum: 0
+          description: Total inference requests served
+          example: 1000
+        errorRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Request error rate
+          example: 0.02
+
+    InferenceRequest:
+      type: object
+      required:
+        - modelId
+        - prompt
+      properties:
+        modelId:
+          type: string
+          description: Model to use for inference
+          example: "gemma-3n"
+        prompt:
+          type: string
+          description: Input prompt for generation
+          example: "Explain quantum computing in simple terms"
+        parameters:
+          $ref: '#/components/schemas/InferenceParameters'
+        context:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: ["system", "user", "assistant"]
+              content:
+                type: string
+          description: Conversation context for chat models
+        stream:
+          type: boolean
+          default: false
+          description: Whether to stream the response
+
+    InferenceParameters:
+      type: object
+      properties:
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 0.7
+          description: Sampling temperature
+        maxTokens:
+          type: integer
+          minimum: 1
+          maximum: 4096
+          default: 512
+          description: Maximum tokens to generate
+        topP:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.9
+          description: Nucleus sampling parameter
+        topK:
+          type: integer
+          minimum: 1
+          default: 40
+          description: Top-k sampling parameter
+        stopSequences:
+          type: array
+          items:
+            type: string
+          description: Sequences that stop generation
+        repetitionPenalty:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 1.1
+          description: Repetition penalty factor
+
+    InferenceResult:
+      type: object
+      required:
+        - success
+        - output
+        - executionTime
+      properties:
+        success:
+          type: boolean
+          description: Whether inference completed successfully
+        output:
+          type: string
+          description: Generated output text
+        tokensGenerated:
+          type: integer
+          minimum: 0
+          description: Number of tokens generated
+        tokensPrompt:
+          type: integer
+          minimum: 0
+          description: Number of prompt tokens
+        executionTime:
+          type: number
+          description: Total execution time in milliseconds
+        finishReason:
+          type: string
+          enum:
+            - stop
+            - length
+            - error
+          description: Reason inference stopped
+        metadata:
+          type: object
+          description: Additional inference metadata
+          additionalProperties: true
+
+    EvaluationRequest:
+      type: object
+      required:
+        - output
+        - criteria
+      properties:
+        output:
+          type: string
+          description: AI-generated output to evaluate
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationCriterion'
+          description: Evaluation criteria to apply
+        context:
+          type: string
+          description: Additional context for evaluation
+        baseline:
+          type: string
+          description: Expected or baseline output for comparison
+
+    EvaluationCriterion:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          description: Criterion name
+          example: "factual_accuracy"
+        type:
+          type: string
+          enum:
+            - boolean
+            - score
+            - categorical
+          description: Evaluation type
+        description:
+          type: string
+          description: Criterion description
+        parameters:
+          type: object
+          description: Type-specific parameters
+          additionalProperties: true
+
+    EvaluationResult:
+      type: object
+      required:
+        - overallScore
+        - criteriaResults
+      properties:
+        overallScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Overall evaluation score (0-1)
+        criteriaResults:
+          type: array
+          items:
+            type: object
+            required:
+              - criterion
+              - score
+              - reasoning
+            properties:
+              criterion:
+                type: string
+                description: Criterion name
+              score:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Criterion score (0-1)
+              reasoning:
+                type: string
+                description: Evaluation reasoning
+              evidence:
+                type: array
+                items:
+                  type: string
+                description: Supporting evidence
+        executionTime:
+          type: number
+          description: Evaluation execution time in milliseconds
+
+    SatisficingRequest:
+      type: object
+      required:
+        - problem
+        - constraints
+      properties:
+        problem:
+          type: string
+          description: Problem statement to solve
+          example: "Generate a user authentication system"
+        constraints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Constraint'
+          description: Solution constraints and requirements
+        maxIterations:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+          description: Maximum evaluation iterations
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 300000
+          default: 60000
+          description: Maximum time in milliseconds
+        evaluationModel:
+          type: string
+          description: Model to use for evaluation (defaults to fastest available)
+
+    Constraint:
+      type: object
+      required:
+        - type
+        - description
+      properties:
+        type:
+          type: string
+          enum:
+            - security
+            - performance
+            - functionality
+            - compatibility
+            - usability
+          description: Constraint category
+        description:
+          type: string
+          description: Constraint description
+        priority:
+          type: string
+          enum:
+            - must
+            - should
+            - nice_to_have
+          default: "should"
+          description: Constraint priority
+        parameters:
+          type: object
+          description: Constraint-specific parameters
+          additionalProperties: true
+
+    SatisficingResult:
+      type: object
+      required:
+        - solution
+        - satisfiedConstraints
+        - iterations
+      properties:
+        solution:
+          type: string
+          description: Final satisficing solution
+        satisfiedConstraints:
+          type: integer
+          minimum: 0
+          description: Number of constraints satisfied
+        totalConstraints:
+          type: integer
+          minimum: 0
+          description: Total number of constraints
+        iterations:
+          type: integer
+          minimum: 0
+          description: Number of evaluation iterations performed
+        executionTime:
+          type: number
+          description: Total satisficing execution time in milliseconds
+        convergenceReason:
+          type: string
+          enum:
+            - satisfactory_solution
+            - timeout
+            - max_iterations
+            - no_improvement
+          description: Reason satisficing stopped
+        iterationHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              iteration:
+                type: integer
+                minimum: 1
+              solution:
+                type: string
+              score:
+                type: number
+                minimum: 0
+                maximum: 1
+              constraintsSatisfied:
+                type: integer
+                minimum: 0
+          description: History of iterations and improvements
+
+    ModelLoadRequest:
+      type: object
+      properties:
+        priority:
+          type: string
+          enum:
+            - low
+            - normal
+            - high
+          default: "normal"
+          description: Load priority (affects resource allocation)
+        preloadData:
+          type: boolean
+          default: false
+          description: Whether to preload model data immediately
+
+    Metrics:
+      type: object
+      required:
+        - period
+        - models
+        - system
+      properties:
+        period:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        models:
+          type: object
+          description: Per-model metrics
+          additionalProperties:
+            $ref: '#/components/schemas/ModelMetrics'
+        system:
+          $ref: '#/components/schemas/SystemMetrics'
+
+    ModelMetrics:
+      type: object
+      properties:
+        requests:
+          type: integer
+          minimum: 0
+          description: Total requests served
+        errors:
+          type: integer
+          minimum: 0
+          description: Total error responses
+        averageResponseTime:
+          type: number
+          description: Average response time in milliseconds
+        p95ResponseTime:
+          type: number
+          description: 95th percentile response time
+        tokensGenerated:
+          type: integer
+          minimum: 0
+          description: Total tokens generated
+        loadCount:
+          type: integer
+          minimum: 0
+          description: Number of times model was loaded
+
+    SystemMetrics:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+          minimum: 0
+          description: Total requests across all models
+        activeModels:
+          type: integer
+          minimum: 0
+          description: Currently loaded models
+        memoryUsage:
+          type: number
+          description: Total memory usage in MB
+        gpuUtilization:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: GPU utilization percentage
+        uptime:
+          type: number
+          description: Service uptime in seconds
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall service health
+        checks:
+          type: object
+          required:
+            - models
+            - resources
+          properties:
+            models:
+              $ref: '#/components/schemas/ServiceCheck'
+            resources:
+              $ref: '#/components/schemas/ServiceCheck'
+            ollama:
+              $ref: '#/components/schemas/ServiceCheck'
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+
+    ServiceCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+          description: Health check result
+        message:
+          type: string
+          description: Health check details
+        responseTime:
+          type: number
+          description: Response time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "MODEL_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+          properties:
+            modelId:
+              type: string
+              description: Model that caused the error
+            availableModels:
+              type: array
+              items:
+                type: string
+              description: Available model IDs
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+
+security:
+  - BearerAuth: []

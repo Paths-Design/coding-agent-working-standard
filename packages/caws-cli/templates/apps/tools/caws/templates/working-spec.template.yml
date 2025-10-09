@@ -15,10 +15,24 @@ acceptance:
     given: '{{GIVEN_CONDITION}}'
     when: '{{WHEN_ACTION}}'
     then: '{{THEN_OUTCOME}}'
+    status: pending # pending | in_progress | completed
+    # Optional: detailed progress tracking
+    # tests:
+    #   written: 0
+    #   passing: 0
+    # coverage: 0.0
+    # last_updated: '2025-10-09T14:30:00Z'
   - id: A2
     given: '{{GIVEN_CONDITION_2}}'
     when: '{{WHEN_ACTION_2}}'
     then: '{{THEN_OUTCOME_2}}'
+    status: pending # pending | in_progress | completed
+    # Optional: detailed progress tracking
+    # tests:
+    #   written: 0
+    #   passing: 0
+    # coverage: 0.0
+    # last_updated: '2025-10-09T14:30:00Z'
 non_functional:
   a11y:
     - '{{ACCESSIBILITY_REQUIREMENT}}'

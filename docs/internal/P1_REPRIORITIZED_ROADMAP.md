@@ -11,11 +11,13 @@
 After reviewing comprehensive agent feedback, I'm **changing the P1 priority order** to address **critical trust and reliability issues** first.
 
 ### Original P1 Plan (Before Feedback)
+
 1. ~~Sprint 2: Enhanced Error Handling~~ (Now Sprint 3)
 2. ~~Sprint 3: IDE Integration~~ (Now Sprint 4)
 3. ~~Sprint 4: Performance Optimization~~ (Deprioritized)
 
 ### New P1 Plan (After Feedback)
+
 1. **Sprint 2: Trust & Reliability Fixes** 🔴 CRITICAL
 2. **Sprint 3: Enhanced Error Context** 🟡 HIGH
 3. **Sprint 4: Progress Tracking & DX** 🟢 MEDIUM
@@ -33,6 +35,7 @@ After reviewing comprehensive agent feedback, I'm **changing the P1 priority ord
 #### Issue #1: Monorepo/Workspace Detection (FALSE POSITIVES)
 
 **Problem**:
+
 ```bash
 ❌ TypeScript configuration [HIGH]
    Issue: ts-jest missing
@@ -40,11 +43,13 @@ After reviewing comprehensive agent feedback, I'm **changing the P1 priority ord
 ```
 
 **Impact**:
+
 - ⚠️ **Trust erosion** - Agents doubt all diagnostics
 - ⚠️ **Wasted time** - Manual verification needed
 - ⚠️ **Confusion** - Mixed signals
 
 **Root Cause**: Only checks root `package.json`, doesn't understand:
+
 - Monorepo structures
 - npm workspaces
 - Nested configurations
@@ -56,17 +61,19 @@ After reviewing comprehensive agent feedback, I'm **changing the P1 priority ord
 #### Issue #2: Inconsistent Working Directory Context
 
 **Problem**:
+
 ```bash
 # From root
 caws gates all 1
 ❌ Coverage: 0% (not found)
 
-# From workspace  
+# From workspace
 caws gates all 1
 ❌ Coverage: 5.8% (found!)
 ```
 
 **Impact**:
+
 - ⚠️ **Broken CI/CD** - Gates fail incorrectly from root
 - ⚠️ **Frustration** - Must remember correct directory
 - ⚠️ **False negatives** - Real coverage not detected
@@ -127,6 +134,7 @@ class WorkspaceDetector {
 ```
 
 **Testing**:
+
 - ✅ npm workspaces
 - ✅ yarn workspaces
 - ✅ pnpm workspaces
@@ -167,8 +175,10 @@ class WorkingDirectoryFinder {
     }
 
     // Priority 4: Current directory if has tests/
-    if (fs.existsSync(path.join(startPath, 'tests')) || 
-        fs.existsSync(path.join(startPath, 'test'))) {
+    if (
+      fs.existsSync(path.join(startPath, 'tests')) ||
+      fs.existsSync(path.join(startPath, 'test'))
+    ) {
       return startPath;
     }
 
@@ -179,6 +189,7 @@ class WorkingDirectoryFinder {
 ```
 
 **Integration Points**:
+
 - `caws diagnose` - Use for dependency checks
 - `caws gates` - Use for coverage/test lookups
 - `caws evaluate` - Use for project analysis
@@ -190,6 +201,7 @@ class WorkingDirectoryFinder {
 **File**: `packages/caws-cli/src/commands/diagnose.js`
 
 **Changes**:
+
 ```javascript
 // Before (false positives)
 if (!hasTsJest) {
@@ -227,6 +239,7 @@ if (isTypeScript && hasJest && !tsJestCheck.found) {
 **File**: `packages/caws-cli/templates/apps/tools/caws/gates.ts`
 
 **Changes**:
+
 ```typescript
 // Before (directory-sensitive)
 const coverageFile = path.join(workingDirectory, 'coverage/coverage-summary.json');
@@ -244,9 +257,10 @@ if (!fs.existsSync(coverageFile)) {
     details: {
       searched_directory: workingDir,
       expected_file: coverageFile,
-      hint: workingDir !== workingDirectory 
-        ? `Auto-detected workspace: ${workingDir}`
-        : 'Run tests to generate coverage report',
+      hint:
+        workingDir !== workingDirectory
+          ? `Auto-detected workspace: ${workingDir}`
+          : 'Run tests to generate coverage report',
     },
   };
 }
@@ -256,13 +270,13 @@ if (!fs.existsSync(coverageFile)) {
 
 ### Success Criteria
 
-| Criteria | Target | Validation |
-|----------|--------|------------|
-| No false positives in monorepos | 0 | Test with npm/yarn/pnpm workspaces |
-| Working directory auto-detection | 100% | Gates pass from root and workspace |
-| Dependency checks workspace-aware | 100% | Find deps in any workspace |
-| Clear error messages | 100% | Show searched locations |
-| Agent trust score | > 9/10 | Re-test with agent |
+| Criteria                          | Target | Validation                         |
+| --------------------------------- | ------ | ---------------------------------- |
+| No false positives in monorepos   | 0      | Test with npm/yarn/pnpm workspaces |
+| Working directory auto-detection  | 100%   | Gates pass from root and workspace |
+| Dependency checks workspace-aware | 100%   | Find deps in any workspace         |
+| Clear error messages              | 100%   | Show searched locations            |
+| Agent trust score                 | > 9/10 | Re-test with agent                 |
 
 ---
 
@@ -277,12 +291,14 @@ if (!fs.existsSync(coverageFile)) {
 #### Issue #3: Limited Error Context
 
 **Problem**:
+
 ```bash
 ❌ Contract gate failed
    - Contract tests not run or results not found
 ```
 
 **Missing**:
+
 - Where did tool look?
 - What format expected?
 - How to generate results?
@@ -296,6 +312,7 @@ if (!fs.existsSync(coverageFile)) {
 #### Task 1: Enhanced Error Messages (3-4 hours)
 
 **Pattern**:
+
 ```javascript
 {
   passed: false,
@@ -324,6 +341,7 @@ if (!fs.existsSync(coverageFile)) {
 ```
 
 **Apply to**:
+
 - All gate checkers
 - Diagnostic tools
 - Validation errors
@@ -401,6 +419,7 @@ const TROUBLESHOOTING_GUIDES = {
 #### Issue #4: No Incremental Progress Tracking
 
 **Problem**:
+
 ```bash
 ⬜ A1: Data securely stored...
 ⬜ A2: Task routed...
@@ -408,6 +427,7 @@ Progress: 0/5 (0%)
 ```
 
 **Missing**:
+
 - Can't mark "in progress"
 - Can't track partial completion
 - Demotivating (0% after hours of work)
@@ -419,14 +439,15 @@ Progress: 0/5 (0%)
 #### Task 1: Progress State Management (4-5 hours)
 
 **Enhance working spec**:
+
 ```yaml
 acceptance:
   - id: A1
     given: User logs in
     when: Invalid credentials
     then: Error message shown
-    status: in_progress          # NEW
-    progress:                     # NEW
+    status: in_progress # NEW
+    progress: # NEW
       tests_written: 5
       tests_passing: 3
       tests_failing: 2
@@ -465,6 +486,7 @@ caws progress update A1 --status in_progress --tests-written 5 --tests-passing 3
 **Already implemented in P1 Sprint 1!** ✅
 
 Just need to:
+
 - Update documentation
 - Add to help text
 - Surface in status command
@@ -473,12 +495,12 @@ Just need to:
 
 ## 📊 Comparison: Original vs Reprioritized
 
-| Sprint | Original Plan | Reprioritized | Reason |
-|--------|---------------|---------------|--------|
-| **P1-2** | Error Handling | **Trust & Reliability** | Critical: False positives kill trust |
-| **P1-3** | IDE Integration | **Enhanced Error Context** | High: Enables self-service debugging |
-| **P1-4** | Performance | **Progress Tracking & DX** | Medium: Important but not blocking |
-| **P1-5** | - | **IDE Integration** (moved) | Lower priority than reliability |
+| Sprint   | Original Plan   | Reprioritized               | Reason                               |
+| -------- | --------------- | --------------------------- | ------------------------------------ |
+| **P1-2** | Error Handling  | **Trust & Reliability**     | Critical: False positives kill trust |
+| **P1-3** | IDE Integration | **Enhanced Error Context**  | High: Enables self-service debugging |
+| **P1-4** | Performance     | **Progress Tracking & DX**  | Medium: Important but not blocking   |
+| **P1-5** | -               | **IDE Integration** (moved) | Lower priority than reliability      |
 
 ---
 
@@ -514,4 +536,3 @@ Just need to:
 The agent feedback is clear: **Fix false positives first** or risk losing trust. Everything else builds on a reliable foundation.
 
 What's your preference?
-

@@ -1,0 +1,311 @@
+openapi: 3.0.3
+info:
+  title: CAWS MCP JSON-RPC Protocol
+  description: |
+    JSON-RPC 2.0 protocol specification for CAWS MCP server communication.
+    Defines the wire protocol for AI agent interactions with CAWS tooling.
+  version: 2.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3000/jsonrpc
+    description: Local JSON-RPC endpoint
+  - url: https://api.caws.dev/jsonrpc
+    description: Production JSON-RPC endpoint
+
+paths:
+  /:
+    post:
+      summary: JSON-RPC 2.0 Request Handler
+      description: |
+        Process JSON-RPC 2.0 requests for CAWS tool execution.
+        Supports single requests, batch requests, and notifications.
+      operationId: handleJsonRpc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/JsonRpcRequest'
+                - $ref: '#/components/schemas/JsonRpcBatchRequest'
+                - $ref: '#/components/schemas/JsonRpcNotification'
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/JsonRpcResponse'
+                  - $ref: '#/components/schemas/JsonRpcError'
+                  - $ref: '#/components/schemas/JsonRpcBatchResponse'
+        '400':
+          description: Invalid JSON-RPC request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcError'
+
+components:
+  schemas:
+    JsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - method
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          description: JSON-RPC version
+        method:
+          type: string
+          description: Method name to invoke
+          example: "caws_validate"
+        params:
+          description: Method parameters
+          oneOf:
+            - type: object
+            - type: array
+        id:
+          description: Request identifier
+          oneOf:
+            - type: string
+            - type: number
+            - type: null
+          example: "req-123"
+
+    JsonRpcNotification:
+      type: object
+      required:
+        - jsonrpc
+        - method
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          description: JSON-RPC version
+        method:
+          type: string
+          description: Method name to invoke
+        params:
+          description: Method parameters
+          oneOf:
+            - type: object
+            - type: array
+
+    JsonRpcBatchRequest:
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/components/schemas/JsonRpcRequest'
+          - $ref: '#/components/schemas/JsonRpcNotification'
+      minItems: 1
+      description: Batch of JSON-RPC requests
+
+    JsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - result
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          description: JSON-RPC version
+        result:
+          description: Method execution result
+        id:
+          description: Request identifier (matches request id)
+          oneOf:
+            - type: string
+            - type: number
+            - type: null
+
+    JsonRpcError:
+      type: object
+      required:
+        - jsonrpc
+        - error
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          description: JSON-RPC version
+        error:
+          $ref: '#/components/schemas/JsonRpcErrorObject'
+        id:
+          description: Request identifier (matches request id or null for parse errors)
+          oneOf:
+            - type: string
+            - type: number
+            - type: null
+
+    JsonRpcErrorObject:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: |
+            Error code as per JSON-RPC 2.0 specification:
+            -32700: Parse error
+            -32600: Invalid Request
+            -32601: Method not found
+            -32602: Invalid params
+            -32603: Internal error
+            -32000 to -32099: Server error
+          example: -32601
+        message:
+          type: string
+          description: Short error description
+          example: "Method not found"
+        data:
+          description: Additional error information
+          example:
+            tool: "caws_unknown_tool"
+            available_tools: ["caws_validate", "caws_init"]
+
+    JsonRpcBatchResponse:
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/components/schemas/JsonRpcResponse'
+          - $ref: '#/components/schemas/JsonRpcError'
+      description: Batch of JSON-RPC responses
+
+    # CAWS-Specific Extensions
+    CawsToolRequest:
+      allOf:
+        - $ref: '#/components/schemas/JsonRpcRequest'
+        - type: object
+          properties:
+            method:
+              enum:
+                - "caws_init"
+                - "caws_scaffold"
+                - "caws_validate"
+                - "caws_evaluate"
+                - "caws_iterate"
+                - "caws_status"
+                - "caws_diagnose"
+                - "caws_workflow_guidance"
+                - "caws_quality_monitor"
+                - "caws_progress_update"
+                - "caws_test_analysis"
+                - "caws_provenance"
+                - "caws_hooks"
+                - "caws_waiver_create"
+                - "caws_waivers_list"
+                - "caws_help"
+
+    CawsToolResponse:
+      allOf:
+        - $ref: '#/components/schemas/JsonRpcResponse'
+        - type: object
+          properties:
+            result:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  description: Tool-specific result data
+                metadata:
+                  $ref: '#/components/schemas/CawsMetadata'
+
+    CawsMetadata:
+      type: object
+      properties:
+        executionTime:
+          type: number
+          description: Tool execution time in milliseconds
+        version:
+          type: string
+          description: CAWS version used
+          example: "3.1.0"
+        timestamp:
+          type: string
+          format: date-time
+          description: Execution timestamp
+        provenanceId:
+          type: string
+          description: Provenance tracking identifier
+
+  examples:
+    validateRequest:
+      summary: Validate working spec
+      value:
+        jsonrpc: "2.0"
+        method: "caws_validate"
+        params:
+          specFile: ".caws/working-spec.yaml"
+        id: "validate-001"
+
+    validateResponse:
+      summary: Successful validation response
+      value:
+        jsonrpc: "2.0"
+        result:
+          success: true
+          data:
+            risk_tier: 2
+            mode: "feature"
+            title: "User Authentication"
+          metadata:
+            executionTime: 1250
+            version: "3.1.0"
+            timestamp: "2025-01-09T10:30:00Z"
+        id: "validate-001"
+
+    errorResponse:
+      summary: Tool execution error
+      value:
+        jsonrpc: "2.0"
+        error:
+          code: -32602
+          message: "Invalid parameters"
+          data:
+            invalid_params: ["workingDirectory"]
+            expected_type: "string"
+        id: "validate-001"
+
+    batchRequest:
+      summary: Batch tool execution
+      value:
+        - jsonrpc: "2.0"
+          method: "caws_validate"
+          params: {}
+          id: "batch-001"
+        - jsonrpc: "2.0"
+          method: "caws_status"
+          params: {}
+          id: "batch-002"
+
+    batchResponse:
+      summary: Batch response
+      value:
+        - jsonrpc: "2.0"
+          result:
+            success: true
+            data: { valid: true }
+          id: "batch-001"
+        - jsonrpc: "2.0"
+          result:
+            success: true
+            data: { coverage: 85.5 }
+          id: "batch-002"

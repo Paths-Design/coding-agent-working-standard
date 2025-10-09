@@ -9648,12 +9648,49 @@ var require_error_handler = __commonJS({
         this.name = "CAWSError";
         this.category = category || getErrorCategory(message);
         this.suggestions = Array.isArray(suggestions) ? suggestions : [suggestions].filter(Boolean);
+        this.timestamp = /* @__PURE__ */ new Date();
+        this.executionTime = null;
       }
     };
-    async function safeAsync(operation, context = "") {
+    var ExecutionTimer = class {
+      constructor() {
+        this.startTime = null;
+        this.endTime = null;
+      }
+      start() {
+        this.startTime = process.hrtime.bigint();
+      }
+      end() {
+        this.endTime = process.hrtime.bigint();
+        return this.getDuration();
+      }
+      getDuration() {
+        if (!this.startTime || !this.endTime) return 0;
+        const durationNs = Number(this.endTime - this.startTime);
+        return durationNs / 1e6;
+      }
+      formatDuration() {
+        const ms = this.getDuration();
+        if (ms < 1e3) {
+          return `${Math.round(ms)}ms`;
+        }
+        return `${(ms / 1e3).toFixed(2)}s`;
+      }
+    };
+    async function safeAsync(operation, context = "", includeTiming = false) {
+      const timer = includeTiming ? new ExecutionTimer() : null;
+      if (timer) timer.start();
       try {
-        return await operation();
+        const result = await operation();
+        if (includeTiming && timer) {
+          const duration = timer.formatDuration();
+          console.log(chalk2.gray(`   (completed in ${duration})`));
+        }
+        return result;
       } catch (error) {
+        if (timer) {
+          error.executionTime = timer.formatDuration();
+        }
         const category = getErrorCategory(error);
         const enhancedError = new CAWSError(
           `${context}: ${error.message}`,
@@ -9661,6 +9698,32 @@ var require_error_handler = __commonJS({
           getRecoverySuggestions(error, category)
         );
         enhancedError.originalError = error;
+        enhancedError.executionTime = error.executionTime;
+        throw enhancedError;
+      }
+    }
+    function safeSync(operation, context = "", includeTiming = false) {
+      const timer = includeTiming ? new ExecutionTimer() : null;
+      if (timer) timer.start();
+      try {
+        const result = operation();
+        if (includeTiming && timer) {
+          const duration = timer.formatDuration();
+          console.log(chalk2.gray(`   (completed in ${duration})`));
+        }
+        return result;
+      } catch (error) {
+        if (timer) {
+          error.executionTime = timer.formatDuration();
+        }
+        const category = getErrorCategory(error);
+        const enhancedError = new CAWSError(
+          `${context}: ${error.message}`,
+          category,
+          getRecoverySuggestions(error, category)
+        );
+        enhancedError.originalError = error;
+        enhancedError.executionTime = error.executionTime;
         throw enhancedError;
       }
     }
@@ -9687,21 +9750,38 @@ var require_error_handler = __commonJS({
           "validate",
           "scaffold",
           "status",
+          "diagnose",
+          "evaluate",
+          "iterate",
+          "waivers",
           "templates",
           "provenance",
           "hooks",
-          "burnup",
-          "tool"
+          "workflow",
+          "quality-monitor",
+          "test-analysis"
         ];
         const similar = findSimilarCommand2(command, validCommands);
         const suggestions = [];
         if (similar) {
           suggestions.push(`Did you mean: caws ${similar}?`);
         }
-        suggestions.push(
-          "Available commands: init, validate, scaffold, status, templates, provenance, hooks"
-        );
-        suggestions.push("Try: caws --help for full command list");
+        const commandCategories = {
+          setup: ["init", "scaffold", "templates"],
+          validation: ["validate", "status", "diagnose"],
+          analysis: ["evaluate", "iterate", "test-analysis"],
+          compliance: ["waivers", "workflow", "quality-monitor"],
+          history: ["provenance", "hooks"]
+        };
+        if (command.includes("setup") || command.includes("start") || command.includes("create")) {
+          suggestions.push("For project setup: caws init");
+        } else if (command.includes("check") || command.includes("verify") || command.includes("test")) {
+          suggestions.push("For validation: caws validate");
+        } else if (command.includes("list") || command.includes("show") || command.includes("get")) {
+          suggestions.push("For status: caws status");
+        }
+        suggestions.push("Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor");
+        suggestions.push("Try: caws --help for full command list with descriptions");
         return suggestions;
       },
       "template not found": () => [
@@ -9819,23 +9899,190 @@ var require_error_handler = __commonJS({
       }
       return categoryLinks[category] || `${baseUrl}/docs/agents/full-guide.md`;
     }
+    function formatJsonOutput(data, pretty = true) {
+      return JSON.stringify(data, null, pretty ? 2 : 0);
+    }
+    function isJsonOutput() {
+      return process.argv.includes("--json") || process.argv.includes("-j") || process.env.CAWS_OUTPUT_FORMAT === "json";
+    }
+    function outputResult(data, success = true) {
+      if (isJsonOutput()) {
+        const jsonData = {
+          success,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          ...data
+        };
+        console.log(formatJsonOutput(jsonData));
+      } else {
+        return data;
+      }
+    }
     function handleCliError2(error, context = {}, exit = true) {
       const category = error.category || getErrorCategory(error);
       const suggestions = error.suggestions || getRecoverySuggestions(error, category, context);
       const docLink = getDocumentationLink(category, context);
-      console.error(chalk2.red(`
+      const troubleshootingGuide = suggestTroubleshootingGuide(error.message);
+      if (isJsonOutput()) {
+        const jsonError = {
+          success: false,
+          error: {
+            message: error.message,
+            category,
+            suggestions,
+            documentation: docLink,
+            executionTime: error.executionTime,
+            timestamp: error.timestamp?.toISOString(),
+            troubleshootingGuide: troubleshootingGuide ? getTroubleshootingGuide(troubleshootingGuide) : null
+          }
+        };
+        console.log(formatJsonOutput(jsonError));
+      } else {
+        console.error(chalk2.red(`
 \u274C ${error.message}`));
-      if (suggestions && suggestions.length > 0) {
-        console.error(chalk2.yellow("\n\u{1F4A1} Suggestions:"));
-        suggestions.forEach((suggestion) => {
-          console.error(chalk2.yellow(`   ${suggestion}`));
-        });
-      }
-      console.error(chalk2.blue(`
+        if (suggestions && suggestions.length > 0) {
+          console.error(chalk2.yellow("\n\u{1F4A1} Suggestions:"));
+          suggestions.forEach((suggestion) => {
+            console.error(chalk2.yellow(`   ${suggestion}`));
+          });
+        }
+        if (troubleshootingGuide) {
+          const guide = getTroubleshootingGuide(troubleshootingGuide);
+          console.error(chalk2.cyan(`
+\u{1F50D} Troubleshooting Guide: ${guide.title}`));
+          console.error(chalk2.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`));
+        }
+        console.error(chalk2.blue(`
 \u{1F4DA} Documentation: ${docLink}`));
+      }
       if (exit) {
         process.exit(1);
       }
+    }
+    var TROUBLESHOOTING_GUIDES = {
+      "coverage-report-not-found": {
+        title: "Coverage Report Not Found",
+        symptoms: [
+          'Coverage check fails with "report not found"',
+          "Tests pass but coverage reports missing",
+          "Jest/Vitest coverage not generating files"
+        ],
+        rootCauses: [
+          "Tests not run with coverage flag",
+          "Coverage output directory misconfigured",
+          "Test framework not configured for coverage",
+          "Working directory detection issue"
+        ],
+        solutions: [
+          "Run tests with coverage: npm test -- --coverage --coverageReporters=json",
+          "Check coverage configuration in package.json or jest.config.js",
+          "Ensure coverage output directory exists",
+          "Run from workspace directory in monorepos"
+        ],
+        commands: [
+          "npm test -- --coverage --coverageReporters=json",
+          "jest --coverage --coverageReporters=json",
+          "vitest run --coverage",
+          "caws status --verbose"
+        ]
+      },
+      "mutation-report-not-found": {
+        title: "Mutation Report Not Found",
+        symptoms: [
+          'Mutation check fails with "report not found"',
+          "Stryker mutation tests not generating reports",
+          "Mutation testing configured but no results"
+        ],
+        rootCauses: [
+          "Mutation tests not run",
+          "Stryker configuration incorrect",
+          "Report output path misconfigured",
+          "Working directory detection issue"
+        ],
+        solutions: [
+          "Run mutation tests: npx stryker run",
+          "Check stryker.conf.json configuration",
+          "Verify report output paths",
+          "Run from workspace directory in monorepos"
+        ],
+        commands: [
+          "npx stryker run",
+          "npx stryker run --configFile stryker.conf.json",
+          "caws status --verbose"
+        ]
+      },
+      "working-spec-validation": {
+        title: "Working Spec Validation Errors",
+        symptoms: [
+          "Working spec fails validation",
+          "Schema errors in .caws/working-spec.yaml",
+          "Invalid risk tier or scope configuration"
+        ],
+        rootCauses: [
+          "Invalid YAML syntax",
+          "Missing required fields",
+          "Incorrect schema structure",
+          "Invalid scope paths"
+        ],
+        solutions: [
+          "Run validation with suggestions: caws validate --suggestions",
+          "Auto-fix safe issues: caws validate --auto-fix",
+          "Check schema documentation",
+          "Use caws init to generate valid spec"
+        ],
+        commands: [
+          "caws validate --suggestions",
+          "caws validate --auto-fix",
+          "caws init --interactive"
+        ]
+      },
+      "monorepo-detection": {
+        title: "Monorepo Detection Issues",
+        symptoms: [
+          "CAWS not detecting workspace structure",
+          "False positives about missing dependencies",
+          "Commands fail from workspace directories"
+        ],
+        rootCauses: [
+          "Unsupported monorepo tool (not npm/yarn/pnpm/lerna)",
+          "Invalid workspace configuration",
+          "Running from wrong directory",
+          "Missing package.json files in workspaces"
+        ],
+        solutions: [
+          "Verify workspace configuration in root package.json",
+          "Ensure workspace directories contain package.json",
+          "Run commands from workspace directories",
+          "Check for supported monorepo tools"
+        ],
+        commands: [
+          "cat package.json | grep workspaces",
+          "find packages -name package.json",
+          "caws diagnose",
+          "caws status"
+        ]
+      }
+    };
+    function getTroubleshootingGuide(issueKey) {
+      return TROUBLESHOOTING_GUIDES[issueKey] || null;
+    }
+    function getAllTroubleshootingGuides() {
+      return TROUBLESHOOTING_GUIDES;
+    }
+    function suggestTroubleshootingGuide(errorMessage) {
+      const lowerMessage = errorMessage.toLowerCase();
+      if (lowerMessage.includes("coverage") && lowerMessage.includes("not found")) {
+        return "coverage-report-not-found";
+      }
+      if (lowerMessage.includes("mutation") && lowerMessage.includes("not found")) {
+        return "mutation-report-not-found";
+      }
+      if (lowerMessage.includes("working spec") || lowerMessage.includes("validation")) {
+        return "working-spec-validation";
+      }
+      if (lowerMessage.includes("workspace") || lowerMessage.includes("monorepo")) {
+        return "monorepo-detection";
+      }
+      return null;
     }
     function validateEnvironment() {
       const errors = [];
@@ -9857,14 +10104,23 @@ var require_error_handler = __commonJS({
     module2.exports = {
       CAWSError,
       ERROR_CATEGORIES,
+      ExecutionTimer,
       getErrorCategory,
       safeAsync,
+      safeSync,
       handleCliError: handleCliError2,
       validateEnvironment,
       getRecoverySuggestions,
       getDocumentationLink,
       findSimilarCommand: findSimilarCommand2,
-      COMMAND_SUGGESTIONS
+      COMMAND_SUGGESTIONS,
+      formatJsonOutput,
+      isJsonOutput,
+      outputResult,
+      TROUBLESHOOTING_GUIDES,
+      getTroubleshootingGuide,
+      getAllTroubleshootingGuides,
+      suggestTroubleshootingGuide
     };
   }
 });
@@ -46302,6 +46558,7 @@ var require_status = __commonJS({
     var path2 = require("path");
     var yaml2 = require_js_yaml();
     var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
     async function loadWorkingSpec(specPath = ".caws/working-spec.yaml") {
       try {
         if (!await fs2.pathExists(specPath)) {
@@ -46367,6 +46624,57 @@ var require_status = __commonJS({
         };
       }
     }
+    async function loadWaiverStatus() {
+      const waiversDir = ".caws/waivers";
+      if (!await fs2.pathExists(waiversDir)) {
+        return {
+          exists: false,
+          active: 0,
+          expired: 0,
+          revoked: 0,
+          total: 0
+        };
+      }
+      try {
+        const waiverFiles = await fs2.readdir(waiversDir);
+        const yamlFiles = waiverFiles.filter((f) => f.endsWith(".yaml"));
+        let active = 0;
+        let expired = 0;
+        let revoked = 0;
+        for (const file of yamlFiles) {
+          const waiverPath = path2.join(waiversDir, file);
+          const content = await fs2.readFile(waiverPath, "utf8");
+          const waiver = yaml2.load(content);
+          if (waiver.status === "revoked") {
+            revoked++;
+          } else if (waiver.status === "active") {
+            const now = /* @__PURE__ */ new Date();
+            const expiresAt = new Date(waiver.expires_at);
+            if (now > expiresAt) {
+              expired++;
+            } else {
+              active++;
+            }
+          }
+        }
+        return {
+          exists: true,
+          active,
+          expired,
+          revoked,
+          total: active + expired + revoked
+        };
+      } catch (error) {
+        return {
+          exists: false,
+          active: 0,
+          expired: 0,
+          revoked: 0,
+          total: 0,
+          error: error.message
+        };
+      }
+    }
     async function checkQualityGates() {
       return {
         checked: false,
@@ -46387,7 +46695,7 @@ var require_status = __commonJS({
       return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
     }
     function displayStatus(data) {
-      const { spec, hooks, provenance, gates } = data;
+      const { spec, hooks, provenance, waivers, gates } = data;
       console.log(chalk2.bold.cyan("\n\u{1F4CA} CAWS Project Status"));
       console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
       if (spec) {
@@ -46421,6 +46729,23 @@ var require_status = __commonJS({
         console.log(chalk2.yellow("   \u{1F4A1} Run: caws provenance init"));
       }
       console.log("");
+      if (waivers.exists && waivers.total > 0) {
+        console.log(chalk2.green("\u2705 Quality Gate Waivers"));
+        console.log(
+          chalk2.gray(
+            `   ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
+          )
+        );
+        console.log(chalk2.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? "s" : ""}`));
+      } else if (waivers.exists) {
+        console.log(chalk2.blue("\u2139\uFE0F  Quality Gate Waivers"));
+        console.log(chalk2.gray("   No waivers configured"));
+      } else {
+        console.log(chalk2.yellow("\u26A0\uFE0F  Quality Gate Waivers"));
+        console.log(chalk2.gray("   Waiver system not initialized"));
+        console.log(chalk2.yellow("   \u{1F4A1} Run: caws waivers create (when needed)"));
+      }
+      console.log("");
       console.log(chalk2.blue("\u2139\uFE0F  Quality Gates"));
       console.log(chalk2.gray(`   ${gates.message}`));
       const suggestions = generateSuggestions(data);
@@ -46439,6 +46764,9 @@ var require_status = __commonJS({
       }
       if (provenance.exists) {
         console.log(chalk2.blue("   View provenance: caws provenance show --format=dashboard"));
+      }
+      if (waivers.exists && waivers.total > 0) {
+        console.log(chalk2.blue("   View waivers: caws waivers list"));
       }
       console.log(chalk2.blue("   Full documentation: docs/agents/full-guide.md"));
       console.log("");
@@ -46460,28 +46788,36 @@ var require_status = __commonJS({
       return suggestions;
     }
     async function statusCommand2(options = {}) {
-      try {
+      return safeAsync(async () => {
         const spec = await loadWorkingSpec(options.spec || ".caws/working-spec.yaml");
         const hooks = await checkGitHooks();
         const provenance = await loadProvenanceChain();
+        const waivers = await loadWaiverStatus();
         const gates = await checkQualityGates();
         displayStatus({
           spec,
           hooks,
           provenance,
+          waivers,
           gates
         });
-      } catch (error) {
-        console.error(chalk2.red("\u274C Error checking project status:"), error.message);
-        console.error(chalk2.yellow("\n\u{1F4A1} Try: caws validate to check your setup"));
-        process.exit(1);
-      }
+        const result = outputResult({
+          command: "status",
+          spec: spec ? "loaded" : "not found",
+          hooks: hooks.installed,
+          provenance: provenance.entries?.length || 0,
+          waivers: waivers.active?.length || 0,
+          gates: gates.passed ? "passed" : "failed"
+        });
+        return result;
+      }, "status check", true);
     }
     module2.exports = {
       statusCommand: statusCommand2,
       loadWorkingSpec,
       checkGitHooks,
       loadProvenanceChain,
+      loadWaiverStatus,
       checkQualityGates,
       displayStatus,
       generateSuggestions
@@ -46740,16 +47076,173 @@ var require_typescript_detector = __commonJS({
         // Will be set by checkTypeScriptTestConfig
       };
     }
+    function getNpmWorkspaces(projectDir) {
+      const packageJsonPath = path2.join(projectDir, "package.json");
+      if (!fs2.existsSync(packageJsonPath)) {
+        return [];
+      }
+      try {
+        const packageJson = JSON.parse(fs2.readFileSync(packageJsonPath, "utf8"));
+        const workspaces = packageJson.workspaces || [];
+        const workspaceDirs = [];
+        for (const ws of workspaces) {
+          if (ws.includes("*")) {
+            const baseDir = ws.split("*")[0];
+            const fullBaseDir = path2.join(projectDir, baseDir);
+            if (fs2.existsSync(fullBaseDir)) {
+              const entries = fs2.readdirSync(fullBaseDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isDirectory()) {
+                  const wsPath = path2.join(fullBaseDir, entry.name);
+                  if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+                    workspaceDirs.push(wsPath);
+                  }
+                }
+              }
+            }
+          } else {
+            const wsPath = path2.join(projectDir, ws);
+            if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+              workspaceDirs.push(wsPath);
+            }
+          }
+        }
+        return workspaceDirs;
+      } catch (error) {
+        return [];
+      }
+    }
+    function getPnpmWorkspaces(projectDir) {
+      const pnpmFile = path2.join(projectDir, "pnpm-workspace.yaml");
+      if (!fs2.existsSync(pnpmFile)) {
+        return [];
+      }
+      try {
+        const yaml2 = require_js_yaml();
+        const config = yaml2.load(fs2.readFileSync(pnpmFile, "utf8"));
+        const workspacePatterns = config.packages || [];
+        const workspaceDirs = [];
+        for (const pattern of workspacePatterns) {
+          if (pattern.includes("*")) {
+            const baseDir = pattern.split("*")[0];
+            const fullBaseDir = path2.join(projectDir, baseDir);
+            if (fs2.existsSync(fullBaseDir)) {
+              const entries = fs2.readdirSync(fullBaseDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isDirectory()) {
+                  const wsPath = path2.join(fullBaseDir, entry.name);
+                  if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+                    workspaceDirs.push(wsPath);
+                  }
+                }
+              }
+            }
+          } else {
+            const wsPath = path2.join(projectDir, pattern);
+            if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+              workspaceDirs.push(wsPath);
+            }
+          }
+        }
+        return workspaceDirs;
+      } catch (error) {
+        return [];
+      }
+    }
+    function getLernaWorkspaces(projectDir) {
+      const lernaFile = path2.join(projectDir, "lerna.json");
+      if (!fs2.existsSync(lernaFile)) {
+        return [];
+      }
+      try {
+        const config = JSON.parse(fs2.readFileSync(lernaFile, "utf8"));
+        const workspacePatterns = config.packages || ["packages/*"];
+        const workspaceDirs = [];
+        for (const pattern of workspacePatterns) {
+          if (pattern.includes("*")) {
+            const baseDir = pattern.split("*")[0];
+            const fullBaseDir = path2.join(projectDir, baseDir);
+            if (fs2.existsSync(fullBaseDir)) {
+              const entries = fs2.readdirSync(fullBaseDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isDirectory()) {
+                  const wsPath = path2.join(fullBaseDir, entry.name);
+                  if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+                    workspaceDirs.push(wsPath);
+                  }
+                }
+              }
+            }
+          } else {
+            const wsPath = path2.join(projectDir, pattern);
+            if (fs2.existsSync(path2.join(wsPath, "package.json"))) {
+              workspaceDirs.push(wsPath);
+            }
+          }
+        }
+        return workspaceDirs;
+      } catch (error) {
+        return [];
+      }
+    }
+    function checkHoistedDependency(depName, projectDir) {
+      const hoistedPath = path2.join(projectDir, "node_modules", depName, "package.json");
+      return fs2.existsSync(hoistedPath);
+    }
+    function getWorkspaceDirectories(projectDir = process.cwd()) {
+      const workspaceDirs = [
+        ...getNpmWorkspaces(projectDir),
+        ...getPnpmWorkspaces(projectDir),
+        ...getLernaWorkspaces(projectDir)
+      ];
+      return [...new Set(workspaceDirs)];
+    }
     function checkTypeScriptTestConfig(projectDir = process.cwd()) {
-      const tsDetection = detectTypeScript(projectDir);
-      const testDetection = detectTestFramework(projectDir, tsDetection.packageJson);
-      const needsConfig = tsDetection.isTypeScript && testDetection.framework === "jest" && !testDetection.hasTsJest;
+      const rootTsDetection = detectTypeScript(projectDir);
+      const rootTestDetection = detectTestFramework(projectDir, rootTsDetection.packageJson);
+      const workspaceDirs = getWorkspaceDirectories(projectDir);
+      const workspaceResults = [];
+      for (const wsDir of workspaceDirs) {
+        const wsTsDetection = detectTypeScript(wsDir);
+        const wsTestDetection = detectTestFramework(wsDir, wsTsDetection.packageJson);
+        workspaceResults.push({
+          directory: path2.relative(projectDir, wsDir),
+          tsDetection: wsTsDetection,
+          testDetection: wsTestDetection
+        });
+      }
+      let primaryTsDetection = rootTsDetection;
+      let primaryTestDetection = rootTestDetection;
+      let primaryWorkspace = null;
+      for (const wsResult of workspaceResults) {
+        if (wsResult.tsDetection.isTypeScript) {
+          if (!primaryTsDetection.isTypeScript || wsResult.tsDetection.hasTsConfig && !primaryTsDetection.hasTsConfig || wsResult.testDetection.framework !== "none" && primaryTestDetection.framework === "none") {
+            primaryTsDetection = wsResult.tsDetection;
+            primaryTestDetection = wsResult.testDetection;
+            primaryWorkspace = wsResult.directory;
+          }
+        }
+      }
+      let hasTsJestAnywhere = primaryTestDetection.hasTsJest;
+      if (!hasTsJestAnywhere) {
+        hasTsJestAnywhere = workspaceResults.some((ws) => ws.testDetection.hasTsJest);
+      }
+      if (!hasTsJestAnywhere) {
+        hasTsJestAnywhere = checkHoistedDependency("ts-jest", projectDir);
+      }
+      const needsConfig = primaryTsDetection.isTypeScript && primaryTestDetection.framework === "jest" && !hasTsJestAnywhere;
       return {
-        ...tsDetection,
-        testFramework: testDetection,
-        needsJestConfig: tsDetection.isTypeScript && !testDetection.isConfigured,
+        ...primaryTsDetection,
+        testFramework: primaryTestDetection,
+        needsJestConfig: primaryTsDetection.isTypeScript && !primaryTestDetection.isConfigured,
         needsTsJest: needsConfig,
-        recommendations: generateRecommendations(tsDetection, testDetection)
+        recommendations: generateRecommendations(primaryTsDetection, primaryTestDetection),
+        workspaceInfo: {
+          hasWorkspaces: workspaceDirs.length > 0,
+          workspaceCount: workspaceDirs.length,
+          primaryWorkspace,
+          allWorkspaces: workspaceResults.map((ws) => ws.directory)
+        }
       };
     }
     function generateRecommendations(tsDetection, testDetection) {
@@ -46791,6 +47284,11 @@ var require_typescript_detector = __commonJS({
     module2.exports = {
       detectTypeScript,
       detectTestFramework,
+      getWorkspaceDirectories,
+      getNpmWorkspaces,
+      getPnpmWorkspaces,
+      getLernaWorkspaces,
+      checkHoistedDependency,
       checkTypeScriptTestConfig,
       generateRecommendations,
       displayTypeScriptDetection
@@ -47088,11 +47586,15 @@ var require_diagnose = __commonJS({
           skipped: true
         };
       }
+      let messageSuffix = "";
+      if (tsConfig.workspaceInfo.hasWorkspaces && tsConfig.workspaceInfo.primaryWorkspace) {
+        messageSuffix = ` (detected in workspace: ${tsConfig.workspaceInfo.primaryWorkspace})`;
+      }
       if (tsConfig.needsJestConfig) {
         return {
           passed: false,
           severity: "medium",
-          message: "TypeScript project missing Jest configuration",
+          message: `TypeScript project missing Jest configuration${messageSuffix}`,
           fix: "Auto-configure Jest for TypeScript",
           autoFixable: true,
           autoFix: async () => {
@@ -47106,17 +47608,25 @@ var require_diagnose = __commonJS({
         };
       }
       if (tsConfig.needsTsJest) {
+        const workspaceContext = tsConfig.workspaceInfo.primaryWorkspace ? ` (in workspace: ${tsConfig.workspaceInfo.primaryWorkspace})` : "";
         return {
           passed: false,
           severity: "high",
-          message: "TypeScript + Jest detected but missing ts-jest",
-          fix: "Install ts-jest: npm install --save-dev ts-jest",
-          autoFixable: false
+          message: `TypeScript + Jest detected but missing ts-jest${workspaceContext}`,
+          fix: `Install ts-jest in ${tsConfig.workspaceInfo.primaryWorkspace || "root"}: npm install --save-dev ts-jest`,
+          autoFixable: false,
+          details: {
+            searchedLocations: tsConfig.workspaceInfo.primaryWorkspace ? [`${tsConfig.workspaceInfo.primaryWorkspace}/package.json`] : ["package.json"],
+            frameworkDetected: tsConfig.testFramework.framework,
+            hasJest: tsConfig.testFramework.hasJest,
+            hasTsJest: tsConfig.testFramework.hasTsJest,
+            workspacesChecked: tsConfig.workspaceInfo.allWorkspaces
+          }
         };
       }
       return {
         passed: true,
-        message: "TypeScript configuration is correct"
+        message: `TypeScript configuration is correct${messageSuffix}`
       };
     }
     async function checkTestFiles() {
@@ -47244,6 +47754,20 @@ var require_diagnose = __commonJS({
         console.log(chalk2.cyan(`   Fix: ${issue.fix}`));
         if (issue.autoFixable) {
           console.log(chalk2.green("   \u2728 Auto-fix available"));
+        }
+        if (issue.details) {
+          console.log(chalk2.gray("   Details:"));
+          if (issue.details.searchedLocations) {
+            console.log(chalk2.gray(`      Searched: ${issue.details.searchedLocations.join(", ")}`));
+          }
+          if (issue.details.frameworkDetected) {
+            console.log(chalk2.gray(`      Framework: ${issue.details.frameworkDetected}`));
+          }
+          if (issue.details.workspacesChecked && issue.details.workspacesChecked.length > 0) {
+            console.log(
+              chalk2.gray(`      Workspaces checked: ${issue.details.workspacesChecked.join(", ")}`)
+            );
+          }
         }
         console.log("");
       });
@@ -47404,7 +47928,9 @@ var require_evaluate = __commonJS({
             detail: `${validCriteria.length}/${spec.acceptance.length} complete`
           });
           if (criteriaScore < 15) {
-            results.recommendations.push("Complete all acceptance criteria with Given-When-Then format");
+            results.recommendations.push(
+              "Complete all acceptance criteria with Given-When-Then format"
+            );
           }
         } else {
           results.checks.push({ name: "Acceptance Criteria", status: "fail", points: 0 });
@@ -47487,14 +48013,20 @@ var require_evaluate = __commonJS({
         results.checks.forEach((check) => {
           const icon = check.status === "pass" ? "\u2705" : check.status === "partial" ? "\u26A0\uFE0F" : "\u274C";
           const detail = check.detail ? ` (${check.detail})` : "";
-          console.log(`${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`);
+          console.log(
+            `${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`
+          );
         });
         const percentage = Math.round(results.score / results.maxScore * 100);
         const grade = percentage >= 90 ? "A" : percentage >= 80 ? "B" : percentage >= 70 ? "C" : percentage >= 60 ? "D" : "F";
         console.log("\n" + "\u2500".repeat(60));
-        console.log(chalk2.bold(`
+        console.log(
+          chalk2.bold(
+            `
 \u{1F4CA} Overall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}
-`));
+`
+          )
+        );
         if (results.warnings.length > 0) {
           console.log(chalk2.yellow("\u26A0\uFE0F  Warnings:\n"));
           results.warnings.forEach((warning) => {
@@ -47544,7 +48076,9 @@ var require_evaluate = __commonJS({
         console.log("   4. Run: caws diagnose for health checks");
         console.log("   5. Ensure test coverage meets risk tier requirements");
         if (percentage < 70) {
-          console.log(chalk2.red("\n\u26A0\uFE0F  Quality score below 70% - improvements needed before proceeding\n"));
+          console.log(
+            chalk2.red("\n\u26A0\uFE0F  Quality score below 70% - improvements needed before proceeding\n")
+          );
           process.exit(1);
         } else if (percentage < 90) {
           console.log(chalk2.yellow("\n\u26A0\uFE0F  Quality score acceptable but improvements recommended\n"));
@@ -47622,15 +48156,83 @@ Project: ${spec.title}`));
         });
         if (spec.acceptance && spec.acceptance.length > 0) {
           console.log(chalk2.blue("\n\u{1F4CA} Acceptance Criteria Progress:\n"));
+          let totalTestsWritten = 0;
+          let totalTestsPassing = 0;
+          let totalCoverage = 0;
+          let criteriaWithProgress = 0;
           spec.acceptance.forEach((criterion, index) => {
-            const status = criterion.completed ? "\u2705" : "\u2B1C";
+            let status = "\u2B1C";
+            let statusText = "pending";
+            let progressInfo = "";
+            if (criterion.status) {
+              switch (criterion.status) {
+                case "completed":
+                  status = "\u2705";
+                  statusText = "completed";
+                  break;
+                case "in_progress":
+                  status = "\u{1F504}";
+                  statusText = "in progress";
+                  break;
+                case "pending":
+                default:
+                  status = "\u2B1C";
+                  statusText = "pending";
+                  break;
+              }
+              if (criterion.tests) {
+                const written = criterion.tests.written || 0;
+                const passing = criterion.tests.passing || 0;
+                progressInfo = ` (${passing}/${written} tests passing`;
+                if (criterion.coverage !== void 0) {
+                  progressInfo += `, ${criterion.coverage.toFixed(1)}% coverage`;
+                }
+                progressInfo += ")";
+                totalTestsWritten += written;
+                totalTestsPassing += passing;
+                if (criterion.coverage !== void 0) {
+                  totalCoverage += criterion.coverage;
+                  criteriaWithProgress++;
+                }
+              }
+              if (criterion.last_updated) {
+                const lastUpdate = new Date(criterion.last_updated).toLocaleDateString();
+                progressInfo += ` - updated ${lastUpdate}`;
+              }
+            } else if (criterion.completed) {
+              status = "\u2705";
+              statusText = "completed";
+            }
             console.log(`   ${status} ${criterion.id}: ${criterion.then}`);
+            if (progressInfo) {
+              console.log(chalk2.gray(`      ${progressInfo}`));
+            }
           });
-          const completed = spec.acceptance.filter((a) => a.completed).length;
+          const completed = spec.acceptance.filter(
+            (a) => a.status === "completed" || a.completed
+          ).length;
+          const inProgress = spec.acceptance.filter((a) => a.status === "in_progress").length;
           const total = spec.acceptance.length;
-          const progress = Math.round(completed / total * 100);
-          console.log(chalk2.bold(`
-   Progress: ${completed}/${total} (${progress}%)`));
+          const completionProgress = Math.round(completed / total * 100);
+          console.log(
+            chalk2.bold(
+              `
+   Overall Progress: ${completed}/${total} completed (${completionProgress}%)`
+            )
+          );
+          if (inProgress > 0) {
+            console.log(chalk2.yellow(`   In Progress: ${inProgress} criteria`));
+          }
+          if (totalTestsWritten > 0) {
+            const testProgress = Math.round(totalTestsPassing / totalTestsWritten * 100);
+            console.log(
+              `   Test Progress: ${totalTestsPassing}/${totalTestsWritten} tests passing (${testProgress}%)`
+            );
+          }
+          if (criteriaWithProgress > 0) {
+            const avgCoverage = totalCoverage / criteriaWithProgress;
+            console.log(`   Average Coverage: ${avgCoverage.toFixed(1)}%`);
+          }
         }
         console.log(chalk2.blue("\n\u{1F512} Quality Gates (Risk Tier " + spec.risk_tier + "):\n"));
         const gates = getQualityGates(spec.risk_tier);
@@ -47665,10 +48267,7 @@ Project: ${spec.title}`));
       };
       if (mode === "feature") {
         guidance.phase = "Feature Development";
-        guidance.completed = [
-          "Working specification created",
-          "Acceptance criteria defined"
-        ];
+        guidance.completed = ["Working specification created", "Acceptance criteria defined"];
         guidance.nextActions = [
           "Write failing tests for first acceptance criterion",
           "Implement minimum code to pass tests",
@@ -47683,10 +48282,7 @@ Project: ${spec.title}`));
         ];
       } else if (mode === "refactor") {
         guidance.phase = "Refactoring";
-        guidance.completed = [
-          "Working specification created",
-          "Baseline tests established"
-        ];
+        guidance.completed = ["Working specification created", "Baseline tests established"];
         guidance.nextActions = [
           "Ensure all existing tests pass",
           "Make small, incremental refactoring changes",
@@ -47704,10 +48300,7 @@ Project: ${spec.title}`));
         ].filter(Boolean);
       } else if (mode === "fix") {
         guidance.phase = "Bug Fix";
-        guidance.completed = [
-          "Working specification created",
-          "Bug reproduced"
-        ];
+        guidance.completed = ["Working specification created", "Bug reproduced"];
         guidance.nextActions = [
           "Write failing test that reproduces the bug",
           "Implement minimal fix",
@@ -47722,9 +48315,7 @@ Project: ${spec.title}`));
         ];
       } else if (mode === "doc") {
         guidance.phase = "Documentation";
-        guidance.completed = [
-          "Working specification created"
-        ];
+        guidance.completed = ["Working specification created"];
         guidance.nextActions = [
           "Update README with current information",
           "Add code examples and usage snippets",
@@ -47739,9 +48330,7 @@ Project: ${spec.title}`));
         ];
       } else if (mode === "chore") {
         guidance.phase = "Maintenance";
-        guidance.completed = [
-          "Working specification created"
-        ];
+        guidance.completed = ["Working specification created"];
         guidance.nextActions = [
           "Update dependencies to latest versions",
           "Run tests to ensure compatibility",
@@ -48036,6 +48625,472 @@ ${statusIcon} Status: ${chalk2.bold(isActive ? "Active" : isExpired ? "Expired" 
   }
 });
 
+// src/commands/workflow.js
+var require_workflow = __commonJS({
+  "src/commands/workflow.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var WORKFLOW_TEMPLATES = {
+      tdd: {
+        name: "Test-Driven Development",
+        steps: [
+          "Define requirements and acceptance criteria",
+          "Write failing test",
+          "Implement minimal code to pass test",
+          "Run CAWS validation",
+          "Refactor while maintaining tests",
+          "Repeat for next requirement"
+        ],
+        guidance: {
+          1: "Start by clearly defining what the code should do. Use CAWS working spec to document requirements.",
+          2: "Write a test that captures the desired behavior but will initially fail.",
+          3: "Implement only the minimal code needed to make the test pass.",
+          4: "Run CAWS evaluation to ensure quality standards are maintained.",
+          5: "Improve code structure while keeping all tests passing.",
+          6: "Move to the next requirement and repeat the cycle."
+        },
+        recommendations: {
+          1: ["caws evaluate --feedback-only", "Ensure spec completeness"],
+          2: ["Write failing test first", "caws validate for basic checks"],
+          3: ["Implement minimal solution", "Run tests to verify"],
+          4: ["caws evaluate", "Address any quality issues"],
+          5: ["Refactor safely", "Re-run CAWS validation"],
+          6: ["caws iterate for next steps", "Continue TDD cycle"]
+        }
+      },
+      refactor: {
+        name: "Refactoring Workflow",
+        steps: [
+          "Establish baseline quality metrics",
+          "Apply refactoring changes",
+          "Run comprehensive validation",
+          "Address any quality gate failures",
+          "Document changes and rationale"
+        ],
+        guidance: {
+          1: "Run CAWS evaluation to establish current quality baseline.",
+          2: "Make your refactoring changes incrementally.",
+          3: "Run full CAWS validation to ensure no quality degradation.",
+          4: "Address any failing quality gates with waivers if necessary.",
+          5: "Update documentation and provenance records."
+        },
+        recommendations: {
+          1: ["caws evaluate", "Establish quality baseline"],
+          2: ["Apply changes incrementally", "caws validate frequently"],
+          3: ["caws evaluate", "Full quality assessment"],
+          4: ["Create waivers if needed", "Document rationale"],
+          5: ["Update provenance", "caws provenance update"]
+        }
+      },
+      feature: {
+        name: "Feature Development",
+        steps: [
+          "Create working specification",
+          "Design and plan implementation",
+          "Implement core functionality",
+          "Add comprehensive testing",
+          "Run full quality validation",
+          "Prepare for integration"
+        ],
+        guidance: {
+          1: "Define clear requirements, acceptance criteria, and risk assessment.",
+          2: "Break down the feature into manageable tasks.",
+          3: "Implement core functionality with error handling.",
+          4: "Add unit, integration, and contract tests.",
+          5: "Run complete CAWS validation and address issues.",
+          6: "Ensure documentation and provenance are complete."
+        },
+        recommendations: {
+          1: ["caws init --interactive", "Create comprehensive spec"],
+          2: ["caws iterate", "Get implementation guidance"],
+          3: ["caws evaluate", "Validate progress"],
+          4: ["Add comprehensive tests", "Run test suite"],
+          5: ["caws validate", "Final quality gates"],
+          6: ["caws provenance update", "Prepare for integration"]
+        }
+      }
+    };
+    function generateWorkflowGuidance(workflowType, currentStep, context = {}) {
+      const template = WORKFLOW_TEMPLATES[workflowType];
+      if (!template) {
+        return {
+          error: `Unknown workflow type: ${workflowType}`,
+          available_types: Object.keys(WORKFLOW_TEMPLATES)
+        };
+      }
+      const step = parseInt(currentStep, 10);
+      if (isNaN(step) || step < 1 || step > template.steps.length) {
+        return {
+          error: `Invalid step number: ${currentStep}. Must be between 1 and ${template.steps.length}`,
+          total_steps: template.steps.length
+        };
+      }
+      const currentGuidance = template.guidance[step] || "Continue with the next logical step.";
+      const nextStep = step < template.steps.length ? step + 1 : null;
+      return {
+        workflow_type: workflowType,
+        workflow_name: template.name,
+        current_step: step,
+        total_steps: template.steps.length,
+        step_description: template.steps[step - 1] || "Unknown step",
+        guidance: currentGuidance,
+        next_step: nextStep,
+        next_step_description: nextStep ? template.steps[nextStep - 1] : null,
+        all_steps: template.steps,
+        caws_recommendations: template.recommendations[step] || ["caws evaluate"],
+        context: context.description || null
+      };
+    }
+    async function workflowCommand2(workflowType, options = {}) {
+      try {
+        const step = parseInt(options.step || "1", 10);
+        let context = {};
+        if (options.currentState) {
+          try {
+            context = typeof options.currentState === "string" ? JSON.parse(options.currentState) : options.currentState;
+          } catch (e) {
+            console.warn(chalk2.yellow("\u26A0\uFE0F  Invalid context JSON, ignoring"));
+          }
+        }
+        const guidance = generateWorkflowGuidance(workflowType, step, context);
+        if (guidance.error) {
+          console.error(chalk2.red(`
+\u274C ${guidance.error}`));
+          if (guidance.available_types) {
+            console.log(chalk2.blue("\n\u{1F4A1} Available workflow types:"));
+            guidance.available_types.forEach((type) => {
+              console.log(chalk2.blue(`   \u2022 ${type}`));
+            });
+          }
+          if (guidance.total_steps) {
+            console.log(chalk2.blue(`
+\u{1F4A1} Valid steps: 1-${guidance.total_steps}`));
+          }
+          process.exit(1);
+        }
+        console.log(chalk2.bold("\n\u{1F504} CAWS Workflow Guidance\n"));
+        console.log("\u2500".repeat(60));
+        console.log(chalk2.bold(`
+Workflow: ${guidance.workflow_name} (${guidance.workflow_type})`));
+        console.log(
+          chalk2.bold(
+            `Step ${guidance.current_step}/${guidance.total_steps}: ${guidance.step_description}`
+          )
+        );
+        if (guidance.context) {
+          console.log(chalk2.gray(`
+Context: ${guidance.context}`));
+        }
+        console.log(chalk2.bold("\n\u{1F4CB} Guidance:\n"));
+        console.log(`   ${guidance.guidance}`);
+        console.log(chalk2.bold("\n\u2705 CAWS Recommendations:\n"));
+        guidance.caws_recommendations.forEach((rec) => {
+          console.log(chalk2.blue(`   \u2022 ${rec}`));
+        });
+        if (guidance.next_step) {
+          console.log(chalk2.bold("\n\u23ED\uFE0F  Next Step:\n"));
+          console.log(chalk2.gray(`   Step ${guidance.next_step}: ${guidance.next_step_description}`));
+          console.log(
+            chalk2.gray(`
+   Run: caws workflow ${workflowType} --step ${guidance.next_step}`)
+          );
+        } else {
+          console.log(chalk2.bold("\n\u{1F389} Workflow Complete!\n"));
+          console.log(chalk2.green("   All steps in this workflow have been completed."));
+          console.log(chalk2.blue("\n   \u{1F4A1} Run: caws evaluate to check final quality"));
+        }
+        console.log(chalk2.bold("\n\u{1F4CA} All Steps:\n"));
+        guidance.all_steps.forEach((stepDesc, idx) => {
+          const stepNum = idx + 1;
+          const icon = stepNum === guidance.current_step ? "\u25B6\uFE0F " : stepNum < guidance.current_step ? "\u2705 " : "\u2B1C ";
+          const color = stepNum === guidance.current_step ? chalk2.bold : stepNum < guidance.current_step ? chalk2.green : chalk2.gray;
+          console.log(color(`   ${icon}${stepNum}. ${stepDesc}`));
+        });
+        console.log("\n" + "\u2500".repeat(60) + "\n");
+      } catch (error) {
+        console.error(chalk2.red(`
+\u274C Workflow guidance failed: ${error.message}`));
+        console.error(chalk2.gray(error.stack));
+        process.exit(1);
+      }
+    }
+    module2.exports = {
+      workflowCommand: workflowCommand2,
+      generateWorkflowGuidance,
+      WORKFLOW_TEMPLATES
+    };
+  }
+});
+
+// src/commands/quality-monitor.js
+var require_quality_monitor = __commonJS({
+  "src/commands/quality-monitor.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    function analyzeQualityImpact(action, files = [], context = {}) {
+      const analysis = {
+        action,
+        files_affected: files?.length || 0,
+        quality_impact: "unknown",
+        recommendations: [],
+        risk_level: "low",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      switch (action) {
+        case "file_saved":
+          analysis.quality_impact = "code_change";
+          analysis.recommendations = [
+            "Run CAWS validation: caws evaluate",
+            "Check for linting issues",
+            "Verify test coverage if applicable"
+          ];
+          break;
+        case "code_edited":
+          analysis.quality_impact = "implementation_change";
+          analysis.recommendations = [
+            "Run unit tests for affected files",
+            "Check CAWS quality gates",
+            "Update documentation if public APIs changed"
+          ];
+          analysis.risk_level = files?.length > 5 ? "medium" : "low";
+          if (files.length > 0) {
+            const hasTests = files.some((f) => f.includes("test") || f.includes("spec"));
+            const hasConfig = files.some((f) => f.includes("config") || f.includes(".json"));
+            if (hasTests) {
+              analysis.recommendations.push("Run full test suite to ensure consistency");
+            }
+            if (hasConfig) {
+              analysis.risk_level = "high";
+              analysis.recommendations.unshift("Configuration changed - validate carefully");
+            }
+          }
+          break;
+        case "test_run":
+          analysis.quality_impact = "validation_complete";
+          analysis.recommendations = [
+            "Review test results",
+            "Address any failing tests",
+            "Update CAWS working spec if needed"
+          ];
+          break;
+        default:
+          analysis.quality_impact = "unknown_action";
+          analysis.recommendations = ["Run CAWS evaluation to assess impact"];
+      }
+      try {
+        const specPath = path2.join(process.cwd(), ".caws/working-spec.yaml");
+        if (fs2.existsSync(specPath)) {
+          const spec = yaml2.load(fs2.readFileSync(specPath, "utf8"));
+          const projectTier = spec.risk_tier;
+          analysis.project_tier = projectTier;
+          if (projectTier <= 2) {
+            analysis.recommendations.unshift(
+              "High-risk project (Tier " + projectTier + "): Run comprehensive validation"
+            );
+            if (analysis.risk_level === "low") {
+              analysis.risk_level = "medium";
+            } else if (analysis.risk_level === "medium") {
+              analysis.risk_level = "high";
+            }
+          }
+          if (projectTier === 1) {
+            analysis.quality_gates = [
+              "Branch coverage \u2265 90%",
+              "Mutation score \u2265 70%",
+              "All contract tests passing",
+              "Manual code review required"
+            ];
+          } else if (projectTier === 2) {
+            analysis.quality_gates = [
+              "Branch coverage \u2265 80%",
+              "Mutation score \u2265 50%",
+              "Contract tests passing (if applicable)"
+            ];
+          } else {
+            analysis.quality_gates = ["Branch coverage \u2265 70%", "Mutation score \u2265 30%"];
+          }
+        }
+      } catch (error) {
+      }
+      if (context.project_tier) {
+        analysis.project_tier = context.project_tier;
+      }
+      return analysis;
+    }
+    async function qualityMonitorCommand2(action, options = {}) {
+      try {
+        let files = [];
+        if (options.files) {
+          files = typeof options.files === "string" ? options.files.split(",").map((f) => f.trim()) : options.files;
+        }
+        let context = {};
+        if (options.context) {
+          try {
+            context = typeof options.context === "string" ? JSON.parse(options.context) : options.context;
+          } catch (e) {
+            console.warn(chalk2.yellow("\u26A0\uFE0F  Invalid context JSON, ignoring"));
+          }
+        }
+        const validActions = ["file_saved", "code_edited", "test_run"];
+        if (!validActions.includes(action)) {
+          console.error(chalk2.red(`
+\u274C Invalid action: ${action}`));
+          console.log(chalk2.blue("\n\u{1F4A1} Valid actions:"));
+          validActions.forEach((a) => {
+            console.log(chalk2.blue(`   \u2022 ${a}`));
+          });
+          process.exit(1);
+        }
+        const analysis = analyzeQualityImpact(action, files, context);
+        console.log(chalk2.bold("\n\u{1F50D} CAWS Quality Monitor\n"));
+        console.log("\u2500".repeat(60));
+        console.log(chalk2.bold(`
+Action: ${action}`));
+        console.log(chalk2.gray(`Time: ${new Date(analysis.timestamp).toLocaleString()}`));
+        if (analysis.files_affected > 0) {
+          console.log(chalk2.bold(`
+Files Affected: ${analysis.files_affected}`));
+          if (files.length > 0 && files.length <= 10) {
+            files.forEach((file) => {
+              console.log(chalk2.gray(`   \u2022 ${file}`));
+            });
+          } else if (files.length > 10) {
+            files.slice(0, 10).forEach((file) => {
+              console.log(chalk2.gray(`   \u2022 ${file}`));
+            });
+            console.log(chalk2.gray(`   ... and ${files.length - 10} more`));
+          }
+        }
+        const impactColor = analysis.quality_impact === "validation_complete" ? chalk2.green : analysis.quality_impact === "code_change" ? chalk2.yellow : chalk2.blue;
+        console.log(chalk2.bold("\n\u{1F4CA} Quality Impact:"));
+        console.log(impactColor(`   ${analysis.quality_impact}`));
+        const riskColor = analysis.risk_level === "high" ? chalk2.red : analysis.risk_level === "medium" ? chalk2.yellow : chalk2.green;
+        console.log(chalk2.bold("\n\u26A0\uFE0F  Risk Level:"));
+        console.log(riskColor(`   ${analysis.risk_level.toUpperCase()}`));
+        if (analysis.project_tier) {
+          console.log(chalk2.bold(`
+\u{1F3AF} Project Tier: ${analysis.project_tier}`));
+        }
+        if (analysis.quality_gates && analysis.quality_gates.length > 0) {
+          console.log(chalk2.bold("\n\u{1F6AA} Quality Gates to Check:\n"));
+          analysis.quality_gates.forEach((gate) => {
+            console.log(chalk2.gray(`   \u25A1 ${gate}`));
+          });
+        }
+        console.log(chalk2.bold("\n\u{1F4A1} Recommendations:\n"));
+        analysis.recommendations.forEach((rec, idx) => {
+          const icon = idx === 0 ? "\u26A1" : "  \u2022";
+          console.log(chalk2.blue(`   ${icon} ${rec}`));
+        });
+        console.log(chalk2.bold("\n\u{1F4DA} Suggested Commands:\n"));
+        switch (action) {
+          case "file_saved":
+          case "code_edited":
+            console.log(chalk2.gray("   caws evaluate       - Check quality score"));
+            console.log(chalk2.gray("   caws validate       - Run validation"));
+            console.log(chalk2.gray("   caws diagnose       - Health check"));
+            break;
+          case "test_run":
+            console.log(chalk2.gray("   caws status         - Project status"));
+            console.log(chalk2.gray("   caws iterate        - Next steps"));
+            break;
+        }
+        console.log("\n" + "\u2500".repeat(60) + "\n");
+      } catch (error) {
+        console.error(chalk2.red(`
+\u274C Quality monitoring failed: ${error.message}`));
+        console.error(chalk2.gray(error.stack));
+        process.exit(1);
+      }
+    }
+    module2.exports = {
+      qualityMonitorCommand: qualityMonitorCommand2,
+      analyzeQualityImpact
+    };
+  }
+});
+
+// src/commands/troubleshoot.js
+var require_troubleshoot = __commonJS({
+  "src/commands/troubleshoot.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var {
+      getTroubleshootingGuide,
+      getAllTroubleshootingGuides
+    } = require_error_handler();
+    function displayGuide(guideKey) {
+      const guide = getTroubleshootingGuide(guideKey);
+      if (!guide) {
+        console.error(chalk2.red(`\u274C Troubleshooting guide '${guideKey}' not found.`));
+        console.log(chalk2.yellow("\nAvailable guides:"));
+        const allGuides = getAllTroubleshootingGuides();
+        Object.keys(allGuides).forEach((key) => {
+          console.log(chalk2.yellow(`  ${key}: ${allGuides[key].title}`));
+        });
+        console.log(chalk2.yellow("\nTry: caws troubleshoot --list for all available guides"));
+        return;
+      }
+      console.log(chalk2.bold.blue(`\u{1F50D} ${guide.title}`));
+      console.log(chalk2.gray("\u2550".repeat(50)));
+      if (guide.symptoms && guide.symptoms.length > 0) {
+        console.log(chalk2.yellow("\n\u{1F4CB} Symptoms:"));
+        guide.symptoms.forEach((symptom) => {
+          console.log(chalk2.gray(`   \u2022 ${symptom}`));
+        });
+      }
+      if (guide.rootCauses && guide.rootCauses.length > 0) {
+        console.log(chalk2.red("\n\u{1F50D} Possible Root Causes:"));
+        guide.rootCauses.forEach((cause) => {
+          console.log(chalk2.gray(`   \u2022 ${cause}`));
+        });
+      }
+      if (guide.solutions && guide.solutions.length > 0) {
+        console.log(chalk2.green("\n\u2705 Solutions:"));
+        guide.solutions.forEach((solution, index) => {
+          console.log(chalk2.gray(`   ${index + 1}. ${solution}`));
+        });
+      }
+      if (guide.commands && guide.commands.length > 0) {
+        console.log(chalk2.cyan("\n\u{1F4BB} Try These Commands:"));
+        guide.commands.forEach((command) => {
+          console.log(chalk2.gray(`   $ ${command}`));
+        });
+      }
+      console.log(chalk2.gray("\n\u2550".repeat(50)));
+      console.log(chalk2.blue("\u{1F4DA} For more help: caws --help or visit the documentation"));
+    }
+    function listGuides() {
+      console.log(chalk2.bold.blue("\u{1F527} Available Troubleshooting Guides"));
+      console.log(chalk2.gray("\u2550".repeat(50)));
+      const allGuides = getAllTroubleshootingGuides();
+      Object.entries(allGuides).forEach(([key, guide]) => {
+        console.log(chalk2.cyan(`${key}:`));
+        console.log(chalk2.gray(`   ${guide.title}`));
+        if (guide.symptoms && guide.symptoms.length > 0) {
+          console.log(chalk2.gray(`   Symptoms: ${guide.symptoms[0]}${guide.symptoms.length > 1 ? "..." : ""}`));
+        }
+        console.log("");
+      });
+      console.log(chalk2.yellow("Usage: caws troubleshoot <guide-key>"));
+      console.log(chalk2.yellow("Example: caws troubleshoot coverage-report-not-found"));
+    }
+    function troubleshootCommand2(guide, options) {
+      try {
+        if (options.list || !guide) {
+          listGuides();
+        } else {
+          displayGuide(guide);
+        }
+      } catch (error) {
+        console.error(chalk2.red(`\u274C Error: ${error.message}`));
+        process.exit(1);
+      }
+    }
+    module2.exports = troubleshootCommand2;
+  }
+});
+
 // src/index.js
 var { Command } = require_commander();
 var fs = require_lib();
@@ -48061,6 +49116,9 @@ var { diagnoseCommand } = require_diagnose();
 var { evaluateCommand } = require_evaluate();
 var { iterateCommand } = require_iterate();
 var { waiversCommand } = require_waivers();
+var { workflowCommand } = require_workflow();
+var { qualityMonitorCommand } = require_quality_monitor();
+var { troubleshootCommand } = require_troubleshoot();
 var { scaffoldProject, setScaffoldDependencies } = require_scaffold();
 var { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require_git_hooks();
 var { validateWorkingSpecWithSuggestions } = require_spec_validation();
@@ -48087,16 +49145,21 @@ program.name("caws").description("CAWS - Coding Agent Workflow System CLI").vers
 program.command("init").description("Initialize a new project with CAWS").argument("[project-name]", 'Name of the project to create (use "." for current directory)').option("-i, --interactive", "Run interactive setup wizard", true).option("--non-interactive", "Skip interactive prompts (use defaults)", false).option("--template <template>", "Use specific project template").action(initProject);
 program.command("scaffold").description("Add CAWS components to existing project").option("-f, --force", "Overwrite existing files", false).option("--minimal", "Only essential components", false).option("--with-codemods", "Include codemod scripts", false).option("--with-oidc", "Include OIDC trusted publisher setup", false).action(scaffoldProject);
 program.command("validate").description("Validate CAWS working spec with suggestions").argument("[spec-file]", "Path to working spec file (default: .caws/working-spec.yaml)").option("-q, --quiet", "Suppress suggestions and warnings", false).option("--auto-fix", "Automatically fix safe validation issues", false).action(validateCommand);
-program.command("status").description("Show project health overview").option("-s, --spec <path>", "Path to working spec file", ".caws/working-spec.yaml").action(statusCommand);
+program.command("status").description("Show project health overview").option("-s, --spec <path>", "Path to working spec file", ".caws/working-spec.yaml").option("--json", "Output in JSON format", false).action(statusCommand);
 program.command("templates [subcommand]").description("Discover and manage project templates").option("-n, --name <template>", "Template name (for info subcommand)").action(templatesCommand);
 program.command("diagnose").description("Run health checks and suggest fixes").option("--fix", "Apply automatic fixes", false).action(diagnoseCommand);
 program.command("evaluate [spec-file]").description("Evaluate work against CAWS quality standards").option("-v, --verbose", "Show detailed error information", false).action(evaluateCommand);
 program.command("iterate [spec-file]").description("Get iterative development guidance based on current progress").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(iterateCommand);
 var waiversCmd = program.command("waivers").description("Manage CAWS quality gate waivers");
-waiversCmd.command("create").description("Create a new quality gate waiver").requiredOption("--title <title>", "Waiver title").requiredOption("--reason <reason>", "Reason for waiver (emergency_hotfix, legacy_integration, etc.)").requiredOption("--description <description>", "Detailed description").requiredOption("--gates <gates>", "Comma-separated list of gates to waive").requiredOption("--expires-at <date>", "Expiration date (ISO 8601)").requiredOption("--approved-by <approver>", "Approver name").requiredOption("--impact-level <level>", "Impact level (low, medium, high, critical)").requiredOption("--mitigation-plan <plan>", "Risk mitigation plan").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("create", options));
+waiversCmd.command("create").description("Create a new quality gate waiver").requiredOption("--title <title>", "Waiver title").requiredOption(
+  "--reason <reason>",
+  "Reason for waiver (emergency_hotfix, legacy_integration, etc.)"
+).requiredOption("--description <description>", "Detailed description").requiredOption("--gates <gates>", "Comma-separated list of gates to waive").requiredOption("--expires-at <date>", "Expiration date (ISO 8601)").requiredOption("--approved-by <approver>", "Approver name").requiredOption("--impact-level <level>", "Impact level (low, medium, high, critical)").requiredOption("--mitigation-plan <plan>", "Risk mitigation plan").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("create", options));
 waiversCmd.command("list").description("List all waivers").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("list", options));
 waiversCmd.command("show <id>").description("Show waiver details").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("show", { ...options, id }));
 waiversCmd.command("revoke <id>").description("Revoke a waiver").option("--revoked-by <name>", "Person revoking the waiver").option("--reason <reason>", "Revocation reason").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("revoke", { ...options, id }));
+var workflowCmd = program.command("workflow <type>").description("Get workflow-specific guidance for development tasks").option("--step <number>", "Current step in workflow", "1").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action((type, options) => workflowCommand(type, options));
+program.command("quality-monitor <action>").description("Monitor code quality impact in real-time").option("--files <files>", "Files affected (comma-separated)").option("--context <json>", "Additional context as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(qualityMonitorCommand);
 program.command("tool").description("Execute CAWS tools programmatically").argument("<tool-id>", "ID of the tool to execute").option("-p, --params <json>", "Parameters as JSON string", "{}").option("-t, --timeout <ms>", "Execution timeout in milliseconds", parseInt, 3e4).action(executeTool);
 program.command("test-analysis <subcommand> [options...]").description("Statistical analysis for budget prediction and test optimization").action(testAnalysisCommand);
 var provenanceCmd = program.command("provenance").description("Manage CAWS provenance tracking and audit trails");
@@ -48173,6 +49236,13 @@ program.exitOverride((err) => {
       "scaffold",
       "status",
       "templates",
+      "diagnose",
+      "evaluate",
+      "iterate",
+      "waivers",
+      "workflow",
+      "quality-monitor",
+      "troubleshoot",
       "provenance",
       "hooks",
       "burnup",

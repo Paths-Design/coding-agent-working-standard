@@ -1,0 +1,268 @@
+openapi: 3.0.3
+info:
+  title: CAWS MCP Tools API
+  description: |
+    Model Context Protocol (MCP) server API for CAWS tooling integration.
+    Provides standardized tools for AI agents to interact with CAWS workflow system.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.caws.dev
+    description: Production API
+
+paths:
+  /tools:
+    get:
+      summary: List available CAWS tools
+      description: Retrieve the complete catalog of CAWS tools available through MCP
+      operationId: listTools
+      responses:
+        '200':
+          description: Successful response with tool catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - tools
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tool'
+                  _metadata:
+                    $ref: '#/components/schemas/Metadata'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tools/{toolName}:
+    get:
+      summary: Get detailed tool information
+      description: Retrieve detailed specification for a specific CAWS tool
+      operationId: getTool
+      parameters:
+        - name: toolName
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - caws_init
+              - caws_scaffold
+              - caws_validate
+              - caws_evaluate
+              - caws_iterate
+              - caws_status
+              - caws_diagnose
+              - caws_workflow_guidance
+              - caws_quality_monitor
+              - caws_progress_update
+              - caws_test_analysis
+              - caws_provenance
+              - caws_hooks
+              - caws_waiver_create
+              - caws_waivers_list
+              - caws_help
+      responses:
+        '200':
+          description: Tool specification retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDetail'
+        '404':
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tools/{toolName}/execute:
+    post:
+      summary: Execute a CAWS tool
+      description: Execute a specific CAWS tool with provided parameters
+      operationId: executeTool
+      parameters:
+        - name: toolName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Tool execution parameters
+              additionalProperties: true
+      responses:
+        '200':
+          description: Tool executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResult'
+        '400':
+          description: Invalid tool parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    Tool:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: Tool identifier
+          example: caws_validate
+        description:
+          type: string
+          description: Human-readable tool description
+          example: Validate CAWS working specifications
+        category:
+          type: string
+          enum:
+            - project-management
+            - validation
+            - quality-gates
+            - development
+            - testing
+            - compliance
+          description: Tool category for organization
+
+    ToolDetail:
+      type: object
+      required:
+        - name
+        - description
+        - inputSchema
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        inputSchema:
+          type: object
+          description: JSON Schema for tool input validation
+        outputSchema:
+          type: object
+          description: JSON Schema for tool output validation
+        examples:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              input:
+                type: object
+              output:
+                type: object
+        requiredPermissions:
+          type: array
+          items:
+            type: string
+          description: Required permissions to execute this tool
+
+    ToolResult:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: Whether the tool execution was successful
+        result:
+          description: Tool execution result data
+        error:
+          $ref: '#/components/schemas/Error'
+        executionTime:
+          type: number
+          description: Execution time in milliseconds
+        _metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: TOOL_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+    Metadata:
+      type: object
+      properties:
+        version:
+          type: string
+          description: API version
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+        requestId:
+          type: string
+          description: Unique request identifier
+        serverVersion:
+          type: string
+          description: CAWS server version
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            serverError:
+              value:
+                code: INTERNAL_ERROR
+                message: An unexpected error occurred
+                timestamp: "2025-01-09T10:00:00Z"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for MCP server authentication
+
+security:
+  - ApiKeyAuth: []

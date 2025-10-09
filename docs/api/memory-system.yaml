@@ -1,0 +1,989 @@
+openapi: 3.0.3
+info:
+  title: CAWS Memory System API
+  description: |
+    API specification for the CAWS Memory System service.
+    Provides multi-tenant memory management with knowledge graphs, vector embeddings, and temporal reasoning.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3003
+    description: Memory System service
+  - url: https://memory.caws.dev
+    description: Production memory service
+
+paths:
+  /health:
+    get:
+      summary: Service health check
+      description: Check memory system service status
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /tenants:
+    get:
+      summary: List tenants
+      description: Get all configured tenants (admin only)
+      operationId: listTenants
+      responses:
+        '200':
+          description: Tenant list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - tenants
+                properties:
+                  tenants:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tenant'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      summary: Create tenant
+      description: Create a new memory tenant (admin only)
+      operationId: createTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreateRequest'
+      responses:
+        '201':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Invalid tenant configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Tenant already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tenants/{tenantId}:
+    get:
+      summary: Get tenant details
+      description: Retrieve tenant configuration and status
+      operationId: getTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    put:
+      summary: Update tenant
+      description: Update tenant configuration
+      operationId: updateTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantUpdateRequest'
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Invalid tenant configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Delete tenant
+      description: Remove a tenant and all its data (admin only)
+      operationId: deleteTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tenant deleted successfully
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memory/{tenantId}/store:
+    post:
+      summary: Store memory item
+      description: Store a new memory item with optional vector embedding
+      operationId: storeMemory
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryStoreRequest'
+      responses:
+        '201':
+          description: Memory item stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryItem'
+        '400':
+          description: Invalid memory data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memory/{tenantId}/retrieve:
+    post:
+      summary: Retrieve memories
+      description: Retrieve memories using various query methods
+      operationId: retrieveMemories
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryRetrievalRequest'
+      responses:
+        '200':
+          description: Memories retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryRetrievalResult'
+        '400':
+          description: Invalid retrieval parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memory/{tenantId}/graph/query:
+    post:
+      summary: Query knowledge graph
+      description: Execute graph queries for knowledge traversal
+      operationId: queryKnowledgeGraph
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphQueryRequest'
+      responses:
+        '200':
+          description: Graph query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphQueryResult'
+        '400':
+          description: Invalid graph query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memory/{tenantId}/temporal/reason:
+    post:
+      summary: Temporal reasoning
+      description: Perform temporal reasoning on memory sequences
+      operationId: temporalReasoning
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemporalReasoningRequest'
+      responses:
+        '200':
+          description: Temporal reasoning completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporalReasoningResult'
+        '400':
+          description: Invalid temporal reasoning request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /federation/learn:
+    post:
+      summary: Federated learning update
+      description: Submit model updates for federated learning (admin only)
+      operationId: federatedLearningUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FederatedLearningUpdate'
+      responses:
+        '200':
+          description: Federated learning update accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accepted
+                  - updateId
+                properties:
+                  accepted:
+                    type: boolean
+                    example: true
+                  updateId:
+                    type: string
+                    description: Unique update identifier
+                  aggregated:
+                    type: boolean
+                    description: Whether update was immediately aggregated
+        '400':
+          description: Invalid federated learning update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    Tenant:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique tenant identifier
+          example: "tenant-org-123"
+        name:
+          type: string
+          description: Human-readable tenant name
+          example: "Acme Corporation"
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        config:
+          $ref: '#/components/schemas/TenantConfig'
+        stats:
+          $ref: '#/components/schemas/TenantStats'
+        createdAt:
+          type: string
+          format: date-time
+          description: Tenant creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last tenant update timestamp
+
+    TenantCreateRequest:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Unique tenant identifier
+        name:
+          type: string
+          description: Human-readable tenant name
+        config:
+          $ref: '#/components/schemas/TenantConfig'
+
+    TenantUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Updated tenant name
+        config:
+          $ref: '#/components/schemas/TenantConfig'
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+
+    TenantStatus:
+      type: string
+      enum:
+        - active
+        - suspended
+        - inactive
+      description: Tenant operational status
+      default: "active"
+
+    TenantConfig:
+      type: object
+      properties:
+        memoryLimit:
+          type: integer
+          minimum: 1
+          description: Maximum memory items allowed (0 = unlimited)
+          default: 10000
+        vectorDimensions:
+          type: integer
+          minimum: 1
+          maximum: 4096
+          default: 1536
+          description: Vector embedding dimensions
+        retentionPolicy:
+          type: object
+          properties:
+            maxAge:
+              type: integer
+              minimum: 1
+              description: Maximum age in days (0 = no limit)
+              default: 365
+            maxItems:
+              type: integer
+              minimum: 1
+              description: Maximum items to retain (0 = no limit)
+              default: 10000
+        privacy:
+          type: object
+          properties:
+            enableFederatedLearning:
+              type: boolean
+              default: true
+              description: Allow federated learning participation
+            dataAnonymization:
+              type: boolean
+              default: true
+              description: Anonymize data before federation
+
+    TenantStats:
+      type: object
+      properties:
+        totalMemories:
+          type: integer
+          minimum: 0
+          description: Total memory items stored
+        vectorMemories:
+          type: integer
+          minimum: 0
+          description: Memories with vector embeddings
+        graphNodes:
+          type: integer
+          minimum: 0
+          description: Knowledge graph nodes
+        graphEdges:
+          type: integer
+          minimum: 0
+          description: Knowledge graph relationships
+        lastActivity:
+          type: string
+          format: date-time
+          description: Last memory operation timestamp
+
+    MemoryStoreRequest:
+      type: object
+      required:
+        - content
+        - type
+      properties:
+        content:
+          type: string
+          description: Memory content to store
+          example: "User prefers dark mode interface"
+        type:
+          $ref: '#/components/schemas/MemoryType'
+        metadata:
+          type: object
+          description: Additional metadata for the memory
+          additionalProperties: true
+          example:
+            source: "user_preference"
+            confidence: 0.95
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorization and search
+          example: ["ui", "preference", "theme"]
+        generateEmbedding:
+          type: boolean
+          default: true
+          description: Whether to generate vector embedding
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryRelationship'
+          description: Relationships to other memories
+
+    MemoryItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - content
+        - type
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique memory identifier
+        tenantId:
+          type: string
+          description: Owning tenant ID
+        content:
+          type: string
+          description: Memory content
+        type:
+          $ref: '#/components/schemas/MemoryType'
+        metadata:
+          type: object
+          description: Memory metadata
+          additionalProperties: true
+        tags:
+          type: array
+          items:
+            type: string
+          description: Memory tags
+        embedding:
+          type: array
+          items:
+            type: number
+          description: Vector embedding (if generated)
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryRelationship'
+          description: Memory relationships
+        createdAt:
+          type: string
+          format: date-time
+          description: Memory creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last memory update timestamp
+
+    MemoryType:
+      type: string
+      enum:
+        - fact
+        - observation
+        - preference
+        - experience
+        - knowledge
+        - context
+      description: Type of memory content
+
+    MemoryRelationship:
+      type: object
+      required:
+        - targetId
+        - type
+      properties:
+        targetId:
+          type: string
+          description: ID of related memory
+        type:
+          type: string
+          enum:
+            - related_to
+            - contradicts
+            - supports
+            - follows_from
+            - causes
+          description: Relationship type
+        strength:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.5
+          description: Relationship strength (0-1)
+
+    MemoryRetrievalRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Text query for semantic search
+          example: "user interface preferences"
+        vector:
+          type: array
+          items:
+            type: number
+          description: Vector query for similarity search
+        filters:
+          type: object
+          description: Metadata filters
+          additionalProperties: true
+          example:
+            type: "preference"
+            tags: ["ui"]
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tag filters
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 10
+          description: Maximum results to return
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.7
+          description: Similarity threshold for vector search
+
+    MemoryRetrievalResult:
+      type: object
+      required:
+        - results
+        - total
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - memory
+              - score
+            properties:
+              memory:
+                $ref: '#/components/schemas/MemoryItem'
+              score:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Relevance score
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching memories found
+        executionTime:
+          type: number
+          description: Query execution time in milliseconds
+
+    GraphQueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Graph query in Cypher-like syntax
+          example: "MATCH (m:Memory)-[:RELATED_TO]->(n:Memory) WHERE m.type = 'preference' RETURN m, n LIMIT 10"
+        parameters:
+          type: object
+          description: Query parameters
+          additionalProperties: true
+        maxDepth:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+          description: Maximum traversal depth
+
+    GraphQueryResult:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            description: Query result data
+            additionalProperties: true
+        executionTime:
+          type: number
+          description: Query execution time in milliseconds
+        nodesVisited:
+          type: integer
+          minimum: 0
+          description: Number of graph nodes traversed
+
+    TemporalReasoningRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Temporal reasoning query
+          example: "What changed in user preferences over the last month?"
+        timeRange:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+              description: Start of time range
+            end:
+              type: string
+              format: date-time
+              description: End of time range
+        patterns:
+          type: array
+          items:
+            type: string
+          description: Specific patterns to look for
+          example: ["preference_change", "behavior_shift"]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.8
+          description: Minimum confidence threshold
+
+    TemporalReasoningResult:
+      type: object
+      required:
+        - patterns
+        - confidence
+      properties:
+        patterns:
+          type: array
+          items:
+            type: object
+            required:
+              - type
+              - description
+              - confidence
+              - evidence
+            properties:
+              type:
+                type: string
+                description: Pattern type identified
+              description:
+                type: string
+                description: Human-readable pattern description
+              confidence:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Pattern confidence score
+              evidence:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemoryItem'
+                description: Supporting memory evidence
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Overall reasoning confidence
+        executionTime:
+          type: number
+          description: Reasoning execution time in milliseconds
+
+    FederatedLearningUpdate:
+      type: object
+      required:
+        - tenantId
+        - modelUpdates
+      properties:
+        tenantId:
+          type: string
+          description: Tenant providing the update
+        modelUpdates:
+          type: object
+          description: Model parameter updates (differential privacy applied)
+          additionalProperties: true
+        sampleCount:
+          type: integer
+          minimum: 1
+          description: Number of samples used for update
+        checksum:
+          type: string
+          description: Update data checksum for integrity
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall service health
+        checks:
+          type: object
+          required:
+            - database
+            - vector
+            - graph
+          properties:
+            database:
+              $ref: '#/components/schemas/ServiceCheck'
+            vector:
+              $ref: '#/components/schemas/ServiceCheck'
+            graph:
+              $ref: '#/components/schemas/ServiceCheck'
+            federation:
+              $ref: '#/components/schemas/ServiceCheck'
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+
+    ServiceCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+          description: Health check result
+        message:
+          type: string
+          description: Health check details
+        responseTime:
+          type: number
+          description: Response time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "TENANT_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+
+security:
+  - BearerAuth: []

@@ -22,37 +22,37 @@ All P0 priority tasks have been completed and tested successfully. The CAWS VS C
 
 ### 1. Core Workflow Tools ✅
 
-| Tool | Status | Result | Details |
-|------|--------|--------|---------|
-| `caws_init` | ✅ PASS | Project initialized | Created `.caws/working-spec.yaml`, `.cursor/` hooks |
-| `caws_scaffold` | ✅ PASS | **NO ESM ERRORS!** | esbuild bundling eliminated all ESM conflicts |
-| `caws_validate` | ✅ PASS | Validation passed | Tier 2 spec validated successfully |
+| Tool            | Status  | Result              | Details                                             |
+| --------------- | ------- | ------------------- | --------------------------------------------------- |
+| `caws_init`     | ✅ PASS | Project initialized | Created `.caws/working-spec.yaml`, `.cursor/` hooks |
+| `caws_scaffold` | ✅ PASS | **NO ESM ERRORS!**  | esbuild bundling eliminated all ESM conflicts       |
+| `caws_validate` | ✅ PASS | Validation passed   | Tier 2 spec validated successfully                  |
 
 **Key Win**: `caws_scaffold` now runs without any ESM errors thanks to esbuild bundling!
 
 ### 2. Quality & Guidance Tools (NEW) ✅
 
-| Tool | Status | Result | Details |
-|------|--------|--------|---------|
-| `caws_evaluate` | ✅ PASS | Quality score: 80% (Grade B) | 9 quality checks, recommendations provided |
-| `caws_iterate` | ✅ PASS | Iterative guidance | TDD cycle guidance, next actions, blockers |
-| `caws_waiver_create` | ✅ PASS | Waiver created: WV-6916 | Stored in `.caws/waivers/WV-6916.yaml` |
+| Tool                 | Status  | Result                       | Details                                    |
+| -------------------- | ------- | ---------------------------- | ------------------------------------------ |
+| `caws_evaluate`      | ✅ PASS | Quality score: 80% (Grade B) | 9 quality checks, recommendations provided |
+| `caws_iterate`       | ✅ PASS | Iterative guidance           | TDD cycle guidance, next actions, blockers |
+| `caws_waiver_create` | ✅ PASS | Waiver created: WV-6916      | Stored in `.caws/waivers/WV-6916.yaml`     |
 
 **Key Win**: All three newly implemented commands work flawlessly via MCP!
 
 ### 3. Project Health Tools ✅
 
-| Tool | Status | Result | Details |
-|------|--------|--------|---------|
-| `caws_status` | ✅ PASS | Health overview displayed | Working spec, git hooks, provenance status |
-| `caws_diagnose` | ✅ PASS | Health checks completed | Found 3 issues, auto-fix available |
+| Tool            | Status  | Result                    | Details                                    |
+| --------------- | ------- | ------------------------- | ------------------------------------------ |
+| `caws_status`   | ✅ PASS | Health overview displayed | Working spec, git hooks, provenance status |
+| `caws_diagnose` | ✅ PASS | Health checks completed   | Found 3 issues, auto-fix available         |
 
 ### 4. Provenance & Git Tools ✅
 
-| Tool | Status | Result | Details |
-|------|--------|--------|---------|
+| Tool              | Status  | Result                     | Details                        |
+| ----------------- | ------- | -------------------------- | ------------------------------ |
 | `caws_provenance` | ✅ PASS | Shows "no data" (expected) | Provenance not initialized yet |
-| `caws_hooks` | ✅ PASS | Shows 0/4 hooks active | Git not initialized (expected) |
+| `caws_hooks`      | ✅ PASS | Shows 0/4 hooks active     | Git not initialized (expected) |
 
 ---
 
@@ -65,6 +65,7 @@ All P0 priority tasks have been completed and tested successfully. The CAWS VS C
 **After**: `../cli/index.js` (esbuild-bundled)
 
 **Files Fixed**:
+
 - `handleCawsEvaluate` ✅
 - `handleCawsIterate` ✅
 - `handleCawsValidate` ✅
@@ -90,13 +91,13 @@ All P0 priority tasks have been completed and tested successfully. The CAWS VS C
 
 ## Performance Improvements
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Extension Size | 56 MB | **2.39 MB** | **95.7% ⬇️** |
-| CLI Bundle Size | 263 MB (copied deps) | **2.0 MB** | **99.2% ⬇️** |
-| Total Package | 270 MB | **13 MB** | **95.2% ⬇️** |
-| Build Time | N/A | **~111ms** | ⚡ Fast |
-| Files Count | 929 | 789 | **15% ⬇️** |
+| Metric          | Before               | After       | Improvement  |
+| --------------- | -------------------- | ----------- | ------------ |
+| Extension Size  | 56 MB                | **2.39 MB** | **95.7% ⬇️** |
+| CLI Bundle Size | 263 MB (copied deps) | **2.0 MB**  | **99.2% ⬇️** |
+| Total Package   | 270 MB               | **13 MB**   | **95.2% ⬇️** |
+| Build Time      | N/A                  | **~111ms**  | ⚡ Fast      |
+| Files Count     | 929                  | 789         | **15% ⬇️**   |
 
 ---
 
@@ -197,18 +198,18 @@ All P0 priority tasks have been completed and tested successfully. The CAWS VS C
 
 ### Complete Parity Achieved
 
-| CLI Command | MCP Tool | Status |
-|-------------|----------|--------|
-| `caws init` | `caws_init` | ✅ 1:1 |
-| `caws scaffold` | `caws_scaffold` | ✅ 1:1 |
-| `caws validate` | `caws_validate` | ✅ 1:1 |
-| `caws evaluate` | `caws_evaluate` | ✅ 1:1 |
-| `caws iterate` | `caws_iterate` | ✅ 1:1 |
+| CLI Command           | MCP Tool             | Status |
+| --------------------- | -------------------- | ------ |
+| `caws init`           | `caws_init`          | ✅ 1:1 |
+| `caws scaffold`       | `caws_scaffold`      | ✅ 1:1 |
+| `caws validate`       | `caws_validate`      | ✅ 1:1 |
+| `caws evaluate`       | `caws_evaluate`      | ✅ 1:1 |
+| `caws iterate`        | `caws_iterate`       | ✅ 1:1 |
 | `caws waivers create` | `caws_waiver_create` | ✅ 1:1 |
-| `caws status` | `caws_status` | ✅ 1:1 |
-| `caws diagnose` | `caws_diagnose` | ✅ 1:1 |
-| `caws provenance` | `caws_provenance` | ✅ 1:1 |
-| `caws hooks` | `caws_hooks` | ✅ 1:1 |
+| `caws status`         | `caws_status`        | ✅ 1:1 |
+| `caws diagnose`       | `caws_diagnose`      | ✅ 1:1 |
+| `caws provenance`     | `caws_provenance`    | ✅ 1:1 |
+| `caws hooks`          | `caws_hooks`         | ✅ 1:1 |
 
 **Result**: 100% parity - All CLI commands accessible via MCP
 
@@ -310,4 +311,3 @@ All P0 priority tasks have been **successfully completed and tested**. The CAWS 
 **Test Duration**: ~15 minutes  
 **Test Environment**: macOS 24.6.0, Cursor IDE, Node.js 18+  
 **Extension Version**: caws-vscode-extension-1.0.0.vsix
-

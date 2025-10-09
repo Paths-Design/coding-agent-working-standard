@@ -1,0 +1,1318 @@
+openapi: 3.0.3
+info:
+  title: CAWS Quality Gates API
+  description: |
+    API specification for the CAWS Quality Gates service.
+    Provides automated quality assurance, testing, and compliance validation.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3005
+    description: Quality Gates service
+  - url: https://quality.caws.dev
+    description: Production quality service
+
+paths:
+  /health:
+    get:
+      summary: Service health check
+      description: Check quality gates service status
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /assess:
+    post:
+      summary: Run quality assessment
+      description: Execute comprehensive quality assessment on code/project
+      operationId: runAssessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentRequest'
+      responses:
+        '200':
+          description: Assessment completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentResult'
+        '400':
+          description: Invalid assessment request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tests:
+    post:
+      summary: Run test suite
+      description: Execute unit, integration, and contract tests
+      operationId: runTests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestRequest'
+      responses:
+        '200':
+          description: Tests executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResult'
+        '400':
+          description: Invalid test request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /coverage:
+    post:
+      summary: Generate coverage report
+      description: Run test coverage analysis and generate reports
+      operationId: generateCoverage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoverageRequest'
+      responses:
+        '200':
+          description: Coverage report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageResult'
+        '400':
+          description: Invalid coverage request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /mutation:
+    post:
+      summary: Run mutation testing
+      description: Execute mutation testing to validate test suite strength
+      operationId: runMutationTesting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MutationRequest'
+      responses:
+        '200':
+          description: Mutation testing completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationResult'
+        '400':
+          description: Invalid mutation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /contract:
+    post:
+      summary: Validate contracts
+      description: Test API contracts against implementations
+      operationId: validateContracts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractRequest'
+      responses:
+        '200':
+          description: Contract validation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResult'
+        '400':
+          description: Invalid contract request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /lint:
+    post:
+      summary: Run linting checks
+      description: Execute code quality and style linting
+      operationId: runLinting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LintRequest'
+      responses:
+        '200':
+          description: Linting completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LintResult'
+        '400':
+          description: Invalid lint request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /security:
+    post:
+      summary: Run security scans
+      description: Execute security vulnerability scanning
+      operationId: runSecurityScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityRequest'
+      responses:
+        '200':
+          description: Security scan completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityResult'
+        '400':
+          description: Invalid security request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /performance:
+    post:
+      summary: Run performance tests
+      description: Execute performance and load testing
+      operationId: runPerformanceTests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerformanceRequest'
+      responses:
+        '200':
+          description: Performance tests completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceResult'
+        '400':
+          description: Invalid performance request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /gates/{tier}:
+    get:
+      summary: Get quality gates for tier
+      description: Retrieve quality gate requirements for a specific risk tier
+      operationId: getQualityGates
+      parameters:
+        - name: tier
+          in: path
+          required: true
+          schema:
+            type: integer
+            enum: [1, 2, 3]
+          description: Risk tier (1=Critical, 2=Standard, 3=Low)
+      responses:
+        '200':
+          description: Quality gates retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityGates'
+        '400':
+          description: Invalid tier specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /validate:
+    post:
+      summary: Validate against quality gates
+      description: Check if assessment results meet quality gate requirements
+      operationId: validateQualityGates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateValidationRequest'
+      responses:
+        '200':
+          description: Gate validation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GateValidationResult'
+        '400':
+          description: Invalid validation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    AssessmentRequest:
+      type: object
+      required:
+        - target
+        - checks
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        checks:
+          type: array
+          items:
+            type: string
+            enum:
+              - tests
+              - coverage
+              - mutation
+              - contract
+              - lint
+              - security
+              - performance
+          description: Quality checks to run
+          default: ["tests", "coverage", "lint"]
+        config:
+          type: object
+          description: Assessment-specific configuration
+          additionalProperties: true
+
+    AssessmentTarget:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - project
+            - directory
+            - files
+            - repository
+          description: Assessment target type
+        path:
+          type: string
+          description: File system path to assess
+          example: "/path/to/project"
+        files:
+          type: array
+          items:
+            type: string
+          description: Specific files to assess
+        repository:
+          type: object
+          required:
+            - url
+          properties:
+            url:
+              type: string
+              description: Repository URL
+            branch:
+              type: string
+              default: "main"
+              description: Branch to assess
+            commit:
+              type: string
+              description: Specific commit to assess
+
+    AssessmentResult:
+      type: object
+      required:
+        - overall
+        - checks
+        - executionTime
+      properties:
+        overall:
+          $ref: '#/components/schemas/QualityScore'
+        checks:
+          type: object
+          description: Results for each quality check
+          additionalProperties:
+            $ref: '#/components/schemas/CheckResult'
+        executionTime:
+          type: number
+          description: Total assessment execution time in milliseconds
+        recommendations:
+          type: array
+          items:
+            type: string
+          description: Suggested improvements
+
+    QualityScore:
+      type: object
+      required:
+        - score
+        - status
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Quality score (0-1)
+          example: 0.85
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+          description: Overall assessment status
+        tier:
+          type: integer
+          enum: [1, 2, 3]
+          description: Risk tier assessed against
+        requiredScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Minimum score required for tier
+
+    CheckResult:
+      type: object
+      required:
+        - status
+        - score
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+            - error
+          description: Check execution status
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Check-specific score
+        details:
+          type: object
+          description: Check-specific results and metrics
+          additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: string
+          description: Errors encountered during check
+        executionTime:
+          type: number
+          description: Check execution time in milliseconds
+
+    TestRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        types:
+          type: array
+          items:
+            type: string
+            enum:
+              - unit
+              - integration
+              - e2e
+              - contract
+              - performance
+          description: Test types to run
+          default: ["unit", "integration"]
+        config:
+          type: object
+          description: Test runner configuration
+          additionalProperties: true
+
+    TestResult:
+      type: object
+      required:
+        - passed
+        - failed
+        - total
+        - executionTime
+      properties:
+        passed:
+          type: integer
+          minimum: 0
+          description: Number of tests passed
+        failed:
+          type: integer
+          minimum: 0
+          description: Number of tests failed
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of tests
+        skipped:
+          type: integer
+          minimum: 0
+          description: Number of tests skipped
+        executionTime:
+          type: number
+          description: Total test execution time in milliseconds
+        coverage:
+          $ref: '#/components/schemas/CoverageResult'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestCaseResult'
+          description: Detailed test case results
+
+    TestCaseResult:
+      type: object
+      required:
+        - name
+        - status
+        - executionTime
+      properties:
+        name:
+          type: string
+          description: Test case name
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - skip
+            - error
+          description: Test execution status
+        executionTime:
+          type: number
+          description: Test execution time in milliseconds
+        error:
+          type: string
+          description: Error message (if failed)
+        output:
+          type: string
+          description: Test output/logs
+
+    CoverageRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        format:
+          type: string
+          enum:
+            - json
+            - html
+            - lcov
+            - clover
+          default: "json"
+          description: Coverage report format
+        thresholds:
+          type: object
+          properties:
+            branches:
+              type: number
+              minimum: 0
+              maximum: 100
+              description: Branch coverage threshold (%)
+            functions:
+              type: number
+              minimum: 0
+              maximum: 100
+              description: Function coverage threshold (%)
+            lines:
+              type: number
+              minimum: 0
+              maximum: 100
+              description: Line coverage threshold (%)
+            statements:
+              type: number
+              minimum: 0
+              maximum: 100
+              description: Statement coverage threshold (%)
+
+    CoverageResult:
+      type: object
+      required:
+        - total
+        - covered
+        - percentage
+      properties:
+        total:
+          type: object
+          required:
+            - branches
+            - functions
+            - lines
+            - statements
+          properties:
+            branches:
+              type: integer
+              minimum: 0
+            functions:
+              type: integer
+              minimum: 0
+            lines:
+              type: integer
+              minimum: 0
+            statements:
+              type: integer
+              minimum: 0
+        covered:
+          type: object
+          required:
+            - branches
+            - functions
+            - lines
+            - statements
+          properties:
+            branches:
+              type: integer
+              minimum: 0
+            functions:
+              type: integer
+              minimum: 0
+            lines:
+              type: integer
+              minimum: 0
+            statements:
+              type: integer
+              minimum: 0
+        percentage:
+          type: object
+          required:
+            - branches
+            - functions
+            - lines
+            - statements
+          properties:
+            branches:
+              type: number
+              minimum: 0
+              maximum: 100
+            functions:
+              type: number
+              minimum: 0
+              maximum: 100
+            lines:
+              type: number
+              minimum: 0
+              maximum: 100
+            statements:
+              type: number
+              minimum: 0
+              maximum: 100
+        reportUrl:
+          type: string
+          format: uri
+          description: URL to detailed coverage report
+
+    MutationRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        mutators:
+          type: array
+          items:
+            type: string
+          description: Specific mutation operators to use
+          example: ["ArithmeticOperator", "ConditionalBoundary"]
+        timeout:
+          type: integer
+          minimum: 1
+          default: 60000
+          description: Mutation testing timeout in milliseconds
+
+    MutationResult:
+      type: object
+      required:
+        - score
+        - mutants
+        - killed
+        - survived
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Mutation score (0-1)
+        mutants:
+          type: integer
+          minimum: 0
+          description: Total mutants generated
+        killed:
+          type: integer
+          minimum: 0
+          description: Mutants killed by tests
+        survived:
+          type: integer
+          minimum: 0
+          description: Mutants that survived
+        timeout:
+          type: integer
+          minimum: 0
+          description: Mutants that timed out
+        executionTime:
+          type: number
+          description: Mutation testing execution time in milliseconds
+        survivingMutants:
+          type: array
+          items:
+            type: object
+            required:
+              - file
+              - line
+              - mutator
+              - description
+            properties:
+              file:
+                type: string
+                description: Source file path
+              line:
+                type: integer
+                description: Line number
+              mutator:
+                type: string
+                description: Mutation operator used
+              description:
+                type: string
+                description: Description of the mutation
+
+    ContractRequest:
+      type: object
+      required:
+        - contracts
+      properties:
+        contracts:
+          type: array
+          items:
+            type: object
+            required:
+              - type
+              - path
+            properties:
+              type:
+                type: string
+                enum:
+                  - openapi
+                  - jsonrpc
+                  - graphql
+                  - protobuf
+                description: Contract specification type
+              path:
+                type: string
+                description: Path to contract file
+              version:
+                type: string
+                description: Contract version
+        baseUrl:
+          type: string
+          format: uri
+          description: Base URL for API under test
+        environment:
+          type: object
+          description: Environment variables for contract testing
+          additionalProperties: true
+
+    ContractResult:
+      type: object
+      required:
+        - passed
+        - failed
+        - total
+      properties:
+        passed:
+          type: integer
+          minimum: 0
+          description: Number of contract tests passed
+        failed:
+          type: integer
+          minimum: 0
+          description: Number of contract tests failed
+        total:
+          type: integer
+          minimum: 0
+          description: Total contract tests executed
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - contract
+              - status
+            properties:
+              contract:
+                type: string
+                description: Contract file path
+              status:
+                type: string
+                enum: ["pass", "fail", "error"]
+              errors:
+                type: array
+                items:
+                  type: string
+                description: Contract validation errors
+              executionTime:
+                type: number
+                description: Test execution time in milliseconds
+
+    LintRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        rules:
+          type: array
+          items:
+            type: string
+          description: Specific linting rules to check
+        config:
+          type: object
+          description: Linter configuration overrides
+          additionalProperties: true
+
+    LintResult:
+      type: object
+      required:
+        - issues
+        - files
+      properties:
+        issues:
+          type: integer
+          minimum: 0
+          description: Total linting issues found
+        files:
+          type: integer
+          minimum: 0
+          description: Number of files linted
+        errors:
+          type: integer
+          minimum: 0
+          description: Number of error-level issues
+        warnings:
+          type: integer
+          minimum: 0
+          description: Number of warning-level issues
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LintIssue'
+          description: Detailed linting issues
+
+    LintIssue:
+      type: object
+      required:
+        - file
+        - line
+        - column
+        - rule
+        - message
+        - severity
+      properties:
+        file:
+          type: string
+          description: File path with issue
+        line:
+          type: integer
+          minimum: 1
+          description: Line number
+        column:
+          type: integer
+          minimum: 1
+          description: Column number
+        rule:
+          type: string
+          description: Linting rule violated
+        message:
+          type: string
+          description: Issue description
+        severity:
+          type: string
+          enum: ["error", "warning", "info"]
+          description: Issue severity level
+        fixable:
+          type: boolean
+          description: Whether the issue can be auto-fixed
+
+    SecurityRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        scanners:
+          type: array
+          items:
+            type: string
+            enum:
+              - secrets
+              - dependencies
+              - code
+              - containers
+          description: Security scanners to run
+          default: ["secrets", "dependencies", "code"]
+        severity:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+          default: "medium"
+          description: Minimum severity to report
+
+    SecurityResult:
+      type: object
+      required:
+        - vulnerabilities
+        - severity
+      properties:
+        vulnerabilities:
+          type: integer
+          minimum: 0
+          description: Total vulnerabilities found
+        severity:
+          type: object
+          required:
+            - low
+            - medium
+            - high
+            - critical
+          properties:
+            low:
+              type: integer
+              minimum: 0
+            medium:
+              type: integer
+              minimum: 0
+            high:
+              type: integer
+              minimum: 0
+            critical:
+              type: integer
+              minimum: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityIssue'
+          description: Detailed security findings
+
+    SecurityIssue:
+      type: object
+      required:
+        - type
+        - severity
+        - description
+        - file
+      properties:
+        type:
+          type: string
+          enum:
+            - secret
+            - vulnerability
+            - code-smell
+            - dependency
+          description: Security issue type
+        severity:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+          description: Issue severity
+        description:
+          type: string
+          description: Security issue description
+        file:
+          type: string
+          description: Affected file path
+        line:
+          type: integer
+          description: Affected line number
+        cve:
+          type: string
+          description: Associated CVE identifier
+        fix:
+          type: string
+          description: Recommended fix
+
+    PerformanceRequest:
+      type: object
+      required:
+        - target
+        - scenarios
+      properties:
+        target:
+          $ref: '#/components/schemas/AssessmentTarget'
+        scenarios:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerformanceScenario'
+          description: Performance test scenarios to run
+        duration:
+          type: integer
+          minimum: 1
+          default: 60
+          description: Test duration in seconds
+        concurrency:
+          type: integer
+          minimum: 1
+          default: 10
+          description: Concurrent users/connections
+
+    PerformanceScenario:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          description: Scenario name
+        type:
+          type: string
+          enum:
+            - load
+            - stress
+            - spike
+            - volume
+          description: Performance test type
+        endpoint:
+          type: string
+          description: API endpoint to test
+        method:
+          type: string
+          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+          default: "GET"
+        payload:
+          type: object
+          description: Request payload for POST/PUT
+          additionalProperties: true
+
+    PerformanceResult:
+      type: object
+      required:
+        - scenarios
+        - overall
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScenarioResult'
+          description: Results for each performance scenario
+        overall:
+          $ref: '#/components/schemas/PerformanceMetrics'
+
+    ScenarioResult:
+      type: object
+      required:
+        - name
+        - metrics
+      properties:
+        name:
+          type: string
+          description: Scenario name
+        metrics:
+          $ref: '#/components/schemas/PerformanceMetrics'
+        errors:
+          type: integer
+          minimum: 0
+          description: Number of errors during scenario
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        responseTime:
+          type: object
+          required:
+            - avg
+            - min
+            - max
+            - p95
+            - p99
+          properties:
+            avg:
+              type: number
+              description: Average response time in milliseconds
+            min:
+              type: number
+              description: Minimum response time in milliseconds
+            max:
+              type: number
+              description: Maximum response time in milliseconds
+            p95:
+              type: number
+              description: 95th percentile response time
+            p99:
+              type: number
+              description: 99th percentile response time
+        throughput:
+          type: number
+          description: Requests per second
+        errorRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Error rate (0-1)
+        concurrency:
+          type: integer
+          description: Concurrent users/connections tested
+
+    QualityGates:
+      type: object
+      required:
+        - tier
+        - requirements
+      properties:
+        tier:
+          type: integer
+          enum: [1, 2, 3]
+          description: Risk tier
+        requirements:
+          type: object
+          required:
+            - coverage
+            - mutation
+            - contracts
+            - review
+          properties:
+            coverage:
+              type: object
+              required:
+                - branches
+                - functions
+                - lines
+                - statements
+              properties:
+                branches:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                functions:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                lines:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                statements:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+            mutation:
+              type: object
+              required:
+                - score
+              properties:
+                score:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+            contracts:
+              type: boolean
+              description: Whether contracts are required
+            review:
+              type: string
+              enum: ["required", "optional", "none"]
+              description: Code review requirements
+
+    GateValidationRequest:
+      type: object
+      required:
+        - tier
+        - results
+      properties:
+        tier:
+          type: integer
+          enum: [1, 2, 3]
+          description: Risk tier to validate against
+        results:
+          $ref: '#/components/schemas/AssessmentResult'
+
+    GateValidationResult:
+      type: object
+      required:
+        - passed
+        - gates
+      properties:
+        passed:
+          type: boolean
+          description: Whether all quality gates passed
+        gates:
+          type: object
+          description: Validation results for each gate
+          additionalProperties:
+            type: object
+            required:
+              - passed
+              - required
+              - actual
+            properties:
+              passed:
+                type: boolean
+              required:
+                description: Required threshold/value
+              actual:
+                description: Actual achieved value
+              message:
+                type: string
+                description: Gate validation message
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall service health
+        checks:
+          type: object
+          required:
+            - jest
+            - eslint
+            - typescript
+          properties:
+            jest:
+              $ref: '#/components/schemas/ServiceCheck'
+            eslint:
+              $ref: '#/components/schemas/ServiceCheck'
+            typescript:
+              $ref: '#/components/schemas/ServiceCheck'
+            stryker:
+              $ref: '#/components/schemas/ServiceCheck'
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+
+    ServiceCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+          description: Health check result
+        message:
+          type: string
+          description: Health check details
+        responseTime:
+          type: number
+          description: Response time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "ASSESSMENT_FAILED"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+
+security:
+  - BearerAuth: []

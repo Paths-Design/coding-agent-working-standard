@@ -1,0 +1,685 @@
+openapi: 3.0.3
+info:
+  title: CAWS Agent Orchestrator API
+  description: |
+    API specification for the CAWS Agent Orchestrator service.
+    Manages intelligent task routing, agent coordination, and memory-aware scheduling.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3001
+    description: Agent Orchestrator service
+  - url: https://orchestrator.caws.dev
+    description: Production orchestrator
+
+paths:
+  /agents:
+    get:
+      summary: List registered agents
+      description: Retrieve all currently registered agents and their capabilities
+      operationId: listAgents
+      responses:
+        '200':
+          description: Successful response with agent list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - agents
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Agent'
+                  total:
+                    type: integer
+                    minimum: 0
+                  active:
+                    type: integer
+                    minimum: 0
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      summary: Register new agent
+      description: Register a new agent with the orchestrator
+      operationId: registerAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRegistration'
+      responses:
+        '201':
+          description: Agent registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          description: Invalid agent registration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Agent with this ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /agents/{agentId}:
+    get:
+      summary: Get agent details
+      description: Retrieve detailed information about a specific agent
+      operationId: getAgent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    put:
+      summary: Update agent
+      description: Update agent capabilities or status
+      operationId: updateAgent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdate'
+      responses:
+        '200':
+          description: Agent updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          description: Invalid update data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Unregister agent
+      description: Remove an agent from the orchestrator
+      operationId: unregisterAgent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Agent unregistered successfully
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks:
+    post:
+      summary: Submit task for execution
+      description: Submit a new task to be routed to an appropriate agent
+      operationId: submitTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSubmission'
+      responses:
+        '202':
+          description: Task accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          headers:
+            Location:
+              description: URL to track task status
+              schema:
+                type: string
+                format: uri
+        '400':
+          description: Invalid task submission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No suitable agents available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks/{taskId}:
+    get:
+      summary: Get task status
+      description: Retrieve current status and progress of a task
+      operationId: getTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Cancel task
+      description: Cancel a running or queued task
+      operationId: cancelTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Task cannot be cancelled (already completed/failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /routing/decision:
+    post:
+      summary: Get routing recommendation
+      description: Get orchestrator's recommendation for which agent should handle a task
+      operationId: getRoutingDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingRequest'
+      responses:
+        '200':
+          description: Routing decision provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingDecision'
+        '400':
+          description: Invalid routing request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No suitable agents available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /health:
+    get:
+      summary: Service health check
+      description: Get orchestrator service health status
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  schemas:
+    Agent:
+      type: object
+      required:
+        - id
+        - name
+        - capabilities
+        - status
+        - registeredAt
+      properties:
+        id:
+          type: string
+          description: Unique agent identifier
+          example: "agent-gpt-4"
+        name:
+          type: string
+          description: Human-readable agent name
+          example: "GPT-4 Code Assistant"
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+          description: Agent's capabilities and skills
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        performance:
+          $ref: '#/components/schemas/AgentPerformance'
+        registeredAt:
+          type: string
+          format: date-time
+          description: When agent was registered
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        metadata:
+          type: object
+          description: Additional agent metadata
+          additionalProperties: true
+
+    AgentRegistration:
+      type: object
+      required:
+        - id
+        - name
+        - capabilities
+      properties:
+        id:
+          type: string
+          description: Unique agent identifier
+        name:
+          type: string
+          description: Human-readable agent name
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        metadata:
+          type: object
+          description: Additional agent metadata
+          additionalProperties: true
+
+    AgentUpdate:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    AgentStatus:
+      type: string
+      enum:
+        - active
+        - inactive
+        - busy
+        - error
+        - maintenance
+      description: Current agent operational status
+      example: "active"
+
+    AgentPerformance:
+      type: object
+      properties:
+        successRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Task completion success rate
+          example: 0.95
+        averageResponseTime:
+          type: number
+          description: Average task completion time in seconds
+          example: 45.2
+        totalTasks:
+          type: integer
+          minimum: 0
+          description: Total tasks completed
+          example: 150
+        consecutiveFailures:
+          type: integer
+          minimum: 0
+          description: Recent consecutive failure count
+          example: 0
+
+    Capability:
+      type: object
+      required:
+        - domain
+        - skill
+        - confidence
+      properties:
+        domain:
+          type: string
+          description: Capability domain (e.g., 'javascript', 'python', 'design')
+          example: "javascript"
+        skill:
+          type: string
+          description: Specific skill within domain
+          example: "react-development"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Agent's self-assessed confidence in this skill
+          example: 0.9
+        experience:
+          type: string
+          enum:
+            - novice
+            - intermediate
+            - expert
+          description: Experience level
+          example: "expert"
+
+    Task:
+      type: object
+      required:
+        - id
+        - type
+        - status
+        - submittedAt
+      properties:
+        id:
+          type: string
+          description: Unique task identifier
+          example: "task-uuid-123"
+        type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        description:
+          type: string
+          description: Human-readable task description
+        requirements:
+          type: object
+          description: Task-specific requirements
+          additionalProperties: true
+        assignedAgent:
+          type: string
+          description: ID of assigned agent (if any)
+        submittedAt:
+          type: string
+          format: date-time
+          description: Task submission timestamp
+        startedAt:
+          type: string
+          format: date-time
+          description: Task start timestamp
+        completedAt:
+          type: string
+          format: date-time
+          description: Task completion timestamp
+        result:
+          type: object
+          description: Task execution result
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/Error'
+
+    TaskSubmission:
+      type: object
+      required:
+        - type
+        - description
+      properties:
+        type:
+          $ref: '#/components/schemas/TaskType'
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        description:
+          type: string
+          description: Task description
+        requirements:
+          type: object
+          description: Task-specific requirements
+          additionalProperties: true
+        deadline:
+          type: string
+          format: date-time
+          description: Optional task deadline
+        metadata:
+          type: object
+          description: Additional task metadata
+          additionalProperties: true
+
+    TaskType:
+      type: string
+      enum:
+        - feature-development
+        - bug-fix
+        - refactor
+        - documentation
+        - testing
+        - review
+        - research
+        - design
+      description: Type of task to be performed
+
+    TaskStatus:
+      type: string
+      enum:
+        - pending
+        - assigned
+        - in-progress
+        - completed
+        - failed
+        - cancelled
+      description: Current task execution status
+
+    TaskPriority:
+      type: string
+      enum:
+        - low
+        - normal
+        - high
+        - critical
+      description: Task priority level
+      default: "normal"
+
+    RoutingRequest:
+      type: object
+      required:
+        - task
+      properties:
+        task:
+          $ref: '#/components/schemas/TaskSubmission'
+        availableAgents:
+          type: array
+          items:
+            type: string
+          description: IDs of agents available for consideration
+        preferences:
+          type: object
+          description: Routing preferences and constraints
+          additionalProperties: true
+
+    RoutingDecision:
+      type: object
+      required:
+        - recommendedAgent
+        - confidence
+        - reasoning
+      properties:
+        recommendedAgent:
+          type: string
+          description: ID of recommended agent
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence in recommendation
+        reasoning:
+          type: string
+          description: Explanation for the recommendation
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              agentId:
+                type: string
+              confidence:
+                type: number
+              reasoning:
+                type: string
+        estimatedCompletion:
+          type: number
+          description: Estimated completion time in seconds
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Service health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+        checks:
+          type: object
+          description: Individual health check results
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: ["pass", "fail", "warn"]
+              message:
+                type: string
+              timestamp:
+                  type: string
+                  format: date-time
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "AGENT_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+
+security:
+  - BearerAuth: []

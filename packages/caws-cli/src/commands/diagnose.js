@@ -142,11 +142,17 @@ async function checkTypeScriptConfig() {
     };
   }
 
+  // If we have workspaces, provide context about where the TypeScript setup was found
+  let messageSuffix = '';
+  if (tsConfig.workspaceInfo.hasWorkspaces && tsConfig.workspaceInfo.primaryWorkspace) {
+    messageSuffix = ` (detected in workspace: ${tsConfig.workspaceInfo.primaryWorkspace})`;
+  }
+
   if (tsConfig.needsJestConfig) {
     return {
       passed: false,
       severity: 'medium',
-      message: 'TypeScript project missing Jest configuration',
+      message: `TypeScript project missing Jest configuration${messageSuffix}`,
       fix: 'Auto-configure Jest for TypeScript',
       autoFixable: true,
       autoFix: async () => {
@@ -161,18 +167,31 @@ async function checkTypeScriptConfig() {
   }
 
   if (tsConfig.needsTsJest) {
+    const workspaceContext = tsConfig.workspaceInfo.primaryWorkspace
+      ? ` (in workspace: ${tsConfig.workspaceInfo.primaryWorkspace})`
+      : '';
+
     return {
       passed: false,
       severity: 'high',
-      message: 'TypeScript + Jest detected but missing ts-jest',
-      fix: 'Install ts-jest: npm install --save-dev ts-jest',
+      message: `TypeScript + Jest detected but missing ts-jest${workspaceContext}`,
+      fix: `Install ts-jest in ${tsConfig.workspaceInfo.primaryWorkspace || 'root'}: npm install --save-dev ts-jest`,
       autoFixable: false,
+      details: {
+        searchedLocations: tsConfig.workspaceInfo.primaryWorkspace
+          ? [`${tsConfig.workspaceInfo.primaryWorkspace}/package.json`]
+          : ['package.json'],
+        frameworkDetected: tsConfig.testFramework.framework,
+        hasJest: tsConfig.testFramework.hasJest,
+        hasTsJest: tsConfig.testFramework.hasTsJest,
+        workspacesChecked: tsConfig.workspaceInfo.allWorkspaces,
+      },
     };
   }
 
   return {
     passed: true,
-    message: 'TypeScript configuration is correct',
+    message: `TypeScript configuration is correct${messageSuffix}`,
   };
 }
 
@@ -339,6 +358,22 @@ function displayResults(results) {
 
     if (issue.autoFixable) {
       console.log(chalk.green('   ✨ Auto-fix available'));
+    }
+
+    // Show additional details if available
+    if (issue.details) {
+      console.log(chalk.gray('   Details:'));
+      if (issue.details.searchedLocations) {
+        console.log(chalk.gray(`      Searched: ${issue.details.searchedLocations.join(', ')}`));
+      }
+      if (issue.details.frameworkDetected) {
+        console.log(chalk.gray(`      Framework: ${issue.details.frameworkDetected}`));
+      }
+      if (issue.details.workspacesChecked && issue.details.workspacesChecked.length > 0) {
+        console.log(
+          chalk.gray(`      Workspaces checked: ${issue.details.workspacesChecked.join(', ')}`)
+        );
+      }
     }
 
     console.log('');

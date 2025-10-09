@@ -18,33 +18,33 @@
 
 ### 1. Core Workflow Tools
 
-| Tool            | Command Called  | Expected Result                         | Status   | Notes                            |
-| --------------- | --------------- | --------------------------------------- | -------- | -------------------------------- |
+| Tool            | Command Called  | Expected Result                         | Status  | Notes                            |
+| --------------- | --------------- | --------------------------------------- | ------- | -------------------------------- |
 | `caws_init`     | `caws init`     | Project initialized with CAWS structure | ✅ PASS | Created .caws/ + working spec    |
 | `caws_scaffold` | `caws scaffold` | Components scaffolded, no ESM errors    | ✅ PASS | **NO ESM ERRORS!** esbuild wins! |
 | `caws_validate` | `caws validate` | Validates working spec                  | ✅ PASS | Validated tier 2 spec            |
 
 ### 2. Quality & Guidance Tools (NEW)
 
-| Tool                 | Command Called        | Expected Result      | Status   | Notes                        |
-| -------------------- | --------------------- | -------------------- | -------- | ---------------------------- |
+| Tool                 | Command Called        | Expected Result      | Status  | Notes                        |
+| -------------------- | --------------------- | -------------------- | ------- | ---------------------------- |
 | `caws_evaluate`      | `caws evaluate`       | Quality score 0-100% | ✅ PASS | Got 80% (Grade B) - Perfect! |
 | `caws_iterate`       | `caws iterate`        | Iterative guidance   | ✅ PASS | TDD guidance provided        |
 | `caws_waiver_create` | `caws waivers create` | Waiver created       | ✅ PASS | Created WV-6916 successfully |
 
 ### 3. Project Health Tools
 
-| Tool            | Command Called  | Expected Result       | Status   | Notes                     |
-| --------------- | --------------- | --------------------- | -------- | ------------------------- |
-| `caws_status`   | `caws status`   | Health overview       | ✅ PASS | Dashboard displayed       |
-| `caws_diagnose` | `caws diagnose` | Health checks + fixes | ✅ PASS | Found 3 issues, auto-fix  |
+| Tool            | Command Called  | Expected Result       | Status  | Notes                    |
+| --------------- | --------------- | --------------------- | ------- | ------------------------ |
+| `caws_status`   | `caws status`   | Health overview       | ✅ PASS | Dashboard displayed      |
+| `caws_diagnose` | `caws diagnose` | Health checks + fixes | ✅ PASS | Found 3 issues, auto-fix |
 
 ### 4. Provenance & Git Tools
 
-| Tool              | Command Called         | Expected Result      | Status   | Notes                    |
-| ----------------- | ---------------------- | -------------------- | -------- | ------------------------ |
+| Tool              | Command Called         | Expected Result      | Status  | Notes                       |
+| ----------------- | ---------------------- | -------------------- | ------- | --------------------------- |
 | `caws_provenance` | `caws provenance show` | Provenance dashboard | ✅ PASS | Shows "no data" as expected |
-| `caws_hooks`      | `caws hooks status`    | Git hooks status     | ✅ PASS | Shows 0/4 hooks active   |
+| `caws_hooks`      | `caws hooks status`    | Git hooks status     | ✅ PASS | Shows 0/4 hooks active      |
 
 ### 5. Test Analysis Tools
 

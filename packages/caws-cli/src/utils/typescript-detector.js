@@ -326,7 +326,7 @@ function checkTypeScriptTestConfig(projectDir = process.cwd()) {
 
   // If not found in primary workspace, check all workspaces
   if (!hasTsJestAnywhere) {
-    hasTsJestAnywhere = workspaceResults.some(ws => ws.testDetection.hasTsJest);
+    hasTsJestAnywhere = workspaceResults.some((ws) => ws.testDetection.hasTsJest);
   }
 
   // If still not found, check hoisted node_modules

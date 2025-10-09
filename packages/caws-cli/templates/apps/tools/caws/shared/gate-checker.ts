@@ -65,7 +65,11 @@ export class CawsGateChecker extends CawsBaseTool {
    */
   private findReportDirectory(startPath: string = this.getWorkingDirectory()): string {
     // Priority 1: Check if the current directory has the reports or test results
-    if (this.hasCoverageReports(startPath) || this.hasMutationReports(startPath) || this.hasTestResults(startPath)) {
+    if (
+      this.hasCoverageReports(startPath) ||
+      this.hasMutationReports(startPath) ||
+      this.hasTestResults(startPath)
+    ) {
       return startPath;
     }
 
@@ -88,7 +92,11 @@ export class CawsGateChecker extends CawsBaseTool {
                 for (const entry of entries) {
                   if (entry.isDirectory()) {
                     const wsPath = path.join(fullBaseDir, entry.name);
-                    if (this.hasCoverageReports(wsPath) || this.hasMutationReports(wsPath) || this.hasTestResults(wsPath)) {
+                    if (
+                      this.hasCoverageReports(wsPath) ||
+                      this.hasMutationReports(wsPath) ||
+                      this.hasTestResults(wsPath)
+                    ) {
                       return wsPath;
                     }
                   }
@@ -97,7 +105,11 @@ export class CawsGateChecker extends CawsBaseTool {
             } else {
               // Direct workspace path
               const wsPath = path.join(startPath, wsPattern);
-              if (this.hasCoverageReports(wsPath) || this.hasMutationReports(wsPath) || this.hasTestResults(wsPath)) {
+              if (
+                this.hasCoverageReports(wsPath) ||
+                this.hasMutationReports(wsPath) ||
+                this.hasTestResults(wsPath)
+              ) {
                 return wsPath;
               }
             }
@@ -164,7 +176,7 @@ export class CawsGateChecker extends CawsBaseTool {
     if (this.pathExists(testResultsPath)) {
       try {
         const entries = fs.readdirSync(testResultsPath);
-        return entries.some(entry => entry.endsWith('.json') || entry.endsWith('.xml'));
+        return entries.some((entry) => entry.endsWith('.json') || entry.endsWith('.xml'));
       } catch (error) {
         // Ignore read errors
       }
@@ -180,7 +192,7 @@ export class CawsGateChecker extends CawsBaseTool {
     if (this.pathExists(packageJsonPath)) {
       try {
         const packageJson = this.readJsonFile<any>(packageJsonPath);
-        return !!(packageJson?.scripts?.test);
+        return !!packageJson?.scripts?.test;
       } catch (error) {
         // Ignore parse errors
       }
@@ -372,24 +384,37 @@ export class CawsGateChecker extends CawsBaseTool {
               description: 'JSON object with coverage data by file',
               example: {
                 '/path/to/file.js': {
-                  statementMap: { /* ... */ },
-                  fnMap: { /* ... */ },
-                  branchMap: { /* ... */ },
-                  s: { /* hit counts */ },
-                  f: { /* function hits */ },
-                  b: { /* branch hits */ },
-                }
-              }
+                  statementMap: {
+                    /* ... */
+                  },
+                  fnMap: {
+                    /* ... */
+                  },
+                  branchMap: {
+                    /* ... */
+                  },
+                  s: {
+                    /* hit counts */
+                  },
+                  f: {
+                    /* function hits */
+                  },
+                  b: {
+                    /* branch hits */
+                  },
+                },
+              },
             },
             run_command: 'npm test -- --coverage --coverageReporters=json',
             alternative_commands: [
               'npm run test:coverage',
               'jest --coverage --coverageReporters=json',
-              'vitest run --coverage'
+              'vitest run --coverage',
             ],
-            workspace_hint: reportDir !== this.getWorkingDirectory()
-              ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
-              : 'Run from workspace directory if using monorepo',
+            workspace_hint:
+              reportDir !== this.getWorkingDirectory()
+                ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
+                : 'Run from workspace directory if using monorepo',
             waiver_available: true,
             waiver_suggestion:
               'If this is an exceptional case, consider creating a coverage waiver',
@@ -539,28 +564,37 @@ export class CawsGateChecker extends CawsBaseTool {
             expected_schema: {
               description: 'JSON object with mutation testing results',
               example: {
-                files: { /* file-specific results */ },
-                testFiles: { /* test file results */ },
-                mutants: [{ /* mutant details */ }],
+                files: {
+                  /* file-specific results */
+                },
+                testFiles: {
+                  /* test file results */
+                },
+                mutants: [
+                  {
+                    /* mutant details */
+                  },
+                ],
                 metrics: {
                   killed: 85,
                   survived: 5,
                   timeout: 2,
                   totalDetected: 92,
                   totalUndetected: 0,
-                  totalValid: 92
-                }
-              }
+                  totalValid: 92,
+                },
+              },
             },
             run_command: 'npx stryker run',
             alternative_commands: [
               'npm run test:mutation',
               'npx stryker run --configFile stryker.conf.json',
-              'yarn mutation:test'
+              'yarn mutation:test',
             ],
-            workspace_hint: reportDir !== this.getWorkingDirectory()
-              ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
-              : 'Run from workspace directory if using monorepo',
+            workspace_hint:
+              reportDir !== this.getWorkingDirectory()
+                ? `Auto-detected workspace: ${path.relative(this.getWorkingDirectory(), reportDir)}`
+                : 'Run from workspace directory if using monorepo',
           },
           errors: [
             `Mutation report not found at ${path.relative(this.getWorkingDirectory(), mutationPath)}`,

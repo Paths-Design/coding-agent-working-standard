@@ -33,6 +33,7 @@ The monitoring system is exposed through three MCP tools:
 Get current monitoring status including budgets, progress, and alerts.
 
 **Example:**
+
 ```javascript
 {
   "monitoring_active": true,
@@ -54,10 +55,12 @@ Get current monitoring status including budgets, progress, and alerts.
 Get active monitoring alerts and warnings.
 
 **Parameters:**
+
 - `severity`: Filter by severity (`info`, `warning`, `critical`)
 - `limit`: Maximum alerts to return (default: 10)
 
 **Example:**
+
 ```javascript
 {
   "alerts_count": 2,
@@ -81,6 +84,7 @@ Get active monitoring alerts and warnings.
 Configure monitoring system settings.
 
 **Parameters:**
+
 - `action`: Configuration action
   - `update_thresholds`: Update budget warning/critical thresholds
   - `add_watch_path`: Add directory to watch list
@@ -88,19 +92,20 @@ Configure monitoring system settings.
   - `set_polling_interval`: Change polling frequency
 
 **Examples:**
+
 ```javascript
 // Update thresholds
 caws_monitor_configure({
   action: 'update_thresholds',
   budgetWarning: 0.85,
-  budgetCritical: 0.95
-})
+  budgetCritical: 0.95,
+});
 
 // Add watch path
 caws_monitor_configure({
   action: 'add_watch_path',
-  path: 'packages'
-})
+  path: 'packages',
+});
 ```
 
 ## Configuration
@@ -216,16 +221,19 @@ Provides structured data for dashboard integration:
 ### Common Issues
 
 **Monitor Not Starting**
+
 - Check file permissions on watch paths
 - Verify working spec exists and is valid
 - Ensure chokidar dependency is installed
 
 **False Positive Alerts**
+
 - Adjust threshold values using `caws_monitor_configure`
 - Review working spec budget limits
 - Check for legitimate large file additions
 
 **Performance Issues**
+
 - Increase polling interval
 - Reduce number of watch paths
 - Use more specific file patterns
@@ -233,6 +241,7 @@ Provides structured data for dashboard integration:
 ### Debug Mode
 
 Enable detailed logging by setting environment variable:
+
 ```bash
 CAWS_MONITOR_DEBUG=true
 ```
@@ -242,6 +251,7 @@ CAWS_MONITOR_DEBUG=true
 ### CawsMonitor Class
 
 #### Constructor Options
+
 ```javascript
 new CawsMonitor({
   watchPaths: string[],      // Paths to monitor
@@ -254,12 +264,14 @@ new CawsMonitor({
 ```
 
 #### Methods
+
 - `start()`: Start monitoring
 - `stop()`: Stop monitoring
 - `getStatus()`: Get current status
 - `addAlert(alert)`: Manually add alert
 
 ### Alert Object Structure
+
 ```javascript
 {
   id: string,           // Unique alert identifier

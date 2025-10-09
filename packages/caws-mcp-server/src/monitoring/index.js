@@ -5,10 +5,10 @@
  * @author @darianrosebrook
  */
 
-import fs from 'fs-extra';
-import path from 'path';
 import chokidar from 'chokidar';
+import fs from 'fs-extra';
 import yaml from 'js-yaml';
+import path from 'path';
 
 class CawsMonitor {
   constructor(options = {}) {
@@ -60,7 +60,6 @@ class CawsMonitor {
 
       // Emit initial status
       this.emitStatusUpdate();
-
     } catch (error) {
       console.error('❌ Failed to start monitoring:', error.message);
       throw error;
@@ -136,7 +135,7 @@ class CawsMonitor {
    * Start file watchers
    */
   async startFileWatchers() {
-    const watchPaths = this.options.watchPaths.map(p =>
+    const watchPaths = this.options.watchPaths.map((p) =>
       path.isAbsolute(p) ? p : path.join(process.cwd(), p)
     );
 
@@ -194,7 +193,6 @@ class CawsMonitor {
 
       // Emit update
       this.emitStatusUpdate();
-
     } catch (error) {
       console.error('❌ Error handling file change:', error.message);
     }
@@ -218,7 +216,6 @@ class CawsMonitor {
       if (this.budgets.has('loc')) {
         this.budgets.get('loc').current = locCount;
       }
-
     } catch (error) {
       console.error('❌ Error calculating budget usage:', error.message);
     }
@@ -244,7 +241,22 @@ class CawsMonitor {
         } else if (entry.isFile()) {
           // Count source files
           const ext = path.extname(entry.name);
-          if (['.js', '.ts', '.jsx', '.tsx', '.vue', '.py', '.java', '.cpp', '.c', '.h', '.rs', '.go'].includes(ext)) {
+          if (
+            [
+              '.js',
+              '.ts',
+              '.jsx',
+              '.tsx',
+              '.vue',
+              '.py',
+              '.java',
+              '.cpp',
+              '.c',
+              '.h',
+              '.rs',
+              '.go',
+            ].includes(ext)
+          ) {
             count++;
           }
         }
@@ -273,7 +285,22 @@ class CawsMonitor {
           }
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name);
-          if (['.js', '.ts', '.jsx', '.tsx', '.vue', '.py', '.java', '.cpp', '.c', '.h', '.rs', '.go'].includes(ext)) {
+          if (
+            [
+              '.js',
+              '.ts',
+              '.jsx',
+              '.tsx',
+              '.vue',
+              '.py',
+              '.java',
+              '.cpp',
+              '.c',
+              '.h',
+              '.rs',
+              '.go',
+            ].includes(ext)
+          ) {
             try {
               const content = await fs.readFile(fullPath, 'utf8');
               const lines = content.split('\n').length;
@@ -307,7 +334,10 @@ class CawsMonitor {
     }
 
     if (progressUpdates.length > 0) {
-      console.log('📊 Progress updated:', progressUpdates.map(p => `${p.id}: ${p.progress}%`).join(', '));
+      console.log(
+        '📊 Progress updated:',
+        progressUpdates.map((p) => `${p.id}: ${p.progress}%`).join(', ')
+      );
     }
   }
 
@@ -327,21 +357,23 @@ class CawsMonitor {
     try {
       // Check if related files exist
       const files = await fs.readdir(process.cwd());
-      const relevantFiles = files.filter(file =>
-        file.includes('test') || file.includes('spec') || file.includes(criterion.id.toLowerCase())
+      const relevantFiles = files.filter(
+        (file) =>
+          file.includes('test') ||
+          file.includes('spec') ||
+          file.includes(criterion.id.toLowerCase())
       );
 
       if (relevantFiles.length > 0) progress += 30;
 
       // Check if tests directory exists
-      if (await fs.pathExists('tests') || await fs.pathExists('test')) progress += 20;
+      if ((await fs.pathExists('tests')) || (await fs.pathExists('test'))) progress += 20;
 
       // Check if implementation files exist
-      if (await fs.pathExists('src') || await fs.pathExists('lib')) progress += 25;
+      if ((await fs.pathExists('src')) || (await fs.pathExists('lib'))) progress += 25;
 
       // Check for documentation
-      if (await fs.pathExists('README.md') || await fs.pathExists('docs')) progress += 25;
-
+      if ((await fs.pathExists('README.md')) || (await fs.pathExists('docs'))) progress += 25;
     } catch (error) {
       // If we can't read files, assume minimal progress
       progress = 10;
@@ -397,8 +429,8 @@ class CawsMonitor {
     // Add new alerts
     for (const alert of newAlerts) {
       // Avoid duplicate alerts
-      const existingAlert = this.alerts.find(a =>
-        a.type === alert.type && a.budgetType === alert.budgetType
+      const existingAlert = this.alerts.find(
+        (a) => a.type === alert.type && a.budgetType === alert.budgetType
       );
 
       if (!existingAlert) {
@@ -435,11 +467,13 @@ class CawsMonitor {
       progress: Object.fromEntries(this.progress),
       overallProgress: this.getOverallProgress(),
       alerts: this.alerts.slice(-10), // Last 10 alerts
-      workingSpec: this.workingSpec ? {
-        id: this.workingSpec.id,
-        title: this.workingSpec.title,
-        riskTier: this.workingSpec.risk_tier,
-      } : null,
+      workingSpec: this.workingSpec
+        ? {
+            id: this.workingSpec.id,
+            title: this.workingSpec.title,
+            riskTier: this.workingSpec.risk_tier,
+          }
+        : null,
     };
 
     // In a real implementation, this would emit to connected clients,

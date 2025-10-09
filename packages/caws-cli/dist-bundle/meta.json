@@ -1552,7 +1552,7 @@
       "format": "cjs"
     },
     "src/error-handler.js": {
-      "bytes": 12223,
+      "bytes": 22424,
       "imports": [
         {
           "path": "node_modules/chalk/source/index.js",
@@ -12201,7 +12201,7 @@
       "format": "cjs"
     },
     "src/commands/status.js": {
-      "bytes": 7406,
+      "bytes": 9878,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12222,6 +12222,11 @@
           "path": "node_modules/chalk/source/index.js",
           "kind": "require-call",
           "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
         }
       ],
       "format": "cjs"
@@ -12248,7 +12253,7 @@
       "format": "cjs"
     },
     "src/utils/typescript-detector.js": {
-      "bytes": 5881,
+      "bytes": 13356,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12264,6 +12269,11 @@
           "path": "node_modules/chalk/source/index.js",
           "kind": "require-call",
           "original": "chalk"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
         }
       ],
       "format": "cjs"
@@ -12290,7 +12300,7 @@
       "format": "cjs"
     },
     "src/commands/diagnose.js": {
-      "bytes": 12008,
+      "bytes": 13630,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12326,7 +12336,7 @@
       "format": "cjs"
     },
     "src/commands/evaluate.js": {
-      "bytes": 9993,
+      "bytes": 10107,
       "imports": [
         {
           "path": "fs",
@@ -12357,7 +12367,7 @@
       "format": "cjs"
     },
     "src/commands/iterate.js": {
-      "bytes": 8854,
+      "bytes": 11604,
       "imports": [
         {
           "path": "fs",
@@ -12418,8 +12428,61 @@
       ],
       "format": "cjs"
     },
+    "src/commands/workflow.js": {
+      "bytes": 8465,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/quality-monitor.js": {
+      "bytes": 8273,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/troubleshoot.js": {
+      "bytes": 3219,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        }
+      ],
+      "format": "cjs"
+    },
     "src/index.js": {
-      "bytes": 16443,
+      "bytes": 17948,
       "imports": [
         {
           "path": "../../node_modules/commander/index.js",
@@ -12517,6 +12580,21 @@
           "original": "./commands/waivers"
         },
         {
+          "path": "src/commands/workflow.js",
+          "kind": "require-call",
+          "original": "./commands/workflow"
+        },
+        {
+          "path": "src/commands/quality-monitor.js",
+          "kind": "require-call",
+          "original": "./commands/quality-monitor"
+        },
+        {
+          "path": "src/commands/troubleshoot.js",
+          "kind": "require-call",
+          "original": "./commands/troubleshoot"
+        },
+        {
           "path": "src/scaffold/index.js",
           "kind": "require-call",
           "original": "./scaffold"
@@ -12550,7 +12628,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 3350788
+      "bytes": 3423221
     },
     "dist-bundle/index.js": {
       "imports": [
@@ -13045,6 +13123,16 @@
           "external": true
         },
         {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
           "path": "path",
           "kind": "require-call",
           "external": true
@@ -13294,7 +13382,7 @@
           "bytesInOutput": 3869
         },
         "src/error-handler.js": {
-          "bytesInOutput": 10973
+          "bytesInOutput": 20500
         },
         "node_modules/inquirer/node_modules/escape-string-regexp/index.js": {
           "bytesInOutput": 406
@@ -14908,34 +14996,43 @@
           "bytesInOutput": 3715
         },
         "src/commands/status.js": {
-          "bytesInOutput": 7250
+          "bytesInOutput": 9965
         },
         "src/commands/templates.js": {
           "bytesInOutput": 7213
         },
         "src/utils/typescript-detector.js": {
-          "bytesInOutput": 5373
+          "bytesInOutput": 11806
         },
         "src/generators/jest-config.js": {
           "bytesInOutput": 6055
         },
         "src/commands/diagnose.js": {
-          "bytesInOutput": 12350
+          "bytesInOutput": 13913
         },
         "src/commands/evaluate.js": {
-          "bytesInOutput": 10046
+          "bytesInOutput": 10166
         },
         "src/commands/iterate.js": {
-          "bytesInOutput": 9224
+          "bytesInOutput": 11829
         },
         "src/commands/waivers.js": {
           "bytesInOutput": 10476
         },
+        "src/commands/workflow.js": {
+          "bytesInOutput": 8449
+        },
+        "src/commands/quality-monitor.js": {
+          "bytesInOutput": 7859
+        },
+        "src/commands/troubleshoot.js": {
+          "bytesInOutput": 3234
+        },
         "src/index.js": {
-          "bytesInOutput": 14002
+          "bytesInOutput": 15057
         }
       },
-      "bytes": 2093957
+      "bytes": 2137615
     }
   }
 }

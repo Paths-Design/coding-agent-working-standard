@@ -23,6 +23,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { CawsMonitor } from './src/monitoring/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,12 @@ class CawsMcpServer extends Server {
       }
     );
 
+    // Initialize monitoring system
+    this.monitor = new CawsMonitor({
+      watchPaths: ['.caws', 'src', 'tests', 'docs', 'packages'],
+      pollingInterval: 30000, // 30 seconds
+    });
+
     this.setupToolHandlers();
     this.setupResourceHandlers();
   }
@@ -50,7 +57,7 @@ class CawsMcpServer extends Server {
   setupToolHandlers() {
     // Handle MCP initialization
     this.setRequestHandler(InitializeRequestSchema, async (request) => {
-      const { protocolVersion, capabilities, clientInfo } = request.params;
+      const { protocolVersion, clientInfo } = request.params;
 
       console.error(`MCP Initialize: protocol=${protocolVersion}, client=${clientInfo?.name}`);
 
@@ -105,8 +112,6 @@ class CawsMcpServer extends Server {
           return await this.handleCawsIterate(args);
         case 'caws_validate':
           return await this.handleCawsValidate(args);
-        case 'caws_waiver_create':
-          return await this.handleWaiverCreate(args);
         case 'caws_workflow_guidance':
           return await this.handleWorkflowGuidance(args);
         case 'caws_quality_monitor':
@@ -129,6 +134,12 @@ class CawsMcpServer extends Server {
           return await this.handleWaiversList(args);
         case 'caws_help':
           return await this.handleHelp(args);
+        case 'caws_monitor_status':
+          return await this.handleMonitorStatus(args);
+        case 'caws_monitor_alerts':
+          return await this.handleMonitorAlerts(args);
+        case 'caws_monitor_configure':
+          return await this.handleMonitorConfigure(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -476,7 +487,9 @@ class CawsMcpServer extends Server {
     const workingDirectory = args.workingDirectory || process.cwd();
 
     try {
-      const contextArg = context ? `--current-state ${JSON.stringify(JSON.stringify(context))}` : '';
+      const contextArg = context
+        ? `--current-state ${JSON.stringify(JSON.stringify(context))}`
+        : '';
       const command = `node ${path.join(__dirname, '../cli/index.js')} workflow ${workflowType} --step ${currentStep} ${contextArg}`;
 
       const result = execSync(command, {
@@ -1071,7 +1084,7 @@ class CawsMcpServer extends Server {
         'quality-gates': ['caws_diagnose', 'caws_hooks', 'caws_provenance'],
         development: ['caws_workflow_guidance', 'caws_quality_monitor', 'caws_progress_update'],
         testing: ['caws_test_analysis'],
-        compliance: ['caws_waiver_create'],
+        compliance: ['caws_waiver_create', 'caws_waivers_list'],
       };
 
       const tools = categories[category] || [];
@@ -1108,7 +1121,7 @@ class CawsMcpServer extends Server {
         'caws_progress_update',
       ],
       '🧪 Testing & Analysis': ['caws_test_analysis'],
-      '📋 Compliance & Waivers': ['caws_waiver_create'],
+      '📋 Compliance & Waivers': ['caws_waiver_create', 'caws_waivers_list'],
     };
 
     const help = {
@@ -1146,6 +1159,200 @@ class CawsMcpServer extends Server {
         },
       ],
     };
+  }
+
+  /**
+   * Handle monitoring status requests
+   */
+  async handleMonitorStatus(_args) {
+    try {
+      const status = this.monitor.getStatus();
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                monitoring_active: status.isRunning,
+                budgets: status.budgets,
+                progress: status.progress,
+                overall_progress: status.overallProgress,
+                active_alerts: status.alerts.length,
+                working_spec: status.workingSpec,
+                timestamp: new Date().toISOString(),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                error: 'Failed to get monitoring status',
+                details: error.message,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle monitoring alerts requests
+   */
+  async handleMonitorAlerts(args) {
+    try {
+      const { severity, limit = 10 } = args;
+      let alerts = this.monitor.alerts;
+
+      if (severity) {
+        alerts = alerts.filter((alert) => alert.severity === severity);
+      }
+
+      alerts = alerts.slice(-limit);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                alerts_count: alerts.length,
+                alerts: alerts.map((alert) => ({
+                  id: alert.id,
+                  type: alert.type,
+                  severity: alert.severity,
+                  message: alert.message,
+                  timestamp: alert.timestamp,
+                  budget_type: alert.budgetType,
+                  current: alert.current,
+                  limit: alert.limit,
+                })),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                error: 'Failed to get monitoring alerts',
+                details: error.message,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle monitoring configuration requests
+   */
+  async handleMonitorConfigure(args) {
+    try {
+      const { action, ...config } = args;
+
+      switch (action) {
+        case 'update_thresholds':
+          if (config.budgetWarning !== undefined) {
+            this.monitor.options.alertThresholds.budgetWarning = config.budgetWarning;
+          }
+          if (config.budgetCritical !== undefined) {
+            this.monitor.options.alertThresholds.budgetCritical = config.budgetCritical;
+          }
+          break;
+
+        case 'add_watch_path':
+          if (config.path && !this.monitor.options.watchPaths.includes(config.path)) {
+            this.monitor.options.watchPaths.push(config.path);
+            // Restart monitoring with new paths
+            await this.monitor.stop();
+            await this.monitor.start();
+          }
+          break;
+
+        case 'remove_watch_path':
+          if (config.path) {
+            this.monitor.options.watchPaths = this.monitor.options.watchPaths.filter(
+              (p) => p !== config.path
+            );
+            // Restart monitoring with updated paths
+            await this.monitor.stop();
+            await this.monitor.start();
+          }
+          break;
+
+        case 'set_polling_interval':
+          if (config.interval && config.interval > 0) {
+            this.monitor.options.pollingInterval = config.interval;
+            // Restart periodic checks with new interval
+            if (this.monitor.checkInterval) {
+              clearInterval(this.monitor.checkInterval);
+            }
+            this.monitor.startPeriodicChecks();
+          }
+          break;
+
+        default:
+          throw new Error(`Unknown configuration action: ${action}`);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                action,
+                new_config: {
+                  watchPaths: this.monitor.options.watchPaths,
+                  pollingInterval: this.monitor.options.pollingInterval,
+                  alertThresholds: this.monitor.options.alertThresholds,
+                },
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                error: 'Failed to configure monitoring',
+                details: error.message,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
   }
 
   getToolExamples(toolName) {
@@ -1598,6 +1805,76 @@ const CAWS_TOOLS = [
       },
     },
   },
+  {
+    name: 'caws_monitor_status',
+    description: 'Get current monitoring status including budgets, progress, and alerts',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'caws_monitor_alerts',
+    description: 'Get active monitoring alerts and warnings',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        severity: {
+          type: 'string',
+          enum: ['info', 'warning', 'critical'],
+          description: 'Filter alerts by severity level',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of alerts to return',
+          default: 10,
+          minimum: 1,
+          maximum: 100,
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_monitor_configure',
+    description: 'Configure monitoring system settings',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'update_thresholds',
+            'add_watch_path',
+            'remove_watch_path',
+            'set_polling_interval',
+          ],
+          description: 'Configuration action to perform',
+        },
+        budgetWarning: {
+          type: 'number',
+          description: 'Warning threshold for budget usage (0.0-1.0)',
+          minimum: 0,
+          maximum: 1,
+        },
+        budgetCritical: {
+          type: 'number',
+          description: 'Critical threshold for budget usage (0.0-1.0)',
+          minimum: 0,
+          maximum: 1,
+        },
+        path: {
+          type: 'string',
+          description: 'Path to add/remove from watch list',
+        },
+        interval: {
+          type: 'number',
+          description: 'Polling interval in milliseconds',
+          minimum: 1000,
+        },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 // Handler implementations for new tools are defined as class methods above
@@ -1609,7 +1886,6 @@ function execCommand(command, options = {}) {
       _resolve({ stdout: child, stderr: '' });
     } catch (error) {
       // Log command execution errors for debugging
-      // eslint-disable-next-line no-console
       console.error(`Command execution failed: ${command}`, error.message);
       throw error;
     }
@@ -1623,13 +1899,18 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // eslint-disable-next-line no-console
-  console.error('CAWS MCP Server started');
+  // Start monitoring system
+  try {
+    await server.monitor.start();
+  } catch (error) {
+    console.error('Failed to start monitoring:', error.message);
+  }
+
+  console.error('CAWS MCP Server started with monitoring');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
-    // eslint-disable-next-line no-console
     console.error('CAWS MCP Server error:', error);
     process.exit(1);
   });

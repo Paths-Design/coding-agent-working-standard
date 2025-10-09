@@ -330,34 +330,38 @@ function generateSuggestions(data) {
  * @param {Object} options - Command options
  */
 async function statusCommand(options = {}) {
-  return safeAsync(async () => {
-    // Load all status data
-    const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
-    const hooks = await checkGitHooks();
-    const provenance = await loadProvenanceChain();
-    const waivers = await loadWaiverStatus();
-    const gates = await checkQualityGates();
+  return safeAsync(
+    async () => {
+      // Load all status data
+      const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
+      const hooks = await checkGitHooks();
+      const provenance = await loadProvenanceChain();
+      const waivers = await loadWaiverStatus();
+      const gates = await checkQualityGates();
 
-    // Display status
-    displayStatus({
-      spec,
-      hooks,
-      provenance,
-      waivers,
-      gates,
-    });
+      // Display status
+      displayStatus({
+        spec,
+        hooks,
+        provenance,
+        waivers,
+        gates,
+      });
 
-    const result = outputResult({
-      command: 'status',
-      spec: spec ? 'loaded' : 'not found',
-      hooks: hooks.installed,
-      provenance: provenance.entries?.length || 0,
-      waivers: waivers.active?.length || 0,
-      gates: gates.passed ? 'passed' : 'failed',
-    });
+      const result = outputResult({
+        command: 'status',
+        spec: spec ? 'loaded' : 'not found',
+        hooks: hooks.installed,
+        provenance: provenance.entries?.length || 0,
+        waivers: waivers.active?.length || 0,
+        gates: gates.passed ? 'passed' : 'failed',
+      });
 
-    return result;
-  }, 'status check', true);
+      return result;
+    },
+    'status check',
+    true
+  );
 }
 
 module.exports = {

@@ -87,6 +87,16 @@ class GatesCLI {
         if (result.errors && result.errors.length > 0) {
           result.errors.forEach((error) => console.error(`  - ${error}`));
         }
+        if (result.details?.searched_paths) {
+          console.error(`  Searched paths: ${result.details.searched_paths.join(', ')}`);
+        }
+        if (result.details?.run_command) {
+          console.error(`  Run: ${result.details.run_command}`);
+        }
+        if (result.details?.waiver_available) {
+          console.error(`  💡 ${result.details.waiver_suggestion}`);
+          console.error(`     ${result.details.waiver_command}`);
+        }
         return false;
       }
     } catch (error) {
@@ -118,6 +128,18 @@ class GatesCLI {
         if (result.errors && result.errors.length > 0) {
           result.errors.forEach((error) => console.error(`  - ${error}`));
         }
+        if (result.details?.searched_paths) {
+          console.error(`  Searched paths: ${result.details.searched_paths.join(', ')}`);
+        }
+        if (result.details?.run_command) {
+          console.error(`  Run: ${result.details.run_command}`);
+        }
+        if (result.details?.waiver_available) {
+          console.error(`  💡 ${result.details.waiver_suggestion}`);
+          console.error(
+            `     caws waivers create --title="Mutation waiver" --reason=emergency_hotfix --gates=mutation`
+          );
+        }
         return false;
       }
     } catch (error) {
@@ -144,6 +166,18 @@ class GatesCLI {
         if (result.errors && result.errors.length > 0) {
           result.errors.forEach((error) => console.error(`  - ${error}`));
         }
+        if (result.details?.searched_paths) {
+          console.error(`  Searched paths: ${result.details.searched_paths.join(', ')}`);
+        }
+        if (result.details?.example_command) {
+          console.error(`  Example: ${result.details.example_command}`);
+        }
+        console.error(
+          `  💡 If contracts are not required for this tier, consider creating a waiver`
+        );
+        console.error(
+          `     caws waivers create --title="Contract waiver" --reason=experimental_feature --gates=contracts`
+        );
         return false;
       }
     } catch (error) {

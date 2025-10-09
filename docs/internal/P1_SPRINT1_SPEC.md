@@ -23,6 +23,7 @@ Currently, 3 MCP tools have **hardcoded logic in the MCP server** instead of cal
 ### 1. `caws_workflow_guidance` ❌ NO CLI COMMAND
 
 **Current Implementation**: Hardcoded in MCP server
+
 ```javascript
 // packages/caws-mcp-server/index.js:586
 generateWorkflowGuidance(workflowType, currentStep, _context) {
@@ -35,7 +36,8 @@ generateWorkflowGuidance(workflowType, currentStep, _context) {
 }
 ```
 
-**What's Needed**: 
+**What's Needed**:
+
 ```bash
 caws workflow <type> --step <number> [--context <json>]
 ```
@@ -47,6 +49,7 @@ caws workflow <type> --step <number> [--context <json>]
 ### 2. `caws_quality_monitor` ❌ NO CLI COMMAND
 
 **Current Implementation**: Hardcoded in MCP server
+
 ```javascript
 // packages/caws-mcp-server/index.js:697
 async analyzeQualityImpact(action, files, context) {
@@ -56,6 +59,7 @@ async analyzeQualityImpact(action, files, context) {
 ```
 
 **What's Needed**:
+
 ```bash
 caws quality-monitor <action> [--files <files>] [--context <json>]
 ```
@@ -67,6 +71,7 @@ caws quality-monitor <action> [--files <files>] [--context <json>]
 ### 3. `caws_test_analysis` ⚠️ WRONG CLI PATH
 
 **Current Implementation**: Calls wrong path
+
 ```javascript
 // packages/caws-mcp-server/index.js:508
 const result = await execCommand(
@@ -87,12 +92,14 @@ const result = await execCommand(
 **File**: `packages/caws-cli/src/commands/workflow.js`
 
 **Requirements**:
+
 1. Support 3 workflow types: `tdd`, `refactor`, `feature`
 2. Accept `--step <number>` flag
 3. Optional `--current-state <json>` flag
 4. Output workflow guidance in structured format
 
-**Code to Port**: 
+**Code to Port**:
+
 - Move `generateWorkflowGuidance()` from MCP server
 - Move workflow templates object
 - Add CLI argument parsing
@@ -107,12 +114,14 @@ const result = await execCommand(
 **File**: `packages/caws-cli/src/commands/quality-monitor.js`
 
 **Requirements**:
+
 1. Support 3 action types: `file_saved`, `code_edited`, `test_run`
 2. Accept `--files <files>` flag (comma-separated)
 3. Optional `--context <json>` flag
 4. Output quality analysis and recommendations
 
 **Code to Port**:
+
 - Move `analyzeQualityImpact()` from MCP server
 - Add CLI argument parsing
 - Format output with colors
@@ -127,6 +136,7 @@ const result = await execCommand(
 **File**: `packages/caws-mcp-server/index.js`
 
 **Changes**:
+
 ```javascript
 // Before:
 const result = await execCommand(
@@ -148,6 +158,7 @@ const result = execSync(command, {...});
 **Changes Needed**:
 
 #### 4a. Update `handleWorkflowGuidance`:
+
 ```javascript
 async handleWorkflowGuidance(args) {
   const { workflowType, currentStep, context } = args;
@@ -156,7 +167,7 @@ async handleWorkflowGuidance(args) {
   try {
     const contextArg = context ? `--current-state ${JSON.stringify(context)}` : '';
     const command = `node ${path.join(__dirname, '../cli/index.js')} workflow ${workflowType} --step ${currentStep} ${contextArg}`;
-    
+
     const result = execSync(command, {
       encoding: 'utf8',
       cwd: workingDirectory,
@@ -176,6 +187,7 @@ async handleWorkflowGuidance(args) {
 ```
 
 #### 4b. Update `handleQualityMonitor`:
+
 ```javascript
 async handleQualityMonitor(args) {
   const { action, files, context } = args;
@@ -185,7 +197,7 @@ async handleQualityMonitor(args) {
     const filesArg = files?.length ? `--files ${files.join(',')}` : '';
     const contextArg = context ? `--context ${JSON.stringify(context)}` : '';
     const command = `node ${path.join(__dirname, '../cli/index.js')} quality-monitor ${action} ${filesArg} ${contextArg}`;
-    
+
     const result = execSync(command, {
       encoding: 'utf8',
       cwd: workingDirectory,
@@ -213,10 +225,12 @@ async handleQualityMonitor(args) {
 **File**: `packages/caws-mcp-server/index.js`
 
 **Methods to Remove**:
+
 - `generateWorkflowGuidance()` (~150 lines)
 - `analyzeQualityImpact()` (~80 lines)
 
-**Benefit**: 
+**Benefit**:
+
 - Cleaner MCP server code
 - Single source of truth (CLI)
 - Easier to maintain
@@ -230,6 +244,7 @@ async handleQualityMonitor(args) {
 **File**: `packages/caws-cli/src/index.js`
 
 **Add**:
+
 ```javascript
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
@@ -279,6 +294,7 @@ program
 ### Task 7: Rebuild and Test
 
 **Steps**:
+
 1. Rebuild CLI with esbuild
 2. Rebuild extension bundle
 3. Package new .vsix
@@ -286,6 +302,7 @@ program
 5. Test all 3 tools via MCP
 
 **Commands**:
+
 ```bash
 # Rebuild CLI
 cd packages/caws-cli
@@ -313,6 +330,7 @@ caws_test_analysis
 ### Task 8: Update Documentation
 
 **Files to Update**:
+
 1. `docs/internal/MCP_CLI_PARITY_ANALYSIS.md` - Mark as complete
 2. `docs/internal/P0_TEST_RESULTS_COMPLETE.md` - Update to 13/13
 3. `docs/agents/full-guide.md` - Add new commands
@@ -324,17 +342,17 @@ caws_test_analysis
 
 ## Total Effort Estimate
 
-| Task | Estimated Time |
-|------|----------------|
-| 1. Create `caws workflow` | 3-4 hours |
-| 2. Create `caws quality-monitor` | 3-4 hours |
-| 3. Fix `test-analysis` path | 0.5 hours |
-| 4. Update MCP handlers | 1 hour |
-| 5. Remove hardcoded methods | 0.25 hours |
-| 6. Register CLI commands | 0.5 hours |
-| 7. Rebuild and test | 1 hour |
-| 8. Update documentation | 1 hour |
-| **TOTAL** | **10-12 hours (~1.5 days)** |
+| Task                             | Estimated Time              |
+| -------------------------------- | --------------------------- |
+| 1. Create `caws workflow`        | 3-4 hours                   |
+| 2. Create `caws quality-monitor` | 3-4 hours                   |
+| 3. Fix `test-analysis` path      | 0.5 hours                   |
+| 4. Update MCP handlers           | 1 hour                      |
+| 5. Remove hardcoded methods      | 0.25 hours                  |
+| 6. Register CLI commands         | 0.5 hours                   |
+| 7. Rebuild and test              | 1 hour                      |
+| 8. Update documentation          | 1 hour                      |
+| **TOTAL**                        | **10-12 hours (~1.5 days)** |
 
 ---
 
@@ -357,18 +375,21 @@ caws_test_analysis
 ## Implementation Order
 
 ### Phase 1: CLI Commands (6-8 hours)
+
 1. Create `workflow.js` command
 2. Create `quality-monitor.js` command
 3. Register both in `index.js`
 4. Test locally via terminal
 
 ### Phase 2: MCP Integration (2-3 hours)
+
 1. Update `handleWorkflowGuidance` to call CLI
 2. Update `handleQualityMonitor` to call CLI
 3. Fix `handleTestAnalysis` path
 4. Remove hardcoded methods
 
 ### Phase 3: Build & Test (2-3 hours)
+
 1. Rebuild CLI bundle
 2. Rebuild extension
 3. Test all tools via MCP
@@ -379,6 +400,7 @@ caws_test_analysis
 ## Architecture Benefits
 
 ### Before (Current State)
+
 ```
 MCP Tool → MCP Server Method → Hardcoded Logic
                 ↓
@@ -386,18 +408,21 @@ MCP Tool → MCP Server Method → Hardcoded Logic
 ```
 
 **Problems**:
+
 - Logic duplicated if we add CLI later
 - Can't use these features from terminal
 - Harder to test
 - Breaks parity principle
 
 ### After (P1 Complete)
+
 ```
 MCP Tool → MCP Handler → CLI Command → Logic
 Terminal → CLI Command → Logic
 ```
 
 **Benefits**:
+
 - Single source of truth
 - CLI-first design
 - Testable independently
@@ -408,28 +433,31 @@ Terminal → CLI Command → Logic
 ## Risk Assessment
 
 ### Low Risk
+
 - Creating new CLI commands (additive)
 - Porting existing logic (no new behavior)
 - Updating MCP handlers (established pattern)
 
 ### Medium Risk
+
 - Breaking existing MCP tool functionality
 - **Mitigation**: Test before/after carefully
 
 ### High Risk
+
 - None identified
 
 ---
 
 ## Ready to Start?
 
-This spec provides everything needed to achieve true 100% CLI/MCP parity. 
+This spec provides everything needed to achieve true 100% CLI/MCP parity.
 
 **Next Steps**:
+
 1. Review this spec
 2. Approve approach
 3. Start with Task 1: Create `caws workflow` command
 4. Work through tasks sequentially
 
 Let me know when you're ready to begin implementation!
-

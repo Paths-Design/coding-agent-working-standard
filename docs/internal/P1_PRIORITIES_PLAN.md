@@ -14,11 +14,11 @@ Based on the successful P0 completion, here are the next priorities organized by
 
 **Status**: 3 MCP tools have no CLI commands yet
 
-| MCP Tool | CLI Command | Status | Impact |
-|----------|-------------|--------|--------|
-| `caws_workflow_guidance` | ❌ Not implemented | **P1-CRITICAL** | Core agent workflow |
-| `caws_quality_monitor` | ❌ Not implemented | **P1-HIGH** | Real-time quality tracking |
-| `caws_test_analysis` | ✅ Exists but not tested | **P1-MEDIUM** | Budget optimization |
+| MCP Tool                 | CLI Command              | Status          | Impact                     |
+| ------------------------ | ------------------------ | --------------- | -------------------------- |
+| `caws_workflow_guidance` | ❌ Not implemented       | **P1-CRITICAL** | Core agent workflow        |
+| `caws_quality_monitor`   | ❌ Not implemented       | **P1-HIGH**     | Real-time quality tracking |
+| `caws_test_analysis`     | ✅ Exists but not tested | **P1-MEDIUM**   | Budget optimization        |
 
 **Rationale**: These tools are exposed via MCP but have incomplete or missing CLI implementations. This breaks the 1:1 parity principle.
 
@@ -35,6 +35,7 @@ Based on the successful P0 completion, here are the next priorities organized by
 - Detailed troubleshooting guides
 
 **Example Enhancement**:
+
 ```typescript
 // Before
 Error: Working spec not found
@@ -154,13 +155,15 @@ Error: Working spec not found at .caws/working-spec.yaml
 **Goal**: Achieve 100% CLI/MCP parity
 
 **Tasks**:
+
 1. Implement `caws workflow` command
-2. Implement `caws quality-monitor` command  
+2. Implement `caws quality-monitor` command
 3. Test `caws test-analysis` via MCP
 4. Update MCP handlers if needed
 5. Verify all tools functional
 
 **Acceptance Criteria**:
+
 - ✅ All MCP tools have working CLI commands
 - ✅ 100% CLI/MCP parity maintained
 - ✅ All tools tested end-to-end
@@ -174,6 +177,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 **Goal**: Better developer experience
 
 **Tasks**:
+
 1. Enhanced error messages with context
 2. Recovery suggestions for common errors
 3. Improved "Did you mean?" functionality
@@ -181,6 +185,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 5. Better progress indicators
 
 **Acceptance Criteria**:
+
 - ✅ All errors have actionable suggestions
 - ✅ "Did you mean?" covers all commands
 - ✅ Progress shown for long operations
@@ -194,6 +199,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 **Goal**: Native IDE experience
 
 **Tasks**:
+
 1. VS Code task definitions
 2. Problem matchers for CAWS output
 3. Status bar integration
@@ -201,6 +207,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 5. Quick-fix providers
 
 **Acceptance Criteria**:
+
 - ✅ CAWS commands in Command Palette
 - ✅ Issues show in Problems panel
 - ✅ Status bar shows project health
@@ -214,6 +221,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 **Goal**: Optimize and refine
 
 **Tasks**:
+
 1. CLI result caching
 2. Parallel validation
 3. Incremental checking
@@ -221,6 +229,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 5. Memory profiling
 
 **Acceptance Criteria**:
+
 - ✅ Response time < 1s for cached operations
 - ✅ Validation 2x faster
 - ✅ Memory usage optimized
@@ -235,6 +244,7 @@ Let me analyze what needs to be implemented:
 ### 1. `caws_workflow_guidance` Tool
 
 **MCP Signature**:
+
 ```typescript
 {
   workflowType: 'tdd' | 'refactor' | 'feature',
@@ -244,6 +254,7 @@ Let me analyze what needs to be implemented:
 ```
 
 **CLI Command Needed**:
+
 ```bash
 caws workflow <type> --step <number> [--context <json>]
 
@@ -254,6 +265,7 @@ caws workflow feature --step 2 --context '{"phase":"implementation"}'
 ```
 
 **Implementation**:
+
 - Create `src/commands/workflow.js`
 - Mode-specific guidance (TDD, refactor, feature)
 - Step-by-step instructions
@@ -264,6 +276,7 @@ caws workflow feature --step 2 --context '{"phase":"implementation"}'
 ### 2. `caws_quality_monitor` Tool
 
 **MCP Signature**:
+
 ```typescript
 {
   action: 'file_saved' | 'code_edited' | 'test_run',
@@ -273,6 +286,7 @@ caws workflow feature --step 2 --context '{"phase":"implementation"}'
 ```
 
 **CLI Command Needed**:
+
 ```bash
 caws quality-monitor <action> [--files <files>] [--context <json>]
 
@@ -283,6 +297,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 ```
 
 **Implementation**:
+
 - Create `src/commands/quality-monitor.js`
 - Track quality impact of changes
 - Real-time feedback
@@ -297,6 +312,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 **Status**: Not tested in P0
 
 **Need**:
+
 - Verify MCP integration works
 - Test all subcommands
 - Document usage
@@ -306,22 +322,26 @@ caws quality-monitor code_edited --files "src/*.ts"
 ## Success Metrics
 
 ### P1 Sprint 1 (Missing Tools)
+
 - ✅ 13/13 MCP tools have CLI implementations (currently 10/13)
 - ✅ 100% CLI/MCP parity achieved
 - ✅ All tools tested via MCP
 - ✅ Response time < 2s for all tools
 
 ### P1 Sprint 2 (Error Handling)
+
 - ✅ 90%+ errors have actionable suggestions
 - ✅ User satisfaction score > 4/5
 - ✅ Reduced support questions by 50%
 
 ### P1 Sprint 3 (IDE Integration)
+
 - ✅ 5+ VS Code tasks defined
 - ✅ Problem matcher working for all diagnostics
 - ✅ Status bar updates in real-time
 
 ### P1 Sprint 4 (Performance)
+
 - ✅ Cached operations < 1s
 - ✅ Parallel validation 2x faster
 - ✅ Memory usage < 100MB
@@ -331,12 +351,15 @@ caws quality-monitor code_edited --files "src/*.ts"
 ## Risks & Mitigation
 
 ### Risk 1: Scope Creep
+
 **Mitigation**: Strict sprint boundaries, prioritize ruthlessly
 
 ### Risk 2: Breaking Changes
+
 **Mitigation**: Comprehensive test suite, semantic versioning
 
 ### Risk 3: Performance Regression
+
 **Mitigation**: Benchmark suite, automated performance testing
 
 ---
@@ -344,32 +367,41 @@ caws quality-monitor code_edited --files "src/*.ts"
 ## Decision Point: Where to Start?
 
 ### Option A: Sprint 1 (Missing Tools) - RECOMMENDED ✅
+
 **Pros**:
+
 - Achieves 100% parity (critical)
 - Unblocks MCP functionality
 - High user impact
 - Clear acceptance criteria
 
 **Cons**:
+
 - Requires CLI implementation
 - Needs comprehensive testing
 
 ### Option B: Sprint 2 (Error Handling)
+
 **Pros**:
+
 - Improves user experience immediately
 - Lower complexity
 - Builds on existing code
 
 **Cons**:
+
 - Doesn't address parity gap
 - Less critical than missing tools
 
 ### Option C: Sprint 3 (IDE Integration)
+
 **Pros**:
+
 - Great user experience
 - Differentiator
 
 **Cons**:
+
 - Higher complexity
 - Can wait until parity is achieved
 
@@ -380,6 +412,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 **Start with P1 Sprint 1: Missing Tools** 🎯
 
 **Rationale**:
+
 1. We claimed "100% parity" but only have 10/13 tools working
 2. Missing tools are already exposed via MCP (broken promises)
 3. Relatively quick implementation (1-2 days)
@@ -387,6 +420,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 5. Maintains our quality standards
 
 **Next Steps**:
+
 1. Implement `caws workflow` command
 2. Implement `caws quality-monitor` command
 3. Test `caws test-analysis` integration
@@ -426,4 +460,3 @@ Let me know if you'd like to:
 4. 📊 **Alternative approach** - Different P1 focus
 
 I'm ready to implement when you are!
-

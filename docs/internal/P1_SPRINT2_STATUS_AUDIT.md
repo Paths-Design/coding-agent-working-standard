@@ -299,16 +299,19 @@ All trust and reliability issues have been resolved. The CAWS extension now prov
 ✅ **Improved Recovery Suggestions**: Category-based and context-aware help
 
 ### **Files Enhanced:**
+
 - `packages/caws-cli/src/error-handler.js` - Core error handling infrastructure
 - `packages/caws-cli/src/commands/status.js` - Timing and JSON output example
 - `packages/caws-cli/src/commands/troubleshoot.js` - New troubleshooting command
 - `packages/caws-cli/src/index.js` - Command registrations and options
 
 ### **User Experience Improvements:**
+
 - **Before**: `❌ Coverage report not found. Run tests with coverage first.`
 - **After**: Rich error with troubleshooting guide, JSON output, timing metrics
 
 ### **Technical Wins:**
+
 - **Performance Monitoring**: High-precision timing with `process.hrtime.bigint()`
 - **Programmatic Integration**: JSON mode for CI/CD and automation
 - **Self-Service Troubleshooting**: Guides reduce support burden

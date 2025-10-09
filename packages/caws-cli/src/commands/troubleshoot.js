@@ -5,10 +5,7 @@
  */
 
 const chalk = require('chalk');
-const {
-  getTroubleshootingGuide,
-  getAllTroubleshootingGuides,
-} = require('../error-handler');
+const { getTroubleshootingGuide, getAllTroubleshootingGuides } = require('../error-handler');
 
 /**
  * Display a specific troubleshooting guide
@@ -21,7 +18,7 @@ function displayGuide(guideKey) {
     console.error(chalk.red(`❌ Troubleshooting guide '${guideKey}' not found.`));
     console.log(chalk.yellow('\nAvailable guides:'));
     const allGuides = getAllTroubleshootingGuides();
-    Object.keys(allGuides).forEach(key => {
+    Object.keys(allGuides).forEach((key) => {
       console.log(chalk.yellow(`  ${key}: ${allGuides[key].title}`));
     });
     console.log(chalk.yellow('\nTry: caws troubleshoot --list for all available guides'));
@@ -33,14 +30,14 @@ function displayGuide(guideKey) {
 
   if (guide.symptoms && guide.symptoms.length > 0) {
     console.log(chalk.yellow('\n📋 Symptoms:'));
-    guide.symptoms.forEach(symptom => {
+    guide.symptoms.forEach((symptom) => {
       console.log(chalk.gray(`   • ${symptom}`));
     });
   }
 
   if (guide.rootCauses && guide.rootCauses.length > 0) {
     console.log(chalk.red('\n🔍 Possible Root Causes:'));
-    guide.rootCauses.forEach(cause => {
+    guide.rootCauses.forEach((cause) => {
       console.log(chalk.gray(`   • ${cause}`));
     });
   }
@@ -54,7 +51,7 @@ function displayGuide(guideKey) {
 
   if (guide.commands && guide.commands.length > 0) {
     console.log(chalk.cyan('\n💻 Try These Commands:'));
-    guide.commands.forEach(command => {
+    guide.commands.forEach((command) => {
       console.log(chalk.gray(`   $ ${command}`));
     });
   }
@@ -75,7 +72,9 @@ function listGuides() {
     console.log(chalk.cyan(`${key}:`));
     console.log(chalk.gray(`   ${guide.title}`));
     if (guide.symptoms && guide.symptoms.length > 0) {
-      console.log(chalk.gray(`   Symptoms: ${guide.symptoms[0]}${guide.symptoms.length > 1 ? '...' : ''}`));
+      console.log(
+        chalk.gray(`   Symptoms: ${guide.symptoms[0]}${guide.symptoms.length > 1 ? '...' : ''}`)
+      );
     }
     console.log('');
   });

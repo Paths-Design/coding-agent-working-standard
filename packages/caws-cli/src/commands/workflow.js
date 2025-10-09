@@ -151,9 +151,10 @@ async function workflowCommand(workflowType, options = {}) {
     // Parse context if provided
     if (options.currentState) {
       try {
-        context = typeof options.currentState === 'string' 
-          ? JSON.parse(options.currentState)
-          : options.currentState;
+        context =
+          typeof options.currentState === 'string'
+            ? JSON.parse(options.currentState)
+            : options.currentState;
       } catch (e) {
         console.warn(chalk.yellow('⚠️  Invalid context JSON, ignoring'));
       }
@@ -181,7 +182,11 @@ async function workflowCommand(workflowType, options = {}) {
     console.log(chalk.bold('\n🔄 CAWS Workflow Guidance\n'));
     console.log('─'.repeat(60));
     console.log(chalk.bold(`\nWorkflow: ${guidance.workflow_name} (${guidance.workflow_type})`));
-    console.log(chalk.bold(`Step ${guidance.current_step}/${guidance.total_steps}: ${guidance.step_description}`));
+    console.log(
+      chalk.bold(
+        `Step ${guidance.current_step}/${guidance.total_steps}: ${guidance.step_description}`
+      )
+    );
 
     if (guidance.context) {
       console.log(chalk.gray(`\nContext: ${guidance.context}`));
@@ -198,15 +203,9 @@ async function workflowCommand(workflowType, options = {}) {
     // Show next step if available
     if (guidance.next_step) {
       console.log(chalk.bold('\n⏭️  Next Step:\n'));
+      console.log(chalk.gray(`   Step ${guidance.next_step}: ${guidance.next_step_description}`));
       console.log(
-        chalk.gray(
-          `   Step ${guidance.next_step}: ${guidance.next_step_description}`
-        )
-      );
-      console.log(
-        chalk.gray(
-          `\n   Run: caws workflow ${workflowType} --step ${guidance.next_step}`
-        )
+        chalk.gray(`\n   Run: caws workflow ${workflowType} --step ${guidance.next_step}`)
       );
     } else {
       console.log(chalk.bold('\n🎉 Workflow Complete!\n'));
@@ -218,16 +217,14 @@ async function workflowCommand(workflowType, options = {}) {
     console.log(chalk.bold('\n📊 All Steps:\n'));
     guidance.all_steps.forEach((stepDesc, idx) => {
       const stepNum = idx + 1;
-      const icon = stepNum === guidance.current_step 
-        ? '▶️ ' 
-        : stepNum < guidance.current_step 
-          ? '✅ ' 
-          : '⬜ ';
-      const color = stepNum === guidance.current_step 
-        ? chalk.bold 
-        : stepNum < guidance.current_step 
-          ? chalk.green 
-          : chalk.gray;
+      const icon =
+        stepNum === guidance.current_step ? '▶️ ' : stepNum < guidance.current_step ? '✅ ' : '⬜ ';
+      const color =
+        stepNum === guidance.current_step
+          ? chalk.bold
+          : stepNum < guidance.current_step
+            ? chalk.green
+            : chalk.gray;
       console.log(color(`   ${icon}${stepNum}. ${stepDesc}`));
     });
 
@@ -244,4 +241,3 @@ module.exports = {
   generateWorkflowGuidance,
   WORKFLOW_TEMPLATES,
 };
-

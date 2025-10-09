@@ -286,13 +286,19 @@ const COMMAND_SUGGESTIONS = {
     // Suggest category based on what user might be trying to do
     if (command.includes('setup') || command.includes('start') || command.includes('create')) {
       suggestions.push('For project setup: caws init');
-    } else if (command.includes('check') || command.includes('verify') || command.includes('test')) {
+    } else if (
+      command.includes('check') ||
+      command.includes('verify') ||
+      command.includes('test')
+    ) {
       suggestions.push('For validation: caws validate');
     } else if (command.includes('list') || command.includes('show') || command.includes('get')) {
       suggestions.push('For status: caws status');
     }
 
-    suggestions.push('Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor');
+    suggestions.push(
+      'Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor'
+    );
     suggestions.push('Try: caws --help for full command list with descriptions');
 
     return suggestions;
@@ -479,9 +485,11 @@ function formatJsonOutput(data, pretty = true) {
  * @returns {boolean} True if --json flag is present
  */
 function isJsonOutput() {
-  return process.argv.includes('--json') ||
-         process.argv.includes('-j') ||
-         process.env.CAWS_OUTPUT_FORMAT === 'json';
+  return (
+    process.argv.includes('--json') ||
+    process.argv.includes('-j') ||
+    process.env.CAWS_OUTPUT_FORMAT === 'json'
+  );
 }
 
 /**
@@ -526,7 +534,9 @@ function handleCliError(error, context = {}, exit = true) {
         documentation: docLink,
         executionTime: error.executionTime,
         timestamp: error.timestamp?.toISOString(),
-        troubleshootingGuide: troubleshootingGuide ? getTroubleshootingGuide(troubleshootingGuide) : null,
+        troubleshootingGuide: troubleshootingGuide
+          ? getTroubleshootingGuide(troubleshootingGuide)
+          : null,
       },
     };
     console.log(formatJsonOutput(jsonError));
@@ -545,7 +555,9 @@ function handleCliError(error, context = {}, exit = true) {
     if (troubleshootingGuide) {
       const guide = getTroubleshootingGuide(troubleshootingGuide);
       console.error(chalk.cyan(`\n🔍 Troubleshooting Guide: ${guide.title}`));
-      console.error(chalk.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`));
+      console.error(
+        chalk.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`)
+      );
     }
 
     console.error(chalk.blue(`\n📚 Documentation: ${docLink}`));

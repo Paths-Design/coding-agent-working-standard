@@ -130,7 +130,7 @@ async function createWaiver(options) {
 /**
  * List all waivers
  */
-async function listWaivers(options) {
+async function listWaivers(_options) {
   const waiversDir = path.join(process.cwd(), WAIVER_DIR);
   
   if (!fs.existsSync(waiversDir)) {
@@ -199,7 +199,7 @@ async function listWaivers(options) {
 /**
  * Show waiver details
  */
-async function showWaiver(waiverId, options) {
+async function showWaiver(waiverId, _options) {
   if (!waiverId) {
     console.error(chalk.red('\n❌ Waiver ID required'));
     console.log(chalk.yellow('💡 Usage: caws waivers show WV-1234\n'));

@@ -1,0 +1,647 @@
+openapi: 3.0.3
+info:
+  title: CAWS Data Layer API
+  description: |
+    API specification for the CAWS Data Layer service.
+    Provides unified access to PostgreSQL, Redis, and vector storage with caching and performance monitoring.
+  version: 1.0.0
+  contact:
+    name: CAWS Development Team
+    email: caws@example.com
+
+servers:
+  - url: http://localhost:3002
+    description: Data Layer service
+  - url: https://data.caws.dev
+    description: Production data service
+
+paths:
+  /health:
+    get:
+      summary: Service health check
+      description: Check data layer service connectivity and basic functionality
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /query:
+    post:
+      summary: Execute database query
+      description: Execute a parameterized database query with optional caching
+      operationId: executeQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /vector/search:
+    post:
+      summary: Vector similarity search
+      description: Perform vector similarity search with optional filtering
+      operationId: vectorSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorSearchRequest'
+      responses:
+        '200':
+          description: Search completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorSearchResult'
+        '400':
+          description: Invalid search parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /cache/{key}:
+    get:
+      summary: Get cached value
+      description: Retrieve a value from the cache by key
+      operationId: getCache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache hit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheEntry'
+        '404':
+          description: Cache miss
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    put:
+      summary: Set cache value
+      description: Store a value in the cache with optional TTL
+      operationId: setCache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheSetRequest'
+      responses:
+        '200':
+          description: Value cached successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheEntry'
+        '400':
+          description: Invalid cache parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Delete cache entry
+      description: Remove a value from the cache
+      operationId: deleteCache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Cache entry deleted
+        '404':
+          description: Cache entry not found
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /performance/metrics:
+    get:
+      summary: Get performance metrics
+      description: Retrieve performance metrics for queries and cache operations
+      operationId: getPerformanceMetrics
+      parameters:
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start time for metrics (ISO 8601)
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End time for metrics (ISO 8601)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of metrics to return
+      responses:
+        '200':
+          description: Performance metrics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceMetrics'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /transactions:
+    post:
+      summary: Execute transaction
+      description: Execute multiple operations within a database transaction
+      operationId: executeTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRequest'
+      responses:
+        '200':
+          description: Transaction completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResult'
+        '400':
+          description: Invalid transaction parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Transaction rolled back due to conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - sql
+      properties:
+        sql:
+          type: string
+          description: SQL query to execute
+          example: "SELECT * FROM users WHERE active = $1"
+        params:
+          type: array
+          description: Query parameters for safe execution
+          items:
+            description: Parameter value (string, number, boolean, null)
+        cache:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: false
+              description: Whether to cache this query result
+            ttl:
+              type: integer
+              minimum: 1
+              description: Cache TTL in seconds
+              example: 300
+            key:
+              type: string
+              description: Custom cache key (auto-generated if not provided)
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 300000
+          default: 30000
+          description: Query timeout in milliseconds
+
+    QueryResult:
+      type: object
+      required:
+        - success
+        - executionTime
+      properties:
+        success:
+          type: boolean
+          description: Whether the query executed successfully
+        rows:
+          type: array
+          description: Query result rows (for SELECT queries)
+          items:
+            type: object
+            description: Row data as key-value pairs
+            additionalProperties: true
+        rowCount:
+          type: integer
+          minimum: 0
+          description: Number of rows affected (for INSERT/UPDATE/DELETE)
+        fields:
+          type: array
+          description: Column metadata for SELECT queries
+          items:
+            $ref: '#/components/schemas/ColumnInfo'
+        executionTime:
+          type: number
+          description: Query execution time in milliseconds
+        cached:
+          type: boolean
+          description: Whether result came from cache
+        cacheKey:
+          type: string
+          description: Cache key used (if cached)
+
+    ColumnInfo:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          description: Column name
+        type:
+          type: string
+          description: PostgreSQL type name
+          example: "varchar"
+        nullable:
+          type: boolean
+          description: Whether column can be null
+
+    VectorSearchRequest:
+      type: object
+      required:
+        - vector
+        - table
+        - column
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+          description: Query vector for similarity search
+          minItems: 1
+          example: [0.1, 0.2, 0.3, 0.4, 0.5]
+        table:
+          type: string
+          description: Table containing vector data
+          example: "document_embeddings"
+        column:
+          type: string
+          description: Column containing vector data
+          example: "embedding"
+        filter:
+          type: object
+          description: Additional WHERE conditions
+          additionalProperties: true
+          example:
+            category: "documentation"
+            active: true
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 10
+          description: Maximum number of results to return
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Similarity threshold (0-1, higher = more similar)
+          example: 0.8
+
+    VectorSearchResult:
+      type: object
+      required:
+        - results
+        - executionTime
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - similarity
+            properties:
+              id:
+                description: Record identifier
+              similarity:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Similarity score (0-1, higher = more similar)
+              data:
+                type: object
+                description: Full record data
+                additionalProperties: true
+        executionTime:
+          type: number
+          description: Search execution time in milliseconds
+        totalResults:
+          type: integer
+          minimum: 0
+          description: Total matching results found
+
+    CacheEntry:
+      type: object
+      required:
+        - key
+        - value
+        - createdAt
+      properties:
+        key:
+          type: string
+          description: Cache key
+        value:
+          description: Cached value (any JSON-serializable data)
+        createdAt:
+          type: string
+          format: date-time
+          description: When entry was cached
+        expiresAt:
+          type: string
+          format: date-time
+          description: When entry expires (if TTL set)
+        ttl:
+          type: integer
+          description: Remaining TTL in seconds
+
+    CacheSetRequest:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          description: Value to cache (any JSON-serializable data)
+        ttl:
+          type: integer
+          minimum: 1
+          description: Time-to-live in seconds
+          example: 300
+
+    PerformanceMetrics:
+      type: object
+      required:
+        - period
+        - metrics
+      properties:
+        period:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        metrics:
+          type: object
+          properties:
+            queryCount:
+              type: integer
+              description: Total queries executed
+            averageQueryTime:
+              type: number
+              description: Average query execution time in ms
+            cacheHitRate:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Cache hit rate percentage
+            slowQueries:
+              type: array
+              items:
+                $ref: '#/components/schemas/SlowQueryInfo'
+              description: Queries exceeding performance thresholds
+
+    SlowQueryInfo:
+      type: object
+      required:
+        - sql
+        - executionTime
+        - timestamp
+      properties:
+        sql:
+          type: string
+          description: Slow query SQL
+        executionTime:
+          type: number
+          description: Execution time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+          description: When query was executed
+        params:
+          type: array
+          description: Query parameters used
+
+    TransactionRequest:
+      type: object
+      required:
+        - operations
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryRequest'
+          minItems: 1
+          description: Operations to execute in transaction
+        isolation:
+          type: string
+          enum:
+            - READ UNCOMMITTED
+            - READ COMMITTED
+            - REPEATABLE READ
+            - SERIALIZABLE
+          default: "READ COMMITTED"
+          description: Transaction isolation level
+
+    TransactionResult:
+      type: object
+      required:
+        - success
+        - executionTime
+        - results
+      properties:
+        success:
+          type: boolean
+          description: Whether transaction completed successfully
+        executionTime:
+          type: number
+          description: Total transaction execution time in milliseconds
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryResult'
+          description: Results for each operation in the transaction
+        rolledBack:
+          type: boolean
+          description: Whether transaction was rolled back
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall service health
+        checks:
+          type: object
+          required:
+            - postgresql
+            - redis
+          properties:
+            postgresql:
+              $ref: '#/components/schemas/ServiceCheck'
+            redis:
+              $ref: '#/components/schemas/ServiceCheck'
+            vector:
+              $ref: '#/components/schemas/ServiceCheck'
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+
+    ServiceCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - warn
+          description: Health check result
+        message:
+          type: string
+          description: Health check details
+        responseTime:
+          type: number
+          description: Response time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "QUERY_TIMEOUT"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+          properties:
+            sql:
+              type: string
+              description: Failed SQL query
+            params:
+              type: array
+              description: Query parameters
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+
+  responses:
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for API authentication
+
+security:
+  - BearerAuth: []
