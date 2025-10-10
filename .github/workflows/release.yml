@@ -59,6 +59,9 @@ jobs:
       - name: Run linting
         run: npx turbo run lint
 
+      - name: Security audit
+        run: npm audit --audit-level=high
+
       - name: Run tests
         run: |
           echo "🔍 CI Environment Info:"

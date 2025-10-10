@@ -119,6 +119,26 @@ caws provenance show             # View audit trail
 caws hooks status                # Check git hooks
 ```
 
+### Cursor Hooks
+
+CAWS includes pre-configured Cursor IDE hooks for Real-Time Quality enforcement and enhanced agent workflows:
+
+```bash
+# Hooks are automatically created during initialization
+# Located in .cursor/hooks/
+
+# Available hooks:
+# - audit.sh - Audit trail for file operations
+# - block-dangerous.sh - Block dangerous commands
+# - scan-secrets.sh - Detect secrets and PII
+# - naming-check.sh - Enforce naming conventions
+# - validate-spec.sh - Check working-spec.yaml
+# - format.sh - Auto-format code
+# - scope-guard.sh - Enforce scope boundaries
+```
+
+See `docs/guides/hooks-and-agent-workflows.md` for detailed configuration.
+
 ## ⚠️ Critical Rules
 
 ### Scope Boundaries

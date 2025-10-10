@@ -23,8 +23,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -52,11 +52,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Security audit
+        run: npm audit --audit-level=moderate
 
       - name: Block shadow file patterns
         run: |
@@ -80,10 +83,10 @@ jobs:
             sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
             sudo chmod +x /usr/local/bin/yq
           fi
-          
+
           # Extract scope.in paths
           SCOPE_PATHS=$(yq '.scope.in[]' .caws/working-spec.yaml 2>/dev/null || echo "")
-          
+
           if [ -n "$SCOPE_PATHS" ]; then
             CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...)
             OUT=""
@@ -116,15 +119,15 @@ jobs:
             sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
             sudo chmod +x /usr/local/bin/yq
           fi
-          
+
           MAXF=$(yq '.change_budget.max_files // 25' .caws/working-spec.yaml)
           MAXL=$(yq '.change_budget.max_loc // 1000' .caws/working-spec.yaml)
           FILES=$(git diff --name-only origin/${{ github.base_ref }}... | wc -l)
           LOC=$(git diff --unified=0 origin/${{ github.base_ref }}... | grep -E '^\+|^-' | wc -l)
-          
+
           echo "Files: $FILES (budget: $MAXF)"
           echo "LOC: $LOC (budget: $MAXL)"
-          
+
           if [ "$FILES" -gt "$MAXF" ] || [ "$LOC" -gt "$MAXL" ]; then
             echo "❌ Budget exceeded - consider breaking into smaller PRs"
             exit 1
@@ -142,8 +145,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -175,22 +178,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Mutation testing
         if: hashFiles('tests/mutation/**') != ''
-        run: npm run test:mutation || echo "⚠️  Mutation testing not configured"
+        run: npm run test:mutation
 
       - name: Accessibility testing
         if: hashFiles('tests/axe/**') != ''
         run: npm run test:axe || echo "⚠️  Accessibility testing not configured"
 
       - name: Performance budgets
-        run: npm run perf:budgets || echo "⚠️  Performance budgets not configured"
+        run: npm run perf:budgets
 
   # Generate PR comment with summary
   pr_comment:
@@ -205,8 +208,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -226,12 +229,10 @@ jobs:
           script: |
             const fs = require('fs');
             const comment = fs.readFileSync('pr-comment.md', 'utf8');
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: comment
             });
-
-

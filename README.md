@@ -312,9 +312,9 @@ This project uses CAWS for its own development. All contributions must:
 ## 📞 Support & Community
 
 - **📖 Documentation**: [Full Agent Guide](docs/agents/full-guide.md)
-- **🐛 Issues**: [GitHub Issues](https://github.com/your-org/caws/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/your-org/caws/discussions)
-- **📧 Email**: caws@your-domain.com
+- **🐛 Issues**: [GitHub Issues](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
+- **📧 Email**: hello@paths.design
 
 ---
 

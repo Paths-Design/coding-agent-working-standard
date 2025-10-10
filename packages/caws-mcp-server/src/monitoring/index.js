@@ -9,6 +9,7 @@ import chokidar from 'chokidar';
 import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import path from 'path';
+import { createChildLogger } from '../logger.js';
 
 class CawsMonitor {
   constructor(options = {}) {
@@ -29,6 +30,9 @@ class CawsMonitor {
     this.alerts = [];
     this.isRunning = false;
 
+    // Create logger for this monitor instance
+    this.logger = createChildLogger({ component: 'CawsMonitor' });
+
     // Bind methods
     this.handleFileChange = this.handleFileChange.bind(this);
     this.calculateBudgetUsage = this.calculateBudgetUsage.bind(this);
@@ -42,7 +46,7 @@ class CawsMonitor {
   async start() {
     if (this.isRunning) return;
 
-    console.log('🔍 Starting CAWS monitoring system...');
+    this.logger.info('Starting CAWS monitoring system');
 
     try {
       // Load initial state
@@ -56,12 +60,12 @@ class CawsMonitor {
       this.startPeriodicChecks();
 
       this.isRunning = true;
-      console.log('✅ CAWS monitoring system active');
+      this.logger.info('CAWS monitoring system active');
 
       // Emit initial status
       this.emitStatusUpdate();
     } catch (error) {
-      console.error('❌ Failed to start monitoring:', error.message);
+      this.logger.error({ err: error }, 'Failed to start monitoring');
       throw error;
     }
   }
@@ -72,7 +76,7 @@ class CawsMonitor {
   async stop() {
     if (!this.isRunning) return;
 
-    console.log('🛑 Stopping CAWS monitoring system...');
+    this.logger.info('Stopping CAWS monitoring system');
 
     // Stop file watchers
     for (const [path, watcher] of this.watchers) {
@@ -86,7 +90,7 @@ class CawsMonitor {
     }
 
     this.isRunning = false;
-    console.log('✅ CAWS monitoring system stopped');
+    this.logger.info('CAWS monitoring system stopped');
   }
 
   /**
@@ -114,12 +118,12 @@ class CawsMonitor {
           });
         }
 
-        console.log(`📋 Loaded working spec: ${this.workingSpec.id || 'unknown'}`);
+        this.logger.info({ specId: this.workingSpec.id || 'unknown' }, 'Loaded working spec');
       } else {
-        console.log('⚠️ No working spec found');
+        this.logger.warn('No working spec found');
       }
     } catch (error) {
-      console.warn('⚠️ Failed to load working spec:', error.message);
+      this.logger.warn({ err: error }, 'Failed to load working spec');
     }
   }
 
@@ -172,7 +176,7 @@ class CawsMonitor {
         await this.checkForAlerts();
         this.emitStatusUpdate();
       } catch (error) {
-        console.error('❌ Error in periodic check:', error.message);
+        this.logger.error({ err: error }, 'Error in periodic check');
       }
     }, this.options.pollingInterval);
   }
@@ -181,7 +185,7 @@ class CawsMonitor {
    * Handle file changes
    */
   async handleFileChange(event, filePath) {
-    console.log(`📁 File ${event}: ${path.relative(process.cwd(), filePath)}`);
+    this.logger.debug({ event, file: path.relative(process.cwd(), filePath) }, 'File changed');
 
     try {
       // Recalculate budgets and progress
@@ -194,7 +198,7 @@ class CawsMonitor {
       // Emit update
       this.emitStatusUpdate();
     } catch (error) {
-      console.error('❌ Error handling file change:', error.message);
+      this.logger.error({ err: error, file: filePath }, 'Error handling file change');
     }
   }
 
@@ -217,7 +221,7 @@ class CawsMonitor {
         this.budgets.get('loc').current = locCount;
       }
     } catch (error) {
-      console.error('❌ Error calculating budget usage:', error.message);
+      this.logger.error({ err: error }, 'Error calculating budget usage');
     }
   }
 
@@ -334,9 +338,9 @@ class CawsMonitor {
     }
 
     if (progressUpdates.length > 0) {
-      console.log(
-        '📊 Progress updated:',
-        progressUpdates.map((p) => `${p.id}: ${p.progress}%`).join(', ')
+      this.logger.info(
+        { updates: progressUpdates.map((p) => ({ id: p.id, progress: `${p.progress}%` })) },
+        'Progress updated'
       );
     }
   }
@@ -440,7 +444,7 @@ class CawsMonitor {
           id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         });
 
-        console.log(`🚨 Alert: ${alert.message}`);
+        this.logger.warn({ alert: alert.message, severity: alert.severity }, 'Alert triggered');
       }
     }
   }
@@ -478,16 +482,22 @@ class CawsMonitor {
 
     // In a real implementation, this would emit to connected clients,
     // update dashboards, send notifications, etc.
-    console.log('📊 Status update emitted');
 
-    // For now, we'll just log a summary
-    const budgetSummary = Array.from(this.budgets.entries())
-      .map(([type, budget]) => `${type}: ${budget.current}/${budget.limit}`)
-      .join(', ');
+    // Log status summary
+    const budgets = Array.from(this.budgets.entries()).map(([type, budget]) => ({
+      type,
+      current: budget.current,
+      limit: budget.limit,
+    }));
 
-    console.log(`   Budget: ${budgetSummary}`);
-    console.log(`   Progress: ${status.overallProgress}%`);
-    console.log(`   Alerts: ${this.alerts.length} active`);
+    this.logger.debug(
+      {
+        budgets,
+        progress: `${status.overallProgress}%`,
+        activeAlerts: this.alerts.length,
+      },
+      'Status update emitted'
+    );
   }
 
   /**

@@ -22,6 +22,7 @@ import {
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { logger } from './src/logger.js';
 import { CawsMonitor } from './src/monitoring/index.js';
 
 class CawsMcpServer extends Server {
@@ -55,7 +56,7 @@ class CawsMcpServer extends Server {
     this.setRequestHandler(InitializeRequestSchema, async (request) => {
       const { protocolVersion, clientInfo } = request.params;
 
-      console.error(`MCP Initialize: protocol=${protocolVersion}, client=${clientInfo?.name}`);
+      logger.info({ protocolVersion, client: clientInfo?.name }, 'MCP initialization');
 
       return {
         protocolVersion,
@@ -77,18 +78,18 @@ class CawsMcpServer extends Server {
 
     // Handle client initialized notification
     this.setNotificationHandler(InitializedNotificationSchema, () => {
-      console.error('MCP Client initialized - ready for requests');
+      logger.info('MCP client initialized - ready for requests');
     });
 
     // List available tools
     this.setRequestHandler(ListToolsRequestSchema, () => {
       try {
-        console.error('MCP: Listing tools - returning', CAWS_TOOLS.length, 'tools');
+        logger.debug({ toolCount: CAWS_TOOLS.length }, 'Listing available tools');
         const result = { tools: CAWS_TOOLS };
-        console.error('MCP: Tools result prepared');
+        logger.debug('Tools list prepared');
         return result;
       } catch (error) {
-        console.error('MCP: Error listing tools:', error.message);
+        logger.error({ err: error }, 'Error listing tools');
         throw error;
       }
     });

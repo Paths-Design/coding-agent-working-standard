@@ -9,26 +9,31 @@ CAWS (Coding Agent Workflow System) prioritizes security through multiple layers
 ### Built-in Security Measures
 
 #### 1. Tool Allowlisting
+
 - Restricted set of approved tools for agents
 - Prevents execution of unauthorized commands
 - Enforced through prompt linting and runtime checks
 
 #### 2. Secret Detection
+
 - Automated scanning of prompts and generated code
 - Pattern-based detection of credentials and sensitive data
 - Integration with security scanning tools
 
 #### 3. Provenance Tracking
+
 - Complete audit trail of all operations
 - Cryptographic signatures for integrity verification
 - SBOM (Software Bill of Materials) generation
 
 #### 4. Input Validation
+
 - Schema-based validation of working specifications
 - Sanitization of user inputs and project names
 - Type-safe operations with TypeScript
 
 #### 5. Supply Chain Security
+
 - Automated dependency vulnerability scanning
 - SLSA (Supply chain Levels for Software Artifacts) attestations
 - Containerized builds with provenance
@@ -36,6 +41,7 @@ CAWS (Coding Agent Workflow System) prioritizes security through multiple layers
 ## 🔍 Security Scanning
 
 ### Automated Security Checks
+
 - **SAST**: Static Application Security Testing
 - **Secret Scanning**: Detection of credentials and keys
 - **Dependency Scanning**: Vulnerability assessment of dependencies
@@ -43,7 +49,9 @@ CAWS (Coding Agent Workflow System) prioritizes security through multiple layers
 - **Code Quality**: ESLint security rules and best practices
 
 ### Quality Gates
+
 All changes must pass security validation:
+
 - No high-severity vulnerabilities
 - No exposed secrets or credentials
 - Compliance with tool allowlists
@@ -57,8 +65,8 @@ All changes must pass security validation:
 
 Instead, report security issues privately to our security team at:
 
-**Email**: security@caws.dev
-**Subject**: [SECURITY] Vulnerability Report
+**Email**: security@paths.design
+**Subject**: [SECURITY] Vulnerability Report for CAWS
 
 ### What to Include in Your Report
 
@@ -90,12 +98,14 @@ Instead, report security issues privately to our security team at:
 ### For Users
 
 #### Safe Usage
+
 - Use official CAWS packages from trusted sources
 - Keep dependencies updated
 - Follow security guidelines in documentation
 - Report suspicious behavior
 
 #### Configuration Security
+
 - Use strong, unique project identifiers
 - Limit blast radius in working specifications
 - Set appropriate rollback SLOs
@@ -104,6 +114,7 @@ Instead, report security issues privately to our security team at:
 ### For Contributors
 
 #### Secure Development
+
 - Never commit secrets or credentials
 - Use the prompt linter for AI-generated code
 - Follow tool allowlist restrictions
@@ -111,6 +122,7 @@ Instead, report security issues privately to our security team at:
 - Write security-focused tests
 
 #### Code Review Security
+
 - Review for potential security issues
 - Check for proper input validation
 - Verify error handling doesn't leak information
@@ -119,18 +131,22 @@ Instead, report security issues privately to our security team at:
 ## 🚨 Security Incident Response
 
 ### Incident Detection
+
 - Automated monitoring for suspicious activity
 - Security scanning in CI/CD pipelines
 - Community reports and feedback
 - Dependency monitoring for vulnerabilities
 
 ### Incident Response Team
+
 The security incident response team consists of:
+
 - Core maintainers with security expertise
 - External security advisors when needed
 - Legal counsel for complex incidents
 
 ### Incident Communication
+
 - **Internal**: Secure channels for team coordination
 - **External**: Coordinated disclosure to affected parties
 - **Public**: Transparent updates when appropriate
@@ -139,6 +155,7 @@ The security incident response team consists of:
 ## 🛠️ Security Tools Integration
 
 ### Supported Security Tools
+
 - **ESLint Security Plugin**: Static security analysis
 - **GitLeaks**: Secret detection in repositories
 - **npm audit**: Dependency vulnerability scanning
@@ -146,6 +163,7 @@ The security incident response team consists of:
 - **Dependabot**: Automated dependency updates
 
 ### Integration Points
+
 - Pre-commit hooks for secret detection
 - CI/CD pipeline security gates
 - Automated dependency monitoring
@@ -154,7 +172,9 @@ The security incident response team consists of:
 ## 📊 Security Metrics
 
 ### Trust Score Components
+
 Security contributes significantly to the CAWS trust score:
+
 - **Secret Detection**: Clean scan results
 - **Dependency Security**: No high-severity vulnerabilities
 - **Code Quality**: Security-focused linting compliance
@@ -162,6 +182,7 @@ Security contributes significantly to the CAWS trust score:
 - **Audit Trail**: Complete provenance tracking
 
 ### Monitoring Dashboard
+
 - Real-time security status
 - Vulnerability trends over time
 - Compliance with security policies
@@ -170,12 +191,15 @@ Security contributes significantly to the CAWS trust score:
 ## 🔄 Security Updates
 
 ### Patch Releases
+
 Security fixes are released promptly:
+
 - Critical issues: Immediate patch releases
 - High priority: Released within security update cycle
 - Regular updates: Included in standard releases
 
 ### Upgrade Recommendations
+
 - **Immediate**: Critical security fixes
 - **Urgent**: High-priority vulnerabilities
 - **Routine**: Regular security improvements
@@ -185,17 +209,17 @@ Security fixes are released promptly:
 
 For urgent security matters requiring immediate attention:
 
- 
-
 ## 📜 Compliance
 
 ### Standards Alignment
+
 - **OWASP Guidelines**: Web application security
 - **NIST Cybersecurity Framework**: Risk management
 - **ISO 27001**: Information security management
 - **SOC 2**: Security controls for service organizations
 
 ### Regulatory Compliance
+
 - Data protection regulations (GDPR, CCPA)
 - Industry-specific security requirements
 - Export control compliance
@@ -221,7 +245,7 @@ We support responsible disclosure practices:
 ---
 
 **Last Updated**: 2025
-**Contact**: security@caws.dev
+**Contact**: security@paths.design
 **Response Time**: 24-72 hours for initial acknowledgment
 
 For security-related questions or concerns, please contact us through the appropriate channels listed above.
