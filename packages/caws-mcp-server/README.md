@@ -18,10 +18,10 @@ The MCP Server acts as a bridge between CAWS and AI agents by:
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────┐
-│   AI Agent      │────│  CAWS MCP Server │────│    CAWS     │
-│   (Cursor,      │    │   (Protocol       │    │  CLI/Tools  │
-│    Windsurf,    │    │    Bridge)       │    │             │
-│    Copilot)     │────│ • Tool Registry  │────│ • Quality   │
+│   AI Agent        │────│  CAWS MCP Server │────│    CAWS     │
+│   (Cursor,        │    │   (Protocol       │    │  CLI/Tools  │
+│    Windsurf,       │    │    Bridge)       │    │             │
+│    Copilot)       │────│ • Tool Registry  │────│ • Quality   │
 └─────────────────┘    │ • Context Mgmt   │    │ • Gates      │
                        │ • Protocol Bridge│    │ • Validation │
                        └──────────────────┘    └─────────────┘
@@ -168,14 +168,14 @@ Create waivers for exceptional circumstances.
 
 ```javascript
 const waiver = await callTool('caws_waiver_create', {
-  title: "Emergency security fix",
-  reason: "emergency_hotfix",
-  description: "Critical vulnerability requires immediate deployment",
-  gates: ["coverage_threshold"],
-  expiresAt: "2025-11-01T00:00:00Z",
-  approvedBy: "security-team",
-  impactLevel: "high",
-  mitigationPlan: "Manual testing completed"
+  title: 'Emergency security fix',
+  reason: 'emergency_hotfix',
+  description: 'Critical vulnerability requires immediate deployment',
+  gates: ['coverage_threshold'],
+  expiresAt: '2025-11-01T00:00:00Z',
+  approvedBy: 'security-team',
+  impactLevel: 'high',
+  mitigationPlan: 'Manual testing completed',
 });
 ```
 
@@ -266,7 +266,7 @@ Manage CAWS provenance tracking and audit trails. Now includes `init` subcommand
 // Initialize provenance tracking
 const init = await callTool('caws_provenance', {
   subcommand: 'init',
-  workingDirectory: '/path/to/project'
+  workingDirectory: '/path/to/project',
 });
 
 // Update provenance
@@ -275,7 +275,7 @@ const update = await callTool('caws_provenance', {
   commit: 'abc123',
   message: 'feat: add new feature',
   author: 'user@example.com',
-  workingDirectory: '/path/to/project'
+  workingDirectory: '/path/to/project',
 });
 
 // Other subcommands: 'show', 'verify', 'analyze-ai'
@@ -374,48 +374,61 @@ function handleFileSave(filePath) {
 ## CAWS-Guided Feature Development
 
 1. **Initialize CAWS Spec**
-   ```
-   caws init feature-name --interactive
-   ```
-   *Create comprehensive working specification*
+```
+
+caws init feature-name --interactive
+
+```
+*Create comprehensive working specification*
 
 2. **Get Initial Guidance**
-   ```
-   # Agent calls MCP tool
-   guidance = callTool('caws_iterate', {
-     currentState: 'Planning phase complete',
-     workflowType: 'feature'
-   })
-   ```
-   *Receive structured development guidance*
+```
+
+# Agent calls MCP tool
+
+guidance = callTool('caws_iterate', {
+currentState: 'Planning phase complete',
+workflowType: 'feature'
+})
+
+```
+*Receive structured development guidance*
 
 3. **Implement Core Functionality**
-   ```
-   # Agent implements features
-   # Real-time quality monitoring via MCP
-   monitoring = callTool('caws_quality_monitor', {
-     action: 'code_edited',
-     files: ['src/feature.js']
-   })
-   ```
+```
+
+# Agent implements features
+
+# Real-time quality monitoring via MCP
+
+monitoring = callTool('caws_quality_monitor', {
+action: 'code_edited',
+files: ['src/feature.js']
+})
+
+```
 
 4. **Quality Validation**
-   ```
-   evaluation = callTool('caws_evaluate', {
-     specFile: '.caws/working-spec.yaml'
-   })
-   if evaluation.quality_score < 0.75:
-       # Address quality issues
-       create_waiver_if_needed()
-   ```
+```
+
+evaluation = callTool('caws_evaluate', {
+specFile: '.caws/working-spec.yaml'
+})
+if evaluation.quality_score < 0.75: # Address quality issues
+create_waiver_if_needed()
+
+```
 
 5. **Iterate Based on Feedback**
-   ```
-   next_guidance = callTool('caws_iterate', {
-     currentState: 'Completed core implementation'
-   })
-   # Continue development cycle
-   ```
+```
+
+next_guidance = callTool('caws_iterate', {
+currentState: 'Completed core implementation'
+})
+
+# Continue development cycle
+
+````
 
 ## Configuration
 
@@ -430,7 +443,7 @@ export CAWS_WORKING_DIR=/current/project
 
 # Default working spec file
 export CAWS_SPEC_FILE=.caws/working-spec.yaml
-```
+````
 
 ### Server Configuration
 
@@ -439,7 +452,7 @@ const server = new CawsMcpServer({
   cawsCliPath: '/custom/path/to/caws',
   defaultWorkingDir: '/projects',
   enableCaching: true,
-  logLevel: 'info'
+  logLevel: 'info',
 });
 ```
 

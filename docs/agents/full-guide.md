@@ -776,11 +776,11 @@ Real-time quality enforcement:
 ### Disabling Temporarily
 
 ```bash
-# If you need to bypass hooks temporarily
-# Cursor Settings → Hooks → Disable
+# If you need to bypass commit hooks temporarily
+git commit --no-verify  # Allowed for commits
 
-# Note: --no-verify is BANNED for git commits
-# Fix the issue instead of bypassing hooks
+# Note: --no-verify is BLOCKED for git push
+# Push operations must pass all quality gates
 ```
 
 ---
@@ -972,11 +972,12 @@ Only increase budget with human approval and strong justification.
 
 ### Q: What if lints fail but I think they're wrong?
 
-**A: Fix the lints.** Never use `--no-verify`. If the lint rule is incorrect:
+**A: Fix the lints.** You can use `git commit --no-verify` to commit temporarily, but you cannot push without fixing. If the lint rule is incorrect:
 
 1. Fix the code to satisfy the lint
 2. Or request human discussion of the lint rule
 3. Human can update lint config if appropriate
+4. Note: `git push --no-verify` is BLOCKED
 
 ### Q: Can I commit without updating provenance?
 

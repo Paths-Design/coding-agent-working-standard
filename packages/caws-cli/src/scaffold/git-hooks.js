@@ -108,7 +108,8 @@ async function scaffoldGitHooks(projectDir, options = {}) {
   if (addedCount > 0) {
     console.log(`\n🔗 Git hooks configured: ${addedCount} hooks active`);
     console.log('💡 Hooks will run automatically on git operations');
-    console.log('💡 Use --no-verify to skip hooks: git commit --no-verify');
+    console.log('💡 Use --no-verify to skip commit hooks: git commit --no-verify');
+    console.log('⚠️  Note: --no-verify is BLOCKED on git push for safety');
   }
 
   return { added: addedCount, skipped: skippedCount };
@@ -142,7 +143,7 @@ if command -v caws >/dev/null 2>&1; then
     echo "✅ CAWS validation passed"
   else
     echo "❌ CAWS validation failed"
-    echo "💡 Fix issues or use: git commit --no-verify"
+    echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
     exit 1
   fi
 else
@@ -161,7 +162,8 @@ if [ -f "package.json" ]; then
     if npx eslint . --quiet; then
       echo "✅ ESLint passed"
     else
-      echo "❌ ESLint failed - fix issues or use --no-verify"
+      echo "❌ ESLint failed"
+      echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
       exit 1
     fi
   fi
@@ -172,7 +174,8 @@ if [ -f "package.json" ]; then
     if npm test; then
       echo "✅ Tests passed"
     else
-      echo "❌ Tests failed - fix issues or use --no-verify"
+      echo "❌ Tests failed"
+      echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
       exit 1
     fi
   fi
@@ -227,13 +230,31 @@ function generatePostCommitHook() {
 
 /**
  * Generate pre-push hook content
+ * Blocks --no-verify to enforce quality gates before pushing
  */
 function generatePrePushHook() {
   return `#!/bin/bash
 # CAWS Pre-push Hook
 # Runs comprehensive checks before pushing
+# BLOCKS --no-verify for safety
 
 set -e
+
+# Block --no-verify on push operations
+for arg in "$@"; do
+  if [[ "$arg" == "--no-verify" ]] || [[ "$arg" == "-n" ]]; then
+    echo "❌ Error: --no-verify is BLOCKED on git push"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Push operations must pass all quality gates."
+    echo ""
+    echo "💡 To fix issues locally:"
+    echo "   1. Run: caws validate"
+    echo "   2. Fix reported issues"
+    echo "   3. Commit fixes: git commit --no-verify (allowed)"
+    echo "   4. Push again: git push (no --no-verify)"
+    exit 1
+  fi
+done
 
 echo "🚀 CAWS Pre-push Validation"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -251,7 +272,8 @@ if command -v caws >/dev/null 2>&1; then
     echo "✅ CAWS validation passed"
   else
     echo "❌ CAWS validation failed"
-    echo "💡 Fix issues or use: git push --no-verify"
+    echo "💡 Fix issues locally, then push again"
+    echo "💡 You can commit fixes with: git commit --no-verify"
     exit 1
   fi
 fi
@@ -267,7 +289,6 @@ if [ -f "package.json" ]; then
     else
       echo "⚠️  Security vulnerabilities found"
       echo "💡 Review with: npm audit"
-      echo "💡 Use --no-verify to push anyway"
       # Don't fail on warnings, just warn
     fi
   fi
