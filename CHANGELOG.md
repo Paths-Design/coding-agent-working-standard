@@ -1,3 +1,10 @@
+# [3.5.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v3.5.0) (2025-10-10)
+
+
+### Features
+
+* production readiness improvements ([0159875](https://github.com/Paths-Design/coding-agent-working-standard/commit/01598759705c463f4d10a90e0828ee031e89fa22))
+
 # [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-09)
 
 
