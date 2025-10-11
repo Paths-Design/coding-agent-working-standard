@@ -1,3 +1,78 @@
+# [3.5.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.5.0...v3.5.1) (2025-10-11)
+
+
+### Features
+
+* **validation:** add comprehensive policy and waiver validation ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Policy validation on load with detailed error messages
+  - Waiver structure validation with format checking
+  - Enhanced error messages with actionable remediation steps
+  - Compliance score calculation and display
+* **dx:** improve developer experience with better validation feedback ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Add default policy fallback when policy.yaml is missing
+  - Add comprehensive validation error context
+  - Display compliance score and grade in validation output
+  - Improve error messages throughout validation system
+
+
+### Documentation
+
+* move internal summary and audit documents to docs/internal folder
+
+
+# [3.5.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v3.5.0) (2025-10-11)
+
+
+### Features
+
+* **types:** create dedicated TypeScript types package (@paths.design/caws-types) ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Standardized validation result types
+  - Working spec type definitions
+  - Policy configuration types
+  - Budget and waiver types
+* **validation:** add JSON output format for validation results ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Structured JSON output with --format=json flag
+  - Machine-readable validation results
+  - Integration-friendly error format
+* **validation:** implement budget utilization tracking ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Real-time percentage tracking of budget usage
+  - Budget warnings at 75%, 90%, and 100% thresholds
+  - Detailed burn-up reporting with utilization metrics
+* **validation:** add tier-specific validation rules ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Tier 1 requirements: observability, rollback, security
+  - Comprehensive tier-based quality gate enforcement
+  - Risk-appropriate validation strictness
+* **validation:** enhance auto-fix system with structured suggestions ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Structured fix objects with descriptions and reasons
+  - Dry-run mode for previewing auto-fixes (--dry-run flag)
+  - Expanded auto-fix coverage for invariants, contracts, and more
+* **policy:** extend policy schema with quality gate thresholds ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Per-tier coverage and mutation thresholds
+  - Contract requirements configuration
+  - Manual review triggers
+  - Waiver approval workflow definitions
+* **waiver:** implement comprehensive waiver lifecycle management ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Detailed waiver metadata tracking
+  - Status management (active, expired, revoked)
+  - Budget delta specification
+  - Approval chain documentation
+
+
+### Tests
+
+* **validation:** achieve 100% test coverage on validation logic ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+  - Comprehensive spec validation test suite
+  - Budget derivation test coverage
+  - 168 passing tests across all validation modules
+
+
+### Documentation
+
+* add agent-agency integration implementation guide
+* add migration guide for v3.5.0 features
+* document additional improvement patterns from agent-agency
+
+
 # [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-09)
 
 
