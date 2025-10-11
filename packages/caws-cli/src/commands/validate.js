@@ -57,6 +57,7 @@ async function validateCommand(specFile, options) {
 
     const result = validateWorkingSpecWithSuggestions(spec, {
       autoFix: options.autoFix,
+      dryRun: options.dryRun,
       suggestions: !options.quiet,
       checkBudget: true,
       projectRoot: path.dirname(specPath),

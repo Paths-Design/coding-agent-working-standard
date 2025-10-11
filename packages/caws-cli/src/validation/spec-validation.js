@@ -190,8 +190,9 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       });
     }
 
-    // Validate risk tier
+    // Validate risk tier with enhanced auto-fix
     if (spec.risk_tier !== undefined && (spec.risk_tier < 1 || spec.risk_tier > 3)) {
+      const fixedValue = Math.max(1, Math.min(3, spec.risk_tier || 2));
       errors.push({
         instancePath: '/risk_tier',
         message: 'Risk tier must be 1, 2, or 3',
@@ -199,7 +200,99 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
           'Tier 1: Critical (auth, billing), Tier 2: Standard (features), Tier 3: Low risk (UI)',
         canAutoFix: true,
       });
-      fixes.push({ field: 'risk_tier', value: Math.max(1, Math.min(3, spec.risk_tier || 2)) });
+      fixes.push({
+        field: 'risk_tier',
+        value: fixedValue,
+        description: `Clamping risk_tier from ${spec.risk_tier} to valid range [1-3]: ${fixedValue}`,
+        reason: 'Risk tier out of bounds',
+      });
+    }
+
+    // Auto-fix empty arrays with sensible defaults
+    if (!spec.invariants || spec.invariants.length === 0) {
+      if (autoFix) {
+        fixes.push({
+          field: 'invariants',
+          value: ['System must remain operational during changes'],
+          description: 'Adding default invariant for empty invariants array',
+          reason: 'Invariants array was empty',
+        });
+      }
+    }
+
+    if (!spec.acceptance || spec.acceptance.length === 0) {
+      if (autoFix) {
+        fixes.push({
+          field: 'acceptance',
+          value: [
+            {
+              id: 'A1',
+              given: 'the system is in a valid state',
+              when: 'the change is applied',
+              then: 'the system remains functional',
+            },
+          ],
+          description: 'Adding placeholder acceptance criteria',
+          reason: 'Acceptance criteria array was empty',
+        });
+      }
+    }
+
+    // Auto-fix missing scope.out
+    if (spec.scope && !spec.scope.out) {
+      fixes.push({
+        field: 'scope.out',
+        value: ['node_modules/', 'dist/', '.git/'],
+        description: 'Adding default exclusions to scope.out',
+        reason: 'scope.out was missing',
+      });
+    }
+
+    // Auto-fix missing mode
+    if (!spec.mode) {
+      fixes.push({
+        field: 'mode',
+        value: 'feature',
+        description: 'Setting default mode to "feature"',
+        reason: 'mode field was missing',
+      });
+    }
+
+    // Auto-fix missing blast_radius
+    if (!spec.blast_radius) {
+      fixes.push({
+        field: 'blast_radius',
+        value: {
+          modules: [],
+          data_migration: false,
+        },
+        description: 'Adding empty blast_radius structure',
+        reason: 'blast_radius was missing',
+      });
+    }
+
+    // Auto-fix missing non_functional
+    if (!spec.non_functional) {
+      fixes.push({
+        field: 'non_functional',
+        value: {
+          a11y: [],
+          perf: {},
+          security: [],
+        },
+        description: 'Adding empty non_functional requirements structure',
+        reason: 'non_functional was missing',
+      });
+    }
+
+    // Auto-fix missing contracts
+    if (!spec.contracts) {
+      fixes.push({
+        field: 'contracts',
+        value: [],
+        description: 'Adding empty contracts array',
+        reason: 'contracts field was missing',
+      });
     }
 
     // Validate scope.in is not empty
@@ -332,18 +425,40 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
-    // Apply auto-fixes if requested
+    // Apply auto-fixes if requested and not in dry-run mode
+    const { dryRun = false } = options;
+    let appliedFixes = [];
+
     if (autoFix && fixes.length > 0) {
-      console.log('🔧 Applying auto-fixes...');
-      for (const fix of fixes) {
-        const pathParts = fix.field.split('.');
-        let current = spec;
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          if (!current[pathParts[i]]) current[pathParts[i]] = {};
-          current = current[pathParts[i]];
+      if (dryRun) {
+        console.log('🔍 Auto-fix preview (dry-run mode):');
+        for (const fix of fixes) {
+          console.log(`   [WOULD FIX] ${fix.field}`);
+          console.log(`      Description: ${fix.description}`);
+          console.log(`      Reason: ${fix.reason}`);
+          console.log(
+            `      Value: ${typeof fix.value === 'object' ? JSON.stringify(fix.value) : fix.value}`
+          );
+          console.log('');
         }
-        current[pathParts[pathParts.length - 1]] = fix.value;
-        console.log(`   Fixed ${fix.field}: ${fix.value}`);
+      } else {
+        console.log('🔧 Applying auto-fixes...');
+        for (const fix of fixes) {
+          try {
+            const pathParts = fix.field.split('.');
+            let current = spec;
+            for (let i = 0; i < pathParts.length - 1; i++) {
+              if (!current[pathParts[i]]) current[pathParts[i]] = {};
+              current = current[pathParts[i]];
+            }
+            current[pathParts[pathParts.length - 1]] = fix.value;
+            appliedFixes.push(fix);
+            console.log(`   ✅ Fixed ${fix.field}`);
+            console.log(`      ${fix.description}`);
+          } catch (error) {
+            console.warn(`   ⚠️  Failed to apply fix for ${fix.field}: ${error.message}`);
+          }
+        }
       }
     }
 
@@ -352,6 +467,8 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       errors,
       warnings,
       fixes: fixes.length > 0 ? fixes : undefined,
+      appliedFixes: appliedFixes.length > 0 ? appliedFixes : undefined,
+      dryRun,
       budget_check: budgetCheck,
     };
   } catch (error) {
