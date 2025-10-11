@@ -117,6 +117,7 @@ program
   .argument('[spec-file]', 'Path to working spec file (default: .caws/working-spec.yaml)')
   .option('-q, --quiet', 'Suppress suggestions and warnings', false)
   .option('--auto-fix', 'Automatically fix safe validation issues', false)
+  .option('--format <format>', 'Output format (text, json)', 'text')
   .action(validateCommand);
 
 // Status command

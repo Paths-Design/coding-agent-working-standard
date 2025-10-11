@@ -1,30 +1,61 @@
-# Source files
+# VS Code Extension Packaging Ignore
+# Files/folders excluded from .vsix package
+
+# Source files (only include compiled output)
 src/**
 tsconfig.json
+*.ts
 
-# Scripts
-scripts/**
+# Build artifacts not needed in package
+out/test/**
+.vscode-test/**
 
 # Development files
 .gitignore
-.eslintrc.json
+.eslintrc*
 eslint.config.js
+.prettierrc*
+tsconfig*.json
+*.map
+
+# Documentation and internal files
+ICON_NEEDED.md
+docs/**
 *.md
 !README.md
+!CHANGELOG.md
+!LICENSE
+!PRIVACY.md
 
-# Build artifacts
-*.vsix
+# Test files
+test/**
+tests/**
+**/*.test.ts
+**/*.spec.ts
 
-# Dependencies (keep bundled, exclude packages)
+# Node modules (included via bundling)
 node_modules/**
-packages/**
 
-# Exclude parent directories (monorepo root)
-../**
+# Build scripts
+scripts/**
 
-# Tests
-out/test/**
-
-# Git
+# Git files
 .git/**
+.gitattributes
+.gitignore
+
+# CI/CD
 .github/**
+.gitlab-ci.yml
+.travis.yml
+
+# Package files
+*.vsix
+*.tgz
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

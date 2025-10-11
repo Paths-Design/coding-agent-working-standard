@@ -138,6 +138,21 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
       await fs.copy(readmePath, path.join(cursorDir, 'README.md'));
     }
 
+    // Copy rules directory if it exists
+    const rulesTemplateDir = path.join(cursorTemplateDir, 'rules');
+    const rulesDestDir = path.join(cursorDir, 'rules');
+    if (fs.existsSync(rulesTemplateDir)) {
+      try {
+        await fs.ensureDir(rulesDestDir);
+        await fs.copy(rulesTemplateDir, rulesDestDir);
+        const ruleFiles = fs.readdirSync(rulesTemplateDir).filter((file) => file.endsWith('.mdc'));
+        console.log(chalk.green('✅ Cursor rules configured'));
+        console.log(chalk.gray(`   Rules: ${ruleFiles.length} rule files installed`));
+      } catch (error) {
+        console.warn(chalk.yellow('⚠️  Failed to copy Cursor rules:'), error.message);
+      }
+    }
+
     console.log(chalk.green('✅ Cursor hooks configured'));
     console.log(chalk.gray(`   Enabled: ${levels.join(', ')}`));
     console.log(

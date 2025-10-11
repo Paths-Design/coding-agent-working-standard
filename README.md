@@ -224,11 +224,11 @@ See the **[Agent Workflow Guide](docs/agents/full-guide.md)** for detailed instr
 
 ### Core Packages
 
-| Package                   | Description                                 | Status          |
-| ------------------------- | ------------------------------------------- | --------------- |
-| **caws-cli**              | Command-line interface for CAWS operations  | ✅ Stable       |
-| **caws-mcp-server**       | Model Context Protocol server for AI agents | ✅ Stable       |
-| **caws-vscode-extension** | VS Code extension with CAWS integration     | 🧪 Experimental |
+| Package                   | Description                                 | Status                  |
+| ------------------------- | ------------------------------------------- | ----------------------- |
+| **caws-cli**              | Command-line interface for CAWS operations  | ✅ Stable (v3.4.0)      |
+| **caws-mcp-server**       | Model Context Protocol server for AI agents | ✅ Stable (v1.0.0)      |
+| **caws-vscode-extension** | VS Code extension with CAWS integration     | 🧪 Pre-release (v0.9.0) |
 
 ### Development Packages
 

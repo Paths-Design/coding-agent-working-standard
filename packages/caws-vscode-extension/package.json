@@ -2,14 +2,35 @@
   "name": "caws-vscode-extension",
   "displayName": "CAWS - Coding Agent Workflow System",
   "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "publisher": "paths-design",
+  "license": "MIT",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.74.0",
+    "node": ">=22.14.0"
   },
   "categories": [
+    "Linters",
+    "Testing",
     "Other"
   ],
+  "keywords": [
+    "caws",
+    "quality",
+    "testing",
+    "agents",
+    "workflow",
+    "ai",
+    "automation"
+  ],
+  "homepage": "https://github.com/Paths-Design/coding-agent-working-standard#readme",
+  "bugs": {
+    "url": "https://github.com/Paths-Design/coding-agent-working-standard/issues"
+  },
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -120,6 +141,12 @@
           "type": "boolean",
           "default": false,
           "description": "Enable experimental features"
+        },
+        "caws.logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Extension logging level"
         }
       }
     }

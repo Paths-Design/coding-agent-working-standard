@@ -2,6 +2,7 @@ import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { getLogger } from './logger';
 
 export interface McpToolResult {
   content: Array<{
@@ -14,6 +15,7 @@ export interface McpToolResult {
 export class CawsMcpClient {
   private mcpProcess: cp.ChildProcess | null = null;
   private requestId = 0;
+  private logger = getLogger().createChild('McpClient');
 
   constructor() {
     this.initializeMcpServer();
@@ -55,22 +57,22 @@ export class CawsMcpClient {
 
       if (this.mcpProcess.stdout) {
         this.mcpProcess.stdout.on('data', (data) => {
-          console.log('MCP Server:', data.toString());
+          this.logger.debug('MCP Server output', { data: data.toString() });
         });
       }
 
       if (this.mcpProcess.stderr) {
         this.mcpProcess.stderr.on('data', (data) => {
-          console.error('MCP Server Error:', data.toString());
+          this.logger.debug('MCP Server stderr', { data: data.toString() });
         });
       }
 
       this.mcpProcess.on('exit', (code) => {
-        console.log(`MCP Server exited with code ${code}`);
+        this.logger.info('MCP Server exited', { exitCode: code });
         this.mcpProcess = null;
       });
     } catch (error) {
-      console.error('Failed to initialize MCP server:', error);
+      this.logger.error('Failed to initialize MCP server', error);
       // Fall back to direct CLI calls
     }
   }

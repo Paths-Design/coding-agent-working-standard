@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { disposeLogger, getLogger, initializeLogger } from './logger';
 import { CawsMcpClient } from './mcp-client';
 import { CawsProvenancePanel } from './provenance-panel';
 import { CawsQualityMonitor } from './quality-monitor';
@@ -11,7 +12,9 @@ let statusBar: CawsStatusBar;
 let webviewProvider: CawsWebviewProvider;
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('CAWS VS Code extension activated');
+  // Initialize structured logging
+  const logger = initializeLogger('CAWS Extension');
+  logger.info('CAWS VS Code extension activated');
 
   // Initialize MCP server first - it will auto-start
   mcpClient = new CawsMcpClient();
@@ -137,12 +140,16 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-  console.log('CAWS VS Code extension deactivated');
+  const logger = getLogger();
+  logger.info('CAWS VS Code extension deactivated');
 
   // Clean up MCP client
   if (mcpClient) {
     mcpClient.dispose();
   }
+
+  // Dispose logger
+  disposeLogger();
 }
 
 /**
@@ -159,7 +166,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
     const mcpServerPath = path.join(context.extensionPath, 'bundled', 'mcp-server', 'index.js');
 
     if (!fs.existsSync(mcpServerPath)) {
-      console.warn('CAWS MCP server not found in bundle, skipping auto-registration');
+      getLogger().warn('CAWS MCP server not found in bundle, skipping auto-registration');
       return;
     }
 
@@ -179,7 +186,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
         const configContent = fs.readFileSync(mcpConfigPath, 'utf8');
         mcpConfig = JSON.parse(configContent);
       } catch (error) {
-        console.warn('Failed to parse existing MCP config, will create new one');
+        getLogger().warn('Failed to parse existing MCP config, will create new one', error);
       }
     }
 
@@ -200,7 +207,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
     // Write updated config
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf8');
 
-    console.log('CAWS MCP server registered with Cursor at:', mcpConfigPath);
+    getLogger().info('CAWS MCP server registered with Cursor', { configPath: mcpConfigPath });
 
     // Show notification to user
     vscode.window
@@ -216,7 +223,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
         }
       });
   } catch (error) {
-    console.error('Failed to register CAWS MCP server with Cursor:', error);
+    getLogger().error('Failed to register CAWS MCP server with Cursor', error);
     // Don't show error to user - this is a nice-to-have feature
   }
 }

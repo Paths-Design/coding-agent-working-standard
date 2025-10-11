@@ -4,19 +4,31 @@
 
 version: 1
 
-# Risk tier definitions with default budgets
+# Risk tier definitions with default budgets and quality requirements
 risk_tiers:
   "1":
     max_files: 10
     max_loc: 250
+    coverage_threshold: 90
+    mutation_threshold: 70
+    contracts_required: true
+    manual_review_required: true
     description: "Critical changes requiring manual review"
   "2":
     max_files: 100
     max_loc: 10000
+    coverage_threshold: 80
+    mutation_threshold: 50
+    contracts_required: true
+    manual_review_required: false
     description: "Standard features with automated gates"
   "3":
     max_files: 500
     max_loc: 40000
+    coverage_threshold: 70
+    mutation_threshold: 30
+    contracts_required: false
+    manual_review_required: false
     description: "Low-risk changes with minimal oversight"
 
 # Edit rules for policy changes
@@ -27,6 +39,12 @@ edit_rules:
   min_approvers_for_budget_raise: 2
   # Require signed commits for policy changes
   require_signed_commits: true
+
+# Waiver approval policy
+waiver_approval:
+  required_approvers: 1
+  max_duration_days: 90
+  auto_revoke_expired: true
 
 # Quality gate configurations
 gates:

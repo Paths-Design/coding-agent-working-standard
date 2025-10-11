@@ -69,6 +69,7 @@ code --install-extension caws-vscode-extension-1.0.0.vsix
 ### Bundled Components
 
 The extension includes:
+
 - **CAWS MCP Server**: Local agent integration server
 - **CAWS CLI Tools**: Core quality assurance commands
 - **Quality Gate Tools**: Validation and analysis tools
@@ -78,6 +79,7 @@ The extension includes:
 Similar to how ESLint bundles its language server, the CAWS extension bundles all necessary components during the build process. This eliminates the need for separate CAWS installation, providing a seamless out-of-the-box experience.
 
 **Build Process:**
+
 ```bash
 npm run bundle  # Copies CAWS components into extension
 npm run compile # Compiles TypeScript
@@ -328,6 +330,7 @@ cawsApi.onGuidanceAvailable((guidance) => {
 ### Common Issues
 
 **Extension not activating**
+
 ```bash
 # Check VS Code version
 code --version
@@ -340,6 +343,7 @@ ls -la .caws/working-spec.yaml
 ```
 
 **MCP server connection failed**
+
 ```bash
 # Check MCP server is running
 ps aux | grep caws-mcp-server
@@ -352,6 +356,7 @@ ps aux | grep caws-mcp-server
 ```
 
 **Quality monitoring not working**
+
 ```bash
 # Verify file watcher permissions
 ls -la src/
@@ -364,6 +369,7 @@ ls -la src/
 ```
 
 **Status bar not showing**
+
 ```bash
 # Check status bar setting
 # Settings: search for "caws.showQualityStatus"
@@ -450,8 +456,9 @@ MIT License - see main project LICENSE file.
 
 ## Links
 
-- **Main Project**: https://github.com/paths-design/caws
-- **VS Code Marketplace**: [CAWS Extension](https://marketplace.visualstudio.com/items?itemName=caws.caws-vscode-extension)
-- **Documentation**: https://docs.caws.dev/vscode-extension
-- **Issues**: https://github.com/paths-design/caws/issues
-- **Discussions**: https://github.com/paths-design/caws/discussions
+- **Main Project**: https://github.com/Paths-Design/coding-agent-working-standard
+- **VS Code Marketplace**: Coming soon (pre-release)
+- **Documentation**: See `docs/guides/vscode-extension-guide.md` in main repository
+- **Issues**: https://github.com/Paths-Design/coding-agent-working-standard/issues
+- **Discussions**: https://github.com/Paths-Design/coding-agent-working-standard/discussions
+- **Support**: hello@paths.design

@@ -32,7 +32,7 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
     const tierBudget = policy.risk_tiers[spec.risk_tier];
     const baseline = {
       max_files: tierBudget.max_files,
-      max_loc: tierBudget.max_loc
+      max_loc: tierBudget.max_loc,
     };
 
     // Start with baseline budget
@@ -60,9 +60,8 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
       baseline,
       effective: effectiveBudget,
       waivers_applied: spec.waiver_ids || [],
-      derived_at: new Date().toISOString()
+      derived_at: new Date().toISOString(),
     };
-
   } catch (error) {
     throw new Error(`Budget derivation failed: ${error.message}`);
   }
@@ -92,27 +91,49 @@ function loadWaiver(waiverId, projectRoot) {
 
 /**
  * Check if a waiver is currently valid
+ * Enhanced with proper expiry and approval validation
  * @param {Object} waiver - Waiver object
+ * @param {Object} policy - Policy configuration (optional)
  * @returns {boolean} Whether waiver is valid and active
  */
-function isWaiverValid(waiver) {
+function isWaiverValid(waiver, policy = null) {
   try {
+    // Check status first
+    if (waiver.status !== 'active') {
+      console.warn(`Waiver ${waiver.id} has status: ${waiver.status}`);
+      return false;
+    }
+
     // Check if expired
     if (waiver.expires_at) {
       const expiryDate = new Date(waiver.expires_at);
       const now = new Date();
       if (now > expiryDate) {
+        console.warn(`Waiver ${waiver.id} expired on ${waiver.expires_at}`);
         return false;
       }
     }
 
-    // Check status
-    if (waiver.status !== 'active') {
+    // Check required approvals
+    if (!waiver.approvers || waiver.approvers.length === 0) {
+      console.warn(`Waiver ${waiver.id} has no approvers`);
       return false;
     }
 
-    // Check if it has required approvals (simplified check)
-    if (!waiver.approvers || waiver.approvers.length === 0) {
+    // Validate minimum approvers if policy provided
+    if (policy && policy.waiver_approval && policy.waiver_approval.required_approvers) {
+      const minApprovers = policy.waiver_approval.required_approvers;
+      if (waiver.approvers.length < minApprovers) {
+        console.warn(
+          `Waiver ${waiver.id} has ${waiver.approvers.length} approvers, needs ${minApprovers}`
+        );
+        return false;
+      }
+    }
+
+    // Check required fields
+    if (!waiver.id || !waiver.title || !waiver.gates) {
+      console.warn(`Waiver ${waiver.id || 'unknown'} missing required fields`);
       return false;
     }
 
@@ -139,7 +160,7 @@ function checkBudgetCompliance(derivedBudget, currentStats) {
       current: currentStats.files_changed,
       limit: derivedBudget.effective.max_files,
       baseline: derivedBudget.baseline.max_files,
-      message: `File count (${currentStats.files_changed}) exceeds budget (${derivedBudget.effective.max_files})`
+      message: `File count (${currentStats.files_changed}) exceeds budget (${derivedBudget.effective.max_files})`,
     });
   }
 
@@ -150,19 +171,55 @@ function checkBudgetCompliance(derivedBudget, currentStats) {
       current: currentStats.lines_changed,
       limit: derivedBudget.effective.max_loc,
       baseline: derivedBudget.baseline.max_loc,
-      message: `Lines of code (${currentStats.lines_changed}) exceed budget (${derivedBudget.effective.max_loc})`
+      message: `Lines of code (${currentStats.lines_changed}) exceed budget (${derivedBudget.effective.max_loc})`,
     });
   }
 
   return {
     compliant: violations.length === 0,
     violations,
-    budget: derivedBudget
+    budget: derivedBudget,
   };
 }
 
 /**
+ * Calculate budget utilization percentages
+ * @param {Object} budgetCompliance - Budget compliance result
+ * @returns {Object} Utilization percentages
+ */
+function calculateBudgetUtilization(budgetCompliance) {
+  const filesPercent =
+    budgetCompliance.budget.effective.max_files > 0
+      ? (budgetCompliance.budget.baseline.max_files / budgetCompliance.budget.effective.max_files) *
+        100
+      : 0;
+
+  const locPercent =
+    budgetCompliance.budget.effective.max_loc > 0
+      ? (budgetCompliance.budget.baseline.max_loc / budgetCompliance.budget.effective.max_loc) * 100
+      : 0;
+
+  return {
+    files: Math.round(filesPercent),
+    loc: Math.round(locPercent),
+    overall: Math.round(Math.max(filesPercent, locPercent)),
+  };
+}
+
+/**
+ * Check if changes are approaching budget limit
+ * @param {Object} budgetCompliance - Budget compliance result
+ * @param {number} threshold - Warning threshold (default 80)
+ * @returns {boolean} Whether approaching limit
+ */
+function isApproachingBudgetLimit(budgetCompliance, threshold = 80) {
+  const utilization = calculateBudgetUtilization(budgetCompliance);
+  return utilization.overall >= threshold;
+}
+
+/**
  * Generate burn-up report for scope visibility
+ * Enhanced with utilization metrics and warnings
  * @param {Object} derivedBudget - Budget from deriveBudget()
  * @param {Object} currentStats - Current change statistics
  * @returns {string} Human-readable burn-up report
@@ -178,18 +235,36 @@ function generateBurnupReport(derivedBudget, currentStats) {
   ];
 
   if (derivedBudget.waivers_applied.length > 0) {
+    report.push('');
     report.push(`Waivers Applied: ${derivedBudget.waivers_applied.join(', ')}`);
-    report.push(`Effective Budget: ${derivedBudget.effective.max_files} files, ${derivedBudget.effective.max_loc} LOC`);
+    report.push(
+      `Effective Budget: ${derivedBudget.effective.max_files} files, ${derivedBudget.effective.max_loc} LOC`
+    );
   }
 
-  const filePercent = Math.round((currentStats.files_changed / derivedBudget.effective.max_files) * 100);
-  const locPercent = Math.round((currentStats.lines_changed / derivedBudget.effective.max_loc) * 100);
+  const filePercent = Math.round(
+    (currentStats.files_changed / derivedBudget.effective.max_files) * 100
+  );
+  const locPercent = Math.round(
+    (currentStats.lines_changed / derivedBudget.effective.max_loc) * 100
+  );
 
-  report.push(`File Usage: ${filePercent}% (${currentStats.files_changed}/${derivedBudget.effective.max_files})`);
-  report.push(`LOC Usage: ${locPercent}% (${currentStats.lines_changed}/${derivedBudget.effective.max_loc})`);
+  report.push('');
+  report.push(
+    `File Usage: ${filePercent}% (${currentStats.files_changed}/${derivedBudget.effective.max_files})`
+  );
+  report.push(
+    `LOC Usage: ${locPercent}% (${currentStats.lines_changed}/${derivedBudget.effective.max_loc})`
+  );
 
-  if (filePercent > 90 || locPercent > 90) {
+  // Add warnings at different thresholds
+  const overall = Math.max(filePercent, locPercent);
+  if (overall >= 95) {
+    report.push('', '🚫 CRITICAL: Budget nearly exhausted!');
+  } else if (overall >= 90) {
     report.push('', '⚠️  WARNING: Approaching budget limits');
+  } else if (overall >= 80) {
+    report.push('', '⚠️  Notice: 80% of budget used');
   }
 
   return report.join('\n');
@@ -200,5 +275,7 @@ module.exports = {
   loadWaiver,
   isWaiverValid,
   checkBudgetCompliance,
-  generateBurnupReport
+  generateBurnupReport,
+  calculateBudgetUtilization,
+  isApproachingBudgetLimit,
 };

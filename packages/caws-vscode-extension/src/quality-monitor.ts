@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import { getLogger } from './logger';
 import { CawsMcpClient } from './mcp-client';
 
 export class CawsQualityMonitor {
   private mcpClient: CawsMcpClient;
   private lastEvaluation: any = null;
+  private logger = getLogger().createChild('QualityMonitor');
 
   constructor(mcpClient: CawsMcpClient) {
     this.mcpClient = mcpClient;
@@ -28,7 +30,7 @@ export class CawsQualityMonitor {
       });
 
       if (!result.content || !result.content[0]) {
-        console.warn('Invalid quality monitoring result: missing content');
+        this.logger.warn('Invalid quality monitoring result: missing content');
         return;
       }
       const monitoring = JSON.parse(result.content[0].text);
@@ -47,7 +49,7 @@ export class CawsQualityMonitor {
       }
     } catch (error) {
       // Silently fail monitoring to avoid disrupting workflow
-      console.warn('CAWS quality monitoring failed:', error);
+      this.logger.warn('CAWS quality monitoring failed', error);
     }
   }
 
@@ -83,7 +85,7 @@ export class CawsQualityMonitor {
       });
 
       if (!result.content || !result.content[0]) {
-        console.warn('Invalid code edit monitoring result: missing content');
+        this.logger.warn('Invalid code edit monitoring result: missing content');
         return;
       }
       const monitoring = JSON.parse(result.content[0].text);
@@ -104,7 +106,7 @@ export class CawsQualityMonitor {
         }
       }
     } catch (error) {
-      console.warn('CAWS code edit monitoring failed:', error);
+      this.logger.warn('CAWS code edit monitoring failed', error);
     }
   }
 

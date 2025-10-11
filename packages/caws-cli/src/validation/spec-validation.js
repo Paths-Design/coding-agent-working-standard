@@ -241,6 +241,40 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
+    // Tier 1 specific requirements (critical changes)
+    if (spec.risk_tier === 1) {
+      if (!spec.observability) {
+        errors.push({
+          instancePath: '/observability',
+          message: 'Observability required for Tier 1 changes',
+          suggestion: 'Define logging, metrics, and tracing strategy',
+          canAutoFix: false,
+        });
+      }
+
+      if (!spec.rollback || spec.rollback.length === 0) {
+        errors.push({
+          instancePath: '/rollback',
+          message: 'Rollback procedures required for Tier 1 changes',
+          suggestion: 'Document rollback steps and data migration reversal',
+          canAutoFix: false,
+        });
+      }
+
+      if (
+        !spec.non_functional ||
+        !spec.non_functional.security ||
+        spec.non_functional.security.length === 0
+      ) {
+        errors.push({
+          instancePath: '/non_functional/security',
+          message: 'Security requirements required for Tier 1 changes',
+          suggestion: 'Define authentication, authorization, and data protection requirements',
+          canAutoFix: false,
+        });
+      }
+    }
+
     // Validate waiver_ids format if present
     if (spec.waiver_ids) {
       if (!Array.isArray(spec.waiver_ids)) {

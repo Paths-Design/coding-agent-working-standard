@@ -1,0 +1,38 @@
+{
+  "name": "@paths.design/caws-types",
+  "version": "1.0.0",
+  "description": "TypeScript type definitions for CAWS (Coding Agent Workflow System)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "caws",
+    "typescript",
+    "types",
+    "validation",
+    "quality-gates",
+    "ai-agents"
+  ],
+  "author": "@darianrosebrook",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paths-design/caws",
+    "directory": "packages/caws-types"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
+

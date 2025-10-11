@@ -14,6 +14,7 @@ const { validateWorkingSpecWithSuggestions } = require('../validation/spec-valid
 
 /**
  * Validate command handler
+ * Enhanced with JSON output format support
  * @param {string} specFile - Path to spec file
  * @param {Object} options - Command options
  */
@@ -22,15 +23,37 @@ async function validateCommand(specFile, options) {
     let specPath = specFile || path.join('.caws', 'working-spec.yaml');
 
     if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`❌ Spec file not found: ${specPath}`));
-      console.error(chalk.blue('💡 Run "caws init" first to create a working spec'));
+      if (options.format === 'json') {
+        console.log(
+          JSON.stringify(
+            {
+              passed: false,
+              verdict: 'fail',
+              errors: [
+                {
+                  field: 'spec_file',
+                  message: `Spec file not found: ${specPath}`,
+                  suggestion: 'Run "caws init" first to create a working spec',
+                },
+              ],
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        console.error(chalk.red(`❌ Spec file not found: ${specPath}`));
+        console.error(chalk.blue('💡 Run "caws init" first to create a working spec'));
+      }
       process.exit(1);
     }
 
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
-    console.log(chalk.cyan('🔍 Validating CAWS working spec...'));
+    if (options.format !== 'json') {
+      console.log(chalk.cyan('🔍 Validating CAWS working spec...'));
+    }
 
     const result = validateWorkingSpecWithSuggestions(spec, {
       autoFix: options.autoFix,
@@ -39,38 +62,82 @@ async function validateCommand(specFile, options) {
       projectRoot: path.dirname(specPath),
     });
 
-    if (result.valid) {
-      console.log(chalk.green('✅ Working spec validation passed'));
-      if (!options.quiet) {
-        console.log(chalk.gray(`   Risk tier: ${spec.risk_tier}`));
-        console.log(chalk.gray(`   Mode: ${spec.mode}`));
-        if (spec.title) {
-          console.log(chalk.gray(`   Title: ${spec.title}`));
-        }
+    // Format output based on requested format
+    if (options.format === 'json') {
+      // Structured JSON output matching CAWSValidationResult
+      const jsonResult = {
+        passed: result.valid,
+        cawsVersion: '3.4.0',
+        timestamp: new Date().toISOString(),
+        verdict: result.valid ? 'pass' : 'fail',
+        spec: {
+          id: spec.id,
+          title: spec.title,
+          risk_tier: spec.risk_tier,
+          mode: spec.mode,
+        },
+        validation: {
+          errors: result.errors || [],
+          warnings: result.warnings || [],
+          fixes: result.fixes || [],
+        },
+        budgetCompliance: result.budget_check || null,
+      };
+
+      console.log(JSON.stringify(jsonResult, null, 2));
+
+      if (!result.valid) {
+        process.exit(1);
       }
     } else {
-      console.log(chalk.red('❌ Working spec validation failed'));
-
-      // Show errors
-      result.errors.forEach((error, index) => {
-        console.log(`   ${index + 1}. ${chalk.red(error.message)}`);
-        if (error.suggestion) {
-          console.log(`      ${chalk.blue('💡 ' + error.suggestion)}`);
+      // Human-readable text output
+      if (result.valid) {
+        console.log(chalk.green('✅ Working spec validation passed'));
+        if (!options.quiet) {
+          console.log(chalk.gray(`   Risk tier: ${spec.risk_tier}`));
+          console.log(chalk.gray(`   Mode: ${spec.mode}`));
+          if (spec.title) {
+            console.log(chalk.gray(`   Title: ${spec.title}`));
+          }
         }
-      });
+      } else {
+        console.log(chalk.red('❌ Working spec validation failed'));
 
-      // Show warnings
-      if (result.warnings && result.warnings.length > 0) {
-        console.log(chalk.yellow('\n⚠️  Warnings:'));
-        result.warnings.forEach((warning, index) => {
-          console.log(`   ${index + 1}. ${chalk.yellow(warning.message)}`);
+        // Show errors
+        result.errors.forEach((error, index) => {
+          console.log(`   ${index + 1}. ${chalk.red(error.message)}`);
+          if (error.suggestion) {
+            console.log(`      ${chalk.blue('💡 ' + error.suggestion)}`);
+          }
         });
-      }
 
-      process.exit(1);
+        // Show warnings
+        if (result.warnings && result.warnings.length > 0) {
+          console.log(chalk.yellow('\n⚠️  Warnings:'));
+          result.warnings.forEach((warning, index) => {
+            console.log(`   ${index + 1}. ${chalk.yellow(warning.message)}`);
+          });
+        }
+
+        process.exit(1);
+      }
     }
   } catch (error) {
-    console.error(chalk.red('❌ Error during validation:'), error.message);
+    if (options.format === 'json') {
+      console.log(
+        JSON.stringify(
+          {
+            passed: false,
+            verdict: 'fail',
+            error: error.message,
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      console.error(chalk.red('❌ Error during validation:'), error.message);
+    }
     process.exit(1);
   }
 }
