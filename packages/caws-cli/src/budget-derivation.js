@@ -9,6 +9,152 @@ const path = require('path');
 const yaml = require('js-yaml');
 
 /**
+ * Validate policy structure and content
+ * @param {Object} policy - Policy object from policy.yaml
+ * @throws {Error} If policy is invalid
+ */
+function validatePolicy(policy) {
+  // Validate version
+  if (!policy.version) {
+    throw new Error(
+      'Policy missing version field\n' +
+        'Add "version: 1" to .caws/policy.yaml\n' +
+        'Run "caws init" to regenerate policy.yaml'
+    );
+  }
+
+  // Validate risk_tiers exists
+  if (!policy.risk_tiers) {
+    throw new Error(
+      'Policy missing risk_tiers configuration\n' +
+        'Policy must define risk tiers 1, 2, and 3\n' +
+        'Run "caws init" to regenerate policy.yaml'
+    );
+  }
+
+  // Validate each required tier
+  for (const tier of [1, 2, 3]) {
+    if (!policy.risk_tiers[tier]) {
+      throw new Error(
+        `Policy missing configuration for risk tier ${tier}\n` +
+          `Add risk_tiers.${tier} with max_files and max_loc to .caws/policy.yaml\n` +
+          'Run "caws init" to regenerate policy.yaml'
+      );
+    }
+
+    const tierConfig = policy.risk_tiers[tier];
+
+    // Validate max_files
+    if (!tierConfig.max_files || tierConfig.max_files <= 0) {
+      throw new Error(
+        `Invalid max_files for tier ${tier}: ${tierConfig.max_files}\n` +
+          `max_files must be a positive integer\n` +
+          `Fix in .caws/policy.yaml under risk_tiers.${tier}.max_files`
+      );
+    }
+
+    // Validate max_loc
+    if (!tierConfig.max_loc || tierConfig.max_loc <= 0) {
+      throw new Error(
+        `Invalid max_loc for tier ${tier}: ${tierConfig.max_loc}\n` +
+          `max_loc must be a positive integer\n` +
+          `Fix in .caws/policy.yaml under risk_tiers.${tier}.max_loc`
+      );
+    }
+
+    // Validate thresholds if present
+    if (
+      tierConfig.coverage_threshold !== undefined &&
+      (tierConfig.coverage_threshold < 0 || tierConfig.coverage_threshold > 100)
+    ) {
+      throw new Error(
+        `Invalid coverage_threshold for tier ${tier}: ${tierConfig.coverage_threshold}\n` +
+          `coverage_threshold must be between 0 and 100\n` +
+          `Fix in .caws/policy.yaml under risk_tiers.${tier}.coverage_threshold`
+      );
+    }
+
+    if (
+      tierConfig.mutation_threshold !== undefined &&
+      (tierConfig.mutation_threshold < 0 || tierConfig.mutation_threshold > 100)
+    ) {
+      throw new Error(
+        `Invalid mutation_threshold for tier ${tier}: ${tierConfig.mutation_threshold}\n` +
+          `mutation_threshold must be between 0 and 100\n` +
+          `Fix in .caws/policy.yaml under risk_tiers.${tier}.mutation_threshold`
+      );
+    }
+  }
+
+  // Validate waiver_approval if present
+  if (policy.waiver_approval) {
+    if (
+      policy.waiver_approval.required_approvers !== undefined &&
+      policy.waiver_approval.required_approvers < 0
+    ) {
+      throw new Error(
+        `Invalid waiver_approval.required_approvers: ${policy.waiver_approval.required_approvers}\n` +
+          'required_approvers must be a non-negative integer'
+      );
+    }
+
+    if (
+      policy.waiver_approval.max_duration_days !== undefined &&
+      policy.waiver_approval.max_duration_days <= 0
+    ) {
+      throw new Error(
+        `Invalid waiver_approval.max_duration_days: ${policy.waiver_approval.max_duration_days}\n` +
+          'max_duration_days must be a positive integer'
+      );
+    }
+  }
+}
+
+/**
+ * Get default policy as fallback
+ * @returns {Object} Default CAWS policy
+ */
+function getDefaultPolicy() {
+  return {
+    version: 1,
+    risk_tiers: {
+      1: {
+        max_files: 25,
+        max_loc: 1000,
+        coverage_threshold: 90,
+        mutation_threshold: 70,
+        contracts_required: true,
+        manual_review_required: true,
+        description: 'Critical changes requiring manual review',
+      },
+      2: {
+        max_files: 50,
+        max_loc: 2000,
+        coverage_threshold: 80,
+        mutation_threshold: 50,
+        contracts_required: true,
+        manual_review_required: false,
+        description: 'Standard features with automated gates',
+      },
+      3: {
+        max_files: 100,
+        max_loc: 5000,
+        coverage_threshold: 70,
+        mutation_threshold: 30,
+        contracts_required: false,
+        manual_review_required: false,
+        description: 'Low-risk changes with minimal oversight',
+      },
+    },
+    waiver_approval: {
+      required_approvers: 1,
+      max_duration_days: 90,
+      auto_revoke_expired: true,
+    },
+  };
+}
+
+/**
  * Derive budget for a working spec based on policy and waivers
  * @param {Object} spec - Working spec object
  * @param {string} projectRoot - Project root directory
@@ -18,15 +164,32 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
   try {
     // Load policy.yaml
     const policyPath = path.join(projectRoot, '.caws', 'policy.yaml');
+    let policy;
+
     if (!fs.existsSync(policyPath)) {
-      throw new Error('Policy file not found: .caws/policy.yaml');
+      console.warn(
+        '⚠️  Policy file not found: .caws/policy.yaml\n' +
+          '   Using default policy. Run "caws init" to create policy.yaml'
+      );
+      policy = getDefaultPolicy();
+    } else {
+      policy = yaml.load(fs.readFileSync(policyPath, 'utf8'));
+
+      // Validate policy structure
+      try {
+        validatePolicy(policy);
+      } catch (error) {
+        throw new Error(`Invalid policy.yaml: ${error.message}`);
+      }
     }
 
-    const policy = yaml.load(fs.readFileSync(policyPath, 'utf8'));
-
-    // Validate policy structure
-    if (!policy.risk_tiers || !policy.risk_tiers[spec.risk_tier]) {
-      throw new Error(`Risk tier ${spec.risk_tier} not defined in policy.yaml`);
+    // Check if risk tier exists in policy
+    if (!policy.risk_tiers[spec.risk_tier]) {
+      throw new Error(
+        `Risk tier ${spec.risk_tier} not defined in policy.yaml\n` +
+          `Policy only defines tiers: ${Object.keys(policy.risk_tiers).join(', ')}\n` +
+          `Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)`
+      );
     }
 
     const tierBudget = policy.risk_tiers[spec.risk_tier];
@@ -68,7 +231,106 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
 }
 
 /**
+ * Validate waiver document structure
+ * @param {Object} waiver - Waiver document to validate
+ * @throws {Error} If waiver structure is invalid
+ */
+function validateWaiverStructure(waiver) {
+  const requiredFields = [
+    'id',
+    'title',
+    'reason',
+    'status',
+    'gates',
+    'expires_at',
+    'approvers',
+  ];
+
+  // Check all required fields present
+  for (const field of requiredFields) {
+    if (!(field in waiver)) {
+      throw new Error(
+        `Waiver missing required field: ${field}\n` +
+          `Required fields: ${requiredFields.join(', ')}\n` +
+          `Fix the waiver file at .caws/waivers/${waiver.id || 'unknown'}.yaml`
+      );
+    }
+  }
+
+  // Validate ID format (WV-XXXX)
+  if (!/^WV-\d{4}$/.test(waiver.id)) {
+    throw new Error(
+      `Invalid waiver ID format: ${waiver.id}\n` +
+        'Waiver IDs must follow the format: WV-XXXX (e.g., WV-0001)\n' +
+        'Where XXXX is a 4-digit number\n' +
+        `Fix the id field in .caws/waivers/${waiver.id}.yaml`
+    );
+  }
+
+  // Validate status
+  const validStatuses = ['active', 'expired', 'revoked'];
+  if (!validStatuses.includes(waiver.status)) {
+    throw new Error(
+      `Invalid waiver status: ${waiver.status}\n` +
+        `Status must be one of: ${validStatuses.join(', ')}\n` +
+        `Fix the status field in .caws/waivers/${waiver.id}.yaml`
+    );
+  }
+
+  // Validate gates is array
+  if (!Array.isArray(waiver.gates) || waiver.gates.length === 0) {
+    throw new Error(
+      `Invalid waiver gates: ${JSON.stringify(waiver.gates)}\n` +
+        'gates must be a non-empty array of gate names\n' +
+        `Example: gates: ["budget_limit", "coverage_threshold"]\n` +
+        `Fix the gates field in .caws/waivers/${waiver.id}.yaml`
+    );
+  }
+
+  // Validate approvers is array
+  if (!Array.isArray(waiver.approvers) || waiver.approvers.length === 0) {
+    throw new Error(
+      `Invalid waiver approvers: ${JSON.stringify(waiver.approvers)}\n` +
+        'approvers must be a non-empty array of approver names/emails\n' +
+        'Example: approvers: ["tech-lead@company.com"]\n' +
+        `Fix the approvers field in .caws/waivers/${waiver.id}.yaml`
+    );
+  }
+
+  // Validate expires_at is valid date string
+  const expiryDate = new Date(waiver.expires_at);
+  if (isNaN(expiryDate.getTime())) {
+    throw new Error(
+      `Invalid waiver expiry date: ${waiver.expires_at}\n` +
+        'expires_at must be a valid ISO 8601 date string\n' +
+        'Example: expires_at: "2025-12-31T23:59:59Z"\n' +
+        `Fix the expires_at field in .caws/waivers/${waiver.id}.yaml`
+    );
+  }
+
+  // Validate delta if present
+  if (waiver.delta) {
+    if (waiver.delta.max_files !== undefined && waiver.delta.max_files < 0) {
+      throw new Error(
+        `Invalid waiver delta.max_files: ${waiver.delta.max_files}\n` +
+          'delta.max_files must be a non-negative integer\n' +
+          `Fix the delta field in .caws/waivers/${waiver.id}.yaml`
+      );
+    }
+
+    if (waiver.delta.max_loc !== undefined && waiver.delta.max_loc < 0) {
+      throw new Error(
+        `Invalid waiver delta.max_loc: ${waiver.delta.max_loc}\n` +
+          'delta.max_loc must be a non-negative integer\n' +
+          `Fix the delta field in .caws/waivers/${waiver.id}.yaml`
+      );
+    }
+  }
+}
+
+/**
  * Load a waiver by ID
+ * Enhanced with structure validation
  * @param {string} waiverId - Waiver ID (e.g., WV-0001)
  * @param {string} projectRoot - Project root directory
  * @returns {Object|null} Waiver object or null if not found
@@ -77,14 +339,23 @@ function loadWaiver(waiverId, projectRoot) {
   try {
     const waiverPath = path.join(projectRoot, '.caws', 'waivers', `${waiverId}.yaml`);
     if (!fs.existsSync(waiverPath)) {
-      console.warn(`Waiver file not found: ${waiverPath}`);
+      console.warn(`⚠️  Waiver file not found: ${waiverPath}`);
       return null;
     }
 
     const waiver = yaml.load(fs.readFileSync(waiverPath, 'utf8'));
+
+    // Validate waiver structure
+    try {
+      validateWaiverStructure(waiver);
+    } catch (error) {
+      console.error(`❌ Invalid waiver ${waiverId}: ${error.message}`);
+      return null;
+    }
+
     return waiver;
   } catch (error) {
-    console.warn(`Failed to load waiver ${waiverId}: ${error.message}`);
+    console.warn(`⚠️  Failed to load waiver ${waiverId}: ${error.message}`);
     return null;
   }
 }
@@ -278,4 +549,7 @@ module.exports = {
   generateBurnupReport,
   calculateBudgetUtilization,
   isApproachingBudgetLimit,
+  validatePolicy,
+  getDefaultPolicy,
+  validateWaiverStructure,
 };

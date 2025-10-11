@@ -462,6 +462,9 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
+    // Calculate compliance score (0-1 scale)
+    const complianceScore = calculateComplianceScore(errors, warnings);
+
     return {
       valid: errors.length === 0,
       errors,
@@ -470,6 +473,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       appliedFixes: appliedFixes.length > 0 ? appliedFixes : undefined,
       dryRun,
       budget_check: budgetCheck,
+      complianceScore,
     };
   } catch (error) {
     return {
@@ -482,6 +486,40 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       ],
     };
   }
+}
+
+/**
+ * Calculate compliance score based on errors and warnings
+ * Score ranges from 0 (many issues) to 1 (perfect)
+ * @param {Array} errors - Validation errors
+ * @param {Array} warnings - Validation warnings
+ * @returns {number} Compliance score (0-1)
+ */
+function calculateComplianceScore(errors, warnings) {
+  // Start at perfect score
+  let score = 1.0;
+
+  // Each error reduces score by 0.2
+  score -= errors.length * 0.2;
+
+  // Each warning reduces score by 0.1
+  score -= warnings.length * 0.1;
+
+  // Floor at 0
+  return Math.max(0, score);
+}
+
+/**
+ * Get compliance grade from score
+ * @param {number} score - Compliance score (0-1)
+ * @returns {string} Grade (A, B, C, D, F)
+ */
+function getComplianceGrade(score) {
+  if (score >= 0.9) return 'A';
+  if (score >= 0.8) return 'B';
+  if (score >= 0.7) return 'C';
+  if (score >= 0.6) return 'D';
+  return 'F';
 }
 
 /**
@@ -524,4 +562,6 @@ module.exports = {
   validateWorkingSpecWithSuggestions,
   getFieldSuggestion,
   canAutoFixField,
+  calculateComplianceScore,
+  getComplianceGrade,
 };

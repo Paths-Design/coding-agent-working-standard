@@ -228,11 +228,15 @@ describe('Budget Derivation', () => {
       expect(budget.effective.max_files).toBe(50);
     });
 
-    it('should throw error if policy file is missing', () => {
+    it('should use default policy if policy file is missing', () => {
       const spec = createValidSpec(2);
       fs.existsSync.mockReturnValue(false);
 
-      expect(() => deriveBudget(spec, '/test')).toThrow('Policy file not found');
+      const budget = deriveBudget(spec, '/test');
+
+      // Should use default policy for Tier 2
+      expect(budget.baseline.max_files).toBe(50);
+      expect(budget.baseline.max_loc).toBe(2000);
     });
 
     it('should throw error if risk tier not defined in policy', () => {

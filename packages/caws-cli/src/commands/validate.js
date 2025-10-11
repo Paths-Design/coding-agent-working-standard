@@ -10,7 +10,10 @@ const yaml = require('js-yaml');
 const chalk = require('chalk');
 
 // Import validation functionality
-const { validateWorkingSpecWithSuggestions } = require('../validation/spec-validation');
+const {
+  validateWorkingSpecWithSuggestions,
+  getComplianceGrade,
+} = require('../validation/spec-validation');
 
 /**
  * Validate command handler
@@ -99,6 +102,12 @@ async function validateCommand(specFile, options) {
           console.log(chalk.gray(`   Mode: ${spec.mode}`));
           if (spec.title) {
             console.log(chalk.gray(`   Title: ${spec.title}`));
+          }
+          if (result.complianceScore !== undefined) {
+            const grade = getComplianceGrade(result.complianceScore);
+            const scorePercent = (result.complianceScore * 100).toFixed(0);
+            const scoreColor = result.complianceScore >= 0.9 ? 'green' : result.complianceScore >= 0.7 ? 'yellow' : 'red';
+            console.log(chalk[scoreColor](`   Compliance: ${scorePercent}% (Grade ${grade})`));
           }
         }
       } else {
