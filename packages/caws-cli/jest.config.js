@@ -14,16 +14,19 @@ module.exports = {
     error: false,
   },
   // Fix CI working directory issues with more robust approach
-  setupFiles: ['<rootDir>/tests/setup.js'],
+  setupFiles: ['<rootDir>/tests/pre-setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   // Skip problematic test files in CI environment
-  testPathIgnorePatterns: process.env.CI ? [
-    '<rootDir>/tests/integration/cursor-hooks.test.js',
-    '<rootDir>/tests/tools.test.js',
-    '<rootDir>/tests/perf-budgets.test.js',
-    '<rootDir>/tests/axe/cli-accessibility.test.js',
-    '<rootDir>/tests/contract/schema-contract.test.js',
-    '<rootDir>/tests/mutation/mutation-quality.test.js',
-    '<rootDir>/tests/validation.test.js',
-    '<rootDir>/tests/integration/tools-integration.test.js'
-  ] : [],
+  testPathIgnorePatterns: process.env.CI
+    ? [
+        '<rootDir>/tests/integration/cursor-hooks.test.js',
+        '<rootDir>/tests/tools.test.js',
+        '<rootDir>/tests/perf-budgets.test.js',
+        '<rootDir>/tests/axe/cli-accessibility.test.js',
+        '<rootDir>/tests/contract/schema-contract.test.js',
+        '<rootDir>/tests/mutation/mutation-quality.test.js',
+        '<rootDir>/tests/validation.test.js',
+        '<rootDir>/tests/integration/tools-integration.test.js',
+      ]
+    : [],
 };
