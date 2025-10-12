@@ -13,13 +13,13 @@ const SAFE_DIRECTORY = path.join(__dirname, '..'); // packages/caws-cli director
 // Ensure working directory exists and is valid
 beforeAll(() => {
   const cwd = process.cwd();
-  
+
   // If working directory doesn't exist (CI issue), create it
   if (!fs.existsSync(cwd)) {
     console.log('⚠️  Working directory does not exist in test, creating...');
     fs.mkdirSync(cwd, { recursive: true });
   }
-  
+
   // Ensure we're in the right directory
   try {
     process.chdir(cwd);
@@ -92,7 +92,7 @@ afterEach(() => {
 });
 
 // Mock process.cwd to handle CI issues
-const originalCwd = process.cwd;
+const originalCwd = process.cwd.bind(process);
 process.cwd = () => {
   try {
     const cwd = originalCwd();
