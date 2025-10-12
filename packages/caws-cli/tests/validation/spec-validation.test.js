@@ -222,7 +222,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       delete spec.scope.out;
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.scope.out).toBeDefined();
       expect(Array.isArray(spec.scope.out)).toBe(true);
@@ -233,7 +233,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       delete spec.blast_radius;
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.blast_radius).toBeDefined();
       expect(spec.blast_radius.modules).toBeDefined();
@@ -244,7 +244,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       delete spec.non_functional;
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.non_functional).toBeDefined();
       expect(spec.non_functional.a11y).toBeDefined();
@@ -256,7 +256,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       spec.invariants = [];
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.invariants).toBeDefined();
       expect(spec.invariants.length).toBeGreaterThan(0);
@@ -267,7 +267,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       spec.acceptance = [];
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.acceptance).toBeDefined();
       expect(spec.acceptance.length).toBeGreaterThan(0);
@@ -281,7 +281,7 @@ describe('SpecValidator', () => {
       const spec = createValidSpec();
       delete spec.contracts;
 
-      const result = validateWorkingSpecWithSuggestions(spec, { autoFix: true });
+      validateWorkingSpecWithSuggestions(spec, { autoFix: true });
 
       expect(spec.contracts).toBeDefined();
       expect(Array.isArray(spec.contracts)).toBe(true);
