@@ -6,6 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// Save the original working directory at test suite start
+const ORIGINAL_CWD = process.cwd();
+const SAFE_DIRECTORY = path.join(__dirname, '..'); // packages/caws-cli directory
+
 // Ensure working directory exists and is valid
 beforeAll(() => {
   const cwd = process.cwd();
@@ -21,6 +25,69 @@ beforeAll(() => {
     process.chdir(cwd);
   } catch (error) {
     console.log('⚠️  Could not change to working directory:', error.message);
+    // Try to go to a safe directory
+    try {
+      process.chdir(SAFE_DIRECTORY);
+    } catch (e) {
+      // Can't recover, continue anyway
+    }
+  }
+});
+
+// Before each test, ensure we're in a valid directory
+beforeEach(() => {
+  try {
+    const currentDir = process.cwd();
+    if (!fs.existsSync(currentDir)) {
+      // Restore to safe directory
+      if (fs.existsSync(ORIGINAL_CWD)) {
+        process.chdir(ORIGINAL_CWD);
+      } else {
+        process.chdir(SAFE_DIRECTORY);
+      }
+    }
+  } catch (error) {
+    // Can't get current directory, restore to safe
+    try {
+      if (fs.existsSync(ORIGINAL_CWD)) {
+        process.chdir(ORIGINAL_CWD);
+      } else {
+        process.chdir(SAFE_DIRECTORY);
+      }
+    } catch (e) {
+      // Can't recover
+    }
+  }
+});
+
+// After each test, ensure we're in a valid directory
+afterEach(() => {
+  try {
+    const currentDir = process.cwd();
+    // Check if current directory still exists
+    if (!fs.existsSync(currentDir)) {
+      // Directory was deleted, restore to safe directory
+      try {
+        if (fs.existsSync(ORIGINAL_CWD)) {
+          process.chdir(ORIGINAL_CWD);
+        } else {
+          process.chdir(SAFE_DIRECTORY);
+        }
+      } catch (error) {
+        // Can't restore, continue
+      }
+    }
+  } catch (error) {
+    // Current directory doesn't exist, restore to safe directory
+    try {
+      if (fs.existsSync(ORIGINAL_CWD)) {
+        process.chdir(ORIGINAL_CWD);
+      } else {
+        process.chdir(SAFE_DIRECTORY);
+      }
+    } catch (e) {
+      // Can't recover, continue anyway
+    }
   }
 });
 
@@ -28,9 +95,15 @@ beforeAll(() => {
 const originalCwd = process.cwd;
 process.cwd = () => {
   try {
-    return originalCwd();
+    const cwd = originalCwd();
+    // Verify the directory exists
+    if (!fs.existsSync(cwd)) {
+      // Fallback to a safe directory
+      return SAFE_DIRECTORY;
+    }
+    return cwd;
   } catch (error) {
     // Fallback to a safe directory
-    return path.join(__dirname, '..', '..');
+    return SAFE_DIRECTORY;
   }
 };
