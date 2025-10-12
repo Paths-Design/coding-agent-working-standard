@@ -14,7 +14,7 @@ module.exports = {
     error: false,
   },
   // Fix CI working directory issues with more robust approach
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  setupFiles: ['<rootDir>/tests/setup.js'],
   // Skip problematic test files in CI environment
   testPathIgnorePatterns: process.env.CI ? [
     '<rootDir>/tests/integration/cursor-hooks.test.js',

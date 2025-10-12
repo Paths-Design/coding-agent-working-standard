@@ -10,28 +10,46 @@ const path = require('path');
 const ORIGINAL_CWD = process.cwd();
 const SAFE_DIRECTORY = path.join(__dirname, '..'); // packages/caws-cli directory
 
-// Ensure working directory exists and is valid
-beforeAll(() => {
-  const cwd = process.cwd();
-
-  // If working directory doesn't exist (CI issue), create it
-  if (!fs.existsSync(cwd)) {
-    console.log('⚠️  Working directory does not exist in test, creating...');
-    fs.mkdirSync(cwd, { recursive: true });
-  }
-
-  // Ensure we're in the right directory
-  try {
-    process.chdir(cwd);
-  } catch (error) {
-    console.log('⚠️  Could not change to working directory:', error.message);
-    // Try to go to a safe directory
-    try {
+// Ensure we start in a valid directory
+try {
+  const currentDir = process.cwd();
+  if (!fs.existsSync(currentDir)) {
+    if (fs.existsSync(SAFE_DIRECTORY)) {
       process.chdir(SAFE_DIRECTORY);
-    } catch (e) {
-      // Can't recover, continue anyway
     }
   }
+} catch (error) {
+  // Can't determine current directory, go to safe directory
+  try {
+    if (fs.existsSync(SAFE_DIRECTORY)) {
+      process.chdir(SAFE_DIRECTORY);
+    }
+  } catch (e) {
+    // Can't recover, continue
+  }
+}
+
+// Create a wrapper for process.cwd that never fails
+const originalCwd = process.cwd.bind(process);
+const safeCwd = () => {
+  try {
+    const cwd = originalCwd();
+    if (fs.existsSync(cwd)) {
+      return cwd;
+    }
+    // Directory doesn't exist, return safe directory
+    return SAFE_DIRECTORY;
+  } catch (error) {
+    // Can't get cwd, return safe directory
+    return SAFE_DIRECTORY;
+  }
+};
+
+// Override process.cwd globally
+Object.defineProperty(process, 'cwd', {
+  writable: true,
+  configurable: true,
+  value: safeCwd,
 });
 
 // Before each test, ensure we're in a valid directory
@@ -47,7 +65,7 @@ beforeEach(() => {
       }
     }
   } catch (error) {
-    // Can't get current directory, restore to safe
+    // Can't determine current directory, restore to safe
     try {
       if (fs.existsSync(ORIGINAL_CWD)) {
         process.chdir(ORIGINAL_CWD);
@@ -90,20 +108,3 @@ afterEach(() => {
     }
   }
 });
-
-// Mock process.cwd to handle CI issues
-const originalCwd = process.cwd.bind(process);
-process.cwd = () => {
-  try {
-    const cwd = originalCwd();
-    // Verify the directory exists
-    if (!fs.existsSync(cwd)) {
-      // Fallback to a safe directory
-      return SAFE_DIRECTORY;
-    }
-    return cwd;
-  } catch (error) {
-    // Fallback to a safe directory
-    return SAFE_DIRECTORY;
-  }
-};
