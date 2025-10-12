@@ -26,6 +26,21 @@ describe('Budget Derivation (Async)', () => {
   });
 
   afterEach(async () => {
+    // Ensure we're not in the temp directory before deleting it
+    try {
+      const cwd = process.cwd();
+      if (cwd.startsWith(tempDir)) {
+        process.chdir(__dirname);
+      }
+    } catch (e) {
+      // Can't get cwd, try to change anyway
+      try {
+        process.chdir(__dirname);
+      } catch (e2) {
+        // Continue with cleanup
+      }
+    }
+    
     // Cleanup
     await fs.remove(tempDir);
   });
