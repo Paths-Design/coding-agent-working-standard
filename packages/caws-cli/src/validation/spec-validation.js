@@ -383,12 +383,23 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
             errors.push({
               instancePath: '/waiver_ids',
               message: `Invalid waiver ID format: ${waiverId}`,
-              suggestion: 'Use format: WV-XXXX (e.g., WV-0001)',
+              suggestion: 'Use format: WV-XXXX where XXXX is exactly 4 digits (e.g., WV-0001)',
               canAutoFix: false,
             });
           }
         }
       }
+    }
+
+    // Warn if change_budget is present (deprecated/informational only)
+    if (spec.change_budget) {
+      warnings.push({
+        instancePath: '/change_budget',
+        message:
+          'change_budget field in working spec is informational only and not used for validation',
+        suggestion:
+          'Budget is derived from policy.yaml risk_tier + waivers. This field is auto-calculated.',
+      });
     }
 
     // Derive and check budget if requested
@@ -413,6 +424,16 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
               message: violation.message,
               suggestion: 'Create a waiver or reduce scope to fit within budget',
               canAutoFix: false,
+            });
+          }
+
+          // Suggest adding waiver_ids if budget exceeded and none referenced
+          if (!spec.waiver_ids || spec.waiver_ids.length === 0) {
+            warnings.push({
+              instancePath: '/waiver_ids',
+              message: 'Budget exceeded but no waivers referenced',
+              suggestion:
+                'Add waiver_ids: ["WV-0001"] to working spec, then create waiver file with: caws waiver create',
             });
           }
         }

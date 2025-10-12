@@ -1,12 +1,14 @@
 /**
  * @fileoverview Budget Derivation Logic
  * Derives budgets from policy.yaml and applies waivers
+ * Enhanced with PolicyManager for caching and improved performance
  * @author @darianrosebrook
  */
 
 const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
+const { defaultPolicyManager } = require('./policy/PolicyManager');
 
 /**
  * Validate policy structure and content
@@ -156,30 +158,48 @@ function getDefaultPolicy() {
 
 /**
  * Derive budget for a working spec based on policy and waivers
+ * Enhanced to use PolicyManager for caching
  * @param {Object} spec - Working spec object
  * @param {string} projectRoot - Project root directory
+ * @param {Object} options - Derivation options
+ * @param {boolean} options.useCache - Use cached policy (default: true)
  * @returns {Object} Derived budget with baseline and effective limits
  */
-function deriveBudget(spec, projectRoot = process.cwd()) {
+async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
   try {
-    // Load policy.yaml
-    const policyPath = path.join(projectRoot, '.caws', 'policy.yaml');
-    let policy;
+    // Load policy using PolicyManager (with caching)
+    const policyResult = await defaultPolicyManager.loadPolicy(projectRoot, {
+      useCache: options.useCache !== false,
+    });
 
-    if (!fs.existsSync(policyPath)) {
-      console.warn(
-        '⚠️  Policy file not found: .caws/policy.yaml\n' +
-          '   Using default policy. Run "caws init" to create policy.yaml'
-      );
-      policy = getDefaultPolicy();
-    } else {
-      policy = yaml.load(fs.readFileSync(policyPath, 'utf8'));
+    const policy = policyResult;
 
-      // Validate policy structure
-      try {
-        validatePolicy(policy);
-      } catch (error) {
-        throw new Error(`Invalid policy.yaml: ${error.message}`);
+    // Check if using default policy
+    if (policy._isDefault) {
+      const expectedPath = path.join(projectRoot, '.caws', 'policy.yaml');
+      const policyExists = fs.existsSync(expectedPath);
+
+      if (policyExists) {
+        console.error(
+          '⚠️  Policy file exists but not loaded: ' +
+            expectedPath +
+            '\n' +
+            '   Current working directory: ' +
+            process.cwd() +
+            '\n' +
+            '   Project root: ' +
+            projectRoot +
+            '\n' +
+            '   Cache status: ' +
+            (policy._cacheHit ? 'HIT (may be stale)' : 'MISS') +
+            '\n' +
+            '   This may be a path resolution or caching issue\n'
+        );
+      } else {
+        console.warn(
+          '⚠️  Policy file not found: .caws/policy.yaml\n' +
+            '   Using default policy. Run "caws init" to create policy.yaml'
+        );
       }
     }
 
@@ -206,6 +226,16 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
       for (const waiverId of spec.waiver_ids) {
         const waiver = loadWaiver(waiverId, projectRoot);
         if (waiver && waiver.status === 'active' && isWaiverValid(waiver)) {
+          // Validate waiver covers budget_limit gate
+          if (!waiver.gates || !waiver.gates.includes('budget_limit')) {
+            console.warn(
+              `\n⚠️  Waiver ${waiverId} does not cover 'budget_limit' gate\n` +
+                `   Current gates: [${waiver.gates ? waiver.gates.join(', ') : 'none'}]\n` +
+                `   Add 'budget_limit' to gates array to apply to budget violations\n`
+            );
+            continue;
+          }
+
           // Apply additive deltas
           if (waiver.delta) {
             if (waiver.delta.max_files) {
@@ -236,15 +266,7 @@ function deriveBudget(spec, projectRoot = process.cwd()) {
  * @throws {Error} If waiver structure is invalid
  */
 function validateWaiverStructure(waiver) {
-  const requiredFields = [
-    'id',
-    'title',
-    'reason',
-    'status',
-    'gates',
-    'expires_at',
-    'approvers',
-  ];
+  const requiredFields = ['id', 'title', 'reason', 'status', 'gates', 'expires_at', 'approvers'];
 
   // Check all required fields present
   for (const field of requiredFields) {
@@ -330,16 +352,30 @@ function validateWaiverStructure(waiver) {
 
 /**
  * Load a waiver by ID
- * Enhanced with structure validation
+ * Enhanced with structure validation and detailed error reporting
  * @param {string} waiverId - Waiver ID (e.g., WV-0001)
  * @param {string} projectRoot - Project root directory
  * @returns {Object|null} Waiver object or null if not found
  */
 function loadWaiver(waiverId, projectRoot) {
   try {
+    // Validate ID format before attempting to load
+    if (!/^WV-\d{4}$/.test(waiverId)) {
+      console.error(
+        `\n❌ Invalid waiver ID format: ${waiverId}\n` +
+          `   Waiver IDs must be exactly 4 digits: WV-0001 through WV-9999\n` +
+          `   Fix waiver_ids in .caws/working-spec.yaml\n`
+      );
+      return null;
+    }
+
     const waiverPath = path.join(projectRoot, '.caws', 'waivers', `${waiverId}.yaml`);
     if (!fs.existsSync(waiverPath)) {
-      console.warn(`⚠️  Waiver file not found: ${waiverPath}`);
+      console.error(
+        `\n❌ Waiver file not found: ${waiverId}\n` +
+          `   Expected location: ${waiverPath}\n` +
+          `   Create waiver with: caws waiver create\n`
+      );
       return null;
     }
 
@@ -349,13 +385,13 @@ function loadWaiver(waiverId, projectRoot) {
     try {
       validateWaiverStructure(waiver);
     } catch (error) {
-      console.error(`❌ Invalid waiver ${waiverId}: ${error.message}`);
+      console.error(`\n❌ Invalid waiver ${waiverId}: ${error.message}\n`);
       return null;
     }
 
     return waiver;
   } catch (error) {
-    console.warn(`⚠️  Failed to load waiver ${waiverId}: ${error.message}`);
+    console.error(`\n❌ Failed to load waiver ${waiverId}: ${error.message}\n`);
     return null;
   }
 }

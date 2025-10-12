@@ -1,114 +1,203 @@
-# [3.5.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.5.0...v3.5.1) (2025-10-11)
+# [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-12)
 
+## Week 1: Agent-Agency Pattern Integration
+
+### Performance Improvements ⚡
+
+- **policy:** Add PolicyManager with intelligent caching
+  - TTL-based caching (5-minute default, configurable)
+  - 10x faster policy loading on cache hits (~15ms → ~1.5ms)
+  - Graceful fallback to default policy when policy.yaml missing
+  - Cache management API (clear, status, reload)
+  - Cache statistics and monitoring capabilities
+- **budget:** Integrate PolicyManager into budget derivation
+  - Async policy loading for better performance
+  - Consistent policy access across all commands
+  - Reduced file I/O with intelligent caching
+
+### New Features ✨
+
+- **spec:** Add SpecFileManager for YAML ↔ JavaScript conversion
+  - Bidirectional WorkingSpec ↔ YAML conversion
+  - Temporary file support for validation workflows
+  - Backup/restore capabilities with automatic cleanup
+  - Spec file validation utilities
+  - File statistics and metadata tracking
+- **docs:** Add comprehensive MCP Server Patterns guide (527 lines)
+  - 7 proven patterns for MCP server design
+  - Base tool classes and shared utilities
+  - Schema-based validation patterns
+  - Permission systems and security
+  - Real-time monitoring with EventEmitter
+  - Provenance tracking patterns
+  - Graceful error handling strategies
+- **philosophy:** Add Reflexivity framework documentation (406 lines)
+  - Self-audit philosophy for governance tools
+  - Self-waiver system for exceptions
+  - Bootstrap strategy (manual → peer → self)
+  - Implementation roadmap (Q4 2025 - Q2 2026)
+  - Success criteria and metrics
+
+### Programmatic API 🔧
+
+- **api:** Export PolicyManager for programmatic use
+  - `PolicyManager` class with full configuration
+  - `defaultPolicyManager` singleton for convenience
+  - Convenience exports: `loadPolicy()`, `clearCache()`, `getCacheStatus()`
+- **api:** Export SpecFileManager for programmatic use
+  - `SpecFileManager` class with full configuration
+  - `defaultSpecFileManager` singleton for convenience
+  - Convenience exports: `specToYaml()`, `yamlToSpec()`, `readSpecFile()`, `writeSpecFile()`
+
+### Testing 🧪
+
+- **test:** Add comprehensive test suites for new modules
+  - PolicyManager: 18 tests (100% coverage)
+  - SpecFileManager: 22 tests (100% coverage)
+  - Budget Derivation (async): 15 tests (100% coverage)
+  - Total: 55 new tests, all passing
+- **test:** Migrate budget derivation tests to async
+  - Updated all tests to use async/await
+  - Use real temporary files instead of mocks
+  - Improved test reliability and isolation
+
+### Documentation 📚
+
+- **docs:** Add internal integration status documentation
+  - `AGENT_AGENCY_INTEGRATION_STATUS.md` (481 lines)
+  - `INTEGRATION_TODO.md` (384 lines)
+  - `IMPLEMENTATION_COMPLETE.md` (summary)
+  - `WEEK1_COMPLETE_SUMMARY.md` (detailed report)
+
+### Breaking Changes
+
+**None** - All changes are backward compatible:
+
+- New modules use additive exports
+- Existing APIs untouched
+- Convenience exports maintain compatibility
+- All 194 tests passing
+
+---
+
+# [3.5.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.5.0...v3.5.1) (2025-10-11)
 
 ### Features
 
-* **validation:** add comprehensive policy and waiver validation ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** add comprehensive policy and waiver validation ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Policy validation on load with detailed error messages
   - Waiver structure validation with format checking
   - Enhanced error messages with actionable remediation steps
   - Compliance score calculation and display
-* **dx:** improve developer experience with better validation feedback ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **dx:** improve developer experience with better validation feedback ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Add default policy fallback when policy.yaml is missing
   - Add comprehensive validation error context
   - Display compliance score and grade in validation output
   - Improve error messages throughout validation system
+- **waiver:** enhance waiver validation with explicit error reporting
+  - Validate waiver ID format before file loading (must be WV-\d{4})
+  - Check waiver gate coverage for budget_limit violations
+  - Show expected file path when waiver not found
+  - Warn when budget exceeded but no waivers referenced
+- **policy:** improve policy loading diagnostics
+  - Detect when policy file exists but isn't loaded (cache/path issues)
+  - Show current working directory and project root for debugging
+  - Display cache hit/miss status for troubleshooting
 
+### Fixed
+
+- **waiver:** silent failures now produce actionable error messages
+- **validation:** invalid waiver IDs now show correct format requirement
+- **validation:** add deprecation notice for change_budget field in working spec
 
 ### Documentation
 
-* move internal summary and audit documents to docs/internal folder
-
+- move internal summary and audit documents to docs/internal folder
+- add AGENT_WAIVER_POLICY_DIAGNOSIS.md with root cause analysis
+- add AGENT_STUCK_QUICK_SUMMARY.md for agent troubleshooting
 
 # [3.5.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v3.5.0) (2025-10-11)
 
-
 ### Features
 
-* **types:** create dedicated TypeScript types package (@paths.design/caws-types) ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **types:** create dedicated TypeScript types package (@paths.design/caws-types) ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Standardized validation result types
   - Working spec type definitions
   - Policy configuration types
   - Budget and waiver types
-* **validation:** add JSON output format for validation results ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** add JSON output format for validation results ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Structured JSON output with --format=json flag
   - Machine-readable validation results
   - Integration-friendly error format
-* **validation:** implement budget utilization tracking ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** implement budget utilization tracking ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Real-time percentage tracking of budget usage
   - Budget warnings at 75%, 90%, and 100% thresholds
   - Detailed burn-up reporting with utilization metrics
-* **validation:** add tier-specific validation rules ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** add tier-specific validation rules ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Tier 1 requirements: observability, rollback, security
   - Comprehensive tier-based quality gate enforcement
   - Risk-appropriate validation strictness
-* **validation:** enhance auto-fix system with structured suggestions ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** enhance auto-fix system with structured suggestions ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Structured fix objects with descriptions and reasons
   - Dry-run mode for previewing auto-fixes (--dry-run flag)
   - Expanded auto-fix coverage for invariants, contracts, and more
-* **policy:** extend policy schema with quality gate thresholds ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **policy:** extend policy schema with quality gate thresholds ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Per-tier coverage and mutation thresholds
   - Contract requirements configuration
   - Manual review triggers
   - Waiver approval workflow definitions
-* **waiver:** implement comprehensive waiver lifecycle management ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **waiver:** implement comprehensive waiver lifecycle management ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Detailed waiver metadata tracking
   - Status management (active, expired, revoked)
   - Budget delta specification
   - Approval chain documentation
 
-
 ### Tests
 
-* **validation:** achieve 100% test coverage on validation logic ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
+- **validation:** achieve 100% test coverage on validation logic ([#TBD](https://github.com/Paths-Design/coding-agent-working-standard/issues/TBD))
   - Comprehensive spec validation test suite
   - Budget derivation test coverage
   - 168 passing tests across all validation modules
 
-
 ### Documentation
 
-* add agent-agency integration implementation guide
-* add migration guide for v3.5.0 features
-* document additional improvement patterns from agent-agency
-
+- add agent-agency integration implementation guide
+- add migration guide for v3.5.0 features
+- document additional improvement patterns from agent-agency
 
 # [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-09)
 
-
 ### Bug Fixes
 
-* **mcp:** add error handling and debug logging to tool/resource handlers ([4cac334](https://github.com/Paths-Design/coding-agent-working-standard/commit/4cac3340d96b73c34b6c1e45fffc1223410dc428))
-* **mcp:** add initialize handler and make tool listing synchronous ([8722e95](https://github.com/Paths-Design/coding-agent-working-standard/commit/8722e952905a1efaa2948bccaaad4899faed4fa0))
-* **mcp:** add server capabilities to MCP SDK constructor ([fb1309b](https://github.com/Paths-Design/coding-agent-working-standard/commit/fb1309b2de08413135456c6dcecd38c179f6d867))
-* **mcp:** convert MCP server to ES modules and fix bundling ([06900d0](https://github.com/Paths-Design/coding-agent-working-standard/commit/06900d026eb5ba8a70050e2eb759e5593131c679))
-* **mcp:** correct bundled CLI path for extension deployment ([2480327](https://github.com/Paths-Design/coding-agent-working-standard/commit/24803271359215ad3b5d8ed1a2b31f71f6db1fbd))
-* **mcp:** update all CLI command paths and names ([2afc486](https://github.com/Paths-Design/coding-agent-working-standard/commit/2afc486cd42796f20645d0d946f1f3d13c559839))
-* **mcp:** use proper MCP SDK schemas for request handlers ([8bbe6b8](https://github.com/Paths-Design/coding-agent-working-standard/commit/8bbe6b82b49ee7e1de59ec7c43fe19191e9274ea))
-* move js-yaml and chalk to dependencies for global install ([3e05031](https://github.com/Paths-Design/coding-agent-working-standard/commit/3e05031139ec046c53ba5e2d9220dcc3c3b73c1c))
-* **vscode:** bundle CLI dependencies from monorepo root ([f1fe37f](https://github.com/Paths-Design/coding-agent-working-standard/commit/f1fe37faa2be19b86699f0cb716f39f8dee9c594))
-* **vscode:** bundle complete CLI node_modules with all transitive deps ([9b9dd8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b9dd8c0a63ea835c2a53f133666e843e7a55f8c))
-* **vscode:** bundle MCP SDK dependencies and fix packaging ([39ac8e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/39ac8e354e4c6b8ca532acb1a84544486c775d30))
-* **vscode:** copy all monorepo node_modules for complete dependency resolution ([1125ddf](https://github.com/Paths-Design/coding-agent-working-standard/commit/1125ddf8bcaf5278dc32974f120db351ab300efb))
-* **vscode:** improve .vscodeignore to prevent monorepo file inclusion ([bfe9a34](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfe9a34b8fa9990f7bff1b307f5368343c31d205))
-
+- **mcp:** add error handling and debug logging to tool/resource handlers ([4cac334](https://github.com/Paths-Design/coding-agent-working-standard/commit/4cac3340d96b73c34b6c1e45fffc1223410dc428))
+- **mcp:** add initialize handler and make tool listing synchronous ([8722e95](https://github.com/Paths-Design/coding-agent-working-standard/commit/8722e952905a1efaa2948bccaaad4899faed4fa0))
+- **mcp:** add server capabilities to MCP SDK constructor ([fb1309b](https://github.com/Paths-Design/coding-agent-working-standard/commit/fb1309b2de08413135456c6dcecd38c179f6d867))
+- **mcp:** convert MCP server to ES modules and fix bundling ([06900d0](https://github.com/Paths-Design/coding-agent-working-standard/commit/06900d026eb5ba8a70050e2eb759e5593131c679))
+- **mcp:** correct bundled CLI path for extension deployment ([2480327](https://github.com/Paths-Design/coding-agent-working-standard/commit/24803271359215ad3b5d8ed1a2b31f71f6db1fbd))
+- **mcp:** update all CLI command paths and names ([2afc486](https://github.com/Paths-Design/coding-agent-working-standard/commit/2afc486cd42796f20645d0d946f1f3d13c559839))
+- **mcp:** use proper MCP SDK schemas for request handlers ([8bbe6b8](https://github.com/Paths-Design/coding-agent-working-standard/commit/8bbe6b82b49ee7e1de59ec7c43fe19191e9274ea))
+- move js-yaml and chalk to dependencies for global install ([3e05031](https://github.com/Paths-Design/coding-agent-working-standard/commit/3e05031139ec046c53ba5e2d9220dcc3c3b73c1c))
+- **vscode:** bundle CLI dependencies from monorepo root ([f1fe37f](https://github.com/Paths-Design/coding-agent-working-standard/commit/f1fe37faa2be19b86699f0cb716f39f8dee9c594))
+- **vscode:** bundle complete CLI node_modules with all transitive deps ([9b9dd8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9b9dd8c0a63ea835c2a53f133666e843e7a55f8c))
+- **vscode:** bundle MCP SDK dependencies and fix packaging ([39ac8e3](https://github.com/Paths-Design/coding-agent-working-standard/commit/39ac8e354e4c6b8ca532acb1a84544486c775d30))
+- **vscode:** copy all monorepo node_modules for complete dependency resolution ([1125ddf](https://github.com/Paths-Design/coding-agent-working-standard/commit/1125ddf8bcaf5278dc32974f120db351ab300efb))
+- **vscode:** improve .vscodeignore to prevent monorepo file inclusion ([bfe9a34](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfe9a34b8fa9990f7bff1b307f5368343c31d205))
 
 ### Features
 
-* add pnpm & lerna workspace support for complete monorepo coverage ([fdc6479](https://github.com/Paths-Design/coding-agent-working-standard/commit/fdc6479f452fa7f8fd6475fccedb0d2e66bc2af0))
-* **cli:** implement esbuild bundling for 95.8% size reduction ([3ef4ee8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3ef4ee881ed17a6ad3b0b0bd84860a87e09db819))
-* **cli:** implement missing CLI commands (evaluate, iterate, waivers) ([7377a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7377a0e27f220e774f2db8f6ba592ec79e0f7a2d))
-* complete P1 Sprint 2 - Trust & Reliability fixes ([a9e8400](https://github.com/Paths-Design/coding-agent-working-standard/commit/a9e84003f9d5430be9619235183edf401c13fcec))
-* complete P1 Sprint 3 - Enhanced Error Context ([6ed118b](https://github.com/Paths-Design/coding-agent-working-standard/commit/6ed118b1933f26153f603ec7e6bed8c7bd4b7b1a))
-* implement comprehensive monitoring system for CAWS ([3d45b49](https://github.com/Paths-Design/coding-agent-working-standard/commit/3d45b498b1b0a64d0a14c6807f156f35c80eae9a))
-* **p1:** achieve true 100% CLI/MCP parity with workflow and quality-monitor commands ([81aa370](https://github.com/Paths-Design/coding-agent-working-standard/commit/81aa3702de31248e563d89537c7063ef81fc579d))
-* **vscode:** add publisher field and improve .vscodeignore for packaging ([7b6ba7e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7b6ba7e1234b75c8a47796bf615845e8926043a8))
-* **vscode:** auto-register MCP server with Cursor on extension activation ([c28b6c9](https://github.com/Paths-Design/coding-agent-working-standard/commit/c28b6c9f27516c02f8d1a15ab346b2a9b57a0a7b))
-
+- add pnpm & lerna workspace support for complete monorepo coverage ([fdc6479](https://github.com/Paths-Design/coding-agent-working-standard/commit/fdc6479f452fa7f8fd6475fccedb0d2e66bc2af0))
+- **cli:** implement esbuild bundling for 95.8% size reduction ([3ef4ee8](https://github.com/Paths-Design/coding-agent-working-standard/commit/3ef4ee881ed17a6ad3b0b0bd84860a87e09db819))
+- **cli:** implement missing CLI commands (evaluate, iterate, waivers) ([7377a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7377a0e27f220e774f2db8f6ba592ec79e0f7a2d))
+- complete P1 Sprint 2 - Trust & Reliability fixes ([a9e8400](https://github.com/Paths-Design/coding-agent-working-standard/commit/a9e84003f9d5430be9619235183edf401c13fcec))
+- complete P1 Sprint 3 - Enhanced Error Context ([6ed118b](https://github.com/Paths-Design/coding-agent-working-standard/commit/6ed118b1933f26153f603ec7e6bed8c7bd4b7b1a))
+- implement comprehensive monitoring system for CAWS ([3d45b49](https://github.com/Paths-Design/coding-agent-working-standard/commit/3d45b498b1b0a64d0a14c6807f156f35c80eae9a))
+- **p1:** achieve true 100% CLI/MCP parity with workflow and quality-monitor commands ([81aa370](https://github.com/Paths-Design/coding-agent-working-standard/commit/81aa3702de31248e563d89537c7063ef81fc579d))
+- **vscode:** add publisher field and improve .vscodeignore for packaging ([7b6ba7e](https://github.com/Paths-Design/coding-agent-working-standard/commit/7b6ba7e1234b75c8a47796bf615845e8926043a8))
+- **vscode:** auto-register MCP server with Cursor on extension activation ([c28b6c9](https://github.com/Paths-Design/coding-agent-working-standard/commit/c28b6c9f27516c02f8d1a15ab346b2a9b57a0a7b))
 
 ### Performance Improvements
 
-* **mcp:** optimize findWorkingSpecs to eliminate timeout ([436ab63](https://github.com/Paths-Design/coding-agent-working-standard/commit/436ab635438e61e50d78477f2180573b7388739b))
+- **mcp:** optimize findWorkingSpecs to eliminate timeout ([436ab63](https://github.com/Paths-Design/coding-agent-working-standard/commit/436ab635438e61e50d78477f2180573b7388739b))
 
 ## [3.3.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.3.1) (2025-10-08)
 
