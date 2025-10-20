@@ -2,7 +2,7 @@
   "name": "caws-vscode-extension",
   "displayName": "CAWS - Coding Agent Workflow System",
   "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
-  "version": "0.9.0",
+  "version": "0.9.3",
   "publisher": "paths-design",
   "license": "MIT",
   "engines": {

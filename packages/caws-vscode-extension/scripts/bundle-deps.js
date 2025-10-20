@@ -11,6 +11,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const EXTENSION_ROOT = path.resolve(__dirname, '..');
 const MONOREPO_ROOT = path.resolve(EXTENSION_ROOT, '../..');
@@ -38,26 +39,27 @@ async function main() {
       path.join(mcpServerDest, 'package.json')
     );
 
-    // Copy MCP server dependencies
-    console.log('  Copying MCP server dependencies...');
-    const mcpDestModules = path.join(mcpServerDest, 'node_modules');
-    await fs.ensureDir(mcpDestModules);
+    // Copy src directory with logger and monitoring
+    const mcpServerSrc = path.join(mcpServerSource, 'src');
+    if (await fs.pathExists(mcpServerSrc)) {
+      await fs.copy(mcpServerSrc, path.join(mcpServerDest, 'src'));
+      console.log('  ✅ Copied src directory');
+    } else {
+      console.warn('  ⚠️  src directory not found');
+    }
 
-    // Copy from monorepo root (where the dependencies are actually installed)
-    const monorepoNodeModules = path.join(MONOREPO_ROOT, 'node_modules');
-    if (await fs.pathExists(monorepoNodeModules)) {
-      // Copy @modelcontextprotocol and its dependencies
-      const mcpDeps = ['@modelcontextprotocol', 'zod', 'content-type', 'raw-body'];
+    // Install MCP server dependencies
+    console.log('  Installing MCP server dependencies...');
 
-      for (const dep of mcpDeps) {
-        const depPath = path.join(monorepoNodeModules, dep);
-        if (await fs.pathExists(depPath)) {
-          await fs.copy(depPath, path.join(mcpDestModules, dep));
-          console.log(`    ✅ Copied ${dep}`);
-        } else {
-          console.warn(`    ⚠️  ${dep} not found in monorepo node_modules`);
-        }
-      }
+    try {
+      execSync('npm install --production --no-audit --no-fund', {
+        cwd: mcpServerDest,
+        stdio: 'inherit',
+      });
+      console.log('  ✅ Installed all dependencies');
+    } catch (error) {
+      console.error('  ❌ Failed to install dependencies:', error.message);
+      throw error;
     }
 
     console.log('✅ Bundled MCP server\n');
@@ -73,7 +75,6 @@ async function main() {
     const cliBundleSource = path.join(cliSource, 'dist-bundle/index.js');
     if (!(await fs.pathExists(cliBundleSource))) {
       console.log('  Building CLI bundle with esbuild...');
-      const { execSync } = require('child_process');
       execSync('node esbuild.config.js', { cwd: cliSource, stdio: 'inherit' });
     }
 

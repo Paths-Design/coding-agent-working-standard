@@ -1,6 +1,6 @@
 /**
  * @fileoverview Validate Command Handler
- * Handles validation commands for CAWS CLI
+ * Handles validation commands for CAWS CLI with multi-spec support
  * @author @darianrosebrook
  */
 
@@ -15,47 +15,44 @@ const {
   getComplianceGrade,
 } = require('../validation/spec-validation');
 
+// Import spec resolution system
+const {
+  resolveSpec,
+  suggestMigration,
+  interactiveSpecSelection,
+} = require('../utils/spec-resolver');
+
 /**
  * Validate command handler
- * Enhanced with JSON output format support
- * @param {string} specFile - Path to spec file
+ * Enhanced with multi-spec support and JSON output format
+ * @param {string} specFile - Path to spec file (optional, uses spec resolution)
  * @param {Object} options - Command options
+ * @param {string} [options.specId] - Feature-specific spec ID
+ * @param {boolean} [options.interactive] - Use interactive spec selection
+ * @param {boolean} [options.format] - Output format (json)
  */
-async function validateCommand(specFile, options) {
+async function validateCommand(specFile, options = {}) {
   try {
-    let specPath = specFile || path.join('.caws', 'working-spec.yaml');
+    // Resolve spec using priority system
+    const resolved = await resolveSpec({
+      specId: options.specId,
+      specFile,
+      warnLegacy: options.format !== 'json',
+      interactive: options.interactive || false,
+    });
 
-    if (!fs.existsSync(specPath)) {
-      if (options.format === 'json') {
-        console.log(
-          JSON.stringify(
-            {
-              passed: false,
-              verdict: 'fail',
-              errors: [
-                {
-                  field: 'spec_file',
-                  message: `Spec file not found: ${specPath}`,
-                  suggestion: 'Run "caws init" first to create a working spec',
-                },
-              ],
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        console.error(chalk.red(`❌ Spec file not found: ${specPath}`));
-        console.error(chalk.blue('💡 Run "caws init" first to create a working spec'));
-      }
-      process.exit(1);
+    const { path: specPath, type: specType, spec } = resolved;
+
+    // Suggest migration if using legacy spec
+    if (specType === 'legacy' && options.format !== 'json') {
+      await suggestMigration();
     }
 
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
-
     if (options.format !== 'json') {
-      console.log(chalk.cyan('🔍 Validating CAWS working spec...'));
+      console.log(
+        chalk.cyan(`🔍 Validating ${specType === 'feature' ? 'feature' : 'working'} spec...`)
+      );
+      console.log(chalk.gray(`   Spec: ${path.relative(process.cwd(), specPath)}`));
     }
 
     const result = validateWorkingSpecWithSuggestions(spec, {
@@ -64,16 +61,87 @@ async function validateCommand(specFile, options) {
       suggestions: !options.quiet,
       checkBudget: true,
       projectRoot: path.dirname(specPath),
+      specType,
     });
+
+    // Enhanced validation for multi-spec scenarios
+    const enhancedValidation = { ...result };
+
+    if (specType === 'feature') {
+      // Check for potential issues in feature specs
+      const featureIssues = [];
+
+      // Check scope conflicts (if multiple specs exist)
+      const { checkMultiSpecStatus } = require('../utils/spec-resolver');
+      const multiSpecStatus = await checkMultiSpecStatus();
+
+      if (multiSpecStatus.specCount > 1) {
+        const { checkScopeConflicts } = require('../utils/spec-resolver');
+        const conflicts = await checkScopeConflicts(
+          Object.keys(multiSpecStatus.registry?.specs || {})
+        );
+
+        if (conflicts.length > 0) {
+          const myConflicts = conflicts.filter((c) => c.spec1 === spec.id || c.spec2 === spec.id);
+
+          if (myConflicts.length > 0) {
+            featureIssues.push({
+              type: 'warning',
+              message: `Scope conflicts detected with other specs`,
+              details: myConflicts.map((c) => {
+                const otherSpec = c.spec1 === spec.id ? c.spec2 : c.spec1;
+                return `Conflict with ${otherSpec}: ${c.conflicts.join(', ')}`;
+              }),
+            });
+          }
+        }
+      }
+
+      // Check for missing contracts in feature specs
+      if (spec.contracts && spec.contracts.length === 0 && spec.mode === 'feature') {
+        featureIssues.push({
+          type: 'info',
+          message: 'Consider adding API contracts for better integration',
+          suggestion: 'Add contracts section to define API boundaries',
+        });
+      }
+
+      // Check for overly broad scopes
+      if (spec.scope && spec.scope.in) {
+        const broadPatterns = spec.scope.in.filter(
+          (pattern) => pattern === 'src/' || pattern === 'tests/' || pattern.includes('*')
+        );
+
+        if (broadPatterns.length > 0) {
+          featureIssues.push({
+            type: 'warning',
+            message: 'Broad scope patterns detected',
+            details: `Patterns like ${broadPatterns.join(', ')} may conflict with other features`,
+            suggestion: 'Use more specific scope.in paths',
+          });
+        }
+      }
+
+      // Add feature-specific issues to validation result
+      if (featureIssues.length > 0) {
+        enhancedValidation.issues = (enhancedValidation.issues || []).concat(featureIssues);
+        enhancedValidation.featureValidation = {
+          passed: featureIssues.filter((i) => i.type === 'error').length === 0,
+          issues: featureIssues,
+        };
+      }
+    }
+
+    const finalResult = enhancedValidation;
 
     // Format output based on requested format
     if (options.format === 'json') {
       // Structured JSON output matching CAWSValidationResult
       const jsonResult = {
-        passed: result.valid,
+        passed: finalResult.valid,
         cawsVersion: '3.4.0',
         timestamp: new Date().toISOString(),
-        verdict: result.valid ? 'pass' : 'fail',
+        verdict: finalResult.valid ? 'pass' : 'fail',
         spec: {
           id: spec.id,
           title: spec.title,
@@ -81,21 +149,24 @@ async function validateCommand(specFile, options) {
           mode: spec.mode,
         },
         validation: {
-          errors: result.errors || [],
-          warnings: result.warnings || [],
-          fixes: result.fixes || [],
+          errors: finalResult.errors || [],
+          warnings: finalResult.warnings || [],
+          fixes: finalResult.fixes || [],
         },
-        budgetCompliance: result.budget_check || null,
+        budgetCompliance: finalResult.budget_check || null,
+        specType,
+        specPath: path.relative(process.cwd(), specPath),
+        featureValidation: finalResult.featureValidation,
       };
 
       console.log(JSON.stringify(jsonResult, null, 2));
 
-      if (!result.valid) {
+      if (!finalResult.valid) {
         process.exit(1);
       }
     } else {
       // Human-readable text output
-      if (result.valid) {
+      if (finalResult.valid) {
         console.log(chalk.green('✅ Working spec validation passed'));
         if (!options.quiet) {
           console.log(chalk.gray(`   Risk tier: ${spec.risk_tier}`));
@@ -103,10 +174,15 @@ async function validateCommand(specFile, options) {
           if (spec.title) {
             console.log(chalk.gray(`   Title: ${spec.title}`));
           }
-          if (result.complianceScore !== undefined) {
-            const grade = getComplianceGrade(result.complianceScore);
-            const scorePercent = (result.complianceScore * 100).toFixed(0);
-            const scoreColor = result.complianceScore >= 0.9 ? 'green' : result.complianceScore >= 0.7 ? 'yellow' : 'red';
+          if (finalResult.complianceScore !== undefined) {
+            const grade = getComplianceGrade(finalResult.complianceScore);
+            const scorePercent = (finalResult.complianceScore * 100).toFixed(0);
+            const scoreColor =
+              finalResult.complianceScore >= 0.9
+                ? 'green'
+                : finalResult.complianceScore >= 0.7
+                  ? 'yellow'
+                  : 'red';
             console.log(chalk[scoreColor](`   Compliance: ${scorePercent}% (Grade ${grade})`));
           }
         }
@@ -114,7 +190,7 @@ async function validateCommand(specFile, options) {
         console.log(chalk.red('❌ Working spec validation failed'));
 
         // Show errors
-        result.errors.forEach((error, index) => {
+        finalResult.errors.forEach((error, index) => {
           console.log(`   ${index + 1}. ${chalk.red(error.message)}`);
           if (error.suggestion) {
             console.log(`      ${chalk.blue('💡 ' + error.suggestion)}`);
@@ -122,9 +198,9 @@ async function validateCommand(specFile, options) {
         });
 
         // Show warnings
-        if (result.warnings && result.warnings.length > 0) {
+        if (finalResult.warnings && finalResult.warnings.length > 0) {
           console.log(chalk.yellow('\n⚠️  Warnings:'));
-          result.warnings.forEach((warning, index) => {
+          finalResult.warnings.forEach((warning, index) => {
             console.log(`   ${index + 1}. ${chalk.yellow(warning.message)}`);
           });
         }

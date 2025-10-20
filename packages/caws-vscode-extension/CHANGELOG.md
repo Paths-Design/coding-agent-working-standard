@@ -4,6 +4,32 @@ All notable changes to the CAWS VS Code Extension will be documented in this fil
 
 ## [Unreleased]
 
+## [0.9.3] - 2025-10-13
+
+### Fixed
+
+- MCP server now outputs pure JSON responses (no ANSI escape codes or colored output)
+- Fixed JSON parsing errors in MCP client communication
+- Added CAWS_MCP_SERVER environment variable to force JSON-only logging
+- Resolves client communication errors with colored/formatted log output
+
+## [0.9.2] - 2025-10-13
+
+### Fixed
+
+- MCP server now properly installs all dependencies including chokidar, pino, and their transitive dependencies
+- Changed bundling strategy from manual copying to `npm install` for reliable dependency resolution
+- Resolves ERR_MODULE_NOT_FOUND for @modelcontextprotocol/sdk and other packages
+
+## [0.9.1] - 2025-10-13
+
+### Fixed
+
+- MCP server bundling now includes src/ directory with logger.js and monitoring/index.js
+- Resolves ERR_MODULE_NOT_FOUND error when initializing extension on new machines
+
+## [0.9.0] - 2025-10-10 (Pre-release)
+
 ### Added
 
 - OutputChannel-based structured logging
@@ -21,8 +47,6 @@ All notable changes to the CAWS VS Code Extension will be documented in this fil
 
 - Marketplace metadata compliance
 - Logging best practices
-
-## [0.9.0] - 2025-10-10 (Pre-release)
 
 ### Added
 
@@ -83,4 +107,3 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Semantic V
 ---
 
 Last updated: October 10, 2025
-

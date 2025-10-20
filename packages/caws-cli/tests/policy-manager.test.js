@@ -42,7 +42,7 @@ describe('PolicyManager', () => {
         // Continue with cleanup
       }
     }
-    
+
     // Cleanup
     await fs.remove(tempDir);
     policyManager.clearCache();

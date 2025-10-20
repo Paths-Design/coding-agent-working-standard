@@ -11,7 +11,7 @@ const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 
 /**
- * Load working specification
+ * Load working specification (legacy single file approach)
  * @param {string} specPath - Path to working spec
  * @returns {Promise<Object|null>} Parsed spec or null
  */
@@ -25,6 +25,20 @@ async function loadWorkingSpec(specPath = '.caws/working-spec.yaml') {
     return yaml.load(content);
   } catch (error) {
     return null;
+  }
+}
+
+/**
+ * Load specs from the new multi-spec system
+ * @returns {Promise<Array>} Array of spec objects
+ */
+async function loadSpecsFromMultiSpec() {
+  const { listSpecFiles } = require('./specs');
+
+  try {
+    return await listSpecFiles();
+  } catch (error) {
+    return [];
   }
 }
 
@@ -299,30 +313,451 @@ function displayStatus(data) {
 }
 
 /**
- * Generate actionable suggestions based on status
+ * Generate actionable suggestions based on status and mode
  * @param {Object} data - Status data
+ * @param {string} currentMode - Current CAWS mode
  * @returns {string[]} Array of suggestions
  */
-function generateSuggestions(data) {
+function generateSuggestions(data, currentMode) {
+  const { spec, specs, hooks, provenance, waivers } = data;
+  const modes = require('../config/modes');
   const suggestions = [];
 
-  if (!data.spec) {
-    suggestions.push('Initialize CAWS: caws init .');
+  // Basic setup suggestions
+  if (!spec && (!specs || specs.length === 0)) {
+    suggestions.push('Create a spec: caws specs create <id>');
   }
 
-  if (!data.hooks.installed) {
+  // Mode-specific suggestions
+  if (modes.isFeatureEnabled('gitHooks', currentMode) && !hooks.installed) {
     suggestions.push('Install Git hooks: caws hooks install');
   }
 
-  if (!data.provenance.exists) {
+  if (modes.isFeatureEnabled('provenance', currentMode) && !provenance.exists) {
     suggestions.push('Initialize provenance tracking: caws provenance init');
   }
 
-  if (data.spec && !data.hooks.installed && !data.provenance.exists) {
-    suggestions.push('Complete setup: caws scaffold');
+  if (modes.isFeatureEnabled('waivers', currentMode) && !waivers.exists) {
+    suggestions.push('Initialize waiver system: caws waivers create (when needed)');
   }
 
+  // Quality gate suggestions
+  if (modes.isFeatureEnabled('qualityGates', currentMode)) {
+    if (spec || (specs && specs.length > 0)) {
+      suggestions.push('Run quality gates: caws diagnose');
+    }
+  }
+
+  // Mode switching suggestion
+  suggestions.push('Switch modes: caws mode set --interactive');
+
   return suggestions;
+}
+
+/**
+ * Create progress bar string
+ * @param {number} current - Current value
+ * @param {number} total - Total value
+ * @param {number} width - Bar width
+ * @returns {string} Progress bar string
+ */
+function createProgressBar(current, total, width = 20) {
+  if (total === 0) return '░'.repeat(width);
+
+  const percentage = Math.min(current / total, 1);
+  const filled = Math.round(percentage * width);
+  const empty = width - filled;
+
+  return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+
+/**
+ * Get color for progress percentage
+ * @param {number} percentage - Progress percentage
+ * @returns {string} Chalk color function
+ */
+function getProgressColor(percentage) {
+  if (percentage >= 80) return chalk.green;
+  if (percentage >= 50) return chalk.yellow;
+  return chalk.red;
+}
+
+/**
+ * Display enhanced visual status
+ * @param {Object} data - Status data
+ * @param {string} currentMode - Current CAWS mode
+ */
+function displayVisualStatus(data, currentMode) {
+  const { spec, specs, hooks, provenance, waivers, gates } = data;
+  const modes = require('../config/modes');
+  const tierConfig = modes.getTier(currentMode);
+
+  console.log(
+    chalk.bold.cyan(
+      `\n📊 CAWS Project Status (${tierConfig.icon} ${tierConfig.color(currentMode)})`
+    )
+  );
+  console.log(
+    chalk.cyan(
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+    )
+  );
+
+  // Multi-spec system status
+  if (specs && specs.length > 0) {
+    console.log(chalk.green(`✅ Specs System (${specs.length} specs)`));
+
+    // Show active specs first
+    const activeSpecs = specs.filter((s) => s.status === 'active');
+    const draftSpecs = specs.filter((s) => s.status === 'draft');
+    const completedSpecs = specs.filter((s) => s.status === 'completed');
+
+    if (activeSpecs.length > 0) {
+      console.log(
+        chalk.gray(`   Active: ${activeSpecs.map((s) => `${s.id}(${s.type})`).join(', ')}`)
+      );
+    }
+    if (draftSpecs.length > 0) {
+      console.log(
+        chalk.gray(`   Draft: ${draftSpecs.length} spec${draftSpecs.length > 1 ? 's' : ''}`)
+      );
+      // Show details for draft specs if not too many
+      if (draftSpecs.length <= 3) {
+        draftSpecs.forEach((s) => {
+          console.log(chalk.gray(`     • ${s.id}: ${s.title}`));
+        });
+      }
+    }
+    if (completedSpecs.length > 0) {
+      console.log(
+        chalk.gray(
+          `   Completed: ${completedSpecs.length} spec${completedSpecs.length > 1 ? 's' : ''}`
+        )
+      );
+      // Show details for completed specs if not too many
+      if (completedSpecs.length <= 3) {
+        completedSpecs.forEach((s) => {
+          console.log(chalk.gray(`     • ${s.id}: ${s.title}`));
+        });
+      }
+    }
+
+    // Overall specs progress
+    const totalSpecs = specs.length;
+    const completedSpecsCount = specs.filter((s) => s.status === 'completed').length;
+    const activeSpecsCount = specs.filter((s) => s.status === 'active').length;
+    const progressPercentage =
+      totalSpecs > 0 ? Math.round((completedSpecsCount / totalSpecs) * 100) : 0;
+    const progressBar = createProgressBar(completedSpecsCount, totalSpecs);
+    const color = getProgressColor(progressPercentage);
+
+    console.log(
+      chalk.gray(
+        `   Overall Progress: ${color(`${progressPercentage}%`)} ${progressBar} ${completedSpecsCount}/${totalSpecs} completed`
+      )
+    );
+
+    if (activeSpecsCount > 0) {
+      console.log(chalk.gray(`   Active Features: ${activeSpecsCount} in progress`));
+    }
+
+    // Show risk tier breakdown
+    const riskBreakdown = {};
+    specs.forEach((s) => {
+      const tier = s.risk_tier || 'T3';
+      riskBreakdown[tier] = (riskBreakdown[tier] || 0) + 1;
+    });
+
+    if (Object.keys(riskBreakdown).length > 1) {
+      const tierDisplay = Object.entries(riskBreakdown)
+        .map(([tier, count]) => `${tier}:${count}`)
+        .join(', ');
+      console.log(chalk.gray(`   Risk Distribution: ${tierDisplay}`));
+    }
+  } else if (spec) {
+    // Legacy single spec system
+    console.log(chalk.green('✅ Working Spec'));
+    console.log(chalk.gray(`   ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`));
+    console.log(chalk.gray(`   Title: ${spec.title}`));
+
+    // Acceptance Criteria Progress
+    if (spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
+      const total = spec.acceptance_criteria.length;
+      const completed = spec.acceptance_criteria.filter((c) => c.completed).length;
+      const percentage = Math.round((completed / total) * 100);
+
+      const color = getProgressColor(percentage);
+      const bar = createProgressBar(completed, total);
+
+      console.log(
+        chalk.gray(
+          `   Acceptance Criteria: ${color(`${percentage}%`)} ${bar} ${completed}/${total}`
+        )
+      );
+    }
+
+    // Test Coverage (placeholder for now)
+    console.log(
+      chalk.gray(
+        `   Test Coverage: ${chalk.blue('Calculating...')} ${createProgressBar(0, 100)} 0%`
+      )
+    );
+
+    // Risk Tier Indicator
+    const riskColor =
+      spec.risk_tier === 'T1' ? chalk.red : spec.risk_tier === 'T2' ? chalk.yellow : chalk.green;
+    console.log(
+      chalk.gray(
+        `   Risk Tier: ${riskColor(spec.risk_tier)} (Quality Gates: ${riskColor('Active')})`
+      )
+    );
+  } else {
+    console.log(chalk.red('❌ No Specs Found'));
+    console.log(chalk.gray('   No working spec or specs directory found'));
+    console.log(chalk.yellow('   💡 Run: caws specs create <id> to create specs'));
+    console.log(chalk.yellow('   💡 Or run: caws init . for legacy single spec'));
+  }
+
+  console.log('');
+
+  // Git Hooks Status (only show in modes that support it)
+  if (modes.isFeatureEnabled('gitHooks', currentMode)) {
+    if (hooks.installed) {
+      const hookBar = createProgressBar(hooks.count, hooks.total);
+      console.log(chalk.green(`✅ Git Hooks`));
+      console.log(
+        chalk.gray(`   ${hookBar} ${hooks.count}/${hooks.total} active: ${hooks.active.join(', ')}`)
+      );
+    } else {
+      console.log(chalk.yellow('⚠️  Git Hooks'));
+      console.log(chalk.gray('   No CAWS git hooks installed'));
+      console.log(chalk.yellow('   💡 Run: caws hooks install'));
+    }
+  }
+
+  console.log('');
+
+  // Provenance Status (only show in modes that support it)
+  if (modes.isFeatureEnabled('provenance', currentMode)) {
+    if (provenance.exists) {
+      const provenanceBar = createProgressBar(provenance.count, Math.max(provenance.count, 10));
+      console.log(chalk.green('✅ Provenance'));
+      console.log(chalk.gray(`   ${provenanceBar} ${provenance.count} entries`));
+      if (provenance.lastUpdate) {
+        console.log(chalk.gray(`   Last update: ${getTimeSince(provenance.lastUpdate)}`));
+      }
+    } else {
+      console.log(chalk.yellow('⚠️  Provenance'));
+      console.log(chalk.gray('   Provenance tracking not initialized'));
+      console.log(chalk.yellow('   💡 Run: caws provenance init'));
+    }
+  }
+
+  console.log('');
+
+  // Waivers Status (only show in modes that support it)
+  if (modes.isFeatureEnabled('waivers', currentMode)) {
+    if (waivers.exists && waivers.total > 0) {
+      const waiverBar = createProgressBar(waivers.active, waivers.total);
+      console.log(chalk.green('✅ Quality Gate Waivers'));
+      console.log(
+        chalk.gray(
+          `   ${waiverBar} ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
+        )
+      );
+      console.log(chalk.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? 's' : ''}`));
+    } else if (waivers.exists) {
+      console.log(chalk.blue('ℹ️  Quality Gate Waivers'));
+      console.log(chalk.gray('   No waivers configured'));
+    } else {
+      console.log(chalk.yellow('⚠️  Quality Gate Waivers'));
+      console.log(chalk.gray('   Waiver system not initialized'));
+      console.log(chalk.yellow('   💡 Run: caws waivers create (when needed)'));
+    }
+  }
+
+  console.log('');
+
+  // Quality Gates Status (only show in modes that support it)
+  if (modes.isFeatureEnabled('qualityGates', currentMode)) {
+    console.log(chalk.blue('🛡️  Quality Gates'));
+    if (gates.checked) {
+      if (gates.passed) {
+        console.log(chalk.green(`   ${createProgressBar(1, 1)} All gates passed`));
+        gates.results?.forEach((gate) => {
+          const gateStatus = gate.status === 'passed' ? chalk.green('✓') : chalk.red('✗');
+          console.log(chalk.gray(`     ${gateStatus} ${gate.name}: ${gate.message || 'OK'}`));
+        });
+      } else {
+        console.log(
+          chalk.red(
+            `   ${createProgressBar(0, gates.results?.length || 1)} ${gates.failed || 0} gates failed`
+          )
+        );
+        gates.results?.forEach((gate) => {
+          const gateStatus = gate.status === 'passed' ? chalk.green('✓') : chalk.red('✗');
+          console.log(chalk.gray(`     ${gateStatus} ${gate.name}: ${gate.message || 'Failed'}`));
+        });
+      }
+    } else {
+      console.log(chalk.gray(`   ${gates.message}`));
+    }
+  }
+
+  // Progress Summary
+  const overallProgress = calculateOverallProgress(data);
+  const progressColor = getProgressColor(overallProgress);
+  const progressBar = createProgressBar(overallProgress, 100);
+
+  console.log('');
+  console.log(chalk.bold.blue('📈 Overall Progress'));
+  console.log(chalk.gray(`   ${progressBar} ${progressColor(`${overallProgress}%`)} complete`));
+
+  // Suggestions (mode-aware)
+  const suggestions = generateSuggestions(data, currentMode);
+  if (suggestions.length > 0) {
+    console.log(chalk.bold.yellow('\n💡 Next Steps:'));
+    suggestions.forEach((suggestion, index) => {
+      console.log(chalk.yellow(`   ${index + 1}. ${suggestion}`));
+    });
+  }
+
+  // Quick Links (mode-aware)
+  console.log(chalk.bold.blue('\n📚 Quick Actions:'));
+  if (spec || (specs && specs.length > 0)) {
+    if (modes.isFeatureEnabled('validate', currentMode)) {
+      console.log(chalk.blue('   View specs: caws specs list'));
+    }
+    if (modes.isFeatureEnabled('validate', currentMode)) {
+      console.log(chalk.blue('   Validate: caws validate'));
+    }
+  }
+
+  if (modes.isFeatureEnabled('gitHooks', currentMode) && hooks.installed) {
+    console.log(chalk.blue('   View hooks: caws hooks status'));
+  }
+
+  if (modes.isFeatureEnabled('provenance', currentMode) && provenance.exists) {
+    console.log(chalk.blue('   View provenance: caws provenance show'));
+  }
+
+  if (modes.isFeatureEnabled('waivers', currentMode) && waivers.exists && waivers.total > 0) {
+    console.log(chalk.blue('   View waivers: caws waivers list'));
+  }
+
+  console.log(chalk.blue('   Get help: caws help'));
+  console.log(chalk.blue('   Switch mode: caws mode set --interactive'));
+
+  console.log('');
+}
+
+/**
+ * Calculate overall project progress (mode-aware)
+ * @param {Object} data - Status data
+ * @returns {number} Overall progress percentage
+ */
+function calculateOverallProgress(data) {
+  const { spec, specs, hooks, provenance, waivers, currentMode } = data;
+  const modes = require('../config/modes');
+
+  let score = 0;
+  let total = 0;
+
+  // Multi-spec system
+  if (specs && specs.length > 0) {
+    // Specs system (40%)
+    total += 40;
+    const completedSpecs = specs.filter((s) => s.status === 'completed').length;
+    if (specs.length > 0) {
+      const percentage = (completedSpecs / specs.length) * 40;
+      score += percentage;
+    }
+
+    // Git hooks (20%) - only if enabled in mode
+    if (modes.isFeatureEnabled('gitHooks', currentMode)) {
+      total += 20;
+      if (hooks.installed) score += 20;
+    }
+
+    // Provenance (20%) - only if enabled in mode
+    if (modes.isFeatureEnabled('provenance', currentMode)) {
+      total += 20;
+      if (provenance.exists) score += 20;
+    }
+
+    // Waivers (15%) - only if enabled in mode
+    if (modes.isFeatureEnabled('waivers', currentMode)) {
+      total += 15;
+      if (waivers.exists) score += 15;
+    }
+
+    // Quality gates (5%) - only if enabled in mode
+    if (modes.isFeatureEnabled('qualityGates', currentMode)) {
+      total += 5;
+      if (specs.length > 0) score += 5;
+    }
+  } else if (spec) {
+    // Legacy single spec system (30%)
+    total += 30;
+    if (spec) score += 30;
+
+    // Acceptance criteria progress (25%)
+    total += 25;
+    if (spec && spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
+      const completed = spec.acceptance_criteria.filter((c) => c.completed).length;
+      const percentage = (completed / spec.acceptance_criteria.length) * 25;
+      score += percentage;
+    }
+
+    // Git hooks (15%) - only if enabled in mode
+    if (modes.isFeatureEnabled('gitHooks', currentMode)) {
+      total += 15;
+      if (hooks.installed) score += 15;
+    }
+
+    // Provenance (15%) - only if enabled in mode
+    if (modes.isFeatureEnabled('provenance', currentMode)) {
+      total += 15;
+      if (provenance.exists) score += 15;
+    }
+
+    // Waivers (10%) - only if enabled in mode
+    if (modes.isFeatureEnabled('waivers', currentMode)) {
+      total += 10;
+      if (waivers.exists) score += 10;
+    }
+
+    // Quality gates (5%) - only if enabled in mode
+    if (modes.isFeatureEnabled('qualityGates', currentMode)) {
+      total += 5;
+      if (spec) score += 5;
+    }
+  } else {
+    // No specs system - check basic setup (mode-aware)
+    total += 100;
+
+    // Git hooks (30%) - only if enabled in mode
+    if (modes.isFeatureEnabled('gitHooks', currentMode)) {
+      if (hooks.installed) score += 30;
+    }
+
+    // Provenance (30%) - only if enabled in mode
+    if (modes.isFeatureEnabled('provenance', currentMode)) {
+      if (provenance.exists) score += 30;
+    }
+
+    // Waivers (20%) - only if enabled in mode
+    if (modes.isFeatureEnabled('waivers', currentMode)) {
+      if (waivers.exists) score += 20;
+    }
+
+    // Quality gates (20%) - only if enabled in mode
+    if (modes.isFeatureEnabled('qualityGates', currentMode)) {
+      if (hooks.installed || provenance.exists) score += 20;
+    }
+  }
+
+  return Math.min(Math.round(score), 100);
 }
 
 /**
@@ -332,29 +767,138 @@ function generateSuggestions(data) {
 async function statusCommand(options = {}) {
   return safeAsync(
     async () => {
+      // Check current mode and adjust behavior accordingly
+      const modes = require('../config/modes');
+      const currentMode = await modes.getCurrentMode();
+      const tierConfig = modes.getTier(currentMode);
+
       // Load all status data
       const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
+      const specs = await loadSpecsFromMultiSpec();
       const hooks = await checkGitHooks();
       const provenance = await loadProvenanceChain();
       const waivers = await loadWaiverStatus();
       const gates = await checkQualityGates();
 
-      // Display status
-      displayStatus({
-        spec,
-        hooks,
-        provenance,
-        waivers,
-        gates,
-      });
+      // Display status (visual mode if requested)
+      if (options.visual || options.json) {
+        if (options.json) {
+          // JSON output for automation
+          const result = {
+            command: 'status',
+            timestamp: new Date().toISOString(),
+            system: specs.length > 0 ? 'multi-spec' : 'single-spec',
+            specs:
+              specs.length > 0
+                ? {
+                    count: specs.length,
+                    active: specs.filter((s) => s.status === 'active').length,
+                    draft: specs.filter((s) => s.status === 'draft').length,
+                    completed: specs.filter((s) => s.status === 'completed').length,
+                    list: specs.map((s) => ({
+                      id: s.id,
+                      type: s.type,
+                      status: s.status,
+                      title: s.title,
+                    })),
+                  }
+                : null,
+            legacySpec: spec
+              ? {
+                  id: spec.id,
+                  title: spec.title,
+                  riskTier: spec.risk_tier,
+                  mode: spec.mode,
+                  acceptanceCriteria: spec.acceptance_criteria?.length || 0,
+                  completedCriteria:
+                    spec.acceptance_criteria?.filter((c) => c.completed).length || 0,
+                }
+              : null,
+            hooks: {
+              installed: hooks.installed,
+              count: hooks.count,
+              total: hooks.total,
+              active: hooks.active,
+            },
+            provenance: {
+              exists: provenance.exists,
+              count: provenance.count,
+              lastUpdate: provenance.lastUpdate,
+            },
+            waivers: {
+              exists: waivers.exists,
+              active: waivers.active,
+              expired: waivers.expired,
+              revoked: waivers.revoked,
+              total: waivers.total,
+            },
+            qualityGates: {
+              checked: gates.checked,
+              passed: gates.passed,
+              message: gates.message,
+            },
+            overallProgress: calculateOverallProgress({
+              spec,
+              specs,
+              hooks,
+              provenance,
+              waivers,
+              gates,
+            }),
+          };
+
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          // Visual output
+          displayVisualStatus(
+            {
+              spec,
+              specs,
+              hooks,
+              provenance,
+              waivers,
+              gates,
+            },
+            currentMode
+          );
+        }
+      } else {
+        // Original text-based output
+        displayStatus({
+          spec,
+          hooks,
+          provenance,
+          waivers,
+          gates,
+        });
+      }
 
       const result = outputResult({
         command: 'status',
-        spec: spec ? 'loaded' : 'not found',
-        hooks: hooks.installed,
-        provenance: provenance.entries?.length || 0,
-        waivers: waivers.active?.length || 0,
-        gates: gates.passed ? 'passed' : 'failed',
+        mode: options.visual ? 'visual' : options.json ? 'json' : 'text',
+        system: specs.length > 0 ? 'multi-spec' : 'single-spec',
+        currentMode: currentMode,
+        specs: specs.length,
+        legacySpec: spec ? 'loaded' : 'not found',
+        hooks: modes.isFeatureEnabled('gitHooks', currentMode) ? hooks.installed : null,
+        provenance: modes.isFeatureEnabled('provenance', currentMode)
+          ? provenance.count || 0
+          : null,
+        waivers: modes.isFeatureEnabled('waivers', currentMode) ? waivers.active || 0 : null,
+        gates: modes.isFeatureEnabled('qualityGates', currentMode)
+          ? gates.passed
+            ? 'passed'
+            : 'failed'
+          : null,
+        overallProgress: calculateOverallProgress({
+          spec,
+          specs,
+          hooks,
+          provenance,
+          waivers,
+          gates,
+          currentMode,
+        }),
       });
 
       return result;

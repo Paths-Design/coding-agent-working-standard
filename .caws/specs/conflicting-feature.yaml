@@ -1,0 +1,9 @@
+id: conflicting-feature
+type: feature
+title: Feature with Overlapping Scope
+status: draft
+risk_tier: 1
+mode: development
+created_at: '2025-10-20T05:13:30.910Z'
+updated_at: '2025-10-20T05:13:30.911Z'
+acceptance_criteria: []

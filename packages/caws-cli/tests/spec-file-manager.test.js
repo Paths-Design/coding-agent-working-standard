@@ -41,7 +41,7 @@ describe('SpecFileManager', () => {
         // Continue with cleanup
       }
     }
-    
+
     // Cleanup
     await fs.remove(tempDir);
   });

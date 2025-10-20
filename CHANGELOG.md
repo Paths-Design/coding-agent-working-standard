@@ -1,3 +1,50 @@
+# [Unreleased]
+
+# [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-20)
+
+## 🚨 Breaking Changes
+
+### Multi-Agent Architecture
+
+- **BREAKING**: Spec resolution now prioritizes `.caws/specs/<feature-id>.yaml` over `.caws/working-spec.yaml`
+- Commands with multiple specs now require `--spec-id` flag
+- Legacy `working-spec.yaml` deprecated as primary spec (backward compatible)
+
+## Analysis & Planning
+
+### Architecture
+
+- **multi-agent:** Enable parallel multi-agent development without conflicts
+  - New spec resolution system: `.caws/specs/` takes priority over legacy `working-spec.yaml`
+  - Added `--spec-id` flag to all major commands (validate, status, iterate, evaluate, diagnose)
+  - Automatic spec detection when only one feature spec exists
+  - Intelligent warnings when using legacy single-spec in multi-agent context
+  - New utility: `src/utils/spec-resolver.js` for centralized spec resolution
+  - Priority-based loading: feature-specific > explicit > auto-detect > legacy
+  - Migration suggestions for projects moving from single to multi-spec
+
+### Documentation
+
+- **multi-agent:** Add comprehensive multi-agent workflow guide
+  - Document location: `docs/guides/multi-agent-workflow.md`
+  - Complete examples: 3 agents, 3 features working in parallel
+  - Migration path from legacy single-spec
+  - Common pitfalls and solutions
+  - Best practices for scope boundaries
+- **agents:** Update AGENTS.md with prominent multi-spec guidance
+  - Critical warning section about multi-agent conflicts
+  - Feature-specific workflow as primary pattern
+  - Legacy single-spec clearly marked as deprecated
+- **analysis:** Add comprehensive comparison of CAWS vs OpenSpec vs Spec-kit
+  - Detailed analysis of three spec-driven development systems
+  - Core philosophy comparison: CAWS (quality gates), OpenSpec (change management), Spec-kit (code generation)
+  - File structure and organization comparison
+  - AI agent integration approaches
+  - Quality and validation mechanisms
+  - Identified 8 key learnings with priority rankings
+  - Four-phase implementation roadmap for CAWS enhancements
+  - Document location: `docs/internal/SPEC_SYSTEMS_COMPARISON.md`
+
 # [3.4.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.3.0...v3.4.0) (2025-10-12)
 
 ## Week 1: Agent-Agency Pattern Integration

@@ -40,7 +40,7 @@ describe('Budget Derivation (Async)', () => {
         // Continue with cleanup
       }
     }
-    
+
     // Cleanup
     await fs.remove(tempDir);
   });

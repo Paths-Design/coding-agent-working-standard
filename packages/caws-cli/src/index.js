@@ -42,6 +42,11 @@ const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
 const { troubleshootCommand } = require('./commands/troubleshoot');
+const { archiveCommand } = require('./commands/archive');
+const { specsCommand } = require('./commands/specs');
+const { modeCommand } = require('./commands/mode');
+const { tutorialCommand } = require('./commands/tutorial');
+const { planCommand } = require('./commands/plan');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -113,8 +118,10 @@ program
 // Validate command
 program
   .command('validate')
-  .description('Validate CAWS working spec with suggestions')
-  .argument('[spec-file]', 'Path to working spec file (default: .caws/working-spec.yaml)')
+  .description('Validate CAWS spec with suggestions (feature-specific or legacy)')
+  .argument('[spec-file]', 'Path to spec file (optional, uses spec resolution)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth, FEAT-001)')
+  .option('-i, --interactive', 'Interactive spec selection when multiple specs exist', false)
   .option('-q, --quiet', 'Suppress suggestions and warnings', false)
   .option('--auto-fix', 'Automatically fix safe validation issues', false)
   .option('--dry-run', 'Preview auto-fixes without applying them', false)
@@ -124,10 +131,134 @@ program
 // Status command
 program
   .command('status')
-  .description('Show project health overview')
-  .option('-s, --spec <path>', 'Path to working spec file', '.caws/working-spec.yaml')
-  .option('--json', 'Output in JSON format', false)
+  .description('Show project health overview (multi-spec aware)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
+  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
+  .option('--visual', 'Enhanced visual output with progress bars', false)
+  .option('--json', 'Output in JSON format for automation', false)
   .action(statusCommand);
+
+// Archive command
+program
+  .command('archive <change-id>')
+  .description('Archive completed change with lifecycle management (multi-spec aware)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
+  .option('-f, --force', 'Force archive even if criteria not met', false)
+  .option('--dry-run', 'Preview archive without performing it', false)
+  .action(archiveCommand);
+
+// Specs command group
+const specsCmd = program.command('specs').description('Manage multiple CAWS spec files');
+
+// Specs subcommands
+specsCmd
+  .command('list')
+  .description('List all available specs')
+  .action(() => specsCommand('list', {}));
+
+specsCmd
+  .command('create <id>')
+  .description('Create a new spec (with conflict resolution)')
+  .option('-t, --type <type>', 'Spec type (feature, fix, refactor, chore, docs)', 'feature')
+  .option('--title <title>', 'Spec title')
+  .option('--tier <tier>', 'Risk tier (T1, T2, T3)', 'T3')
+  .option('--mode <mode>', 'Development mode', 'development')
+  .option('-f, --force', 'Override existing specs without confirmation', false)
+  .option('-i, --interactive', 'Ask for confirmation on conflicts', false)
+  .action((id, options) => specsCommand('create', { id, ...options }));
+
+specsCmd
+  .command('show <id>')
+  .description('Show detailed spec information')
+  .action((id) => specsCommand('show', { id }));
+
+specsCmd
+  .command('update <id>')
+  .description('Update spec properties')
+  .option('-s, --status <status>', 'Spec status (draft, active, completed)')
+  .option('--title <title>', 'Spec title')
+  .option('--description <desc>', 'Spec description')
+  .action((id, options) => specsCommand('update', { id, ...options }));
+
+specsCmd
+  .command('delete <id>')
+  .description('Delete a spec')
+  .action((id) => specsCommand('delete', { id }));
+
+specsCmd
+  .command('conflicts')
+  .description('Check for scope conflicts between specs')
+  .action(() => specsCommand('conflicts', {}));
+
+specsCmd
+  .command('migrate')
+  .description('Migrate from legacy working-spec.yaml to feature-specific specs')
+  .option('-i, --interactive', 'Interactive feature selection', false)
+  .option('-f, --features <features>', 'Comma-separated list of features to migrate', (value) =>
+    value.split(',')
+  )
+  .action((options) => specsCommand('migrate', options));
+
+specsCmd
+  .command('types')
+  .description('Show available spec types')
+  .action(() => specsCommand('types', {}));
+
+// Mode command group
+const modeCmd = program.command('mode').description('Manage CAWS complexity tiers');
+
+// Mode subcommands
+modeCmd
+  .command('current')
+  .description('Show current CAWS mode')
+  .action(() => modeCommand('current', {}));
+
+modeCmd
+  .command('set <mode>')
+  .description('Set CAWS complexity tier')
+  .action((mode) => modeCommand('set', { mode }));
+
+modeCmd
+  .command('set')
+  .description('Set CAWS complexity tier (interactive)')
+  .option('-i, --interactive', 'Interactive mode selection', false)
+  .option('-m, --mode <mode>', 'Specific mode to set')
+  .action((options) => modeCommand('set', options));
+
+modeCmd
+  .command('compare')
+  .description('Compare all available tiers')
+  .action(() => modeCommand('compare', {}));
+
+modeCmd
+  .command('recommend')
+  .description('Get tier recommendation for your project')
+  .option('--size <size>', 'Project size (small, medium, large)', 'medium')
+  .option('--team-size <size>', 'Team size (number)', '1')
+  .option('--compliance <required>', 'Compliance requirements (true/false)', 'false')
+  .option('--audit <required>', 'Audit requirements (true/false)', 'false')
+  .option('--details', 'Show detailed recommendation', false)
+  .action((options) => modeCommand('recommend', options));
+
+modeCmd
+  .command('details <mode>')
+  .description('Show detailed information about a specific tier')
+  .action((mode) => modeCommand('details', { mode }));
+
+// Tutorial command
+program
+  .command('tutorial [type]')
+  .description('Interactive guided learning for CAWS')
+  .action(tutorialCommand);
+
+// Plan command
+program
+  .command('plan <action>')
+  .description('Generate implementation plans from specifications')
+  .option('--spec-id <id>', 'Spec ID to generate plan for')
+  .option('--spec <id>', 'Alias for --spec-id')
+  .option('--output <path>', 'Output file path for the plan')
+  .action((action, options) => planCommand(action, options));
 
 // Templates command
 program
@@ -139,21 +270,24 @@ program
 // Diagnose command
 program
   .command('diagnose')
-  .description('Run health checks and suggest fixes')
+  .description('Run health checks and suggest fixes (multi-spec aware)')
+  .option('--spec-id <id>', 'Feature-specific spec ID')
   .option('--fix', 'Apply automatic fixes', false)
   .action(diagnoseCommand);
 
 // Evaluate command
 program
   .command('evaluate [spec-file]')
-  .description('Evaluate work against CAWS quality standards')
+  .description('Evaluate work against CAWS quality standards (feature-specific or legacy)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(evaluateCommand);
 
 // Iterate command
 program
   .command('iterate [spec-file]')
-  .description('Get iterative development guidance based on current progress')
+  .description('Get iterative development guidance (feature-specific or legacy)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--current-state <json>', 'Current implementation state as JSON', '{}')
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(iterateCommand);
@@ -202,7 +336,8 @@ waiversCmd
 // Workflow command group
 const workflowCmd = program
   .command('workflow <type>')
-  .description('Get workflow-specific guidance for development tasks')
+  .description('Get workflow-specific guidance for development tasks (multi-spec aware)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--step <number>', 'Current step in workflow', '1')
   .option('--current-state <json>', 'Current implementation state as JSON', '{}')
   .option('-v, --verbose', 'Show detailed error information', false)
@@ -211,7 +346,8 @@ const workflowCmd = program
 // Quality Monitor command
 program
   .command('quality-monitor <action>')
-  .description('Monitor code quality impact in real-time')
+  .description('Monitor code quality impact in real-time (multi-spec aware)')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--files <files>', 'Files affected (comma-separated)')
   .option('--context <json>', 'Additional context as JSON', '{}')
   .option('-v, --verbose', 'Show detailed error information', false)
@@ -236,7 +372,10 @@ program
 // Test Analysis command
 program
   .command('test-analysis <subcommand> [options...]')
-  .description('Statistical analysis for budget prediction and test optimization')
+  .description(
+    'Statistical analysis for budget prediction and test optimization (multi-spec aware)'
+  )
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .action(testAnalysisCommand);
 
 // Provenance command group
@@ -380,6 +519,11 @@ program.exitOverride((err) => {
       'validate',
       'scaffold',
       'status',
+      'archive',
+      'specs',
+      'mode',
+      'tutorial',
+      'plan',
       'templates',
       'diagnose',
       'evaluate',
@@ -475,6 +619,12 @@ if (require.main === module) {
         'init',
         'validate',
         'scaffold',
+        'status',
+        'archive',
+        'specs',
+        'mode',
+        'tutorial',
+        'plan',
         'provenance',
         'hooks',
         'burnup',
