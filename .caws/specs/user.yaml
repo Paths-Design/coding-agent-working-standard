@@ -1,0 +1,25 @@
+id: user
+type: feature
+title: User Management
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2025-10-21T15:15:43.794Z'
+updated_at: '2025-10-21T15:15:43.795Z'
+acceptance_criteria: []
+criteria:
+  - id: A1
+    given: User runs caws provenance --help
+    when: UX improvements implemented
+    then: Clear subcommand structure and descriptions shown
+  - id: A3
+    given: User runs caws hooks install
+    when: Git repository exists
+    then: Automatic git hooks configured for provenance tracking
+scope:
+  in:
+    - src/users/
+    - tests/users/
+  out:
+    - src/payments/
+    - src/admin/

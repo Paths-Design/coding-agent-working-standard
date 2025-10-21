@@ -505,7 +505,9 @@ async function runCawsIteration(): Promise<void> {
 /**
  * Get available CAWS specs
  */
-async function getAvailableSpecs(): Promise<Array<{id: string, path: string, type: string, title: string}>> {
+async function getAvailableSpecs(): Promise<
+  Array<{ id: string; path: string; type: string; title: string }>
+> {
   try {
     const result = await mcpClient.callTool('caws_specs_list', {});
     if (result.content && result.content[0]) {
@@ -520,7 +522,9 @@ async function getAvailableSpecs(): Promise<Array<{id: string, path: string, typ
 /**
  * Select a spec for command execution
  */
-async function selectSpecForCommand(specs: Array<{id: string, path: string, type: string, title: string}>): Promise<{id: string, path: string, type: string, title: string} | null> {
+async function selectSpecForCommand(
+  specs: Array<{ id: string; path: string; type: string; title: string }>
+): Promise<{ id: string; path: string; type: string; title: string } | null> {
   if (specs.length === 0) {
     return null;
   }
@@ -530,17 +534,17 @@ async function selectSpecForCommand(specs: Array<{id: string, path: string, type
   }
 
   // Multiple specs - show quick pick
-  const items = specs.map(spec => ({
+  const items = specs.map((spec) => ({
     label: `${spec.id} (${spec.type})`,
     description: spec.title,
     detail: spec.path,
-    spec: spec
+    spec: spec,
   }));
 
   const selected = await vscode.window.showQuickPick(items, {
     placeHolder: 'Select a CAWS spec to validate',
     matchOnDescription: true,
-    matchOnDetail: true
+    matchOnDetail: true,
   });
 
   return selected ? selected.spec : null;
@@ -560,14 +564,18 @@ async function runCawsSpecsList(): Promise<void> {
     const specs = JSON.parse(result.content[0].text);
 
     if (specs.length === 0) {
-      vscode.window.showInformationMessage('No CAWS specs found. Create one with "CAWS: Create Spec"');
+      vscode.window.showInformationMessage(
+        'No CAWS specs found. Create one with "CAWS: Create Spec"'
+      );
       return;
     }
 
     const outputChannel = vscode.window.createOutputChannel('CAWS Specs');
     outputChannel.clear();
     outputChannel.append('📋 Available CAWS Specs\n');
-    outputChannel.append('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n');
+    outputChannel.append(
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+    );
 
     specs.forEach((spec: any, index: number) => {
       outputChannel.append(`${index + 1}. ${spec.id} (${spec.type})\n`);
@@ -593,9 +601,10 @@ async function runCawsSpecsCreate(): Promise<void> {
       placeHolder: 'my-feature',
       validateInput: (value) => {
         if (!value) return 'Spec ID is required';
-        if (!/^[a-z0-9-]+$/.test(value)) return 'Spec ID must contain only lowercase letters, numbers, and hyphens';
+        if (!/^[a-z0-9-]+$/.test(value))
+          return 'Spec ID must contain only lowercase letters, numbers, and hyphens';
         return null;
-      }
+      },
     });
 
     if (!specId) return;
@@ -606,7 +615,7 @@ async function runCawsSpecsCreate(): Promise<void> {
       validateInput: (value) => {
         if (!value || value.length < 10) return 'Title must be at least 10 characters';
         return null;
-      }
+      },
     });
 
     if (!title) return;
@@ -614,7 +623,7 @@ async function runCawsSpecsCreate(): Promise<void> {
     const result = await mcpClient.callTool('caws_specs_create', {
       id: specId,
       title: title,
-      type: 'feature'
+      type: 'feature',
     });
 
     if (result.content && result.content[0]) {
@@ -643,7 +652,9 @@ async function runCawsSpecsShow(): Promise<void> {
 
     // For now, just show the spec path - in a full implementation,
     // we'd read and display the full spec content
-    vscode.window.showInformationMessage(`Spec: ${selectedSpec.id}\nPath: ${selectedSpec.path}\nTitle: ${selectedSpec.title}`);
+    vscode.window.showInformationMessage(
+      `Spec: ${selectedSpec.id}\nPath: ${selectedSpec.path}\nTitle: ${selectedSpec.title}`
+    );
 
     // TODO: Read and display full spec content in a webview or output channel
   } catch (error) {
