@@ -93,6 +93,24 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.specsList', async () => {
+      await runCawsSpecsList();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.specsCreate', async () => {
+      await runCawsSpecsCreate();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.specsShow', async () => {
+      await runCawsSpecsShow();
+    })
+  );
+
   // Register code action provider
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider('*', new CawsCodeActionProvider())
@@ -484,10 +502,171 @@ async function runCawsIteration(): Promise<void> {
   }
 }
 
+/**
+ * Get available CAWS specs
+ */
+async function getAvailableSpecs(): Promise<Array<{id: string, path: string, type: string, title: string}>> {
+  try {
+    const result = await mcpClient.callTool('caws_specs_list', {});
+    if (result.content && result.content[0]) {
+      return JSON.parse(result.content[0].text);
+    }
+  } catch (error) {
+    // Fallback to legacy spec if available
+  }
+  return [];
+}
+
+/**
+ * Select a spec for command execution
+ */
+async function selectSpecForCommand(specs: Array<{id: string, path: string, type: string, title: string}>): Promise<{id: string, path: string, type: string, title: string} | null> {
+  if (specs.length === 0) {
+    return null;
+  }
+
+  if (specs.length === 1) {
+    return specs[0];
+  }
+
+  // Multiple specs - show quick pick
+  const items = specs.map(spec => ({
+    label: `${spec.id} (${spec.type})`,
+    description: spec.title,
+    detail: spec.path,
+    spec: spec
+  }));
+
+  const selected = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Select a CAWS spec to validate',
+    matchOnDescription: true,
+    matchOnDetail: true
+  });
+
+  return selected ? selected.spec : null;
+}
+
+/**
+ * List all available CAWS specs
+ */
+async function runCawsSpecsList(): Promise<void> {
+  try {
+    const result = await mcpClient.callTool('caws_specs_list', {});
+
+    if (!result.content || !result.content[0]) {
+      throw new Error('Invalid specs list result: missing content');
+    }
+
+    const specs = JSON.parse(result.content[0].text);
+
+    if (specs.length === 0) {
+      vscode.window.showInformationMessage('No CAWS specs found. Create one with "CAWS: Create Spec"');
+      return;
+    }
+
+    const outputChannel = vscode.window.createOutputChannel('CAWS Specs');
+    outputChannel.clear();
+    outputChannel.append('📋 Available CAWS Specs\n');
+    outputChannel.append('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n');
+
+    specs.forEach((spec: any, index: number) => {
+      outputChannel.append(`${index + 1}. ${spec.id} (${spec.type})\n`);
+      outputChannel.append(`   Title: ${spec.title}\n`);
+      outputChannel.append(`   Path: ${spec.path}\n`);
+      outputChannel.append('\n');
+    });
+
+    outputChannel.show();
+    vscode.window.showInformationMessage(`Found ${specs.length} CAWS specs - check output channel`);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to list specs: ${error}`);
+  }
+}
+
+/**
+ * Create a new CAWS spec
+ */
+async function runCawsSpecsCreate(): Promise<void> {
+  try {
+    const specId = await vscode.window.showInputBox({
+      prompt: 'Enter spec ID (e.g., user-auth, payment-system)',
+      placeHolder: 'my-feature',
+      validateInput: (value) => {
+        if (!value) return 'Spec ID is required';
+        if (!/^[a-z0-9-]+$/.test(value)) return 'Spec ID must contain only lowercase letters, numbers, and hyphens';
+        return null;
+      }
+    });
+
+    if (!specId) return;
+
+    const title = await vscode.window.showInputBox({
+      prompt: 'Enter spec title',
+      placeHolder: 'My Feature Description',
+      validateInput: (value) => {
+        if (!value || value.length < 10) return 'Title must be at least 10 characters';
+        return null;
+      }
+    });
+
+    if (!title) return;
+
+    const result = await mcpClient.callTool('caws_specs_create', {
+      id: specId,
+      title: title,
+      type: 'feature'
+    });
+
+    if (result.content && result.content[0]) {
+      vscode.window.showInformationMessage(`Created spec: ${specId}`);
+      runCawsSpecsList(); // Refresh the list
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to create spec: ${error}`);
+  }
+}
+
+/**
+ * Show details of a specific spec
+ */
+async function runCawsSpecsShow(): Promise<void> {
+  try {
+    const specs = await getAvailableSpecs();
+
+    if (specs.length === 0) {
+      vscode.window.showInformationMessage('No specs available');
+      return;
+    }
+
+    const selectedSpec = await selectSpecForCommand(specs);
+    if (!selectedSpec) return;
+
+    // For now, just show the spec path - in a full implementation,
+    // we'd read and display the full spec content
+    vscode.window.showInformationMessage(`Spec: ${selectedSpec.id}\nPath: ${selectedSpec.path}\nTitle: ${selectedSpec.title}`);
+
+    // TODO: Read and display full spec content in a webview or output channel
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to show spec: ${error}`);
+  }
+}
+
 async function runCawsValidation(): Promise<void> {
   try {
+    // Check if multiple specs exist and prompt for selection if needed
+    const specs = await getAvailableSpecs();
+    let specFile = '.caws/working-spec.yaml';
+
+    if (specs.length > 1) {
+      // Multiple specs exist - use spec resolution logic
+      const selectedSpec = await selectSpecForCommand(specs);
+      if (selectedSpec) {
+        specFile = selectedSpec.path;
+      }
+    }
+
     const result = await mcpClient.callTool('caws_validate', {
-      specFile: '.caws/working-spec.yaml',
+      specFile: specFile,
     });
 
     if (!result.content || !result.content[0]) {

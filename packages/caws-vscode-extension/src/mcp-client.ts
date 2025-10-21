@@ -252,23 +252,37 @@ export class CawsMcpClient {
       switch (toolName) {
         case 'caws_evaluate':
           command = cliEntry;
-          args = ['agent', 'evaluate', parameters.specFile || '.caws/working-spec.yaml'];
+          args = ['agent', 'evaluate'];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_iterate':
           command = cliEntry;
           args = [
-            'agent',
             'iterate',
             '--current-state',
             JSON.stringify({ description: parameters.currentState }),
-            parameters.specFile || '.caws/working-spec.yaml',
           ];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_validate':
           command = cliEntry;
-          args = ['validate', parameters.specFile || '.caws/working-spec.yaml'];
+          args = ['validate'];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            // Let CLI handle spec resolution automatically
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_waiver_create':

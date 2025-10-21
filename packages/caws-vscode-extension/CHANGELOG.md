@@ -4,6 +4,28 @@ All notable changes to the CAWS VS Code Extension will be documented in this fil
 
 ## [Unreleased]
 
+## [4.0.0] - 2025-10-21
+
+### Added
+
+- **Multi-spec Architecture Support**: Extension now supports multiple CAWS working specs
+- **Spec Selection UI**: Interactive spec selection when multiple specs exist
+- **Spec Management Commands**: New commands for listing, creating, and viewing specs
+- **Enhanced CLI Integration**: Updated to work with CAWS CLI v4.0.0 multi-spec architecture
+- **Improved Command Conditions**: Commands now activate when `.caws` directory exists (not just legacy spec)
+
+### Commands Added
+
+- `CAWS: List Specs` - Show all available CAWS specs
+- `CAWS: Create Spec` - Interactive spec creation with validation
+- `CAWS: Show Spec Details` - View details of a specific spec
+
+### Changed
+
+- **Version**: Updated to 4.0.0 to match CLI version
+- **Activation**: Commands now activate for any CAWS project (not just legacy spec)
+- **Spec Resolution**: Uses CLI's interactive spec selection when multiple specs exist
+
 ## [0.9.3] - 2025-10-13
 
 ### Fixed
