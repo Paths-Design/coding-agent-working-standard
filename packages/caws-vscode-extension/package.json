@@ -2,7 +2,7 @@
   "name": "caws-vscode-extension",
   "displayName": "CAWS - Coding Agent Workflow System",
   "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
-  "version": "0.9.0",
+  "version": "4.0.0",
   "publisher": "paths-design",
   "license": "MIT",
   "engines": {
@@ -86,29 +86,44 @@
         "command": "caws.showProvenance",
         "title": "CAWS: Show Provenance Dashboard",
         "category": "CAWS"
+      },
+      {
+        "command": "caws.specsList",
+        "title": "CAWS: List Specs",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.specsCreate",
+        "title": "CAWS: Create Spec",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.specsShow",
+        "title": "CAWS: Show Spec Details",
+        "category": "CAWS"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "caws.evaluate",
-          "when": "workspaceContains:.caws/working-spec.yaml"
+          "when": "workspaceContains:.caws"
         },
         {
           "command": "caws.iterate",
-          "when": "workspaceContains:.caws/working-spec.yaml"
+          "when": "workspaceContains:.caws"
         },
         {
           "command": "caws.validate",
-          "when": "workspaceContains:.caws/working-spec.yaml"
+          "when": "workspaceContains:.caws"
         },
         {
           "command": "caws.createWaiver",
-          "when": "workspaceContains:.caws/working-spec.yaml"
+          "when": "workspaceContains:.caws"
         },
         {
           "command": "caws.showDashboard",
-          "when": "workspaceContains:.caws/working-spec.yaml"
+          "when": "workspaceContains:.caws"
         }
       ],
       "editor/context": [

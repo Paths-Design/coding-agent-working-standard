@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "specs": {
+    "user-auth": {
+      "path": "user-auth.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T04:55:05.997Z",
+      "updated_at": "2025-10-20T04:55:05.998Z"
+    },
+    "payment-system": {
+      "path": "payment-system.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T04:29:31.128Z",
+      "updated_at": "2025-10-20T04:29:31.129Z"
+    },
+    "user-auth-2025-10-20T04-51-43": {
+      "path": "user-auth-2025-10-20T04-51-43.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T04:51:43.199Z",
+      "updated_at": "2025-10-20T04:51:43.199Z"
+    },
+    "test-conflict": {
+      "path": "test-conflict.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T05:07:04.297Z",
+      "updated_at": "2025-10-20T05:07:04.298Z"
+    },
+    "test-conflict-2025-10-20T05-06-40": {
+      "path": "test-conflict-2025-10-20T05-06-40.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T05:06:41.003Z",
+      "updated_at": "2025-10-20T05:06:41.003Z"
+    },
+    "demo-feature": {
+      "path": "demo-feature.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T05:09:27.264Z",
+      "updated_at": "2025-10-20T05:09:27.264Z"
+    },
+    "conflicting-feature": {
+      "path": "conflicting-feature.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T05:13:30.910Z",
+      "updated_at": "2025-10-20T05:13:30.911Z"
+    },
+    "test-build": {
+      "path": "test-build.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-20T15:36:22.058Z",
+      "updated_at": "2025-10-20T15:36:22.062Z"
+    },
+    "user": {
+      "path": "user.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-21T15:15:43.794Z",
+      "updated_at": "2025-10-21T15:15:43.795Z"
+    },
+    "dashboard": {
+      "path": "dashboard.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2025-10-21T15:15:43.801Z",
+      "updated_at": "2025-10-21T15:15:43.801Z"
+    }
+  },
+  "lastUpdated": "2025-10-21T15:15:43.802Z"
+}

@@ -1,0 +1,9 @@
+id: test-conflict-2025-10-20T05-06-40
+type: feature
+title: New feature
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2025-10-20T05:06:41.003Z'
+updated_at: '2025-10-20T05:06:41.003Z'
+acceptance_criteria: []

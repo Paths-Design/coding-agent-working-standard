@@ -9,6 +9,13 @@
  * @author @darianrosebrook
  */
 
+// Force JSON-only logging for MCP server (no colors or pretty printing)
+// This must be set before any imports that might initialize the logger
+process.env.CAWS_MCP_SERVER = 'true';
+process.env.NO_COLOR = '1'; // Disable ANSI colors globally
+process.env.PINO_PRETTY_PRINT = 'false'; // Disable pino pretty printing
+process.env.PINO_LOG_PRETTY = 'false'; // Another pino pretty print variable
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -137,6 +144,10 @@ class CawsMcpServer extends Server {
           return await this.handleMonitorAlerts(args);
         case 'caws_monitor_configure':
           return await this.handleMonitorConfigure(args);
+        case 'caws_archive':
+          return await this.handleCawsArchive(args);
+        case 'caws_slash_commands':
+          return await this.handleSlashCommands(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -147,7 +158,7 @@ class CawsMcpServer extends Server {
     // List available resources
     this.setRequestHandler(ListResourcesRequestSchema, () => {
       try {
-        console.error('MCP: Listing resources');
+        logger.debug('Listing resources');
         const resources = [];
 
         // Working specs
@@ -162,14 +173,14 @@ class CawsMcpServer extends Server {
             });
           });
         } catch (error) {
-          console.error('MCP: Error finding working specs:', error.message);
+          logger.warn({ error: error.message }, 'Error finding working specs');
           // Ignore errors in resource listing
         }
 
-        console.error('MCP: Returning', resources.length, 'resources');
+        logger.debug({ resourceCount: resources.length }, 'Returning resources');
         return { resources };
       } catch (error) {
-        console.error('MCP: Error listing resources:', error.message);
+        logger.error({ error: error.message }, 'Error listing resources');
         throw error;
       }
     });
@@ -943,6 +954,420 @@ class CawsMcpServer extends Server {
         isError: true,
       };
     }
+  }
+
+  async handleCawsArchive(args) {
+    const { changeId, force = false, dryRun = false, workingDirectory = process.cwd() } = args;
+
+    try {
+      let command = `npx @paths.design/caws-cli archive "${changeId}"`;
+
+      if (force) command += ' --force';
+      if (dryRun) command += ' --dry-run';
+
+      const result = await execCommand(command, {
+        cwd: workingDirectory,
+        timeout: 30000,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                changeId,
+                archived: !dryRun,
+                output: result.stdout || 'Archive operation completed',
+                dryRun,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: `caws archive ${changeId}`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleSlashCommands(args) {
+    const { command, ...params } = args;
+
+    // Map slash commands to MCP tool names
+    const slashCommandMap = {
+      '/caws:start': 'caws_init',
+      '/caws:init': 'caws_init',
+      '/caws:validate': 'caws_validate',
+      '/caws:archive': 'caws_archive',
+      '/caws:status': 'caws_status',
+      '/caws:specs': 'caws_slash_commands', // Route to slash command handler
+      '/caws:evaluate': 'caws_evaluate',
+      '/caws:iterate': 'caws_iterate',
+      '/caws:diagnose': 'caws_diagnose',
+      '/caws:scaffold': 'caws_scaffold',
+      '/caws:help': 'caws_help',
+      '/caws:waivers': 'caws_waivers_list',
+      '/caws:workflow': 'caws_workflow_guidance',
+      '/caws:monitor': 'caws_monitor_status',
+      '/caws:provenance': 'caws_provenance',
+      '/caws:hooks': 'caws_hooks',
+    };
+
+    const mappedTool = slashCommandMap[command];
+
+    if (!mappedTool) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: `Unknown slash command: ${command}`,
+                availableCommands: Object.keys(slashCommandMap),
+                suggestion: 'Use /caws:help for available commands',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // For specs commands, route to subcommand handler
+    if (mappedTool === 'caws_slash_commands') {
+      return await this.handleSlashCommandsWithSubcommands(args);
+    }
+
+    // Call the mapped tool with the provided parameters
+    try {
+      const toolArgs = { ...params, workingDirectory: params.workingDirectory || process.cwd() };
+
+      switch (mappedTool) {
+        case 'caws_init':
+          return await this.handleCawsInit(toolArgs);
+        case 'caws_scaffold':
+          return await this.handleCawsScaffold(toolArgs);
+        case 'caws_evaluate':
+          return await this.handleCawsEvaluate(toolArgs);
+        case 'caws_iterate':
+          return await this.handleCawsIterate(toolArgs);
+        case 'caws_validate':
+          return await this.handleCawsValidate(toolArgs);
+        case 'caws_archive':
+          return await this.handleCawsArchive(toolArgs);
+        case 'caws_workflow_guidance':
+          return await this.handleWorkflowGuidance(toolArgs);
+        case 'caws_quality_monitor':
+          return await this.handleQualityMonitor(toolArgs);
+        case 'caws_test_analysis':
+          return await this.handleTestAnalysis(toolArgs);
+        case 'caws_provenance':
+          return await this.handleProvenance(toolArgs);
+        case 'caws_hooks':
+          return await this.handleHooks(toolArgs);
+        case 'caws_status':
+          return await this.handleStatus(toolArgs);
+        case 'caws_diagnose':
+          return await this.handleDiagnose(toolArgs);
+        case 'caws_help':
+          return await this.handleHelp(toolArgs);
+        default:
+          throw new Error(`Tool handler not implemented: ${mappedTool}`);
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                slashCommand: command,
+                mappedTool,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleSlashCommandsWithSubcommands(args) {
+    const { command, ...params } = args;
+
+    // Handle specs subcommands
+    if (command.startsWith('/caws:specs ')) {
+      const subcommand = command.replace('/caws:specs ', '');
+
+      // Import specs functionality
+      const fs = await import('fs-extra');
+      const path = await import('path');
+      const yaml = await import('js-yaml');
+
+      const SPECS_DIR = '.caws/specs';
+      const SPECS_REGISTRY = '.caws/specs/registry.json';
+
+      try {
+        // Load specs registry
+        let registry = { specs: {} };
+        if (fs.existsSync(SPECS_REGISTRY)) {
+          registry = JSON.parse(fs.readFileSync(SPECS_REGISTRY, 'utf8'));
+        }
+
+        // List specs
+        if (subcommand === 'list' || subcommand === '') {
+          if (!fs.existsSync(SPECS_DIR)) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ specs: [], count: 0 }, null, 2) }],
+            };
+          }
+
+          const files = fs.readdirSync(SPECS_DIR, { recursive: true });
+          const yamlFiles = files.filter((file) => file.endsWith('.yaml') || file.endsWith('.yml'));
+
+          const specs = [];
+          for (const file of yamlFiles) {
+            const filePath = path.join(SPECS_DIR, file);
+            try {
+              const content = fs.readFileSync(filePath, 'utf8');
+              const spec = yaml.load(content);
+              specs.push({
+                id: spec.id || path.basename(file, path.extname(file)),
+                type: spec.type || 'feature',
+                status: spec.status || 'draft',
+                title: spec.title || 'Untitled',
+              });
+            } catch (error) {
+              // Skip invalid files
+            }
+          }
+
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ specs, count: specs.length }, null, 2) },
+            ],
+          };
+        }
+
+        // Create spec
+        if (subcommand.startsWith('create ')) {
+          const specId = subcommand.replace('create ', '');
+          const { type = 'feature', title, tier = 'T3', mode = 'development' } = params;
+
+          // Create spec file
+          const specContent = {
+            id: specId,
+            type,
+            title: title || `New ${type}`,
+            status: 'draft',
+            risk_tier: tier,
+            mode,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            acceptance_criteria: [],
+          };
+
+          fs.ensureDirSync(SPECS_DIR);
+          const filePath = path.join(SPECS_DIR, `${specId}.yaml`);
+          fs.writeFileSync(filePath, yaml.dump(specContent, { indent: 2 }));
+
+          // Update registry
+          registry.specs[specId] = {
+            path: `${specId}.yaml`,
+            type,
+            status: 'draft',
+            created_at: specContent.created_at,
+            updated_at: specContent.updated_at,
+          };
+          fs.writeFileSync(SPECS_REGISTRY, JSON.stringify(registry, null, 2));
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    spec: { id: specId, type, title: specContent.title, status: 'draft' },
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        // Show spec
+        if (subcommand.startsWith('show ')) {
+          const specId = subcommand.replace('show ', '');
+
+          if (!registry.specs[specId]) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: `Spec '${specId}' not found` }, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const specPath = path.join(SPECS_DIR, registry.specs[specId].path);
+          const content = fs.readFileSync(specPath, 'utf8');
+          const spec = yaml.load(content);
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(spec, null, 2) }],
+          };
+        }
+
+        // Update spec
+        if (subcommand.startsWith('update ')) {
+          const specId = subcommand.replace('update ', '');
+
+          if (!registry.specs[specId]) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: `Spec '${specId}' not found` }, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const specPath = path.join(SPECS_DIR, registry.specs[specId].path);
+          const content = fs.readFileSync(specPath, 'utf8');
+          const spec = yaml.load(content);
+
+          // Apply updates
+          const updates = {};
+          if (params.status) updates.status = params.status;
+          if (params.title) updates.title = params.title;
+          if (params.description) updates.description = params.description;
+
+          const updatedSpec = { ...spec, ...updates, updated_at: new Date().toISOString() };
+          fs.writeFileSync(specPath, yaml.dump(updatedSpec, { indent: 2 }));
+
+          // Update registry
+          registry.specs[specId].updated_at = updatedSpec.updated_at;
+          if (params.status) registry.specs[specId].status = params.status;
+          fs.writeFileSync(SPECS_REGISTRY, JSON.stringify(registry, null, 2));
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    spec: { id: specId, updates },
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        // Delete spec
+        if (subcommand.startsWith('delete ')) {
+          const specId = subcommand.replace('delete ', '');
+
+          if (!registry.specs[specId]) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ error: `Spec '${specId}' not found` }, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const specPath = path.join(SPECS_DIR, registry.specs[specId].path);
+          fs.removeSync(specPath);
+          delete registry.specs[specId];
+          fs.writeFileSync(SPECS_REGISTRY, JSON.stringify(registry, null, 2));
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    spec: specId,
+                    message: 'Spec deleted successfully',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+      } catch (error) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ error: error.message }, null, 2) }],
+          isError: true,
+        };
+      }
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              error: `Unsupported slash command: ${command}`,
+              supported: [
+                '/caws:specs list',
+                '/caws:specs create',
+                '/caws:specs show',
+                '/caws:specs update',
+                '/caws:specs delete',
+              ],
+            },
+            null,
+            2
+          ),
+        },
+      ],
+      isError: true,
+    };
   }
 
   async handleWaiversList(args) {
@@ -1872,6 +2297,84 @@ const CAWS_TOOLS = [
       required: ['action'],
     },
   },
+  {
+    name: 'caws_archive',
+    description: 'Archive completed change with lifecycle management',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        changeId: {
+          type: 'string',
+          description: 'Change identifier to archive',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Force archive even if criteria not met',
+          default: false,
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Preview archive without performing it',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for the operation',
+        },
+      },
+      required: ['changeId'],
+    },
+  },
+  {
+    name: 'caws_slash_commands',
+    description: 'Execute CAWS commands using natural slash command syntax',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Slash command to execute (e.g., /caws:start, /caws:validate)',
+        },
+        projectName: {
+          type: 'string',
+          description: 'Project name (for init commands)',
+        },
+        template: {
+          type: 'string',
+          description: 'Project template (for init commands)',
+        },
+        interactive: {
+          type: 'boolean',
+          description: 'Interactive mode (for init commands)',
+        },
+        specFile: {
+          type: 'string',
+          description: 'Path to working spec file',
+        },
+        currentState: {
+          type: 'string',
+          description: 'Current implementation state (for iterate commands)',
+        },
+        changeId: {
+          type: 'string',
+          description: 'Change identifier (for archive commands)',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Force operation (for archive commands)',
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Preview operation (for archive commands)',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for the operation',
+        },
+      },
+      required: ['command'],
+    },
+  },
 ];
 
 // Handler implementations for new tools are defined as class methods above
@@ -1883,7 +2386,7 @@ function execCommand(command, options = {}) {
       _resolve({ stdout: child, stderr: '' });
     } catch (error) {
       // Log command execution errors for debugging
-      console.error(`Command execution failed: ${command}`, error.message);
+      logger.error({ command, error: error.message }, 'Command execution failed');
       throw error;
     }
   });
@@ -1900,19 +2403,19 @@ async function main() {
   if (process.env.CAWS_DISABLE_MONITORING !== 'true') {
     try {
       await server.monitor.start();
-      console.error('CAWS MCP Server started with monitoring');
+      logger.info('CAWS MCP Server started with monitoring');
     } catch (error) {
-      console.error('Failed to start monitoring:', error.message);
-      console.error('CAWS MCP Server started without monitoring');
+      logger.warn({ error: error.message }, 'Failed to start monitoring, starting without it');
+      logger.info('CAWS MCP Server started without monitoring');
     }
   } else {
-    console.error('CAWS MCP Server started (monitoring disabled)');
+    logger.info('CAWS MCP Server started (monitoring disabled)');
   }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
-    console.error('CAWS MCP Server error:', error);
+    console.error('CAWS MCP Server error:', error.message);
     process.exit(1);
   });
 }

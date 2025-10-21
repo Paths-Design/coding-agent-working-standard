@@ -13,6 +13,9 @@ const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 
+// Import spec resolution system
+const { resolveSpec } = require('../utils/spec-resolver');
+
 /**
  * Iterate command handler
  *
@@ -21,6 +24,15 @@ const { initializeGlobalSetup } = require('../config');
  */
 async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}) {
   try {
+    // Resolve spec using priority system
+    const resolved = await resolveSpec({
+      specId: options.specId,
+      specFile,
+      warnLegacy: false,
+    });
+
+    const { path: specPath, type: specType, spec } = resolved;
+
     console.log('🔍 Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
 
@@ -28,18 +40,6 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
       console.log(`✅ Detected ${setup.setupType} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
     }
-
-    // Load working spec
-    const specPath = path.isAbsolute(specFile) ? specFile : path.join(process.cwd(), specFile);
-
-    if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`\n❌ Working spec not found: ${specFile}`));
-      console.error(chalk.yellow('💡 Run: caws init to create a working spec'));
-      process.exit(1);
-    }
-
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
 
     // Parse current state from options
     const currentState = options.currentState ? JSON.parse(options.currentState) : {};

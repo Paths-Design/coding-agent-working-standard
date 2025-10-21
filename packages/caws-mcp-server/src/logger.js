@@ -26,24 +26,25 @@ function createLogger() {
     },
   };
 
-  // In development, use pretty printing for better readability
-  if (isDevelopment && !process.env.CAWS_LOG_JSON) {
-    return pino({
-      ...baseConfig,
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname',
-          singleLine: false,
-        },
-      },
-    });
+  // For MCP server, always use JSON output (no colors or pretty printing)
+  // MCP protocol requires pure JSON communication
+  if (process.env.CAWS_MCP_SERVER || !isDevelopment || process.env.CAWS_LOG_JSON) {
+    return pino(baseConfig);
   }
 
-  // In production, use JSON for log aggregation
-  return pino(baseConfig);
+  // In development (non-MCP), use pretty printing for better readability
+  return pino({
+    ...baseConfig,
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+        singleLine: false,
+      },
+    },
+  });
 }
 
 const logger = createLogger();

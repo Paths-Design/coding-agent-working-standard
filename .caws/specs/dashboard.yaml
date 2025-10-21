@@ -1,0 +1,21 @@
+id: dashboard
+type: feature
+title: Dashboard
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2025-10-21T15:15:43.801Z'
+updated_at: '2025-10-21T15:15:43.801Z'
+acceptance_criteria: []
+criteria:
+  - id: A2
+    given: User runs caws provenance show --format=dashboard
+    when: Provenance data exists
+    then: Visual dashboard with metrics and insights displayed
+scope:
+  in:
+    - src/dashboard/
+    - tests/dashboard/
+  out:
+    - src/payments/
+    - src/users/

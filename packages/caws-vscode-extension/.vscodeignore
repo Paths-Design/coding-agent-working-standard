@@ -33,8 +33,17 @@ tests/**
 **/*.test.ts
 **/*.spec.ts
 
-# Node modules (included via bundling)
+# Node modules (excluded except for bundled ones)
 node_modules/**
+**/node_modules/**
+../../node_modules/**
+!bundled/mcp-server/node_modules/**
+
+# Other workspace packages
+../caws-cli/**
+../caws-mcp-server/**
+../caws-types/**
+../caws-test-project/**
 
 # Build scripts
 scripts/**

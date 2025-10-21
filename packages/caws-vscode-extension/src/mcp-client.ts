@@ -16,12 +16,20 @@ export class CawsMcpClient {
   private mcpProcess: cp.ChildProcess | null = null;
   private requestId = 0;
   private logger = getLogger().createChild('McpClient');
+  private pendingRequests = new Map<
+    number,
+    { resolve: Function; reject: Function; timeout: NodeJS.Timeout }
+  >();
+  private initialized = false;
 
   constructor() {
-    this.initializeMcpServer();
+    // Initialize MCP server asynchronously
+    this.initializeMcpServer().catch((error) => {
+      this.logger.error('Failed to initialize MCP server in constructor', error);
+    });
   }
 
-  private initializeMcpServer(): void {
+  private async initializeMcpServer(): Promise<void> {
     try {
       // Use bundled MCP server from extension
       const extensionPath = vscode.extensions.getExtension(
@@ -55,30 +63,137 @@ export class CawsMcpClient {
         cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd(),
       });
 
-      if (this.mcpProcess.stdout) {
-        this.mcpProcess.stdout.on('data', (data) => {
-          this.logger.debug('MCP Server output', { data: data.toString() });
-        });
-      }
+      // Set up MCP protocol handlers
+      this.setupMcpProtocol();
 
-      if (this.mcpProcess.stderr) {
-        this.mcpProcess.stderr.on('data', (data) => {
-          this.logger.debug('MCP Server stderr', { data: data.toString() });
-        });
-      }
+      // Initialize MCP handshake
+      await this.initializeMcpProtocol();
+      this.initialized = true;
 
-      this.mcpProcess.on('exit', (code) => {
-        this.logger.info('MCP Server exited', { exitCode: code });
-        this.mcpProcess = null;
-      });
+      this.logger.info('MCP server initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize MCP server', error);
       // Fall back to direct CLI calls
+      this.mcpProcess = null;
+    }
+  }
+
+  private setupMcpProtocol(): void {
+    if (!this.mcpProcess) return;
+
+    if (this.mcpProcess.stdout) {
+      this.mcpProcess.stdout.on('data', (data) => {
+        this.handleMcpResponse(data);
+      });
+    }
+
+    if (this.mcpProcess.stderr) {
+      this.mcpProcess.stderr.on('data', (data) => {
+        this.logger.debug('MCP Server stderr', { data: data.toString() });
+      });
+    }
+
+    this.mcpProcess.on('exit', (code) => {
+      this.logger.info('MCP Server exited', { exitCode: code });
+      this.mcpProcess = null;
+    });
+  }
+
+  private async initializeMcpProtocol(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: {
+            name: 'caws-vscode-extension',
+            version: '0.9.3',
+          },
+        },
+      };
+
+      const initHandler = (data: Buffer) => {
+        try {
+          const response = JSON.parse(data.toString());
+          if (response.id === 1) {
+            if (this.mcpProcess?.stdout) {
+              this.mcpProcess.stdout.removeListener('data', initHandler);
+            }
+
+            if (response.error) {
+              reject(new Error(`MCP initialization failed: ${response.error.message}`));
+            } else {
+              // Send initialized notification
+              const initializedNotification = {
+                jsonrpc: '2.0',
+                method: 'notifications/initialized',
+              };
+              this.mcpProcess?.stdin?.write(JSON.stringify(initializedNotification) + '\n');
+              resolve();
+            }
+          }
+        } catch (error) {
+          // Continue listening for valid response
+        }
+      };
+
+      if (this.mcpProcess?.stdout) {
+        this.mcpProcess.stdout.on('data', initHandler);
+      }
+
+      // Send initialization request
+      this.mcpProcess?.stdin?.write(JSON.stringify(initRequest) + '\n');
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (this.mcpProcess?.stdout) {
+          this.mcpProcess.stdout.removeListener('data', initHandler);
+        }
+        reject(new Error('MCP initialization timeout'));
+      }, 10000);
+    });
+  }
+
+  private handleMcpResponse(data: Buffer): void {
+    try {
+      const response = JSON.parse(data.toString());
+      // Handle pending requests
+      const pendingRequest = this.pendingRequests.get(response.id);
+      if (pendingRequest) {
+        this.pendingRequests.delete(response.id);
+        clearTimeout(pendingRequest.timeout);
+
+        if (response.error) {
+          pendingRequest.reject(new Error(response.error.message));
+        } else {
+          pendingRequest.resolve(response.result);
+        }
+      }
+    } catch (error) {
+      this.logger.debug('Received non-JSON data from MCP server', { data: data.toString() });
     }
   }
 
   async callTool(toolName: string, parameters: any = {}): Promise<McpToolResult> {
-    if (this.mcpProcess && this.mcpProcess.stdin) {
+    // Wait for MCP initialization (with timeout)
+    if (!this.initialized) {
+      await new Promise((resolve) => {
+        const checkInit = () => {
+          if (this.initialized || !this.mcpProcess) {
+            resolve(void 0);
+          } else {
+            setTimeout(checkInit, 100);
+          }
+        };
+        setTimeout(() => resolve(void 0), 5000); // 5 second timeout
+        checkInit();
+      });
+    }
+
+    if (this.mcpProcess && this.mcpProcess.stdin && this.initialized) {
       // Use MCP protocol
       return this.callMcpTool(toolName, parameters);
     } else {
@@ -89,8 +204,8 @@ export class CawsMcpClient {
 
   private async callMcpTool(toolName: string, parameters: any): Promise<McpToolResult> {
     return new Promise((resolve, reject) => {
-      if (!this.mcpProcess || !this.mcpProcess.stdin) {
-        reject(new Error('MCP server not available'));
+      if (!this.mcpProcess || !this.mcpProcess.stdin || !this.initialized) {
+        reject(new Error('MCP server not available or not initialized'));
         return;
       }
 
@@ -105,41 +220,15 @@ export class CawsMcpClient {
         },
       };
 
-      const responseHandler = (data: Buffer) => {
-        try {
-          const response = JSON.parse(data.toString());
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error('MCP request timeout'));
+      }, 30000);
 
-          if (response.id === requestId) {
-            // Remove this handler
-            if (this.mcpProcess?.stdout) {
-              this.mcpProcess.stdout.removeListener('data', responseHandler);
-            }
-
-            if (response.error) {
-              reject(new Error(response.error.message));
-            } else {
-              resolve(response.result);
-            }
-          }
-        } catch (error) {
-          // Not a valid JSON response, continue listening
-        }
-      };
-
-      if (this.mcpProcess.stdout) {
-        this.mcpProcess.stdout.on('data', responseHandler);
-      }
+      this.pendingRequests.set(requestId, { resolve, reject, timeout });
 
       // Send request
       this.mcpProcess.stdin.write(JSON.stringify(request) + '\n');
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        if (this.mcpProcess?.stdout) {
-          this.mcpProcess.stdout.removeListener('data', responseHandler);
-        }
-        reject(new Error('MCP request timeout'));
-      }, 30000);
     });
   }
 
@@ -163,23 +252,37 @@ export class CawsMcpClient {
       switch (toolName) {
         case 'caws_evaluate':
           command = cliEntry;
-          args = ['agent', 'evaluate', parameters.specFile || '.caws/working-spec.yaml'];
+          args = ['agent', 'evaluate'];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_iterate':
           command = cliEntry;
           args = [
-            'agent',
             'iterate',
             '--current-state',
             JSON.stringify({ description: parameters.currentState }),
-            parameters.specFile || '.caws/working-spec.yaml',
           ];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_validate':
           command = cliEntry;
-          args = ['validate', parameters.specFile || '.caws/working-spec.yaml'];
+          args = ['validate'];
+          if (parameters.specFile && parameters.specFile !== '.caws/working-spec.yaml') {
+            args.push(parameters.specFile);
+          } else {
+            // Let CLI handle spec resolution automatically
+            args.push('--interactive-spec-selection');
+          }
           break;
 
         case 'caws_waiver_create':

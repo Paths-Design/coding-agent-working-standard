@@ -1,21 +1,53 @@
-# [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-12)
+<<<<<<< HEAD
+# [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-20)
 
+## 🚨 Breaking Changes
 
-### Bug Fixes
+### Multi-Agent Architecture
 
-* Aggressive process.cwd override to prevent ENOENT errors ([d7c0e7d](https://github.com/Paths-Design/coding-agent-working-standard/commit/d7c0e7db0216ac92d25c7f79fddcc3286c3a9d86))
-* Bind process.cwd mock to avoid context issues ([2d6bee9](https://github.com/Paths-Design/coding-agent-working-standard/commit/2d6bee9a23a7418b5ba8140ca2aa134f20fcf392))
-* Ensure tests change directory before deleting temp directories ([2e6fc69](https://github.com/Paths-Design/coding-agent-working-standard/commit/2e6fc695487e4dd44c5bfc18f94923d67bd378f0))
-* Prevent test failures from deleted working directories ([58b7f60](https://github.com/Paths-Design/coding-agent-working-standard/commit/58b7f60ccb0c49d7b8249a8748872677e19dad7f))
-* Remove unused variables in test files ([97e2638](https://github.com/Paths-Design/coding-agent-working-standard/commit/97e263896467cdbb6d41237df2bf1e5beb420f81))
-* Split setup into pre-setup and setup files for Jest compatibility ([16ad99e](https://github.com/Paths-Design/coding-agent-working-standard/commit/16ad99e1fff9cb063706173be253b21755438826))
+- **BREAKING**: Spec resolution now prioritizes `.caws/specs/<feature-id>.yaml` over `.caws/working-spec.yaml`
+- Commands with multiple specs now require `--spec-id` flag
+- Legacy `working-spec.yaml` deprecated as primary spec (backward compatible)
 
+## Analysis & Planning
+
+### Architecture
+
+- **multi-agent:** Enable parallel multi-agent development without conflicts
+  - New spec resolution system: `.caws/specs/` takes priority over legacy `working-spec.yaml`
+  - Added `--spec-id` flag to all major commands (validate, status, iterate, evaluate, diagnose)
+  - Automatic spec detection when only one feature spec exists
+  - Intelligent warnings when using legacy single-spec in multi-agent context
+  - New utility: `src/utils/spec-resolver.js` for centralized spec resolution
+  - Priority-based loading: feature-specific > explicit > auto-detect > legacy
+  - Migration suggestions for projects moving from single to multi-spec
+
+### Documentation
+
+- **multi-agent:** Add comprehensive multi-agent workflow guide
+  - Document location: `docs/guides/multi-agent-workflow.md`
+  - Complete examples: 3 agents, 3 features working in parallel
+  - Migration path from legacy single-spec
+  - Common pitfalls and solutions
+  - Best practices for scope boundaries
+- **agents:** Update AGENTS.md with prominent multi-spec guidance
+  - Critical warning section about multi-agent conflicts
+  - Feature-specific workflow as primary pattern
+  - Legacy single-spec clearly marked as deprecated
+- **analysis:** Add comprehensive comparison of CAWS vs OpenSpec vs Spec-kit
+  - Detailed analysis of three spec-driven development systems
+  - Core philosophy comparison: CAWS (quality gates), OpenSpec (change management), Spec-kit (code generation)
+  - File structure and organization comparison
+  - AI agent integration approaches
+  - Quality and validation mechanisms
+  - Identified 8 key learnings with priority rankings
+  - Four-phase implementation roadmap for CAWS enhancements
+  - Document location: `docs/internal/SPEC_SYSTEMS_COMPARISON.md`
 
 ### Features
 
 * Add PolicyManager, SpecFileManager, and enhanced waiver validation ([9313a3b](https://github.com/Paths-Design/coding-agent-working-standard/commit/9313a3bbded454fd28f18b395c6e4178f2c0ff1e))
 * production readiness improvements ([0159875](https://github.com/Paths-Design/coding-agent-working-standard/commit/01598759705c463f4d10a90e0828ee031e89fa22))
-
 
 ### BREAKING CHANGES
 

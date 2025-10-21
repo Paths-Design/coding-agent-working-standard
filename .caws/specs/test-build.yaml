@@ -1,0 +1,9 @@
+id: test-build
+type: feature
+title: Test Build Verification
+status: draft
+risk_tier: 2
+mode: development
+created_at: '2025-10-20T15:36:22.058Z'
+updated_at: '2025-10-20T15:36:22.062Z'
+acceptance_criteria: []
