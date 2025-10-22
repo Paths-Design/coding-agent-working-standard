@@ -126,7 +126,7 @@ async function modeCommand(action, options = {}) {
   return safeAsync(
     async () => {
       switch (action) {
-        case 'current':
+        case 'current': {
           const currentMode = await getCurrentMode();
           displayCurrentMode();
 
@@ -144,8 +144,9 @@ async function modeCommand(action, options = {}) {
             mode: currentMode,
             tier: tier,
           });
+        }
 
-        case 'set':
+        case 'set': {
           let targetMode;
 
           if (options.mode) {
@@ -177,16 +178,18 @@ async function modeCommand(action, options = {}) {
             command: 'mode set',
             mode: targetMode,
           });
+        }
 
-        case 'compare':
+        case 'compare': {
           displayTierComparison();
 
           return outputResult({
             command: 'mode compare',
             tiers: getAvailableTiers(),
           });
+        }
 
-        case 'recommend':
+        case 'recommend': {
           const projectInfo = {};
 
           if (options.size) projectInfo.size = options.size;
@@ -220,8 +223,9 @@ async function modeCommand(action, options = {}) {
             tier: recommendedTier,
             projectInfo,
           });
+        }
 
-        case 'details':
+        case 'details': {
           if (!options.mode) {
             throw new Error('Mode not specified. Use --mode <mode>');
           }
@@ -232,6 +236,7 @@ async function modeCommand(action, options = {}) {
             command: 'mode details',
             mode: options.mode,
           });
+        }
 
         default:
           throw new Error(

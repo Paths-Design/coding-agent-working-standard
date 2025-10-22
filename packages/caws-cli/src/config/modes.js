@@ -236,7 +236,6 @@ function displayTierComparison() {
  */
 async function getCurrentMode() {
   const fs = require('fs-extra');
-  const path = require('path');
   const MODE_CONFIG = '.caws/mode.json';
 
   try {
@@ -285,13 +284,7 @@ async function setCurrentMode(mode) {
  * @returns {string} Recommended tier
  */
 function getTierRecommendation(projectInfo = {}) {
-  const {
-    size = 'medium',
-    teamSize = 1,
-    compliance = false,
-    auditRequired = false,
-    budget = 'unlimited',
-  } = projectInfo;
+  const { size = 'medium', teamSize = 1, compliance = false, auditRequired = false } = projectInfo;
 
   // Enterprise tier for compliance/audit requirements
   if (compliance || auditRequired) {

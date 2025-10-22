@@ -4,8 +4,6 @@
  * @author @darianrosebrook
  */
 
-const fs = require('fs-extra');
-const path = require('path');
 const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 
@@ -433,7 +431,7 @@ async function runInteractiveTutorial(tutorialType) {
  * @param {string} tutorialType - Type of tutorial to run
  * @param {Object} options - Command options
  */
-async function tutorialCommand(tutorialType, options = {}) {
+async function tutorialCommand(tutorialType, _options = {}) {
   return safeAsync(
     async () => {
       if (!tutorialType) {

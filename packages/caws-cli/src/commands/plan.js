@@ -6,7 +6,6 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 
@@ -389,7 +388,7 @@ async function planCommand(action, options = {}) {
   return safeAsync(
     async () => {
       switch (action) {
-        case 'generate':
+        case 'generate': {
           const specId = options.specId || options.spec;
 
           if (!specId) {
@@ -427,6 +426,8 @@ async function planCommand(action, options = {}) {
 
             return await generateAndDisplayPlan(spec, specId, options);
           }
+          break;
+        }
 
         default:
           throw new Error(`Unknown plan action: ${action}. Use: generate`);

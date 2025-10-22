@@ -4,9 +4,7 @@
  * @author @darianrosebrook
  */
 
-const fs = require('fs-extra');
 const path = require('path');
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 
 // Import validation functionality
@@ -16,11 +14,7 @@ const {
 } = require('../validation/spec-validation');
 
 // Import spec resolution system
-const {
-  resolveSpec,
-  suggestMigration,
-  interactiveSpecSelection,
-} = require('../utils/spec-resolver');
+const { resolveSpec, suggestMigration } = require('../utils/spec-resolver');
 
 /**
  * Validate command handler

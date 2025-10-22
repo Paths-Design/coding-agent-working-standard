@@ -154,7 +154,6 @@ async function createSpec(id, options = {}) {
   const specExists = await fs.pathExists(existingSpecPath);
 
   // Handle conflict resolution
-  let shouldProceed = true;
   let answer = null;
 
   if (specExists && !force) {
@@ -195,7 +194,6 @@ async function createSpec(id, options = {}) {
         return null;
       } else if (answer === 'override') {
         console.log(chalk.yellow('⚠️  Overriding existing spec...'));
-        shouldProceed = true;
       }
     } else {
       console.error(chalk.red(`❌ Spec '${id}' already exists.`));
@@ -368,7 +366,6 @@ function displaySpecsTable(specs) {
   sortedSpecs.forEach((spec) => {
     const specType = SPEC_TYPES[spec.type] || SPEC_TYPES.feature;
     const typeColor = specType.color;
-    const icon = specType.icon;
 
     const statusColor =
       spec.status === 'active'
@@ -397,12 +394,11 @@ function displaySpecsTable(specs) {
 function displaySpecDetails(spec) {
   const specType = SPEC_TYPES[spec.type] || SPEC_TYPES.feature;
   const typeColor = specType.color;
-  const icon = specType.icon;
 
   console.log(chalk.bold.cyan(`\n📋 Spec Details: ${spec.id}`));
   console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
 
-  console.log(`${icon} ${typeColor(spec.type.toUpperCase())} - ${spec.title}`);
+  console.log(`${specType.icon} ${typeColor(spec.type.toUpperCase())} - ${spec.title}`);
   console.log(
     chalk.gray(`   Status: ${spec.status} | Risk Tier: ${spec.risk_tier} | Mode: ${spec.mode}`)
   );
@@ -569,7 +565,7 @@ async function specsCommand(action, options = {}) {
   return safeAsync(
     async () => {
       switch (action) {
-        case 'list':
+        case 'list': {
           const specs = await listSpecFiles();
           displaySpecsTable(specs);
 
@@ -578,8 +574,9 @@ async function specsCommand(action, options = {}) {
             count: specs.length,
             specs: specs.map((s) => ({ id: s.id, type: s.type, status: s.status })),
           });
+        }
 
-        case 'conflicts':
+        case 'conflicts': {
           const { checkScopeConflicts } = require('../utils/spec-resolver');
           const registry = await loadSpecsRegistry();
           const specIds = Object.keys(registry.specs ?? {});
@@ -620,16 +617,18 @@ async function specsCommand(action, options = {}) {
             conflictCount: conflicts.length,
             conflicts,
           });
+        }
 
-        case 'migrate':
+        case 'migrate': {
           const result = await migrateFromLegacy(options);
 
           return outputResult({
             command: 'specs migrate',
             ...result,
           });
+        }
 
-        case 'create':
+        case 'create': {
           if (!options.id) {
             throw new Error('Spec ID is required. Usage: caws specs create <id>');
           }
@@ -659,8 +658,9 @@ async function specsCommand(action, options = {}) {
             command: 'specs create',
             spec: newSpec,
           });
+        }
 
-        case 'show':
+        case 'show': {
           if (!options.id) {
             throw new Error('Spec ID is required. Usage: caws specs show <id>');
           }
@@ -676,8 +676,9 @@ async function specsCommand(action, options = {}) {
             command: 'specs show',
             spec: { id: spec.id, type: spec.type, status: spec.status },
           });
+        }
 
-        case 'update':
+        case 'update': {
           if (!options.id) {
             throw new Error('Spec ID is required. Usage: caws specs update <id>');
           }
@@ -699,8 +700,9 @@ async function specsCommand(action, options = {}) {
             spec: options.id,
             updates,
           });
+        }
 
-        case 'delete':
+        case 'delete': {
           if (!options.id) {
             throw new Error('Spec ID is required. Usage: caws specs delete <id>');
           }
@@ -716,8 +718,9 @@ async function specsCommand(action, options = {}) {
             command: 'specs delete',
             spec: options.id,
           });
+        }
 
-        case 'types':
+        case 'types': {
           console.log(chalk.bold.cyan('\n📋 Available Spec Types'));
           console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
 
@@ -731,6 +734,7 @@ async function specsCommand(action, options = {}) {
             command: 'specs types',
             types: Object.keys(SPEC_TYPES),
           });
+        }
 
         default:
           throw new Error(

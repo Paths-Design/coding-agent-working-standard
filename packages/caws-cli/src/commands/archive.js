@@ -11,7 +11,7 @@ const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 
 // Import spec resolution system
-const { resolveSpec, suggestMigration } = require('../utils/spec-resolver');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Load change folder structure
@@ -90,7 +90,7 @@ async function validateAcceptanceCriteria(workingSpec) {
  * @param {string} changeId - Change identifier
  * @returns {Promise<Object>} Quality gate result
  */
-async function validateQualityGates(changeId) {
+async function validateQualityGates(_changeId) {
   // For now, return success - in full implementation would run actual gate checks
   return {
     valid: true,

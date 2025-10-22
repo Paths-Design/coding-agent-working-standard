@@ -9,7 +9,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 
@@ -31,7 +30,7 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
       warnLegacy: false,
     });
 
-    const { path: specPath, type: specType, spec } = resolved;
+    const { spec } = resolved;
 
     console.log('🔍 Detecting CAWS setup...');
     const setup = initializeGlobalSetup();

@@ -661,12 +661,10 @@ function calculateOverallProgress(data) {
   const modes = require('../config/modes');
 
   let score = 0;
-  let total = 0;
 
   // Multi-spec system
   if (specs && specs.length > 0) {
     // Specs system (40%)
-    total += 40;
     const completedSpecs = specs.filter((s) => s.status === 'completed').length;
     if (specs.length > 0) {
       const percentage = (completedSpecs / specs.length) * 40;
@@ -675,34 +673,28 @@ function calculateOverallProgress(data) {
 
     // Git hooks (20%) - only if enabled in mode
     if (modes.isFeatureEnabled('gitHooks', currentMode)) {
-      total += 20;
       if (hooks.installed) score += 20;
     }
 
     // Provenance (20%) - only if enabled in mode
     if (modes.isFeatureEnabled('provenance', currentMode)) {
-      total += 20;
       if (provenance.exists) score += 20;
     }
 
     // Waivers (15%) - only if enabled in mode
     if (modes.isFeatureEnabled('waivers', currentMode)) {
-      total += 15;
       if (waivers.exists) score += 15;
     }
 
     // Quality gates (5%) - only if enabled in mode
     if (modes.isFeatureEnabled('qualityGates', currentMode)) {
-      total += 5;
       if (specs.length > 0) score += 5;
     }
   } else if (spec) {
     // Legacy single spec system (30%)
-    total += 30;
     if (spec) score += 30;
 
     // Acceptance criteria progress (25%)
-    total += 25;
     if (spec && spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
       const completed = spec.acceptance_criteria.filter((c) => c.completed).length;
       const percentage = (completed / spec.acceptance_criteria.length) * 25;
@@ -711,30 +703,25 @@ function calculateOverallProgress(data) {
 
     // Git hooks (15%) - only if enabled in mode
     if (modes.isFeatureEnabled('gitHooks', currentMode)) {
-      total += 15;
       if (hooks.installed) score += 15;
     }
 
     // Provenance (15%) - only if enabled in mode
     if (modes.isFeatureEnabled('provenance', currentMode)) {
-      total += 15;
       if (provenance.exists) score += 15;
     }
 
     // Waivers (10%) - only if enabled in mode
     if (modes.isFeatureEnabled('waivers', currentMode)) {
-      total += 10;
       if (waivers.exists) score += 10;
     }
 
     // Quality gates (5%) - only if enabled in mode
     if (modes.isFeatureEnabled('qualityGates', currentMode)) {
-      total += 5;
       if (spec) score += 5;
     }
   } else {
     // No specs system - check basic setup (mode-aware)
-    total += 100;
 
     // Git hooks (30%) - only if enabled in mode
     if (modes.isFeatureEnabled('gitHooks', currentMode)) {
@@ -770,7 +757,6 @@ async function statusCommand(options = {}) {
       // Check current mode and adjust behavior accordingly
       const modes = require('../config/modes');
       const currentMode = await modes.getCurrentMode();
-      const tierConfig = modes.getTier(currentMode);
 
       // Load all status data
       const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
