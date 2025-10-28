@@ -1,0 +1,425 @@
+---
+description: Sophisticated TODO detection patterns and hidden implementation analysis
+globs:
+alwaysApply: true
+---
+
+# Sophisticated TODO Detection & Analysis
+
+## Core Principle
+
+**Detect hidden incomplete implementations beyond simple TODO comments.** Use context-aware analysis with confidence scoring to identify stub implementations, temporary solutions, and incomplete business logic.
+
+## Advanced Detection Patterns
+
+### High-Confidence Hidden TODO Patterns
+
+**Incomplete Implementation Patterns:**
+
+```python
+incomplete_implementation_patterns = [
+    r'\bnot\s+yet\s+implemented\b',
+    r'\bmissing\s+implementation\b',
+    r'\bincomplete\s+implementation\b',
+    r'\bpartial\s+implementation\b',
+    r'\bunimplemented\b',
+    r'\bnot\s+done\b',
+    r'\bpending\s+implementation\b',
+    r'\bto\s+be\s+implemented\b',
+    r'\bwill\s+be\s+implemented\b',
+    r'\bcoming\s+soon\b',
+    r'\bwork\s+in\s+progress\b',
+    r'\bwip\b',
+]
+```
+
+**Placeholder Code Patterns:**
+
+```python
+placeholder_code_patterns = [
+    r'\bplaceholder\s+code\b',
+    r'\bplaceholder\s+implementation\b',
+    r'\bstub\s+implementation\b',
+    r'\bdummy\s+implementation\b',
+    r'\bfake\s+implementation\b',
+    r'\bsimplified\s+.*?\s+implementation\b',
+    r'\bfor\s+now\b.*?(just|simply|only)\s+(concatenate|return|use)',
+    r'\btemporary\s+implementation\b',
+    r'\bmock\s+implementation\b',
+    r'\bsample\s+implementation\b',
+]
+```
+
+**Temporary Solution Patterns:**
+
+```python
+temporary_solution_patterns = [
+    r'\btemporary\s+solution\b',
+    r'\btemporary\s+fix\b',
+    r'\bquick\s+fix\b',
+    r'\bworkaround\b',
+    r'\bhack\b.*?(fix|solution)',
+    r'\bband-aid\s+solution\b',
+    r'\bkludge\b',
+    r'\bcrude\s+solution\b',
+    r'\brough\s+implementation\b',
+]
+```
+
+**Hardcoded Value Patterns:**
+
+```python
+hardcoded_value_patterns = [
+    r'\bhardcoded\s+value\b',
+    r'\bmagic\s+number\b',
+    r'\bmagic\s+string\b',
+    r'\bconstant\s+value\b.*?(replace|change|make\s+configurable)',
+    r'\bfixed\s+value\b',
+    r'\bstatic\s+value\b',
+    r'\bhardcoded\s+constant\b',
+]
+```
+
+**Future Improvement Patterns:**
+
+```python
+future_improvement_patterns = [
+    r'\bin\s+production\b.*?(implement|add|fix)',
+    r'\bin\s+a\s+real\s+implementation\b',
+    r'\beventually\b.*?(implement|add|fix)',
+    r'\bshould\s+be\b.*?(implemented|added|fixed)',
+    r'\bwould\s+be\b.*?(implemented|added|fixed)',
+    r'\bmight\s+be\b.*?(implemented|added|fixed)',
+    r'\bcould\s+be\b.*?(implemented|added|fixed)',
+    r'\blater\b.*?(implement|add|fix)',
+    r'\bsomeday\b.*?(implement|add|fix)',
+]
+```
+
+## Language-Specific Code Stub Detection
+
+### JavaScript/TypeScript Patterns
+
+```python
+javascript_stub_patterns = {
+    'function_stub': re.compile(r'^\s*(async\s+)?function\s+\w+\(.*\)\s*{'),
+    'throw_not_impl': re.compile(r"^\s*throw\s+new\s+Error\((\"|')(TODO|Not\s+Implemented|Not\s+Yet\s+Implemented)"),
+    'return_todo': re.compile(r"^\s*return\s+(null|undefined);\s*//\s*(TODO|PLACEHOLDER)"),
+    'console_log_stub': re.compile(r"^\s*console\.log\(.*?\);\s*//\s*(TODO|PLACEHOLDER|STUB)"),
+    'empty_function': re.compile(r'^\s*(async\s+)?function\s+\w+\(.*\)\s*{\s*}\s*$'),
+    'return_mock': re.compile(r"^\s*return\s+\{.*?\};\s*//\s*(MOCK|FAKE|DUMMY)"),
+}
+```
+
+### Python Patterns
+
+```python
+python_stub_patterns = {
+    'function_stub': re.compile(r'^\s*def\s+\w+\(.*\):'),
+    'pass_stmt': re.compile(r'^\s*pass\s*$'),
+    'ellipsis_stmt': re.compile(r'^\s*\.\.\.\s*$'),
+    'raise_not_impl': re.compile(r'^\s*raise\s+NotImplementedError'),
+    'return_none': re.compile(r"^\s*return\s+None\s*#\s*(TODO|PLACEHOLDER)"),
+    'print_stub': re.compile(r"^\s*print\(.*?\)\s*#\s*(TODO|PLACEHOLDER|STUB)"),
+    'empty_function': re.compile(r'^\s*def\s+\w+\(.*\):\s*pass\s*$'),
+}
+```
+
+### Rust Patterns
+
+```python
+rust_stub_patterns = {
+    'function_stub': re.compile(r'^\s*(async\s+)?fn\s+\w+\(.*\)\s*->\s*\w+\s*{'),
+    'todo_macro': re.compile(r'^\s*todo!\(\)'),
+    'unimplemented_macro': re.compile(r'^\s*unimplemented!\(\)'),
+    'panic_stub': re.compile(r"^\s*panic!\(\"TODO\"\)"),
+    'return_default': re.compile(r"^\s*Default::default\(\)\s*//\s*(TODO|PLACEHOLDER)"),
+}
+```
+
+## Context-Aware Analysis
+
+### Confidence Scoring
+
+```python
+def calculate_confidence_score(comment: str, line_num: int, file_path: Path) -> float:
+    score = 0.0
+
+    # Check for documentation indicators (reduce score)
+    if is_documentation_comment(comment):
+        score -= 0.5
+
+    # Check for TODO indicators (increase score)
+    if has_todo_indicators(comment):
+        score += 0.3
+
+    # Check if it's in a generated file (reduce score)
+    if is_generated_file(file_path):
+        score -= 0.4
+
+    # Check for implementation context (increase score)
+    if is_implementation_context(comment):
+        score += 0.2
+
+    # Check for business logic context (increase score)
+    if is_business_logic_context(comment):
+        score += 0.3
+
+    return max(-1.0, min(1.0, score))
+```
+
+### Exclusion Patterns
+
+```python
+exclusion_patterns = [
+    r'\bperformance\s+monitoring\b',
+    r'\bperformance\s+optimization\b',
+    r'\bfallback\s+mechanism\b',
+    r'\bbasic\s+authentication\b',
+    r'\bmock\s+object\b',  # For testing
+    r'\bcurrent\s+implementation\b.*?(uses|provides|supports)',
+    r'\bexample\s+implementation\b',
+    r'\bsample\s+code\b',
+    r'\bdemo\s+implementation\b',
+    r'\btest\s+implementation\b',
+]
+```
+
+## Implementation Detection
+
+### Fake Persistence Detection
+
+```python
+fake_persistence_patterns = [
+    r'private\s+\w+:\s*\w+\[\]\s*=\s*\[\]',  # In-memory arrays
+    r'const\s+\w+\s*=\s*\[\]',  # Empty arrays
+    r'let\s+\w+\s*=\s*\[\]',  # Empty arrays
+    r'mock.*database',
+    r'fake.*persistence',
+    r'in-memory.*storage',
+    r'temporary.*storage',
+]
+```
+
+### Mock API Detection
+
+```python
+mock_api_patterns = [
+    r'return\s+\{.*?\};\s*//\s*(MOCK|FAKE|DUMMY)',
+    r'console\.log.*mock',
+    r'hardcoded.*response',
+    r'static.*response',
+    r'fake.*api',
+    r'mock.*endpoint',
+]
+```
+
+### Stub Business Logic Detection
+
+```python
+stub_business_logic_patterns = [
+    r'return\s+\d+;\s*//\s*(TODO|PLACEHOLDER)',
+    r'return\s+true;\s*//\s*(TODO|PLACEHOLDER)',
+    r'return\s+false;\s*//\s*(TODO|PLACEHOLDER)',
+    r'return\s+null;\s*//\s*(TODO|PLACEHOLDER)',
+    r'throw\s+new\s+Error.*not\s+implemented',
+    r'raise.*NotImplementedError',
+]
+```
+
+## CAWS Integration
+
+### Pre-Commit Analysis
+
+```bash
+# Run sophisticated TODO analysis
+check-hidden-todos() {
+  echo "🔍 Running sophisticated TODO analysis..."
+
+  # Check for high-confidence hidden TODOs
+  local hidden_todos=$(grep -r -E "(not yet implemented|missing implementation|incomplete implementation|partial implementation|unimplemented|not done|pending implementation|to be implemented|will be implemented)" src/ | wc -l)
+  if [ "$hidden_todos" -gt 0 ]; then
+    echo "❌ Found $hidden_todos hidden incomplete implementations"
+    echo "All implementations must be complete"
+    exit 1
+  fi
+
+  # Check for placeholder implementations
+  local placeholders=$(grep -r -E "(placeholder code|placeholder implementation|stub implementation|dummy implementation|fake implementation)" src/ | wc -l)
+  if [ "$placeholders" -gt 0 ]; then
+    echo "❌ Found $placeholders placeholder implementations"
+    echo "Replace with real implementations"
+    exit 1
+  fi
+
+  # Check for temporary solutions
+  local temp_solutions=$(grep -r -E "(temporary solution|temporary fix|quick fix|workaround|hack.*fix)" src/ | wc -l)
+  if [ "$temp_solutions" -gt 0 ]; then
+    echo "❌ Found $temp_solutions temporary solutions"
+    echo "Implement proper solutions"
+    exit 1
+  fi
+
+  echo "✅ No hidden incomplete implementations found"
+}
+```
+
+### CI/CD Integration
+
+```yaml
+# Sophisticated TODO analysis in CI
+- name: Check Hidden TODOs
+  run: |
+    echo "🔍 Running sophisticated hidden TODO analysis..."
+
+    # Check for incomplete implementations
+    incomplete_count=$(grep -r -E "(not yet implemented|missing implementation|incomplete implementation|partial implementation|unimplemented|not done|pending implementation|to be implemented|will be implemented)" src/ | wc -l)
+    if [ "$incomplete_count" -gt 0 ]; then
+      echo "❌ Found $incomplete_count hidden incomplete implementations"
+      echo "All implementations must be complete"
+      exit 1
+    fi
+
+    # Check for placeholder implementations
+    placeholder_count=$(grep -r -E "(placeholder code|placeholder implementation|stub implementation|dummy implementation|fake implementation)" src/ | wc -l)
+    if [ "$placeholder_count" -gt 0 ]; then
+      echo "❌ Found $placeholder_count placeholder implementations"
+      echo "Replace with real implementations"
+      exit 1
+    fi
+
+    # Check for temporary solutions
+    temp_count=$(grep -r -E "(temporary solution|temporary fix|quick fix|workaround|hack.*fix)" src/ | wc -l)
+    if [ "$temp_count" -gt 0 ]; then
+      echo "❌ Found $temp_count temporary solutions"
+      echo "Implement proper solutions"
+      exit 1
+    fi
+
+    # Check for fake persistence
+    fake_persistence_count=$(grep -r -E "(private.*\[\]|mock.*database|fake.*persistence|in-memory.*storage)" src/ | wc -l)
+    if [ "$fake_persistence_count" -gt 0 ]; then
+      echo "❌ Found $fake_persistence_count fake persistence patterns"
+      echo "Use real database connections"
+      exit 1
+    fi
+
+    echo "✅ No hidden incomplete implementations found"
+
+- name: Generate TODO Analysis Report
+  run: |
+    echo "📊 Generating comprehensive TODO analysis report..."
+
+    # Generate detailed report
+    echo "# Hidden TODO Analysis Report" > hidden-todos-report.md
+    echo "" >> hidden-todos-report.md
+    echo "## Incomplete Implementations" >> hidden-todos-report.md
+    grep -r -E "(not yet implemented|missing implementation|incomplete implementation|partial implementation|unimplemented|not done|pending implementation|to be implemented|will be implemented)" src/ >> hidden-todos-report.md || echo "None found" >> hidden-todos-report.md
+    echo "" >> hidden-todos-report.md
+    echo "## Placeholder Implementations" >> hidden-todos-report.md
+    grep -r -E "(placeholder code|placeholder implementation|stub implementation|dummy implementation|fake implementation)" src/ >> hidden-todos-report.md || echo "None found" >> hidden-todos-report.md
+    echo "" >> hidden-todos-report.md
+    echo "## Temporary Solutions" >> hidden-todos-report.md
+    grep -r -E "(temporary solution|temporary fix|quick fix|workaround|hack.*fix)" src/ >> hidden-todos-report.md || echo "None found" >> hidden-todos-report.md
+    echo "" >> hidden-todos-report.md
+    echo "## Fake Persistence Patterns" >> hidden-todos-report.md
+    grep -r -E "(private.*\[\]|mock.*database|fake.*persistence|in-memory.*storage)" src/ >> hidden-todos-report.md || echo "None found" >> hidden-todos-report.md
+
+    echo "📊 TODO analysis report generated"
+```
+
+## CAWS Commands
+
+### TODO Analysis Commands
+
+```bash
+# Run comprehensive TODO analysis
+caws analyze-todos --confidence-threshold=0.7
+
+# Check for hidden incomplete implementations
+caws analyze-todos --pattern="incomplete_implementation" --confidence-threshold=0.8
+
+# Analyze placeholder implementations
+caws analyze-todos --pattern="placeholder_code" --confidence-threshold=0.6
+
+# Check for temporary solutions
+caws analyze-todos --pattern="temporary_solution" --confidence-threshold=0.7
+
+# Analyze fake persistence patterns
+caws analyze-todos --pattern="fake_persistence" --confidence-threshold=0.8
+```
+
+### Quality Monitoring
+
+```bash
+# Track TODO resolution progress
+caws quality-monitor --action=code_edited --files="$(git diff --name-only)" --check-hidden-todos
+
+# Update progress with TODO resolution
+caws progress update --criterion-id="TODO-001" --status="completed" --tests-passing=1
+
+# Track implementation completeness metrics
+caws metrics track --metric="hidden_todos_count" --value=0
+caws metrics track --metric="placeholder_implementations" --value=0
+caws metrics track --metric="temporary_solutions" --value=0
+```
+
+## Quality Metrics
+
+### Implementation Completeness Score
+
+```python
+def calculate_completeness_score(analysis_results):
+    total_files = analysis_results['total_files']
+    files_with_todos = analysis_results['files_with_hidden_todos']
+    high_conf_todos = analysis_results['high_confidence_todos']
+
+    # Completeness score (higher is better)
+    completeness_score = 1.0 - (files_with_todos / total_files) if total_files > 0 else 1.0
+
+    # Quality score based on confidence levels
+    quality_score = 1.0 - (high_conf_todos / total_files) if total_files > 0 else 1.0
+
+    return {
+        'completeness_score': completeness_score,
+        'quality_score': quality_score,
+        'files_with_todos': files_with_todos,
+        'high_confidence_todos': high_conf_todos,
+        'total_files_analyzed': total_files
+    }
+```
+
+### Anti-Pattern Detection Metrics
+
+- **Placeholder Density**: Number of high-confidence TODOs per 1000 lines
+- **Stub Implementation Rate**: % of functions with stub patterns detected
+- **Temporary Solution Rate**: % of code marked as temporary/workaround
+- **Hardcoded Value Rate**: % of magic numbers/strings detected
+- **Fake Persistence Rate**: % of code using in-memory storage patterns
+
+## Continuous Improvement
+
+### Monthly Audits
+
+```bash
+# Generate monthly completeness report
+grep -r -E "(not yet implemented|missing implementation|incomplete implementation|partial implementation|unimplemented|not done|pending implementation|to be implemented|will be implemented)" src/ > monthly-hidden-todos.txt
+grep -r -E "(placeholder code|placeholder implementation|stub implementation|dummy implementation|fake implementation)" src/ > monthly-placeholders.txt
+grep -r -E "(temporary solution|temporary fix|quick fix|workaround|hack.*fix)" src/ > monthly-temp-solutions.txt
+
+# Track trends over time
+echo "Implementation completeness trends:" >> monthly-report.md
+echo "- Hidden incomplete implementations: $(wc -l < monthly-hidden-todos.txt)" >> monthly-report.md
+echo "- Placeholder implementations: $(wc -l < monthly-placeholders.txt)" >> monthly-report.md
+echo "- Temporary solutions: $(wc -l < monthly-temp-solutions.txt)" >> monthly-report.md
+```
+
+### Quarterly Reviews
+
+- Full implementation audit across entire codebase
+- Review integration reality and persistence patterns
+- Update quality gates based on project evolution
+- Refine detection patterns based on new anti-patterns
+- Analyze confidence threshold effectiveness
+
+This rule ensures sophisticated detection of hidden incomplete implementations beyond simple TODO comments, providing context-aware analysis with confidence scoring to maintain high code quality standards.

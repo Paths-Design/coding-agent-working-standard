@@ -1,0 +1,10 @@
+# Week 1 Emergency Stabilization (edit freely; script picks these up)
+week: week-1
+goals:
+  god_objects:
+    severe: 0      # files with SLOC ≥ severe threshold
+    critical: 0    # files with SLOC ≥ critical threshold
+    warning: 5     # files with SLOC ≥ warning threshold
+  duplicate_structs: 329
+  duplicate_filenames: 7
+  quality_gates: passing

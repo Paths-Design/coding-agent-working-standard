@@ -354,9 +354,11 @@ async function checkScopeConflicts(specIds) {
   const conflicts = [];
   const specScopes = [];
 
+  // Load registry once
+  const registry = await loadSpecsRegistry();
+
   // Load all specs and their scopes
   for (const id of specIds) {
-    const registry = await loadSpecsRegistry();
     const specPath = path.join(SPECS_DIR, registry.specs[id].path);
 
     try {
@@ -414,19 +416,58 @@ async function checkScopeConflicts(specIds) {
  * @returns {boolean} True if paths overlap
  */
 function pathsOverlap(path1, path2) {
-  // Normalize paths (remove leading/trailing slashes, handle wildcards)
-  const normalizePath = (p) => p.replace(/^\/+|\/+$/g, '').replace(/\*/g, '.*');
+  // Normalize paths (remove leading/trailing slashes)
+  const normalizePath = (p) => p.replace(/^\/+|\/+$/g, '');
 
-  // Simple check: if one path is a substring of another or vice versa
   const normalized1 = normalizePath(path1);
   const normalized2 = normalizePath(path2);
 
-  // Check for exact match or substring relationships
-  return (
-    normalized1 === normalized2 ||
-    normalized1.includes(normalized2) ||
-    normalized2.includes(normalized1)
-  );
+  // Check for exact match
+  if (normalized1 === normalized2) {
+    return true;
+  }
+
+  // Handle wildcard patterns
+  const hasWildcard = (p) => p.includes('*');
+
+  if (hasWildcard(normalized1) || hasWildcard(normalized2)) {
+    // Convert wildcards to regex patterns
+    const toRegex = (p) => {
+      // Escape dots first
+      let result = p.replace(/\./g, '\\.');
+
+      // Handle ** patterns (match any path including zero segments)
+      result = result.replace(/\*\*/g, '(?:.*/)?');
+
+      // Handle single * patterns (match any non-slash characters)
+      result = result.replace(/\*/g, '[^/]*');
+
+      // Fix patterns like src/auth/**/*.js to match src/auth/login.js
+      // The pattern (?:.*/)?[^/]* should become .*[^/]* for direct filename matching
+      result = result.replace(/\(\\?\:\\.\*\/\)\?\/\[\\^\/\]\*/g, '.*[^/]*');
+
+      // Also fix patterns like (?:.[^/]*/)?/[^/]* to match direct filenames
+      result = result.replace(/\(\\?\:\\.\[\\^\/\]\*\/\)\?\/\[\\^\/\]\*/g, '.*[^/]*');
+
+      return result;
+    };
+
+    // Check if either path matches the other's pattern
+    if (hasWildcard(normalized1)) {
+      const regex1 = new RegExp('^' + toRegex(normalized1) + '$');
+      if (regex1.test(normalized2)) return true;
+    }
+
+    if (hasWildcard(normalized2)) {
+      const regex2 = new RegExp('^' + toRegex(normalized2) + '$');
+      if (regex2.test(normalized1)) return true;
+    }
+
+    return false;
+  }
+
+  // Simple substring check for non-wildcard paths
+  return normalized1.includes(normalized2) || normalized2.includes(normalized1);
 }
 
 /**
@@ -554,6 +595,7 @@ module.exports = {
   interactiveSpecSelection,
   loadSpecsRegistry,
   suggestFeatureBreakdown,
+  pathsOverlap,
   SPECS_DIR,
   LEGACY_SPEC,
   SPECS_REGISTRY,

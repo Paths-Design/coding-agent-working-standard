@@ -1,0 +1,48 @@
+# CAWS Canonical Map
+# Maps normalized stems to canonical repo-relative files.
+# The checker also honors per-file pragma: "CAWS: canonical-of <path>"
+
+# Example canonical mappings
+canonicals:
+  # e.g., "router.api" is the normalized stem for files like router_api.rs, router-api.ts
+  # "router.api": "iterations/v3/api-server/src/router.rs"
+  # "task.executor": "iterations/v3/council/src/task_executor.rs"
+  
+  # Add your canonical mappings here:
+  # "normalized.stem": "path/to/canonical/file.ext"
+
+# Pattern overrides: the most specific first; useful when stems collide cross-module
+overrides:
+  # - pattern: "iterations/v3/apps/web-dashboard/**"
+  #   canonical: "iterations/v3/apps/web-dashboard/src/app/router.ts"
+  
+  # Add pattern overrides here:
+  # - pattern: "path/pattern/**"
+  #   canonical: "path/to/canonical/file.ext"
+
+# Documentation:
+# 
+# How it works:
+# 1. Files are grouped by normalized stem (banned modifiers, version tags, separators removed)
+# 2. Within each crate/package, only one canonical file is allowed per normalized stem
+# 3. Canonical resolution priority:
+#    a) Explicit per-file pragma: "CAWS: canonical-of <path>" (first 50 lines)
+#    b) Canonical map entry for normalized stem
+#    c) Pattern override (most specific first)
+#    d) Heuristic: oldest file by commit time
+#
+# Examples:
+# - Files: router.rs, router_v2.rs, router-final.ts → normalized stem: "router"
+# - Files: task_executor.rs, task-executor-new.rs → normalized stem: "task.executor"
+# - Files: scheduler.rs, scheduler2.rs, scheduler-next.rs → normalized stem: "scheduler"
+#
+# Violations:
+# - Shadow files: non-canonical files in same cluster
+# - Banned modifiers: files with "enhanced/new/final" etc. in name
+# - Missing canonical: clusters with >1 member but no canonical declared
+#
+# Fixes:
+# - Rename canonical to purpose-first name (e.g., "router_http.rs", "router_ws.rs")
+# - Move logic from shadow files into canonical
+# - Declare canonical via pragma or this map
+

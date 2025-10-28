@@ -1,0 +1,15 @@
+# CAWS Functional Duplication Exceptions
+# This file contains time-boxed exceptions for known duplication issues
+
+exceptions:
+  # Example exception (commented out)
+  # - pattern: "packages/legacy/**"
+  #   reason: "Legacy code undergoing refactoring - will be consolidated in Q2 2025"
+  #   expires_at: "2025-06-30T23:59:59Z"
+  #   approved_by: "tech-lead@company.com"
+  
+  # Add your exceptions here following this format:
+  # - pattern: "path/pattern/**"
+  #   reason: "Clear justification for the exception"
+  #   expires_at: "YYYY-MM-DDTHH:MM:SSZ"
+  #   approved_by: "approver@company.com"

@@ -400,7 +400,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       require('readline').createInterface.mockReturnValue(mockRl);
 
-      const result = await specsCommand('create', { id: 'test-spec' });
+      const result = await specsCommand('create', { id: 'test-spec', interactive: true });
 
       expect(result.command).toBe('specs create');
       expect(result.canceled).toBe(true);

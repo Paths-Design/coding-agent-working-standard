@@ -1,0 +1,390 @@
+---
+description: Comprehensive documentation quality standards to prevent superiority claims, unfounded achievements, and marketing language
+globs: ['**/*.md', '**/*.txt', '**/*.rst', '**/*.adoc']
+alwaysApply: true
+---
+
+# Documentation Quality Standards
+
+## Core Principle
+
+**Documentation must be engineering-grade, accurate, and free of marketing language.** Focus on architectural decisions, implementation details, and system design rather than claims of superiority or unfounded achievements.
+
+## Prohibited Content Patterns
+
+### ❌ Superiority Claims (Banned)
+
+**Never use these terms in documentation:**
+
+- `revolutionary`, `breakthrough`, `innovative`, `groundbreaking`
+- `cutting-edge`, `state-of-the-art`, `next-generation`
+- `advanced`, `premium`, `superior`, `best`, `leading`
+- `industry-leading`, `award-winning`, `game-changing`
+
+### ❌ Unfounded Achievement Claims (Banned)
+
+**Never claim these without verification:**
+
+- `production-ready`, `enterprise-grade`, `battle-tested`
+- `complete`, `finished`, `done`, `achieved`, `delivered`
+- `implemented`, `operational`, `ready`, `deployed`
+- `launched`, `released`, `100%`, `fully`
+- `comprehensive`, `entire`, `total`, `all`, `every`
+- `perfect`, `ideal`, `optimal`, `maximum`, `minimum`
+- `unlimited`, `infinite`, `endless`
+
+### ❌ Marketing Language (Banned)
+
+**Avoid these patterns:**
+
+- `cutting-edge technology`
+- `revolutionary approach`
+- `industry-leading solution`
+- `state-of-the-art system`
+- `next-generation platform`
+- `advanced capabilities`
+- `premium features`
+- `superior performance`
+
+### ❌ Temporal Documentation (Archive Only)
+
+**Never create these in main directories:**
+
+- `SESSION_*_SUMMARY.md`
+- `IMPLEMENTATION_STATUS.md`
+- `TODO_*_COMPLETE.md`
+- `*_SUMMARY.md`
+- `*_REPORT.md`
+- `*_AUDIT.md`
+- `*_CHECKLIST.md`
+- `PHASE*_*.md`
+- `NEXT_ACTIONS.md`
+
+## Required Content Standards
+
+### ✅ Engineering-Grade Language
+
+**Use these patterns instead:**
+
+- `implemented` (not "production-ready")
+- `operational` (not "enterprise-grade")
+- `in development` (not "complete")
+- `working` (not "finished")
+- `functional` (not "achieved")
+- `available` (not "delivered")
+
+### ✅ Accurate Status Claims
+
+**Before claiming any status, verify:**
+
+- [ ] Feature fully implemented and tested
+- [ ] All documented endpoints exist and work
+- [ ] Code examples run without errors
+- [ ] Installation instructions work on clean environment
+- [ ] Performance claims backed by benchmarks
+- [ ] Security claims validated by testing
+
+### ✅ Architectural Focus
+
+**Documentation should emphasize:**
+
+- **Architectural decisions** and rationale
+- **Implementation details** and patterns
+- **System design** and component relationships
+- **Technical specifications** and constraints
+- **Integration points** and APIs
+- **Quality gates** and verification methods
+
+## Documentation Quality Checklist
+
+### Pre-Publication Verification
+
+- [ ] No superiority claims or marketing language
+- [ ] No unfounded achievement claims
+- [ ] All status claims verified and accurate
+- [ ] Code examples tested and working
+- [ ] Installation instructions verified
+- [ ] API documentation matches implementation
+- [ ] No temporal documentation in main directories
+- [ ] Professional, neutral tone throughout
+- [ ] Focus on engineering-grade content
+
+### Content Quality Gates
+
+- [ ] **Accuracy**: All claims backed by evidence
+- [ ] **Completeness**: All documented features implemented
+- [ ] **Clarity**: Technical concepts clearly explained
+- [ ] **Consistency**: Terminology used consistently
+- [ ] **Currency**: Information reflects current state
+- [ ] **Relevance**: Content serves maintainers/collaborators/researchers
+
+## Enforcement Mechanisms
+
+### Automated Detection
+
+**Use these patterns to detect violations:**
+
+```regex
+# Superiority claims
+(?i)\b(revolutionary|breakthrough|innovative|groundbreaking|cutting-edge|state-of-the-art|next-generation|advanced|premium|superior|best|leading|industry-leading|award-winning|game-changing)\b
+
+# Unfounded achievements
+(?i)\b(production-ready|enterprise-grade|battle-tested|complete|finished|done|achieved|delivered|implemented|operational|ready|deployed|launched|released|100%|fully|comprehensive|entire|total|all|every|perfect|ideal|optimal|maximum|minimum|unlimited|infinite|endless)\b
+
+# Temporal documentation
+(?i)(session|implementation|todo|summary|report|audit|checklist|phase|next_actions)
+```
+
+### Manual Review Requirements
+
+**For any documentation claiming:**
+
+- Production readiness → Require evidence of all quality gates
+- Enterprise features → Require enterprise testing validation
+- Complete implementation → Require 100% test coverage
+- Performance claims → Require benchmark data
+- Security features → Require security audit results
+
+### Quality Metrics
+
+**Track these metrics:**
+
+- **Accuracy Score**: % of claims verified by evidence
+- **Reality Alignment**: % of documented features that work
+- **Engineering Focus**: % of content focused on technical details
+- **Marketing Language**: % of content free of marketing terms
+- **Temporal Content**: % of content in appropriate directories
+
+## Correct Documentation Patterns
+
+### ✅ Accurate Feature Documentation
+
+```markdown
+## Features
+
+### Implemented
+
+- User authentication with JWT tokens
+- Real-time notifications via WebSocket
+- Basic analytics dashboard
+
+### In Development
+
+- Advanced ML recommendations (Q2 2025)
+- Multi-tenant isolation (Q1 2025)
+
+### Planned
+
+- AI-powered chat support (Q3 2025)
+```
+
+### ✅ Working Code Examples
+
+```javascript
+// POST /api/users
+const response = await fetch('/api/users', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    name: 'John Doe',
+    email: 'john@example.com', // Required field included
+    password: 'securePassword123',
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(`Failed to create user: ${response.statusText}`);
+}
+
+const user = await response.json();
+console.log('Created user:', user);
+```
+
+### ✅ Realistic Status Claims
+
+```markdown
+# Project Status
+
+**Current Status**: In Development (Proof of Concept)
+
+**Implementation Progress**: 25% - Core authentication and basic API working, but missing:
+
+- Database persistence (in-memory only)
+- Security hardening
+- Comprehensive testing
+- Production deployment pipeline
+
+**Next Milestone**: Alpha release (Q1 2025) with full persistence layer
+```
+
+## CAWS Integration
+
+### Pre-Commit Hooks
+
+**Automatically check:**
+
+- No prohibited language patterns
+- No temporal documentation in main directories
+- All status claims have evidence
+- Code examples are tested
+- Installation instructions work
+
+```bash
+# Check for prohibited language patterns
+check-documentation-quality() {
+  echo "🔍 Checking documentation quality..."
+
+  # Check for superiority claims
+  local superiority_claims=$(grep -r -E "(?i)\b(revolutionary|breakthrough|innovative|groundbreaking|cutting-edge|state-of-the-art|next-generation|advanced|premium|superior|best|leading|industry-leading|award-winning|game-changing)\b" docs/ | wc -l)
+  if [ "$superiority_claims" -gt 0 ]; then
+    echo "❌ Found $superiority_claims superiority claims"
+    echo "Use engineering-grade language instead"
+    exit 1
+  fi
+
+  # Check for unfounded achievements
+  local unfounded_claims=$(grep -r -E "(?i)\b(production-ready|enterprise-grade|battle-tested|complete|finished|done|achieved|delivered|implemented|operational|ready|deployed|launched|released|100%|fully|comprehensive|entire|total|all|every|perfect|ideal|optimal|maximum|minimum|unlimited|infinite|endless)\b" docs/ | wc -l)
+  if [ "$unfounded_claims" -gt 0 ]; then
+    echo "❌ Found $unfounded_claims unfounded achievement claims"
+    echo "Verify all claims with evidence"
+    exit 1
+  fi
+
+  # Check for temporal documentation
+  local temporal_docs=$(find docs/ -name "*SESSION*" -o -name "*SUMMARY*" -o -name "*REPORT*" -o -name "*AUDIT*" -o -name "*CHECKLIST*" -o -name "*PHASE*" -o -name "*NEXT_ACTIONS*" | wc -l)
+  if [ "$temporal_docs" -gt 0 ]; then
+    echo "❌ Found $temporal_docs temporal documentation files"
+    echo "Move to archive directory"
+    exit 1
+  fi
+
+  echo "✅ Documentation quality checks passed"
+}
+```
+
+### CI/CD Integration
+
+**Run documentation quality checks:**
+
+- Link validation
+- Code example testing
+- Status claim verification
+- Marketing language detection
+- Temporal content detection
+
+````yaml
+# GitHub Actions example
+- name: Check Documentation Quality
+  run: |
+    echo "🔍 Running documentation quality checks..."
+
+    # Check for prohibited language patterns
+    superiority_claims=$(grep -r -E "(?i)\b(revolutionary|breakthrough|innovative|groundbreaking|cutting-edge|state-of-the-art|next-generation|advanced|premium|superior|best|leading|industry-leading|award-winning|game-changing)\b" docs/ | wc -l)
+    if [ "$superiority_claims" -gt 0 ]; then
+      echo "❌ Found $superiority_claims superiority claims"
+      exit 1
+    fi
+
+    # Check for unfounded achievements
+    unfounded_claims=$(grep -r -E "(?i)\b(production-ready|enterprise-grade|battle-tested|complete|finished|done|achieved|delivered|implemented|operational|ready|deployed|launched|released|100%|fully|comprehensive|entire|total|all|every|perfect|ideal|optimal|maximum|minimum|unlimited|infinite|endless)\b" docs/ | wc -l)
+    if [ "$unfounded_claims" -gt 0 ]; then
+      echo "❌ Found $unfounded_claims unfounded achievement claims"
+      exit 1
+    fi
+
+    # Check for temporal documentation
+    temporal_docs=$(find docs/ -name "*SESSION*" -o -name "*SUMMARY*" -o -name "*REPORT*" -o -name "*AUDIT*" -o -name "*CHECKLIST*" -o -name "*PHASE*" -o -name "*NEXT_ACTIONS*" | wc -l)
+    if [ "$temporal_docs" -gt 0 ]; then
+      echo "❌ Found $temporal_docs temporal documentation files"
+      exit 1
+    fi
+
+    echo "✅ Documentation quality checks passed"
+
+- name: Test Code Examples
+  run: |
+    echo "🔍 Testing code examples in documentation..."
+
+    # Extract and test code examples
+    find docs/ -name "*.md" -exec grep -l "```" {} \; | while read file; do
+      echo "Testing code examples in $file"
+      # Extract code blocks and test them
+      # Implementation depends on language and framework
+    done
+
+    echo "✅ Code examples tested"
+````
+
+### Quality Gates
+
+**Block commits if:**
+
+- Superiority claims detected
+- Unfounded achievements claimed
+- Temporal documentation in wrong location
+- Marketing language used
+- Status claims without evidence
+
+### CAWS Commands
+
+```bash
+# Check documentation quality
+caws validate --check-documentation-quality
+
+# Generate documentation quality report
+caws docs quality-report --include-marketing-check --include-status-verification
+
+# Track documentation quality metrics
+caws metrics track --metric="documentation_quality_score" --value=95
+
+# Update progress with documentation quality
+caws progress update --criterion-id="DOCS-001" --status="completed"
+```
+
+## Continuous Improvement
+
+### Regular Audits
+
+**Monthly reviews:**
+
+- Check for new problematic patterns
+- Update prohibited terms list
+- Review quality metrics
+- Improve detection accuracy
+
+### Feedback Integration
+
+**User feedback:**
+
+- Report problematic content
+- Suggest quality improvements
+- Identify new patterns to detect
+- Validate quality metrics
+
+### Rule Evolution
+
+**Update rules based on:**
+
+- New problematic patterns discovered
+- Industry best practices
+- User feedback and complaints
+- Quality metric trends
+- Production incident analysis
+
+### CAWS Integration Points
+
+```bash
+# Track documentation quality trends
+caws metrics trends --metric="documentation_quality_score" --period="30d"
+
+# Export documentation quality metrics
+caws metrics export --format=json --include-documentation-quality
+
+# Archive documentation with quality verification
+caws archive DOCS-001 --verify-documentation-quality
+```
+
+This rule ensures documentation maintains engineering-grade quality and prevents the accumulation of problematic content that requires manual cleanup, fully integrated with CAWS workflow and quality gates.

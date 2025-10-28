@@ -119,7 +119,7 @@ program
 // Validate command
 program
   .command('validate')
-  .description('Validate CAWS spec with suggestions (feature-specific or legacy)')
+  .description('Validate CAWS spec with suggestions')
   .argument('[spec-file]', 'Path to spec file (optional, uses spec resolution)')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth, FEAT-001)')
   .option('-i, --interactive', 'Interactive spec selection when multiple specs exist', false)
@@ -132,7 +132,7 @@ program
 // Quality Gates command
 program
   .command('quality-gates')
-  .description('Run comprehensive quality gates on staged files only')
+  .description('Run comprehensive quality gates')
   .option('--ci', 'CI mode - exit with error code if violations found', false)
   .option('--languages <languages>', 'Comma-separated list of languages to check', 'rust')
   .option('--no-todos', 'Skip hidden TODO analysis', false)
@@ -142,7 +142,7 @@ program
 // Status command
 program
   .command('status')
-  .description('Show project health overview (multi-spec aware)')
+  .description('Show project health overview')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('-s, --spec <path>', 'Path to spec file (explicit override)')
   .option('--visual', 'Enhanced visual output with progress bars', false)
@@ -152,7 +152,7 @@ program
 // Archive command
 program
   .command('archive <change-id>')
-  .description('Archive completed change with lifecycle management (multi-spec aware)')
+  .description('Archive completed change')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('-f, --force', 'Force archive even if criteria not met', false)
   .option('--dry-run', 'Preview archive without performing it', false)
@@ -265,7 +265,7 @@ program
 // Plan command
 program
   .command('plan <action>')
-  .description('Generate implementation plans from specifications')
+  .description('Generate implementation plans')
   .option('--spec-id <id>', 'Spec ID to generate plan for')
   .option('--spec <id>', 'Alias for --spec-id')
   .option('--output <path>', 'Output file path for the plan')
@@ -281,7 +281,7 @@ program
 // Diagnose command
 program
   .command('diagnose')
-  .description('Run health checks and suggest fixes (multi-spec aware)')
+  .description('Run health checks and suggest fixes')
   .option('--spec-id <id>', 'Feature-specific spec ID')
   .option('--fix', 'Apply automatic fixes', false)
   .action(diagnoseCommand);
@@ -289,7 +289,7 @@ program
 // Evaluate command
 program
   .command('evaluate [spec-file]')
-  .description('Evaluate work against CAWS quality standards (feature-specific or legacy)')
+  .description('Evaluate work against CAWS quality standards')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(evaluateCommand);
@@ -297,7 +297,7 @@ program
 // Iterate command
 program
   .command('iterate [spec-file]')
-  .description('Get iterative development guidance (feature-specific or legacy)')
+  .description('Get iterative development guidance')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--current-state <json>', 'Current implementation state as JSON', '{}')
   .option('-v, --verbose', 'Show detailed error information', false)
@@ -347,7 +347,7 @@ waiversCmd
 // Workflow command group
 const workflowCmd = program
   .command('workflow <type>')
-  .description('Get workflow-specific guidance for development tasks (multi-spec aware)')
+  .description('Get workflow-specific guidance')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--step <number>', 'Current step in workflow', '1')
   .option('--current-state <json>', 'Current implementation state as JSON', '{}')
@@ -357,7 +357,7 @@ const workflowCmd = program
 // Quality Monitor command
 program
   .command('quality-monitor <action>')
-  .description('Monitor code quality impact in real-time (multi-spec aware)')
+  .description('Monitor code quality impact in real-time')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .option('--files <files>', 'Files affected (comma-separated)')
   .option('--context <json>', 'Additional context as JSON', '{}')
@@ -383,16 +383,12 @@ program
 // Test Analysis command
 program
   .command('test-analysis <subcommand> [options...]')
-  .description(
-    'Statistical analysis for budget prediction and test optimization (multi-spec aware)'
-  )
+  .description('Statistical analysis for budget prediction')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
   .action(testAnalysisCommand);
 
 // Provenance command group
-const provenanceCmd = program
-  .command('provenance')
-  .description('Manage CAWS provenance tracking and audit trails');
+const provenanceCmd = program.command('provenance').description('Manage CAWS provenance tracking');
 
 // Subcommands
 provenanceCmd

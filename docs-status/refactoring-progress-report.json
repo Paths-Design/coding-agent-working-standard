@@ -1,0 +1,65 @@
+{
+  "timestamp": "2025-10-28T21:46:11.280Z",
+  "context": "ci",
+  "git": {
+    "branch": "main",
+    "commit": "24385dafc3c91d1f803294a6ba65654e2a599bd3",
+    "baseline": "origin/main"
+  },
+  "targets": {
+    "week": "week-1",
+    "goals": {
+      "god_objects": {
+        "severe": 0,
+        "critical": 0,
+        "warning": 5
+      },
+      "duplicate_structs": 329,
+      "duplicate_filenames": 7,
+      "quality_gates": "passing"
+    }
+  },
+  "metrics": {
+    "god_objects": {
+      "counts": {
+        "severe": 0,
+        "critical": 0,
+        "warning": 0
+      },
+      "thresholds": {
+        "severe": 1000,
+        "critical": 1500,
+        "warning": 500
+      },
+      "largest_files": []
+    },
+    "duplication": {
+      "filename_count": 1,
+      "struct_count": 0
+    },
+    "quality_gates": {
+      "status": "failing",
+      "exit_code": 1
+    }
+  },
+  "progress": {
+    "overall_percentage": 67,
+    "breakdown": {
+      "god_objects": 100,
+      "duplication": 100,
+      "quality_gates": 0
+    }
+  },
+  "status": "needs_work",
+  "notes": {
+    "initial": {
+      "god_objects": {
+        "severe": 11,
+        "critical": null,
+        "warning": null
+      },
+      "duplicate_structs": 658,
+      "duplicate_filenames": 69
+    }
+  }
+}

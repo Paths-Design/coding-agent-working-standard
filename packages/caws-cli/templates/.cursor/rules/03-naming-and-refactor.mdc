@@ -1,0 +1,33 @@
+---
+description: Canonical naming; forbid enhanced/new/final forks; refactor rules
+globs:
+alwaysApply: true
+---
+
+# Canonical Naming & Refactor Rules
+
+## No Duplicate/Fork Names
+
+Reject or remove modules/files named with these modifiers:
+`enhanced | unified | better | new | next | final | copy | revamp | improved` (case-insensitive).
+
+**Pre-flight check (human-run or agent-run shell):**
+
+```bash
+rg -n --no-ignore -g '!node_modules' '(?i)\b(enhanced|unified|better|new|next|final|copy|revamp|improved)\b'
+rg -n --no-ignore -g '!node_modules' '(?i)(enhanced|unified|new|final|copy).*\.([tj]sx?|mjs|cjs|mts|cts)$'
+```
+
+If hits exist in proposed filenames/symbols: **do not proceed**. Use **purpose-first canonical names** and edit the existing module.
+
+## Refactor Strategy
+
+- **Merge, then delete**: If two files cover one domain, merge into the canonical name, update imports, remove the duplicate.
+- Prefer **Strategy** + feature flags over file forks.
+- Every refactor must include tests proving no behavior change (or updated tests + CHANGELOG if behavior changes).
+
+## Acceptance
+
+- No banned modifiers present in filenames or public symbols.
+- Imports updated; build is green.
+- Duplicates removed from tree.

@@ -200,7 +200,14 @@ describe('Migration Tools', () => {
         ],
       };
 
-      fs.pathExists.mockResolvedValue(true);
+      // Mock fs.pathExists to return true for legacy spec, false for new specs
+      fs.pathExists.mockImplementation((filePath) => {
+        if (filePath.includes('working-spec.yaml')) {
+          return Promise.resolve(true);
+        }
+        // Return false for spec files to allow creation
+        return Promise.resolve(false);
+      });
       fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
       fs.ensureDir.mockResolvedValue(undefined);
       fs.writeFile.mockResolvedValue(undefined);
@@ -246,7 +253,14 @@ describe('Migration Tools', () => {
     test('should pass options to migration function', async () => {
       const { specsCommand } = require('../src/commands/specs');
 
-      fs.pathExists.mockResolvedValue(true);
+      // Mock fs.pathExists to return true for legacy spec, false for new specs
+      fs.pathExists.mockImplementation((filePath) => {
+        if (filePath.includes('working-spec.yaml')) {
+          return Promise.resolve(true);
+        }
+        // Return false for spec files to allow creation
+        return Promise.resolve(false);
+      });
       fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
       fs.ensureDir.mockResolvedValue(undefined);
       fs.writeFile.mockResolvedValue(undefined);
@@ -256,9 +270,9 @@ describe('Migration Tools', () => {
         acceptance: [
           {
             id: 'A1',
-            given: 'Test feature',
-            when: 'Action',
-            then: 'Result',
+            given: 'User authentication test',
+            when: 'User logs in',
+            then: 'User is authenticated',
           },
         ],
       };
@@ -267,7 +281,7 @@ describe('Migration Tools', () => {
 
       const result = await specsCommand('migrate', {
         interactive: true,
-        features: ['test-feature'],
+        features: ['auth'],
       });
 
       expect(result.migrated).toBe(1);

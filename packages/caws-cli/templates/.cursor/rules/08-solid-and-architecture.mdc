@@ -1,0 +1,16 @@
+---
+description: Architecture invariants (SOLID) and change isolation
+globs:
+alwaysApply: true
+---
+
+# Architecture Invariants
+
+- SRP: Each module/class has one reason to change.
+- OCP: Prefer extension points over editing stable internals.
+- LSP/ISP/DIP: Respect substitution; segregate interfaces; depend on abstractions.
+
+## Change Isolation
+
+- Introduce seams (interfaces/strategies) near integration points.
+- Add tests at seams; assert unchanged public behavior.

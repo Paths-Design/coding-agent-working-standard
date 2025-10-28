@@ -13,6 +13,57 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // ""')
 # Check if CAWS is available and we have a working spec
 if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
 
+  # AGENT GUARDRAILS - Prevent policy bypass attempts
+  if [[ "$ACTION" == "edit_file" ]] || [[ "$ACTION" == "create_file" ]]; then
+    if [[ "$FILE_PATH" == ".caws/policy.yaml" ]]; then
+      echo '{
+        "userMessage": "🚫 Policy file editing blocked by agent guardrails",
+        "agentMessage": "Agents cannot edit .caws/policy.yaml - requires human dual control",
+        "block": true,
+        "suggestions": [
+          "Policy changes must be approved by humans with Gatekeeper role",
+          "Create a separate PR for policy changes",
+          "For budget exceptions: caws waivers create --title=\"Budget exception\" --reason=architectural_refactor --gates=budget_limit",
+          "Contact @gatekeepers for policy modifications"
+        ]
+      }'
+      exit 1
+    fi
+
+    if [[ "$FILE_PATH" == "CODEOWNERS" ]]; then
+      echo '{
+        "userMessage": "🚫 CODEOWNERS editing blocked by agent guardrails",
+        "agentMessage": "Agents cannot modify CODEOWNERS - governance changes require approval",
+        "block": true,
+        "suggestions": [
+          "CODEOWNERS changes require governance review",
+          "Contact repository maintainers for ownership changes",
+          "For approval workflows: caws waivers create --reason=governance_change"
+        ]
+      }'
+      exit 1
+    fi
+
+    if [[ "$FILE_PATH" == ".caws/working-spec.yaml" ]]; then
+      # Check if trying to add change_budget
+      FILE_CONTENT=$(echo "$INPUT" | jq -r '.content // ""')
+      if echo "$FILE_CONTENT" | grep -q "change_budget"; then
+        echo '{
+          "userMessage": "🚫 Budget editing blocked by agent guardrails",
+          "agentMessage": "Agents cannot introduce change_budget fields - budgets are derived automatically",
+          "block": true,
+          "suggestions": [
+            "Check current budget status: caws burnup",
+            "For budget exceptions: caws waivers create --title=\"Scope expansion\" --reason=architectural_refactor --gates=budget_limit --expires-at=\"2025-12-31T23:59:59Z\"",
+            "Add waiver_ids to working spec instead: [\"WV-XXXX\"]",
+            "Validate waiver: caws validate .caws/working-spec.yaml"
+          ]
+        }'
+        exit 1
+      fi
+    fi
+  fi
+
   # For file access actions, check scope
   if [[ "$ACTION" == "read_file" ]] || [[ "$ACTION" == "edit_file" ]] || [[ -n "$FILE_PATH" ]]; then
 
@@ -25,9 +76,10 @@ if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
         "agentMessage": "Cannot access '"$FILE_PATH"' - outside CAWS defined scope",
         "block": true,
         "suggestions": [
-          "Check CAWS working spec scope definition",
-          "Update scope in .caws/working-spec.yaml if needed",
-          "Create waiver for scope violation: caws waivers create --reason=scope_violation"
+          "Check current scope: caws validate .caws/working-spec.yaml",
+          "Update scope in working spec: edit .caws/working-spec.yaml scope.in array",
+          "For scope exceptions: caws waivers create --title=\"Scope expansion\" --reason=architectural_refactor --gates=scope_boundary --description=\"Need access to '"$FILE_PATH"' for implementation\"",
+          "Validate changes: caws validate .caws/working-spec.yaml"
         ]
       }'
       exit 1
@@ -36,8 +88,10 @@ if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
         "userMessage": "⚠️ File access outside primary scope",
         "agentMessage": "File '"$FILE_PATH"' is outside primary scope but allowed",
         "suggestions": [
-          "Consider if this file should be in primary scope",
-          "Update .caws/working-spec.yaml scope if needed"
+          "Check if needed in primary scope: edit .caws/working-spec.yaml scope.in",
+          "Consider scope implications: caws agent evaluate",
+          "Document scope decision in working spec invariants",
+          "Validate scope changes: caws validate .caws/working-spec.yaml"
         ]
       }'
     fi
@@ -63,9 +117,11 @@ if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
           "userMessage": "⚠️ Prompt references files outside CAWS scope",
           "agentMessage": "Prompt mentions out-of-scope files: '"$OUT_OF_SCOPE"'",
           "suggestions": [
-            "Focus on files within CAWS defined scope",
-            "Update working spec scope if additional files needed",
-            "Remove out-of-scope file references from prompt"
+            "Check current scope definition: caws validate .caws/working-spec.yaml",
+            "Update working spec scope: edit .caws/working-spec.yaml scope.in array",
+            "For scope exceptions: caws waivers create --title=\"Scope expansion\" --reason=architectural_refactor --gates=scope_boundary",
+            "Refocus prompt on in-scope files or request scope update approval",
+            "Validate scope changes: caws validate .caws/working-spec.yaml"
           ]
         }'
       fi

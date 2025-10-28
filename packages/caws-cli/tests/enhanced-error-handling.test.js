@@ -9,6 +9,16 @@ const fs = require('fs-extra');
 // Mock dependencies
 jest.mock('fs-extra');
 jest.mock('js-yaml');
+jest.mock('../src/budget-derivation', () => ({
+  deriveBudget: jest.fn().mockResolvedValue({
+    max_files: 10,
+    max_loc: 500,
+    coverage_threshold: 80,
+    mutation_threshold: 50,
+  }),
+  checkBudgetCompliance: jest.fn().mockResolvedValue({ compliant: true }),
+  calculateBudgetUtilization: jest.fn().mockResolvedValue({ files: 0.1, loc: 0.1 }),
+}));
 
 describe('Enhanced Error Handling', () => {
   beforeEach(() => {
@@ -387,6 +397,3 @@ describe('Enhanced Error Handling', () => {
     });
   });
 });
-
-
-

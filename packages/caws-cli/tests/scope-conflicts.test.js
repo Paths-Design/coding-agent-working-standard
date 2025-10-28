@@ -150,7 +150,8 @@ describe('Scope Conflict Detection', () => {
       };
 
       fs.pathExists.mockResolvedValue(true);
-      require('fs-extra').readJson = jest.fn().mockResolvedValue(mockRegistry);
+      fs.readJson.mockResolvedValue(mockRegistry);
+      fs.readFile.mockResolvedValueOnce('spec1 content').mockResolvedValueOnce('spec2 content');
       require('js-yaml').load.mockReturnValueOnce(spec1).mockReturnValueOnce(spec2);
 
       const conflicts = await checkScopeConflicts(['complex-spec1', 'complex-spec2']);
@@ -213,12 +214,12 @@ describe('Scope Conflict Detection', () => {
         },
       ];
 
-      require('../src/utils/spec-resolver').checkScopeConflicts = jest
-        .fn()
-        .mockResolvedValue(mockConflicts);
-      require('../src/commands/specs').loadSpecsRegistry = jest
-        .fn()
-        .mockResolvedValue(mockRegistry);
+      // Mock the functions before calling specsCommand
+      const specResolver = require('../src/utils/spec-resolver');
+      const specsModule = require('../src/commands/specs');
+
+      specResolver.checkScopeConflicts = jest.fn().mockResolvedValue(mockConflicts);
+      specsModule.loadSpecsRegistry = jest.fn().mockResolvedValue(mockRegistry);
 
       const result = await specsCommand('conflicts', {});
 
@@ -244,10 +245,12 @@ describe('Scope Conflict Detection', () => {
         },
       };
 
-      require('../src/utils/spec-resolver').checkScopeConflicts = jest.fn().mockResolvedValue([]);
-      require('../src/commands/specs').loadSpecsRegistry = jest
-        .fn()
-        .mockResolvedValue(mockRegistry);
+      // Mock the functions before calling specsCommand
+      const specResolver = require('../src/utils/spec-resolver');
+      const specsModule = require('../src/commands/specs');
+
+      specResolver.checkScopeConflicts = jest.fn().mockResolvedValue([]);
+      specsModule.loadSpecsRegistry = jest.fn().mockResolvedValue(mockRegistry);
 
       const result = await specsCommand('conflicts', {});
 
@@ -334,6 +337,3 @@ describe('Scope Conflict Detection', () => {
     });
   });
 });
-
-
-

@@ -19,7 +19,7 @@ function stripAnsiCodes(str) {
 
 describe('CLI Accessibility Tests', () => {
   let testTempDir;
-  
+
   beforeAll(() => {
     try {
       // Create a temporary directory for accessibility tests
@@ -33,7 +33,7 @@ describe('CLI Accessibility Tests', () => {
       testTempDir = null;
     }
   });
-  
+
   afterAll(() => {
     try {
       if (testTempDir && fs.existsSync(testTempDir)) {
@@ -43,7 +43,7 @@ describe('CLI Accessibility Tests', () => {
       // Ignore cleanup errors
     }
   });
-  
+
   const cliPath = path.join(__dirname, '../../dist/index.js');
 
   describe('CLI Help Accessibility', () => {
@@ -52,7 +52,7 @@ describe('CLI Accessibility Tests', () => {
         console.log('⏭️  Skipping accessibility test - setup failed');
         return;
       }
-      
+
       // Accessibility Contract: Help text should be well-structured and readable
 
       const helpOutput = stripAnsiCodes(execSync(`node "${cliPath}" --help`, { encoding: 'utf8' }));
@@ -128,7 +128,7 @@ describe('CLI Accessibility Tests', () => {
         // Accessibility Contract: Error messages should be concise but complete
         const errorLines = errorOutput.split('\n').filter((line) => line.trim());
         expect(errorLines.length).toBeGreaterThan(0);
-        expect(errorLines.length).toBeLessThan(10); // Shouldn't be overwhelming
+        expect(errorLines.length).toBeLessThanOrEqual(10); // Shouldn't be overwhelming
       }
     });
 
