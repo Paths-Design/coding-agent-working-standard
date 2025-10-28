@@ -1405,7 +1405,11 @@ class CawsMcpServer extends Server {
   }
 
   async handleRefactorProgressCheck(args) {
-    const { context = 'ci', strict = false, workingDirectory: _workingDirectory = process.cwd() } = args;
+    const {
+      context = 'ci',
+      strict = false,
+      workingDirectory: _workingDirectory = process.cwd(),
+    } = args;
 
     try {
       // Execute the refactor progress checker

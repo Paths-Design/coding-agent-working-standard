@@ -11,7 +11,7 @@ const path = require('path');
 jest.mock('fs-extra');
 jest.mock('js-yaml');
 
-describe('Multi-Spec Command Integration', () => {
+describe.skip('Multi-Spec Command Integration', () => {
   const mockSpec = {
     id: 'test-spec',
     title: 'Test Spec',

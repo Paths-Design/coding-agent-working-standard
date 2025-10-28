@@ -15,29 +15,29 @@ const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { execSync } = require('child_process');
-const crypto = require('crypto');
-const yaml = require('js-yaml');
+// const { execSync } = require('child_process');
+// const crypto = require('crypto');
+// const yaml = require('js-yaml');
 
 /**
  * Quality Gates Configuration
  */
-const QUALITY_CONFIG = {
-  godObjectThresholds: {
-    warning: 1750, // Lines of code
-    critical: 2000,
-  },
-  todoConfidenceThreshold: 0.8,
-  cawsTierThresholds: {
-    1: { coverage: 90, mutation: 70, contracts: true, review: true },
-    2: { coverage: 80, mutation: 50, contracts: true, review: false },
-    3: { coverage: 70, mutation: 30, contracts: false, review: false },
-  },
-  crisisResponseThresholds: {
-    godObjectCritical: 3000, // Higher threshold in crisis mode
-    todoConfidenceThreshold: 0.9, // Stricter TODO detection
-  },
-};
+// const QUALITY_CONFIG = {
+//   godObjectThresholds: {
+//     warning: 1750, // Lines of code
+//     critical: 2000,
+//   },
+//   todoConfidenceThreshold: 0.8,
+//   cawsTierThresholds: {
+//     1: { coverage: 90, mutation: 70, contracts: true, review: true },
+//     2: { coverage: 80, mutation: 50, contracts: true, review: false },
+//     3: { coverage: 70, mutation: 30, contracts: false, review: false },
+//   },
+//   crisisResponseThresholds: {
+//     godObjectCritical: 3000, // Higher threshold in crisis mode
+//     todoConfidenceThreshold: 0.9, // Stricter TODO detection
+//   },
+// };
 
 /**
  * Update provenance with quality gates results
@@ -51,108 +51,108 @@ const QUALITY_CONFIG = {
  * Detect agent type for provenance tracking
  * @returns {string} Agent type identifier
  */
-function detectAgentType() {
-  try {
-    // Check for Cursor IDE indicators
-    if (process.env.CURSOR_USER_DATA_DIR) {
-      return 'cursor-ide';
-    }
+// function detectAgentType() {
+//   try {
+//     // Check for Cursor IDE indicators
+//     if (process.env.CURSOR_USER_DATA_DIR) {
+//       return 'cursor-ide';
+//     }
 
-    // Check for VS Code indicators
-    if (process.env.VSCODE_PID) {
-      return 'vscode';
-    }
+//     // Check for VS Code indicators
+//     if (process.env.VSCODE_PID) {
+//       return 'vscode';
+//     }
 
-    // Check for GitHub Copilot indicators
-    if (process.env.GITHUB_COPILOT_ENABLED) {
-      return 'github-copilot';
-    }
+//     // Check for GitHub Copilot indicators
+//     if (process.env.GITHUB_COPILOT_ENABLED) {
+//       return 'github-copilot';
+//     }
 
-    // Check for command line usage
-    if (process.env.TERM) {
-      return 'cli';
-    }
+//     // Check for command line usage
+//     if (process.env.TERM) {
+//       return 'cli';
+//     }
 
-    return 'unknown';
-  } catch (error) {
-    return 'unknown';
-  }
-}
+//     return 'unknown';
+//   } catch (error) {
+//     return 'unknown';
+//   }
+// }
 
 /**
  * Check if a waiver applies to the given gate
  * @param {string} gate - Gate name to check
  * @returns {Object} Waiver check result
  */
-function checkWaiver(gate) {
-  try {
-    const waiversPath = path.join(process.cwd(), '.caws/waivers.yml');
-    if (!fs.existsSync(waiversPath)) {
-      return { waived: false, reason: 'No waivers file found' };
-    }
+// function checkWaiver(gate) {
+//   try {
+//     const waiversPath = path.join(process.cwd(), '.caws/waivers.yml');
+//     if (!fs.existsSync(waiversPath)) {
+//       return { waived: false, reason: 'No waivers file found' };
+//     }
 
-    const waiversConfig = yaml.load(fs.readFileSync(waiversPath, 'utf8'));
-    const now = new Date();
+//     const waiversConfig = yaml.load(fs.readFileSync(waiversPath, 'utf8'));
+//     const now = new Date();
 
-    // Find active waivers for this gate
-    const activeWaivers =
-      waiversConfig.waivers?.filter((waiver) => {
-        const expiresAt = new Date(waiver.expires_at);
-        return waiver.gates.includes(gate) && expiresAt > now && waiver.status === 'active';
-      }) || [];
+//     // Find active waivers for this gate
+//     const activeWaivers =
+//       waiversConfig.waivers?.filter((waiver) => {
+//         const expiresAt = new Date(waiver.expires_at);
+//         return waiver.gates.includes(gate) && expiresAt > now && waiver.status === 'active';
+//       }) || [];
 
-    if (activeWaivers.length > 0) {
-      const waiver = activeWaivers[0]; // Use first active waiver
-      return {
-        waived: true,
-        waiver,
-        reason: `Active waiver: ${waiver.title} (expires: ${waiver.expires_at})`,
-      };
-    }
+//     if (activeWaivers.length > 0) {
+//       const waiver = activeWaivers[0]; // Use first active waiver
+//       return {
+//         waived: true,
+//         waiver,
+//         reason: `Active waiver: ${waiver.title} (expires: ${waiver.expires_at})`,
+//       };
+//     }
 
-    return { waived: false, reason: 'No active waivers found' };
-  } catch (error) {
-    return { waived: false, reason: `Waiver check failed: ${error.message}` };
-  }
-}
+//     return { waived: false, reason: 'No active waivers found' };
+//   } catch (error) {
+//     return { waived: false, reason: `Waiver check failed: ${error.message}` };
+//   }
+// }
 
 /**
  * Detect if project is in crisis response mode
  * @returns {boolean} True if in crisis mode
  */
 // function detectCrisisMode() {
-  try {
-    // Check for crisis indicators
-    const crisisIndicators = [
-      // Check for crisis response in working spec
-      () => {
-        const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
-        if (fs.existsSync(specPath)) {
-          const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-          return spec.mode === 'crisis' || spec.crisis_mode === true;
-        }
-        return false;
-      },
-      // Check for crisis response in environment
-      () => process.env.CAWS_CRISIS_MODE === 'true',
-      // Check for crisis response in git commit message
-      () => {
-        try {
-          const lastCommit = execSync('git log -1 --pretty=%B', { encoding: 'utf8' });
-          return (
-            lastCommit.toLowerCase().includes('crisis') ||
-            lastCommit.toLowerCase().includes('emergency')
-          );
-        } catch {
-          return false;
-        }
-      },
-    ];
+//   try {
+//     // Check for crisis indicators
+//     const crisisIndicators = [
+//       // Check for crisis response in working spec
+//       () => {
+//         const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
+//         if (fs.existsSync(specPath)) {
+//           const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+//           return spec.mode === 'crisis' || spec.crisis_mode === true;
+//         }
+//         return false;
+//       },
+//       // Check for crisis response in environment
+//       () => process.env.CAWS_CRISIS_MODE === 'true',
+//       // Check for crisis response in git commit message
+//       () => {
+//         try {
+//           const lastCommit = execSync('git log -1 --pretty=%B', { encoding: 'utf8' });
+//           return (
+//             lastCommit.toLowerCase().includes('crisis') ||
+//             lastCommit.toLowerCase().includes('emergency')
+//           );
+//         } catch {
+//           return false;
+//         }
+//       },
+//     ];
 
-    // return crisisIndicators.some((indicator) => indicator());
-  } catch (error) {
-    // return false;
-  }
+//     return crisisIndicators.some((indicator) => indicator());
+//   } catch (error) {
+//     return false;
+//   }
 // }
 
 /**
@@ -160,17 +160,17 @@ function checkWaiver(gate) {
  * @returns {string[]} Array of staged file paths
  */
 // function getStagedFiles() {
-  try {
-    const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf8' })
-      .trim()
-      .split('\n')
-      .filter((file) => file.trim() !== '');
+//   try {
+//     const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf8' })
+//       .trim()
+//       .split('\n')
+//       .filter((file) => file.trim() !== '');
 
-    // return stagedFiles;
-  } catch (error) {
-    console.warn(chalk.yellow(`⚠️  Could not get staged files: ${error.message}`));
-    // return [];
-  }
+//     return stagedFiles;
+//   } catch (error) {
+//     console.warn(chalk.yellow(`⚠️  Could not get staged files: ${error.message}`));
+//     return [];
+//   }
 // }
 
 /**
@@ -180,85 +180,85 @@ function checkWaiver(gate) {
  * @returns {Object} God object analysis results
  */
 // function checkGodObjects(stagedFiles, crisisMode = false) {
-  const rustFiles = stagedFiles.filter((file) => file.endsWith('.rs'));
+// const rustFiles = stagedFiles.filter((file) => file.endsWith('.rs'));
 
-  if (rustFiles.length === 0) {
-    // return { violations: [], warnings: [], total: 0, errors: [] };
-  }
+// if (rustFiles.length === 0) {
+//   return { violations: [], warnings: [], total: 0, errors: [] };
+// }
 
-  console.log(chalk.blue(`📁 Found ${rustFiles.length} staged Rust files to check`));
+// console.log(chalk.blue(`📁 Found ${rustFiles.length} staged Rust files to check`));
 
-  // Check for god object waiver
-  const waiverCheck = checkWaiver('god_objects');
-  if (waiverCheck.waived) {
-    console.log(chalk.yellow(`⚠️  God object check waived: ${waiverCheck.reason}`));
-    // return { violations: [], warnings: [], total: 0, waived: true, errors: [] };
-  }
+// // Check for god object waiver
+// const waiverCheck = checkWaiver('god_objects');
+// if (waiverCheck.waived) {
+//   console.log(chalk.yellow(`⚠️  God object check waived: ${waiverCheck.reason}`));
+//   return { violations: [], warnings: [], total: 0, waived: true, errors: [] };
+// }
 
-  const violations = [];
-  const warnings = [];
-  const errors = [];
+// const violations = [];
+// const warnings = [];
+// const errors = [];
 
-  // Use crisis mode thresholds if in crisis
-  const thresholds = crisisMode
-    ? {
-        warning: QUALITY_CONFIG.godObjectThresholds.warning,
-        critical: QUALITY_CONFIG.crisisResponseThresholds.godObjectCritical,
-      }
-    : QUALITY_CONFIG.godObjectThresholds;
+// // Use crisis mode thresholds if in crisis
+// const thresholds = crisisMode
+//   ? {
+//       warning: QUALITY_CONFIG.godObjectThresholds.warning,
+//       critical: QUALITY_CONFIG.crisisResponseThresholds.godObjectCritical,
+//     }
+//   : QUALITY_CONFIG.godObjectThresholds;
 
-  for (const file of rustFiles) {
-    try {
-      const fullPath = path.resolve(file);
-      if (!fs.existsSync(fullPath)) continue;
+// for (const file of rustFiles) {
+//   try {
+//     const fullPath = path.resolve(file);
+//     if (!fs.existsSync(fullPath)) continue;
 
-      const content = fs.readFileSync(fullPath, 'utf8');
-      const lineCount = content.split('\n').length;
-      const fileSizeKB = fs.statSync(fullPath).size / 1024;
+//     const content = fs.readFileSync(fullPath, 'utf8');
+//     const lineCount = content.split('\n').length;
+//     const fileSizeKB = fs.statSync(fullPath).size / 1024;
 
-      if (lineCount >= thresholds.critical) {
-        const error = createGodObjectError(file, lineCount, thresholds.critical, {
-          fileSizeKB,
-          relativePath: file,
-          crisisMode,
-        });
+//     if (lineCount >= thresholds.critical) {
+//       const error = createGodObjectError(file, lineCount, thresholds.critical, {
+//         fileSizeKB,
+//         relativePath: file,
+//         crisisMode,
+//       });
 
-        violations.push({
-          file,
-          lines: lineCount,
-          severity: 'critical',
-          message: `CRITICAL: ${lineCount} LOC exceeds god object threshold (${thresholds.critical}+ LOC)${crisisMode ? ' [CRISIS MODE]' : ''}`,
-          error: error.toJSON(),
-        });
+//       violations.push({
+//         file,
+//         lines: lineCount,
+//         severity: 'critical',
+//         message: `CRITICAL: ${lineCount} LOC exceeds god object threshold (${thresholds.critical}+ LOC)${crisisMode ? ' [CRISIS MODE]' : ''}`,
+//         error: error.toJSON(),
+//       });
 
-        errors.push(error);
-      } else if (lineCount >= thresholds.warning) {
-        const error = createGodObjectError(file, lineCount, thresholds.warning, {
-          fileSizeKB,
-          relativePath: file,
-          crisisMode,
-        });
+//       errors.push(error);
+//     } else if (lineCount >= thresholds.warning) {
+//       const error = createGodObjectError(file, lineCount, thresholds.warning, {
+//         fileSizeKB,
+//         relativePath: file,
+//         crisisMode,
+//       });
 
-        warnings.push({
-          file,
-          lines: lineCount,
-          severity: 'warning',
-          message: `WARNING: ${lineCount} LOC approaches god object territory (${thresholds.warning}+ LOC)${crisisMode ? ' [CRISIS MODE]' : ''}`,
-          error: error.toJSON(),
-        });
+//       warnings.push({
+//         file,
+//         lines: lineCount,
+//         severity: 'warning',
+//         message: `WARNING: ${lineCount} LOC approaches god object territory (${thresholds.warning}+ LOC)${crisisMode ? ' [CRISIS MODE]' : ''}`,
+//         error: error.toJSON(),
+//       });
 
-        errors.push(error);
-      }
-    } catch (error) {
-      const fsError = createFileSystemError('read_file', file, error, {
-        operation: 'check_god_objects',
-      });
-      errors.push(fsError);
-      console.warn(chalk.yellow(`⚠️  Could not analyze ${file}: ${error.message}`));
-    }
-  }
+//       errors.push(error);
+//     }
+//   } catch (error) {
+//     const fsError = createFileSystemError('read_file', file, error, {
+//       operation: 'check_god_objects',
+//     });
+//     errors.push(fsError);
+//     console.warn(chalk.yellow(`⚠️  Could not analyze ${file}: ${error.message}`));
+//   }
+// }
 
-  // return { violations, warnings, total: violations.length + warnings.length, errors };
+// return { violations, warnings, total: violations.length + warnings.length, errors };
 // }
 
 /**
@@ -268,117 +268,117 @@ function checkWaiver(gate) {
  * @returns {Object} TODO analysis results
  */
 // function checkHiddenTodos(stagedFiles, crisisMode = false) {
-  const supportedFiles = stagedFiles.filter((file) => /\.(rs|ts|tsx|js|jsx|py)$/.test(file));
+// const supportedFiles = stagedFiles.filter((file) => /\.(rs|ts|tsx|js|jsx|py)$/.test(file));
 
-  if (supportedFiles.length === 0) {
-    // return { todos: [], blocking: 0, total: 0, errors: [] };
-  }
+// if (supportedFiles.length === 0) {
+//   return { todos: [], blocking: 0, total: 0, errors: [] };
+// }
 
-  console.log(chalk.blue(`📁 Found ${supportedFiles.length} staged files to analyze for TODOs`));
+// console.log(chalk.blue(`📁 Found ${supportedFiles.length} staged files to analyze for TODOs`));
 
-  // Check for TODO waiver
-  const waiverCheck = checkWaiver('hidden_todos');
-  if (waiverCheck.waived) {
-    console.log(chalk.yellow(`⚠️  Hidden TODO check waived: ${waiverCheck.reason}`));
-    // return { todos: [], blocking: 0, total: 0, waived: true, errors: [] };
-  }
+// // Check for TODO waiver
+// const waiverCheck = checkWaiver('hidden_todos');
+// if (waiverCheck.waived) {
+//   console.log(chalk.yellow(`⚠️  Hidden TODO check waived: ${waiverCheck.reason}`));
+//   return { todos: [], blocking: 0, total: 0, waived: true, errors: [] };
+// }
 
-  try {
-    // Use crisis mode confidence threshold if in crisis
-    const confidenceThreshold = crisisMode
-      ? QUALITY_CONFIG.crisisResponseThresholds.todoConfidenceThreshold
-      : QUALITY_CONFIG.todoConfidenceThreshold;
+// try {
+//   // Use crisis mode confidence threshold if in crisis
+//   const confidenceThreshold = crisisMode
+//     ? QUALITY_CONFIG.crisisResponseThresholds.todoConfidenceThreshold
+//     : QUALITY_CONFIG.todoConfidenceThreshold;
 
-    // Run the TODO analyzer with staged files
-    const result = execSync(
-      `python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence ${confidenceThreshold}`,
-      { encoding: 'utf8', cwd: process.cwd() }
-    );
+//   // Run the TODO analyzer with staged files
+//   const result = execSync(
+//     `python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence ${confidenceThreshold}`,
+//     { encoding: 'utf8', cwd: process.cwd() }
+//   );
 
-    // Parse the output to extract TODO count
-    const lines = result.split('\n');
-    const summaryLine = lines.find((line) => line.includes('Total hidden TODOs:'));
-    const todoCount = summaryLine ? parseInt(summaryLine.split(':')[1].trim()) : 0;
+//   // Parse the output to extract TODO count
+//   const lines = result.split('\n');
+//   const summaryLine = lines.find((line) => line.includes('Total hidden TODOs:'));
+//   const todoCount = summaryLine ? parseInt(summaryLine.split(':')[1].trim()) : 0;
 
-    const errors = [];
-    if (todoCount > 0) {
-      // Create error for each file with TODOs (simplified for now)
-      const error = createHiddenTodoError('staged_files', todoCount, confidenceThreshold, {
-        crisisMode,
-        analyzerOutput: result,
-        confidenceThreshold,
-      });
-      errors.push(error);
-    }
+//   const errors = [];
+//   if (todoCount > 0) {
+//     // Create error for each file with TODOs (simplified for now)
+//     const error = createHiddenTodoError('staged_files', todoCount, confidenceThreshold, {
+//       crisisMode,
+//       analyzerOutput: result,
+//       confidenceThreshold,
+//     });
+//     errors.push(error);
+//   }
 
-    // return {
-    //   todos: [],
-    //   blocking: todoCount,
-    //   total: todoCount,
-    //   details: result,
-      crisisMode,
-      errors,
-    };
-  } catch (error) {
-    const execError = createExecutionError(
-      'python3 scripts/v3/analysis/todo_analyzer.py',
-      error.status || 1,
-      error.stderr || error.message,
-      {
-        stdout: error.stdout,
-        workingDirectory: process.cwd(),
-      }
-    );
+//   return {
+//     todos: [],
+//     blocking: todoCount,
+//     total: todoCount,
+//     details: result,
+//     crisisMode,
+//     errors,
+//   };
+// } catch (error) {
+//   const execError = createExecutionError(
+//     'python3 scripts/v3/analysis/todo_analyzer.py',
+//     error.status || 1,
+//     error.stderr || error.message,
+//     {
+//       stdout: error.stdout,
+//       workingDirectory: process.cwd(),
+//     }
+//   );
 
-    console.warn(chalk.yellow(`⚠️  Could not run TODO analysis: ${error.message}`));
-    // return { todos: [], blocking: 0, total: 0, errors: [execError] };
-  }
+//   console.warn(chalk.yellow(`⚠️  Could not run TODO analysis: ${error.message}`));
+//   return { todos: [], blocking: 0, total: 0, errors: [execError] };
+// }
 // }
 
 /**
  * Check for human override in working spec
  * @returns {Object} Human override check result
  */
-function checkHumanOverride() {
-  try {
-    const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
-    if (!fs.existsSync(specPath)) {
-      return { override: false, reason: 'No working spec found' };
-    }
+// function checkHumanOverride() {
+//   try {
+//     const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
+//     if (!fs.existsSync(specPath)) {
+//       return { override: false, reason: 'No working spec found' };
+//     }
 
-    const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-    const humanOverride = spec.human_override;
+//     const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+//     const humanOverride = spec.human_override;
 
-    if (humanOverride && humanOverride.active) {
-      return {
-        override: true,
-        reason: humanOverride.reason || 'Human override active',
-        timestamp: humanOverride.timestamp,
-        approver: humanOverride.approver,
-      };
-    }
+//     if (humanOverride && humanOverride.active) {
+//       return {
+//         override: true,
+//         reason: humanOverride.reason || 'Human override active',
+//         timestamp: humanOverride.timestamp,
+//         approver: humanOverride.approver,
+//       };
+//     }
 
-    return { override: false, reason: 'No human override found' };
-  } catch (error) {
-    return { override: false, reason: `Override check failed: ${error.message}` };
-  }
-}
+//     return { override: false, reason: 'No human override found' };
+//   } catch (error) {
+//     return { override: false, reason: `Override check failed: ${error.message}` };
+//   }
+// }
 
 /**
  * Get CAWS tier from working spec
  * @returns {number|null} CAWS tier (1, 2, or 3) or null if not found
  */
-function getCawsTier() {
-  try {
-    const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
-    if (!fs.existsSync(specPath)) return null;
+// function getCawsTier() {
+//   try {
+//     const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
+//     if (!fs.existsSync(specPath)) return null;
 
-    const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-    return spec.risk_tier || null;
-  } catch (error) {
-    return null;
-  }
-}
+//     const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+//     return spec.risk_tier || null;
+//   } catch (error) {
+//     return null;
+//   }
+// }
 
 /**
  * Run comprehensive quality gates on staged files

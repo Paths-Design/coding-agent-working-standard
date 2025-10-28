@@ -37,6 +37,7 @@ const EXCEPTION_SCHEMA = {
   additionalProperties: false,
   properties: {
     schema_version: { const: '2.0.0' },
+    description: { type: 'string' },
     gates: {
       type: 'object',
       additionalProperties: {
@@ -187,9 +188,13 @@ export function loadExceptionConfig() {
       // lightweight migration: add schema_version if missing
       if (!parsed.schema_version) parsed.schema_version = '2.0.0';
       if (!validateConfig(parsed)) {
-        console.warn(
-          `⚠️ Invalid quality-exceptions.json: ${ajv.errorsText(validateConfig.errors, { separator: '\n' })}`
-        );
+        // Only log validation errors once per session to avoid spam
+        if (!global._qualityExceptionsValidationLogged) {
+          console.warn(
+            `⚠️ Invalid quality-exceptions.json: ${ajv.errorsText(validateConfig.errors, { separator: '\n' })}`
+          );
+          global._qualityExceptionsValidationLogged = true;
+        }
         // fall back but keep parsed; don't lose data
         return { ...DEFAULT_CONFIG, ...parsed };
       }

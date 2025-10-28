@@ -35,6 +35,7 @@ const CI_MODE = process.argv.includes('--ci') || !!process.env.CI;
 const FIX_MODE = process.argv.includes('--fix');
 const JSON_MODE = process.argv.includes('--json');
 const FORCE_MODE = process.argv.includes('--force');
+const QUIET_MODE = process.argv.includes('--quiet');
 const VALID_GATES = new Set([
   'naming',
   'code_freeze',
@@ -123,7 +124,9 @@ class QualityGateRunner {
         if (age < 5 * 60 * 1000 && !FORCE_MODE) {
           // 5 minutes and not in force mode
           console.error('Error: Another quality gates process is already running');
-          console.error('Please wait for it to complete, use --force to bypass, or remove the lock file manually:');
+          console.error(
+            'Please wait for it to complete, use --force to bypass, or remove the lock file manually:'
+          );
           console.error(`  rm "${lockPath}"`);
           process.exit(1);
         } else if (age >= 5 * 60 * 1000) {
@@ -235,23 +238,25 @@ class QualityGateRunner {
     this.acquireLock();
 
     try {
-      console.log('Running Quality Gates - Crisis Response Mode');
-      console.log('='.repeat(50));
-      console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
-      console.log(`Files to check: ${this.filesToCheck.length}`);
-      console.log('='.repeat(50));
+      if (!QUIET_MODE && !JSON_MODE) {
+        console.log('Running Quality Gates - Crisis Response Mode');
+        console.log('='.repeat(50));
+        console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
+        console.log(`Files to check: ${this.filesToCheck.length}`);
+        console.log('='.repeat(50));
+      }
 
       const gatePromises = [];
 
       // Gate 1: Naming Conventions
       if (!GATES_FILTER || GATES_FILTER.has('naming')) {
-        console.log('\nChecking naming conventions...');
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking naming conventions...');
         gatePromises.push(this.runGateWithTimeout('naming', () => this.runNamingGate(), 10000));
       }
 
       // Gate 1.5: Code Freeze (Crisis Response)
       if (!GATES_FILTER || GATES_FILTER.has('code_freeze')) {
-        console.log('\nChecking code freeze compliance...');
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking code freeze compliance...');
         gatePromises.push(
           this.runGateWithTimeout('code_freeze', () => this.runCodeFreezeGate(), 5000)
         );
@@ -259,7 +264,7 @@ class QualityGateRunner {
 
       // Gate 2: Duplication Prevention (can be slow)
       if (!GATES_FILTER || GATES_FILTER.has('duplication')) {
-        console.log('\nChecking duplication...');
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking duplication...');
         gatePromises.push(
           this.runGateWithTimeout('duplication', () => this.runDuplicationGate(), 60000)
         );
@@ -267,7 +272,7 @@ class QualityGateRunner {
 
       // Gate 3: God Object Prevention
       if (!GATES_FILTER || GATES_FILTER.has('god_objects')) {
-        console.log('\nChecking god objects...');
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking god objects...');
         gatePromises.push(
           this.runGateWithTimeout('god_objects', () => this.runGodObjectGate(), 10000)
         );
@@ -275,7 +280,7 @@ class QualityGateRunner {
 
       // Gate 4: Documentation Quality
       if (!GATES_FILTER || GATES_FILTER.has('documentation')) {
-        console.log('\nChecking documentation quality...');
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
         gatePromises.push(
           this.runGateWithTimeout('documentation', () => this.runDocumentationQualityGate(), 15000)
         );
@@ -314,7 +319,8 @@ class QualityGateRunner {
       const enforcementLevel = filenameResults.enforcementLevel;
 
       if (allViolations.length > 0) {
-        console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of allViolations) {
           const severity = violation.severity || enforcementLevel;
@@ -345,9 +351,13 @@ class QualityGateRunner {
           }
         }
 
-        console.log(`   ${allViolations.length} naming findings (${enforcementLevel} mode)`);
+        if (!QUIET_MODE && !JSON_MODE) {
+          console.log(`   ${allViolations.length} naming findings (${enforcementLevel} mode)`);
+        }
       } else {
-        console.log('   No problematic naming patterns found');
+        if (!QUIET_MODE && !JSON_MODE) {
+          console.log('   No problematic naming patterns found');
+        }
       }
     } catch (error) {
       this.violations.push({
@@ -376,7 +386,8 @@ class QualityGateRunner {
       const enforcementLevel = codeFreezeResults.enforcementLevel;
 
       if (codeFreezeResults.violations.length > 0) {
-        console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of codeFreezeResults.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -418,7 +429,7 @@ class QualityGateRunner {
 
   async runDuplicationGate() {
     try {
-      console.log('   Checking functional duplication...');
+      if (!QUIET_MODE && !JSON_MODE) console.log('   Checking functional duplication...');
 
       const duplicationResults = await checkFunctionalDuplication(this.context);
 
@@ -440,7 +451,8 @@ class QualityGateRunner {
       const enforcementLevel = duplicationResults.enforcementLevel;
 
       if (duplicationResults.violations.length > 0) {
-        console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of duplicationResults.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -477,7 +489,7 @@ class QualityGateRunner {
           );
         }
       } else {
-        console.log('   No functional duplication violations found');
+        if (!QUIET_MODE && !JSON_MODE) console.log('   No functional duplication violations found');
       }
     } catch (error) {
       console.error('   Error running functional duplication gate:', error.message);
@@ -516,7 +528,8 @@ class QualityGateRunner {
       const enforcementLevel = godObjectResults.enforcementLevel;
 
       if (allViolations.length > 0) {
-        console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of allViolations) {
           const severity = violation.severity || enforcementLevel;
@@ -543,9 +556,10 @@ class QualityGateRunner {
           }
         }
 
-        console.log(`   ${allViolations.length} god object findings (${enforcementLevel} mode)`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`   ${allViolations.length} god object findings (${enforcementLevel} mode)`);
       } else {
-        console.log('   No god object violations found');
+        if (!QUIET_MODE && !JSON_MODE) console.log('   No god object violations found');
       }
     } catch (error) {
       this.violations.push({
@@ -616,7 +630,8 @@ class QualityGateRunner {
         // Handle violations based on enforcement level
         const enforcementLevel = result.enforcementLevel;
 
-        console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of result.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -694,7 +709,8 @@ class QualityGateRunner {
               // Handle violations based on enforcement level
               const enforcementLevel = result.enforcementLevel;
 
-              console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+              if (!QUIET_MODE && !JSON_MODE)
+                console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
               for (const violation of result.violations) {
                 const severity = violation.severity || enforcementLevel;
@@ -756,12 +772,14 @@ class QualityGateRunner {
   }
 
   reportResults() {
-    console.log('\n' + '='.repeat(50));
-    console.log('QUALITY GATES RESULTS');
-    console.log('='.repeat(50));
+    if (!QUIET_MODE) {
+      console.log('\n' + '='.repeat(50));
+      console.log('QUALITY GATES RESULTS');
+      console.log('='.repeat(50));
+    }
 
     // Report warnings
-    if (this.warnings.length > 0) {
+    if (this.warnings.length > 0 && !QUIET_MODE && !JSON_MODE) {
       console.log(`\nWARNINGS (${this.warnings.length}):`);
       for (const warning of this.warnings) {
         console.log(`   ${warning.file || 'General'}: ${warning.message}`);
@@ -770,29 +788,33 @@ class QualityGateRunner {
 
     // Report violations
     if (this.violations.length > 0) {
-      console.log(`\nVIOLATIONS (${this.violations.length}) - COMMIT BLOCKED:`);
-      console.log('');
-
-      for (const violation of this.violations) {
-        console.log(`${violation.gate.toUpperCase()}: ${violation.type.toUpperCase()}`);
-        console.log(`   ${violation.message}`);
-        if (violation.file) {
-          console.log(`   File: ${violation.file}`);
-        }
-        if (violation.size) {
-          console.log(`   Size: ${violation.size} LOC`);
-        }
-        if (violation.details) {
-          console.log(`   Details: ${JSON.stringify(violation.details, null, 2)}`);
-        }
+      if (!QUIET_MODE && !JSON_MODE) {
+        console.log(`\nVIOLATIONS (${this.violations.length}) - COMMIT BLOCKED:`);
         console.log('');
-      }
 
-      console.log('Fix these critical violations before committing.');
-      console.log('See docs/refactoring.md for crisis response plan.');
+        for (const violation of this.violations) {
+          console.log(`${violation.gate.toUpperCase()}: ${violation.type.toUpperCase()}`);
+          console.log(`   ${violation.message}`);
+          if (violation.file) {
+            console.log(`   File: ${violation.file}`);
+          }
+          if (violation.size) {
+            console.log(`   Size: ${violation.size} LOC`);
+          }
+          if (violation.details) {
+            console.log(`   Details: ${JSON.stringify(violation.details, null, 2)}`);
+          }
+          console.log('');
+        }
+
+        console.log('Fix these critical violations before committing.');
+        console.log('See docs/refactoring.md for crisis response plan.');
+      }
     } else {
-      console.log('\nALL QUALITY GATES PASSED');
-      console.log('Commit allowed - quality maintained!');
+      if (!QUIET_MODE && !JSON_MODE) {
+        console.log('\nALL QUALITY GATES PASSED');
+        console.log('Commit allowed - quality maintained!');
+      }
     }
 
     // Write artifacts (JSON + optional GitHub Summary)
@@ -850,6 +872,7 @@ OPTIONS:
   --ci              Run in CI mode (strict enforcement, blocks on warnings)
   --context=<ctx>   Set context explicitly (commit, push, ci)
   --json            Output machine-readable JSON to stdout
+  --quiet           Suppress all console output except JSON/errors
   --gates=<list>    Run only specific gates (comma-separated)
   --fix             Attempt automatic fixes (experimental)
   --force           Bypass lock files and force execution

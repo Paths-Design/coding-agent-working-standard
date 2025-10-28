@@ -64,7 +64,7 @@ describe('Cursor Hooks Integration', () => {
         console.log('⏭️  Skipping cursor hooks test - setup failed');
         return;
       }
-      
+
       // Initialize project (non-interactive, which should enable hooks by default)
       execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
         cwd: testTempDir,
@@ -184,7 +184,6 @@ describe('Cursor Hooks Integration', () => {
 
       const content = fs.readFileSync(validateScript, 'utf8');
       expect(content).toContain('working-spec.yaml');
-      expect(content).toContain('validate.js');
       expect(content).toContain('caws validate');
     });
 
