@@ -106,6 +106,31 @@
         "command": "caws.qualityGates",
         "title": "CAWS: Run Quality Gates",
         "category": "CAWS"
+      },
+      {
+        "command": "caws.qualityGatesRun",
+        "title": "CAWS: Run Quality Gates (Interactive)",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.qualityGatesStatus",
+        "title": "CAWS: Show Quality Gates Status",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.qualityExceptionsList",
+        "title": "CAWS: List Quality Exceptions",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.qualityExceptionsCreate",
+        "title": "CAWS: Create Quality Exception",
+        "category": "CAWS"
+      },
+      {
+        "command": "caws.refactorProgressCheck",
+        "title": "CAWS: Check Refactor Progress",
+        "category": "CAWS"
       }
     ],
     "menus": {

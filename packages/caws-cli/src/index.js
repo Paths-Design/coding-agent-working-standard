@@ -132,12 +132,66 @@ program
 // Quality Gates command
 program
   .command('quality-gates')
-  .description('Run comprehensive quality gates')
+  .description('Run comprehensive quality gates (naming, duplication, god objects, documentation)')
   .option('--ci', 'CI mode - exit with error code if violations found', false)
-  .option('--languages <languages>', 'Comma-separated list of languages to check', 'rust')
-  .option('--no-todos', 'Skip hidden TODO analysis', false)
-  .option('--no-god-objects', 'Skip god object detection', false)
-  .action(qualityGatesCommand);
+  .option('--json', 'Output machine-readable JSON to stdout', false)
+  .option('--gates <gates>', 'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,documentation)', '')
+  .option('--fix', 'Attempt automatic fixes (experimental)', false)
+  .option('--help', 'Show detailed help and usage examples', false)
+  .action(async (options) => {
+    // Handle --help flag
+    if (options.help) {
+      console.log(`
+CAWS Quality Gates - Enterprise Code Quality Enforcement
+
+USAGE:
+  caws quality-gates [options]
+
+DESCRIPTION:
+  Runs comprehensive quality gates to maintain code quality standards.
+  Supports selective gate execution, JSON output, and CI/CD integration.
+
+OPTIONS:
+  --ci              CI mode - exit with error code if violations found
+  --json            Output machine-readable JSON to stdout
+  --gates=<gates>   Run only specific gates (comma-separated)
+  --fix             Attempt automatic fixes (experimental)
+  --help            Show this help message
+
+VALID GATES:
+  naming           Check naming conventions and banned modifiers
+  code_freeze      Enforce code freeze compliance
+  duplication      Detect functional duplication
+  god_objects      Prevent oversized files
+  documentation    Check documentation quality
+
+EXAMPLES:
+  # Run all gates in development mode
+  caws quality-gates
+
+  # Run only specific gates
+  caws quality-gates --gates=naming,duplication
+
+  # CI mode with JSON output
+  caws quality-gates --ci --json
+
+  # Show detailed help
+  caws quality-gates --help
+
+OUTPUT:
+  - Console: Human-readable results with enforcement levels
+  - JSON: Machine-readable structured data (--json flag)
+  - Artifacts: docs-status/quality-gates-report.json
+  - GitHub Actions: Automatic step summaries when GITHUB_STEP_SUMMARY is set
+
+For more information, see: packages/quality-gates/README.md
+`);
+      process.exit(0);
+    }
+
+    // Call the actual quality gates runner
+    await qualityGatesCommand(options);
+  });
 
 // Status command
 program

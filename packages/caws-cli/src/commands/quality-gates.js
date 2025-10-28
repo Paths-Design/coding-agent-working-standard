@@ -1,15 +1,12 @@
 /**
  * CAWS Quality Gates Command
  *
- * Runs comprehensive quality gates on staged files only, providing
- * focused analysis without false positives from untouched code.
- *
- * Features:
- * - Staged file analysis only
- * - God object detection
- * - Hidden TODO analysis with dependency resolution
- * - Engineering-grade TODO template support
- * - CAWS tier-aware quality thresholds
+ * Integrates the hardened quality gates system into the CAWS CLI.
+ * Provides access to enterprise-grade quality enforcement with:
+ * - Timeout protection and concurrent execution
+ * - Comprehensive gate coverage (naming, duplication, god objects, documentation)
+ * - JSON output and CI/CD integration
+ * - Exception framework with audit trails
  *
  * @author @darianrosebrook
  */
@@ -17,16 +14,7 @@
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
-const { execSync } = require('child_process');
-const crypto = require('crypto');
-const {
-  createGodObjectError,
-  createHiddenTodoError,
-  createExecutionError,
-  createFileSystemError,
-  getErrorStatistics,
-} = require('../utils/quality-gates-errors');
+const { spawn } = require('child_process');
 
 /**
  * Quality Gates Configuration
@@ -456,193 +444,102 @@ function getCawsTier() {
  */
 async function qualityGatesCommand(options = {}) {
   try {
-    // Detect crisis mode
-    const crisisMode = detectCrisisMode();
-    const modeIndicator = crisisMode ? ' [CRISIS RESPONSE MODE]' : '';
+    console.log(chalk.bold('\n🚦 CAWS Quality Gates - Enterprise Code Quality Enforcement'));
+    console.log('='.repeat(70));
 
-    console.log(chalk.bold(`\n🚦 CAWS Quality Gates - Staged Files Analysis${modeIndicator}`));
-    console.log('='.repeat(60));
+    // Find the quality gates runner script
+    const cliSrcDir = path.dirname(__filename); // packages/caws-cli/src/commands -> packages/caws-cli/src/commands
+    const cliSrcRoot = path.dirname(cliSrcDir); // packages/caws-cli/src/commands -> packages/caws-cli/src
+    const cliPackageDir = path.dirname(cliSrcRoot); // packages/caws-cli/src -> packages/caws-cli
+    const packagesDir = path.dirname(cliPackageDir); // packages/caws-cli -> packages
+    const qualityGatesRunner = path.join(packagesDir, 'quality-gates', 'run-quality-gates.mjs');
 
-    // Get staged files
-    const stagedFiles = getStagedFiles();
-
-    if (stagedFiles.length === 0) {
-      console.log(chalk.green('✅ No staged files to analyze'));
-      console.log(chalk.gray('💡 Stage files with: git add <files>'));
-      return;
-    }
-
-    console.log(chalk.blue(`📁 Analyzing ${stagedFiles.length} staged files`));
-
-    // Get CAWS tier for context
-    const cawsTier = getCawsTier();
-    if (cawsTier) {
-      console.log(chalk.blue(`🎯 CAWS Tier: ${cawsTier}`));
-      const thresholds = QUALITY_CONFIG.cawsTierThresholds[cawsTier];
-      if (thresholds) {
-        console.log(
-          chalk.gray(`   Coverage: ≥${thresholds.coverage}%, Mutation: ≥${thresholds.mutation}%`)
-        );
-      }
-    }
-
-    // Check for human override
-    const humanOverride = checkHumanOverride();
-    if (humanOverride.override) {
-      console.log(chalk.yellow(`⚠️  Human override active: ${humanOverride.reason}`));
-      console.log(chalk.gray('   Quality gates will be bypassed'));
-      return;
-    }
-
-    // Run quality checks
-    console.log(chalk.bold('\n🔤 Checking naming conventions...'));
-    console.log(chalk.green('   ✅ Naming conventions check passed'));
-
-    console.log(chalk.bold('\n🚫 Checking code freeze compliance...'));
-    console.log(chalk.green('   ✅ Code freeze compliance check passed'));
-
-    console.log(chalk.bold('\n📋 Checking duplication...'));
-    console.log(chalk.green('   ✅ No duplication regression detected'));
-
-    console.log(chalk.bold('\n🏗️  Checking god objects...'));
-    const godObjectResults = checkGodObjects(stagedFiles, crisisMode);
-
-    if (godObjectResults.waived) {
-      console.log(chalk.yellow('   ⚠️  God object check waived'));
-    } else if (godObjectResults.violations.length > 0) {
-      console.log(chalk.red('   ❌ God object violations detected:'));
-      godObjectResults.violations.forEach((violation) => {
-        console.log(chalk.red(`      ${violation.file}: ${violation.message}`));
-      });
-    } else {
-      console.log(chalk.green('   ✅ No blocking god object violations'));
-    }
-
-    if (godObjectResults.warnings.length > 0) {
-      console.log(chalk.yellow('   ⚠️  God object warnings:'));
-      godObjectResults.warnings.forEach((warning) => {
-        console.log(chalk.yellow(`      ${warning.file}: ${warning.message}`));
-      });
-    }
-
-    console.log(chalk.bold('\n🔍 Checking hidden TODOs...'));
-    const todoResults = checkHiddenTodos(stagedFiles, crisisMode);
-
-    if (todoResults.waived) {
-      console.log(chalk.yellow('   ⚠️  Hidden TODO check waived'));
-    } else if (todoResults.total > 0) {
-      console.log(chalk.red(`   ❌ Found ${todoResults.total} hidden TODOs in staged files`));
-      console.log(
-        chalk.gray('   💡 Fix stub implementations and placeholder code before committing')
-      );
-      console.log(chalk.gray('   📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification'));
-    } else {
-      console.log(chalk.green('   ✅ No critical hidden TODOs found in staged files'));
-    }
-
-    // Summary
-    console.log('\n' + '='.repeat(60));
-    console.log(chalk.bold('📊 QUALITY GATES RESULTS'));
-    console.log('='.repeat(60));
-
-    const totalViolations = godObjectResults.violations.length;
-    const totalWarnings = godObjectResults.warnings.length;
-    const totalTodos = todoResults.total;
-
-    if (totalViolations > 0) {
-      console.log(chalk.red(`\n❌ CRITICAL VIOLATIONS (${totalViolations}):`));
-      godObjectResults.violations.forEach((violation) => {
-        console.log(chalk.red(`   ${violation.file}: ${violation.message}`));
-      });
-    }
-
-    if (totalWarnings > 0) {
-      console.log(chalk.yellow(`\n⚠️  WARNINGS (${totalWarnings}):`));
-      godObjectResults.warnings.forEach((warning) => {
-        console.log(chalk.yellow(`   ${warning.file}: ${warning.message}`));
-      });
-    }
-
-    if (totalTodos > 0) {
-      console.log(chalk.red(`\n🔍 HIDDEN TODOS (${totalTodos}):`));
-      console.log(chalk.red(`   Found ${totalTodos} hidden TODOs in staged files`));
-    }
-
-    // Check if any critical violations are not waived
-    const unwaivedViolations = godObjectResults.violations.length > 0 && !godObjectResults.waived;
-    const unwaivedTodos = todoResults.total > 0 && !todoResults.waived;
-
-    // Final result
-    if (unwaivedViolations || unwaivedTodos) {
-      console.log(chalk.red('\n❌ QUALITY GATES FAILED'));
-      console.log(chalk.red('🚫 Commit blocked - fix violations above'));
-
-      if (crisisMode) {
-        console.log(
-          chalk.yellow('⚠️  Crisis mode active - consider creating waivers for critical fixes')
-        );
-      }
-
-      if (options.ci) {
-        process.exit(1);
-      }
-    } else {
-      console.log(chalk.green('\n✅ ALL QUALITY GATES PASSED'));
-      console.log(chalk.green('🎉 Commit allowed - quality maintained!'));
-
-      if (godObjectResults.waived || todoResults.waived) {
-        console.log(chalk.yellow('⚠️  Some checks were waived - review waivers before merging'));
-      }
-    }
-
-    // Collect all errors for statistics
-    const allErrors = [...(godObjectResults.errors || []), ...(todoResults.errors || [])];
-
-    // Update provenance with results
-    const provenanceResults = {
-      passed: !unwaivedViolations && !unwaivedTodos,
-      violations: godObjectResults.violations,
-      warnings: godObjectResults.warnings,
-      todos: todoResults.total,
-      godObjectResults,
-      todoResults,
-      errors: allErrors,
-      errorStatistics: getErrorStatistics(allErrors),
-    };
-
-    updateProvenance(provenanceResults, crisisMode, stagedFiles);
-
-    // CAWS tier recommendations
-    if (cawsTier && QUALITY_CONFIG.cawsTierThresholds[cawsTier]) {
-      const thresholds = QUALITY_CONFIG.cawsTierThresholds[cawsTier];
-      console.log(chalk.blue(`\n🎯 CAWS Tier ${cawsTier} Requirements:`));
-      console.log(chalk.gray(`   • Branch coverage ≥ ${thresholds.coverage}%`));
-      console.log(chalk.gray(`   • Mutation score ≥ ${thresholds.mutation}%`));
-      if (thresholds.contracts) {
-        console.log(chalk.gray('   • Contract tests passing'));
-      }
-      if (thresholds.review) {
-        console.log(chalk.gray('   • Manual code review required'));
-      }
-    }
-  } catch (error) {
-    console.error(chalk.red(`\n❌ Quality gates failed: ${error.message}`));
-    if (options.ci) {
+    // Check if the runner exists
+    if (!fs.existsSync(qualityGatesRunner)) {
+      console.error(chalk.red('❌ Quality gates runner not found at:'));
+      console.error(chalk.gray(`   ${qualityGatesRunner}`));
+      console.error(chalk.yellow('💡 Run from project root or ensure quality gates are installed'));
       process.exit(1);
     }
+
+    // Build command arguments
+    const args = ['node', qualityGatesRunner];
+
+    // Map CLI options to runner options
+    if (options.ci) {
+      args.push('--ci');
+    }
+
+    if (options.json) {
+      args.push('--json');
+    }
+
+    if (options.gates && options.gates.trim()) {
+      args.push('--gates', options.gates.trim());
+    }
+
+    if (options.fix) {
+      args.push('--fix');
+    }
+
+    // Add CAWS-specific environment variables for integration
+    const env = {
+      ...process.env,
+      CAWS_CLI_INTEGRATION: 'true',
+      CAWS_CLI_VERSION: require(path.join(cliPackageDir, 'package.json')).version,
+    };
+
+    // Set GitHub Actions summary if available
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      env.GITHUB_STEP_SUMMARY = process.env.GITHUB_STEP_SUMMARY;
+    }
+
+    console.log(chalk.blue('📁 Executing quality gates runner...'));
+    console.log(chalk.gray(`   Command: ${args.join(' ')}`));
+
+    // Execute the quality gates runner
+    const child = spawn(args[0], args.slice(1), {
+      stdio: 'inherit',
+      cwd: packagesDir,
+      env: env,
+    });
+
+    // Wait for completion
+    return new Promise((resolve, reject) => {
+      child.on('close', (code) => {
+        if (code === 0) {
+          console.log(chalk.green('\n✅ Quality gates completed successfully'));
+          resolve();
+        } else {
+          console.log(chalk.red(`\n❌ Quality gates failed with exit code: ${code}`));
+          if (options.ci) {
+            process.exit(code);
+          }
+          reject(new Error(`Quality gates failed with exit code: ${code}`));
+        }
+      });
+
+      child.on('error', (error) => {
+        console.error(chalk.red('❌ Failed to execute quality gates runner:'), error.message);
+        reject(error);
+      });
+    });
+
+  } catch (error) {
+    console.error(chalk.red('❌ CAWS Quality Gates command failed:'), error.message);
+    console.error(chalk.gray('Stack trace:'), error.stack);
+
+    // Provide helpful troubleshooting
+    console.log(chalk.yellow('\n🔧 Troubleshooting:'));
+    console.log(chalk.gray('   • Ensure you\'re running from the project root'));
+    console.log(chalk.gray('   • Check that quality gates are installed: ls packages/quality-gates/'));
+    console.log(chalk.gray('   • Verify Node.js version: node --version'));
+    console.log(chalk.gray('   • Try direct execution: node packages/quality-gates/run-quality-gates.mjs'));
+
+    throw error;
   }
 }
 
 module.exports = {
   qualityGatesCommand,
-  getStagedFiles,
-  checkGodObjects,
-  checkHiddenTodos,
-  checkWaiver,
-  detectCrisisMode,
-  checkHumanOverride,
-  getCawsTier,
-  updateProvenance,
-  detectAgentType,
-  QUALITY_CONFIG,
 };

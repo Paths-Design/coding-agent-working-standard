@@ -150,6 +150,16 @@ class CawsMcpServer extends Server {
           return await this.handleSlashCommands(args);
         case 'caws_quality_gates':
           return await this.handleQualityGates(args);
+        case 'caws_quality_gates_run':
+          return await this.handleQualityGatesRun(args);
+        case 'caws_quality_gates_status':
+          return await this.handleQualityGatesStatus(args);
+        case 'caws_quality_exceptions_list':
+          return await this.handleQualityExceptionsList(args);
+        case 'caws_quality_exceptions_create':
+          return await this.handleQualityExceptionsCreate(args);
+        case 'caws_refactor_progress_check':
+          return await this.handleRefactorProgressCheck(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -1051,6 +1061,373 @@ class CawsMcpServer extends Server {
     }
   }
 
+  async handleQualityGatesRun(args) {
+    const {
+      gates = '',
+      ci = false,
+      json = false,
+      fix = false,
+      workingDirectory = process.cwd()
+    } = args;
+
+    try {
+      // Build command arguments
+      const cliArgs = [];
+      if (gates && gates.trim()) {
+        cliArgs.push('--gates', gates.trim());
+      }
+      if (ci) {
+        cliArgs.push('--ci');
+      }
+      if (json) {
+        cliArgs.push('--json');
+      }
+      if (fix) {
+        cliArgs.push('--fix');
+      }
+
+      // Execute the quality gates runner directly
+      const { spawn } = await import('child_process');
+      const qualityGatesPath = path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'run-quality-gates.mjs');
+
+      return new Promise((resolve, reject) => {
+        const child = spawn('node', [qualityGatesPath, ...cliArgs], {
+          cwd: workingDirectory,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            CAWS_MCP_INTEGRATION: 'true',
+          },
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        child.on('close', (code) => {
+          const output = stdout || stderr;
+          resolve({
+            content: [
+              {
+                type: 'text',
+                text: output,
+              },
+            ],
+          });
+        });
+
+        child.on('error', (error) => {
+          reject({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: error.message,
+                  command: 'caws_quality_gates_run',
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          });
+        });
+      });
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error.message,
+              command: 'caws_quality_gates_run',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleQualityGatesStatus(args) {
+    const { workingDirectory = process.cwd(), json = false } = args;
+
+    try {
+      // Check for quality gates report file
+      const reportPath = path.join(workingDirectory, 'docs-status', 'quality-gates-report.json');
+
+      if (fs.existsSync(reportPath)) {
+        const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+
+        if (json) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(report, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Human-readable format
+        const status = report.violations.length === 0 ? '✅ PASSED' : '❌ FAILED';
+        const summary = `Quality Gates Status: ${status}\n` +
+          `Last run: ${new Date(report.timestamp).toLocaleString()}\n` +
+          `Context: ${report.context}\n` +
+          `Files checked: ${report.files_scoped}\n` +
+          `Violations: ${report.violations.length}\n` +
+          `Warnings: ${report.warnings.length}`;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: summary,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'No quality gates report found. Run quality gates first.',
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error.message,
+              command: 'caws_quality_gates_status',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleQualityExceptionsList(args) {
+    const { gate, status = 'active', workingDirectory = process.cwd() } = args;
+
+    try {
+      // Import the exception framework
+      const { loadExceptionConfig } = await import(path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'shared-exception-framework.mjs'));
+
+      const config = loadExceptionConfig();
+      let exceptions = config.exceptions || [];
+
+      // Filter by status
+      const now = new Date();
+      exceptions = exceptions.filter(exc => {
+        const expiresAt = new Date(exc.expires_at);
+        const isExpired = expiresAt < now;
+
+        switch (status) {
+          case 'active': return !isExpired;
+          case 'expired': return isExpired;
+          case 'all': return true;
+          default: return !isExpired;
+        }
+      });
+
+      // Filter by gate if specified
+      if (gate) {
+        exceptions = exceptions.filter(exc => exc.gate === gate);
+      }
+
+      // Format for display
+      const formatted = exceptions.map(exc => ({
+        id: exc.id,
+        gate: exc.gate,
+        reason: exc.reason,
+        approved_by: exc.approved_by,
+        expires_at: exc.expires_at,
+        status: new Date(exc.expires_at) > now ? 'active' : 'expired',
+      }));
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              exceptions: formatted,
+              count: formatted.length,
+              filter: { gate, status },
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error.message,
+              command: 'caws_quality_exceptions_list',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleQualityExceptionsCreate(args) {
+    const {
+      gate,
+      reason,
+      approvedBy,
+      expiresAt,
+      filePattern,
+      violationType,
+      context = 'all',
+      workingDirectory = process.cwd()
+    } = args;
+
+    try {
+      // Import the exception framework
+      const { addException } = await import(path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'shared-exception-framework.mjs'));
+
+      const exceptionData = {
+        gate,
+        reason,
+        approved_by: approvedBy,
+        expires_at: expiresAt,
+        ...(filePattern && { file_pattern: filePattern }),
+        ...(violationType && { violation_type: violationType }),
+        context,
+      };
+
+      const result = await addException(exceptionData);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Exception created successfully',
+              exception: result,
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error.message,
+              command: 'caws_quality_exceptions_create',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  async handleRefactorProgressCheck(args) {
+    const { context = 'ci', strict = false, workingDirectory = process.cwd() } = args;
+
+    try {
+      // Execute the refactor progress checker
+      const { spawn } = await import('child_process');
+      const progressCheckerPath = path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'monitor-refactoring-progress.mjs');
+
+      const cliArgs = ['--context', context];
+      if (strict) {
+        cliArgs.push('--strict');
+      }
+
+      return new Promise((resolve, reject) => {
+        const child = spawn('node', [progressCheckerPath, ...cliArgs], {
+          cwd: workingDirectory,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            CAWS_MCP_INTEGRATION: 'true',
+          },
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        child.on('close', (code) => {
+          const output = stdout || stderr;
+          const success = strict ? code === 0 : true; // In non-strict mode, always report as success
+
+          resolve({
+            content: [
+              {
+                type: 'text',
+                text: output,
+              },
+            ],
+          });
+        });
+
+        child.on('error', (error) => {
+          reject({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: error.message,
+                  command: 'caws_refactor_progress_check',
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          });
+        });
+      });
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error.message,
+              command: 'caws_refactor_progress_check',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   async handleSlashCommands(args) {
     const { command, ...params } = args;
 
@@ -1073,6 +1450,11 @@ class CawsMcpServer extends Server {
       '/caws:provenance': 'caws_provenance',
       '/caws:hooks': 'caws_hooks',
       '/caws:quality-gates': 'caws_quality_gates',
+      '/caws:quality-gates-run': 'caws_quality_gates_run',
+      '/caws:quality-gates-status': 'caws_quality_gates_status',
+      '/caws:quality-exceptions-list': 'caws_quality_exceptions_list',
+      '/caws:quality-exceptions-create': 'caws_quality_exceptions_create',
+      '/caws:refactor-progress': 'caws_refactor_progress_check',
     };
 
     const mappedTool = slashCommandMap[command];
@@ -2435,6 +2817,151 @@ const CAWS_TOOLS = [
         },
       },
       required: ['command'],
+    },
+  },
+  {
+    name: 'caws_quality_gates_run',
+    description: 'Run comprehensive quality gates to enforce code quality standards',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        gates: {
+          type: 'string',
+          description: 'Comma-separated list of gates to run (naming,code_freeze,duplication,god_objects,documentation). Leave empty to run all gates.',
+        },
+        ci: {
+          type: 'boolean',
+          description: 'Run in CI mode (strict enforcement, exit on violations)',
+          default: false,
+        },
+        json: {
+          type: 'boolean',
+          description: 'Output machine-readable JSON instead of human-readable text',
+          default: false,
+        },
+        fix: {
+          type: 'boolean',
+          description: 'Attempt automatic fixes for safe violations (experimental)',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory to run quality gates in (defaults to current directory)',
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_quality_gates_status',
+    description: 'Check the status of quality gates and recent results',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory to check status in (defaults to current directory)',
+        },
+        json: {
+          type: 'boolean',
+          description: 'Output in JSON format',
+          default: false,
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_quality_exceptions_list',
+    description: 'List all active quality gate exceptions and waivers',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        gate: {
+          type: 'string',
+          description: 'Filter exceptions by specific gate (optional)',
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by status: active, expired, all',
+          enum: ['active', 'expired', 'all'],
+          default: 'active',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory to check exceptions in (defaults to current directory)',
+        },
+      },
+    },
+  },
+  {
+    name: 'caws_quality_exceptions_create',
+    description: 'Create a new quality gate exception/waiver',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        gate: {
+          type: 'string',
+          description: 'Quality gate to create exception for',
+          required: true,
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for the exception',
+          required: true,
+        },
+        approvedBy: {
+          type: 'string',
+          description: 'Person/entity approving the exception',
+          required: true,
+        },
+        expiresAt: {
+          type: 'string',
+          description: 'Expiration date in ISO format (YYYY-MM-DDTHH:mm:ssZ)',
+          required: true,
+        },
+        filePattern: {
+          type: 'string',
+          description: 'File pattern to match (micromatch glob)',
+        },
+        violationType: {
+          type: 'string',
+          description: 'Type of violation to waive',
+        },
+        context: {
+          type: 'string',
+          description: 'Context where exception applies: all, commit, push, ci',
+          enum: ['all', 'commit', 'push', 'ci'],
+          default: 'all',
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory to create exception in (defaults to current directory)',
+        },
+      },
+      required: ['gate', 'reason', 'approvedBy', 'expiresAt'],
+    },
+  },
+  {
+    name: 'caws_refactor_progress_check',
+    description: 'Check refactoring progress against defined targets and baselines',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        context: {
+          type: 'string',
+          description: 'Execution context: commit, push, ci',
+          enum: ['commit', 'push', 'ci'],
+          default: 'ci',
+        },
+        strict: {
+          type: 'boolean',
+          description: 'Fail if targets are not met (for CI)',
+          default: false,
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory to check progress in (defaults to current directory)',
+        },
+      },
     },
   },
 ];

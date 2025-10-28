@@ -105,6 +105,37 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Quality Gates Commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.qualityGatesRun', async () => {
+      await runQualityGatesInteractive();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.qualityGatesStatus', async () => {
+      await runQualityGatesStatus();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.qualityExceptionsList', async () => {
+      await runQualityExceptionsList();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.qualityExceptionsCreate', async () => {
+      await runQualityExceptionsCreate();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.refactorProgressCheck', async () => {
+      await runRefactorProgressCheck();
+    })
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand('caws.specsShow', async () => {
       await runCawsSpecsShow();
@@ -1016,6 +1047,323 @@ function generateGuidanceHtml(guidance: any): string {
     </body>
     </html>
   `;
+}
+
+// Quality Gates Handler Functions
+async function runQualityGatesInteractive(): Promise<void> {
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder open');
+      return;
+    }
+
+    // Show progress
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Quality Gates',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Running quality gates...' });
+
+        // Get user preferences
+        const gates = await vscode.window.showQuickPick(
+          [
+            { label: 'All Gates', value: '' },
+            { label: 'Naming Conventions', value: 'naming' },
+            { label: 'Code Freeze', value: 'code_freeze' },
+            { label: 'Duplication', value: 'duplication' },
+            { label: 'God Objects', value: 'god_objects' },
+            { label: 'Documentation', value: 'documentation' },
+          ],
+          {
+            placeHolder: 'Select quality gates to run',
+            canPickMany: true,
+          }
+        );
+
+        if (!gates) return;
+
+        const selectedGates = gates.map(g => g.value).filter(Boolean).join(',');
+        const ci = await vscode.window.showQuickPick(['No', 'Yes'], {
+          placeHolder: 'Run in CI mode?',
+        });
+
+        progress.report({ message: 'Executing quality gates...' });
+
+        const result = await mcpClient.callTool('caws_quality_gates_run', {
+          gates: selectedGates,
+          ci: ci === 'Yes',
+          json: false,
+          workingDirectory: workspaceFolder.uri.fsPath,
+        });
+
+        if (result.content && result.content[0]) {
+          const output = result.content[0].text;
+
+          // Show results in output channel
+          const outputChannel = vscode.window.createOutputChannel('CAWS Quality Gates');
+          outputChannel.clear();
+          outputChannel.appendLine('CAWS Quality Gates Results');
+          outputChannel.appendLine('='.repeat(50));
+          outputChannel.appendLine(output);
+          outputChannel.show();
+
+          // Check if there were violations
+          if (output.includes('VIOLATIONS') || output.includes('FAILED')) {
+            const showDetails = await vscode.window.showErrorMessage(
+              'Quality gates found violations',
+              'Show Details',
+              'OK'
+            );
+            if (showDetails === 'Show Details') {
+              outputChannel.show();
+            }
+          } else {
+            vscode.window.showInformationMessage('Quality gates passed successfully!');
+          }
+        }
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+  }
+}
+
+async function runQualityGatesStatus(): Promise<void> {
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder open');
+      return;
+    }
+
+    const result = await mcpClient.callTool('caws_quality_gates_status', {
+      workingDirectory: workspaceFolder.uri.fsPath,
+      json: false,
+    });
+
+    if (result.content && result.content[0]) {
+      const status = result.content[0].text;
+
+      // Show in output channel
+      const outputChannel = vscode.window.createOutputChannel('CAWS Quality Gates Status');
+      outputChannel.clear();
+      outputChannel.appendLine('CAWS Quality Gates Status');
+      outputChannel.appendLine('='.repeat(50));
+      outputChannel.appendLine(status);
+      outputChannel.show();
+
+      vscode.window.showInformationMessage('Quality gates status displayed');
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to get quality gates status: ${error}`);
+  }
+}
+
+async function runQualityExceptionsList(): Promise<void> {
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder open');
+      return;
+    }
+
+    const gate = await vscode.window.showQuickPick(
+      [
+        { label: 'All Gates', value: '' },
+        { label: 'Naming', value: 'naming' },
+        { label: 'Code Freeze', value: 'code_freeze' },
+        { label: 'Duplication', value: 'duplication' },
+        { label: 'God Objects', value: 'god_objects' },
+        { label: 'Documentation', value: 'documentation' },
+      ],
+      { placeHolder: 'Filter by gate (optional)' }
+    );
+
+    const status = await vscode.window.showQuickPick(
+      [
+        { label: 'Active Only', value: 'active' },
+        { label: 'Expired Only', value: 'expired' },
+        { label: 'All', value: 'all' },
+      ],
+      { placeHolder: 'Filter by status' }
+    );
+
+    if (!status) return;
+
+    const result = await mcpClient.callTool('caws_quality_exceptions_list', {
+      gate: gate?.value || undefined,
+      status: status.value,
+      workingDirectory: workspaceFolder.uri.fsPath,
+    });
+
+    if (result.content && result.content[0]) {
+      const data = JSON.parse(result.content[0].text);
+
+      if (data.success && data.exceptions.length > 0) {
+        // Show in output channel
+        const outputChannel = vscode.window.createOutputChannel('CAWS Quality Exceptions');
+        outputChannel.clear();
+        outputChannel.appendLine(`CAWS Quality Exceptions (${data.count} found)`);
+        outputChannel.appendLine('='.repeat(50));
+
+        data.exceptions.forEach((exc: any) => {
+          outputChannel.appendLine(`ID: ${exc.id}`);
+          outputChannel.appendLine(`Gate: ${exc.gate}`);
+          outputChannel.appendLine(`Reason: ${exc.reason}`);
+          outputChannel.appendLine(`Status: ${exc.status}`);
+          outputChannel.appendLine(`Expires: ${exc.expires_at}`);
+          outputChannel.appendLine(`Approved by: ${exc.approved_by}`);
+          outputChannel.appendLine('-'.repeat(30));
+        });
+
+        outputChannel.show();
+        vscode.window.showInformationMessage(`Found ${data.count} quality exceptions`);
+      } else {
+        vscode.window.showInformationMessage('No quality exceptions found');
+      }
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to list quality exceptions: ${error}`);
+  }
+}
+
+async function runQualityExceptionsCreate(): Promise<void> {
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder open');
+      return;
+    }
+
+    // Get exception details from user
+    const gate = await vscode.window.showQuickPick(
+      [
+        'naming',
+        'code_freeze',
+        'duplication',
+        'god_objects',
+        'documentation',
+      ],
+      { placeHolder: 'Select gate for exception' }
+    );
+
+    if (!gate) return;
+
+    const reason = await vscode.window.showInputBox({
+      prompt: 'Reason for exception',
+      placeHolder: 'Brief description of why this exception is needed',
+    });
+
+    if (!reason) return;
+
+    const approvedBy = await vscode.window.showInputBox({
+      prompt: 'Approved by',
+      placeHolder: 'Person/entity approving this exception',
+    });
+
+    if (!approvedBy) return;
+
+    // Default expiration to 30 days from now
+    const defaultExpiry = new Date();
+    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+
+    const expiresAt = await vscode.window.showInputBox({
+      prompt: 'Expiration date (ISO format)',
+      placeHolder: 'YYYY-MM-DDTHH:mm:ssZ',
+      value: defaultExpiry.toISOString(),
+    });
+
+    if (!expiresAt) return;
+
+    const filePattern = await vscode.window.showInputBox({
+      prompt: 'File pattern (optional)',
+      placeHolder: 'micromatch glob pattern, e.g., src/**/*.ts',
+    });
+
+    const result = await mcpClient.callTool('caws_quality_exceptions_create', {
+      gate,
+      reason,
+      approvedBy,
+      expiresAt,
+      filePattern: filePattern || undefined,
+      context: 'all',
+      workingDirectory: workspaceFolder.uri.fsPath,
+    });
+
+    if (result.content && result.content[0]) {
+      const data = JSON.parse(result.content[0].text);
+
+      if (data.success) {
+        vscode.window.showInformationMessage('Quality exception created successfully');
+      } else {
+        vscode.window.showErrorMessage(`Failed to create exception: ${data.error}`);
+      }
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to create quality exception: ${error}`);
+  }
+}
+
+async function runRefactorProgressCheck(): Promise<void> {
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder open');
+      return;
+    }
+
+    const context = await vscode.window.showQuickPick(
+      [
+        { label: 'CI Mode', value: 'ci' },
+        { label: 'Push Mode', value: 'push' },
+        { label: 'Commit Mode', value: 'commit' },
+      ],
+      { placeHolder: 'Select execution context' }
+    );
+
+    if (!context) return;
+
+    const strict = await vscode.window.showQuickPick(['No', 'Yes'], {
+      placeHolder: 'Fail if targets not met?',
+    });
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Refactor Progress',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Checking refactor progress...' });
+
+        const result = await mcpClient.callTool('caws_refactor_progress_check', {
+          context: context.value,
+          strict: strict === 'Yes',
+          workingDirectory: workspaceFolder.uri.fsPath,
+        });
+
+        if (result.content && result.content[0]) {
+          const output = result.content[0].text;
+
+          // Show in output channel
+          const outputChannel = vscode.window.createOutputChannel('CAWS Refactor Progress');
+          outputChannel.clear();
+          outputChannel.appendLine('CAWS Refactor Progress Check');
+          outputChannel.appendLine('='.repeat(50));
+          outputChannel.appendLine(output);
+          outputChannel.show();
+
+          vscode.window.showInformationMessage('Refactor progress check completed');
+        }
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Refactor progress check failed: ${error}`);
+  }
 }
 
 async function updateQualityStatus(): Promise<void> {
