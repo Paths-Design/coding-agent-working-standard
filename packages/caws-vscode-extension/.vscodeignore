@@ -36,7 +36,6 @@ tests/**
 # Node modules (excluded except for bundled ones)
 node_modules/**
 **/node_modules/**
-../../node_modules/**
 !bundled/mcp-server/node_modules/**
 
 # Other workspace packages
@@ -61,6 +60,25 @@ scripts/**
 # Package files
 *.vsix
 *.tgz
+
+# Environment files
+.env
+.env.*
+*.env
+../../.env
+
+# Root workspace files
+../../turbo.json
+../../package.json
+../../package-lock.json
+../../pnpm-lock.yaml
+../../pnpm-workspace.yaml
+../../tsconfig.json
+../../tsconfig.eslint.json
+../../jest.config.js
+../../Cargo.toml
+../../Cargo.lock
+../../tests/**
 
 # Misc
 .DS_Store

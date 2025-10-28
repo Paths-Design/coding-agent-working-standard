@@ -60,18 +60,8 @@ describe('Spec Resolver System', () => {
       const mockSpec = { id: 'user-auth', title: 'User Authentication' };
       const specPath = path.join(SPECS_DIR, 'user-auth.yaml');
 
-      // Mock registry
-      const mockRegistry = {
-        specs: {
-          'user-auth': { path: 'user-auth.yaml' },
-        },
-      };
-
-      fs.pathExists
-        .mockResolvedValueOnce(true) // Registry exists
-        .mockResolvedValueOnce(true); // Spec file exists
-
-      require('fs-extra').readJson = jest.fn().mockResolvedValue(mockRegistry);
+      fs.pathExists.mockResolvedValue(true); // Spec file exists
+      fs.readFile.mockResolvedValue('id: user-auth\ntitle: User Authentication');
       require('js-yaml').load = jest.fn().mockReturnValue(mockSpec);
 
       const result = await resolveSpec({ specId: 'user-auth' });
@@ -80,9 +70,8 @@ describe('Spec Resolver System', () => {
       expect(result.type).toBe('feature');
       expect(result.spec).toEqual(mockSpec);
 
-      expect(require('fs-extra').readJson).toHaveBeenCalledWith(
-        path.join(process.cwd(), SPECS_REGISTRY)
-      );
+      expect(fs.pathExists).toHaveBeenCalledWith(specPath);
+      expect(fs.readFile).toHaveBeenCalledWith(specPath, 'utf8');
     });
 
     test('should auto-detect single spec when no ID provided', async () => {
@@ -101,12 +90,13 @@ describe('Spec Resolver System', () => {
         .mockResolvedValueOnce(true) // Registry exists
         .mockResolvedValueOnce(true); // Spec file exists
 
-      require('fs-extra').readJson = jest.fn().mockResolvedValue(mockRegistry);
+      fs.readJson = jest.fn().mockResolvedValue(mockRegistry);
+      fs.readFile.mockResolvedValue('id: single-spec\ntitle: Single Spec');
       require('js-yaml').load = jest.fn().mockReturnValue(mockSpec);
 
       const result = await resolveSpec({});
 
-      expect(result.path).toContain('user-auth.yaml');
+      expect(result.path).toContain('single-spec.yaml');
       expect(result.type).toBe('feature');
       expect(result.spec).toEqual(mockSpec);
     });

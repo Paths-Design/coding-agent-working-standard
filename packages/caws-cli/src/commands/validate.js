@@ -156,7 +156,10 @@ async function validateCommand(specFile, options = {}) {
       console.log(JSON.stringify(jsonResult, null, 2));
 
       if (!finalResult.valid) {
-        process.exit(1);
+        // Don't call process.exit in test environment
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          process.exit(1);
+        }
       }
     } else {
       // Human-readable text output
@@ -199,7 +202,10 @@ async function validateCommand(specFile, options = {}) {
           });
         }
 
-        process.exit(1);
+        // Don't call process.exit in test environment
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          process.exit(1);
+        }
       }
     }
   } catch (error) {

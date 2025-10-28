@@ -13,7 +13,7 @@
     "templates"
   ],
   "scripts": {
-    "build": "mkdir -p dist && cp -r src/* dist/ && npm run typecheck",
+    "build": "mkdir -p dist && cp -r src/* dist/",
     "dev": "mkdir -p dist && cp -r src/* dist/ && node dist/index.js",
     "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",

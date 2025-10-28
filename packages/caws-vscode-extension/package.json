@@ -101,6 +101,11 @@
         "command": "caws.specsShow",
         "title": "CAWS: Show Spec Details",
         "category": "CAWS"
+      },
+      {
+        "command": "caws.qualityGates",
+        "title": "CAWS: Run Quality Gates",
+        "category": "CAWS"
       }
     ],
     "menus": {
@@ -123,6 +128,10 @@
         },
         {
           "command": "caws.showDashboard",
+          "when": "workspaceContains:.caws"
+        },
+        {
+          "command": "caws.qualityGates",
           "when": "workspaceContains:.caws"
         }
       ],

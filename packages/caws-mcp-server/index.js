@@ -148,6 +148,8 @@ class CawsMcpServer extends Server {
           return await this.handleCawsArchive(args);
         case 'caws_slash_commands':
           return await this.handleSlashCommands(args);
+        case 'caws_quality_gates':
+          return await this.handleQualityGates(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -1009,6 +1011,46 @@ class CawsMcpServer extends Server {
     }
   }
 
+  async handleQualityGates(args) {
+    const { args: cliArgs = [], workingDirectory = process.cwd() } = args;
+
+    try {
+      const command = `npx @paths.design/caws-cli quality-gates ${cliArgs.join(' ')}`;
+      const result = execSync(command, {
+        encoding: 'utf8',
+        cwd: workingDirectory,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: result,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws quality-gates',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   async handleSlashCommands(args) {
     const { command, ...params } = args;
 
@@ -1030,6 +1072,7 @@ class CawsMcpServer extends Server {
       '/caws:monitor': 'caws_monitor_status',
       '/caws:provenance': 'caws_provenance',
       '/caws:hooks': 'caws_hooks',
+      '/caws:quality-gates': 'caws_quality_gates',
     };
 
     const mappedTool = slashCommandMap[command];
@@ -2323,6 +2366,25 @@ const CAWS_TOOLS = [
         },
       },
       required: ['changeId'],
+    },
+  },
+  {
+    name: 'caws_quality_gates',
+    description: 'Run comprehensive quality gates on staged files only',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        args: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Command line arguments to pass to quality-gates command',
+          default: [],
+        },
+        workingDirectory: {
+          type: 'string',
+          description: 'Working directory for quality gates execution',
+        },
+      },
     },
   },
   {

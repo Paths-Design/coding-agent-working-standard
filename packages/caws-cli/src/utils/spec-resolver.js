@@ -10,8 +10,8 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 
-// Import SPEC_TYPES from specs command for consistent display
-const { SPEC_TYPES } = require('../commands/specs');
+// Import SPEC_TYPES from constants for consistent display
+const { SPEC_TYPES } = require('../constants/spec-types');
 
 /**
  * Spec resolution priority:

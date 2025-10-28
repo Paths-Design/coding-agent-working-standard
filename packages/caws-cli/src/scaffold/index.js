@@ -311,6 +311,19 @@ async function scaffoldProject(options) {
       },
     });
 
+    // Add quality gates scripts for staged file analysis
+    enhancements.push({
+      name: 'scripts/quality-gates/run-quality-gates.js',
+      description: 'Quality gates runner for staged files',
+      required: false,
+    });
+
+    enhancements.push({
+      name: 'scripts/quality-gates/check-god-objects.js',
+      description: 'God object detector for staged files',
+      required: false,
+    });
+
     // Add commit conventions for setups that don't have them
     if (!setup.hasTemplates || !fs.existsSync(path.join(currentDir, 'COMMIT_CONVENTIONS.md'))) {
       enhancements.push({

@@ -41,6 +41,7 @@ const { iterateCommand } = require('./commands/iterate');
 const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
+const { qualityGatesCommand } = require('./commands/quality-gates');
 const { troubleshootCommand } = require('./commands/troubleshoot');
 const { archiveCommand } = require('./commands/archive');
 const { specsCommand } = require('./commands/specs');
@@ -127,6 +128,16 @@ program
   .option('--dry-run', 'Preview auto-fixes without applying them', false)
   .option('--format <format>', 'Output format (text, json)', 'text')
   .action(validateCommand);
+
+// Quality Gates command
+program
+  .command('quality-gates')
+  .description('Run comprehensive quality gates on staged files only')
+  .option('--ci', 'CI mode - exit with error code if violations found', false)
+  .option('--languages <languages>', 'Comma-separated list of languages to check', 'rust')
+  .option('--no-todos', 'Skip hidden TODO analysis', false)
+  .option('--no-god-objects', 'Skip god object detection', false)
+  .action(qualityGatesCommand);
 
 // Status command
 program

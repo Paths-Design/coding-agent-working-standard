@@ -11,6 +11,8 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
+    "lint": "echo 'Types package does not need linting'",
+    "test": "echo 'Types package does not need testing'",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

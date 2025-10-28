@@ -11,6 +11,15 @@ const path = require('path');
 jest.mock('fs-extra');
 jest.mock('js-yaml');
 
+// Mock the specs module to allow proper mocking of createSpec
+jest.mock('../src/commands/specs', () => {
+  const originalModule = jest.requireActual('../src/commands/specs');
+  return {
+    ...originalModule,
+    createSpec: jest.fn(),
+  };
+});
+
 describe('Enhanced Spec Creation with Conflict Resolution', () => {
   const SPECS_DIR = '.caws/specs';
 
@@ -33,6 +42,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       }),
       close: jest.fn(),
     });
+
+    // Clear the mocked createSpec function
+    const { createSpec } = require('../src/commands/specs');
+    createSpec.mockClear();
   });
 
   afterEach(() => {
@@ -345,19 +358,18 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
   describe('specsCommand integration with conflict resolution', () => {
     test('should pass force option to createSpec', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      const { specsCommand, createSpec } = require('../src/commands/specs');
 
       // Mock createSpec to capture options
-      const mockCreateSpec = jest.fn().mockResolvedValue({
+      createSpec.mockResolvedValue({
         id: 'test-spec',
         title: 'Test Spec',
         status: 'draft',
       });
-      require('../src/commands/specs').createSpec = mockCreateSpec;
 
       await specsCommand('create', { id: 'test-spec', force: true });
 
-      expect(mockCreateSpec).toHaveBeenCalledWith('test-spec', {
+      expect(createSpec).toHaveBeenCalledWith('test-spec', {
         type: 'feature',
         title: 'New feature',
         risk_tier: 'T3',
@@ -368,19 +380,18 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
     });
 
     test('should pass interactive option to createSpec', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      const { specsCommand, createSpec } = require('../src/commands/specs');
 
       // Mock createSpec to capture options
-      const mockCreateSpec = jest.fn().mockResolvedValue({
+      createSpec.mockResolvedValue({
         id: 'test-spec',
         title: 'Test Spec',
         status: 'draft',
       });
-      require('../src/commands/specs').createSpec = mockCreateSpec;
 
       await specsCommand('create', { id: 'test-spec', interactive: true });
 
-      expect(mockCreateSpec).toHaveBeenCalledWith('test-spec', {
+      expect(createSpec).toHaveBeenCalledWith('test-spec', {
         type: 'feature',
         title: 'New feature',
         risk_tier: 'T3',
@@ -391,11 +402,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
     });
 
     test('should handle createSpec returning null (canceled)', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      const { specsCommand, createSpec } = require('../src/commands/specs');
 
       // Mock createSpec to return null (canceled)
-      const mockCreateSpec = jest.fn().mockResolvedValue(null);
-      require('../src/commands/specs').createSpec = mockCreateSpec;
+      createSpec.mockResolvedValue(null);
 
       const result = await specsCommand('create', { id: 'test-spec' });
 
@@ -411,20 +421,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
   describe('CLI integration', () => {
     test('should pass force option from CLI to specsCommand', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      const { specsCommand, createSpec } = require('../src/commands/specs');
 
       // Mock createSpec to capture options
-      const mockCreateSpec = jest.fn().mockResolvedValue({
+      createSpec.mockResolvedValue({
         id: 'test-spec',
         title: 'Test Spec',
         status: 'draft',
       });
-      require('../src/commands/specs').createSpec = mockCreateSpec;
 
       // Simulate CLI call with --force
       await specsCommand('create', { id: 'test-spec', force: true });
 
-      expect(mockCreateSpec).toHaveBeenCalledWith(
+      expect(createSpec).toHaveBeenCalledWith(
         'test-spec',
         expect.objectContaining({
           force: true,
@@ -433,20 +442,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
     });
 
     test('should pass interactive option from CLI to specsCommand', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      const { specsCommand, createSpec } = require('../src/commands/specs');
 
       // Mock createSpec to capture options
-      const mockCreateSpec = jest.fn().mockResolvedValue({
+      createSpec.mockResolvedValue({
         id: 'test-spec',
         title: 'Test Spec',
         status: 'draft',
       });
-      require('../src/commands/specs').createSpec = mockCreateSpec;
 
       // Simulate CLI call with --interactive
       await specsCommand('create', { id: 'test-spec', interactive: true });
 
-      expect(mockCreateSpec).toHaveBeenCalledWith(
+      expect(createSpec).toHaveBeenCalledWith(
         'test-spec',
         expect.objectContaining({
           interactive: true,
@@ -455,6 +463,3 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
     });
   });
 });
-
-
-

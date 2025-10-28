@@ -116,10 +116,10 @@ async function scaffoldGitHooks(projectDir, options = {}) {
 }
 
 /**
- * Generate pre-commit hook content
+ * Generate pre-commit hook content with staged file quality gates
  */
 function generatePreCommitHook(options) {
-  const { qualityGates = true } = options;
+  const { qualityGates = true, stagedOnly = true } = options;
 
   return `#!/bin/bash
 # CAWS Pre-commit Hook
@@ -127,8 +127,8 @@ function generatePreCommitHook(options) {
 
 set -e
 
-echo "🔍 CAWS Pre-commit Validation"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚦 Running CAWS Quality Gates${qualityGates ? ' (Crisis Response Mode)' : ''}..."
+echo "📁 Analyzing ${stagedOnly ? 'staged files only' : 'all files'}..."
 
 # Check if CAWS is initialized
 if [ ! -d ".caws" ]; then
@@ -136,55 +136,43 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
-# Run CAWS validation if available
-if command -v caws >/dev/null 2>&1; then
-  echo "📋 Running CAWS validation..."
-  if caws validate --quiet; then
-    echo "✅ CAWS validation passed"
+# Run quality gates
+if command -v node >/dev/null 2>&1; then
+  if node scripts/quality-gates/run-quality-gates.js; then
+    echo "✅ Quality gates passed"
   else
-    echo "❌ CAWS validation failed"
-    echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
+    echo "❌ Quality gates failed - commit blocked"
+    echo "💡 Fix the violations above before committing"
+    echo "📖 See docs/refactoring.md for crisis response plan"
     exit 1
   fi
 else
-  echo "⚠️  CAWS CLI not found - install with: npm install -g @paths.design/caws-cli"
+  echo "⚠️  Node.js not found - skipping quality gates"
+  echo "💡 Install Node.js to enable automatic quality checking"
+  exit 0
 fi
 
-# Run quality gates if enabled
-${
-  qualityGates
-    ? `
-echo "🎯 Running quality gates..."
-if [ -f "package.json" ]; then
-  # Run linting if available
-  if [ -f "node_modules/.bin/eslint" ] || command -v eslint >/dev/null 2>&1; then
-    echo "🔍 Running ESLint..."
-    if npx eslint . --quiet; then
-      echo "✅ ESLint passed"
-    else
-      echo "❌ ESLint failed"
-      echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
-      exit 1
-    fi
+# Run hidden TODO analysis on staged files only
+echo "🔍 Checking for hidden TODOs in staged files..."
+if command -v python3 >/dev/null 2>&1; then
+  if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+    echo "✅ No critical hidden TODOs found in staged files"
+  else
+    echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+    echo "💡 Fix stub implementations and placeholder code before committing"
+    echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+    echo ""
+    echo "🔍 Running detailed analysis on staged files..."
+    python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
+    exit 1
   fi
-
-  # Run tests if available
-  if [ -f "package.json" ] && grep -q '"test"' package.json; then
-    echo "🧪 Running tests..."
-    if npm test; then
-      echo "✅ Tests passed"
-    else
-      echo "❌ Tests failed"
-      echo "💡 Fix issues or skip with: git commit --no-verify (allowed)"
-      exit 1
-    fi
-  fi
+else
+  echo "⚠️  Python3 not found - skipping hidden TODO analysis"
+  echo "💡 Install Python3 to enable automatic TODO checking"
 fi
-`
-    : ''
-}
 
-echo "🎉 Pre-commit checks passed!"
+echo "✅ All quality checks passed - proceeding with commit"
+exit 0
 `;
 }
 

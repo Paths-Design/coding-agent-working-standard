@@ -9,6 +9,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
+const { SPEC_TYPES } = require('../constants/spec-types');
 
 // Import suggestFeatureBreakdown from spec-resolver
 const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
@@ -18,37 +19,6 @@ const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
  */
 const SPECS_DIR = '.caws/specs';
 const SPECS_REGISTRY = '.caws/specs/registry.json';
-
-/**
- * Spec types and their metadata
- */
-const SPEC_TYPES = {
-  feature: {
-    color: chalk.green,
-    icon: '🚀',
-    description: 'New feature development',
-  },
-  fix: {
-    color: chalk.red,
-    icon: '🔧',
-    description: 'Bug fixes and patches',
-  },
-  refactor: {
-    color: chalk.blue,
-    icon: '♻️',
-    description: 'Code refactoring and improvements',
-  },
-  chore: {
-    color: chalk.gray,
-    icon: '🧹',
-    description: 'Maintenance and cleanup',
-  },
-  docs: {
-    color: chalk.cyan,
-    icon: '📚',
-    description: 'Documentation updates',
-  },
-};
 
 /**
  * Load specs registry

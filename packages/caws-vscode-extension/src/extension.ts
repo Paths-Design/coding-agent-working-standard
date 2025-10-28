@@ -111,6 +111,12 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caws.qualityGates', async () => {
+      await runQualityGates();
+    })
+  );
+
   // Register code action provider
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider('*', new CawsCodeActionProvider())
@@ -145,6 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
             new vscode.CompletionItem('evaluate', vscode.CompletionItemKind.Function),
             new vscode.CompletionItem('iterate', vscode.CompletionItemKind.Function),
             new vscode.CompletionItem('validate', vscode.CompletionItemKind.Function),
+            new vscode.CompletionItem('quality-gates', vscode.CompletionItemKind.Function),
             new vscode.CompletionItem('waivers', vscode.CompletionItemKind.Module),
             new vscode.CompletionItem('cicd', vscode.CompletionItemKind.Module),
             new vscode.CompletionItem('experimental', vscode.CompletionItemKind.Module),
@@ -530,7 +537,7 @@ async function selectSpecForCommand(
   }
 
   if (specs.length === 1) {
-    return specs[0];
+    return specs[0] || null;
   }
 
   // Multiple specs - show quick pick
@@ -659,6 +666,87 @@ async function runCawsSpecsShow(): Promise<void> {
     // TODO: Read and display full spec content in a webview or output channel
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to show spec: ${error}`);
+  }
+}
+
+async function runQualityGates(): Promise<void> {
+  try {
+    // Get quality gates options from user
+    const options = await vscode.window.showQuickPick(
+      [
+        { label: 'Run All Checks', value: 'all' },
+        { label: 'Skip TODO Analysis', value: 'no-todos' },
+        { label: 'Skip God Object Detection', value: 'no-god-objects' },
+        { label: 'CI Mode (Exit on Violations)', value: 'ci' },
+      ],
+      {
+        placeHolder: 'Select quality gates options',
+        canPickMany: true,
+      }
+    );
+
+    if (!options) return;
+
+    // Build command arguments
+    const args: string[] = [];
+    if (options.some((opt) => opt.value === 'no-todos')) {
+      args.push('--no-todos');
+    }
+    if (options.some((opt) => opt.value === 'no-god-objects')) {
+      args.push('--no-god-objects');
+    }
+    if (options.some((opt) => opt.value === 'ci')) {
+      args.push('--ci');
+    }
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'CAWS Quality Gates',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Running quality gates on staged files...' });
+
+        const result = await mcpClient.callTool('caws_quality_gates', {
+          args: args,
+        });
+
+        if (!result.content || !result.content[0]) {
+          throw new Error('Invalid quality gates result: missing content');
+        }
+        const output = result.content[0].text;
+
+        // Show results in output channel
+        const outputChannel = vscode.window.createOutputChannel('CAWS Quality Gates');
+        outputChannel.clear();
+        outputChannel.append(output);
+        outputChannel.show();
+
+        // Parse JSON output to show summary
+        try {
+          const jsonOutput = JSON.parse(output);
+          if (jsonOutput.passed) {
+            vscode.window.showInformationMessage('✅ Quality gates passed - all checks successful');
+          } else {
+            const violations = jsonOutput.violations?.length || 0;
+            const warnings = jsonOutput.warnings?.length || 0;
+            vscode.window.showWarningMessage(
+              `⚠️ Quality gates completed with ${violations} violations and ${warnings} warnings - check output channel for details`
+            );
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, just show the raw output
+          vscode.window.showInformationMessage(
+            'Quality gates completed - check output channel for details'
+          );
+        }
+
+        updateQualityStatus();
+      }
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
   }
 }
 
