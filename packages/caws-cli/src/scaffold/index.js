@@ -324,6 +324,12 @@ async function scaffoldProject(options) {
       required: false,
     });
 
+    enhancements.push({
+      name: 'scripts/v3/analysis/todo_analyzer.py',
+      description: 'Advanced hidden TODO analyzer with dependency resolution',
+      required: false,
+    });
+
     // Add commit conventions for setups that don't have them
     if (!setup.hasTemplates || !fs.existsSync(path.join(currentDir, 'COMMIT_CONVENTIONS.md'))) {
       enhancements.push({

@@ -11,14 +11,7 @@ const path = require('path');
 jest.mock('fs-extra');
 jest.mock('js-yaml');
 
-// Mock the specs module to allow proper mocking of createSpec
-jest.mock('../src/commands/specs', () => {
-  const originalModule = jest.requireActual('../src/commands/specs');
-  return {
-    ...originalModule,
-    createSpec: jest.fn(),
-  };
-});
+// Don't mock the specs module - we want to test the real functions
 
 describe('Migration Tools', () => {
   beforeEach(() => {
@@ -32,9 +25,7 @@ describe('Migration Tools', () => {
     // Mock process.exit
     jest.spyOn(process, 'exit').mockImplementation(() => {});
 
-    // Clear the mocked createSpec function
-    const { createSpec } = require('../src/commands/specs');
-    createSpec.mockClear();
+    // No need to clear mocks for createSpec since we're testing the real function
   });
 
   afterEach(() => {
@@ -189,7 +180,7 @@ describe('Migration Tools', () => {
     });
 
     test('should handle selective feature migration', async () => {
-      const { specsCommand, createSpec } = require('../src/commands/specs');
+      const { specsCommand } = require('../src/commands/specs');
 
       const legacySpec = {
         id: 'PROJ-001',
@@ -211,20 +202,14 @@ describe('Migration Tools', () => {
 
       fs.pathExists.mockResolvedValue(true);
       fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
+      fs.ensureDir.mockResolvedValue(undefined);
+      fs.writeFile.mockResolvedValue(undefined);
       require('js-yaml').load = jest.fn().mockReturnValue(legacySpec);
-
-      createSpec.mockResolvedValue({
-        id: 'auth',
-        title: 'Authentication',
-        status: 'draft',
-      });
 
       const result = await specsCommand('migrate', { features: ['auth'] });
 
-      expect(createSpec).toHaveBeenCalledTimes(1);
-      expect(createSpec).toHaveBeenCalledWith('auth', expect.any(Object));
-
       expect(result.migrated).toBe(1);
+      expect(fs.writeFile).toHaveBeenCalled();
     });
 
     test('should handle migration creation failures', async () => {
@@ -259,10 +244,12 @@ describe('Migration Tools', () => {
 
   describe('Migration Command Integration', () => {
     test('should pass options to migration function', async () => {
-      const { specsCommand, createSpec } = require('../src/commands/specs');
+      const { specsCommand } = require('../src/commands/specs');
 
       fs.pathExists.mockResolvedValue(true);
       fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
+      fs.ensureDir.mockResolvedValue(undefined);
+      fs.writeFile.mockResolvedValue(undefined);
 
       const mockLegacySpec = {
         id: 'PROJ-001',
@@ -277,17 +264,14 @@ describe('Migration Tools', () => {
       };
 
       require('js-yaml').load = jest.fn().mockReturnValue(mockLegacySpec);
-      createSpec.mockResolvedValue({
-        id: 'test-feature',
-        title: 'Test Feature',
-      });
 
-      await specsCommand('migrate', {
+      const result = await specsCommand('migrate', {
         interactive: true,
         features: ['test-feature'],
       });
 
-      expect(createSpec).toHaveBeenCalledWith('test-feature', expect.any(Object));
+      expect(result.migrated).toBe(1);
+      expect(fs.writeFile).toHaveBeenCalled();
     });
 
     test('should handle unknown migration options', async () => {

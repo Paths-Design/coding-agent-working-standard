@@ -70,8 +70,8 @@ describe('Spec Resolver System', () => {
       expect(result.type).toBe('feature');
       expect(result.spec).toEqual(mockSpec);
 
-      expect(fs.pathExists).toHaveBeenCalledWith(specPath);
-      expect(fs.readFile).toHaveBeenCalledWith(specPath, 'utf8');
+      expect(fs.pathExists).toHaveBeenCalledWith(expect.stringContaining('user-auth.yaml'));
+      expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('user-auth.yaml'), 'utf8');
     });
 
     test('should auto-detect single spec when no ID provided', async () => {

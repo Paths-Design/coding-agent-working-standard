@@ -18,6 +18,8 @@
     "test": "turbo run test",
     "test:watch": "turbo run test:watch",
     "test:unit": "turbo run test",
+    "test:fast": "./scripts/test-runner.sh --mode fast",
+    "test:runner": "./scripts/test-runner.sh",
     "validate": "turbo run validate",
     "typecheck": "turbo run typecheck || tsc --noEmit",
     "clean": "turbo run clean",

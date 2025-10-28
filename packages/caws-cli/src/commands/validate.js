@@ -159,6 +159,8 @@ async function validateCommand(specFile, options = {}) {
         // Don't call process.exit in test environment
         if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
           process.exit(1);
+        } else {
+          throw new Error('Validation failed');
         }
       }
     } else {
@@ -205,6 +207,8 @@ async function validateCommand(specFile, options = {}) {
         // Don't call process.exit in test environment
         if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
           process.exit(1);
+        } else {
+          throw new Error('Validation failed');
         }
       }
     }
@@ -224,7 +228,10 @@ async function validateCommand(specFile, options = {}) {
     } else {
       console.error(chalk.red('❌ Error during validation:'), error.message);
     }
-    process.exit(1);
+    // Don't call process.exit in test environment
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      process.exit(1);
+    }
   }
 }
 

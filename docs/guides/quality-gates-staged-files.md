@@ -17,12 +17,15 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 - Language-specific analysis (Rust, TypeScript, JavaScript, Python)
 - **Crisis Mode**: Higher thresholds (3000 LOC) for emergency situations
 
-### 🔍 **Hidden TODO Analysis**
-- Detects stub implementations and placeholder code
-- Engineering-grade TODO template support
-- Dependency resolution for blocking TODOs
-- CAWS tier-aware analysis
-- **Crisis Mode**: Stricter confidence thresholds (0.9 vs 0.8)
+### 🔍 **Advanced Hidden TODO Analysis**
+- **Enhanced Pattern Detection**: Context-aware analysis with reduced false positives
+- **Code Stub Detection**: Identifies `pass`, `NotImplementedError`, `throw new Error("TODO")` patterns
+- **Engineering-Grade TODO Templates**: Automatic suggestions for CAWS-compliant TODO format
+- **Dependency Resolution**: Smart analysis of TODO blocking status based on dependencies
+- **Multi-Language Support**: Rust, Python, JavaScript, TypeScript, Go, Java, C#, C++, and more
+- **Confidence Scoring**: Context-aware confidence levels (0.0-1.0) with documentation filtering
+- **CAWS Tier Integration**: Different thresholds and requirements based on project tier
+- **Crisis Mode**: Stricter confidence thresholds (0.9 vs 0.8) for emergency situations
 
 ### 🎯 **CAWS Tier Integration**
 - Tier 1: 90% coverage, 70% mutation, contracts required, manual review
@@ -502,6 +505,77 @@ python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
 
 ⚠️  Human override active: Emergency production fix approved by tech lead
    Quality gates will be bypassed
+```
+
+## TODO Analyzer Script
+
+The CAWS quality gates system includes an advanced Python-based TODO analyzer (`scripts/v3/analysis/todo_analyzer.py`) that provides sophisticated hidden TODO detection:
+
+### Key Features
+
+- **Context-Aware Analysis**: Distinguishes between legitimate documentation and actual TODOs
+- **Multi-Language Support**: Analyzes Rust, Python, JavaScript, TypeScript, Go, Java, C#, C++, and more
+- **Code Stub Detection**: Identifies incomplete implementations beyond just comments
+- **Engineering-Grade Templates**: Suggests CAWS-compliant TODO formats with completion checklists
+- **Dependency Resolution**: Determines if TODOs are blocking based on dependencies
+- **Confidence Scoring**: Context-aware confidence levels to reduce false positives
+
+### Usage
+
+```bash
+# Analyze staged files with dependency resolution
+python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
+
+# Analyze specific files
+python3 scripts/v3/analysis/todo_analyzer.py --files src/main.rs src/utils.py
+
+# Include engineering-grade suggestions
+python3 scripts/v3/analysis/todo_analyzer.py --staged-only --engineering-suggestions
+
+# CI mode (exit with error code if TODOs found)
+python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode
+```
+
+### Engineering-Grade TODO Template
+
+The analyzer can suggest upgrades to CAWS-compliant TODO formats:
+
+```rust
+// TODO: Implement user authentication
+//       <One-sentence context & why this exists>
+//
+// COMPLETION CHECKLIST:
+// [ ] Primary functionality implemented
+// [ ] API/data structures defined & stable
+// [ ] Error handling + validation aligned with error taxonomy
+// [ ] Tests: Unit ≥80% branch coverage (≥50% mutation if enabled)
+// [ ] Integration tests for external systems/contracts
+// [ ] Documentation: public API + system behavior
+// [ ] Performance/profiled against SLA (CPU/mem/latency throughput)
+// [ ] Security posture reviewed (inputs, authz, sandboxing)
+// [ ] Observability: logs (debug), metrics (SLO-aligned), tracing
+// [ ] Configurability and feature flags defined if relevant
+// [ ] Failure-mode cards documented (degradation paths)
+//
+// ACCEPTANCE CRITERIA:
+// - <User-facing measurable behavior>
+// - <Invariant or schema contract requirements>
+// - <Performance/statistical bounds>
+// - <Interoperation requirements or protocol contract>
+//
+// DEPENDENCIES:
+// - <System or feature this relies on> (Required/Optional)
+// - <Interop/contract references>
+// - File path(s)/module links to dependent code
+//
+// ESTIMATED EFFORT: <Number + confidence range>
+// PRIORITY: High
+// BLOCKING: {Yes/No} – If Yes: explicitly list what it blocks
+//
+// GOVERNANCE:
+// - CAWS Tier: 2 (impacts rigor, provenance, review policy)
+// - Change Budget: <LOC or file count> (if relevant)
+// - Reviewer Requirements: <Roles or domain expertise>
 ```
 
 This comprehensive quality gates system ensures that only high-quality, well-structured code enters your codebase while maintaining developer productivity through focused analysis.
