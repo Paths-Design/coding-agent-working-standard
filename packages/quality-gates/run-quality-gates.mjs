@@ -23,14 +23,18 @@ import { getContextInfo, getFilesToCheck } from './file-scope-manager.mjs';
 // Import quality gate modules
 import { execSync } from 'child_process';
 import fs from 'fs';
-import { dirname, join } from 'path';
+import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const CI_MODE = process.argv.includes('--ci') || !!process.env.CI;
 const FIX_MODE = process.argv.includes('--fix');
 const JSON_MODE = process.argv.includes('--json');
+const FORCE_MODE = process.argv.includes('--force');
 const VALID_GATES = new Set([
   'naming',
   'code_freeze',
@@ -103,19 +107,32 @@ class QualityGateRunner {
   }
 
   acquireLock() {
-    const lockPath = 'docs-status/quality-gates.lock';
+    const docsStatusDir = path.join(__dirname, 'docs-status');
+    const lockPath = path.join(docsStatusDir, 'quality-gates.lock');
+
+    // Ensure docs-status directory exists
+    if (!fs.existsSync(docsStatusDir)) {
+      fs.mkdirSync(docsStatusDir, { recursive: true });
+    }
+
     try {
       // Check if lock file exists and is recent (< 5 minutes)
       if (fs.existsSync(lockPath)) {
         const stats = fs.statSync(lockPath);
         const age = Date.now() - stats.mtime.getTime();
-        if (age < 5 * 60 * 1000) {
-          // 5 minutes
+        if (age < 5 * 60 * 1000 && !FORCE_MODE) {
+          // 5 minutes and not in force mode
           console.error('Error: Another quality gates process is already running');
-          console.error('Please wait for it to complete or remove the lock file manually');
+          console.error('Please wait for it to complete, use --force to bypass, or remove the lock file manually:');
+          console.error(`  rm "${lockPath}"`);
           process.exit(1);
-        } else {
+        } else if (age >= 5 * 60 * 1000) {
           // Stale lock, remove it
+          console.warn('Warning: Removing stale lock file');
+          fs.unlinkSync(lockPath);
+        } else {
+          // Force mode - remove existing lock
+          console.warn('Warning: Force mode enabled, removing existing lock file');
           fs.unlinkSync(lockPath);
         }
       }
@@ -140,6 +157,17 @@ class QualityGateRunner {
   }
 
   determineContext() {
+    // Check for explicit --context flag first
+    for (const arg of process.argv) {
+      if (arg.startsWith('--context=')) {
+        const context = arg.substring('--context='.length);
+        if (['commit', 'push', 'ci'].includes(context)) {
+          return context;
+        }
+        break;
+      }
+    }
+
     // Determine context based on environment and arguments
     if (
       process.argv.includes('--ci') ||
@@ -820,9 +848,11 @@ USAGE:
 
 OPTIONS:
   --ci              Run in CI mode (strict enforcement, blocks on warnings)
+  --context=<ctx>   Set context explicitly (commit, push, ci)
   --json            Output machine-readable JSON to stdout
   --gates=<list>    Run only specific gates (comma-separated)
   --fix             Attempt automatic fixes (experimental)
+  --force           Bypass lock files and force execution
   --help, -h        Show this help message
 
 VALID GATES:

@@ -444,10 +444,10 @@ function pathsOverlap(path1, path2) {
 
       // Fix patterns like src/auth/**/*.js to match src/auth/login.js
       // The pattern (?:.*/)?[^/]* should become .*[^/]* for direct filename matching
-      result = result.replace(/\(\\?\:\\.\*\/\)\?\/\[\\^\/\]\*/g, '.*[^/]*');
+      result = result.replace(/(\?:.*\/)?[^/]*/g, '.*[^/]*');
 
       // Also fix patterns like (?:.[^/]*/)?/[^/]* to match direct filenames
-      result = result.replace(/\(\\?\:\\.\[\\^\/\]\*\/\)\?\/\[\\^\/\]\*/g, '.*[^/]*');
+      result = result.replace(/(?:\..*\/)?[^/]*/g, '.*[^/]*');
 
       return result;
     };

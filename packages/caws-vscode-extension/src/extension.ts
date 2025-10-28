@@ -1086,7 +1086,10 @@ async function runQualityGatesInteractive(): Promise<void> {
 
         if (!gates) return;
 
-        const selectedGates = gates.map(g => g.value).filter(Boolean).join(',');
+        const selectedGates = gates
+          .map((g) => g.value)
+          .filter(Boolean)
+          .join(',');
         const ci = await vscode.window.showQuickPick(['No', 'Yes'], {
           placeHolder: 'Run in CI mode?',
         });
@@ -1241,13 +1244,7 @@ async function runQualityExceptionsCreate(): Promise<void> {
 
     // Get exception details from user
     const gate = await vscode.window.showQuickPick(
-      [
-        'naming',
-        'code_freeze',
-        'duplication',
-        'god_objects',
-        'documentation',
-      ],
+      ['naming', 'code_freeze', 'duplication', 'god_objects', 'documentation'],
       { placeHolder: 'Select gate for exception' }
     );
 

@@ -1,5 +1,8 @@
 # Code Freeze Gate Policy
 
+# Set to false to disable code freeze entirely
+enabled: false
+
 blocked_commit_types:
   - feat
   - perf

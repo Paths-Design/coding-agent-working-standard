@@ -1067,7 +1067,7 @@ class CawsMcpServer extends Server {
       ci = false,
       json = false,
       fix = false,
-      workingDirectory = process.cwd()
+      workingDirectory = process.cwd(),
     } = args;
 
     try {
@@ -1088,7 +1088,14 @@ class CawsMcpServer extends Server {
 
       // Execute the quality gates runner directly
       const { spawn } = await import('child_process');
-      const qualityGatesPath = path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'run-quality-gates.mjs');
+      const qualityGatesPath = path.join(
+        path.dirname(path.dirname(__filename)),
+        '..',
+        '..',
+        'packages',
+        'quality-gates',
+        'run-quality-gates.mjs'
+      );
 
       return new Promise((resolve, reject) => {
         const child = spawn('node', [qualityGatesPath, ...cliArgs], {
@@ -1111,7 +1118,7 @@ class CawsMcpServer extends Server {
           stderr += data.toString();
         });
 
-        child.on('close', (code) => {
+        child.on('close', (_code) => {
           const output = stdout || stderr;
           resolve({
             content: [
@@ -1128,11 +1135,15 @@ class CawsMcpServer extends Server {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify({
-                  success: false,
-                  error: error.message,
-                  command: 'caws_quality_gates_run',
-                }, null, 2),
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    error: error.message,
+                    command: 'caws_quality_gates_run',
+                  },
+                  null,
+                  2
+                ),
               },
             ],
             isError: true,
@@ -1144,11 +1155,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error.message,
-              command: 'caws_quality_gates_run',
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws_quality_gates_run',
+              },
+              null,
+              2
+            ),
           },
         ],
         isError: true,
@@ -1157,11 +1172,11 @@ class CawsMcpServer extends Server {
   }
 
   async handleQualityGatesStatus(args) {
-    const { workingDirectory = process.cwd(), json = false } = args;
+    const { workingDirectory: _workingDirectory = process.cwd(), json = false } = args;
 
     try {
       // Check for quality gates report file
-      const reportPath = path.join(workingDirectory, 'docs-status', 'quality-gates-report.json');
+      const reportPath = path.join(_workingDirectory, 'docs-status', 'quality-gates-report.json');
 
       if (fs.existsSync(reportPath)) {
         const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
@@ -1179,7 +1194,8 @@ class CawsMcpServer extends Server {
 
         // Human-readable format
         const status = report.violations.length === 0 ? '✅ PASSED' : '❌ FAILED';
-        const summary = `Quality Gates Status: ${status}\n` +
+        const summary =
+          `Quality Gates Status: ${status}\n` +
           `Last run: ${new Date(report.timestamp).toLocaleString()}\n` +
           `Context: ${report.context}\n` +
           `Files checked: ${report.files_scoped}\n` +
@@ -1209,11 +1225,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error.message,
-              command: 'caws_quality_gates_status',
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws_quality_gates_status',
+              },
+              null,
+              2
+            ),
           },
         ],
         isError: true,
@@ -1222,36 +1242,49 @@ class CawsMcpServer extends Server {
   }
 
   async handleQualityExceptionsList(args) {
-    const { gate, status = 'active', workingDirectory = process.cwd() } = args;
+    const { gate, status = 'active' } = args;
 
     try {
       // Import the exception framework
-      const { loadExceptionConfig } = await import(path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'shared-exception-framework.mjs'));
+      const { loadExceptionConfig } = await import(
+        path.join(
+          path.dirname(path.dirname(__filename)),
+          '..',
+          '..',
+          'packages',
+          'quality-gates',
+          'shared-exception-framework.mjs'
+        )
+      );
 
       const config = loadExceptionConfig();
       let exceptions = config.exceptions || [];
 
       // Filter by status
       const now = new Date();
-      exceptions = exceptions.filter(exc => {
+      exceptions = exceptions.filter((exc) => {
         const expiresAt = new Date(exc.expires_at);
         const isExpired = expiresAt < now;
 
         switch (status) {
-          case 'active': return !isExpired;
-          case 'expired': return isExpired;
-          case 'all': return true;
-          default: return !isExpired;
+          case 'active':
+            return !isExpired;
+          case 'expired':
+            return isExpired;
+          case 'all':
+            return true;
+          default:
+            return !isExpired;
         }
       });
 
       // Filter by gate if specified
       if (gate) {
-        exceptions = exceptions.filter(exc => exc.gate === gate);
+        exceptions = exceptions.filter((exc) => exc.gate === gate);
       }
 
       // Format for display
-      const formatted = exceptions.map(exc => ({
+      const formatted = exceptions.map((exc) => ({
         id: exc.id,
         gate: exc.gate,
         reason: exc.reason,
@@ -1264,12 +1297,16 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: true,
-              exceptions: formatted,
-              count: formatted.length,
-              filter: { gate, status },
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: true,
+                exceptions: formatted,
+                count: formatted.length,
+                filter: { gate, status },
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -1278,11 +1315,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error.message,
-              command: 'caws_quality_exceptions_list',
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws_quality_exceptions_list',
+              },
+              null,
+              2
+            ),
           },
         ],
         isError: true,
@@ -1299,12 +1340,20 @@ class CawsMcpServer extends Server {
       filePattern,
       violationType,
       context = 'all',
-      workingDirectory = process.cwd()
     } = args;
 
     try {
       // Import the exception framework
-      const { addException } = await import(path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'shared-exception-framework.mjs'));
+      const { addException } = await import(
+        path.join(
+          path.dirname(path.dirname(__filename)),
+          '..',
+          '..',
+          'packages',
+          'quality-gates',
+          'shared-exception-framework.mjs'
+        )
+      );
 
       const exceptionData = {
         gate,
@@ -1322,11 +1371,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: true,
-              message: 'Exception created successfully',
-              exception: result,
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: true,
+                message: 'Exception created successfully',
+                exception: result,
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -1335,11 +1388,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error.message,
-              command: 'caws_quality_exceptions_create',
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws_quality_exceptions_create',
+              },
+              null,
+              2
+            ),
           },
         ],
         isError: true,
@@ -1348,12 +1405,19 @@ class CawsMcpServer extends Server {
   }
 
   async handleRefactorProgressCheck(args) {
-    const { context = 'ci', strict = false, workingDirectory = process.cwd() } = args;
+    const { context = 'ci', strict = false, workingDirectory: _workingDirectory = process.cwd() } = args;
 
     try {
       // Execute the refactor progress checker
       const { spawn } = await import('child_process');
-      const progressCheckerPath = path.join(path.dirname(path.dirname(__filename)), '..', '..', 'packages', 'quality-gates', 'monitor-refactoring-progress.mjs');
+      const progressCheckerPath = path.join(
+        path.dirname(path.dirname(__filename)),
+        '..',
+        '..',
+        'packages',
+        'quality-gates',
+        'monitor-refactoring-progress.mjs'
+      );
 
       const cliArgs = ['--context', context];
       if (strict) {
@@ -1362,7 +1426,7 @@ class CawsMcpServer extends Server {
 
       return new Promise((resolve, reject) => {
         const child = spawn('node', [progressCheckerPath, ...cliArgs], {
-          cwd: workingDirectory,
+          cwd: _workingDirectory,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
             ...process.env,
@@ -1381,9 +1445,8 @@ class CawsMcpServer extends Server {
           stderr += data.toString();
         });
 
-        child.on('close', (code) => {
+        child.on('close', (_code) => {
           const output = stdout || stderr;
-          const success = strict ? code === 0 : true; // In non-strict mode, always report as success
 
           resolve({
             content: [
@@ -1400,11 +1463,15 @@ class CawsMcpServer extends Server {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify({
-                  success: false,
-                  error: error.message,
-                  command: 'caws_refactor_progress_check',
-                }, null, 2),
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    error: error.message,
+                    command: 'caws_refactor_progress_check',
+                  },
+                  null,
+                  2
+                ),
               },
             ],
             isError: true,
@@ -1416,11 +1483,15 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error.message,
-              command: 'caws_refactor_progress_check',
-            }, null, 2),
+            text: JSON.stringify(
+              {
+                success: false,
+                error: error.message,
+                command: 'caws_refactor_progress_check',
+              },
+              null,
+              2
+            ),
           },
         ],
         isError: true,
@@ -2827,7 +2898,8 @@ const CAWS_TOOLS = [
       properties: {
         gates: {
           type: 'string',
-          description: 'Comma-separated list of gates to run (naming,code_freeze,duplication,god_objects,documentation). Leave empty to run all gates.',
+          description:
+            'Comma-separated list of gates to run (naming,code_freeze,duplication,god_objects,documentation). Leave empty to run all gates.',
         },
         ci: {
           type: 'boolean',

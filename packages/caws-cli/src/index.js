@@ -135,7 +135,11 @@ program
   .description('Run comprehensive quality gates (naming, duplication, god objects, documentation)')
   .option('--ci', 'CI mode - exit with error code if violations found', false)
   .option('--json', 'Output machine-readable JSON to stdout', false)
-  .option('--gates <gates>', 'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,documentation)', '')
+  .option(
+    '--gates <gates>',
+    'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,documentation)',
+    ''
+  )
   .option('--fix', 'Attempt automatic fixes (experimental)', false)
   .option('--help', 'Show detailed help and usage examples', false)
   .action(async (options) => {

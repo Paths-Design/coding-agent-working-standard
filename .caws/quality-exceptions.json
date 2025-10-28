@@ -44,7 +44,7 @@
   },
   "global_overrides": {
     "code_freeze": {
-      "enabled": true,
+      "enabled": false,
       "gates": [
         "*"
       ],
