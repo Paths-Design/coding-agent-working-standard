@@ -10,22 +10,22 @@
         "releaseRules": [
           {
             "type": "feat",
-            "scope": "packages/caws-cli",
+            "scope": "cli",
             "release": "minor"
           },
           {
             "type": "fix",
-            "scope": "packages/caws-cli",
+            "scope": "cli",
             "release": "patch"
           },
           {
             "type": "feat",
-            "scope": "cli",
+            "scope": "packages/caws-cli",
             "release": "minor"
           },
           {
             "type": "fix",
-            "scope": "cli",
+            "scope": "packages/caws-cli",
             "release": "patch"
           },
           {
@@ -37,6 +37,7 @@
             "release": false
           }
         ],
+        "preset": "angular",
         "parserOpts": {
           "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
         }
