@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'packages/caws-cli/**'
+      - '.releaserc.json'
+      - 'CHANGELOG.md'
+      - 'package.json'
+      - 'package-lock.json'
 
 permissions:
   contents: write

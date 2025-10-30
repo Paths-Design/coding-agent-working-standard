@@ -4,7 +4,44 @@
   ],
   "repositoryUrl": "https://github.com/Paths-Design/coding-agent-working-standard.git",
   "plugins": [
-    "@semantic-release/commit-analyzer",
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "releaseRules": [
+          {
+            "type": "feat",
+            "scope": "packages/caws-cli",
+            "release": "minor"
+          },
+          {
+            "type": "fix",
+            "scope": "packages/caws-cli",
+            "release": "patch"
+          },
+          {
+            "type": "feat",
+            "scope": "cli",
+            "release": "minor"
+          },
+          {
+            "type": "fix",
+            "scope": "cli",
+            "release": "patch"
+          },
+          {
+            "type": "feat",
+            "release": false
+          },
+          {
+            "type": "fix",
+            "release": false
+          }
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        }
+      }
+    ],
     "@semantic-release/release-notes-generator",
     [
       "@semantic-release/changelog",
