@@ -114,11 +114,11 @@ describe('Error Handling Integration', () => {
         const startTime = Date.now();
         const results = await parallel([
           // eslint-disable-next-line no-undef
-          () => new Promise((resolve) => setTimeout(() => resolve(1), 100)),
+          new Promise((resolve) => setTimeout(() => resolve(1), 100)),
           // eslint-disable-next-line no-undef
-          () => new Promise((resolve) => setTimeout(() => resolve(2), 100)),
+          new Promise((resolve) => setTimeout(() => resolve(2), 100)),
           // eslint-disable-next-line no-undef
-          () => new Promise((resolve) => setTimeout(() => resolve(3), 100)),
+          new Promise((resolve) => setTimeout(() => resolve(3), 100)),
         ]);
         const duration = Date.now() - startTime;
 
@@ -130,9 +130,9 @@ describe('Error Handling Integration', () => {
       it('should handle failures with failFast', async () => {
         await expect(
           parallel([
-            () => Promise.resolve(1),
-            () => Promise.reject(new Error('Test error')),
-            () => Promise.resolve(3),
+            Promise.resolve(1),
+            Promise.reject(new Error('Test error')),
+            Promise.resolve(3),
           ])
         ).rejects.toThrow('Test error');
       });
@@ -140,9 +140,9 @@ describe('Error Handling Integration', () => {
       it('should collect all results when failFast is false', async () => {
         const results = await parallel(
           [
-            () => Promise.resolve(1),
-            () => Promise.reject(new Error('Test error')),
-            () => Promise.resolve(3),
+            Promise.resolve(1),
+            Promise.reject(new Error('Test error')),
+            Promise.resolve(3),
           ],
           { failFast: false }
         );

@@ -302,6 +302,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
           callback('2');
         }),
         close: jest.fn(),
+        once: jest.fn((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback());
+          }
+        }),
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
@@ -318,6 +323,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
           callback('3');
         }),
         close: jest.fn(),
+        once: jest.fn((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback());
+          }
+        }),
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
@@ -334,6 +344,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
           callback('4');
         }),
         close: jest.fn(),
+        once: jest.fn((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback());
+          }
+        }),
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
@@ -350,6 +365,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
           callback('cancel');
         }),
         close: jest.fn(),
+        once: jest.fn((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback());
+          }
+        }),
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
@@ -366,6 +386,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
           callback('invalid');
         }),
         close: jest.fn(),
+        once: jest.fn((event, callback) => {
+          if (event === 'close') {
+            process.nextTick(() => callback());
+          }
+        }),
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
