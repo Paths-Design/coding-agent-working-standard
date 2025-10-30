@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const yaml = require('js-yaml');
+const { commandWrapper, Output } = require('../utils/command-wrapper');
 
 /**
  * Provenance command handler
@@ -15,29 +16,33 @@ const yaml = require('js-yaml');
  * @param {Object} options - Command options
  */
 async function provenanceCommand(subcommand, options) {
-  try {
-    switch (subcommand) {
-      case 'update':
-        return await updateProvenance(options);
-      case 'show':
-        return await showProvenance(options);
-      case 'verify':
-        return await verifyProvenance(options);
-      case 'analyze-ai':
-        return await analyzeAIProvenance(options);
-      case 'init':
-        return await initProvenance(options);
-      case 'install-hooks':
-        return await installHooks(options);
-      default:
-        console.error(`❌ Unknown provenance subcommand: ${subcommand}`);
-        console.log('Available commands: update, show, verify, analyze-ai, init, install-hooks');
-        process.exit(1);
+  return commandWrapper(
+    async () => {
+      switch (subcommand) {
+        case 'update':
+          return await updateProvenance(options);
+        case 'show':
+          return await showProvenance(options);
+        case 'verify':
+          return await verifyProvenance(options);
+        case 'analyze-ai':
+          return await analyzeAIProvenance(options);
+        case 'init':
+          return await initProvenance(options);
+        case 'install-hooks':
+          return await installHooks(options);
+        default:
+          throw new Error(
+            `Unknown provenance subcommand: ${subcommand}.\n` +
+            'Available commands: update, show, verify, analyze-ai, init, install-hooks'
+          );
+      }
+    },
+    {
+      commandName: `provenance ${subcommand}`,
+      context: { subcommand, options },
     }
-  } catch (error) {
-    console.error(`❌ Provenance command failed: ${error.message}`);
-    process.exit(1);
-  }
+  );
 }
 
 /**

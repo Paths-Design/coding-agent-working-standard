@@ -114,6 +114,7 @@ program
   .option('--minimal', 'Only essential components', false)
   .option('--with-codemods', 'Include codemod scripts', false)
   .option('--with-oidc', 'Include OIDC trusted publisher setup', false)
+  .option('--with-quality-gates', 'Install quality gates package and scripts', false)
   .action(scaffoldProject);
 
 // Validate command

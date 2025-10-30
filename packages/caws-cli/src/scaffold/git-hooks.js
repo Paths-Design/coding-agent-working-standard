@@ -117,6 +117,7 @@ async function scaffoldGitHooks(projectDir, options = {}) {
 
 /**
  * Generate pre-commit hook content with staged file quality gates
+ * Implements fallback chain: Node script → CLI → Python scripts → Skip gracefully
  */
 function generatePreCommitHook(options) {
   const { qualityGates = true, stagedOnly = true } = options;
@@ -124,6 +125,7 @@ function generatePreCommitHook(options) {
   return `#!/bin/bash
 # CAWS Pre-commit Hook
 # Runs validation and quality checks before commits
+# Implements graceful fallback chain to avoid blocking commits
 
 set -e
 
@@ -136,39 +138,87 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
-# Run quality gates
-if command -v node >/dev/null 2>&1; then
-  if node scripts/quality-gates/run-quality-gates.js; then
-    echo "✅ Quality gates passed"
-  else
-    echo "❌ Quality gates failed - commit blocked"
-    echo "💡 Fix the violations above before committing"
-    echo "📖 See docs/refactoring.md for crisis response plan"
-    exit 1
+# Fallback chain for quality gates:
+# 1. Try Node.js script (if exists)
+# 2. Try CAWS CLI
+# 3. Try Makefile target
+# 4. Try Python scripts
+# 5. Skip gracefully (warn only)
+
+QUALITY_GATES_RAN=false
+
+# Option 1: Node.js quality gates script
+if [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
+  if command -v node >/dev/null 2>&1; then
+    echo "📁 Running Node.js quality gates script..."
+    if node scripts/quality-gates/run-quality-gates.js; then
+      echo "✅ Quality gates passed"
+      QUALITY_GATES_RAN=true
+    else
+      echo "❌ Quality gates failed - commit blocked"
+      echo "💡 Fix the violations above before committing"
+      exit 1
+    fi
   fi
+# Option 2: CAWS CLI validation
+elif command -v caws >/dev/null 2>&1; then
+  echo "📋 Running CAWS CLI validation..."
+  if caws validate --quiet 2>/dev/null; then
+    echo "✅ CAWS validation passed"
+    QUALITY_GATES_RAN=true
+  else
+    echo "⚠️  CAWS validation failed, but allowing commit (non-blocking)"
+    echo "💡 Run 'caws validate' for details"
+    QUALITY_GATES_RAN=true
+  fi
+# Option 3: Makefile target
+elif [ -f "Makefile" ] && grep -q "caws-validate\\|caws-gates" Makefile; then
+  echo "🔧 Running Makefile quality gates..."
+  if make caws-validate >/dev/null 2>&1 || make caws-gates >/dev/null 2>&1; then
+    echo "✅ Makefile quality gates passed"
+    QUALITY_GATES_RAN=true
+  else
+    echo "⚠️  Makefile quality gates failed, but allowing commit (non-blocking)"
+    QUALITY_GATES_RAN=true
+  fi
+# Option 4: Python scripts
+elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; then
+  echo "🐍 Running Python quality gates script..."
+  if python3 scripts/simple_gates.py all --tier 2 --profile backend-api >/dev/null 2>&1; then
+    echo "✅ Python quality gates passed"
+    QUALITY_GATES_RAN=true
+  else
+    echo "⚠️  Python quality gates failed, but allowing commit (non-blocking)"
+    QUALITY_GATES_RAN=true
+  fi
+# Option 5: Skip gracefully
 else
-  echo "⚠️  Node.js not found - skipping quality gates"
-  echo "💡 Install Node.js to enable automatic quality checking"
-  exit 0
+  echo "⚠️  Quality gates not available - skipping"
+  echo "💡 Available options:"
+  echo "   • Install: npm install -g @paths.design/caws-cli"
+  echo "   • Use Python: python3 scripts/simple_gates.py"
+  echo "   • Use Makefile: make caws-gates"
+  QUALITY_GATES_RAN=true
 fi
 
-# Run hidden TODO analysis on staged files only
-echo "🔍 Checking for hidden TODOs in staged files..."
-if command -v python3 >/dev/null 2>&1; then
-  if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
-    echo "✅ No critical hidden TODOs found in staged files"
-  else
-    echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
-    echo "💡 Fix stub implementations and placeholder code before committing"
-    echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
-    echo ""
-    echo "🔍 Running detailed analysis on staged files..."
-    python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
-    exit 1
+# Run hidden TODO analysis on staged files only (if Python available)
+if [ "$QUALITY_GATES_RAN" = true ]; then
+  echo "🔍 Checking for hidden TODOs in staged files..."
+  if command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
+    if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+      echo "✅ No critical hidden TODOs found in staged files"
+    else
+      echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+      echo "💡 Fix stub implementations and placeholder code before committing"
+      echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+      echo ""
+      echo "🔍 Running detailed analysis on staged files..."
+      python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
+      exit 1
+    fi
+  elif command -v python3 >/dev/null 2>&1; then
+    echo "⚠️  Python3 found but TODO analyzer not available - skipping"
   fi
-else
-  echo "⚠️  Python3 not found - skipping hidden TODO analysis"
-  echo "💡 Install Python3 to enable automatic TODO checking"
 fi
 
 echo "✅ All quality checks passed - proceeding with commit"

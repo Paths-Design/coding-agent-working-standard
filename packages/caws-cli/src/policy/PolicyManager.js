@@ -54,51 +54,83 @@ class PolicyManager {
         }
       }
 
-      // Load from file
-      const policyPath = path.join(projectRoot, '.caws', 'policy.yaml');
+      // Load from file - check multiple locations for backward compatibility
+      const policyPaths = [
+        path.join(projectRoot, '.caws', 'policy.yaml'), // Preferred location
+        path.join(projectRoot, '.caws', 'policy', 'tier-policy.json'), // Legacy location
+      ];
 
-      try {
-        const content = await fs.readFile(policyPath, 'utf-8');
-        const policy = yaml.load(content);
+      let policyPath = null;
+      let policyContent = null;
 
+      // Try each path in order
+      for (const candidatePath of policyPaths) {
+        try {
+          if (await fs.pathExists(candidatePath)) {
+            policyPath = candidatePath;
+            const content = await fs.readFile(candidatePath, 'utf-8');
+            
+            // Handle JSON format (legacy)
+            if (candidatePath.endsWith('.json')) {
+              policyContent = JSON.parse(content);
+            } else {
+              // Handle YAML format (preferred)
+              policyContent = yaml.load(content);
+            }
+            break;
+          }
+        } catch (error) {
+          // Continue to next path if this one fails
+          continue;
+        }
+      }
+
+      if (policyPath && policyContent) {
         // Validate policy structure
-        this.validatePolicy(policy);
+        this.validatePolicy(policyContent);
 
         // Update cache
         if (this.enableCaching) {
           this.policyCache.set(projectRoot, {
-            policy,
+            policy: policyContent,
+            cachedAt: Date.now(),
+            ttl: cacheTTL,
+          });
+        }
+
+        // Warn if using legacy location
+        if (policyPath.endsWith('.json')) {
+          console.warn(
+            '⚠️  Using legacy policy file location: .caws/policy/tier-policy.json\n' +
+            '   Migrate to .caws/policy.yaml for better compatibility\n' +
+            '   Run: caws init --migrate-policy'
+          );
+        }
+
+        return {
+          ...policyContent,
+          _cacheHit: false,
+          _loadDuration: Date.now() - startTime,
+          _policyPath: policyPath,
+        };
+      } else {
+        // Policy file doesn't exist - use default
+        const defaultPolicy = this.getDefaultPolicy();
+
+        if (this.enableCaching) {
+          this.policyCache.set(projectRoot, {
+            policy: defaultPolicy,
             cachedAt: Date.now(),
             ttl: cacheTTL,
           });
         }
 
         return {
-          ...policy,
+          ...defaultPolicy,
+          _isDefault: true,
           _cacheHit: false,
           _loadDuration: Date.now() - startTime,
         };
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          // Policy file doesn't exist - use default
-          const defaultPolicy = this.getDefaultPolicy();
-
-          if (this.enableCaching) {
-            this.policyCache.set(projectRoot, {
-              policy: defaultPolicy,
-              cachedAt: Date.now(),
-              ttl: cacheTTL,
-            });
-          }
-
-          return {
-            ...defaultPolicy,
-            _isDefault: true,
-            _cacheHit: false,
-            _loadDuration: Date.now() - startTime,
-          };
-        }
-        throw error;
       }
     } catch (error) {
       throw new Error(`Policy load failed: ${error.message}`);

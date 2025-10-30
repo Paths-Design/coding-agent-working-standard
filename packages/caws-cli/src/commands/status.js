@@ -9,6 +9,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
+const { parallel } = require('../utils/async-utils');
 
 /**
  * Load working specification (legacy single file approach)
@@ -758,13 +759,15 @@ async function statusCommand(options = {}) {
       const modes = require('../config/modes');
       const currentMode = await modes.getCurrentMode();
 
-      // Load all status data
-      const spec = await loadWorkingSpec(options.spec || '.caws/working-spec.yaml');
-      const specs = await loadSpecsFromMultiSpec();
-      const hooks = await checkGitHooks();
-      const provenance = await loadProvenanceChain();
-      const waivers = await loadWaiverStatus();
-      const gates = await checkQualityGates();
+      // Load all status data in parallel for better performance
+      const [spec, specs, hooks, provenance, waivers, gates] = await parallel([
+        () => loadWorkingSpec(options.spec || '.caws/working-spec.yaml'),
+        () => loadSpecsFromMultiSpec(),
+        () => checkGitHooks(),
+        () => loadProvenanceChain(),
+        () => loadWaiverStatus(),
+        () => checkQualityGates(),
+      ]);
 
       // Display status (visual mode if requested)
       if (options.visual || options.json) {

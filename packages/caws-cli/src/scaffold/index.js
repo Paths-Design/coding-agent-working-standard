@@ -330,6 +330,29 @@ async function scaffoldProject(options) {
       required: false,
     });
 
+    // Install quality gates package if requested
+    if (options.withQualityGates) {
+      console.log(chalk.blue('\n📦 Installing quality gates package...'));
+      try {
+        const { execSync } = require('child_process');
+        const npmCommand = fs.existsSync(path.join(currentDir, 'package.json'))
+          ? 'npm install --save-dev @paths.design/quality-gates'
+          : 'npm install -g @paths.design/quality-gates';
+
+        console.log(chalk.gray(`   Running: ${npmCommand}`));
+        execSync(npmCommand, {
+          cwd: currentDir,
+          stdio: 'inherit',
+        });
+        console.log(chalk.green('✅ Quality gates package installed'));
+        console.log(chalk.blue('💡 You can now use: caws quality-gates'));
+      } catch (error) {
+        console.log(chalk.yellow(`⚠️  Failed to install quality gates package: ${error.message}`));
+        console.log(chalk.gray('   You can install manually: npm install -g @paths.design/quality-gates'));
+        console.log(chalk.gray('   Or use Python scripts: python3 scripts/simple_gates.py'));
+      }
+    }
+
     // Add commit conventions for setups that don't have them
     if (!setup.hasTemplates || !fs.existsSync(path.join(currentDir, 'COMMIT_CONVENTIONS.md'))) {
       enhancements.push({

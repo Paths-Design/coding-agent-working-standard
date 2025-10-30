@@ -9,6 +9,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
+const { question, closeReadline } = require('../utils/promise-utils');
 const { SPEC_TYPES } = require('../constants/spec-types');
 
 // Import suggestFeatureBreakdown from spec-resolver
@@ -488,42 +489,40 @@ async function migrateFromLegacy(options = {}) {
  * @returns {Promise<string>} User's choice: 'cancel', 'rename', 'merge', 'override'
  */
 async function askConflictResolution() {
-  return new Promise((resolve) => {
-    const readline = require('readline');
+  const readline = require('readline');
 
-    console.log(chalk.blue('\n🔄 Conflict Resolution Options:'));
-    console.log(chalk.gray("   1. Cancel - Don't create the spec"));
-    console.log(chalk.gray('   2. Rename - Create with auto-generated name'));
-    console.log(chalk.gray('   3. Merge - Merge with existing spec (not implemented)'));
-    console.log(chalk.gray('   4. Override - Replace existing spec (use --force)'));
+  console.log(chalk.blue('\n🔄 Conflict Resolution Options:'));
+  console.log(chalk.gray("   1. Cancel - Don't create the spec"));
+  console.log(chalk.gray('   2. Rename - Create with auto-generated name'));
+  console.log(chalk.gray('   3. Merge - Merge with existing spec (not implemented)'));
+  console.log(chalk.gray('   4. Override - Replace existing spec (use --force)'));
+  console.log(chalk.yellow('\nEnter your choice (1-4) or the option name:'));
 
-    console.log(chalk.yellow('\nEnter your choice (1-4) or the option name:'));
-
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    rl.question('> ', (answer) => {
-      rl.close();
-
-      const trimmed = answer.trim().toLowerCase();
-
-      // Handle numeric choices
-      if (trimmed === '1' || trimmed === 'cancel') {
-        resolve('cancel');
-      } else if (trimmed === '2' || trimmed === 'rename') {
-        resolve('rename');
-      } else if (trimmed === '3' || trimmed === 'merge') {
-        resolve('merge');
-      } else if (trimmed === '4' || trimmed === 'override') {
-        resolve('override');
-      } else {
-        console.log(chalk.red('❌ Invalid choice. Defaulting to cancel.'));
-        resolve('cancel');
-      }
-    });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
   });
+
+  try {
+    const answer = await question(rl, '> ');
+    const trimmed = answer.trim().toLowerCase();
+
+    // Handle numeric choices
+    if (trimmed === '1' || trimmed === 'cancel') {
+      return 'cancel';
+    } else if (trimmed === '2' || trimmed === 'rename') {
+      return 'rename';
+    } else if (trimmed === '3' || trimmed === 'merge') {
+      return 'merge';
+    } else if (trimmed === '4' || trimmed === 'override') {
+      return 'override';
+    } else {
+      console.log(chalk.red('❌ Invalid choice. Defaulting to cancel.'));
+      return 'cancel';
+    }
+  } finally {
+    await closeReadline(rl);
+  }
 }
 
 /**

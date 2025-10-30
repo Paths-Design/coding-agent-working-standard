@@ -11,9 +11,9 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 const WaiversManager = require('../waivers-manager');
+const { commandWrapper, Output } = require('../utils/command-wrapper');
 
 const WAIVER_DIR = '.caws/waivers';
 
@@ -24,46 +24,44 @@ const WAIVER_DIR = '.caws/waivers';
  * @param {object} options - Command options
  */
 async function waiversCommand(subcommand = 'list', options = {}) {
-  try {
-    console.log('🔍 Detecting CAWS setup...');
-    const setup = initializeGlobalSetup();
+  return commandWrapper(
+    async () => {
+      Output.info('Detecting CAWS setup...');
+      const setup = initializeGlobalSetup();
 
-    if (setup.hasWorkingSpec) {
-      console.log(`✅ Detected ${setup.setupType} CAWS setup`);
-      console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
-    }
+      if (setup.hasWorkingSpec) {
+        Output.success(`Detected ${setup.setupType} CAWS setup`, {
+          capabilities: setup.capabilities,
+        });
+      }
 
-    // Ensure waivers directory exists
-    const waiversDir = path.join(process.cwd(), WAIVER_DIR);
-    if (!fs.existsSync(waiversDir)) {
-      fs.mkdirSync(waiversDir, { recursive: true });
-    }
+      // Ensure waivers directory exists
+      const waiversDir = path.join(process.cwd(), WAIVER_DIR);
+      if (!fs.existsSync(waiversDir)) {
+        fs.mkdirSync(waiversDir, { recursive: true });
+      }
 
-    switch (subcommand) {
-      case 'create':
-        await createWaiver(options);
-        break;
-      case 'list':
-        await listWaivers(options);
-        break;
-      case 'show':
-        await showWaiver(options.id, options);
-        break;
-      case 'revoke':
-        await revokeWaiver(options.id, options);
-        break;
-      default:
-        console.error(chalk.red(`\n❌ Unknown waiver subcommand: ${subcommand}`));
-        console.log(chalk.yellow('\n💡 Available subcommands: create, list, show, revoke'));
-        process.exit(1);
+      switch (subcommand) {
+        case 'create':
+          return await createWaiver(options);
+        case 'list':
+          return await listWaivers(options);
+        case 'show':
+          return await showWaiver(options.id, options);
+        case 'revoke':
+          return await revokeWaiver(options.id, options);
+        default:
+          throw new Error(
+            `Unknown waiver subcommand: ${subcommand}.\n` +
+            'Available subcommands: create, list, show, revoke'
+          );
+      }
+    },
+    {
+      commandName: `waivers ${subcommand}`,
+      context: { subcommand, options },
     }
-  } catch (error) {
-    console.error(chalk.red(`\n❌ Waiver command failed: ${error.message}`));
-    if (options.verbose) {
-      console.error(error.stack);
-    }
-    process.exit(1);
-  }
+  );
 }
 
 /**

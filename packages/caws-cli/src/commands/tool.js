@@ -5,7 +5,7 @@
  */
 
 const path = require('path');
-const chalk = require('chalk');
+const { commandWrapper, Output } = require('../utils/command-wrapper');
 
 // Import tool system
 const ToolLoader = require('../tool-loader');
@@ -32,16 +32,19 @@ async function initializeToolSystem() {
     // Set up event listeners for tool system
     toolLoader.on('discovery:complete', ({ tools: _tools, count }) => {
       if (count > 0) {
-        console.log(chalk.blue(`🔧 Discovered ${count} tools`));
+        Output.info(`Discovered ${count} tools`);
       }
     });
 
     toolLoader.on('tool:loaded', ({ id, metadata }) => {
-      console.log(chalk.gray(`  ✓ Loaded tool: ${metadata.name} (${id})`));
+      // Only log in verbose mode or when not using JSON output
+      if (!process.env.CAWS_OUTPUT_FORMAT || process.env.CAWS_OUTPUT_FORMAT !== 'json') {
+        console.log(`  ✓ Loaded tool: ${metadata.name} (${id})`);
+      }
     });
 
     toolLoader.on('tool:error', ({ id, error }) => {
-      console.warn(chalk.yellow(`⚠️  Failed to load tool ${id}: ${error}`));
+      Output.warning(`Failed to load tool ${id}: ${error}`);
     });
 
     // Auto-discover tools on initialization
@@ -49,8 +52,7 @@ async function initializeToolSystem() {
 
     return toolLoader;
   } catch (error) {
-    console.warn(chalk.yellow('⚠️  Tool system initialization failed:'), error.message);
-    console.warn(chalk.blue('💡 Continuing without dynamic tools'));
+    Output.warning(`Tool system initialization failed: ${error.message}`, 'Continuing without dynamic tools');
     return null;
   }
 }
@@ -61,75 +63,73 @@ async function initializeToolSystem() {
  * @param {Object} options - Command options
  */
 async function executeTool(toolId, options) {
-  try {
-    // Initialize tool system
-    const loader = await initializeToolSystem();
+  return commandWrapper(
+    async () => {
+      // Initialize tool system
+      const loader = await initializeToolSystem();
 
-    if (!loader) {
-      console.error(chalk.red('❌ Tool system not available'));
-      process.exit(1);
-    }
-
-    // Load all tools first
-    await loader.loadAllTools();
-    const tool = loader.getTool(toolId);
-
-    if (!tool) {
-      console.error(chalk.red(`❌ Tool '${toolId}' not found`));
-      console.log(chalk.blue('💡 Available tools:'));
-      const tools = loader.getAllTools();
-      for (const [id, t] of tools) {
-        console.log(`   - ${id}: ${t.metadata.name}`);
+      if (!loader) {
+        throw new Error('Tool system not available');
       }
-      process.exit(1);
-    }
 
-    // Validate tool before execution
-    const validation = await toolValidator.validateTool(tool);
-    if (!validation.valid) {
-      console.error(chalk.red('❌ Tool validation failed:'));
-      validation.errors.forEach((error) => {
-        console.error(`   ${chalk.red('✗')} ${error}`);
+      // Load all tools first
+      await loader.loadAllTools();
+      const tool = loader.getTool(toolId);
+
+      if (!tool) {
+        const tools = loader.getAllTools();
+        const availableTools = Array.from(tools, ([id, t]) => `${id}: ${t.metadata.name}`).join(', ');
+        throw new Error(
+          `Tool '${toolId}' not found.\n` +
+          `Available tools: ${availableTools}`
+        );
+      }
+
+      // Validate tool before execution
+      const validation = await toolValidator.validateTool(tool);
+      if (!validation.valid) {
+        throw new Error(
+          `Tool validation failed:\n` +
+          validation.errors.map((e) => `  - ${e}`).join('\n')
+        );
+      }
+
+      // Parse parameters
+      let params = {};
+      if (options.params) {
+        try {
+          params = JSON.parse(options.params);
+        } catch (error) {
+          throw new Error(`Invalid JSON parameters: ${error.message}`);
+        }
+      }
+
+      Output.progress(`Executing tool: ${tool.metadata.name}`);
+
+      // Execute tool
+      const result = await tool.module.execute(params, {
+        workingDirectory: process.cwd(),
+        timeout: options.timeout,
       });
-      process.exit(1);
-    }
 
-    // Parse parameters
-    let params = {};
-    if (options.params) {
-      try {
-        params = JSON.parse(options.params);
-      } catch (error) {
-        console.error(chalk.red('❌ Invalid JSON parameters:'), error.message);
-        process.exit(1);
+      // Display results
+      if (result.success) {
+        Output.success('Tool execution successful', {
+          output: result.output,
+        });
+        return result;
+      } else {
+        throw new Error(
+          `Tool execution failed:\n` +
+          result.errors.map((e) => `  - ${e}`).join('\n')
+        );
       }
+    },
+    {
+      commandName: `tool ${toolId}`,
+      context: { toolId, options },
     }
-
-    console.log(chalk.blue(`🚀 Executing tool: ${tool.metadata.name}`));
-
-    // Execute tool
-    const result = await tool.module.execute(params, {
-      workingDirectory: process.cwd(),
-      timeout: options.timeout,
-    });
-
-    // Display results
-    if (result.success) {
-      console.log(chalk.green('✅ Tool execution successful'));
-      if (result.output && typeof result.output === 'object') {
-        console.log(chalk.gray('Output:'), JSON.stringify(result.output, null, 2));
-      }
-    } else {
-      console.error(chalk.red('❌ Tool execution failed'));
-      result.errors.forEach((error) => {
-        console.error(`   ${chalk.red('✗')} ${error}`);
-      });
-      process.exit(1);
-    }
-  } catch (error) {
-    console.error(chalk.red(`❌ Error executing tool ${toolId}:`), error.message);
-    process.exit(1);
-  }
+  );
 }
 
 module.exports = {

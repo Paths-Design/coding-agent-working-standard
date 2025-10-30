@@ -83,8 +83,12 @@ import {
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from './src/logger.js';
 import { CawsMonitor } from './src/monitoring/index.js';
+
+// ES module equivalent of __filename
+const __filename = fileURLToPath(import.meta.url);
 
 /**
  * Execute CLI command with color suppression and ANSI stripping
@@ -511,7 +515,17 @@ class CawsMcpServer extends Server {
     const workingDirectory = args.workingDirectory || process.cwd();
 
     try {
-      const command = `npx @paths.design/caws-cli validate ${specFile} --format json`;
+      // Detect existing CLI installation first
+      let cawsCommand;
+      try {
+        execSync('caws --version', { stdio: 'ignore', cwd: workingDirectory });
+        cawsCommand = 'caws';
+      } catch {
+        // CLI not found, use npx fallback
+        cawsCommand = 'npx @paths.design/caws-cli';
+      }
+
+      const command = `${cawsCommand} validate ${specFile} --format json`;
       const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
