@@ -1,7 +1,39 @@
 {
-  "timestamp": "2025-10-28T23:13:48.570Z",
+  "timestamp": "2025-10-28T23:47:19.446Z",
   "context": "commit",
   "files_scoped": 0,
   "warnings": [],
-  "violations": []
+  "violations": [],
+  "performance": {
+    "total_execution_time_ms": 1017,
+    "gate_timings": {
+      "naming": 873
+    }
+  },
+  "debug": {
+    "debug_log": [
+      "Context defaulted to: commit",
+      "Context determined: commit",
+      "Files to check: 0",
+      "File scoping failed, using empty set (error: Cannot read properties of undefined (reading 'gitCommand'))",
+      "Context info: {\"description\":\"staged files only\",\"scope\":\"commit\",\"gitCommand\":\"git diff --cached --name-only -z --diff-filter=ACMRTUXB\"}",
+      "Acquiring lock: /Users/darianrosebrook/Desktop/Projects/caws/packages/quality-gates/docs-status/quality-gates.lock",
+      "Lock file exists, age: 5960ms",
+      "Force mode: removed existing lock file",
+      "Lock acquired: /Users/darianrosebrook/Desktop/Projects/caws/packages/quality-gates/docs-status/quality-gates.lock",
+      "Starting quality gates execution",
+      "Total files to check: 0",
+      "Gates to run: naming",
+      "Starting gate: naming (timeout: 10000ms)",
+      "Gate naming completed in 873ms",
+      "All gates completed",
+      "Total execution time: 1017ms"
+    ],
+    "environment": {
+      "node_version": "v22.19.0",
+      "platform": "darwin",
+      "arch": "arm64",
+      "cwd": "/Users/darianrosebrook/Desktop/Projects/caws/packages/quality-gates"
+    }
+  }
 }
