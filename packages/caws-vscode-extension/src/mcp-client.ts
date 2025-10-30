@@ -33,7 +33,7 @@ export class CawsMcpClient {
     try {
       // Use bundled MCP server from extension
       const extensionPath = vscode.extensions.getExtension(
-        'caws.caws-vscode-extension'
+        'paths-design.caws-vscode-extension'
       )?.extensionPath;
       let mcpServerPath: string;
 
@@ -381,7 +381,7 @@ export class CawsMcpClient {
   private getCawsCliPath(): string {
     // Try bundled CLI first
     const extensionPath = vscode.extensions.getExtension(
-      'caws.caws-vscode-extension'
+      'paths-design.caws-vscode-extension'
     )?.extensionPath;
     if (extensionPath) {
       const bundledCliPath = path.join(extensionPath, 'bundled', 'cli');
