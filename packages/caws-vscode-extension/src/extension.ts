@@ -267,10 +267,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
 
     // Show notification to user
     vscode.window
-      .showInformationMessage(
-        'CAWS MCP server is now available to Cursor AI! Restart Cursor to activate all 13 CAWS tools.',
-        'Open MCP Config'
-      )
+      .showInformationMessage('CAWS MCP server has started.', 'Open MCP Config')
       .then((selection) => {
         if (selection === 'Open MCP Config') {
           vscode.workspace.openTextDocument(mcpConfigPath).then((doc) => {

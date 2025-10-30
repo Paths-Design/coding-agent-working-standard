@@ -241,6 +241,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -303,6 +304,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -396,6 +398,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -437,6 +440,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -516,6 +520,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -542,6 +547,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -1030,6 +1036,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {
@@ -1879,6 +1886,7 @@ class CawsMcpServer extends Server {
         encoding: 'utf8',
         cwd: workingDirectory,
         maxBuffer: 1024 * 1024,
+        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
       });
 
       return {

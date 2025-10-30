@@ -26,9 +26,23 @@ function createLogger() {
     },
   };
 
-  // For MCP server, always use JSON output (no colors or pretty printing)
-  // MCP protocol requires pure JSON communication
-  if (process.env.CAWS_MCP_SERVER || !isDevelopment || process.env.CAWS_LOG_JSON) {
+  // For MCP server, use minimal JSON output to stderr only
+  // MCP protocol requires pure JSON communication on stdout
+  // All logs must go to stderr to avoid corrupting MCP messages
+  if (process.env.CAWS_MCP_SERVER) {
+    return pino({
+      ...baseConfig,
+      // Force all logs to stderr, not stdout (MCP uses stdout for protocol)
+      destination: 2, // stderr file descriptor
+      // Completely disable formatting and colors
+      formatters: {
+        level: (label) => ({ level: label }),
+      },
+    });
+  }
+
+  // In production (non-MCP), use JSON output
+  if (!isDevelopment || process.env.CAWS_LOG_JSON) {
     return pino(baseConfig);
   }
 
