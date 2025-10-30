@@ -32,6 +32,41 @@ import path from 'path';
 import { logger } from './src/logger.js';
 import { CawsMonitor } from './src/monitoring/index.js';
 
+/**
+ * Strip ANSI escape codes from text output
+ * This prevents color codes from corrupting JSON responses
+ * Handles all ANSI escape sequences: CSI codes, OSC codes, etc.
+ */
+function stripAnsi(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Remove all ANSI escape sequences:
+  // - CSI (Control Sequence Introducer): ESC[ ... [m] (most common)
+  // - OSC (Operating System Command): ESC] ... BEL or ESC\
+  // - Other escape sequences: ESC followed by various characters
+  return text
+    .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
+    .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
+    .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
+    .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
+    .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
+    .replace(/\u001b[\[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
+    .replace(/\u001b./g, ''); // Any remaining escape sequences
+}
+
+/**
+ * Execute CLI command with color suppression and ANSI stripping
+ */
+function execCawsCommand(command, options = {}) {
+  const result = execSync(command, {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+    ...options,
+  });
+  // Strip any remaining ANSI codes as a safety measure
+  return stripAnsi(result);
+}
+
 class CawsMcpServer extends Server {
   constructor() {
     super(
@@ -237,12 +272,7 @@ class CawsMcpServer extends Server {
       }
 
       const command = `npx @paths.design/caws-cli ${cliArgs.join(' ')}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -300,12 +330,7 @@ class CawsMcpServer extends Server {
       if (force) cliArgs.push('--force');
 
       const command = `npx @paths.design/caws-cli ${cliArgs.join(' ')}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -350,11 +375,7 @@ class CawsMcpServer extends Server {
 
     try {
       const command = `npx @paths.design/caws-cli evaluate ${specFile}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024, // 1MB buffer
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -394,12 +415,7 @@ class CawsMcpServer extends Server {
       const stateArg = JSON.stringify({ description: currentState });
       const command = `npx @paths.design/caws-cli iterate --current-state ${JSON.stringify(stateArg)} ${specFile}`;
 
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -436,12 +452,7 @@ class CawsMcpServer extends Server {
 
     try {
       const command = `npx @paths.design/caws-cli validate ${specFile}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -480,10 +491,7 @@ class CawsMcpServer extends Server {
       ];
 
       const command = `npx @paths.design/caws-cli ${waiverArgs.join(' ')}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: args.workingDirectory || process.cwd(),
-      });
+      const result = execCawsCommand(command, { cwd: args.workingDirectory || process.cwd() });
 
       return {
         content: [
@@ -516,12 +524,7 @@ class CawsMcpServer extends Server {
         : '';
       const command = `npx @paths.design/caws-cli workflow ${workflowType} --step ${currentStep} ${contextArg}`;
 
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [{ type: 'text', text: result }],
@@ -543,12 +546,7 @@ class CawsMcpServer extends Server {
       const contextArg = context ? `--context ${JSON.stringify(JSON.stringify(context))}` : '';
       const command = `npx @paths.design/caws-cli quality-monitor ${action} ${filesArg} ${contextArg}`;
 
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [{ type: 'text', text: result }],
@@ -571,12 +569,7 @@ class CawsMcpServer extends Server {
     try {
       // Execute test analysis command and return results
       const command = `npx @paths.design/caws-cli test-analysis ${subcommand}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        timeout: 30000,
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory, timeout: 30000 });
 
       return {
         content: [{ type: 'text', text: result }],
@@ -669,7 +662,7 @@ class CawsMcpServer extends Server {
   async getActiveWaivers() {
     try {
       const command = `npx @paths.design/caws-cli waivers list`;
-      const result = execSync(command, { encoding: 'utf8' });
+      const result = execCawsCommand(command);
 
       // Parse the output to extract waiver information
       // This is a simplified parsing - in production, use structured output
@@ -1032,12 +1025,7 @@ class CawsMcpServer extends Server {
 
     try {
       const command = `npx @paths.design/caws-cli quality-gates ${cliArgs.join(' ')}`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
@@ -1882,12 +1870,7 @@ class CawsMcpServer extends Server {
 
     try {
       const command = `npx @paths.design/caws-cli waivers list`;
-      const result = execSync(command, {
-        encoding: 'utf8',
-        cwd: workingDirectory,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-      });
+      const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
         content: [
