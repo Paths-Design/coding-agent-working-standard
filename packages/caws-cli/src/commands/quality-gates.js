@@ -11,7 +11,6 @@
  * @author @darianrosebrook
  */
 
-const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -31,7 +30,6 @@ async function qualityGatesCommand(options = {}) {
 
       const projectRoot = process.cwd();
       let qualityGatesRunner = null;
-      let runnerType = null;
 
       // Fallback chain for finding quality gates runner:
       // 1. Check monorepo structure (current behavior)
@@ -48,7 +46,6 @@ async function qualityGatesCommand(options = {}) {
 
       if (fs.existsSync(monorepoRunner)) {
         qualityGatesRunner = monorepoRunner;
-        runnerType = 'monorepo';
       } else {
         // Option 2: Check node_modules for quality-gates package
         const nodeModulesPaths = [
@@ -59,7 +56,6 @@ async function qualityGatesCommand(options = {}) {
         for (const nmPath of nodeModulesPaths) {
           if (fs.existsSync(nmPath)) {
             qualityGatesRunner = nmPath;
-            runnerType = 'npm-package';
             break;
           }
         }

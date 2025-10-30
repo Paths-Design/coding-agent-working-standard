@@ -10,10 +10,9 @@ const { parallel, retry, withTimeout, withCleanup } = require('../utils/async-ut
 describe('Error Handling Integration', () => {
   describe('commandWrapper', () => {
     it('should handle errors gracefully', async () => {
-      let errorHandled = false;
       const originalExit = process.exit;
       process.exit = () => {
-        errorHandled = true;
+        // Exit handler called
       };
 
       try {
@@ -114,8 +113,11 @@ describe('Error Handling Integration', () => {
       it('should execute promises in parallel', async () => {
         const startTime = Date.now();
         const results = await parallel([
+          // eslint-disable-next-line no-undef
           () => new Promise((resolve) => setTimeout(() => resolve(1), 100)),
+          // eslint-disable-next-line no-undef
           () => new Promise((resolve) => setTimeout(() => resolve(2), 100)),
+          // eslint-disable-next-line no-undef
           () => new Promise((resolve) => setTimeout(() => resolve(3), 100)),
         ]);
         const duration = Date.now() - startTime;
@@ -188,6 +190,7 @@ describe('Error Handling Integration', () => {
     describe('withTimeout', () => {
       it('should resolve before timeout', async () => {
         const result = await withTimeout(
+          // eslint-disable-next-line no-undef
           new Promise((resolve) => setTimeout(() => resolve('success'), 50)),
           1000
         );
@@ -197,6 +200,7 @@ describe('Error Handling Integration', () => {
       it('should reject on timeout', async () => {
         await expect(
           withTimeout(
+            // eslint-disable-next-line no-undef
             new Promise((resolve) => setTimeout(() => resolve('success'), 200)),
             100,
             'Custom timeout message'
@@ -239,4 +243,5 @@ describe('Error Handling Integration', () => {
     });
   });
 });
+
 

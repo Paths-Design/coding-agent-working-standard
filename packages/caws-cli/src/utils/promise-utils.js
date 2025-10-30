@@ -43,14 +43,18 @@ function once(emitter, event, options = {}) {
     const { timeout } = options;
 
     const timeoutId = timeout
-      ? setTimeout(() => {
+      ? // eslint-disable-next-line no-undef
+        setTimeout(() => {
           emitter.removeListener(event, handler);
           reject(new Error(`Event '${event}' timed out after ${timeout}ms`));
         }, timeout)
       : null;
 
     const handler = (...args) => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId) {
+        // eslint-disable-next-line no-undef
+        clearTimeout(timeoutId);
+      }
       emitter.removeListener(event, handler);
       resolve(args.length === 1 ? args[0] : args);
     };
@@ -64,4 +68,5 @@ module.exports = {
   closeReadline,
   once,
 };
+
 

@@ -8,7 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const yaml = require('js-yaml');
-const { commandWrapper, Output } = require('../utils/command-wrapper');
+const { commandWrapper } = require('../utils/command-wrapper');
 
 /**
  * Provenance command handler

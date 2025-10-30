@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 const WaiversManager = require('../waivers-manager');
 const { commandWrapper, Output } = require('../utils/command-wrapper');

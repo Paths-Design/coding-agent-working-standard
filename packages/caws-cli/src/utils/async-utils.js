@@ -88,6 +88,7 @@ async function retry(operation, options = {}) {
       }
 
       // Wait before retrying with exponential backoff
+      // eslint-disable-next-line no-undef
       await new Promise((resolve) => setTimeout(resolve, delay));
       delay = Math.min(delay * 2, maxDelay);
     }
@@ -105,6 +106,7 @@ async function retry(operation, options = {}) {
  */
 async function withTimeout(promise, timeoutMs, errorMessage = 'Operation timed out') {
   const timeoutPromise = new Promise((_, reject) => {
+    // eslint-disable-next-line no-undef
     setTimeout(() => {
       reject(new Error(`${errorMessage} (${timeoutMs}ms)`));
     }, timeoutMs);
@@ -182,4 +184,5 @@ module.exports = {
   collectResults,
   withCancellation,
 };
+
 

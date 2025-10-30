@@ -329,3 +329,4 @@ Most CAWS tools work correctly, but three path resolution issues prevent quality
 - ⚠️ **Pre-commit hooks**: May reference wrong paths
 
 The primary blocker is the MCP server ES module issue. Once fixed, quality gates should work via both CLI and MCP server.
+
