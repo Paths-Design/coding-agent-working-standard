@@ -7,6 +7,7 @@
     [
       "@semantic-release/commit-analyzer",
       {
+        "preset": "angular",
         "releaseRules": [
           {
             "type": "feat",
@@ -37,9 +38,9 @@
             "release": false
           }
         ],
-        "preset": "angular",
         "parserOpts": {
-          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"],
+          "headerPattern": "^(\w+)(?:\(([^)]+)\))?: (.+)$"
         }
       }
     ],
