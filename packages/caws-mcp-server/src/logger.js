@@ -30,15 +30,48 @@ function createLogger() {
   // MCP protocol requires pure JSON communication on stdout
   // All logs must go to stderr to avoid corrupting MCP messages
   if (process.env.CAWS_MCP_SERVER) {
+    // Create a minimal logger that writes only to stderr with no colors
+    // Use a custom write function to ensure no ANSI codes leak through
+    const stderrDestination = pino.destination({
+      fd: 2, // stderr
+      sync: false,
+      minLength: 0, // Disable buffering
+    });
+    
+    // Wrap the destination to strip any ANSI codes that might leak through
+    const originalWrite = stderrDestination.write.bind(stderrDestination);
+    const stripAnsiCodes = (str) => {
+      if (typeof str !== 'string') return str;
+      return str
+        .replace(/\u001b\[[0-9;]*m/g, '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+    };
+    
+    stderrDestination.write = function(chunk) {
+      if (Buffer.isBuffer(chunk)) {
+        const str = chunk.toString('utf8');
+        const cleaned = stripAnsiCodes(str);
+        return originalWrite(Buffer.from(cleaned, 'utf8'));
+      }
+      if (typeof chunk === 'string') {
+        const cleaned = stripAnsiCodes(chunk);
+        return originalWrite(cleaned);
+      }
+      return originalWrite(chunk);
+    };
+    
     return pino({
+      level: 'error', // Only errors - suppress all info/debug/warn logs
       ...baseConfig,
-      // Force all logs to stderr, not stdout (MCP uses stdout for protocol)
-      destination: 2, // stderr file descriptor
       // Completely disable formatting and colors
       formatters: {
         level: (label) => ({ level: label }),
       },
-    });
+      // Explicitly disable color detection
+      colorize: false,
+      // Disable TTY detection
+      sync: false,
+    }, stderrDestination);
   }
 
   // In production (non-MCP), use JSON output

@@ -13,8 +13,62 @@
 // This must be set before any imports that might initialize the logger
 process.env.CAWS_MCP_SERVER = 'true';
 process.env.NO_COLOR = '1'; // Disable ANSI colors globally
+process.env.FORCE_COLOR = '0'; // Explicitly disable colors
 process.env.PINO_PRETTY_PRINT = 'false'; // Disable pino pretty printing
 process.env.PINO_LOG_PRETTY = 'false'; // Another pino pretty print variable
+process.env.PINO_COLORIZE = 'false'; // Disable pino colorization
+process.env.TERM = 'dumb'; // Dumb terminal (no colors)
+
+/**
+ * Strip ANSI escape codes from text output
+ * This prevents color codes from corrupting JSON responses
+ * Handles all ANSI escape sequences: CSI codes, OSC codes, etc.
+ * IMPORTANT: Preserves newlines and other essential control characters for JSON-RPC
+ */
+function stripAnsi(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Remove all ANSI escape sequences:
+  // - CSI (Control Sequence Introducer): ESC[ ... [m] (most common)
+  // - OSC (Operating System Command): ESC] ... BEL or ESC\
+  // - Other escape sequences: ESC followed by various characters
+  // DO NOT remove newlines (\n = 0x0A) or carriage returns (\r = 0x0D) - they're essential for JSON-RPC
+  return text
+    .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
+    .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
+    .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
+    .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
+    .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
+    .replace(/\u001b[\[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
+    .replace(/\u001b./g, '') // Any remaining escape sequences
+    // Only remove problematic control characters, NOT newlines or carriage returns
+    // Keep: \n (0x0A), \r (0x0D), \t (0x09)
+    // Remove: other control chars that might corrupt JSON
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+}
+
+// Ensure stdout is completely clean for MCP protocol
+// Only strip ANSI codes - DO NOT interfere with valid JSON-RPC messages
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = function(chunk, encoding, fd) {
+  const str = chunk.toString();
+  
+  // Check if this looks like a JSON-RPC message (starts with { or [)
+  const isJsonRpc = /^[\s]*[\{\[]/.test(str);
+  
+  if (isJsonRpc) {
+    // This is likely a JSON-RPC message from MCP SDK - only strip ANSI codes, preserve everything else
+    // Don't use trim() - JSON-RPC messages end with newlines which are essential
+    const cleaned = stripAnsi(str);
+    return originalStdoutWrite(cleaned, encoding, fd);
+  } else {
+    // Not JSON-RPC - might be accidental output (like logger), strip ANSI and write
+    const cleaned = stripAnsi(str);
+    if (cleaned.trim().length > 0) {
+      return originalStdoutWrite(cleaned, encoding, fd);
+    }
+    return true;
+  }
+};
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -33,38 +87,46 @@ import { logger } from './src/logger.js';
 import { CawsMonitor } from './src/monitoring/index.js';
 
 /**
- * Strip ANSI escape codes from text output
- * This prevents color codes from corrupting JSON responses
- * Handles all ANSI escape sequences: CSI codes, OSC codes, etc.
- */
-function stripAnsi(text) {
-  if (!text || typeof text !== 'string') return text;
-  // Remove all ANSI escape sequences:
-  // - CSI (Control Sequence Introducer): ESC[ ... [m] (most common)
-  // - OSC (Operating System Command): ESC] ... BEL or ESC\
-  // - Other escape sequences: ESC followed by various characters
-  return text
-    .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
-    .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
-    .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
-    .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
-    .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
-    .replace(/\u001b[\[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
-    .replace(/\u001b./g, ''); // Any remaining escape sequences
-}
-
-/**
  * Execute CLI command with color suppression and ANSI stripping
  */
 function execCawsCommand(command, options = {}) {
+  try {
   const result = execSync(command, {
     encoding: 'utf8',
     maxBuffer: 1024 * 1024,
-    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+        FORCE_COLOR: '0',
+        CAWS_OUTPUT_FORMAT: 'json', // Force JSON output format
+        TERM: 'dumb', // Dumb terminal (no colors)
+        // Ensure no TTY detection
+        CI: 'true', // Many tools check CI env var to disable colors
+      },
+      stdio: ['pipe', 'pipe', 'pipe'], // Explicitly separate stdout/stderr
     ...options,
   });
   // Strip any remaining ANSI codes as a safety measure
-  return stripAnsi(result);
+    // Do multiple passes to catch any edge cases
+    let cleaned = stripAnsi(result);
+    cleaned = stripAnsi(cleaned); // Second pass for nested codes
+    return cleaned;
+  } catch (error) {
+    // If command fails, strip ANSI from error message too
+    if (error.stdout) {
+      error.stdout = stripAnsi(error.stdout.toString());
+      error.stdout = stripAnsi(error.stdout); // Second pass
+    }
+    if (error.stderr) {
+      error.stderr = stripAnsi(error.stderr.toString());
+      error.stderr = stripAnsi(error.stderr); // Second pass
+    }
+    // Also clean the error message itself
+    if (error.message) {
+      error.message = stripAnsi(error.message);
+    }
+    throw error;
+  }
 }
 
 class CawsMcpServer extends Server {
@@ -83,11 +145,13 @@ class CawsMcpServer extends Server {
       }
     );
 
-    // Initialize monitoring system
-    this.monitor = new CawsMonitor({
-      watchPaths: ['.caws', 'src', 'tests', 'docs', 'packages'],
-      pollingInterval: 30000, // 30 seconds
-    });
+    // Disable monitoring in MCP mode to prevent stdout pollution
+    // Monitoring uses file watchers and yaml parsing which can emit ANSI codes
+    this.monitor = {
+      start: async () => {},
+      stop: async () => {},
+      getStatus: () => ({ running: false, alerts: [] }),
+    };
 
     this.setupToolHandlers();
     this.setupResourceHandlers();
@@ -98,7 +162,7 @@ class CawsMcpServer extends Server {
     this.setRequestHandler(InitializeRequestSchema, async (request) => {
       const { protocolVersion, clientInfo } = request.params;
 
-      logger.info({ protocolVersion, client: clientInfo?.name }, 'MCP initialization');
+      // Don't log in MCP mode - logs can leak ANSI codes to stdout
 
       return {
         protocolVersion,
@@ -120,18 +184,17 @@ class CawsMcpServer extends Server {
 
     // Handle client initialized notification
     this.setNotificationHandler(InitializedNotificationSchema, () => {
-      logger.info('MCP client initialized - ready for requests');
+      // Don't log in MCP mode - logs can leak ANSI codes to stdout
     });
 
     // List available tools
     this.setRequestHandler(ListToolsRequestSchema, () => {
       try {
-        logger.debug({ toolCount: CAWS_TOOLS.length }, 'Listing available tools');
+        // Don't log debug messages in MCP mode - they might leak to stdout
         const result = { tools: CAWS_TOOLS };
-        logger.debug('Tools list prepared');
         return result;
       } catch (error) {
-        logger.error({ err: error }, 'Error listing tools');
+        // Don't log in MCP mode - suppress all output to prevent ANSI leaks
         throw error;
       }
     });
@@ -205,7 +268,6 @@ class CawsMcpServer extends Server {
     // List available resources
     this.setRequestHandler(ListResourcesRequestSchema, () => {
       try {
-        logger.debug('Listing resources');
         const resources = [];
 
         // Working specs
@@ -220,14 +282,12 @@ class CawsMcpServer extends Server {
             });
           });
         } catch (error) {
-          logger.warn({ error: error.message }, 'Error finding working specs');
-          // Ignore errors in resource listing
+          // Ignore errors in resource listing - don't log to avoid stdout pollution
         }
 
-        logger.debug({ resourceCount: resources.length }, 'Returning resources');
         return { resources };
       } catch (error) {
-        logger.error({ error: error.message }, 'Error listing resources');
+        // Don't log in MCP mode - suppress all output to prevent ANSI leaks
         throw error;
       }
     });
@@ -451,7 +511,7 @@ class CawsMcpServer extends Server {
     const workingDirectory = args.workingDirectory || process.cwd();
 
     try {
-      const command = `npx @paths.design/caws-cli validate ${specFile}`;
+      const command = `npx @paths.design/caws-cli validate ${specFile} --format json`;
       const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
@@ -792,7 +852,7 @@ class CawsMcpServer extends Server {
     const { specFile = '.caws/working-spec.yaml', workingDirectory = process.cwd() } = args;
 
     try {
-      const command = `npx @paths.design/caws-cli status --spec ${specFile}`;
+      const command = `npx @paths.design/caws-cli status --spec ${specFile} --json`;
       const result = await execCommand(command, {
         cwd: workingDirectory,
         timeout: 30000,
@@ -3045,14 +3105,36 @@ function execCommand(command, options = {}) {
       const result = execSync(command, {
         ...options,
         encoding: 'utf8',
-        env: { ...process.env, ...options.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+        stdio: ['pipe', 'pipe', 'pipe'], // Explicitly separate stdout/stderr
+        env: {
+          ...process.env,
+          ...options.env,
+          NO_COLOR: '1',
+          FORCE_COLOR: '0',
+          CAWS_OUTPUT_FORMAT: 'json', // Force JSON output format
+          TERM: 'dumb', // Dumb terminal (no colors)
+          CI: 'true', // Many tools check CI env var to disable colors
+        },
       });
       // Strip ANSI codes from output to prevent JSON corruption
-      const cleanedOutput = stripAnsi(result);
+      // Do multiple passes to catch any edge cases
+      let cleanedOutput = stripAnsi(result.toString());
+      cleanedOutput = stripAnsi(cleanedOutput); // Second pass
       _resolve({ stdout: cleanedOutput, stderr: '' });
     } catch (error) {
-      // Log command execution errors for debugging
-      logger.error({ command, error: error.message }, 'Command execution failed');
+      // Strip ANSI from error output too
+      let stdout = '';
+      let stderr = '';
+      if (error.stdout) {
+        stdout = stripAnsi(error.stdout.toString());
+        stdout = stripAnsi(stdout); // Second pass
+      }
+      if (error.stderr) {
+        stderr = stripAnsi(error.stderr.toString());
+        stderr = stripAnsi(stderr); // Second pass
+      }
+      
+      // Don't log in MCP mode - suppress all output to prevent ANSI leaks
       throw error;
     }
   });
@@ -3065,18 +3147,12 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Start monitoring system (unless disabled for testing)
-  if (process.env.CAWS_DISABLE_MONITORING !== 'true') {
-    try {
-      await server.monitor.start();
-      logger.info('CAWS MCP Server started with monitoring');
-    } catch (error) {
-      logger.warn({ error: error.message }, 'Failed to start monitoring, starting without it');
-      logger.info('CAWS MCP Server started without monitoring');
-    }
-  } else {
-    logger.info('CAWS MCP Server started (monitoring disabled)');
-  }
+  // Disable monitoring in MCP mode - it can cause stdout pollution
+  // Monitoring uses file watchers and yaml parsing which may emit logs
+  process.env.CAWS_DISABLE_MONITORING = 'true';
+  
+  // Don't log in MCP mode - logs can leak ANSI codes to stdout
+  // MCP server is now running silently
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
