@@ -44,62 +44,73 @@ async function qualityGatesCommand(options = {}) {
       const packagesDir = path.dirname(cliPackageDir);
       const monorepoRunner = path.join(packagesDir, 'quality-gates', 'run-quality-gates.mjs');
 
+      // Option 2: Check VS Code extension bundled (if running from extension context)
+      const vscodeExtensionPath = process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
+      const bundledRunner = vscodeExtensionPath
+        ? path.join(vscodeExtensionPath, 'bundled', 'quality-gates', 'run-quality-gates.mjs')
+        : null;
+
+      // Option 3: Check node_modules for quality-gates package
+      const nodeModulesPaths = [
+        path.join(projectRoot, 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
+        path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs'),
+        path.join(projectRoot, 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
+      ];
+
+      // Try all possible paths in order
+      let qualityGatesRunner = null;
       if (fs.existsSync(monorepoRunner)) {
         qualityGatesRunner = monorepoRunner;
+      } else if (bundledRunner && fs.existsSync(bundledRunner)) {
+        qualityGatesRunner = bundledRunner;
       } else {
-        // Option 2: Check node_modules for quality-gates package
-        const nodeModulesPaths = [
-          path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs'),
-          path.join(projectRoot, 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
-        ];
-
         for (const nmPath of nodeModulesPaths) {
           if (fs.existsSync(nmPath)) {
             qualityGatesRunner = nmPath;
             break;
           }
         }
+      }
 
-        // Option 3: Check for project-local Python scripts
-        if (!qualityGatesRunner) {
-          const pythonScript = path.join(projectRoot, 'scripts', 'simple_gates.py');
-          const makefile = path.join(projectRoot, 'Makefile');
+      // Option 4: Check for project-local Python scripts
+      if (!qualityGatesRunner) {
+        const pythonScript = path.join(projectRoot, 'scripts', 'simple_gates.py');
+        const makefile = path.join(projectRoot, 'Makefile');
 
-          if (fs.existsSync(pythonScript)) {
-            Output.warning('Node.js quality gates runner not found', 'Found Python script - falling back to Python implementation');
-            Output.info(`Running: python3 ${pythonScript}`);
-            Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
+        if (fs.existsSync(pythonScript)) {
+          Output.warning('Node.js quality gates runner not found', 'Found Python script - falling back to Python implementation');
+          Output.info(`Running: python3 ${pythonScript}`);
+          Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
 
-            // Execute Python script instead
-            const { execSync } = require('child_process');
-            const pythonArgs = ['all', '--tier', '2', '--profile', 'backend-api'];
-            if (options.ci) {
-              pythonArgs.push('--ci');
-            }
-            if (options.json) {
-              pythonArgs.push('--json');
-            }
-
-            execSync(`python3 ${pythonScript} ${pythonArgs.join(' ')}`, {
-              stdio: 'inherit',
-              cwd: projectRoot,
-            });
-            Output.success('Quality gates completed successfully');
-            return;
-          } else if (fs.existsSync(makefile)) {
-            Output.warning('Node.js quality gates runner not found', 'Found Makefile - falling back to Makefile target');
-            Output.info('Running: make caws-gates');
-            Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
-
-            // Execute Makefile target
-            const { execSync } = require('child_process');
-            execSync('make caws-gates', {
-              stdio: 'inherit',
-              cwd: projectRoot,
-            });
-            Output.success('Quality gates completed successfully');
-            return;
+          // Execute Python script instead
+          const { execSync } = require('child_process');
+          const pythonArgs = ['all', '--tier', '2', '--profile', 'backend-api'];
+          if (options.ci) {
+            pythonArgs.push('--ci');
           }
+          if (options.json) {
+            pythonArgs.push('--json');
+          }
+
+          execSync(`python3 ${pythonScript} ${pythonArgs.join(' ')}`, {
+            stdio: 'inherit',
+            cwd: projectRoot,
+          });
+          Output.success('Quality gates completed successfully');
+          return;
+        } else if (fs.existsSync(makefile)) {
+          Output.warning('Node.js quality gates runner not found', 'Found Makefile - falling back to Makefile target');
+          Output.info('Running: make caws-gates');
+          Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
+
+          // Execute Makefile target
+          const { execSync } = require('child_process');
+          execSync('make caws-gates', {
+            stdio: 'inherit',
+            cwd: projectRoot,
+          });
+          Output.success('Quality gates completed successfully');
+          return;
         }
       }
 

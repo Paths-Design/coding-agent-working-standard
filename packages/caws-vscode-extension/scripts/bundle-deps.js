@@ -12,6 +12,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const { execSync } = require('child_process');
+const glob = require('glob');
 
 const EXTENSION_ROOT = path.resolve(__dirname, '..');
 const MONOREPO_ROOT = path.resolve(EXTENSION_ROOT, '../..');
@@ -104,6 +105,67 @@ async function main() {
 
     console.log('✅ Bundled CAWS CLI (esbuild)\n');
 
+    // Bundle Quality Gates
+    console.log('Bundling Quality Gates...');
+    const qualityGatesSource = path.join(MONOREPO_ROOT, 'packages/quality-gates');
+    const qualityGatesDest = path.join(BUNDLED_DIR, 'quality-gates');
+
+    await fs.ensureDir(qualityGatesDest);
+
+    // Copy all .mjs files (ES modules)
+    const mjsFiles = await fs.readdir(qualityGatesSource);
+    for (const file of mjsFiles) {
+      if (file.endsWith('.mjs')) {
+        await fs.copy(
+          path.join(qualityGatesSource, file),
+          path.join(qualityGatesDest, file)
+        );
+      }
+    }
+    console.log('  ✅ Copied quality gates modules');
+
+    // Copy configuration files
+    const configPatterns = ['*.yaml', '*.yml', '*.json'];
+    for (const pattern of configPatterns) {
+      const files = glob.sync(pattern, { cwd: qualityGatesSource });
+      for (const file of files) {
+        if (file !== 'package.json' && file !== 'package-lock.json') {
+          await fs.copy(
+            path.join(qualityGatesSource, file),
+            path.join(qualityGatesDest, file)
+          );
+        }
+      }
+    }
+
+    // Copy templates directory if it exists
+    const templatesDir = path.join(qualityGatesSource, 'templates');
+    if (await fs.pathExists(templatesDir)) {
+      await fs.copy(templatesDir, path.join(qualityGatesDest, 'templates'));
+      console.log('  ✅ Copied templates directory');
+    }
+
+    // Copy package.json for dependencies
+    await fs.copy(
+      path.join(qualityGatesSource, 'package.json'),
+      path.join(qualityGatesDest, 'package.json')
+    );
+
+    // Install quality gates dependencies
+    console.log('  Installing quality gates dependencies...');
+    try {
+      execSync('npm install --production --no-audit --no-fund', {
+        cwd: qualityGatesDest,
+        stdio: 'inherit',
+      });
+      console.log('  ✅ Installed all dependencies');
+    } catch (error) {
+      console.error('  ❌ Failed to install dependencies:', error.message);
+      throw error;
+    }
+
+    console.log('✅ Bundled Quality Gates\n');
+
     // Create bundled info file
     const bundledInfo = {
       bundledAt: new Date().toISOString(),
@@ -115,6 +177,10 @@ async function main() {
         version: require(path.join(cliSource, 'package.json')).version,
         path: 'bundled/cli',
       },
+      qualityGates: {
+        version: require(path.join(qualityGatesSource, 'package.json')).version,
+        path: 'bundled/quality-gates',
+      },
     };
 
     await fs.writeJSON(path.join(BUNDLED_DIR, 'bundle-info.json'), bundledInfo, { spaces: 2 });
@@ -125,6 +191,7 @@ async function main() {
     console.log('─'.repeat(50));
     console.log(`MCP Server v${bundledInfo.mcpServer.version} → ${bundledInfo.mcpServer.path}`);
     console.log(`CAWS CLI v${bundledInfo.cli.version} → ${bundledInfo.cli.path}`);
+    console.log(`Quality Gates v${bundledInfo.qualityGates.version} → ${bundledInfo.qualityGates.path}`);
     console.log('─'.repeat(50));
     console.log('\n✅ Bundling complete!');
     console.log('\nBundled files are ready for extension packaging.');

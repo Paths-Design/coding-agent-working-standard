@@ -1152,14 +1152,46 @@ class CawsMcpServer extends Server {
 
       // Execute the quality gates runner directly
       const { spawn } = await import('child_process');
-      const qualityGatesPath = path.join(
-        path.dirname(path.dirname(__filename)),
-        '..',
-        '..',
-        'packages',
-        'quality-gates',
-        'run-quality-gates.mjs'
-      );
+      
+      // Try multiple locations for quality gates runner:
+      // 1. Bundled in VS Code extension (when MCP server runs from extension)
+      // 2. Monorepo structure (development)
+      // 3. npm package installation
+      const extensionPath = process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
+      const possiblePaths = [
+        // Bundled in extension (relative to MCP server when bundled)
+        extensionPath
+          ? path.join(extensionPath, 'bundled', 'quality-gates', 'run-quality-gates.mjs')
+          : null,
+        // Bundled relative to MCP server (if running from bundled location)
+        path.join(path.dirname(__filename), '..', 'quality-gates', 'run-quality-gates.mjs'),
+        // Monorepo structure (development)
+        path.join(
+          path.dirname(path.dirname(__filename)),
+          '..',
+          '..',
+          'packages',
+          'quality-gates',
+          'run-quality-gates.mjs'
+        ),
+        // npm package
+        path.join(process.cwd(), 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
+        path.join(process.cwd(), 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
+      ].filter(Boolean);
+
+      let qualityGatesPath = null;
+      for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+          qualityGatesPath = possiblePath;
+          break;
+        }
+      }
+
+      if (!qualityGatesPath) {
+        throw new Error(
+          `Quality gates runner not found. Searched:\n${possiblePaths.map((p) => `  - ${p}`).join('\n')}`
+        );
+      }
 
       return new Promise((resolve, reject) => {
         const child = spawn('node', [qualityGatesPath, ...cliArgs], {

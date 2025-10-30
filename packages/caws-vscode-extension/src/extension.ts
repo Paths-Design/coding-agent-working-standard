@@ -255,7 +255,10 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
     mcpConfig.mcpServers.caws = {
       command: 'node',
       args: [mcpServerPath],
-      env: {},
+      env: {
+        VSCODE_EXTENSION_PATH: context.extensionPath,
+        VSCODE_EXTENSION_DIR: context.extensionPath,
+      },
       disabled: false,
       alwaysAllow: [],
     };

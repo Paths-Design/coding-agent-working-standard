@@ -61,6 +61,11 @@ export class CawsMcpClient {
       this.mcpProcess = cp.spawn('node', [mcpServerPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd(),
+        env: {
+          ...process.env,
+          VSCODE_EXTENSION_PATH: extensionPath || '',
+          VSCODE_EXTENSION_DIR: extensionPath || '',
+        },
       });
 
       // Set up MCP protocol handlers
