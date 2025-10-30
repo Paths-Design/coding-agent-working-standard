@@ -20,7 +20,7 @@ The CAWS CLI serves as the central control point for:
 ### Global Installation (Recommended)
 
 ```bash
-npm install -g @caws/cli
+npm install -g @paths.design/caws-cli
 ```
 
 ### Local Development
@@ -199,17 +199,17 @@ Projects use `.caws/working-spec.yaml` files:
 
 ```yaml
 id: PROJ-001
-title: "Feature implementation"
+title: 'Feature implementation'
 risk_tier: 2
 mode: feature
 change_budget:
   max_files: 25
   max_loc: 1000
 acceptance:
-  - id: "A1"
-    given: "Current state"
-    when: "Feature implemented"
-    then: "Expected behavior"
+  - id: 'A1'
+    given: 'Current state'
+    when: 'Feature implemented'
+    then: 'Expected behavior'
 ```
 
 ### Tool Configuration
@@ -256,7 +256,7 @@ class MyTool extends BaseTool {
       id: 'my-tool',
       name: 'My Custom Tool',
       capabilities: ['validation'],
-      version: '1.0.0'
+      version: '1.0.0',
     };
   }
 
@@ -306,9 +306,10 @@ npm run test:contract     # Contract tests
 ### Common Issues
 
 **Command not found**
+
 ```bash
 # Ensure global installation
-npm install -g @caws/cli
+npm install -g @paths.design/caws-cli
 caws --version
 
 # Or use local installation
@@ -316,6 +317,7 @@ node packages/caws-cli/dist/index.js --help
 ```
 
 **Tool loading errors**
+
 ```bash
 # Check tool directory structure
 ls -la apps/tools/caws/
@@ -328,6 +330,7 @@ chmod +x apps/tools/caws/*.js
 ```
 
 **Validation failures**
+
 ```bash
 # Check working spec syntax
 caws validate --suggestions .caws/working-spec.yaml
@@ -361,7 +364,7 @@ MIT License - see main project LICENSE file.
 
 ## Links
 
-- **Main Project**: https://github.com/paths-design/caws
-- **Documentation**: https://docs.caws.dev
-- **Issues**: https://github.com/paths-design/caws/issues
-- **Discussions**: https://github.com/paths-design/caws/discussions
+- **Main Project**: https://github.com/Paths-Design/coding-agent-working-standard
+- **Documentation**: https://docs.paths.design
+- **Issues**: https://github.com/Paths-Design/coding-agent-working-standard/issues
+- **Discussions**: https://github.com/Paths-Design/coding-agent-working-standard/discussions
