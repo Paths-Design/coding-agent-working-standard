@@ -1,6 +1,6 @@
 {
   "name": "caws-mcp-server",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "CAWS Model Context Protocol server for AI agent integration",
   "type": "module",
   "main": "index.js",
