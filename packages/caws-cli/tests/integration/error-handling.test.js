@@ -4,8 +4,8 @@
  * @author @darianrosebrook
  */
 
-const { commandWrapper, Output } = require('../utils/command-wrapper');
-const { parallel, retry, withTimeout, withCleanup } = require('../utils/async-utils');
+const { commandWrapper, Output } = require('../../src/utils/command-wrapper');
+const { parallel, retry, withTimeout, withCleanup } = require('../../src/utils/async-utils');
 
 describe('Error Handling Integration', () => {
   describe('commandWrapper', () => {
