@@ -1,3 +1,10 @@
+## [5.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v5.0.0...v5.0.1) (2025-10-30)
+
+
+### Bug Fixes
+
+* suppress ANSI color codes in MCP server output ([bfa5744](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfa57449afb16b7e8c8bb4188473610f31cd95b5))
+
 # [5.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v4.0.0...v5.0.0) (2025-10-30)
 
 
