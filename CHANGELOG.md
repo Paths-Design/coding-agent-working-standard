@@ -1,3 +1,31 @@
+# [5.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v4.0.0...v5.0.0) (2025-10-30)
+
+
+### Bug Fixes
+
+* resolve CI/CD failures and implement waiver sync ([68ea1ac](https://github.com/Paths-Design/coding-agent-working-standard/commit/68ea1acd5b60abb1d792b79ab037711ca81edba1))
+* resolve linting and test issues for semantic release ([29270b3](https://github.com/Paths-Design/coding-agent-working-standard/commit/29270b369ead361f1b70f91f7bbc9e7351fe969f))
+
+
+### Features
+
+* add comprehensive quality gates system with staged file analysis ([f34e679](https://github.com/Paths-Design/coding-agent-working-standard/commit/f34e6794ff4cfb77472bf8a853d134c33a835bc2))
+* Complete multi-agent architecture implementation ([60c7cbb](https://github.com/Paths-Design/coding-agent-working-standard/commit/60c7cbbd581bbcf327f1b8e296166815e860ce6b))
+* Harden quality gates system with enterprise-grade reliability ([da849f7](https://github.com/Paths-Design/coding-agent-working-standard/commit/da849f74a08184f0850d66832c3ec1f0f7cfe9eb))
+* integrate advanced TODO analyzer with CAWS quality gates ([24385da](https://github.com/Paths-Design/coding-agent-working-standard/commit/24385dafc3c91d1f803294a6ba65654e2a599bd3))
+* Integrate hardened quality gates across CAWS ecosystem ([8fc03f4](https://github.com/Paths-Design/coding-agent-working-standard/commit/8fc03f41400aaabe6e679b31f011e607fc349c95))
+* synchronize updated todo-analyzer.mjs from agent-agency ([2bf6eb8](https://github.com/Paths-Design/coding-agent-working-standard/commit/2bf6eb82558e1958400354f1810e0558c3501e0a))
+* Update VS Code extension to v4.0.0 with multi-spec support ([30fb4c9](https://github.com/Paths-Design/coding-agent-working-standard/commit/30fb4c98820bb78f351cb5dbb45ca8e461f12564))
+* updating the commands to be up to date ([1a3f9e0](https://github.com/Paths-Design/coding-agent-working-standard/commit/1a3f9e0d1f7749698feda30e92ac89bc97b3eece))
+
+
+### BREAKING CHANGES
+
+* TODO analyzer now requires Python3 and provides enhanced analysis capabilities
+* New quality-gates command requires Node.js 16+ and Python3 for full functionality
+* Extension now supports multiple working specs instead of single legacy spec
+* Spec resolution now prioritizes .caws/specs/ over legacy working-spec.yaml
+
 # [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-20)
 
 ## 🚨 Breaking Changes
