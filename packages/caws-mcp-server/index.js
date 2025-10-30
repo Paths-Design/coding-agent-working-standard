@@ -33,16 +33,24 @@ function stripAnsi(text) {
   // - Other escape sequences: ESC followed by various characters
   // DO NOT remove newlines (\n = 0x0A) or carriage returns (\r = 0x0D) - they're essential for JSON-RPC
   return text
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
-    .replace(/\u001b[\[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b[[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
+    // eslint-disable-next-line no-control-regex
     .replace(/\u001b./g, '') // Any remaining escape sequences
     // Only remove problematic control characters, NOT newlines or carriage returns
     // Keep: \n (0x0A), \r (0x0D), \t (0x09)
     // Remove: other control chars that might corrupt JSON
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
 }
 
@@ -53,7 +61,7 @@ process.stdout.write = function(chunk, encoding, fd) {
   const str = chunk.toString();
   
   // Check if this looks like a JSON-RPC message (starts with { or [)
-  const isJsonRpc = /^[\s]*[\{\[]/.test(str);
+  const isJsonRpc = /^[\s]*[{[]/.test(str);
   
   if (isJsonRpc) {
     // This is likely a JSON-RPC message from MCP SDK - only strip ANSI codes, preserve everything else
@@ -84,8 +92,6 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logger } from './src/logger.js';
-import { CawsMonitor } from './src/monitoring/index.js';
 
 // ES module equivalent of __filename
 const __filename = fileURLToPath(import.meta.url);
@@ -164,7 +170,7 @@ class CawsMcpServer extends Server {
   setupToolHandlers() {
     // Handle MCP initialization
     this.setRequestHandler(InitializeRequestSchema, async (request) => {
-      const { protocolVersion, clientInfo } = request.params;
+      const { protocolVersion } = request.params;
 
       // Don't log in MCP mode - logs can leak ANSI codes to stdout
 
@@ -193,14 +199,8 @@ class CawsMcpServer extends Server {
 
     // List available tools
     this.setRequestHandler(ListToolsRequestSchema, () => {
-      try {
-        // Don't log debug messages in MCP mode - they might leak to stdout
-        const result = { tools: CAWS_TOOLS };
-        return result;
-      } catch (error) {
-        // Don't log in MCP mode - suppress all output to prevent ANSI leaks
-        throw error;
-      }
+      // Don't log debug messages in MCP mode - they might leak to stdout
+      return { tools: CAWS_TOOLS };
     });
 
     // Handle tool calls
@@ -271,29 +271,24 @@ class CawsMcpServer extends Server {
   setupResourceHandlers() {
     // List available resources
     this.setRequestHandler(ListResourcesRequestSchema, () => {
+      const resources = [];
+
+      // Working specs
       try {
-        const resources = [];
-
-        // Working specs
-        try {
-          const specFiles = this.findWorkingSpecs();
-          specFiles.forEach((specPath) => {
-            resources.push({
-              uri: `caws://working-spec/${specPath}`,
-              name: `Working Spec: ${path.basename(specPath, '.yaml')}`,
-              description: 'CAWS working specification',
-              mimeType: 'application/yaml',
-            });
+        const specFiles = this.findWorkingSpecs();
+        specFiles.forEach((specPath) => {
+          resources.push({
+            uri: `caws://working-spec/${specPath}`,
+            name: `Working Spec: ${path.basename(specPath, '.yaml')}`,
+            description: 'CAWS working specification',
+            mimeType: 'application/yaml',
           });
-        } catch (error) {
-          // Ignore errors in resource listing - don't log to avoid stdout pollution
-        }
-
-        return { resources };
+        });
       } catch (error) {
-        // Don't log in MCP mode - suppress all output to prevent ANSI leaks
-        throw error;
+        // Ignore errors in resource listing - don't log to avoid stdout pollution
       }
+
+      return { resources };
     });
 
     // Read resource content
@@ -3115,42 +3110,28 @@ const CAWS_TOOLS = [
 // Helper function to execute shell commands
 function execCommand(command, options = {}) {
   return new Promise((_resolve, _reject) => {
-    try {
-      const result = execSync(command, {
-        ...options,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'], // Explicitly separate stdout/stderr
-        env: {
-          ...process.env,
-          ...options.env,
-          NO_COLOR: '1',
-          FORCE_COLOR: '0',
-          CAWS_OUTPUT_FORMAT: 'json', // Force JSON output format
-          TERM: 'dumb', // Dumb terminal (no colors)
-          CI: 'true', // Many tools check CI env var to disable colors
-        },
-      });
-      // Strip ANSI codes from output to prevent JSON corruption
-      // Do multiple passes to catch any edge cases
-      let cleanedOutput = stripAnsi(result.toString());
-      cleanedOutput = stripAnsi(cleanedOutput); // Second pass
-      _resolve({ stdout: cleanedOutput, stderr: '' });
-    } catch (error) {
-      // Strip ANSI from error output too
-      let stdout = '';
-      let stderr = '';
-      if (error.stdout) {
-        stdout = stripAnsi(error.stdout.toString());
-        stdout = stripAnsi(stdout); // Second pass
-      }
-      if (error.stderr) {
-        stderr = stripAnsi(error.stderr.toString());
-        stderr = stripAnsi(stderr); // Second pass
-      }
-      
-      // Don't log in MCP mode - suppress all output to prevent ANSI leaks
-      throw error;
-    }
+    const result = execSync(command, {
+      ...options,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'], // Explicitly separate stdout/stderr
+      env: {
+        ...process.env,
+        ...options.env,
+        NO_COLOR: '1',
+        FORCE_COLOR: '0',
+        CAWS_OUTPUT_FORMAT: 'json', // Force JSON output format
+        TERM: 'dumb', // Dumb terminal (no colors)
+        CI: 'true', // Many tools check CI env var to disable colors
+      },
+    });
+    // Strip ANSI codes from output to prevent JSON corruption
+    // Do multiple passes to catch any edge cases
+    let cleanedOutput = stripAnsi(result.toString());
+    cleanedOutput = stripAnsi(cleanedOutput); // Second pass
+    _resolve({ stdout: cleanedOutput, stderr: '' });
+  }).catch((error) => {
+    // Don't log in MCP mode - suppress all output to prevent ANSI leaks
+    throw error;
   });
 }
 
