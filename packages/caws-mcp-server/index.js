@@ -613,7 +613,7 @@ class CawsMcpServer extends Server {
               {
                 success: true,
                 subcommand,
-                output: result.stdout || 'Provenance operation completed',
+                output: stripAnsi(result.stdout || 'Provenance operation completed'),
               },
               null,
               2
@@ -759,7 +759,7 @@ class CawsMcpServer extends Server {
               {
                 success: true,
                 subcommand,
-                output: result.stdout || result.stderr || 'Hooks operation completed',
+                output: stripAnsi(result.stdout || result.stderr || 'Hooks operation completed'),
               },
               null,
               2
@@ -805,7 +805,7 @@ class CawsMcpServer extends Server {
             text: JSON.stringify(
               {
                 success: true,
-                output: result.stdout || 'Status check completed',
+                output: stripAnsi(result.stdout || 'Status check completed'),
               },
               null,
               2
@@ -853,7 +853,7 @@ class CawsMcpServer extends Server {
             text: JSON.stringify(
               {
                 success: true,
-                output: result.stdout || 'Diagnostics completed',
+                output: stripAnsi(result.stdout || 'Diagnostics completed'),
                 fixesApplied: fix,
               },
               null,
@@ -990,7 +990,7 @@ class CawsMcpServer extends Server {
                 success: true,
                 changeId,
                 archived: !dryRun,
-                output: result.stdout || 'Archive operation completed',
+                output: stripAnsi(result.stdout || 'Archive operation completed'),
                 dryRun,
               },
               null,
@@ -1099,6 +1099,8 @@ class CawsMcpServer extends Server {
           env: {
             ...process.env,
             CAWS_MCP_INTEGRATION: 'true',
+            NO_COLOR: '1',
+            FORCE_COLOR: '0',
           },
         });
 
@@ -1114,7 +1116,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('close', (_code) => {
-          const output = stdout || stderr;
+          const output = stripAnsi(stdout || stderr);
           resolve({
             content: [
               {
@@ -1430,6 +1432,8 @@ class CawsMcpServer extends Server {
           env: {
             ...process.env,
             CAWS_MCP_INTEGRATION: 'true',
+            NO_COLOR: '1',
+            FORCE_COLOR: '0',
           },
         });
 
@@ -3038,8 +3042,14 @@ const CAWS_TOOLS = [
 function execCommand(command, options = {}) {
   return new Promise((_resolve, _reject) => {
     try {
-      const child = execSync(command, { ...options, encoding: 'utf8' });
-      _resolve({ stdout: child, stderr: '' });
+      const result = execSync(command, {
+        ...options,
+        encoding: 'utf8',
+        env: { ...process.env, ...options.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+      });
+      // Strip ANSI codes from output to prevent JSON corruption
+      const cleanedOutput = stripAnsi(result);
+      _resolve({ stdout: cleanedOutput, stderr: '' });
     } catch (error) {
       // Log command execution errors for debugging
       logger.error({ command, error: error.message }, 'Command execution failed');
