@@ -282,7 +282,7 @@ class CawsMcpServer extends Server {
               {
                 success: true,
                 message: 'Project initialized successfully',
-                output: result,
+                output: stripAnsi(result),
                 projectName: projectName === '.' ? path.basename(workingDirectory) : projectName,
               },
               null,
@@ -340,7 +340,7 @@ class CawsMcpServer extends Server {
               {
                 success: true,
                 message: 'CAWS components scaffolded successfully',
-                output: result,
+                output: stripAnsi(result),
               },
               null,
               2
@@ -381,7 +381,7 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: result,
+            text: stripAnsi(result),
           },
         ],
       };
@@ -421,7 +421,7 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: result,
+            text: stripAnsi(result),
           },
         ],
       };
@@ -458,7 +458,7 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: `Validation completed:\n${result}`,
+            text: `Validation completed:\n${stripAnsi(result)}`,
           },
         ],
       };
@@ -497,7 +497,7 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: `Waiver created successfully:\n${result}`,
+            text: `Waiver created successfully:\n${stripAnsi(result)}`,
           },
         ],
       };
@@ -527,7 +527,7 @@ class CawsMcpServer extends Server {
       const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
-        content: [{ type: 'text', text: result }],
+        content: [{ type: 'text', text: stripAnsi(result) }],
       };
     } catch (error) {
       return {
@@ -549,7 +549,7 @@ class CawsMcpServer extends Server {
       const result = execCawsCommand(command, { cwd: workingDirectory });
 
       return {
-        content: [{ type: 'text', text: result }],
+        content: [{ type: 'text', text: stripAnsi(result) }],
       };
     } catch (error) {
       return {
@@ -572,7 +572,7 @@ class CawsMcpServer extends Server {
       const result = execCawsCommand(command, { cwd: workingDirectory, timeout: 30000 });
 
       return {
-        content: [{ type: 'text', text: result }],
+        content: [{ type: 'text', text: stripAnsi(result) }],
       };
     } catch (error) {
       return {
@@ -1031,7 +1031,7 @@ class CawsMcpServer extends Server {
         content: [
           {
             type: 'text',
-            text: result,
+            text: stripAnsi(result),
           },
         ],
       };
@@ -1449,7 +1449,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('close', (_code) => {
-          const output = stdout || stderr;
+          const output = stripAnsi(stdout || stderr);
 
           resolve({
             content: [
