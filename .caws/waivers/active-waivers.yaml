@@ -3,29 +3,113 @@
 # Waivers are automatically cleaned up when they expire
 
 waivers:
-  # Budget waiver for extended CAWS feature implementation
   WV-0001:
-    id: "WV-0001"
-    title: "Extended CAWS feature implementation scope"
-    reason: "experimental_feature"
-    description: "Feature implementation exceeded initial budget due to comprehensive IDE integrations, agent workflows, and quality gate enhancements. Additional scope includes MCP server, VS Code extension, Cursor hooks, Git integrations, and complete scaffolding system."
+    approved_by: darianrosebrook
+    created_at: '2025-01-07T00:00:00Z'
+    description: >-
+      Feature implementation exceeded initial budget due to comprehensive IDE
+      integrations, agent workflows, and quality gate enhancements. Additional
+      scope includes MCP server, VS Code extension, Cursor hooks, Git
+      integrations, and complete scaffolding system.
+    expires_at: '2025-12-31T23:59:59Z'
     gates:
-      - "budget_limit"
-    expires_at: "2025-12-31T23:59:59Z"
-    approved_by: "darianrosebrook"
-    created_at: "2025-01-07T00:00:00Z"
-    risk_assessment:
-      impact_level: "medium"
-      mitigation_plan: "All additional features have been thoroughly tested and documented. Quality gates remain enforced for all new code. Waiver expires at end of year to prevent indefinite scope creep."
-      review_required: false
+      - budget_limit
+    id: WV-0001
     metadata:
-      related_pr: null
+      environment: development
       related_issue: null
-      environment: "development"
-      urgency: "normal"
-
-# This waiver allows the budget overrun while maintaining:
-# - Full audit trail of the decision
-# - Time-bound exception (expires end of year)
-# - Documented justification and mitigation
-# - Accountability through approval process
+      related_pr: null
+      urgency: normal
+    reason: experimental_feature
+    risk_assessment:
+      impact_level: medium
+      mitigation_plan: >-
+        All additional features have been thoroughly tested and documented.
+        Quality gates remain enforced for all new code. Waiver expires at end of
+        year to prevent indefinite scope creep.
+      review_required: false
+    title: Extended CAWS feature implementation scope
+  WV-2694:
+    approved_by: '@release-test'
+    created_at: '2025-10-30T17:43:22.694Z'
+    description: Testing waiver sync for release
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-2694
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Release verification
+    title: Release verification waiver
+  WV-6819:
+    approved_by: '@test'
+    created_at: '2025-10-30T17:41:36.819Z'
+    description: Testing waiver sync functionality
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-6819
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Test mitigation
+    title: Test waiver sync 11
+  WV-9086:
+    approved_by: '@release-test'
+    created_at: '2025-10-30T17:43:29.086Z'
+    description: Testing waiver sync for release
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-9086
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Release verification
+    title: Release verification waiver
+  WV-9180:
+    approved_by: '@test'
+    created_at: '2025-10-30T17:43:09.180Z'
+    description: Final test before release
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-9180
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Test
+    title: Final waiver sync test
+  WV-DIRECT-TEST:
+    approved_by: '@test'
+    created_at: '2025-10-30T17:40:51.085Z'
+    description: Direct test
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-DIRECT-TEST
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Test mitigation
+    title: Direct Test Waiver
+  WV-TEST:
+    approved_by: '@test'
+    created_at: '2025-10-30T17:39:02.587Z'
+    description: Test
+    expires_at: '2025-12-31T23:59:59Z'
+    gates:
+      - budget_limit
+    id: WV-TEST
+    metadata: {}
+    reason: emergency_hotfix
+    risk_assessment:
+      impact_level: low
+      mitigation_plan: Test mitigation
+    title: Test Waiver

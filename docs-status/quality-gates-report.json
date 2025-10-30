@@ -1,128 +1,27 @@
 {
-  "timestamp": "2025-10-30T01:23:50.698Z",
-  "context": "ci",
-  "files_scoped": 386,
+  "timestamp": "2025-10-30T17:24:06.212Z",
+  "context": "commit",
+  "files_scoped": 0,
   "warnings": [],
-  "violations": [
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 1.00) between:\n  - packages/caws-cli/demo-project/apps/tools/caws/attest.js:18\n  - packages/caws-cli/templates/apps/tools/caws/attest.js:18",
-      "file": "packages/caws-cli/demo-project/apps/tools/caws/attest.js",
-      "similarity": 1,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 1.00) between:\n  - packages/caws-cli/demo-project/apps/tools/caws/attest.js:240\n  - packages/caws-cli/templates/apps/tools/caws/attest.js:240",
-      "file": "packages/caws-cli/demo-project/apps/tools/caws/attest.js",
-      "similarity": 1,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 1.00) between:\n  - packages/caws-cli/demo-project/apps/tools/caws/attest.js:143\n  - packages/caws-cli/templates/apps/tools/caws/attest.js:143",
-      "file": "packages/caws-cli/demo-project/apps/tools/caws/attest.js",
-      "similarity": 1,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.90) between:\n  - packages/caws-cli/src/utils/typescript-detector.js:113\n  - packages/caws-cli/src/utils/typescript-detector.js:163",
-      "file": "packages/caws-cli/src/utils/typescript-detector.js",
-      "similarity": 0.8983050847457628,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.86) between:\n  - packages/caws-cli/src/utils/typescript-detector.js:113\n  - packages/caws-cli/src/utils/typescript-detector.js:213",
-      "file": "packages/caws-cli/src/utils/typescript-detector.js",
-      "similarity": 0.864406779661017,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.83) between:\n  - packages/caws-cli/src/error-handler.js:161\n  - packages/caws-cli/src/error-handler.js:198",
-      "file": "packages/caws-cli/src/error-handler.js",
-      "similarity": 0.8271604938271605,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.79) between:\n  - apps/tools/caws/error-handler.js:46\n  - packages/caws-cli/src/error-handler.js:44",
-      "file": "apps/tools/caws/error-handler.js",
-      "similarity": 0.7887323943661971,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.78) between:\n  - packages/caws-cli/src/utils/typescript-detector.js:163\n  - packages/caws-cli/src/utils/typescript-detector.js:213",
-      "file": "packages/caws-cli/src/utils/typescript-detector.js",
-      "similarity": 0.7795275590551181,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "functional_duplicate_pair",
-      "message": "High functional similarity (Jaccard 0.73) between:\n  - packages/caws-cli/templates/apps/tools/caws/legacy-assessor.js:456\n  - packages/caws-cli/templates/apps/tools/caws/mutant-analyzer.js:495",
-      "file": "packages/caws-cli/templates/apps/tools/caws/legacy-assessor.js",
-      "similarity": 0.726027397260274,
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'provenance.js' in package packages/caws-cli (count=2)",
-      "file": "unknown",
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'quality-gates.js' in package packages/caws-cli (count=2)",
-      "file": "unknown",
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'validate.js' in package packages/caws-cli (count=2)",
-      "file": "unknown",
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'waivers.js' in package packages/caws-cli (count=2)",
-      "file": "unknown",
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'index.js' in package packages/caws-cli (count=3)",
-      "file": "unknown",
-      "severity": "fail"
-    },
-    {
-      "gate": "duplication",
-      "type": "basename_duplicate_within_package",
-      "message": "Multiple files named 'index.js' in package packages/caws-mcp-server (count=2)",
-      "file": "unknown",
-      "severity": "fail"
-    }
-  ],
+  "violations": [],
+  "waivers": {
+    "active": 1,
+    "applied": 0,
+    "details": [
+      {
+        "id": "WV-0001",
+        "title": "Extended CAWS feature implementation scope",
+        "gates": [
+          "budget_limit"
+        ],
+        "expires_at": "2025-12-31T23:59:59Z"
+      }
+    ]
+  },
   "performance": {
-    "total_execution_time_ms": 13057,
+    "total_execution_time_ms": 744,
     "gate_timings": {
-      "duplication": 12776
+      "naming": 615
     }
   }
 }

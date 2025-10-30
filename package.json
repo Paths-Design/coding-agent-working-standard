@@ -1,6 +1,6 @@
 {
   "name": "caws",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "description": "CAWS - Coding Agent Workflow System (Turborepo)",
   "website": "https://paths.design",
   "private": true,
@@ -21,7 +21,7 @@
     "test:fast": "./scripts/test-runner.sh --mode fast",
     "test:runner": "./scripts/test-runner.sh",
     "validate": "turbo run validate",
-    "typecheck": "turbo run typecheck || tsc --noEmit",
+    "typecheck": "turbo run typecheck --continue",
     "clean": "turbo run clean",
 
     "// Test scripts (with smart fallbacks)": "",

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-20)
 
 ## 🚨 Breaking Changes

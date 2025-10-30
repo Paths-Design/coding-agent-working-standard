@@ -18,10 +18,84 @@
  * @author: @darianrosebrook
  */
 
+/**
+ * @typedef {Object} Violation
+ * @property {string} gate - The gate that detected this violation (e.g., 'naming', 'duplication')
+ * @property {string} type - Type of violation (e.g., 'banned_modifier', 'timeout', 'gate_error')
+ * @property {string} message - Human-readable description of the violation
+ * @property {string} [file] - File path where violation occurred (relative or absolute)
+ * @property {number} [line] - Line number where violation occurred
+ * @property {string} [rule] - Rule identifier that was violated
+ * @property {string} [severity] - Severity level: 'warning', 'block', or 'fail'
+ * @property {string} [suggestion] - Suggested fix for the violation
+ * @property {number} [size] - File size in lines of code (for god object violations)
+ * @property {number} [similarity] - Similarity percentage (for duplication violations)
+ * @property {Object} [details] - Additional violation-specific details
+ * @property {string} [waivedBy] - ID of waiver that exempts this violation (added by isViolationWaived)
+ * @property {string} [waiverTitle] - Title of the waiver (added by isViolationWaived)
+ * @property {string} [waiverExpires] - Expiration date of the waiver (added by isViolationWaived)
+ */
+
+/**
+ * @typedef {Object} Warning
+ * @property {string} gate - The gate that generated this warning
+ * @property {string} type - Type of warning (e.g., 'exception_used', 'marketing_language')
+ * @property {string} message - Human-readable description of the warning
+ * @property {string} [file] - File path where warning occurred
+ * @property {number} [line] - Line number where warning occurred
+ * @property {string} [rule] - Rule identifier
+ * @property {string} [suggestion] - Suggested fix
+ * @property {Object} [violation] - Original violation that generated this warning
+ * @property {Object} [exception] - Exception that was applied (for exception_used warnings)
+ */
+
+/**
+ * @typedef {Object} Waiver
+ * @property {string} id - Unique waiver identifier
+ * @property {string} title - Human-readable waiver title
+ * @property {string} description - Detailed waiver description
+ * @property {string|string[]} gates - Gate name(s) this waiver applies to ('*' for all gates)
+ * @property {string} reason - Reason for the waiver (e.g., 'emergency_hotfix')
+ * @property {string} expires_at - ISO 8601 expiration date-time
+ * @property {string} approved_by - Approver name/email
+ * @property {string} impact_level - Impact level: 'low', 'medium', 'high', or 'critical'
+ * @property {string} mitigation_plan - Description of mitigation plan
+ */
+
+/**
+ * @typedef {Object} ContextInfo
+ * @property {string} description - Human-readable context description
+ * @property {string} scope - Context scope: 'commit', 'push', or 'ci'
+ * @property {string} gitCommand - Git command used to determine file scope
+ */
+
+/**
+ * @typedef {Object} GateTimings
+ * @property {number} [gateName] - Execution time in milliseconds for each gate
+ */
+
+/**
+ * @typedef {Object} QualityGateReport
+ * @property {string} timestamp - ISO 8601 timestamp of report generation
+ * @property {string} context - Execution context: 'commit', 'push', or 'ci'
+ * @property {number} files_scoped - Number of files analyzed
+ * @property {Warning[]} warnings - Non-blocking warnings
+ * @property {Violation[]} violations - All violations (including waived)
+ * @property {Object} waivers - Waiver information
+ * @property {number} waivers.active - Number of active waivers
+ * @property {number} waivers.applied - Number of violations waived
+ * @property {Object[]} waivers.details - Details of active waivers
+ * @property {Object} performance - Performance metrics
+ * @property {number} performance.total_execution_time_ms - Total execution time
+ * @property {GateTimings} performance.gate_timings - Per-gate timing breakdown
+ * @property {Object} [debug] - Debug information (only if DEBUG_MODE enabled)
+ */
+
 import { getContextInfo, getFilesToCheck } from './file-scope-manager.mjs';
 
 // Import quality gate modules
 import fs from 'fs';
+import yaml from 'js-yaml';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
@@ -49,6 +123,10 @@ if (DEBUG_MODE) {
   console.log('DEBUG: Starting quality gates runner');
 }
 
+/**
+ * Parses --gates command-line argument to determine which gates should run.
+ * @returns {Set<string>|null} Set of gate names to run, or null if all gates should run
+ */
 const GATES_FILTER = (() => {
   // Find --gates or --gates=value
   let gatesArg = null;
@@ -84,14 +162,58 @@ const GATES_FILTER = (() => {
   return null;
 })();
 
+/**
+ * QualityGateRunner orchestrates the execution of all quality gates.
+ *
+ * Manages gate execution lifecycle, violation tracking, waiver application,
+ * and result reporting. Ensures proper cleanup and lock management to prevent
+ * concurrent executions.
+ *
+ * @class QualityGateRunner
+ */
 class QualityGateRunner {
+  /**
+   * Creates a new QualityGateRunner instance.
+   *
+   * Initializes the runner by:
+   * - Determining execution context (commit/push/ci)
+   * - Loading file scope for the context
+   * - Loading active waivers from `.caws/waivers/active-waivers.yaml`
+   * - Setting up cleanup handlers for graceful shutdown
+   *
+   * All initialization failures are logged but use safe fallbacks to ensure
+   * the runner can still execute (with reduced functionality).
+   */
   constructor() {
+    /** @type {Violation[]} */
     this.violations = [];
+
+    /** @type {Warning[]} */
     this.warnings = [];
+
+    /** @type {string|null} */
     this.lockFile = null;
+
+    /** @type {number} */
     this.startTime = Date.now();
+
+    /** @type {GateTimings} */
     this.gateTimings = {};
+
+    /** @type {string[]} */
     this.debugLog = [];
+
+    /** @type {Waiver[]} */
+    this.activeWaivers = [];
+
+    /** @type {'commit'|'push'|'ci'} */
+    this.context;
+
+    /** @type {ContextInfo} */
+    this.contextInfo;
+
+    /** @type {string[]} */
+    this.filesToCheck;
 
     try {
       this.context = this.determineContext();
@@ -125,6 +247,11 @@ class QualityGateRunner {
         this.debugLog.push(`Files to check: ${this.filesToCheck.length}`);
         this.debugLog.push(`File scoping command: ${this.contextInfo.gitCommand || 'unknown'}`);
       }
+
+      // Clear caches if we have files to check (indicates changes)
+      if (this.filesToCheck.length > 0) {
+        this.clearCachesOnFileChanges();
+      }
     } catch (error) {
       console.error('Failed to get files for context, using empty set:', error.message);
       this.filesToCheck = []; // fallback
@@ -132,8 +259,37 @@ class QualityGateRunner {
         this.debugLog.push(`File scoping failed, using empty set (error: ${error.message})`);
       }
     }
+
+    // Load active waivers
+    try {
+      this.activeWaivers = this.loadActiveWaivers();
+      if (DEBUG_MODE) {
+        this.debugLog.push(`Loaded ${this.activeWaivers.length} active waivers`);
+      }
+    } catch (error) {
+      console.warn('Warning: Could not load waivers:', error.message);
+      this.activeWaivers = [];
+      if (DEBUG_MODE) {
+        this.debugLog.push(`Waiver loading failed: ${error.message}`);
+      }
+    }
+
+    // Set up cleanup handlers for crashes/unexpected termination
+    this.setupCleanupHandlers();
   }
 
+  /**
+   * Acquires a lock file to prevent concurrent quality gate executions.
+   *
+   * Lock file mechanism:
+   * - Location: `docs-status/quality-gates.lock`
+   * - Contains: PID and ISO timestamp
+   * - Stale detection: Locks older than 5 minutes are considered stale
+   * - Force mode: --force flag bypasses lock checks
+   *
+   * @throws {Error} Exits process with code 1 if lock exists and is not stale
+   * @returns {void}
+   */
   acquireLock() {
     const docsStatusDir = path.join(__dirname, 'docs-status');
     const lockPath = path.join(docsStatusDir, 'quality-gates.lock');
@@ -195,6 +351,18 @@ class QualityGateRunner {
     }
   }
 
+  /**
+   * Releases the lock file if it exists.
+   *
+   * Called automatically on:
+   * - Normal completion (finally block)
+   * - Process termination (SIGINT, SIGTERM)
+   * - Uncaught exceptions
+   *
+   * Failures to release locks are logged but non-fatal.
+   *
+   * @returns {void}
+   */
   releaseLock() {
     if (this.lockFile && fs.existsSync(this.lockFile)) {
       try {
@@ -211,6 +379,266 @@ class QualityGateRunner {
     }
   }
 
+  clearCachesOnFileChanges() {
+    try {
+      // Find project root
+      let projectRoot = process.cwd();
+      let attempts = 0;
+      while (attempts < 10) {
+        const cawsDir = path.join(projectRoot, '.caws');
+        const workingSpecPath = path.join(cawsDir, 'working-spec.yaml');
+
+        if (fs.existsSync(cawsDir) && fs.existsSync(workingSpecPath)) {
+          break;
+        }
+
+        const parentDir = path.dirname(projectRoot);
+        if (parentDir === projectRoot) {
+          break;
+        }
+        projectRoot = parentDir;
+        attempts++;
+      }
+
+      const cacheFiles = [
+        path.join(projectRoot, '.caws', 'duplication-cache.json'),
+        path.join(projectRoot, '.caws', 'naming-exceptions.json'),
+        path.join(projectRoot, '.caws', 'canonical-map.yaml'),
+      ];
+
+      let clearedCount = 0;
+      for (const cacheFile of cacheFiles) {
+        if (fs.existsSync(cacheFile)) {
+          try {
+            fs.unlinkSync(cacheFile);
+            clearedCount++;
+            if (DEBUG_MODE) {
+              this.debugLog.push(`Cleared cache: ${path.relative(projectRoot, cacheFile)}`);
+            }
+          } catch (error) {
+            console.warn(`Warning: Could not clear cache ${cacheFile}:`, error.message);
+          }
+        }
+      }
+
+      if (clearedCount > 0 && !QUIET_MODE) {
+        console.log(`   Cleared ${clearedCount} cache files`);
+      }
+    } catch (error) {
+      console.warn('Warning: Could not clear caches:', error.message);
+    }
+  }
+
+  clearTemporaryCaches() {
+    try {
+      // Clear temporary analysis caches that are safe to regenerate
+      const tempCacheFiles = [
+        path.join(__dirname, 'docs-status', 'quality-gates-report.json'),
+        // Add other temporary cache files here
+      ];
+
+      let clearedCount = 0;
+      for (const cacheFile of tempCacheFiles) {
+        if (fs.existsSync(cacheFile)) {
+          try {
+            fs.unlinkSync(cacheFile);
+            clearedCount++;
+            if (DEBUG_MODE) {
+              this.debugLog.push(
+                `Cleared temporary cache: ${path.relative(process.cwd(), cacheFile)}`
+              );
+            }
+          } catch (error) {
+            // Don't warn for temporary cache cleanup failures
+          }
+        }
+      }
+
+      if (clearedCount > 0 && DEBUG_MODE) {
+        console.log(`   Cleared ${clearedCount} temporary cache files`);
+      }
+    } catch (error) {
+      // Don't warn for temporary cache cleanup failures
+    }
+  }
+
+  setupCleanupHandlers() {
+    const cleanup = () => {
+      try {
+        // Release lock
+        this.releaseLock();
+
+        // Clear caches on crash (since analysis may be incomplete)
+        if (this.filesToCheck && this.filesToCheck.length > 0) {
+          this.clearCachesOnFileChanges();
+        }
+
+        if (DEBUG_MODE) {
+          console.error('Quality gates cleanup completed');
+        }
+      } catch (error) {
+        console.error('Warning: Cleanup failed:', error.message);
+      }
+    };
+
+    // Handle common termination signals
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+    process.on('uncaughtException', (error) => {
+      console.error('Uncaught exception:', error);
+      cleanup();
+      process.exit(1);
+    });
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('Unhandled rejection at:', promise, 'reason:', reason);
+      cleanup();
+      process.exit(1);
+    });
+
+    if (DEBUG_MODE) {
+      this.debugLog.push('Cleanup handlers installed');
+    }
+  }
+
+  /**
+   * Loads active waivers from `.caws/waivers/active-waivers.yaml`.
+   *
+   * Waivers allow temporary bypassing of quality gate violations for
+   * documented reasons (e.g., emergency hotfixes, planned refactoring).
+   *
+   * Waiver validation:
+   * - Must have `id`, `gates`, and `expires_at` fields
+   * - Only non-expired waivers are loaded
+   * - Invalid waivers are skipped with warnings
+   *
+   * @returns {Waiver[]} Array of active, non-expired waivers
+   */
+  loadActiveWaivers() {
+    // Find project root (go up until we find .caws directory with working-spec.yaml)
+    let projectRoot = process.cwd();
+    let attempts = 0;
+    while (attempts < 10) {
+      const cawsDir = path.join(projectRoot, '.caws');
+      const workingSpecPath = path.join(cawsDir, 'working-spec.yaml');
+
+      // Look for .caws directory with working-spec.yaml (indicates project root)
+      if (fs.existsSync(cawsDir) && fs.existsSync(workingSpecPath)) {
+        break;
+      }
+
+      const parentDir = path.dirname(projectRoot);
+      if (parentDir === projectRoot) {
+        // Hit filesystem root
+        break;
+      }
+      projectRoot = parentDir;
+      attempts++;
+    }
+
+    const activeWaiversPath = path.join(projectRoot, '.caws', 'waivers', 'active-waivers.yaml');
+
+    if (DEBUG_MODE) {
+      this.debugLog.push(`Project root detected: ${projectRoot}`);
+      this.debugLog.push(`Checking waivers path: ${activeWaiversPath}`);
+      this.debugLog.push(`Waivers file exists: ${fs.existsSync(activeWaiversPath)}`);
+    }
+
+    // Check if active waivers file exists
+    if (!fs.existsSync(activeWaiversPath)) {
+      if (DEBUG_MODE) {
+        this.debugLog.push('Active waivers file does not exist');
+      }
+      return [];
+    }
+
+    try {
+      const content = fs.readFileSync(activeWaiversPath, 'utf8');
+      const activeWaiversConfig = yaml.load(content);
+
+      if (!activeWaiversConfig || !activeWaiversConfig.waivers) {
+        if (DEBUG_MODE) {
+          this.debugLog.push('No waivers found in active-waivers.yaml');
+        }
+        return [];
+      }
+
+      const waivers = [];
+      const now = new Date();
+
+      // Process each waiver in the config
+      for (const [waiverId, waiver] of Object.entries(activeWaiversConfig.waivers)) {
+        try {
+          // Validate waiver structure
+          if (!waiver.id || !waiver.gates || !waiver.expires_at) {
+            console.warn(`Warning: Invalid waiver structure for ${waiverId}`);
+            continue;
+          }
+
+          // Check if waiver is active and not expired
+          if (new Date(waiver.expires_at) > now) {
+            waivers.push(waiver);
+            if (DEBUG_MODE) {
+              this.debugLog.push(
+                `Loaded active waiver: ${waiver.id} for gates: ${Array.isArray(waiver.gates) ? waiver.gates.join(', ') : waiver.gates}`
+              );
+            }
+          } else if (DEBUG_MODE) {
+            this.debugLog.push(`Skipped expired waiver: ${waiver.id}`);
+          }
+        } catch (error) {
+          console.warn(`Warning: Could not process waiver ${waiverId}: ${error.message}`);
+        }
+      }
+
+      return waivers;
+    } catch (error) {
+      console.warn('Warning: Could not load active waivers file:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Checks if a violation is covered by an active waiver.
+   *
+   * Waiver matching logic:
+   * - Gate name must match (or waiver applies to '*' for all gates)
+   * - Waiver must not be expired
+   * - Mutates violation object to add waiver metadata if waived
+   *
+   * @param {Violation} violation - Violation to check against waivers
+   * @returns {boolean} True if violation is waived, false otherwise
+   */
+  isViolationWaived(violation) {
+    for (const waiver of this.activeWaivers) {
+      // Check if this waiver applies to the gate
+      const waiverGates = Array.isArray(waiver.gates) ? waiver.gates : [waiver.gates];
+      if (waiverGates.includes(violation.gate) || waiverGates.includes('*')) {
+        // Add waiver information to violation for reporting
+        violation.waivedBy = waiver.id;
+        violation.waiverTitle = waiver.title || waiver.description;
+        violation.waiverExpires = waiver.expires_at;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Determines the execution context for quality gates.
+   *
+   * Context priority (highest to lowest):
+   * 1. --context=<value> command-line flag
+   * 2. --ci flag or CI environment variable
+   * 3. CAWS_ENFORCEMENT_CONTEXT environment variable
+   * 4. Default: 'commit'
+   *
+   * Context affects:
+   * - File scope (staged vs. all files)
+   * - Enforcement strictness (warning vs. block vs. fail)
+   * - Error handling (CI mode is stricter)
+   *
+   * @returns {'commit'|'push'|'ci'} Execution context
+   */
   determineContext() {
     // Check for explicit --context flag first
     for (const arg of process.argv) {
@@ -268,6 +696,20 @@ class QualityGateRunner {
     }
   }
 
+  /**
+   * Executes a quality gate function with timeout protection.
+   *
+   * Ensures gates don't hang indefinitely by:
+   * - Wrapping gate execution in a timeout promise
+   * - Recording execution time for performance monitoring
+   * - Converting timeouts to violations
+   * - Continuing execution even if gate fails (allows other gates to run)
+   *
+   * @param {string} gateName - Name of the gate (for logging and violation reporting)
+   * @param {Function} gateFunction - Async function that executes the gate
+   * @param {number} [timeoutMs=30000] - Maximum execution time in milliseconds
+   * @returns {Promise<void>} Resolves when gate completes or times out
+   */
   async runGateWithTimeout(gateName, gateFunction, timeoutMs = 30000) {
     return new Promise(async (resolve) => {
       const gateStartTime = Date.now();
@@ -315,6 +757,27 @@ class QualityGateRunner {
     });
   }
 
+  /**
+   * Runs all quality gates in parallel with timeout protection.
+   *
+   * Gate execution flow:
+   * 1. Acquire lock to prevent concurrent runs
+   * 2. Execute all enabled gates in parallel (Promise.all)
+   * 3. Each gate runs with its own timeout
+   * 4. Collect violations and warnings from all gates
+   * 5. Report results (console + JSON artifacts)
+   * 6. Release lock (always, even on errors)
+   *
+   * Gate filtering:
+   * - If GATES_FILTER is set, only runs specified gates
+   * - Otherwise runs all available gates
+   *
+   * Exit codes:
+   * - 0: No blocking violations (may have waived violations)
+   * - 1: Blocking violations found (commit blocked)
+   *
+   * @returns {Promise<void>} Resolves when all gates complete
+   */
   async runAllGates() {
     // Acquire lock to prevent concurrent runs
     this.acquireLock();
@@ -1090,11 +1553,53 @@ class QualityGateRunner {
     }
   }
 
+  /**
+   * Reports quality gate results to console and generates artifacts.
+   *
+   * Output includes:
+   * - Console: Human-readable summary with violations, warnings, waivers
+   * - JSON: Machine-readable report at `docs-status/quality-gates-report.json`
+   * - GitHub Summary: Markdown summary if GITHUB_STEP_SUMMARY env var is set
+   *
+   * Violation processing:
+   * - Checks each violation against active waivers
+   * - Separates waived vs. blocking violations
+   * - Only blocking violations cause exit code 1
+   *
+   * Artifacts:
+   * - QualityGateReport JSON with full metadata
+   * - Performance metrics (gate timings, total execution time)
+   * - Debug information (if DEBUG_MODE enabled)
+   *
+   * @returns {void} Exits process with code 0 (success) or 1 (blocking violations)
+   */
   reportResults() {
     if (!QUIET_MODE) {
       console.log('\n' + '='.repeat(50));
       console.log('QUALITY GATES RESULTS');
       console.log('='.repeat(50));
+    }
+
+    // Check waivers for each violation
+    for (const violation of this.violations) {
+      this.isViolationWaived(violation);
+    }
+
+    // Separate waived and blocking violations
+    const waivedViolations = this.violations.filter((v) => v.waivedBy);
+    const blockingViolations = this.violations.filter((v) => !v.waivedBy);
+
+    // Report active waivers
+    if (this.activeWaivers.length > 0 && !QUIET_MODE && !JSON_MODE) {
+      console.log(`\n🔖 ACTIVE WAIVERS (${this.activeWaivers.length}):`);
+      for (const waiver of this.activeWaivers) {
+        const daysLeft = Math.ceil(
+          (new Date(waiver.expires_at) - new Date()) / (1000 * 60 * 60 * 24)
+        );
+        console.log(`   ${waiver.id}: ${waiver.title} (${daysLeft} days left)`);
+        console.log(`      Gates: ${waiver.gates.join(', ')}`);
+        console.log(`      Reason: ${waiver.reason}`);
+      }
     }
 
     // Report warnings
@@ -1105,13 +1610,28 @@ class QualityGateRunner {
       }
     }
 
-    // Report violations
-    if (this.violations.length > 0) {
+    // Report waived violations
+    if (waivedViolations.length > 0 && !QUIET_MODE && !JSON_MODE) {
+      console.log(`\n✅ WAIVED VIOLATIONS (${waivedViolations.length}) - ALLOWED:`);
+      for (const violation of waivedViolations) {
+        console.log(`${violation.gate.toUpperCase()}: ${violation.type.toUpperCase()}`);
+        console.log(`   ${violation.message}`);
+        console.log(`   Waived by: ${violation.waivedBy} (${violation.waiverTitle})`);
+        console.log(`   Expires: ${violation.waiverExpires}`);
+        if (violation.file) {
+          console.log(`   File: ${violation.file}`);
+        }
+        console.log('');
+      }
+    }
+
+    // Report blocking violations
+    if (blockingViolations.length > 0) {
       if (!QUIET_MODE && !JSON_MODE) {
-        console.log(`\nVIOLATIONS (${this.violations.length}) - COMMIT BLOCKED:`);
+        console.log(`\n❌ BLOCKING VIOLATIONS (${blockingViolations.length}) - COMMIT BLOCKED:`);
         console.log('');
 
-        for (const violation of this.violations) {
+        for (const violation of blockingViolations) {
           console.log(`${violation.gate.toUpperCase()}: ${violation.type.toUpperCase()}`);
           console.log(`   ${violation.message}`);
           if (violation.file) {
@@ -1131,8 +1651,15 @@ class QualityGateRunner {
       }
     } else {
       if (!QUIET_MODE && !JSON_MODE) {
-        console.log('\nALL QUALITY GATES PASSED');
+        const statusMsg =
+          waivedViolations.length > 0
+            ? `QUALITY GATES PASSED (${waivedViolations.length} violations waived)`
+            : 'ALL QUALITY GATES PASSED';
+        console.log(`\n✅ ${statusMsg}`);
         console.log('Commit allowed - quality maintained!');
+
+        // Clear temporary caches on successful exit
+        this.clearTemporaryCaches();
       }
     }
 
@@ -1148,6 +1675,16 @@ class QualityGateRunner {
         files_scoped: this.filesToCheck.length,
         warnings: this.warnings,
         violations: this.violations,
+        waivers: {
+          active: this.activeWaivers.length,
+          applied: waivedViolations.length,
+          details: this.activeWaivers.map((w) => ({
+            id: w.id,
+            title: w.title,
+            gates: w.gates,
+            expires_at: w.expires_at,
+          })),
+        },
         performance: {
           total_execution_time_ms: Date.now() - this.startTime,
           gate_timings: this.gateTimings,
@@ -1204,11 +1741,27 @@ class QualityGateRunner {
       }
     } catch {}
 
-    process.exit(this.violations.length ? 1 : 0);
+    // Only block commit if there are non-waived violations
+    const nonWaivedViolations = this.violations.filter((v) => !v.waivedBy);
+    process.exit(nonWaivedViolations.length ? 1 : 0);
   }
 }
 
-// Main execution
+/**
+ * Main entry point for quality gates runner.
+ *
+ * Handles command-line argument parsing, initializes QualityGateRunner,
+ * and executes all gates. Processes help flag and mode indicators.
+ *
+ * Execution modes:
+ * - CI mode: Stricter enforcement, no interactive fixes
+ * - Fix mode: Attempts automatic fixes (experimental)
+ * - JSON mode: Outputs machine-readable JSON instead of console output
+ * - Quiet mode: Suppresses all output except errors
+ * - Debug mode: Enables detailed debug logging
+ *
+ * @returns {Promise<void>} Resolves when gates complete (or process exits)
+ */
 async function main() {
   console.log('Quality gates starting...');
   // Handle help flag

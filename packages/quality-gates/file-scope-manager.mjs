@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 // scripts/file-scope-manager.mjs
 
+/**
+ * @typedef {Object} ContextInfo
+ * @property {string} description - Human-readable context description
+ * @property {string} scope - Context scope: 'commit', 'push', or 'ci'
+ * @property {string} gitCommand - Git command used to determine file scope
+ */
+
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -447,6 +454,26 @@ function filterAndNormalize(relPaths, root, cfg) {
 }
 
 /** ----------------------- public API ----------------------- */
+
+/**
+ * Gets the list of files to check based on execution context.
+ *
+ * File scoping by context:
+ * - 'commit': Staged files only (git diff --cached)
+ * - 'push': Files changed vs. upstream base (git diff <base>...HEAD)
+ * - 'ci': All tracked files in repository (git ls-files)
+ *
+ * File filtering:
+ * - Applies include/exclude globs from `.qualitygatesrc.json`
+ * - Filters binary files (by extension, size, content analysis)
+ * - Filters Git LFS pointer files
+ * - Respects linguist attributes (generated, vendored, documentation)
+ * - Includes extensionless files with shebangs
+ *
+ * @param {'commit'|'push'|'ci'} [context='commit'] - Execution context
+ * @returns {string[]} Array of absolute file paths to check
+ * @throws {Error} If not in a git repository or git commands fail
+ */
 export function getFilesToCheck(context = 'commit') {
   const root = repoRoot();
   const cfg = loadConfig(root);
@@ -470,6 +497,15 @@ export function getFilesByPattern(context = 'commit', patterns = ['**/*']) {
   return matchedRel.map((r) => path.join(root, r));
 }
 
+/**
+ * Gets human-readable information about an execution context.
+ *
+ * Provides metadata about what files are being checked and how,
+ * useful for logging and user feedback.
+ *
+ * @param {'commit'|'push'|'ci'} context - Execution context
+ * @returns {ContextInfo} Context metadata with description and git command
+ */
 export function getContextInfo(context) {
   if (context === 'commit')
     return {

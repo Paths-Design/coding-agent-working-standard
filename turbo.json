@@ -38,6 +38,10 @@
       "dependsOn": [],
       "inputs": [".caws/**", "apps/tools/caws/**"]
     },
+    "typecheck": {
+      "dependsOn": [],
+      "inputs": ["src/**", "*.ts", "*.tsx", "tsconfig.json"]
+    },
     "clean": {
       "dependsOn": [],
       "cache": false

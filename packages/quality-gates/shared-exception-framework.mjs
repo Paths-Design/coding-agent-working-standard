@@ -311,6 +311,23 @@ function checkBudgets(violation, ex) {
 
 /* ----------------------------- Enforcement resolution ----------------------------- */
 
+/**
+ * Gets the enforcement level for a gate in the given context.
+ *
+ * Enforcement levels determine how violations are handled:
+ * - 'warning': Violations are reported but don't block commits
+ * - 'block': Violations block commits locally
+ * - 'fail': Violations cause CI/CD to fail
+ *
+ * Priority resolution:
+ * 1. Global overrides (e.g., code freeze)
+ * 2. Gate-specific enforcement_levels[context]
+ * 3. Default: 'fail' (strictest)
+ *
+ * @param {string} gateName - Name of the gate (e.g., 'naming', 'duplication')
+ * @param {'commit'|'push'|'ci'} [context=currentContext()] - Execution context
+ * @returns {'warning'|'block'|'fail'} Enforcement level for this gate/context combination
+ */
 export function getEnforcementLevel(gateName, context = currentContext()) {
   const config = loadExceptionConfig();
   const gate = config.gates?.[gateName];
@@ -495,10 +512,60 @@ export function listExceptions(gateName = null) {
 }
 
 /* ----------------------------- Violation processing ----------------------------- */
-/* Contract:
-   - violations: array of { file, type, message?, size?, delta?, pattern?, ... }
-   - returns { violations, warnings, enforcementLevel, appliedExceptions }
-*/
+
+/**
+ * @typedef {Object} RawViolation
+ * @property {string} file - File path where violation occurred
+ * @property {string} type - Violation type identifier
+ * @property {string} [message] - Human-readable violation message
+ * @property {string} [issue] - Alternative message field (for naming violations)
+ * @property {number} [size] - File size in LOC (for god object violations)
+ * @property {number} [delta] - Size change in LOC (for regression violations)
+ * @property {string} [pattern] - Pattern that matched (for duplication)
+ * @property {number} [line] - Line number where violation occurred
+ * @property {string} [rule] - Rule identifier
+ * @property {string} [suggestion] - Suggested fix
+ */
+
+/**
+ * @typedef {Object} ProcessViolationsOptions
+ * @property {Function} [defaultSeverity] - Function to determine default severity for a violation
+ */
+
+/**
+ * @typedef {Object} ProcessViolationsResult
+ * @property {Violation[]} violations - Processed violations with severity assigned
+ * @property {Warning[]} warnings - Warnings for waived violations
+ * @property {'warning'|'block'|'fail'} enforcementLevel - Effective enforcement level for this gate/context
+ * @property {Object[]} appliedExceptions - Metadata about exceptions that were applied
+ */
+
+/**
+ * Processes violations against active exceptions and enforcement levels.
+ *
+ * This is the core function that determines which violations should block commits
+ * vs. which are allowed due to exceptions or enforcement level settings.
+ *
+ * Processing flow:
+ * 1. Check each violation against active exceptions
+ * 2. If exception matches, convert to warning (non-blocking)
+ * 3. Assign severity based on enforcement level for gate/context
+ * 4. Track applied exceptions for reporting
+ *
+ * Exception matching:
+ * - File pattern (micromatch glob)
+ * - Violation type
+ * - Message regex
+ * - Branch, author, CI-only constraints
+ * - Budget thresholds (size, delta, max hits)
+ * - Time windows (effective_from, expires_at)
+ *
+ * @param {string} gateName - Name of the gate (e.g., 'naming', 'duplication')
+ * @param {RawViolation[]} violations - Array of raw violations to process
+ * @param {'commit'|'push'|'ci'} [context=currentContext()] - Execution context
+ * @param {ProcessViolationsOptions} [opts={}] - Processing options
+ * @returns {ProcessViolationsResult} Processed violations with warnings and enforcement level
+ */
 export function processViolations(gateName, violations, context = currentContext(), opts = {}) {
   const enforcementLevel = getEnforcementLevel(gateName, context);
   const processed = [];

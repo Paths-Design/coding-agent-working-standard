@@ -469,7 +469,36 @@ class WaiversManager {
       }
 
       const content = fs.readFileSync(this.waiversFile, 'utf8');
-      return yaml.load(content) || [];
+      const data = yaml.load(content) || {};
+
+      // Handle both formats: direct array or {waivers: {...}} structure
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      if (data.waivers && typeof data.waivers === 'object') {
+        // Convert the waivers object to an array
+        return Object.values(data.waivers).map((waiver) => {
+          // Normalize waiver format for quality gates
+          return {
+            id: waiver.id,
+            title: waiver.title || waiver.description || waiver.id,
+            reason: waiver.reason || waiver.reason_code || 'unknown',
+            description: waiver.description || waiver.title || waiver.id,
+            gates: Array.isArray(waiver.gates) ? waiver.gates : [waiver.gates],
+            expires_at: waiver.expires_at,
+            approved_by: waiver.approved_by || waiver.risk_owner || 'unknown',
+            created_at: waiver.created_at || waiver.approved_at || new Date().toISOString(),
+            risk_assessment: waiver.risk_assessment || {
+              impact_level: waiver.impact_level || 'medium',
+              mitigation_plan: waiver.mitigation || waiver.mitigation_plan || 'Unknown mitigation',
+            },
+            metadata: waiver.metadata || {},
+          };
+        });
+      }
+
+      return [];
     } catch (error) {
       console.warn(`Warning: Could not load waivers file: ${error.message}`);
       return [];
@@ -477,10 +506,26 @@ class WaiversManager {
   }
 
   async saveActiveWaivers(waivers) {
-    const content = yaml.dump(waivers, {
-      indent: 2,
-      sortKeys: true,
+    // Convert array back to object format for compatibility
+    const waiversObj = {};
+    waivers.forEach((waiver) => {
+      waiversObj[waiver.id] = waiver;
     });
+
+    const data = {
+      waivers: waiversObj,
+    };
+
+    const content = [
+      '# CAWS Active Waivers',
+      '# This file contains all currently active waivers that temporarily bypass quality gates',
+      '# Waivers are automatically cleaned up when they expire',
+      '',
+      yaml.dump(data, {
+        indent: 2,
+        sortKeys: true,
+      }),
+    ].join('\n');
 
     fs.writeFileSync(this.waiversFile, content, 'utf8');
   }

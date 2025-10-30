@@ -2,7 +2,7 @@
   "name": "caws-vscode-extension",
   "displayName": "CAWS - Coding Agent Workflow System",
   "description": "VS Code extension for CAWS quality assurance and agent workflow integration",
-  "version": "4.0.0",
+  "version": "4.1.1",
   "publisher": "paths-design",
   "license": "MIT",
   "engines": {
@@ -210,6 +210,7 @@
     "vscode:prepublish": "npm run bundle-deps && npm run compile",
     "bundle-deps": "node scripts/bundle-deps.js",
     "compile": "tsc -p ./",
+    "typecheck": "tsc --noEmit -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run bundle-deps && npm run compile && npm run lint",
     "lint": "npx eslint src",

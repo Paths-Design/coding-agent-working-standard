@@ -1,6 +1,6 @@
 {
-  "name": "@caws/mcp-server",
-  "version": "1.0.0",
+  "name": "caws-mcp-server",
+  "version": "1.1.1",
   "description": "CAWS Model Context Protocol server for AI agent integration",
   "type": "module",
   "main": "index.js",
@@ -15,6 +15,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "npx eslint index.js",
+    "typecheck": "echo 'MCP Server type checking not configured (ES modules)'",
     "format": "prettier --write index.js"
   },
   "keywords": [

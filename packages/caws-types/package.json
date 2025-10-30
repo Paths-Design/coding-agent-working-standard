@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "lint": "echo 'Types package does not need linting'",

@@ -4,7 +4,7 @@
 
 ## Priority Focus
 
-Quality gates **block commits** that degrade code quality while enabling controlled development workflows.
+Quality gates **block commits** that degrade code quality while enabling controlled development workflows through **waiver integration** and **intelligent cache management**.
 
 ## What Quality Gates Check
 
@@ -34,6 +34,46 @@ Quality gates **block commits** that degrade code quality while enabling control
 - **2,000+ LOC**: Critical god objects (CI/CD block)
 - ⚠️ **1,500+ LOC**: Warning (allows but flags for decomposition)
 - **<1,500 LOC**: Target for long-term maintainability
+
+## Key Features
+
+### Waiver System Integration
+
+Quality gates integrate with CAWS CLI waivers for controlled exceptions:
+
+```bash
+# Create waiver for architectural work
+caws waivers create \
+  --title="Emergency hotfix waiver" \
+  --reason=emergency_hotfix \
+  --gates=hidden-todo \
+  --expires-at=2025-12-31T23:59:59Z
+
+# Quality gates automatically apply waivers
+node run-quality-gates.mjs  # Waived violations won't block commits
+```
+
+**Waiver Display:**
+
+```
+🔖 ACTIVE WAIVERS (1):
+   WV-0001: Extended CAWS feature implementation scope (63 days left)
+      Gates: budget_limit
+      Reason: experimental_feature
+
+✅ WAIVED VIOLATIONS (2) - ALLOWED:
+   hidden-todo: PLACEHOLDER - Real implementation needed
+   Waived by: WV-0001 (Emergency hotfix waiver)
+```
+
+### Intelligent Cache Management
+
+Quality gates automatically manage caches for performance and reliability:
+
+- **File Change Detection**: Clears caches when files change
+- **Successful Exit Cleanup**: Clears temporary caches on completion
+- **Crash Recovery**: Automatic cleanup on unexpected termination
+- **Stale Lock Prevention**: Removes locks older than 5 minutes
 
 ## How It Works
 

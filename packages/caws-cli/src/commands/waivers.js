@@ -1,10 +1,10 @@
 /**
  * CAWS Waivers Command
- * 
+ *
  * Manage quality gate waivers for exceptional circumstances.
  * Waivers allow temporary exceptions to quality requirements
  * with proper documentation and approval.
- * 
+ *
  * @author @darianrosebrook
  */
 
@@ -13,12 +13,13 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
+const WaiversManager = require('../waivers-manager');
 
 const WAIVER_DIR = '.caws/waivers';
 
 /**
  * Waivers command handler
- * 
+ *
  * @param {string} subcommand - create, list, show, revoke
  * @param {object} options - Command options
  */
@@ -26,7 +27,7 @@ async function waiversCommand(subcommand = 'list', options = {}) {
   try {
     console.log('🔍 Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
-    
+
     if (setup.hasWorkingSpec) {
       console.log(`✅ Detected ${setup.setupType} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
@@ -70,9 +71,18 @@ async function waiversCommand(subcommand = 'list', options = {}) {
  */
 async function createWaiver(options) {
   // Validate required fields
-  const required = ['title', 'reason', 'description', 'gates', 'expiresAt', 'approvedBy', 'impactLevel', 'mitigationPlan'];
-  const missing = required.filter(field => !options[field]);
-  
+  const required = [
+    'title',
+    'reason',
+    'description',
+    'gates',
+    'expiresAt',
+    'approvedBy',
+    'impactLevel',
+    'mitigationPlan',
+  ];
+  const missing = required.filter((field) => !options[field]);
+
   if (missing.length > 0) {
     console.error(chalk.red(`\n❌ Missing required fields: ${missing.join(', ')}`));
     console.log(chalk.yellow('\n💡 Example:'));
@@ -93,9 +103,10 @@ async function createWaiver(options) {
   const timestamp = new Date().toISOString();
 
   // Parse gates
-  const gates = typeof options.gates === 'string' 
-    ? options.gates.split(',').map(g => g.trim())
-    : options.gates;
+  const gates =
+    typeof options.gates === 'string'
+      ? options.gates.split(',').map((g) => g.trim())
+      : options.gates;
 
   // Create waiver object
   const waiver = {
@@ -112,9 +123,17 @@ async function createWaiver(options) {
     status: 'active',
   };
 
-  // Save waiver
+  // Save individual waiver file
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
   fs.writeFileSync(waiverPath, yaml.dump(waiver, { lineWidth: -1 }));
+
+  // Also add to active waivers file
+  try {
+    await addToActiveWaivers(waiver);
+  } catch (error) {
+    console.error(`Failed to add waiver to active waivers: ${error.message}`);
+    console.error(error.stack);
+  }
 
   console.log(chalk.green(`\n✅ Waiver created: ${waiverId}`));
   console.log(`   Title: ${waiver.title}`);
@@ -132,36 +151,42 @@ async function createWaiver(options) {
  */
 async function listWaivers(_options) {
   const waiversDir = path.join(process.cwd(), WAIVER_DIR);
-  
+
   if (!fs.existsSync(waiversDir)) {
     console.log(chalk.yellow('\nℹ️  No waivers found\n'));
     return;
   }
 
-  const waiverFiles = fs.readdirSync(waiversDir).filter(f => f.endsWith('.yaml'));
+  const waiverFiles = fs.readdirSync(waiversDir).filter((f) => f.endsWith('.yaml'));
 
   if (waiverFiles.length === 0) {
     console.log(chalk.yellow('\nℹ️  No waivers found\n'));
     return;
   }
 
-  const waivers = waiverFiles.map(file => {
+  const waivers = waiverFiles.map((file) => {
     const content = fs.readFileSync(path.join(waiversDir, file), 'utf8');
     return yaml.load(content);
   });
 
   // Filter by status
-  const activeWaivers = waivers.filter(w => w.status === 'active' && new Date(w.expires_at) > new Date());
-  const expiredWaivers = waivers.filter(w => w.status === 'active' && new Date(w.expires_at) <= new Date());
-  const revokedWaivers = waivers.filter(w => w.status === 'revoked');
+  const activeWaivers = waivers.filter(
+    (w) => w.status === 'active' && new Date(w.expires_at) > new Date()
+  );
+  const expiredWaivers = waivers.filter(
+    (w) => w.status === 'active' && new Date(w.expires_at) <= new Date()
+  );
+  const revokedWaivers = waivers.filter((w) => w.status === 'revoked');
 
   console.log(chalk.blue('\n🔖 CAWS Quality Gate Waivers\n'));
   console.log('─'.repeat(60));
 
   if (activeWaivers.length > 0) {
     console.log(chalk.green('\n✅ Active Waivers:\n'));
-    activeWaivers.forEach(waiver => {
-      const daysLeft = Math.ceil((new Date(waiver.expires_at) - new Date()) / (1000 * 60 * 60 * 24));
+    activeWaivers.forEach((waiver) => {
+      const daysLeft = Math.ceil(
+        (new Date(waiver.expires_at) - new Date()) / (1000 * 60 * 60 * 24)
+      );
       console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Reason: ${waiver.reason}`);
       console.log(`   Gates: ${waiver.gates.join(', ')}`);
@@ -173,7 +198,7 @@ async function listWaivers(_options) {
 
   if (expiredWaivers.length > 0) {
     console.log(chalk.yellow('\n⚠️  Expired Waivers:\n'));
-    expiredWaivers.forEach(waiver => {
+    expiredWaivers.forEach((waiver) => {
       console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Expired: ${waiver.expires_at}`);
       console.log();
@@ -182,7 +207,7 @@ async function listWaivers(_options) {
 
   if (revokedWaivers.length > 0) {
     console.log(chalk.red('\n❌ Revoked Waivers:\n'));
-    revokedWaivers.forEach(waiver => {
+    revokedWaivers.forEach((waiver) => {
       console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Revoked: ${waiver.revoked_at}`);
       console.log();
@@ -207,7 +232,7 @@ async function showWaiver(waiverId, _options) {
   }
 
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
-  
+
   if (!fs.existsSync(waiverPath)) {
     console.error(chalk.red(`\n❌ Waiver not found: ${waiverId}\n`));
     process.exit(1);
@@ -222,7 +247,9 @@ async function showWaiver(waiverId, _options) {
 
   console.log(chalk.blue('\n🔖 Waiver Details\n'));
   console.log('─'.repeat(60));
-  console.log(`\n${statusIcon} Status: ${chalk.bold(isActive ? 'Active' : isExpired ? 'Expired' : waiver.status)}`);
+  console.log(
+    `\n${statusIcon} Status: ${chalk.bold(isActive ? 'Active' : isExpired ? 'Expired' : waiver.status)}`
+  );
   console.log(`\n📋 ${chalk.bold(waiver.title)}`);
   console.log(`   ID: ${waiver.id}`);
   console.log(`   Reason: ${waiver.reason}`);
@@ -230,7 +257,7 @@ async function showWaiver(waiverId, _options) {
   console.log(`\n📝 Description:`);
   console.log(`   ${waiver.description}`);
   console.log(`\n🔒 Waived Quality Gates:`);
-  waiver.gates.forEach(gate => {
+  waiver.gates.forEach((gate) => {
     console.log(`   • ${gate}`);
   });
   console.log(`\n🛡️ Mitigation Plan:`);
@@ -259,7 +286,7 @@ async function revokeWaiver(waiverId, options) {
   }
 
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
-  
+
   if (!fs.existsSync(waiverPath)) {
     console.error(chalk.red(`\n❌ Waiver not found: ${waiverId}\n`));
     process.exit(1);
@@ -289,5 +316,53 @@ async function revokeWaiver(waiverId, options) {
   console.log(`   Reason: ${waiver.revocation_reason}\n`);
 }
 
-module.exports = { waiversCommand };
+/**
+ * Add waiver to active waivers file for quality gates integration
+ */
+async function addToActiveWaivers(waiver) {
+  try {
+    const waiversManager = new WaiversManager();
 
+    // Load existing active waivers
+    const activeWaivers = await waiversManager.loadActiveWaivers();
+
+    // Check if waiver already exists
+    const existingIndex = activeWaivers.findIndex((w) => w.id === waiver.id);
+
+    // Normalize waiver format
+    const normalizedWaiver = {
+      id: waiver.id,
+      title: waiver.title || waiver.description || waiver.id,
+      reason: waiver.reason || waiver.reason_code || 'unknown',
+      description: waiver.description || waiver.title || waiver.id,
+      gates: Array.isArray(waiver.gates) ? waiver.gates : [waiver.gates],
+      expires_at: waiver.expires_at,
+      approved_by: waiver.approved_by || waiver.risk_owner || 'unknown',
+      created_at: waiver.created_at || waiver.approved_at || new Date().toISOString(),
+      risk_assessment: waiver.risk_assessment || {
+        impact_level: waiver.impact_level || 'medium',
+        mitigation_plan: waiver.mitigation || waiver.mitigation_plan || 'Unknown mitigation',
+      },
+      metadata: waiver.metadata || {},
+    };
+
+    if (existingIndex >= 0) {
+      // Update existing waiver
+      activeWaivers[existingIndex] = normalizedWaiver;
+    } else {
+      // Add new waiver
+      activeWaivers.push(normalizedWaiver);
+    }
+
+    // Save updated active waivers
+    await waiversManager.saveActiveWaivers(activeWaivers);
+  } catch (error) {
+    // Enhanced error logging
+    console.error(`Error adding waiver to active waivers: ${error.message}`);
+    console.error(error.stack);
+    console.warn(`Warning: Could not add waiver to active waivers file: ${error.message}`);
+    // Don't fail the waiver creation if this fails
+  }
+}
+
+module.exports = { waiversCommand };

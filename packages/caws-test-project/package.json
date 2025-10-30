@@ -15,6 +15,7 @@
     "lint:fix": "echo 'Test project does not need linting fixes'",
     "lint:staged": "echo 'Test project does not need linting'",
     "format": "echo 'Test project does not need formatting'",
+    "typecheck": "echo 'Test project does not need type checking'",
     "validate": "echo 'Test project does not need validation'",
     "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
     "dev": "echo 'Test project does not need development mode'",

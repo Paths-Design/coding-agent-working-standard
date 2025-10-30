@@ -1,0 +1,12 @@
+id: WV-6093
+title: Debug Test Waiver
+reason: experimental_feature
+description: Testing waiver integration with debug logging
+gates:
+  - naming
+created_at: '2025-10-30T17:21:56.093Z'
+expires_at: '2025-12-31'
+approved_by: Debug Team
+impact_level: low
+mitigation_plan: Debug testing
+status: active
