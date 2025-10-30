@@ -1,6 +1,18 @@
 # VS Code Extension Packaging Ignore
 # Files/folders excluded from .vsix package
 
+# Exclude all parent directories by default
+../**
+../../**
+
+# Exclude sensitive files explicitly
+.env
+.env.*
+*.env
+../../.env
+../../.env.*
+../../*.env
+
 # Source files (only include compiled output)
 src/**
 tsconfig.json
@@ -38,12 +50,6 @@ node_modules/**
 **/node_modules/**
 !bundled/mcp-server/node_modules/**
 
-# Other workspace packages
-../caws-cli/**
-../caws-mcp-server/**
-../caws-types/**
-../caws-test-project/**
-
 # Build scripts
 scripts/**
 
@@ -65,20 +71,6 @@ scripts/**
 .env
 .env.*
 *.env
-../../.env
-
-# Root workspace files
-../../turbo.json
-../../package.json
-../../package-lock.json
-../../pnpm-lock.yaml
-../../pnpm-workspace.yaml
-../../tsconfig.json
-../../tsconfig.eslint.json
-../../jest.config.js
-../../Cargo.toml
-../../Cargo.lock
-../../tests/**
 
 # Misc
 .DS_Store
