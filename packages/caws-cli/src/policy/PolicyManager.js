@@ -69,7 +69,7 @@ class PolicyManager {
           if (await fs.pathExists(candidatePath)) {
             policyPath = candidatePath;
             const content = await fs.readFile(candidatePath, 'utf-8');
-            
+
             // Handle JSON format (legacy)
             if (candidatePath.endsWith('.json')) {
               policyContent = JSON.parse(content);
@@ -102,8 +102,8 @@ class PolicyManager {
         if (policyPath.endsWith('.json')) {
           console.warn(
             '⚠️  Using legacy policy file location: .caws/policy/tier-policy.json\n' +
-            '   Migrate to .caws/policy.yaml for better compatibility\n' +
-            '   Run: caws init --migrate-policy'
+              '   Migrate to .caws/policy.yaml for better compatibility\n' +
+              '   Run: caws init --migrate-policy'
           );
         }
 

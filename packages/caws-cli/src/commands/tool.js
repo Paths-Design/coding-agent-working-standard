@@ -52,7 +52,10 @@ async function initializeToolSystem() {
 
     return toolLoader;
   } catch (error) {
-    Output.warning(`Tool system initialization failed: ${error.message}`, 'Continuing without dynamic tools');
+    Output.warning(
+      `Tool system initialization failed: ${error.message}`,
+      'Continuing without dynamic tools'
+    );
     return null;
   }
 }
@@ -78,19 +81,17 @@ async function executeTool(toolId, options) {
 
       if (!tool) {
         const tools = loader.getAllTools();
-        const availableTools = Array.from(tools, ([id, t]) => `${id}: ${t.metadata.name}`).join(', ');
-        throw new Error(
-          `Tool '${toolId}' not found.\n` +
-          `Available tools: ${availableTools}`
+        const availableTools = Array.from(tools, ([id, t]) => `${id}: ${t.metadata.name}`).join(
+          ', '
         );
+        throw new Error(`Tool '${toolId}' not found.\n` + `Available tools: ${availableTools}`);
       }
 
       // Validate tool before execution
       const validation = await toolValidator.validateTool(tool);
       if (!validation.valid) {
         throw new Error(
-          `Tool validation failed:\n` +
-          validation.errors.map((e) => `  - ${e}`).join('\n')
+          `Tool validation failed:\n` + validation.errors.map((e) => `  - ${e}`).join('\n')
         );
       }
 
@@ -120,8 +121,7 @@ async function executeTool(toolId, options) {
         return result;
       } else {
         throw new Error(
-          `Tool execution failed:\n` +
-          result.errors.map((e) => `  - ${e}`).join('\n')
+          `Tool execution failed:\n` + result.errors.map((e) => `  - ${e}`).join('\n')
         );
       }
     },

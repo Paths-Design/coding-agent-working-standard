@@ -14,25 +14,30 @@ All critical fixes and high-priority improvements have been successfully impleme
 ### Priority 1: Critical Fixes (Breaking Functionality)
 
 #### Fix 1.1: MCP Server ES Module `__filename` Error ✅
+
 **Status:** Fixed  
 **File:** `packages/caws-mcp-server/index.js`
 
 **Changes:**
+
 - Added `import { fileURLToPath } from 'url'`
 - Defined `const __filename = fileURLToPath(import.meta.url)` for ES module compatibility
 - Fixes all 4 instances of `__filename` usage (lines 1147, 1308, 1406, 1475)
 
 **Impact:**
+
 - `caws_quality_gates_run()` MCP tool now works without errors
 - Quality gates can be executed via MCP server
 
 ---
 
 #### Fix 1.2: Pre-Commit Hook Fallback Chain ✅
+
 **Status:** Fixed  
 **File:** `packages/caws-cli/src/scaffold/git-hooks.js`
 
 **Changes:**
+
 - Implemented graceful fallback chain:
   1. Node.js script (`scripts/quality-gates/run-quality-gates.js`)
   2. CAWS CLI (`caws validate`)
@@ -41,6 +46,7 @@ All critical fixes and high-priority improvements have been successfully impleme
   5. Skip gracefully with helpful message
 
 **Impact:**
+
 - Pre-commit hooks no longer block commits when quality gates script is missing
 - Provides clear warnings and helpful alternatives
 - CLI validation is non-blocking (warns instead of failing)
@@ -48,15 +54,18 @@ All critical fixes and high-priority improvements have been successfully impleme
 ---
 
 #### Fix 1.3: MCP Validate CLI Detection ✅
+
 **Status:** Fixed  
 **File:** `packages/caws-mcp-server/index.js`
 
 **Changes:**
+
 - Detects existing `caws` CLI installation before using `npx`
 - Uses `caws` command directly when available
 - Falls back to `npx @paths.design/caws-cli` only when CLI not found
 
 **Impact:**
+
 - More efficient execution (avoids unnecessary npx overhead)
 - Better integration with existing CLI installations
 
@@ -65,10 +74,12 @@ All critical fixes and high-priority improvements have been successfully impleme
 ### Priority 2: High-Priority Improvements (UX Issues)
 
 #### Fix 2.1: CLI Quality Gates Path Resolution ✅
+
 **Status:** Fixed  
 **File:** `packages/caws-cli/src/commands/quality-gates.js`
 
 **Changes:**
+
 - Added comprehensive fallback chain:
   1. Check monorepo structure (existing behavior)
   2. Check `node_modules` for `@paths.design/quality-gates` package
@@ -77,6 +88,7 @@ All critical fixes and high-priority improvements have been successfully impleme
   5. Provide helpful error with all alternatives
 
 **Impact:**
+
 - Works from monorepo root ✅
 - Works with globally installed CLI (falls back to Python) ✅
 - Works with npm package installation ✅
@@ -85,10 +97,12 @@ All critical fixes and high-priority improvements have been successfully impleme
 ---
 
 #### Fix 2.2: Standardize Policy File Location ✅
+
 **Status:** Fixed  
 **File:** `packages/caws-cli/src/policy/PolicyManager.js`
 
 **Changes:**
+
 - Checks both locations for backward compatibility:
   1. `.caws/policy.yaml` (preferred)
   2. `.caws/policy/tier-policy.json` (legacy)
@@ -96,6 +110,7 @@ All critical fixes and high-priority improvements have been successfully impleme
 - Warns when using legacy location with migration instructions
 
 **Impact:**
+
 - Backward compatible with existing projects ✅
 - Consistent policy file location going forward ✅
 - Clear migration path for legacy projects ✅
@@ -104,18 +119,22 @@ All critical fixes and high-priority improvements have been successfully impleme
 ---
 
 #### Fix 2.3: Quality Gates Installation Clarity ✅
+
 **Status:** Fixed  
-**Files:** 
+**Files:**
+
 - `packages/caws-cli/src/index.js`
 - `packages/caws-cli/src/scaffold/index.js`
 
 **Changes:**
+
 - Added `--with-quality-gates` option to `caws scaffold` command
 - Automatically installs quality gates package when requested
 - Detects if project has `package.json` to choose local vs global install
 - Provides helpful error messages with installation instructions
 
 **Impact:**
+
 - Clear installation path: `caws scaffold --with-quality-gates` ✅
 - Automatic package installation ✅
 - Better error messages with alternatives ✅
@@ -127,13 +146,15 @@ All critical fixes and high-priority improvements have been successfully impleme
 ### Manual Testing Checklist
 
 1. **MCP Server ES Module Fix**
+
    ```javascript
    // Test: Run quality gates via MCP server
-   caws_quality_gates_run({ gates: 'naming,duplication' })
+   caws_quality_gates_run({ gates: 'naming,duplication' });
    // Expected: Works without __filename error
    ```
 
 2. **Pre-Commit Hook Fallback**
+
    ```bash
    # Test: Commit without quality gates script
    git commit -m "test commit"
@@ -141,22 +162,24 @@ All critical fixes and high-priority improvements have been successfully impleme
    ```
 
 3. **MCP Validate CLI Detection**
+
    ```javascript
    // Test: Run validation via MCP
-   caws_validate({ specFile: '.caws/working-spec.yaml' })
+   caws_validate({ specFile: '.caws/working-spec.yaml' });
    // Expected: Uses existing CLI instead of npx
    ```
 
 4. **CLI Quality Gates Path Resolution**
+
    ```bash
    # Test from different contexts:
    # 1. From monorepo root
    caws quality-gates
-   
+
    # 2. With globally installed CLI (external project)
    caws quality-gates
    # Expected: Falls back to Python scripts with helpful message
-   
+
    # 3. With npm package installed
    npm install --save-dev @paths.design/quality-gates
    caws quality-gates
@@ -164,11 +187,12 @@ All critical fixes and high-priority improvements have been successfully impleme
    ```
 
 5. **Policy File Location**
+
    ```bash
    # Test: Both locations work
    # 1. Preferred location
    caws validate  # Should work with .caws/policy.yaml
-   
+
    # 2. Legacy location
    # Move policy.yaml to .caws/policy/tier-policy.json
    caws validate  # Should work with warning
@@ -204,6 +228,7 @@ If you have `.caws/policy/tier-policy.json`, you can:
 You have three options:
 
 1. **Install package** (recommended):
+
    ```bash
    npm install -g @paths.design/quality-gates
    # or locally:
@@ -211,6 +236,7 @@ You have three options:
    ```
 
 2. **Use scaffold option**:
+
    ```bash
    caws scaffold --with-quality-gates
    ```
@@ -251,7 +277,7 @@ You have three options:
 ✅ **Fix 1.3:** MCP validate uses existing CLI when available  
 ✅ **Fix 2.1:** CLI quality gates work from multiple contexts  
 ✅ **Fix 2.2:** Policy files load from both locations  
-✅ **Fix 2.3:** Clear quality gates installation path  
+✅ **Fix 2.3:** Clear quality gates installation path
 
 ---
 
@@ -266,5 +292,3 @@ All critical and high-priority fixes have been successfully implemented. The CAW
 - ✅ Helpful error messages
 
 The tools are now more robust and user-friendly, addressing all the issues identified in the developer feedback and diagnostic analysis.
-
-

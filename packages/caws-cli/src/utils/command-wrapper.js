@@ -41,10 +41,14 @@ async function commandWrapper(commandFn, options = {}) {
         error.context = { ...context, ...error.context };
 
         // Handle error with unified handler
-        handleCliError(error, {
-          command: commandName,
-          ...context,
-        }, exitOnError);
+        handleCliError(
+          error,
+          {
+            command: commandName,
+            ...context,
+          },
+          exitOnError
+        );
 
         // If exitOnError is false, rethrow for caller to handle
         if (!exitOnError) {
@@ -68,11 +72,14 @@ const Output = {
    */
   success(message, data = {}) {
     if (isJsonOutput()) {
-      outputResult({
-        success: true,
-        message,
-        ...data,
-      }, true);
+      outputResult(
+        {
+          success: true,
+          message,
+          ...data,
+        },
+        true
+      );
     } else {
       console.log(chalk.green(`✅ ${message}`));
       if (Object.keys(data).length > 0 && !isJsonOutput()) {
@@ -88,13 +95,16 @@ const Output = {
    */
   error(message, suggestions = []) {
     if (isJsonOutput()) {
-      outputResult({
-        success: false,
-        error: {
-          message,
-          suggestions,
+      outputResult(
+        {
+          success: false,
+          error: {
+            message,
+            suggestions,
+          },
         },
-      }, false);
+        false
+      );
     } else {
       console.error(chalk.red(`❌ ${message}`));
       if (suggestions.length > 0) {
@@ -113,11 +123,14 @@ const Output = {
    */
   warning(message, suggestion = null) {
     if (isJsonOutput()) {
-      outputResult({
-        warning: true,
-        message,
-        suggestion,
-      }, true);
+      outputResult(
+        {
+          warning: true,
+          message,
+          suggestion,
+        },
+        true
+      );
     } else {
       console.warn(chalk.yellow(`⚠️  ${message}`));
       if (suggestion) {
@@ -133,11 +146,14 @@ const Output = {
    */
   info(message, data = {}) {
     if (isJsonOutput()) {
-      outputResult({
-        info: true,
-        message,
-        ...data,
-      }, true);
+      outputResult(
+        {
+          info: true,
+          message,
+          ...data,
+        },
+        true
+      );
     } else {
       console.log(chalk.blue(`ℹ️  ${message}`));
       if (Object.keys(data).length > 0) {
@@ -182,4 +198,3 @@ module.exports = {
   Output,
   isJsonOutput,
 };
-

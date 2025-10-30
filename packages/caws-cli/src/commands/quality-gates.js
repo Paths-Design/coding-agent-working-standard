@@ -45,7 +45,8 @@ async function qualityGatesCommand(options = {}) {
       const monorepoRunner = path.join(packagesDir, 'quality-gates', 'run-quality-gates.mjs');
 
       // Option 2: Check VS Code extension bundled (if running from extension context)
-      const vscodeExtensionPath = process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
+      const vscodeExtensionPath =
+        process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
       const bundledRunner = vscodeExtensionPath
         ? path.join(vscodeExtensionPath, 'bundled', 'quality-gates', 'run-quality-gates.mjs')
         : null;
@@ -53,12 +54,17 @@ async function qualityGatesCommand(options = {}) {
       // Option 3: Check node_modules for quality-gates package
       const nodeModulesPaths = [
         path.join(projectRoot, 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
-        path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs'),
+        path.join(
+          projectRoot,
+          'node_modules',
+          '@paths.design',
+          'quality-gates',
+          'run-quality-gates.mjs'
+        ),
         path.join(projectRoot, 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
       ];
 
       // Try all possible paths in order
-      let qualityGatesRunner = null;
       if (fs.existsSync(monorepoRunner)) {
         qualityGatesRunner = monorepoRunner;
       } else if (bundledRunner && fs.existsSync(bundledRunner)) {
@@ -78,9 +84,14 @@ async function qualityGatesCommand(options = {}) {
         const makefile = path.join(projectRoot, 'Makefile');
 
         if (fs.existsSync(pythonScript)) {
-          Output.warning('Node.js quality gates runner not found', 'Found Python script - falling back to Python implementation');
+          Output.warning(
+            'Node.js quality gates runner not found',
+            'Found Python script - falling back to Python implementation'
+          );
           Output.info(`Running: python3 ${pythonScript}`);
-          Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
+          Output.info(
+            'Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates'
+          );
 
           // Execute Python script instead
           const { execSync } = require('child_process');
@@ -99,9 +110,14 @@ async function qualityGatesCommand(options = {}) {
           Output.success('Quality gates completed successfully');
           return;
         } else if (fs.existsSync(makefile)) {
-          Output.warning('Node.js quality gates runner not found', 'Found Makefile - falling back to Makefile target');
+          Output.warning(
+            'Node.js quality gates runner not found',
+            'Found Makefile - falling back to Makefile target'
+          );
           Output.info('Running: make caws-gates');
-          Output.info('Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates');
+          Output.info(
+            'Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates'
+          );
 
           // Execute Makefile target
           const { execSync } = require('child_process');
@@ -125,12 +141,12 @@ async function qualityGatesCommand(options = {}) {
 
         throw new Error(
           'Quality gates runner not found.\n\n' +
-          'Expected locations:\n' +
-          `  • Monorepo: ${monorepoRunner}\n` +
-          `  • npm package: ${path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs')}\n` +
-          `  • Python script: ${path.join(projectRoot, 'scripts', 'simple_gates.py')}\n\n` +
-          'Available options:\n' +
-          suggestions.map((s, i) => `  ${i + 1}. ${s}`).join('\n')
+            'Expected locations:\n' +
+            `  • Monorepo: ${monorepoRunner}\n` +
+            `  • npm package: ${path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs')}\n` +
+            `  • Python script: ${path.join(projectRoot, 'scripts', 'simple_gates.py')}\n\n` +
+            'Available options:\n' +
+            suggestions.map((s, i) => `  ${i + 1}. ${s}`).join('\n')
         );
       }
 
@@ -178,7 +194,7 @@ async function qualityGatesCommand(options = {}) {
 
       // Wait for completion with timeout (30 minutes default for CI)
       const timeoutMs = options.timeout || (options.ci ? 30 * 60 * 1000 : 10 * 60 * 1000);
-      
+
       const completionPromise = new Promise((resolve, reject) => {
         child.on('close', (code) => {
           if (code === 0) {

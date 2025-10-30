@@ -348,7 +348,9 @@ async function scaffoldProject(options) {
         console.log(chalk.blue('💡 You can now use: caws quality-gates'));
       } catch (error) {
         console.log(chalk.yellow(`⚠️  Failed to install quality gates package: ${error.message}`));
-        console.log(chalk.gray('   You can install manually: npm install -g @paths.design/quality-gates'));
+        console.log(
+          chalk.gray('   You can install manually: npm install -g @paths.design/quality-gates')
+        );
         console.log(chalk.gray('   Or use Python scripts: python3 scripts/simple_gates.py'));
       }
     }

@@ -330,6 +330,18 @@ if [ -f "package.json" ]; then
       # Don't fail on warnings, just warn
     fi
   fi
+elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+  # Python project security checks
+  if command -v pip-audit >/dev/null 2>&1; then
+    echo "🔍 Checking Python vulnerabilities..."
+    pip-audit --desc 2>/dev/null || echo "⚠️  Install pip-audit for vulnerability checks: pip install pip-audit"
+  fi
+elif [ -f "Cargo.toml" ]; then
+  # Rust project security checks
+  if command -v cargo-audit >/dev/null 2>&1; then
+    echo "🔍 Checking Rust vulnerabilities..."
+    cargo audit 2>/dev/null || echo "⚠️  Install cargo-audit for vulnerability checks: cargo install cargo-audit"
+  fi
 fi
 
 echo "🎉 Pre-push checks completed!"
