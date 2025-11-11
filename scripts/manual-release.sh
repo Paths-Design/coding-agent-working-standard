@@ -24,11 +24,32 @@ fi
 echo -e "${GREEN}✅ Logged in as: $(npm whoami --workspaces=false)${NC}"
 echo ""
 
+# Function to check if version is already published
+is_version_published() {
+  local pkg_name=$1
+  local version=$2
+  local published_version=$(npm view "${pkg_name}@${version}" version --workspaces=false 2>/dev/null || echo "")
+  if [ -n "$published_version" ]; then
+    return 0  # Version exists
+  else
+    return 1  # Version doesn't exist
+  fi
+}
+
 # Function to release a package
 release_package() {
   local pkg_path=$1
   local pkg_name=$2
   local current_version=$3
+  
+  echo -e "${YELLOW}📦 Checking ${pkg_name}@${current_version}...${NC}"
+  
+  # Check if version is already published
+  if is_version_published "$pkg_name" "$current_version"; then
+    echo -e "${GREEN}✅ ${pkg_name}@${current_version} is already published - skipping${NC}"
+    echo ""
+    return 0
+  fi
   
   echo -e "${YELLOW}📦 Releasing ${pkg_name}@${current_version}...${NC}"
   
@@ -40,14 +61,20 @@ release_package() {
   
   # Publish to npm
   echo "  Publishing to npm..."
-  npm publish --access public
+  npm publish --access public --workspaces=false
   
-  # Create git tag
+  # Create git tag (only if tag doesn't exist)
   echo "  Creating git tag..."
   local tag_name="${pkg_name/@paths.design\//}-v${current_version}"
   tag_name=$(echo "$tag_name" | tr '/' '-')
   cd ../..
-  git tag -a "$tag_name" -m "chore(release): ${pkg_name}@${current_version}"
+  
+  # Check if tag already exists
+  if git rev-parse "$tag_name" >/dev/null 2>&1; then
+    echo "  Tag $tag_name already exists - skipping"
+  else
+    git tag -a "$tag_name" -m "chore(release): ${pkg_name}@${current_version}"
+  fi
   
   echo -e "${GREEN}✅ Released ${pkg_name}@${current_version}${NC}"
   echo ""
