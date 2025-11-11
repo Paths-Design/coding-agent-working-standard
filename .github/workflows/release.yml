@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'packages/caws-cli/**'
+      - 'packages/caws-mcp-server/**'
+      - 'packages/quality-gates/**'
       - '.releaserc.json'
       - 'CHANGELOG.md'
       - 'package.json'
@@ -112,4 +114,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx semantic-release
+        run: |
+          # Use multi-package release script to handle multiple packages
+          # Falls back to standard semantic-release if script doesn't exist
+          if [ -f "scripts/multi-package-release.mjs" ]; then
+            node scripts/multi-package-release.mjs
+          else
+            npx semantic-release
+          fi
