@@ -77,6 +77,27 @@ Quality gates automatically manage caches for performance and reliability:
 
 ## How It Works
 
+### Quick Start with npx
+
+```bash
+# Run quality gates via npx (no installation needed)
+npx @paths.design/quality-gates
+
+# CI mode
+npx @paths.design/quality-gates --ci
+
+# Specific gates only
+npx @paths.design/quality-gates --gates=naming,duplication
+
+# JSON output
+npx @paths.design/quality-gates --json
+```
+
+**Note:** The package exposes the binary as `caws-quality-gates`, so you can also use:
+```bash
+npx @paths.design/quality-gates caws-quality-gates
+```
+
 ### Pre-commit Hook (Local Development)
 
 ```bash
@@ -130,6 +151,22 @@ node packages/quality-gates/run-quality-gates.mjs
 ```
 
 ### Quick Start
+
+**Via npx (recommended - no installation needed):**
+
+```bash
+# Run all quality gates (development mode)
+npx @paths.design/quality-gates
+
+# Run all gates in CI mode (strict enforcement)
+npx @paths.design/quality-gates --ci
+
+# Get machine-readable JSON output
+npx @paths.design/quality-gates --json
+
+# Run only specific gates
+npx @paths.design/quality-gates --gates=naming,duplication
+```
 
 **With npm package:**
 
@@ -196,6 +233,20 @@ node packages/quality-gates/run-quality-gates.mjs --gates=duplication
 
 #### 2. CI/CD Integration
 
+**Via npx (recommended - no installation needed):**
+
+```bash
+# GitHub Actions / CI pipeline
+npx @paths.design/quality-gates --ci
+
+# With step summary (GitHub Actions)
+GITHUB_STEP_SUMMARY=/tmp/summary.md npx @paths.design/quality-gates --ci
+
+# Matrix builds (test specific gates)
+npx @paths.design/quality-gates --ci --gates=naming
+npx @paths.design/quality-gates --ci --gates=duplication
+```
+
 **With npm package:**
 
 ```bash
@@ -239,6 +290,15 @@ caws quality-gates --ci --json
 
 #### 4. Pre-commit Hook
 
+**Via npx:**
+
+```bash
+# Setup pre-commit hook
+echo '#!/bin/bash
+npx @paths.design/quality-gates --ci' > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
 **With npm package:**
 
 ```bash
@@ -274,7 +334,9 @@ chmod +x .git/hooks/pre-commit
 - `code_freeze` - Code freeze compliance (blocks new features)
 - `duplication` - Functional duplication detection
 - `god_objects` - God object size limits
+- `hidden-todo` - Hidden incomplete implementations
 - `documentation` - Documentation quality checks
+- `placeholders` - Placeholder governance (explicit degradations)
 
 ### Output Formats
 

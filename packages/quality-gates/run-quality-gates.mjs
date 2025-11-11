@@ -100,6 +100,7 @@ import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
+import { checkPlaceholders } from './check-placeholders.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -117,6 +118,7 @@ const VALID_GATES = new Set([
   'god_objects',
   'hidden-todo',
   'documentation',
+  'placeholders',
 ]);
 
 if (DEBUG_MODE) {
@@ -865,6 +867,14 @@ class QualityGateRunner {
         }
       }
 
+      // Gate 6: Placeholder Governance
+      if (!GATES_FILTER || GATES_FILTER.has('placeholders')) {
+        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking placeholder governance...');
+        gatePromises.push(
+          this.runGateWithTimeout('placeholders', () => this.runPlaceholdersGate(), 15000)
+        );
+      }
+
       // Wait for all gates to complete (with their own error handling)
       await Promise.all(gatePromises);
 
@@ -1443,6 +1453,76 @@ class QualityGateRunner {
           message: `Documentation quality check failed: ${error.message}`,
         });
       }
+    }
+  }
+
+  async runPlaceholdersGate() {
+    try {
+      const placeholderResults = await checkPlaceholders({
+        files: this.filesToCheck,
+        enforcement: getGlobalEnforcementLevel(),
+      });
+
+      // Report warnings (approved exceptions)
+      if (placeholderResults.warnings.length > 0) {
+        console.log(`   ${placeholderResults.warnings.length} approved exceptions in use`);
+        for (const warning of placeholderResults.warnings) {
+          console.log(`      ${warning.file || 'General'}: ${warning.message}`);
+        }
+      }
+
+      // Handle violations based on enforcement level
+      const enforcementLevel = placeholderResults.enforcementLevel;
+
+      if (placeholderResults.violations.length > 0) {
+        if (!QUIET_MODE && !JSON_MODE)
+          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+
+        for (const violation of placeholderResults.violations) {
+          const severity = violation.severity || enforcementLevel;
+
+          // Only add to violations if severity requires blocking
+          if (severity === 'fail' || severity === 'block') {
+            this.violations.push({
+              gate: 'placeholders',
+              type: violation.type,
+              message: violation.message,
+              file: violation.file,
+              line: violation.line,
+              rule: violation.rule,
+              severity: severity,
+              suggestion: violation.suggestion,
+            });
+          } else {
+            // Warning level - add to warnings instead
+            this.warnings.push({
+              gate: 'placeholders',
+              type: violation.type,
+              message: violation.message,
+              file: violation.file,
+              line: violation.line,
+              rule: violation.rule,
+              suggestion: violation.suggestion,
+            });
+          }
+        }
+
+        if (!QUIET_MODE && !JSON_MODE) {
+          console.log(
+            `   ${placeholderResults.violations.length} placeholder governance findings (${enforcementLevel} mode)`
+          );
+        }
+      } else {
+        if (!QUIET_MODE && !JSON_MODE) {
+          console.log('   No placeholder governance violations found');
+        }
+      }
+    } catch (error) {
+      this.violations.push({
+        gate: 'placeholders',
+        type: 'error',
+        message: `Placeholder governance check failed: ${error.message}`,
+      });
     }
   }
 
