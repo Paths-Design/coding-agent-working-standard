@@ -34,6 +34,14 @@ const PACKAGES = [
     }
   },
   {
+    name: '@paths.design/caws-types',
+    path: 'packages/caws-types',
+    scope: 'caws-types',
+    config: {
+      pkgRoot: 'packages/caws-types'
+    }
+  },
+  {
     name: '@paths.design/quality-gates',
     path: 'packages/quality-gates',
     scope: 'quality-gates',

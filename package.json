@@ -49,6 +49,7 @@
     "caws:prompt-lint": "node apps/tools/caws/prompt-lint.js .agent/prompts/*.md --allowlist apps/tools/caws/tools-allow.json",
     "caws:provenance": "node apps/tools/caws/provenance.js > .agent/provenance.json",
     "caws:pr-comment": "node apps/tools/caws/pr-comment.js",
+    "quality-gates": "node packages/quality-gates/run-quality-gates.mjs",
 
     "// Code modification tools": "",
     "codemod:dry": "node docs/*/codemod/refactor.js",

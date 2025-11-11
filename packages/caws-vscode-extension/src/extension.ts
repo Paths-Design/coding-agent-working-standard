@@ -1082,7 +1082,9 @@ async function runQualityGatesInteractive(): Promise<void> {
             { label: 'Code Freeze', value: 'code_freeze' },
             { label: 'Duplication', value: 'duplication' },
             { label: 'God Objects', value: 'god_objects' },
+            { label: 'Hidden TODO', value: 'hidden-todo' },
             { label: 'Documentation', value: 'documentation' },
+            { label: 'Placeholders', value: 'placeholders' },
           ],
           {
             placeHolder: 'Select quality gates to run',
@@ -1187,7 +1189,9 @@ async function runQualityExceptionsList(): Promise<void> {
         { label: 'Code Freeze', value: 'code_freeze' },
         { label: 'Duplication', value: 'duplication' },
         { label: 'God Objects', value: 'god_objects' },
+        { label: 'Hidden TODO', value: 'hidden-todo' },
         { label: 'Documentation', value: 'documentation' },
+        { label: 'Placeholders', value: 'placeholders' },
       ],
       { placeHolder: 'Filter by gate (optional)' }
     );
@@ -1250,7 +1254,15 @@ async function runQualityExceptionsCreate(): Promise<void> {
 
     // Get exception details from user
     const gate = await vscode.window.showQuickPick(
-      ['naming', 'code_freeze', 'duplication', 'god_objects', 'documentation'],
+      [
+        'naming',
+        'code_freeze',
+        'duplication',
+        'god_objects',
+        'hidden-todo',
+        'documentation',
+        'placeholders',
+      ],
       { placeHolder: 'Select gate for exception' }
     );
 
