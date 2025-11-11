@@ -17,13 +17,11 @@ This directory contains modular rule files that Cursor uses to guide development
 - `06-typescript-conventions.mdc` - TypeScript/JS conventions and best practices
 - `07-process-ops.mdc` - Process discipline and server management
 - `08-solid-and-architecture.mdc` - SOLID principles and architectural patterns
-- `09-docstrings.mdc` - Language-specific docstring formats and standards
-- `10-authorship-and-attribution.mdc` - File headers and authorship standards
-- `16-documentation-quality-standards.mdc` - Engineering-grade documentation standards
-- `17-scope-management-waivers.mdc` - Scope management, change budgets, and emergency waiver procedures
-- `18-implementation-completeness.mdc` - Anti-fake implementation guardrails and completeness verification
-- `19-language-agnostic-standards.mdc` - Universal engineering standards across all programming languages
-- `20-sophisticated-todo-detection.mdc` - Advanced TODO detection patterns and hidden implementation analysis
+- `09-docstrings.mdc` - Language-specific docstring formats, standards, and file headers
+- `10-documentation-quality-standards.mdc` - Engineering-grade documentation standards
+- `11-scope-management-waivers.mdc` - Scope management, change budgets, and emergency waiver procedures
+- `12-implementation-completeness.mdc` - Anti-fake implementation guardrails with sophisticated TODO detection
+- `13-language-agnostic-standards.mdc` - Universal engineering standards (conditional - applies to code files only)
 
 ## How MDC Works
 

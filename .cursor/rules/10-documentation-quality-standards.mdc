@@ -1,6 +1,7 @@
 ---
 description: Comprehensive documentation quality standards to prevent superiority claims, unfounded achievements, and marketing language
 globs: ['**/*.md', '**/*.txt', '**/*.rst', '**/*.adoc']
+ruleTokenCount: 2826
 alwaysApply: true
 ---
 

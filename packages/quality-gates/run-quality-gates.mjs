@@ -842,10 +842,21 @@ class QualityGateRunner {
 
       // Gate 5: Documentation Quality
       if (!GATES_FILTER || GATES_FILTER.has('documentation')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
-        gatePromises.push(
-          this.runGateWithTimeout('documentation', () => this.runDocumentationQualityGate(), 15000)
-        );
+        // Skip documentation gate in commit context if no files are staged
+        // (full repo scan is too slow and not needed for commit validation)
+        if (this.context === 'commit' && this.filesToCheck.length === 0) {
+          if (!QUIET_MODE && !JSON_MODE) {
+            console.log('\nChecking documentation quality...');
+            console.log('   Skipping documentation gate (no files staged)');
+          }
+        } else {
+          if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
+          // Use longer timeout for CI mode (full repo scan) vs commit mode (staged files only)
+          const timeoutMs = this.context === 'ci' ? 120000 : 30000; // 2 min for CI, 30s for commit
+          gatePromises.push(
+            this.runGateWithTimeout('documentation', () => this.runDocumentationQualityGate(), timeoutMs)
+          );
+        }
       }
 
       // Wait for all gates to complete (with their own error handling)

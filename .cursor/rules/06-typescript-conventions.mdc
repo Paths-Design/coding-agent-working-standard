@@ -5,6 +5,7 @@ globs:
   - '**/*.tsx'
   - '**/*.mts'
   - '**/*.cts'
+ruleTokenCount: 144
 alwaysApply: false
 ---
 

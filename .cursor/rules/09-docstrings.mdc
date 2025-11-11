@@ -1,6 +1,7 @@
 ---
 description: Language-specific docstring formats and checklists
 globs:
+ruleTokenCount: 704
 alwaysApply: false
 ---
 
@@ -83,7 +84,18 @@ def add(a: int, b: int) -> int:
     return a + b
 ```
 
+## File Headers & Authorship
+
+For top-of-file documentation, include author signature:
+
+```
+Author: @darianrosebrook
+```
+
+Only in source files with public entrypoints or non-trivial modules.
+
 ## Acceptance
 
 - Public APIs have docstrings in native style.
 - Docstrings describe behavior, inputs, outputs, and failure modes.
+- File headers include author attribution for public entrypoints.

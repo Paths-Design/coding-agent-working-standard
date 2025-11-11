@@ -1,7 +1,8 @@
 ---
 description: Language-agnostic engineering standards and universal code quality metrics
-globs:
-alwaysApply: true
+globs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.rs', '**/*.py', '**/*.go', '**/*.java', '**/*.cpp', '**/*.c', '**/*.cs']
+ruleTokenCount: 2962
+alwaysApply: false
 ---
 
 # Language-Agnostic Engineering Standards

@@ -1,6 +1,7 @@
 ---
 description: Process discipline for local servers and hung commands
 globs:
+ruleTokenCount: 108
 alwaysApply: true
 ---
 

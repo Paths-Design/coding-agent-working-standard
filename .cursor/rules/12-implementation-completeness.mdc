@@ -1,18 +1,260 @@
 ---
-description: Sophisticated TODO detection patterns and hidden implementation analysis
+description: Anti-fake implementation guardrails to prevent incomplete, stubbed, or fake implementations
 globs:
+ruleTokenCount: 6097
 alwaysApply: true
 ---
 
-# Sophisticated TODO Detection & Analysis
+# Implementation Completeness Guardrails
 
 ## Core Principle
 
-**Detect hidden incomplete implementations beyond simple TODO comments.** Use context-aware analysis with confidence scoring to identify stub implementations, temporary solutions, and incomplete business logic.
+**No incomplete, stubbed, or fake implementations in production code.** All business logic must be fully implemented with proper error handling and real integrations.
+
+## Implementation Quality Detection
+
+### PLACEHOLDER Detection
+
+**Automated Detection Patterns:**
+
+```bash
+# Find all placeholder implementations
+rg -n "PLACEHOLDER|TODO|MOCK_DATA|FIXME|HACK" src/
+rg -n "throw new Error.*not implemented" src/
+rg -n "return.*mock|fake|dummy" src/
+rg -n "console\.log.*placeholder" src/
+```
+
+**Required Tagging:**
+
+```typescript
+// PLACEHOLDER: Real payment processing not implemented
+function processPayment(amount: number): Promise<PaymentResult> {
+  throw new Error('PLACEHOLDER: Payment processing not implemented');
+}
+
+// TODO: Implement actual tax calculation
+function calculateTax(amount: number): number {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('TODO: Tax calculation must be implemented before production');
+  }
+  return amount * 0.1; // Mock calculation
+}
+
+// MOCK DATA: Remove before production
+const mockUsers = [{ id: 1, name: 'John Doe', email: 'john@example.com' }];
+```
+
+### Stub Implementation Prevention
+
+**Forbidden Patterns:**
+
+```typescript
+// ❌ BAD: Silent stub implementation
+function getUserData(id: string) {
+  return { id, name: 'Mock User' }; // No indication this is fake
+}
+
+// ❌ BAD: Console.log stub
+function processOrder(order: Order) {
+  console.log('Processing order:', order); // Not real implementation
+  return { success: true };
+}
+
+// ❌ BAD: Empty implementation
+function calculateTotal(items: Item[]) {
+  // Implementation coming soon
+  return 0;
+}
+```
+
+**Required Patterns:**
+
+```typescript
+// ✅ GOOD: Explicit placeholder with error
+function getUserData(id: string) {
+  // PLACEHOLDER: Real user data fetching not implemented
+  throw new Error('PLACEHOLDER: getUserData not implemented');
+}
+
+// ✅ GOOD: Proper implementation
+function processOrder(order: Order) {
+  const total = calculateTotal(order.items);
+  const tax = calculateTax(total);
+  return { success: true, total, tax };
+}
+```
+
+## Fake Persistence Detection
+
+### Database Mock Detection
+
+**Forbidden Patterns:**
+
+```typescript
+// ❌ BAD: In-memory "database"
+class UserRepository {
+  private users: User[] = []; // Not real persistence
+
+  async save(user: User) {
+    this.users.push(user); // Fake persistence
+  }
+}
+
+// ❌ BAD: Mock database operations
+async function createUser(userData: CreateUserRequest) {
+  // Mock database call
+  return { id: Math.random(), ...userData };
+}
+```
+
+**Required Patterns:**
+
+```typescript
+// ✅ GOOD: Real database implementation
+class UserRepository {
+  constructor(private db: Database) {}
+
+  async save(user: User) {
+    const result = await this.db.query(
+      'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *',
+      [user.name, user.email]
+    );
+    return result.rows[0];
+  }
+}
+```
+
+### API Mock Detection
+
+**Forbidden Patterns:**
+
+```typescript
+// ❌ BAD: Fake API responses
+async function fetchUserData(id: string) {
+  // Mock API response
+  return { id, name: 'Mock User', email: 'mock@example.com' };
+}
+
+// ❌ BAD: Hardcoded responses
+async function getWeatherData(city: string) {
+  return { city, temperature: 72, condition: 'sunny' }; // Fake data
+}
+```
+
+**Required Patterns:**
+
+```typescript
+// ✅ GOOD: Real API implementation
+async function fetchUserData(id: string) {
+  const response = await fetch(`/api/users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user: ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+```
+
+## Business Logic Completeness
+
+### Core Business Functions
+
+**Must be fully implemented:**
+
+- Authentication and authorization
+- Data validation and sanitization
+- Business rule enforcement
+- Error handling and recovery
+- Audit logging and monitoring
+
+**Implementation Requirements:**
+
+```typescript
+// ✅ GOOD: Complete business logic
+class OrderService {
+  async processOrder(order: Order): Promise<OrderResult> {
+    // Validate input
+    if (!order.items || order.items.length === 0) {
+      throw new ValidationError('Order must contain items');
+    }
+
+    // Check inventory
+    const inventoryCheck = await this.inventoryService.checkAvailability(order.items);
+    if (!inventoryCheck.available) {
+      throw new InsufficientInventoryError(inventoryCheck.unavailableItems);
+    }
+
+    // Calculate pricing
+    const pricing = await this.pricingService.calculateOrder(order);
+
+    // Process payment
+    const payment = await this.paymentService.processPayment({
+      amount: pricing.total,
+      method: order.paymentMethod,
+    });
+
+    // Create order record
+    const orderRecord = await this.orderRepository.create({
+      ...order,
+      total: pricing.total,
+      paymentId: payment.id,
+      status: 'confirmed',
+    });
+
+    // Send confirmation
+    await this.notificationService.sendOrderConfirmation(orderRecord);
+
+    return {
+      orderId: orderRecord.id,
+      total: pricing.total,
+      estimatedDelivery: pricing.estimatedDelivery,
+    };
+  }
+}
+```
+
+## Quality Gates for Implementation
+
+### Pre-Production Checks
+
+**Automated Verification:**
+
+```bash
+# Check for incomplete implementations
+npm run check:completeness
+# - Scan for PLACEHOLDER/TODO/MOCK_DATA
+# - Verify all business logic is implemented
+# - Check for real database connections
+# - Validate API integrations
+
+# Check for fake persistence
+npm run check:persistence
+# - Verify database connections are real
+# - Check for in-memory storage patterns
+# - Validate migration scripts exist
+```
+
+### Implementation Completeness Matrix
+
+| Component           | Real DB     | Real APIs   | Error Handling | Validation  | Logging     |
+| ------------------- | ----------- | ----------- | -------------- | ----------- | ----------- |
+| **Auth**            | ✅ Required | ✅ Required | ✅ Required    | ✅ Required | ✅ Required |
+| **Billing**         | ✅ Required | ✅ Required | ✅ Required    | ✅ Required | ✅ Required |
+| **Data Processing** | ✅ Required | ✅ Required | ✅ Required    | ✅ Required | ✅ Required |
+| **UI Components**   | N/A         | ✅ Required | ✅ Required    | ✅ Required | Optional    |
+| **Utilities**       | N/A         | ✅ Required | ✅ Required    | ✅ Required | Optional    |
 
 ## Advanced Detection Patterns
 
-### High-Confidence Hidden TODO Patterns
+### Sophisticated TODO Detection & Analysis
+
+**Detect hidden incomplete implementations beyond simple TODO comments.** Use context-aware analysis with confidence scoring to identify stub implementations, temporary solutions, and incomplete business logic.
+
+#### High-Confidence Hidden TODO Patterns
 
 **Incomplete Implementation Patterns:**
 
@@ -96,9 +338,9 @@ future_improvement_patterns = [
 ]
 ```
 
-## Language-Specific Code Stub Detection
+#### Language-Specific Code Stub Detection
 
-### JavaScript/TypeScript Patterns
+**JavaScript/TypeScript Patterns:**
 
 ```python
 javascript_stub_patterns = {
@@ -111,7 +353,7 @@ javascript_stub_patterns = {
 }
 ```
 
-### Python Patterns
+**Python Patterns:**
 
 ```python
 python_stub_patterns = {
@@ -125,7 +367,7 @@ python_stub_patterns = {
 }
 ```
 
-### Rust Patterns
+**Rust Patterns:**
 
 ```python
 rust_stub_patterns = {
@@ -137,9 +379,9 @@ rust_stub_patterns = {
 }
 ```
 
-## Context-Aware Analysis
+#### Context-Aware Analysis
 
-### Confidence Scoring
+**Confidence Scoring:**
 
 ```python
 def calculate_confidence_score(comment: str, line_num: int, file_path: Path) -> float:
@@ -168,7 +410,7 @@ def calculate_confidence_score(comment: str, line_num: int, file_path: Path) -> 
     return max(-1.0, min(1.0, score))
 ```
 
-### Exclusion Patterns
+**Exclusion Patterns:**
 
 ```python
 exclusion_patterns = [
@@ -185,47 +427,157 @@ exclusion_patterns = [
 ]
 ```
 
-## Implementation Detection
+## Enforcement Mechanisms
 
-### Fake Persistence Detection
+### Pre-Commit Hooks
 
-```python
-fake_persistence_patterns = [
-    r'private\s+\w+:\s*\w+\[\]\s*=\s*\[\]',  # In-memory arrays
-    r'const\s+\w+\s*=\s*\[\]',  # Empty arrays
-    r'let\s+\w+\s*=\s*\[\]',  # Empty arrays
-    r'mock.*database',
-    r'fake.*persistence',
-    r'in-memory.*storage',
-    r'temporary.*storage',
-]
+```bash
+# Check for incomplete implementations
+check-implementation-completeness() {
+  echo "🔍 Running implementation completeness check..."
+
+  # Check for placeholder implementations
+  local placeholders=$(git diff --cached | grep -E "PLACEHOLDER|TODO|MOCK_DATA" | wc -l)
+  if [ "$placeholders" -gt 0 ]; then
+    echo "❌ Found $placeholders placeholder implementations"
+    echo "All business logic must be fully implemented"
+    exit 1
+  fi
+
+  # Check for fake persistence patterns
+  local fake_persistence=$(git diff --cached | grep -E "private.*\[\]|mock.*database|fake.*persistence" | wc -l)
+  if [ "$fake_persistence" -gt 0 ]; then
+    echo "❌ Found $fake_persistence fake persistence patterns"
+    echo "Real database connections required"
+    exit 1
+  fi
+
+  echo "✅ No incomplete implementations found"
+}
 ```
 
-### Mock API Detection
+### CI/CD Integration
 
-```python
-mock_api_patterns = [
-    r'return\s+\{.*?\};\s*//\s*(MOCK|FAKE|DUMMY)',
-    r'console\.log.*mock',
-    r'hardcoded.*response',
-    r'static.*response',
-    r'fake.*api',
-    r'mock.*endpoint',
-]
+```yaml
+# Implementation completeness checks
+- name: Check Implementation Completeness
+  run: |
+    echo "🔍 Running implementation completeness analysis..."
+
+    # Check for placeholder implementations
+    placeholder_count=$(grep -r "PLACEHOLDER\|TODO\|MOCK_DATA" src/ | wc -l)
+    if [ "$placeholder_count" -gt 0 ]; then
+      echo "❌ Found $placeholder_count placeholder implementations"
+      echo "All business logic must be fully implemented"
+      exit 1
+    fi
+
+    # Check for fake persistence
+    fake_persistence_count=$(grep -r "private.*\[\]\|mock.*database\|fake.*persistence" src/ | wc -l)
+    if [ "$fake_persistence_count" -gt 0 ]; then
+      echo "❌ Found $fake_persistence_count fake persistence patterns"
+      echo "Real database connections required"
+      exit 1
+    fi
+
+    echo "✅ No incomplete implementations found"
+
+- name: Check for Hidden TODOs
+  run: |
+    # Use sophisticated pattern detection
+    hidden_todos=$(grep -r -E "(not yet implemented|missing implementation|incomplete implementation|partial implementation|unimplemented|not done|pending implementation|to be implemented|will be implemented)" src/ | wc -l)
+    if [ "$hidden_todos" -gt 0 ]; then
+      echo "❌ Found $hidden_todos hidden incomplete implementations"
+      echo "All implementations must be complete"
+      exit 1
+    fi
+
+    echo "✅ No hidden incomplete implementations found"
 ```
 
-### Stub Business Logic Detection
+## Testing Requirements
+
+### Implementation Testing
+
+**Must test real implementations:**
+
+```typescript
+// ✅ GOOD: Test real database operations
+describe('UserRepository', () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await createTestDatabase();
+    await seedTestData(db);
+  });
+
+  afterEach(async () => {
+    await cleanupTestData(db);
+    await db.end();
+  });
+
+  it('should save user to database', async () => {
+    const user = { name: 'John Doe', email: 'john@example.com' };
+    const savedUser = await userRepository.save(user);
+
+    expect(savedUser.id).toBeDefined();
+    expect(savedUser.name).toBe(user.name);
+
+    // Verify in database
+    const dbUser = await db.query('SELECT * FROM users WHERE id = $1', [savedUser.id]);
+    expect(dbUser.rows[0]).toEqual(savedUser);
+  });
+});
+```
+
+**Forbidden test patterns:**
+
+```typescript
+// ❌ BAD: Mock the system under test
+jest.mock('./userRepository', () => ({
+  save: jest.fn(() => ({ id: 1, name: 'Mock User' })),
+}));
+
+// ❌ BAD: Test fake implementations
+test('save user', () => {
+  const result = userRepository.save({ name: 'John' });
+  expect(result.name).toBe('John'); // Tests mock, not real implementation
+});
+```
+
+## Quality Metrics
+
+### Implementation Completeness Score
+
+**Calculation Formula:**
 
 ```python
-stub_business_logic_patterns = [
-    r'return\s+\d+;\s*//\s*(TODO|PLACEHOLDER)',
-    r'return\s+true;\s*//\s*(TODO|PLACEHOLDER)',
-    r'return\s+false;\s*//\s*(TODO|PLACEHOLDER)',
-    r'return\s+null;\s*//\s*(TODO|PLACEHOLDER)',
-    r'throw\s+new\s+Error.*not\s+implemented',
-    r'raise.*NotImplementedError',
-]
+def calculate_completeness_score(analysis_results):
+    total_files = analysis_results['total_files']
+    files_with_todos = analysis_results['files_with_todos']
+    high_conf_todos = analysis_results['high_confidence_todos']
+
+    # Completeness score (higher is better)
+    completeness_score = 1.0 - (files_with_todos / total_files) if total_files > 0 else 1.0
+
+    # Quality score based on confidence levels
+    quality_score = 1.0 - (high_conf_todos / total_files) if total_files > 0 else 1.0
+
+    return {
+        'completeness_score': completeness_score,
+        'quality_score': quality_score,
+        'files_with_todos': files_with_todos,
+        'high_confidence_todos': high_conf_todos,
+        'total_files_analyzed': total_files
+    }
 ```
+
+**Anti-Pattern Detection Metrics:**
+
+- **Placeholder Density**: Number of high-confidence TODOs per 1000 lines
+- **Stub Implementation Rate**: % of functions with stub patterns detected
+- **Temporary Solution Rate**: % of code marked as temporary/workaround
+- **Hardcoded Value Rate**: % of magic numbers/strings detected
 
 ## CAWS Integration
 
@@ -328,9 +680,9 @@ check-hidden-todos() {
     echo "📊 TODO analysis report generated"
 ```
 
-## CAWS Commands
+### CAWS Commands
 
-### TODO Analysis Commands
+#### TODO Analysis Commands
 
 ```bash
 # Run comprehensive TODO analysis
@@ -349,7 +701,7 @@ caws analyze-todos --pattern="temporary_solution" --confidence-threshold=0.7
 caws analyze-todos --pattern="fake_persistence" --confidence-threshold=0.8
 ```
 
-### Quality Monitoring
+#### Quality Monitoring
 
 ```bash
 # Track TODO resolution progress
@@ -363,8 +715,6 @@ caws metrics track --metric="hidden_todos_count" --value=0
 caws metrics track --metric="placeholder_implementations" --value=0
 caws metrics track --metric="temporary_solutions" --value=0
 ```
-
-## Quality Metrics
 
 ### Implementation Completeness Score
 
@@ -397,9 +747,9 @@ def calculate_completeness_score(analysis_results):
 - **Hardcoded Value Rate**: % of magic numbers/strings detected
 - **Fake Persistence Rate**: % of code using in-memory storage patterns
 
-## Continuous Improvement
+### Continuous Improvement
 
-### Monthly Audits
+**Monthly Audits:**
 
 ```bash
 # Generate monthly completeness report
@@ -414,7 +764,7 @@ echo "- Placeholder implementations: $(wc -l < monthly-placeholders.txt)" >> mon
 echo "- Temporary solutions: $(wc -l < monthly-temp-solutions.txt)" >> monthly-report.md
 ```
 
-### Quarterly Reviews
+**Quarterly Reviews:**
 
 - Full implementation audit across entire codebase
 - Review integration reality and persistence patterns
@@ -422,4 +772,4 @@ echo "- Temporary solutions: $(wc -l < monthly-temp-solutions.txt)" >> monthly-r
 - Refine detection patterns based on new anti-patterns
 - Analyze confidence threshold effectiveness
 
-This rule ensures sophisticated detection of hidden incomplete implementations beyond simple TODO comments, providing context-aware analysis with confidence scoring to maintain high code quality standards.
+This rule ensures sophisticated detection of hidden incomplete implementations beyond simple TODO comments, providing context-aware analysis with confidence scoring to maintain high code quality standards. All implementations must be complete, real, and production-ready, preventing the accumulation of incomplete or fake code that could cause production issues.

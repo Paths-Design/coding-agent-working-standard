@@ -1,6 +1,7 @@
 ---
 description: Safe defaults, guard clauses, early returns
 globs:
+ruleTokenCount: 101
 alwaysApply: false
 ---
 

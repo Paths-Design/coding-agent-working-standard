@@ -1,6 +1,7 @@
 ---
 description: Default agent behavior, edit style, and risk limits
 globs:
+ruleTokenCount: 330
 alwaysApply: true
 ---
 
