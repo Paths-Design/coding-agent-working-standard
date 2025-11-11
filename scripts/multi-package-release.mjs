@@ -168,18 +168,28 @@ function releasePackage(pkg) {
   
   try {
     // Write temporary config as CommonJS module
-    writeFileSync(configPath, config);
+    writeFileSync(configPath, config, { mode: 0o644 });
     
-    // Verify file was created
+    // Verify file was created and is readable
     if (!existsSync(configPath)) {
       throw new Error(`Failed to create config file: ${configPath}`);
     }
     
-    // Use relative path from root directory (semantic-release resolves from cwd)
-    const configPathRelative = `.releaserc.${pkg.scope}.cjs`;
+    // Verify file is readable
+    try {
+      readFileSync(configPath, 'utf8');
+    } catch (readError) {
+      throw new Error(`Config file exists but is not readable: ${configPath} - ${readError.message}`);
+    }
     
-    // Run semantic-release with relative path
-    execSync(`npx semantic-release --extends ${configPathRelative}`, {
+    // Use absolute path for better reliability with semantic-release's import resolution
+    // semantic-release uses import-from-esm which needs proper path resolution
+    const configPathAbsolute = path.resolve(configPath);
+    
+    console.log(`  Using config: ${configPathAbsolute}`);
+    
+    // Run semantic-release with absolute path
+    execSync(`npx semantic-release --extends ${configPathAbsolute}`, {
       cwd: rootDir,
       stdio: 'inherit',
       env: {
@@ -199,6 +209,19 @@ function releasePackage(pkg) {
     return true;
   } catch (error) {
     console.error(`❌ Failed to release ${pkg.name}:`, error.message);
+    
+    // Debug: Check if file exists before cleanup
+    if (existsSync(configPath)) {
+      console.error(`  Config file exists at: ${configPath}`);
+      try {
+        const content = readFileSync(configPath, 'utf8');
+        console.error(`  Config file size: ${content.length} bytes`);
+      } catch (readError) {
+        console.error(`  Could not read config file: ${readError.message}`);
+      }
+    } else {
+      console.error(`  Config file does not exist at: ${configPath}`);
+    }
     
     // Clean up temp config
     if (existsSync(configPath)) {
