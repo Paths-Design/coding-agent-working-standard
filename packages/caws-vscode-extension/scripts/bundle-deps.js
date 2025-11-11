@@ -50,10 +50,24 @@ async function main() {
 
     console.log('  Bundling MCP server dependencies...');
     try {
+      // Bundle without shebang since it's loaded as ES module, not executed directly
       execSync(
-        `npx esbuild "${mcpServerEntry}" --bundle --platform=node --target=node18 --format=esm --outfile="${mcpServerBundle}" --external:@paths.design/caws-cli --external:@paths.design/quality-gates --banner:js="#!/usr/bin/env node"`,
+        `npx esbuild "${mcpServerEntry}" --bundle --platform=node --target=node18 --format=esm --outfile="${mcpServerBundle}" --external:@paths.design/caws-cli --external:@paths.design/quality-gates`,
         { stdio: 'inherit', cwd: EXTENSION_ROOT }
       );
+      
+      // Read the bundled file and remove any shebang that might have been preserved
+      // Shebangs cause syntax errors when loading ES modules
+      let bundledContent = await fs.readFile(mcpServerBundle, 'utf8');
+      if (bundledContent.startsWith('#!/usr/bin/env node')) {
+        bundledContent = bundledContent.replace(/^#!\/usr\/bin\/env node\n?/, '');
+      }
+      // Also handle if esbuild preserved it differently
+      if (bundledContent.startsWith('///usr/bin/env node')) {
+        bundledContent = bundledContent.replace(/^\/\/\/usr\/bin\/env node\n?/, '');
+      }
+      await fs.writeFile(mcpServerBundle, bundledContent);
+      
       console.log('  ✅ Bundled MCP server (single file)');
     } catch (error) {
       console.error('  ❌ Failed to bundle MCP server:', error.message);
