@@ -328,6 +328,7 @@ See `docs/guides/hooks-and-agent-workflows.md` for detailed configuration.
 **OIDC (OpenID Connect) setup is only needed for projects that publish packages to registries.**
 
 CAWS automatically detects if your project publishes packages by checking for:
+
 - `package.json` with `publishConfig` or publish scripts (npm)
 - `pyproject.toml` with build system and project metadata (PyPI)
 - `pom.xml` (Maven)
@@ -335,21 +336,25 @@ CAWS automatically detects if your project publishes packages by checking for:
 - GitHub Actions workflows with publishing steps
 
 **When OIDC is automatically included:**
+
 - Project has publishing configuration detected
 - You explicitly request it with `--with-oidc` flag
 
 **When OIDC is skipped:**
+
 - Research/training projects (no publishing config)
 - Internal tools (not published)
 - Applications (not published as packages)
 
 **If OIDC is skipped but you need it later:**
+
 ```bash
 # Add OIDC setup guide manually
 caws scaffold --with-oidc
 ```
 
 **Agent Guidance:**
+
 - ✅ If project publishes packages → OIDC setup is included automatically
 - ✅ If project is research/training/internal → OIDC is skipped (correct behavior)
 - ✅ If user asks about OIDC → Check project type and explain when it's needed
