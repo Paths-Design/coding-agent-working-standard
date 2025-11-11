@@ -5,6 +5,7 @@
  *
  * This script bundles the CAWS MCP server and CLI into the extension
  * so they can be used without external installation.
+ * Uses esbuild to bundle dependencies into single files, eliminating node_modules.
  *
  * @author @darianrosebrook
  */
@@ -28,40 +29,48 @@ async function main() {
     await fs.ensureDir(BUNDLED_DIR);
     console.log('✅ Cleaned bundled directory\n');
 
-    // Bundle MCP Server
-    console.log('Bundling MCP server...');
+    // Bundle MCP Server with esbuild (single file, no node_modules)
+    console.log('Bundling MCP server with esbuild...');
     const mcpServerSource = path.join(MONOREPO_ROOT, 'packages/caws-mcp-server');
     const mcpServerDest = path.join(BUNDLED_DIR, 'mcp-server');
 
     await fs.ensureDir(mcpServerDest);
-    await fs.copy(path.join(mcpServerSource, 'index.js'), path.join(mcpServerDest, 'index.js'));
-    await fs.copy(
-      path.join(mcpServerSource, 'package.json'),
-      path.join(mcpServerDest, 'package.json')
-    );
 
-    // Copy src directory with logger and monitoring
-    const mcpServerSrc = path.join(mcpServerSource, 'src');
-    if (await fs.pathExists(mcpServerSrc)) {
-      await fs.copy(mcpServerSrc, path.join(mcpServerDest, 'src'));
-      console.log('  ✅ Copied src directory');
-    } else {
-      console.warn('  ⚠️  src directory not found');
+    // Check if esbuild is available
+    try {
+      execSync('npx esbuild --version', { stdio: 'pipe' });
+    } catch (error) {
+      console.log('  Installing esbuild...');
+      execSync('npm install --save-dev esbuild', { cwd: EXTENSION_ROOT, stdio: 'inherit' });
     }
 
-    // Install MCP server dependencies
-    console.log('  Installing MCP server dependencies...');
+    // Bundle MCP server entry point with all dependencies
+    const mcpServerEntry = path.join(mcpServerSource, 'index.js');
+    const mcpServerBundle = path.join(mcpServerDest, 'index.js');
 
+    console.log('  Bundling MCP server dependencies...');
     try {
-      execSync('npm install --production --no-audit --no-fund', {
-        cwd: mcpServerDest,
-        stdio: 'inherit',
-      });
-      console.log('  ✅ Installed all dependencies');
+      execSync(
+        `npx esbuild "${mcpServerEntry}" --bundle --platform=node --target=node18 --format=esm --outfile="${mcpServerBundle}" --external:@paths.design/caws-cli --external:@paths.design/quality-gates --banner:js="#!/usr/bin/env node"`,
+        { stdio: 'inherit', cwd: EXTENSION_ROOT }
+      );
+      console.log('  ✅ Bundled MCP server (single file)');
     } catch (error) {
-      console.error('  ❌ Failed to install dependencies:', error.message);
+      console.error('  ❌ Failed to bundle MCP server:', error.message);
       throw error;
     }
+
+    // Copy minimal package.json (just for version info)
+    const mcpServerPackageJson = require(path.join(mcpServerSource, 'package.json'));
+    const minimalMcpPackageJson = {
+      name: mcpServerPackageJson.name,
+      version: mcpServerPackageJson.version,
+      description: mcpServerPackageJson.description,
+      type: 'module',
+    };
+    await fs.writeJSON(path.join(mcpServerDest, 'package.json'), minimalMcpPackageJson, {
+      spaces: 2,
+    });
 
     console.log('✅ Bundled MCP server\n');
 
@@ -105,24 +114,40 @@ async function main() {
 
     console.log('✅ Bundled CAWS CLI (esbuild)\n');
 
-    // Bundle Quality Gates
+    // Bundle Quality Gates with esbuild (single file for main entry, copy others)
     console.log('Bundling Quality Gates...');
     const qualityGatesSource = path.join(MONOREPO_ROOT, 'packages/quality-gates');
     const qualityGatesDest = path.join(BUNDLED_DIR, 'quality-gates');
 
     await fs.ensureDir(qualityGatesDest);
 
-    // Copy all .mjs files (ES modules)
+    // Bundle the main entry point (run-quality-gates.mjs) with dependencies
+    const qualityGatesEntry = path.join(qualityGatesSource, 'run-quality-gates.mjs');
+    const qualityGatesBundle = path.join(qualityGatesDest, 'run-quality-gates.mjs');
+
+    console.log('  Bundling quality gates main entry with dependencies...');
+    try {
+      execSync(
+        `npx esbuild "${qualityGatesEntry}" --bundle --platform=node --target=node16 --format=esm --outfile="${qualityGatesBundle}" --banner:js="#!/usr/bin/env node"`,
+        { stdio: 'inherit', cwd: EXTENSION_ROOT }
+      );
+      console.log('  ✅ Bundled main entry point');
+    } catch (error) {
+      console.error('  ❌ Failed to bundle quality gates:', error.message);
+      throw error;
+    }
+
+    // Copy other .mjs files (they may import each other, but we'll bundle the main one)
     const mjsFiles = await fs.readdir(qualityGatesSource);
     for (const file of mjsFiles) {
-      if (file.endsWith('.mjs')) {
+      if (file.endsWith('.mjs') && file !== 'run-quality-gates.mjs') {
         await fs.copy(
           path.join(qualityGatesSource, file),
           path.join(qualityGatesDest, file)
         );
       }
     }
-    console.log('  ✅ Copied quality gates modules');
+    console.log('  ✅ Copied other quality gates modules');
 
     // Copy configuration files
     const configPatterns = ['*.yaml', '*.yml', '*.json'];
@@ -145,24 +170,17 @@ async function main() {
       console.log('  ✅ Copied templates directory');
     }
 
-    // Copy package.json for dependencies
-    await fs.copy(
-      path.join(qualityGatesSource, 'package.json'),
-      path.join(qualityGatesDest, 'package.json')
-    );
-
-    // Install quality gates dependencies
-    console.log('  Installing quality gates dependencies...');
-    try {
-      execSync('npm install --production --no-audit --no-fund', {
-        cwd: qualityGatesDest,
-        stdio: 'inherit',
-      });
-      console.log('  ✅ Installed all dependencies');
-    } catch (error) {
-      console.error('  ❌ Failed to install dependencies:', error.message);
-      throw error;
-    }
+    // Copy minimal package.json (just for version info)
+    const qualityGatesPackageJson = require(path.join(qualityGatesSource, 'package.json'));
+    const minimalQgPackageJson = {
+      name: qualityGatesPackageJson.name,
+      version: qualityGatesPackageJson.version,
+      description: qualityGatesPackageJson.description,
+      type: 'module',
+    };
+    await fs.writeJSON(path.join(qualityGatesDest, 'package.json'), minimalQgPackageJson, {
+      spaces: 2,
+    });
 
     console.log('✅ Bundled Quality Gates\n');
 

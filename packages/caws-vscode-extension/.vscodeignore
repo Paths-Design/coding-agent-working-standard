@@ -45,11 +45,9 @@ tests/**
 **/*.test.ts
 **/*.spec.ts
 
-# Node modules (excluded except for bundled ones)
+# Node modules (all excluded - dependencies are bundled)
 node_modules/**
 **/node_modules/**
-!bundled/mcp-server/node_modules/**
-!bundled/quality-gates/node_modules/**
 
 # Build scripts
 scripts/**
