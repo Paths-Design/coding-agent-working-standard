@@ -138,7 +138,7 @@ program
   .option('--json', 'Output machine-readable JSON to stdout', false)
   .option(
     '--gates <gates>',
-    'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,documentation)',
+    'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,hidden-todo,documentation,placeholders)',
     ''
   )
   .option('--fix', 'Attempt automatic fixes (experimental)', false)
@@ -168,7 +168,9 @@ VALID GATES:
   code_freeze      Enforce code freeze compliance
   duplication      Detect functional duplication
   god_objects      Prevent oversized files
+  hidden-todo      Detect hidden incomplete implementations
   documentation    Check documentation quality
+  placeholders     Placeholder governance (explicit degradations)
 
 EXAMPLES:
   # Run all gates in development mode
