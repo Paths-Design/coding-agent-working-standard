@@ -55,7 +55,7 @@ async function main() {
         `npx esbuild "${mcpServerEntry}" --bundle --platform=node --target=node18 --format=esm --outfile="${mcpServerBundle}" --external:@paths.design/caws-cli --external:@paths.design/quality-gates`,
         { stdio: 'inherit', cwd: EXTENSION_ROOT }
       );
-      
+
       // Read the bundled file and remove any shebang that might have been preserved
       // Shebangs cause syntax errors when loading ES modules
       let bundledContent = await fs.readFile(mcpServerBundle, 'utf8');
@@ -67,7 +67,7 @@ async function main() {
         bundledContent = bundledContent.replace(/^\/\/\/usr\/bin\/env node\n?/, '');
       }
       await fs.writeFile(mcpServerBundle, bundledContent);
-      
+
       console.log('  ✅ Bundled MCP server (single file)');
     } catch (error) {
       console.error('  ❌ Failed to bundle MCP server:', error.message);
@@ -155,10 +155,7 @@ async function main() {
     const mjsFiles = await fs.readdir(qualityGatesSource);
     for (const file of mjsFiles) {
       if (file.endsWith('.mjs') && file !== 'run-quality-gates.mjs') {
-        await fs.copy(
-          path.join(qualityGatesSource, file),
-          path.join(qualityGatesDest, file)
-        );
+        await fs.copy(path.join(qualityGatesSource, file), path.join(qualityGatesDest, file));
       }
     }
     console.log('  ✅ Copied other quality gates modules');
@@ -169,10 +166,7 @@ async function main() {
       const files = glob.sync(pattern, { cwd: qualityGatesSource });
       for (const file of files) {
         if (file !== 'package.json' && file !== 'package-lock.json') {
-          await fs.copy(
-            path.join(qualityGatesSource, file),
-            path.join(qualityGatesDest, file)
-          );
+          await fs.copy(path.join(qualityGatesSource, file), path.join(qualityGatesDest, file));
         }
       }
     }
@@ -223,7 +217,9 @@ async function main() {
     console.log('─'.repeat(50));
     console.log(`MCP Server v${bundledInfo.mcpServer.version} → ${bundledInfo.mcpServer.path}`);
     console.log(`CAWS CLI v${bundledInfo.cli.version} → ${bundledInfo.cli.path}`);
-    console.log(`Quality Gates v${bundledInfo.qualityGates.version} → ${bundledInfo.qualityGates.path}`);
+    console.log(
+      `Quality Gates v${bundledInfo.qualityGates.version} → ${bundledInfo.qualityGates.path}`
+    );
     console.log('─'.repeat(50));
     console.log('\n✅ Bundling complete!');
     console.log('\nBundled files are ready for extension packaging.');

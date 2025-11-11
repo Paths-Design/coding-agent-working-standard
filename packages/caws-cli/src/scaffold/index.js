@@ -659,19 +659,19 @@ async function scaffoldProject(options) {
         console.log('3. Push to trigger automated publishing');
         console.log('4. Your existing CAWS tools remain unchanged');
       } else {
-        console.log('2. Customize your working spec in .caws/working-spec.yaml');
-        console.log('3. Run validation: caws validate --suggestions');
+        console.log('2. Run: caws validate (verify setup)');
+        console.log('3. Run: caws diagnose (check project health)');
+        console.log('4. Customize .caws/working-spec.yaml for your project');
+        console.log('5. Optional: Create .caws/policy.yaml for tier-specific budgets');
         if (!qualityGatesAdded && !options.minimal) {
           console.log(
-            chalk.gray('4. Note: Quality gates scripts skipped (git hooks use CAWS CLI by default)')
+            chalk.gray('6. Note: Quality gates scripts skipped (git hooks use CAWS CLI by default)')
           );
           console.log(
             chalk.gray(
               '   Add --with-quality-gates flag if you want local scripts without global CLI'
             )
           );
-        } else {
-          console.log('4. Your existing CAWS tools remain unchanged');
         }
       }
     }

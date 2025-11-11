@@ -481,9 +481,10 @@ async function diagnoseCommand(options = {}) {
 
     if (issueCount === 0) {
       console.log(chalk.blue('📚 Next steps:'));
-      console.log(chalk.blue('   • Run: caws status to view project health'));
+      console.log(chalk.blue('   • Run: caws status --visual to view project health'));
       console.log(chalk.blue('   • Run: caws validate to check working spec'));
-      console.log(chalk.blue('   • Run: node apps/tools/caws/gates.js for quality gates'));
+      console.log(chalk.blue('   • Optional: Create .caws/policy.yaml for custom budgets'));
+      console.log(chalk.blue('   • Start implementing: caws iterate --current-state "Ready to begin"'));
     }
   } catch (error) {
     console.error(chalk.red('\n❌ Error running diagnosis:'), error.message);

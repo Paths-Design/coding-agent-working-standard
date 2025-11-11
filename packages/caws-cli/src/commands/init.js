@@ -496,11 +496,16 @@ Happy coding! 🎯
       console.log('   Or use "chore" mode for maintenance work (mode: chore)');
     }
     
-    console.log('\n3. Run "caws validate" to check your setup');
+    console.log('\n📋 Recommended Setup Workflow:');
+    console.log('   1. Review .caws/working-spec.yaml');
+    console.log('   2. Run: caws scaffold (adds tools and templates)');
+    console.log('   3. Run: caws validate (verify setup)');
+    console.log('   4. Run: caws diagnose (check health)');
+    console.log('   5. Optional: Create .caws/policy.yaml for custom budgets');
     if (answers?.useCursorHooks || options.interactive === false) {
-      console.log('4. Restart Cursor IDE to activate quality gates');
+      console.log('   6. Restart Cursor IDE to activate quality gates');
     }
-    console.log('5. Start implementing your features!');
+    console.log('\n💡 Quick start: caws scaffold && caws validate && caws diagnose');
   } catch (error) {
     console.error(chalk.red('❌ Error during initialization:'), error.message);
     if (error.stack) {
