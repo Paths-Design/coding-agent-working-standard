@@ -97,12 +97,32 @@ function generateWorkingSpec(answers) {
         .map((s) => s.trim())
         .filter((s) => s),
     },
-    contracts: [
-      {
-        type: answers.contractType || '',
-        path: answers.contractPath || '',
-      },
-    ],
+    contracts: (() => {
+      // If contract type/path provided, use it
+      if (answers.contractType && answers.contractPath) {
+        return [
+          {
+            type: answers.contractType,
+            path: answers.contractPath,
+          },
+        ];
+      }
+      
+      // For Tier 1 & 2, provide minimal project_setup contract if none specified
+      const riskTier = answers.riskTier || 2;
+      if (riskTier === 1 || riskTier === 2) {
+        return [
+          {
+            type: 'project_setup',
+            path: '.caws/working-spec.yaml',
+            description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
+          },
+        ];
+      }
+      
+      // Tier 3 doesn't require contracts
+      return [];
+    })(),
     observability: {
       logs: (answers.observabilityLogs || '')
         .split(',')

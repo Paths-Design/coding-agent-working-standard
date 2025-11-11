@@ -481,7 +481,21 @@ Happy coding! 🎯
     console.log(chalk.blue('\nNext steps:'));
     console.log('1. Review .caws/working-spec.yaml');
     console.log('2. Customize the specification for your needs');
-    console.log('3. Run "caws validate" to check your setup');
+    
+    // Show contract requirements if Tier 1 or 2
+    const riskTier = answers?.riskTier || defaultAnswers?.riskTier || 2;
+    if (riskTier === 1 || riskTier === 2) {
+      console.log(chalk.yellow('\n⚠️  Important: Contract Requirements'));
+      console.log(`   Tier ${riskTier} changes require at least one contract.`);
+      console.log('   For infrastructure/setup work, add a minimal contract:');
+      console.log(chalk.gray('   contracts:'));
+      console.log(chalk.gray('     - type: "project_setup"'));
+      console.log(chalk.gray('       path: ".caws/working-spec.yaml"'));
+      console.log(chalk.gray('       description: "Project-level CAWS configuration"'));
+      console.log('   Or use "chore" mode for maintenance work (mode: chore)');
+    }
+    
+    console.log('\n3. Run "caws validate" to check your setup');
     if (answers?.useCursorHooks || options.interactive === false) {
       console.log('4. Restart Cursor IDE to activate quality gates');
     }

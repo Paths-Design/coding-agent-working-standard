@@ -194,6 +194,18 @@ async function validateCommand(specFile, options = {}) {
           if (error.suggestion) {
             console.log(`      ${chalk.blue('💡 ' + error.suggestion)}`);
           }
+          if (error.example) {
+            console.log(`      ${chalk.gray('Example:')}`);
+            if (error.example.contracts) {
+              error.example.contracts.forEach((contract) => {
+                console.log(`        ${chalk.gray('- type: ' + contract.type)}`);
+                console.log(`          ${chalk.gray('path: ' + contract.path)}`);
+                if (contract.description) {
+                  console.log(`          ${chalk.gray('description: ' + contract.description)}`);
+                }
+              });
+            }
+          }
         });
 
         // Show warnings

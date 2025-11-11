@@ -364,12 +364,71 @@ fi
 # Run full validation suite
 if command -v caws >/dev/null 2>&1; then
   echo "📋 Running comprehensive CAWS validation..."
-  if caws validate --quiet; then
+  
+  # Run validation and capture output
+  VALIDATION_OUTPUT=$(caws validate 2>&1)
+  VALIDATION_EXIT=$?
+  
+  if [ $VALIDATION_EXIT -eq 0 ]; then
     echo "✅ CAWS validation passed"
   else
     echo "❌ CAWS validation failed"
-    echo "💡 Fix issues locally, then push again"
-    echo "💡 You can commit fixes with: git commit --no-verify"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Validation Errors:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$VALIDATION_OUTPUT" | grep -E "(❌|error|Error|Missing|required)" || echo "$VALIDATION_OUTPUT"
+    echo ""
+    
+    # Check for contract-related errors
+    if echo "$VALIDATION_OUTPUT" | grep -qi "contract"; then
+      echo "💡 Contract Requirements:"
+      echo "   • Tier 1 & 2 changes require at least one contract"
+      echo "   • For infrastructure/setup work, use 'chore' mode or add a minimal contract:"
+      echo ""
+      echo "   Example minimal contract (.caws/working-spec.yaml):"
+      echo "   contracts:"
+      echo "     - type: 'project_setup'"
+      echo "       path: '.caws/working-spec.yaml'"
+      echo "       description: 'Project-level CAWS configuration'"
+      echo ""
+      echo "   Or change mode to 'chore' for maintenance work:"
+      echo "   mode: chore"
+      echo ""
+    fi
+    
+    # Check for active waivers
+    echo "🔍 Checking for active waivers..."
+    if command -v caws >/dev/null 2>&1 && caws waivers list --status=active --format=count 2>/dev/null | grep -q "[1-9]"; then
+      ACTIVE_WAIVERS=$(caws waivers list --status=active 2>/dev/null)
+      echo "⚠️  Active waivers found:"
+      echo "$ACTIVE_WAIVERS" | head -5
+      echo ""
+      echo "💡 Note: Waivers may not cover all validation failures"
+      echo "   Review waiver coverage: caws waivers list --status=active"
+    else
+      echo "   No active waivers found"
+      echo ""
+      echo "💡 If this is infrastructure/setup work, you can create a waiver:"
+      echo "   caws waivers create \\"
+      echo "     --title=\"Initial CAWS setup\" \\"
+      echo "     --reason=infrastructure_limitation \\"
+      echo "     --gates=contracts \\"
+      echo "     --expires-at=\"2024-12-31T23:59:59Z\" \\"
+      echo "     --approved-by=\"@your-team\" \\"
+      echo "     --impact-level=low \\"
+      echo "     --mitigation-plan=\"Contracts will be added as features are developed\""
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Next Steps:"
+    echo "   1. Review errors above"
+    echo "   2. Fix issues in .caws/working-spec.yaml"
+    echo "   3. Run: caws validate (to verify fixes)"
+    echo "   4. Commit fixes: git commit --no-verify (allowed)"
+    echo "   5. Push again: git push"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
   fi
 fi

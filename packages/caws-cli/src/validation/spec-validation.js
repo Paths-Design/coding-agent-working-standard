@@ -325,11 +325,35 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
     // Tier-specific validations
     if (spec.risk_tier === 1 || spec.risk_tier === 2) {
       if (!spec.contracts || spec.contracts.length === 0) {
+        const isChoreMode = spec.mode === 'chore';
+        const suggestion = isChoreMode
+          ? 'For infrastructure/setup work, add a minimal project_setup contract or create a waiver'
+          : 'Add API contracts (OpenAPI, GraphQL, etc.) or change mode to "chore" for maintenance work';
+        
         errors.push({
           instancePath: '/contracts',
-          message: 'Contracts required for Tier 1 and 2 changes',
-          suggestion: 'Specify API contracts (OpenAPI, GraphQL, etc.)',
+          message: `Contracts required for Tier ${spec.risk_tier} changes`,
+          suggestion: suggestion,
           canAutoFix: false,
+          example: isChoreMode
+            ? {
+                contracts: [
+                  {
+                    type: 'project_setup',
+                    path: '.caws/working-spec.yaml',
+                    description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
+                  },
+                ],
+              }
+            : {
+                contracts: [
+                  {
+                    type: 'openapi',
+                    path: 'docs/api/feature.yaml',
+                    version: '1.0.0',
+                  },
+                ],
+              },
         });
       }
     }
