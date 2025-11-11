@@ -13,13 +13,15 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Check if logged into npm
+# Check if logged into npm (bypass workspace restrictions)
 echo "Checking npm authentication..."
-if ! npm whoami &>/dev/null; then
-  echo -e "${RED}❌ Not logged into npm. Run: npm login${NC}"
+if ! npm whoami --workspaces=false &>/dev/null; then
+  echo -e "${RED}❌ Not logged into npm.${NC}"
+  echo -e "${YELLOW}Run: npm login --workspaces=false${NC}"
+  echo -e "${YELLOW}Or: npm login --no-workspaces${NC}"
   exit 1
 fi
-echo -e "${GREEN}✅ Logged in as: $(npm whoami)${NC}"
+echo -e "${GREEN}✅ Logged in as: $(npm whoami --workspaces=false)${NC}"
 echo ""
 
 # Function to release a package

@@ -15,6 +15,7 @@ Run the automated script:
 ### Prerequisites
 
 1. **Ensure you're logged into npm:**
+
    ```bash
    npm whoami
    # If not logged in:
@@ -71,6 +72,7 @@ git tag -a "caws-mcp-server-v1.1.2" -m "chore(release): @paths.design/caws-mcp-s
 ### After All Releases
 
 1. **Push tags to GitHub:**
+
    ```bash
    git push --tags
    ```
