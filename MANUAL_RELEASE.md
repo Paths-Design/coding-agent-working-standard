@@ -17,9 +17,11 @@ Run the automated script:
 1. **Ensure you're logged into npm:**
 
    ```bash
-   npm whoami
-   # If not logged in:
-   npm login
+   npm whoami --workspaces=false
+   # If not logged in (workspace workaround):
+   npm login --workspaces=false
+   # Or:
+   npm login --no-workspaces
    ```
 
 2. **Ensure all changes are committed:**
