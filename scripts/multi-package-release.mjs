@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Multi-Package Semantic Release Script
- * 
+ *
  * Detects which packages have changes and runs semantic-release for each one.
  * This avoids conflicts from multiple npm plugins in a single config.
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,33 +22,33 @@ const PACKAGES = [
     scope: 'cli',
     config: {
       pkgRoot: 'packages/caws-cli',
-      tarballDir: 'dist'
-    }
+      tarballDir: 'dist',
+    },
   },
   {
     name: '@paths.design/caws-mcp-server',
     path: 'packages/caws-mcp-server',
     scope: 'mcp-server',
     config: {
-      pkgRoot: 'packages/caws-mcp-server'
-    }
+      pkgRoot: 'packages/caws-mcp-server',
+    },
   },
   {
     name: '@paths.design/caws-types',
     path: 'packages/caws-types',
     scope: 'caws-types',
     config: {
-      pkgRoot: 'packages/caws-types'
-    }
+      pkgRoot: 'packages/caws-types',
+    },
   },
   {
     name: '@paths.design/quality-gates',
     path: 'packages/quality-gates',
     scope: 'quality-gates',
     config: {
-      pkgRoot: 'packages/quality-gates'
-    }
-  }
+      pkgRoot: 'packages/quality-gates',
+    },
+  },
 ];
 
 /**
@@ -59,13 +59,13 @@ function hasPackageChanges(packagePath, lastTag = null) {
     const gitCommand = lastTag
       ? `git diff --name-only ${lastTag}..HEAD -- ${packagePath}`
       : `git diff --name-only HEAD~10..HEAD -- ${packagePath}`;
-    
-    const output = execSync(gitCommand, { 
+
+    const output = execSync(gitCommand, {
       cwd: rootDir,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    
+
     return output.trim().length > 0;
   } catch (error) {
     // If no commits or tag doesn't exist, check last 10 commits
@@ -78,11 +78,14 @@ function hasPackageChanges(packagePath, lastTag = null) {
  */
 function getLastTag(packageName) {
   try {
-    const tags = execSync(`git tag --sort=-version:refname | grep "^${packageName.replace('@', '').replace('/', '-')}-v" | head -1`, {
-      cwd: rootDir,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    const tags = execSync(
+      `git tag --sort=-version:refname | grep "^${packageName.replace('@', '').replace('/', '-')}-v" | head -1`,
+      {
+        cwd: rootDir,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
     return tags.trim() || null;
   } catch {
     return null;
@@ -117,41 +120,38 @@ function createPackageConfig(pkg) {
             { type: 'refactor', release: false },
             { type: 'test', release: false },
             { type: 'build', release: false },
-            { type: 'ci', release: false }
+            { type: 'ci', release: false },
           ],
           parserOpts: {
-            noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES']
-          }
-        }
+            noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
+          },
+        },
       ],
       '@semantic-release/release-notes-generator',
       [
         '@semantic-release/changelog',
         {
-          changelogFile: `${pkg.path}/CHANGELOG.md`
-        }
+          changelogFile: `${pkg.path}/CHANGELOG.md`,
+        },
       ],
       [
         '@semantic-release/npm',
         {
           npmPublish: true,
           ...pkg.config,
-          provenance: false
-        }
+          provenance: false,
+        },
       ],
       [
         '@semantic-release/git',
         {
-          assets: [
-            `${pkg.path}/CHANGELOG.md`,
-            `${pkg.path}/package.json`
-          ],
-          message: `chore(release): ${pkg.name}@\${nextRelease.version} [skip ci]\n\n\${nextRelease.notes}`
-        }
-      ]
-    ]
+          assets: [`${pkg.path}/CHANGELOG.md`, `${pkg.path}/package.json`],
+          message: `chore(release): ${pkg.name}@\${nextRelease.version} [skip ci]\n\n\${nextRelease.notes}`,
+        },
+      ],
+    ],
   };
-  
+
   // Return as CommonJS module for better compatibility with semantic-release
   return `module.exports = ${JSON.stringify(config, null, 2)};`;
 }
@@ -161,33 +161,35 @@ function createPackageConfig(pkg) {
  */
 function releasePackage(pkg) {
   console.log(`\n📦 Releasing ${pkg.name}...`);
-  
+
   // Use .cjs extension to explicitly mark as CommonJS (works with semantic-release)
   const configPath = path.join(rootDir, `.releaserc.${pkg.scope}.cjs`);
   const config = createPackageConfig(pkg);
-  
+
   try {
     // Write temporary config as CommonJS module
     writeFileSync(configPath, config, { mode: 0o644 });
-    
+
     // Verify file was created and is readable
     if (!existsSync(configPath)) {
       throw new Error(`Failed to create config file: ${configPath}`);
     }
-    
+
     // Verify file is readable
     try {
       readFileSync(configPath, 'utf8');
     } catch (readError) {
-      throw new Error(`Config file exists but is not readable: ${configPath} - ${readError.message}`);
+      throw new Error(
+        `Config file exists but is not readable: ${configPath} - ${readError.message}`
+      );
     }
-    
+
     // Use absolute path for better reliability with semantic-release's import resolution
     // semantic-release uses import-from-esm which needs proper path resolution
     const configPathAbsolute = path.resolve(configPath);
-    
+
     console.log(`  Using config: ${configPathAbsolute}`);
-    
+
     // Run semantic-release with absolute path
     execSync(`npx semantic-release --extends ${configPathAbsolute}`, {
       cwd: rootDir,
@@ -195,21 +197,21 @@ function releasePackage(pkg) {
       env: {
         ...process.env,
         GITHUB_TOKEN: process.env.GITHUB_TOKEN,
-        NPM_TOKEN: process.env.NPM_TOKEN || process.env.NODE_AUTH_TOKEN
-      }
+        NPM_TOKEN: process.env.NPM_TOKEN || process.env.NODE_AUTH_TOKEN,
+      },
     });
-    
+
     console.log(`✅ Successfully released ${pkg.name}`);
-    
+
     // Clean up temp config
     if (existsSync(configPath)) {
       unlinkSync(configPath);
     }
-    
+
     return true;
   } catch (error) {
     console.error(`❌ Failed to release ${pkg.name}:`, error.message);
-    
+
     // Debug: Check if file exists before cleanup
     if (existsSync(configPath)) {
       console.error(`  Config file exists at: ${configPath}`);
@@ -222,12 +224,12 @@ function releasePackage(pkg) {
     } else {
       console.error(`  Config file does not exist at: ${configPath}`);
     }
-    
+
     // Clean up temp config
     if (existsSync(configPath)) {
       unlinkSync(configPath);
     }
-    
+
     return false;
   }
 }
@@ -237,41 +239,40 @@ function releasePackage(pkg) {
  */
 async function main() {
   console.log('🚀 Multi-Package Semantic Release\n');
-  
-  const changedPackages = PACKAGES.filter(pkg => {
+
+  const changedPackages = PACKAGES.filter((pkg) => {
     const hasChanges = hasPackageChanges(pkg.path);
     if (hasChanges) {
       console.log(`✓ ${pkg.name} has changes`);
     }
     return hasChanges;
   });
-  
+
   if (changedPackages.length === 0) {
     console.log('ℹ️  No packages with changes detected');
     process.exit(0);
   }
-  
+
   console.log(`\n📋 Releasing ${changedPackages.length} package(s)...\n`);
-  
-  const results = changedPackages.map(pkg => ({
+
+  const results = changedPackages.map((pkg) => ({
     package: pkg.name,
-    success: releasePackage(pkg)
+    success: releasePackage(pkg),
   }));
-  
-  const successful = results.filter(r => r.success).length;
-  const failed = results.filter(r => !r.success).length;
-  
+
+  const successful = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
+
   console.log(`\n📊 Release Summary:`);
   console.log(`   ✅ Successful: ${successful}`);
   console.log(`   ❌ Failed: ${failed}`);
-  
+
   if (failed > 0) {
     process.exit(1);
   }
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('❌ Release script failed:', error);
   process.exit(1);
 });
-

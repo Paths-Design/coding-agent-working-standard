@@ -453,6 +453,11 @@ public
 **/sbom.json
 **/attestation.json
 
+# Quality gates auto-generated status files
+docs-status/quality-gates-report.json
+**/docs-status/quality-gates.lock
+**/docs-status/*.lock
+
 # Test project artifacts
 test-caws-project/
 **/test-project/
