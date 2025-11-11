@@ -49,6 +49,7 @@ tests/**
 node_modules/**
 **/node_modules/**
 !bundled/mcp-server/node_modules/**
+!bundled/quality-gates/node_modules/**
 
 # Build scripts
 scripts/**

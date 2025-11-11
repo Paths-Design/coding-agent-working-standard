@@ -252,12 +252,18 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
     }
 
     // Register CAWS MCP server
+    // Note: Cursor may not support 'cwd' in MCP config, so we pass workspace via env var
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     mcpConfig.mcpServers.caws = {
       command: 'node',
       args: [mcpServerPath],
       env: {
         VSCODE_EXTENSION_PATH: context.extensionPath,
         VSCODE_EXTENSION_DIR: context.extensionPath,
+        ...(workspaceRoot && {
+          CURSOR_WORKSPACE_ROOT: workspaceRoot,
+          VSCODE_WORKSPACE_ROOT: workspaceRoot,
+        }),
       },
       disabled: false,
       alwaysAllow: [],

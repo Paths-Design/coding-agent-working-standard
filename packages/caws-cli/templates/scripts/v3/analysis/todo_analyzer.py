@@ -453,6 +453,29 @@ class HiddenTodoAnalyzer:
             # Console and logging
             r'console\.(log|warn|error|info)',
             r'\blogging\s+implementation\b',
+            
+            # TODO system documentation (false positives when documenting TODO system itself)
+            r'\btodo\s+template\s+system\b',
+            r'\btodo\s+template\b',
+            r'\btodo\s+instance\b',
+            r'\btodo\s+step\b',
+            r'\btodo\s+integration\b',
+            r'\btodo\s+system\b',
+            r'\btodotemplate\b',
+            r'\btodoinstance\b',
+            r'\btodostep\b',
+            r'\btodointegration\b',
+            r'\btodotemplatesystem\b',
+            r'\btodoprogress\b',
+            r'\btododependency\b',
+            r'\btodoqualityenforcer\b',
+            r'\btodoworkflowhooks\b',
+            r'\btodostatus\b',
+            r'\btodopriority\b',
+            r'\btodosteptype\b',
+            # Rust doc comment patterns when mentioning TODO system types
+            r'^\s*//[!]/.*\btodo\b.*(template|instance|step|integration|system)\b',
+            r'^\s*///.*\btodo\b.*(template|instance|step|integration|system)\b',
         ]
 
         # Engineering-grade TODO template patterns (for suggestions)
@@ -612,6 +635,30 @@ class HiddenTodoAnalyzer:
         for indicator in self.documentation_indicators:
             if re.search(indicator, comment, re.IGNORECASE):
                 return True
+        
+        # Check for Rust doc comments (//! and ///) that mention TODO system types
+        todo_system_types = [
+            r'todo\s+template',
+            r'todo\s+instance',
+            r'todo\s+step',
+            r'todo\s+integration',
+            r'todo\s+system',
+            r'todotemplate',
+            r'todoinstance',
+            r'todostep',
+            r'todointegration',
+            r'todotemplatesystem',
+            r'todoprogress',
+            r'tododependency',
+        ]
+        
+        # If comment mentions TODO system types and appears to be documentation, exclude it
+        if any(re.search(pattern, comment, re.IGNORECASE) for pattern in todo_system_types):
+            # Check if it's describing the system rather than a TODO item
+            # If it contains "TODO:" followed by a colon, it's likely a real TODO
+            if not re.search(r'\bTODO\s*:\s*', comment, re.IGNORECASE):
+                return True
+        
         return False
 
     def has_todo_indicators(self, comment: str) -> bool:
@@ -1522,7 +1569,7 @@ class HiddenTodoAnalyzer:
                     'blocking_analysis': {}
                 }
             
-            print(f"📁 Found {len(staged_files)} staged files to analyze")
+            print(f"Found {len(staged_files)} staged files to analyze")
             
             # Analyze staged files
             analysis_results = self.analyze_files(staged_files, min_confidence)

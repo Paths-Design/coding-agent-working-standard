@@ -16,12 +16,19 @@ COMMAND=$(echo "$INPUT" | jq -r '.command // ""')
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
 
 # Hard blocks - never allow these
+# CRITICAL: These commands can cause catastrophic data loss
+# git init, git reset --hard, and git push --force were added after an incident
+# where an agent panicked at quality gates and wiped thousands of lines of work
 HARD_BLOCKS=(
   "rm -rf /"
   "rm -rf /*"
   "rm -rf ~"
   "rm -rf $HOME"
   "> /dev/sda"
+  "git init"                    # Can wipe entire git history and stashed changes
+  "git commit --amend --no-edit" # Can rewrite commit history destructively
+  "git reset --hard"            # Can lose uncommitted work and stashed changes
+  "git push --force"             # Can overwrite remote repository history
   "dd if="
   "mkfs"
   "format c:"
@@ -38,10 +45,9 @@ for blocked in "${HARD_BLOCKS[@]}"; do
 done
 
 # Ask permission for risky operations
+# Note: git commands moved to HARD_BLOCKS after catastrophic data loss incident
 ASK_PERMISSION=(
   "rm -rf"
-  "git push --force"
-  "git reset --hard"
   "npm publish"
   "docker rmi"
   "docker system prune"

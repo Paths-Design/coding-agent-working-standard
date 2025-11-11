@@ -11,6 +11,7 @@
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import ignore from 'ignore';
 import micromatch from 'micromatch';
 import path from 'path';
 
@@ -187,6 +188,44 @@ function repoRoot() {
   } catch {
     throw new Error('Not a git repository. Run inside a repo or ensure GIT_* envs are set.');
   }
+}
+
+/** ----------------------- .gitignore support ----------------------- */
+/**
+ * Loads .gitignore patterns from the repository root.
+ * Note: Git processes .gitignore files hierarchically (parent to child), but for file-scope-manager
+ * we only need the repository root's .gitignore since git ls-files already respects .gitignore.
+ * This provides additional filtering for edge cases and consistency.
+ */
+function loadGitignore(root) {
+  const ig = ignore();
+  
+  // Load repository root .gitignore (primary source)
+  // Git ls-files already respects .gitignore, so this is mainly for edge cases
+  const gitignorePath = path.join(root, '.gitignore');
+  if (fs.existsSync(gitignorePath)) {
+    try {
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      ig.add(content);
+    } catch {
+      // Ignore errors reading .gitignore file
+    }
+  }
+  
+  return ig;
+}
+
+/**
+ * Checks if a file should be ignored based on .gitignore patterns.
+ * @param {string} relPath - Relative path from repository root
+ * @param {ignore.Ignore} gitignore - Loaded .gitignore instance
+ * @returns {boolean} True if file should be ignored
+ */
+function shouldIgnoreByGitignore(relPath, gitignore) {
+  if (!gitignore) return false;
+  // Normalize path separators for cross-platform compatibility
+  const normalized = normalizePath(relPath);
+  return gitignore.ignores(normalized);
 }
 
 /** ----------------------- config ----------------------- */
@@ -375,13 +414,28 @@ function listPushFiles(root, baseRef) {
 /** ----------------------- normalization & selection ----------------------- */
 function filterAndNormalize(relPaths, root, cfg) {
   const match = makeMatcher(cfg);
-  // First pass: apply include/exclude globs and basic existence checks
+  
+  // Load .gitignore patterns once for this batch
+  let gitignoreInstance = null;
+  try {
+    gitignoreInstance = loadGitignore(root);
+  } catch {
+    // If we can't load .gitignore, continue without it (fail open)
+    // git ls-files already respects .gitignore, so this is mainly for edge cases
+  }
+  
+  // First pass: apply include/exclude globs, .gitignore, and basic existence checks
   const keptRel = [];
   const extlessAbs = [];
 
   for (const rel of relPaths) {
     if (!rel) continue;
     if (!match(rel)) continue;
+    
+    // Check .gitignore (additional safety check, git ls-files already filters but this catches edge cases)
+    if (gitignoreInstance && shouldIgnoreByGitignore(rel, gitignoreInstance)) {
+      continue;
+    }
 
     const abs = path.join(root, rel);
     try {
@@ -403,11 +457,17 @@ function filterAndNormalize(relPaths, root, cfg) {
   if (extlessAbs.length > 0) {
     const shebangs = shebangMapFor(extlessAbs);
     for (const abs of extlessAbs) {
+      const rel = path.relative(root, abs);
+      
+      // Check .gitignore for extensionless files too
+      if (gitignoreInstance && shouldIgnoreByGitignore(rel, gitignoreInstance)) {
+        continue;
+      }
+      
       if (shebangs.get(abs)) {
-        keptRel.push(path.relative(root, abs));
+        keptRel.push(rel);
       } else {
         // also include well-known config files without extension
-        const rel = path.relative(root, abs);
         if (/(^|\/)(Makefile|Dockerfile.*|\.editorconfig|\.env.*|\.git.*)$/i.test(rel)) {
           keptRel.push(rel);
         }
@@ -460,7 +520,7 @@ function filterAndNormalize(relPaths, root, cfg) {
  *
  * File scoping by context:
  * - 'commit': Staged files only (git diff --cached)
- * - 'push': Files changed vs. upstream base (git diff <base>...HEAD)
+ * - 'push': All tracked files in repository (git ls-files) - validates entire repo before push
  * - 'ci': All tracked files in repository (git ls-files)
  *
  * File filtering:
@@ -480,7 +540,7 @@ export function getFilesToCheck(context = 'commit') {
 
   let rel;
   if (context === 'commit') rel = listStagedFiles(root);
-  else if (context === 'push') rel = listPushFiles(root, cfg.ciBaseRef);
+  else if (context === 'push') rel = listRepoFiles(root); // Scan entire repo before push
   else if (context === 'ci') rel = listRepoFiles(root);
   else rel = listStagedFiles(root);
 
@@ -515,9 +575,9 @@ export function getContextInfo(context) {
     };
   if (context === 'push')
     return {
-      description: 'files changed vs base (upstream/CI)',
+      description: 'all tracked files (validates entire repo before push)',
       scope: 'push',
-      gitCommand: 'git diff --name-only -z --diff-filter=ACMRTUXB <base>...HEAD',
+      gitCommand: 'git ls-files -z --recurse-submodules',
     };
   if (context === 'ci')
     return {

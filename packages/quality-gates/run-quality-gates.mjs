@@ -851,10 +851,16 @@ class QualityGateRunner {
           }
         } else {
           if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
-          // Use longer timeout for CI mode (full repo scan) vs commit mode (staged files only)
-          const timeoutMs = this.context === 'ci' ? 120000 : 30000; // 2 min for CI, 30s for commit
+          // Use longer timeout for full repo scans (push/ci) vs commit mode (staged files only)
+          // commit: 30s (staged files only, typically small)
+          // push/ci: 120s (entire repo scan, may be large)
+          const timeoutMs = (this.context === 'ci' || this.context === 'push') ? 120000 : 30000;
           gatePromises.push(
-            this.runGateWithTimeout('documentation', () => this.runDocumentationQualityGate(), timeoutMs)
+            this.runGateWithTimeout(
+              'documentation',
+              () => this.runDocumentationQualityGate(),
+              timeoutMs
+            )
           );
         }
       }
@@ -1244,9 +1250,12 @@ class QualityGateRunner {
         return await this.runBasicDocumentationChecks();
       }
 
-      // TODO: Update doc linter to support file filtering. For transparency, announce scope here.
+      // File scope is correctly determined by context:
+      // - commit: staged files only
+      // - push: all tracked files (entire repo)
+      // - ci: all tracked files (entire repo)
       console.log(
-        `    File scope: ${this.filesToCheck.length} files (linter currently scans repo)`
+        `    File scope: ${this.filesToCheck.length} files (context: ${this.context})`
       );
 
       console.log('    Starting documentation quality scan...');

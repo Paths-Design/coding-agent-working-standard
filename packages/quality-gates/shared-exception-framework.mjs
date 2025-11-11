@@ -17,17 +17,59 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = repoRootSafe() ?? path.join(__dirname, '..', '..');
-const EXCEPTION_CONFIG_PATH = path.join(PROJECT_ROOT, '.caws', 'quality-exceptions.json');
-const LOCK_PATH = path.join(PROJECT_ROOT, '.caws', '.quality-exceptions.lock');
 
-function repoRootSafe() {
+// Project root can be overridden (e.g., by MCP server with working directory)
+let PROJECT_ROOT_OVERRIDE = null;
+
+function repoRootSafe(cwd = process.cwd()) {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { 
+      encoding: 'utf8',
+      cwd: cwd 
+    }).trim();
   } catch {
     return null;
   }
 }
+
+function getProjectRoot() {
+  // If override is set, use it
+  if (PROJECT_ROOT_OVERRIDE) {
+    return PROJECT_ROOT_OVERRIDE;
+  }
+  // Otherwise, try to find git root from current working directory
+  return repoRootSafe() ?? path.join(__dirname, '..', '..');
+}
+
+function getExceptionConfigPath() {
+  return path.join(getProjectRoot(), '.caws', 'quality-exceptions.json');
+}
+
+function getLockPath() {
+  return path.join(getProjectRoot(), '.caws', '.quality-exceptions.lock');
+}
+
+// Allow setting project root (e.g., from MCP server with working directory)
+export function setProjectRoot(projectRoot) {
+  if (projectRoot) {
+    // Resolve to absolute path
+    PROJECT_ROOT_OVERRIDE = path.isAbsolute(projectRoot) 
+      ? projectRoot 
+      : path.resolve(process.cwd(), projectRoot);
+    // Try to find git root from the provided directory
+    const gitRoot = repoRootSafe(PROJECT_ROOT_OVERRIDE);
+    if (gitRoot) {
+      PROJECT_ROOT_OVERRIDE = gitRoot;
+    }
+  } else {
+    PROJECT_ROOT_OVERRIDE = null;
+  }
+}
+
+// Legacy constants for backward compatibility (now use functions)
+const PROJECT_ROOT = getProjectRoot();
+const EXCEPTION_CONFIG_PATH = getExceptionConfigPath();
+const LOCK_PATH = getLockPath();
 
 /* ----------------------------- Schema & defaults ----------------------------- */
 
@@ -162,11 +204,12 @@ function ensureDir(p) {
 }
 
 function acquireLock(timeoutMs = 2000) {
-  ensureDir(LOCK_PATH);
+  const lockPath = getLockPath();
+  ensureDir(lockPath);
   const start = Date.now();
   while (true) {
     try {
-      fs.writeFileSync(LOCK_PATH, String(process.pid), { flag: 'wx' });
+      fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
       return true;
     } catch {
       if (Date.now() - start > timeoutMs) return false;
@@ -176,14 +219,15 @@ function acquireLock(timeoutMs = 2000) {
 }
 function releaseLock() {
   try {
-    fs.unlinkSync(LOCK_PATH);
+    fs.unlinkSync(getLockPath());
   } catch {}
 }
 
 export function loadExceptionConfig() {
+  const configPath = getExceptionConfigPath();
   try {
-    if (fs.existsSync(EXCEPTION_CONFIG_PATH)) {
-      const content = fs.readFileSync(EXCEPTION_CONFIG_PATH, 'utf8');
+    if (fs.existsSync(configPath)) {
+      const content = fs.readFileSync(configPath, 'utf8');
       const parsed = JSON.parse(content);
       // lightweight migration: add schema_version if missing
       if (!parsed.schema_version) parsed.schema_version = '2.0.0';
@@ -207,8 +251,9 @@ export function loadExceptionConfig() {
 }
 
 export function saveExceptionConfig(config) {
+  const configPath = getExceptionConfigPath();
   const payload = JSON.stringify(config, null, 2);
-  ensureDir(EXCEPTION_CONFIG_PATH);
+  ensureDir(configPath);
   if (!validateConfig(config)) {
     console.error(
       `❌ Refusing to save invalid config:\n${ajv.errorsText(validateConfig.errors, { separator: '\n' })}`
@@ -220,9 +265,9 @@ export function saveExceptionConfig(config) {
     return false;
   }
   try {
-    const tmp = EXCEPTION_CONFIG_PATH + '.tmp';
+    const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, payload);
-    fs.renameSync(tmp, EXCEPTION_CONFIG_PATH);
+    fs.renameSync(tmp, configPath);
     return true;
   } catch (e) {
     console.error(`❌ Error saving config: ${e.message}`);

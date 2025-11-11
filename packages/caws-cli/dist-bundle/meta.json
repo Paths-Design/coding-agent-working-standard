@@ -1522,7 +1522,7 @@
       "format": "cjs"
     },
     "package.json": {
-      "bytes": 2909,
+      "bytes": 2914,
       "imports": []
     },
     "src/config/index.js": {
@@ -1552,7 +1552,7 @@
       "format": "cjs"
     },
     "src/error-handler.js": {
-      "bytes": 22424,
+      "bytes": 22496,
       "imports": [
         {
           "path": "node_modules/chalk/source/index.js",
@@ -11725,8 +11725,8 @@
       ],
       "format": "cjs"
     },
-    "src/budget-derivation.js": {
-      "bytes": 6358,
+    "src/policy/PolicyManager.js": {
+      "bytes": 11921,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -11746,8 +11746,34 @@
       ],
       "format": "cjs"
     },
+    "src/budget-derivation.js": {
+      "bytes": 19225,
+      "imports": [
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "src/policy/PolicyManager.js",
+          "kind": "require-call",
+          "original": "./policy/PolicyManager"
+        }
+      ],
+      "format": "cjs"
+    },
     "src/validation/spec-validation.js": {
-      "bytes": 10950,
+      "bytes": 17570,
       "imports": [
         {
           "path": "src/budget-derivation.js",
@@ -11779,7 +11805,7 @@
       "format": "cjs"
     },
     "src/scaffold/cursor-hooks.js": {
-      "bytes": 5228,
+      "bytes": 5927,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -11876,7 +11902,7 @@
       "format": "cjs"
     },
     "src/scaffold/git-hooks.js": {
-      "bytes": 11628,
+      "bytes": 15447,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -11892,7 +11918,7 @@
       "format": "cjs"
     },
     "src/scaffold/index.js": {
-      "bytes": 17240,
+      "bytes": 18941,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -11926,6 +11952,11 @@
         },
         {
           "path": "crypto",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
           "kind": "require-call",
           "external": true
         }
@@ -11993,8 +12024,19 @@
       ],
       "format": "cjs"
     },
-    "src/commands/validate.js": {
-      "bytes": 2428,
+    "src/constants/spec-types.js": {
+      "bytes": 789,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/utils/spec-resolver.js": {
+      "bytes": 19053,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12017,9 +12059,80 @@
           "original": "chalk"
         },
         {
+          "path": "src/constants/spec-types.js",
+          "kind": "require-call",
+          "original": "../constants/spec-types"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/validate.js": {
+      "bytes": 8146,
+      "imports": [
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
           "path": "src/validation/spec-validation.js",
           "kind": "require-call",
           "original": "../validation/spec-validation"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
         }
       ],
       "format": "cjs"
@@ -12096,8 +12209,24 @@
       ],
       "format": "cjs"
     },
+    "src/utils/command-wrapper.js": {
+      "bytes": 4803,
+      "imports": [
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        }
+      ],
+      "format": "cjs"
+    },
     "src/commands/provenance.js": {
-      "bytes": 33587,
+      "bytes": 33706,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12118,6 +12247,11 @@
           "path": "../../node_modules/js-yaml/index.js",
           "kind": "require-call",
           "original": "js-yaml"
+        },
+        {
+          "path": "src/utils/command-wrapper.js",
+          "kind": "require-call",
+          "original": "../utils/command-wrapper"
         }
       ],
       "format": "cjs"
@@ -12175,7 +12309,7 @@
       "format": "cjs"
     },
     "src/commands/tool.js": {
-      "bytes": 3868,
+      "bytes": 3709,
       "imports": [
         {
           "path": "path",
@@ -12183,9 +12317,9 @@
           "external": true
         },
         {
-          "path": "node_modules/chalk/source/index.js",
+          "path": "src/utils/command-wrapper.js",
           "kind": "require-call",
-          "original": "chalk"
+          "original": "../utils/command-wrapper"
         },
         {
           "path": "src/tool-loader.js",
@@ -12200,8 +12334,18 @@
       ],
       "format": "cjs"
     },
-    "src/commands/status.js": {
-      "bytes": 9878,
+    "src/utils/async-utils.js": {
+      "bytes": 5137,
+      "imports": [],
+      "format": "cjs"
+    },
+    "src/utils/promise-utils.js": {
+      "bytes": 1758,
+      "imports": [],
+      "format": "cjs"
+    },
+    "src/commands/specs.js": {
+      "bytes": 22596,
       "imports": [
         {
           "path": "../../node_modules/fs-extra/lib/index.js",
@@ -12227,6 +12371,138 @@
           "path": "src/error-handler.js",
           "kind": "require-call",
           "original": "../error-handler"
+        },
+        {
+          "path": "src/utils/promise-utils.js",
+          "kind": "require-call",
+          "original": "../utils/promise-utils"
+        },
+        {
+          "path": "src/constants/spec-types.js",
+          "kind": "require-call",
+          "original": "../constants/spec-types"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        },
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/config/modes.js": {
+      "bytes": 8180,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/status.js": {
+      "bytes": 28619,
+      "imports": [
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "src/utils/async-utils.js",
+          "kind": "require-call",
+          "original": "../utils/async-utils"
+        },
+        {
+          "path": "src/commands/specs.js",
+          "kind": "require-call",
+          "original": "./specs"
+        },
+        {
+          "path": "src/config/modes.js",
+          "kind": "require-call",
+          "original": "../config/modes"
+        },
+        {
+          "path": "src/config/modes.js",
+          "kind": "require-call",
+          "original": "../config/modes"
+        },
+        {
+          "path": "src/config/modes.js",
+          "kind": "require-call",
+          "original": "../config/modes"
+        },
+        {
+          "path": "src/config/modes.js",
+          "kind": "require-call",
+          "original": "../config/modes"
         }
       ],
       "format": "cjs"
@@ -12367,7 +12643,38 @@
       "format": "cjs"
     },
     "src/commands/iterate.js": {
-      "bytes": 11604,
+      "bytes": 11221,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/config/index.js",
+          "kind": "require-call",
+          "original": "../config"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/waivers-manager.js": {
+      "bytes": 16807,
       "imports": [
         {
           "path": "fs",
@@ -12383,22 +12690,12 @@
           "path": "../../node_modules/js-yaml/index.js",
           "kind": "require-call",
           "original": "js-yaml"
-        },
-        {
-          "path": "node_modules/chalk/source/index.js",
-          "kind": "require-call",
-          "original": "chalk"
-        },
-        {
-          "path": "src/config/index.js",
-          "kind": "require-call",
-          "original": "../config"
         }
       ],
       "format": "cjs"
     },
     "src/commands/waivers.js": {
-      "bytes": 9950,
+      "bytes": 12117,
       "imports": [
         {
           "path": "fs",
@@ -12424,6 +12721,16 @@
           "path": "src/config/index.js",
           "kind": "require-call",
           "original": "../config"
+        },
+        {
+          "path": "src/waivers-manager.js",
+          "kind": "require-call",
+          "original": "../waivers-manager"
+        },
+        {
+          "path": "src/utils/command-wrapper.js",
+          "kind": "require-call",
+          "original": "../utils/command-wrapper"
         }
       ],
       "format": "cjs"
@@ -12465,8 +12772,49 @@
       ],
       "format": "cjs"
     },
+    "src/commands/quality-gates.js": {
+      "bytes": 7974,
+      "imports": [
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "src/utils/command-wrapper.js",
+          "kind": "require-call",
+          "original": "../utils/command-wrapper"
+        },
+        {
+          "path": "src/utils/async-utils.js",
+          "kind": "require-call",
+          "original": "../utils/async-utils"
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
     "src/commands/troubleshoot.js": {
-      "bytes": 3219,
+      "bytes": 3238,
       "imports": [
         {
           "path": "node_modules/chalk/source/index.js",
@@ -12481,8 +12829,132 @@
       ],
       "format": "cjs"
     },
+    "src/commands/archive.js": {
+      "bytes": 10402,
+      "imports": [
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "../../node_modules/js-yaml/index.js",
+          "kind": "require-call",
+          "original": "js-yaml"
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/mode.js": {
+      "bytes": 8145,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "src/config/modes.js",
+          "kind": "require-call",
+          "original": "../config/modes"
+        },
+        {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/tutorial.js": {
+      "bytes": 14825,
+      "imports": [
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "src/commands/plan.js": {
+      "bytes": 13602,
+      "imports": [
+        {
+          "path": "../../node_modules/fs-extra/lib/index.js",
+          "kind": "require-call",
+          "original": "fs-extra"
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/chalk/source/index.js",
+          "kind": "require-call",
+          "original": "chalk"
+        },
+        {
+          "path": "src/error-handler.js",
+          "kind": "require-call",
+          "original": "../error-handler"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        },
+        {
+          "path": "src/utils/spec-resolver.js",
+          "kind": "require-call",
+          "original": "../utils/spec-resolver"
+        }
+      ],
+      "format": "cjs"
+    },
     "src/index.js": {
-      "bytes": 17948,
+      "bytes": 25855,
       "imports": [
         {
           "path": "../../node_modules/commander/index.js",
@@ -12590,9 +13062,39 @@
           "original": "./commands/quality-monitor"
         },
         {
+          "path": "src/commands/quality-gates.js",
+          "kind": "require-call",
+          "original": "./commands/quality-gates"
+        },
+        {
           "path": "src/commands/troubleshoot.js",
           "kind": "require-call",
           "original": "./commands/troubleshoot"
+        },
+        {
+          "path": "src/commands/archive.js",
+          "kind": "require-call",
+          "original": "./commands/archive"
+        },
+        {
+          "path": "src/commands/specs.js",
+          "kind": "require-call",
+          "original": "./commands/specs"
+        },
+        {
+          "path": "src/commands/mode.js",
+          "kind": "require-call",
+          "original": "./commands/mode"
+        },
+        {
+          "path": "src/commands/tutorial.js",
+          "kind": "require-call",
+          "original": "./commands/tutorial"
+        },
+        {
+          "path": "src/commands/plan.js",
+          "kind": "require-call",
+          "original": "./commands/plan"
         },
         {
           "path": "src/scaffold/index.js",
@@ -12628,7 +13130,7 @@
       "imports": [],
       "exports": [],
       "inputs": {},
-      "bytes": 3423221
+      "bytes": 3744806
     },
     "dist-bundle/index.js": {
       "imports": [
@@ -12943,6 +13445,11 @@
           "external": true
         },
         {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
           "path": "child_process",
           "kind": "require-call",
           "external": true
@@ -12998,7 +13505,22 @@
           "external": true
         },
         {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
           "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "readline",
           "kind": "require-call",
           "external": true
         },
@@ -13078,12 +13600,42 @@
           "external": true
         },
         {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        },
+        {
           "path": "path",
           "kind": "require-call",
           "external": true
         },
         {
           "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "fs",
           "kind": "require-call",
           "external": true
         },
@@ -13124,6 +13676,51 @@
         },
         {
           "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "fs",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "child_process",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "readline",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "readline",
           "kind": "require-call",
           "external": true
         },
@@ -13376,13 +13973,13 @@
           "bytesInOutput": 6050
         },
         "package.json": {
-          "bytesInOutput": 3261
+          "bytesInOutput": 3268
         },
         "src/config/index.js": {
           "bytesInOutput": 3869
         },
         "src/error-handler.js": {
-          "bytesInOutput": 20500
+          "bytesInOutput": 20544
         },
         "node_modules/inquirer/node_modules/escape-string-regexp/index.js": {
           "bytesInOutput": 406
@@ -14950,32 +15547,41 @@
         "src/utils/project-analysis.js": {
           "bytesInOutput": 2338
         },
+        "src/policy/PolicyManager.js": {
+          "bytesInOutput": 12101
+        },
         "src/budget-derivation.js": {
-          "bytesInOutput": 5580
+          "bytesInOutput": 16324
         },
         "src/validation/spec-validation.js": {
-          "bytesInOutput": 10626
+          "bytesInOutput": 16755
         },
         "src/generators/working-spec.js": {
           "bytesInOutput": 6007
         },
         "src/scaffold/cursor-hooks.js": {
-          "bytesInOutput": 4973
+          "bytesInOutput": 5700
         },
         "src/utils/finalization.js": {
           "bytesInOutput": 7863
         },
         "src/scaffold/git-hooks.js": {
-          "bytesInOutput": 12204
+          "bytesInOutput": 15962
         },
         "src/scaffold/index.js": {
-          "bytesInOutput": 16398
+          "bytesInOutput": 18130
         },
         "src/commands/init.js": {
           "bytesInOutput": 19293
         },
+        "src/constants/spec-types.js": {
+          "bytesInOutput": 852
+        },
+        "src/utils/spec-resolver.js": {
+          "bytesInOutput": 16815
+        },
         "src/commands/validate.js": {
-          "bytesInOutput": 2479
+          "bytesInOutput": 7503
         },
         "src/commands/burnup.js": {
           "bytesInOutput": 2667
@@ -14983,8 +15589,11 @@
         "src/test-analysis.js": {
           "bytesInOutput": 18784
         },
+        "src/utils/command-wrapper.js": {
+          "bytesInOutput": 4581
+        },
         "src/commands/provenance.js": {
-          "bytesInOutput": 33797
+          "bytesInOutput": 33895
         },
         "src/tool-loader.js": {
           "bytesInOutput": 8507
@@ -14993,10 +15602,22 @@
           "bytesInOutput": 11229
         },
         "src/commands/tool.js": {
-          "bytesInOutput": 3715
+          "bytesInOutput": 3388
+        },
+        "src/utils/async-utils.js": {
+          "bytesInOutput": 3279
+        },
+        "src/utils/promise-utils.js": {
+          "bytesInOutput": 1215
+        },
+        "src/commands/specs.js": {
+          "bytesInOutput": 22575
+        },
+        "src/config/modes.js": {
+          "bytesInOutput": 7342
         },
         "src/commands/status.js": {
-          "bytesInOutput": 9965
+          "bytesInOutput": 27660
         },
         "src/commands/templates.js": {
           "bytesInOutput": 7213
@@ -15014,10 +15635,13 @@
           "bytesInOutput": 10166
         },
         "src/commands/iterate.js": {
-          "bytesInOutput": 11829
+          "bytesInOutput": 11343
+        },
+        "src/waivers-manager.js": {
+          "bytesInOutput": 17084
         },
         "src/commands/waivers.js": {
-          "bytesInOutput": 10476
+          "bytesInOutput": 12388
         },
         "src/commands/workflow.js": {
           "bytesInOutput": 8449
@@ -15025,14 +15649,29 @@
         "src/commands/quality-monitor.js": {
           "bytesInOutput": 7859
         },
+        "src/commands/quality-gates.js": {
+          "bytesInOutput": 6922
+        },
         "src/commands/troubleshoot.js": {
-          "bytesInOutput": 3234
+          "bytesInOutput": 3242
+        },
+        "src/commands/archive.js": {
+          "bytesInOutput": 9543
+        },
+        "src/commands/mode.js": {
+          "bytesInOutput": 8935
+        },
+        "src/commands/tutorial.js": {
+          "bytesInOutput": 15549
+        },
+        "src/commands/plan.js": {
+          "bytesInOutput": 12885
         },
         "src/index.js": {
-          "bytesInOutput": 15057
+          "bytesInOutput": 22318
         }
       },
-      "bytes": 2137615
+      "bytes": 2332025
     }
   }
 }

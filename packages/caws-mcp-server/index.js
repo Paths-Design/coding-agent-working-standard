@@ -91,10 +91,92 @@ import {
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 // ES module equivalent of __filename
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/**
+ * Detect project root directory (git root or provided directory)
+ * This ensures CAWS operations are scoped to the correct project
+ */
+function getProjectRoot(workingDirectory = process.cwd()) {
+  // Try environment variables first (set by VS Code/Cursor)
+  if (process.env.CURSOR_WORKSPACE_ROOT) {
+    return process.env.CURSOR_WORKSPACE_ROOT;
+  }
+  if (process.env.VSCODE_WORKSPACE_ROOT) {
+    return process.env.VSCODE_WORKSPACE_ROOT;
+  }
+  
+  // Try to find git root from working directory
+  try {
+    const gitRoot = execSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      cwd: workingDirectory,
+      stdio: 'pipe',
+    }).trim();
+    return gitRoot;
+  } catch {
+    // Not a git repo or git not available, use provided directory
+    return workingDirectory;
+  }
+}
+
+/**
+ * Resolve path to quality gates module with fallback support
+ * Works in both development (monorepo) and bundled (VS Code extension) contexts
+ */
+function resolveQualityGatesModule(moduleName) {
+  const possiblePaths = [
+    // Bundled (VS Code extension) - check this FIRST for bundled contexts
+    // From bundled/mcp-server to bundled/quality-gates
+    path.join(__dirname, '..', 'quality-gates', moduleName),
+    // Bundled alternative - if quality-gates is in same directory
+    path.join(__dirname, 'quality-gates', moduleName),
+    // Development (monorepo) - from MCP server to quality-gates
+    path.join(__dirname, '..', '..', 'packages', 'quality-gates', moduleName),
+    // Node modules (if published as separate package)
+    path.join(process.cwd(), 'node_modules', '@paths.design', 'caws-quality-gates', moduleName),
+  ];
+
+  const attemptedPaths = [];
+  for (const modulePath of possiblePaths) {
+    attemptedPaths.push(modulePath);
+    try {
+      if (fs.existsSync(modulePath)) {
+        return pathToFileURL(modulePath).href;
+      }
+    } catch {
+      // Continue to next path
+      continue;
+    }
+  }
+
+  // If no path found, try the original monorepo path as fallback
+  const fallbackPath = path.join(
+    path.dirname(path.dirname(__filename)),
+    '..',
+    '..',
+    'packages',
+    'quality-gates',
+    moduleName
+  );
+  attemptedPaths.push(fallbackPath);
+
+  // Provide helpful error message with attempted paths
+  const errorMessage = `Quality gates module "${moduleName}" not found. Attempted paths:\n` +
+    attemptedPaths.map(p => `  - ${p}`).join('\n') +
+    `\n\nCurrent directory: ${__dirname}\n` +
+    `Working directory: ${process.cwd()}\n` +
+    `\nTroubleshooting:\n` +
+    `  1. Ensure quality-gates package is bundled with extension\n` +
+    `  2. Check that bundled/quality-gates directory exists\n` +
+    `  3. Verify module name is correct: ${moduleName}`;
+
+  throw new Error(errorMessage);
+}
 
 /**
  * Execute CLI command with color suppression and ANSI stripping
@@ -713,13 +795,17 @@ class CawsMcpServer extends Server {
 
   findWorkingSpecs() {
     // Only check the current project's .caws directory (fast, no recursion)
+    // Use project root detection to ensure we're looking in the right place
     const specs = [];
-    const cawsDir = path.join(process.cwd(), '.caws');
+    const projectRoot = getProjectRoot();
+    const cawsDir = path.join(projectRoot, '.caws');
     const specPath = path.join(cawsDir, 'working-spec.yaml');
 
     try {
       if (fs.existsSync(specPath)) {
-        specs.push('.caws/working-spec.yaml');
+        // Return relative path from project root
+        const relativePath = path.relative(projectRoot, specPath);
+        specs.push(relativePath);
       }
     } catch (error) {
       // Ignore if we can't read the spec
@@ -1340,20 +1426,30 @@ class CawsMcpServer extends Server {
   }
 
   async handleQualityExceptionsList(args) {
-    const { gate, status = 'active' } = args;
+    const { gate, status = 'active', workingDirectory = process.cwd() } = args;
 
     try {
-      // Import the exception framework
-      const { loadExceptionConfig } = await import(
-        path.join(
-          path.dirname(path.dirname(__filename)),
-          '..',
-          '..',
-          'packages',
-          'quality-gates',
-          'shared-exception-framework.mjs'
-        )
-      );
+      // Import the exception framework using path resolver
+      const exceptionFrameworkPath = resolveQualityGatesModule('shared-exception-framework.mjs');
+      
+      // Set NODE_PATH to include quality-gates node_modules for ES module resolution
+      const qualityGatesDir = path.dirname(fileURLToPath(exceptionFrameworkPath));
+      const originalNodePath = process.env.NODE_PATH || '';
+      const qualityGatesNodeModules = path.join(qualityGatesDir, 'node_modules');
+      process.env.NODE_PATH = qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
+      
+      let loadExceptionConfig, setProjectRoot;
+      try {
+        const module = await import(exceptionFrameworkPath);
+        loadExceptionConfig = module.loadExceptionConfig;
+        setProjectRoot = module.setProjectRoot;
+      } finally {
+        // Restore original NODE_PATH
+        process.env.NODE_PATH = originalNodePath;
+      }
+
+      // Set project root to working directory (ensures project-specific exceptions)
+      setProjectRoot(workingDirectory);
 
       const config = loadExceptionConfig();
       let exceptions = config.exceptions || [];
@@ -1409,6 +1505,10 @@ class CawsMcpServer extends Server {
         ],
       };
     } catch (error) {
+      // Provide helpful error message with troubleshooting guidance
+      const errorMessage = error.message || 'Unknown error';
+      const isPathError = errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
+      
       return {
         content: [
           {
@@ -1416,8 +1516,12 @@ class CawsMcpServer extends Server {
             text: JSON.stringify(
               {
                 success: false,
-                error: error.message,
+                error: errorMessage,
                 command: 'caws_quality_exceptions_list',
+                suggestion: isPathError 
+                  ? 'Exception framework not available. Ensure quality-gates package is bundled with extension or available in monorepo.'
+                  : 'Check error message for details and verify exception framework is properly configured.',
+                exceptions: [], // Return empty list on error for graceful degradation
               },
               null,
               2
@@ -1438,32 +1542,53 @@ class CawsMcpServer extends Server {
       filePattern,
       violationType,
       context = 'all',
+      workingDirectory = process.cwd(),
     } = args;
 
     try {
-      // Import the exception framework
-      const { addException } = await import(
-        path.join(
-          path.dirname(path.dirname(__filename)),
-          '..',
-          '..',
-          'packages',
-          'quality-gates',
-          'shared-exception-framework.mjs'
-        )
-      );
+      // Import the exception framework using path resolver
+      const exceptionFrameworkPath = resolveQualityGatesModule('shared-exception-framework.mjs');
+      
+      // Set NODE_PATH to include quality-gates node_modules for ES module resolution
+      const qualityGatesDir = path.dirname(fileURLToPath(exceptionFrameworkPath));
+      const originalNodePath = process.env.NODE_PATH || '';
+      const qualityGatesNodeModules = path.join(qualityGatesDir, 'node_modules');
+      process.env.NODE_PATH = qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
+      
+      let addException, setProjectRoot;
+      try {
+        const module = await import(exceptionFrameworkPath);
+        addException = module.addException;
+        setProjectRoot = module.setProjectRoot;
+      } finally {
+        // Restore original NODE_PATH
+        process.env.NODE_PATH = originalNodePath;
+      }
+
+      // Set project root to working directory (ensures project-specific exceptions)
+      setProjectRoot(workingDirectory);
+
+      // Calculate expiresInDays from expiresAt if provided, otherwise use default
+      let expiresInDays = 180; // Default 180 days
+      if (expiresAt) {
+        const expiresDate = new Date(expiresAt);
+        const now = new Date();
+        const diffMs = expiresDate.getTime() - now.getTime();
+        expiresInDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+        if (expiresInDays < 1) expiresInDays = 1; // Minimum 1 day
+      }
 
       const exceptionData = {
-        gate,
         reason,
-        approved_by: approvedBy,
-        expires_at: expiresAt,
-        ...(filePattern && { file_pattern: filePattern }),
-        ...(violationType && { violation_type: violationType }),
+        approvedBy,
+        expiresInDays,
+        ...(filePattern && { filePattern }),
+        ...(violationType && { violationType }),
         context,
       };
 
-      const result = await addException(exceptionData);
+      // Fix: addException expects (gateName, exceptionData) signature
+      const result = addException(gate, exceptionData);
 
       return {
         content: [
@@ -1482,6 +1607,10 @@ class CawsMcpServer extends Server {
         ],
       };
     } catch (error) {
+      // Provide helpful error message with troubleshooting guidance
+      const errorMessage = error.message || 'Unknown error';
+      const isPathError = errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
+      
       return {
         content: [
           {
@@ -1489,8 +1618,12 @@ class CawsMcpServer extends Server {
             text: JSON.stringify(
               {
                 success: false,
-                error: error.message,
+                error: errorMessage,
                 command: 'caws_quality_exceptions_create',
+                suggestion: isPathError 
+                  ? 'Exception framework not available. Ensure quality-gates package is bundled with extension or available in monorepo.'
+                  : 'Check error message for details. Verify all required parameters are provided and exception framework is properly configured.',
+                exception: null, // Return null on error for graceful degradation
               },
               null,
               2

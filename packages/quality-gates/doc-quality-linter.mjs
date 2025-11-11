@@ -11,8 +11,10 @@
  */
 
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getFilesToCheck } from './file-scope-manager.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,23 +34,11 @@ class DocumentationQualityLinter {
   constructor(projectRoot = '.') {
     this.projectRoot = path.resolve(projectRoot);
 
-    // Pre-compile regex patterns for better performance
-    this.superiorityPatterns = [
-      /\b(revolutionary|breakthrough|innovative|groundbreaking)\b/gi,
-      /\b(cutting-edge|state-of-the-art|next-generation)\b/gi,
-      /\b(advanced|premium|superior|best|leading)\b/gi,
-      /\b(industry-leading|award-winning|game-changing)\b/gi,
-    ];
-
-    this.achievementPatterns = [
-      /\b(production-ready|enterprise-grade|battle-tested)\b/gi,
-      /\b(complete|finished|done|achieved|delivered)\b/gi,
-      /\b(implemented|operational|ready|deployed)\b/gi,
-      /\b(launched|released|100%|fully)\b/gi,
-      /\b(comprehensive|entire|total|all|every)\b/gi,
-      /\b(perfect|ideal|optimal|maximum|minimum)\b/gi,
-      /\b(unlimited|infinite|endless)\b/gi,
-    ];
+    // Pre-compile combined regex patterns for better performance
+    // Single patterns are faster than multiple tests per line
+    this.superiorityPattern = /\b(revolutionary|breakthrough|innovative|groundbreaking|cutting-edge|state-of-the-art|next-generation|advanced|premium|superior|best|leading|industry-leading|award-winning|game-changing)\b/i;
+    
+    this.achievementPattern = /\b(production-ready|enterprise-grade|battle-tested|complete|finished|done|achieved|delivered|implemented|operational|ready|deployed|launched|released|100%|fully|comprehensive|entire|total|all|every|perfect|ideal|optimal|maximum|minimum|unlimited|infinite|endless)\b/i;
 
     this.temporalPatterns = [
       /SESSION_.*_SUMMARY\.md/i,
@@ -77,47 +67,46 @@ class DocumentationQualityLinter {
     ];
   }
 
-  lintFile(filePath) {
+  async lintFile(filePath) {
     const issues = [];
 
     try {
-      const content = fs.readFileSync(filePath, 'utf8');
+      const content = await fsPromises.readFile(filePath, 'utf8');
       const lines = content.split('\n');
 
-      // Check for superiority claims
+      // Check for superiority claims and achievement claims (optimized single-pass)
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const lineNum = i + 1;
 
-        for (const pattern of this.superiorityPatterns) {
-          if (pattern.test(line)) {
-            issues.push(
-              new QualityIssue(
-                filePath,
-                lineNum,
-                'error',
-                'SUPERIORITY_CLAIM',
-                `Superiority claim detected: '${line.trim()}'`,
-                'Remove marketing language and focus on technical capabilities'
-              )
-            );
-          }
+        // Check superiority claims (single pattern test)
+        if (this.superiorityPattern.test(line)) {
+          const match = line.match(this.superiorityPattern);
+          issues.push(
+            new QualityIssue(
+              filePath,
+              lineNum,
+              'error',
+              'SUPERIORITY_CLAIM',
+              `Superiority claim detected: '${match ? match[0] : line.trim()}'`,
+              'Remove marketing language and focus on technical capabilities'
+            )
+          );
         }
 
-        // Check for unfounded achievement claims
-        for (const pattern of this.achievementPatterns) {
-          if (pattern.test(line)) {
-            issues.push(
-              new QualityIssue(
-                filePath,
-                lineNum,
-                'warning',
-                'UNFOUNDED_ACHIEVEMENT',
-                `Unfounded achievement claim detected: '${line.trim()}'`,
-                'Verify claim with evidence or use more accurate language'
-              )
-            );
-          }
+        // Check for unfounded achievement claims (single pattern test)
+        if (this.achievementPattern.test(line)) {
+          const match = line.match(this.achievementPattern);
+          issues.push(
+            new QualityIssue(
+              filePath,
+              lineNum,
+              'warning',
+              'UNFOUNDED_ACHIEVEMENT',
+              `Unfounded achievement claim detected: '${match ? match[0] : line.trim()}'`,
+              'Verify claim with evidence or use more accurate language'
+            )
+          );
         }
       }
 
@@ -191,110 +180,34 @@ class DocumentationQualityLinter {
   async lintProject(showProgress = true, scopedFiles = null) {
     const allIssues = [];
 
-    // Use scoped files if provided, otherwise find all documentation files
-    let filesToLint = [];
-    if (scopedFiles && scopedFiles.length > 0) {
-      // Filter scoped files to only documentation files
-      const docExtensions = ['.md', '.txt', '.rst', '.adoc'];
-      filesToLint = scopedFiles.filter((file) =>
-        docExtensions.includes(path.extname(file).toLowerCase())
-      );
-    } else {
-      // Find all documentation files (legacy behavior)
-      const findFiles = (dir, extensions) => {
-        const files = [];
-
-        const walk = (currentDir) => {
-          try {
-            const entries = fs.readdirSync(currentDir);
-
-            for (const entry of entries) {
-              const fullPath = path.join(currentDir, entry);
-              const stat = fs.statSync(fullPath);
-
-              if (stat.isDirectory()) {
-                // Skip excluded directories
-                const excludedDirs = [
-                  'node_modules',
-                  '.git',
-                  'target',
-                  'dist',
-                  'build',
-                  '__pycache__',
-                  '.venv',
-                  '.stryker-tmp',
-                  'site-packages',
-                  '.dist-info',
-                  '.whl',
-                  'venv',
-                  'env',
-                  'virtualenv',
-                  'conda',
-                  'anaconda',
-                  '.build',
-                  'checkouts',
-                  'Tests',
-                  'examples',
-                  'models',
-                  'vocabs',
-                  'merges',
-                ];
-
-                if (!excludedDirs.includes(entry)) {
-                  walk(fullPath);
-                }
-              } else if (stat.isFile()) {
-                const ext = path.extname(entry);
-                if (extensions.includes(ext)) {
-                  files.push(fullPath);
-                }
-              }
-            }
-          } catch (error) {
-            // Skip directories we can't read
-          }
-        };
-
-        walk(dir);
-        return files;
-      };
-
-      const extensions = ['.md', '.txt', '.rst', '.adoc'];
-      const allDocFiles = findFiles(this.projectRoot, extensions);
-
-      // Filter files
-      filesToLint = [];
-      for (const filePath of allDocFiles) {
-        // Skip archive files
-        if (filePath.includes('docs/archive/')) {
-          continue;
-        }
-
-        // Skip third-party files
-        const skipPatterns = [
-          '.venv',
-          'site-packages',
-          '.dist-info',
-          '.whl',
-          '.build',
-          'checkouts',
-          'Tests',
-          'examples',
-          'models',
-          'vocabs',
-          'merges',
-          'LICENSE.txt',
-          'bert-vocab.txt',
-          'bench-all-gg.txt',
-          'CMakeLists.txt',
-        ];
-
-        if (skipPatterns.some((pattern) => filePath.includes(pattern))) {
-          continue;
-        }
-
-        filesToLint.push(filePath);
+    // Early return if no files to check - prevents unnecessary full repo scan
+    if (!scopedFiles || scopedFiles.length === 0) {
+      if (showProgress) {
+        console.error('   No files to check, skipping documentation quality scan');
       }
+      return allIssues;
+    }
+
+    // Use scoped files if provided, otherwise use file-scope-manager to get all files
+    let filesToLint = [];
+    const docExtensions = ['.md', '.txt', '.rst', '.adoc'];
+
+    // Filter scoped files to only documentation files
+    // file-scope-manager already handles .gitignore filtering
+    filesToLint = scopedFiles.filter((file) =>
+      docExtensions.includes(path.extname(file).toLowerCase())
+    );
+    
+    if (showProgress) {
+      console.error(`   Found ${filesToLint.length} documentation files in scope (respecting .gitignore)`);
+    }
+
+    // Early return if no documentation files found
+    if (filesToLint.length === 0) {
+      if (showProgress) {
+        console.error('   No documentation files found in scope');
+      }
+      return allIssues;
     }
 
     const totalFiles = filesToLint.length;
@@ -311,8 +224,27 @@ class DocumentationQualityLinter {
       const batchEnd = Math.min(batchStart + batchSize, filesToLint.length);
       const batch = filesToLint.slice(batchStart, batchEnd);
 
-      // Process batch in parallel
-      const batchPromises = batch.map((filePath) => this.lintFile(filePath));
+      // Process batch in parallel with timeout protection
+      const batchPromises = batch.map((filePath) => 
+        Promise.race([
+          this.lintFile(filePath),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout reading ${filePath} (5s limit)`)), 5000)
+          )
+        ]).catch((error) => {
+          // Return error as issue instead of failing entire batch
+          return [new QualityIssue(
+            filePath,
+            0,
+            'error',
+            'FILE_READ_ERROR',
+            error.message.includes('Timeout') 
+              ? `File read timeout: ${error.message}`
+              : `Could not read file: ${error.message}`,
+            'Check file size and permissions'
+          )];
+        })
+      );
       const batchResults = await Promise.allSettled(batchPromises);
 
       // Collect results

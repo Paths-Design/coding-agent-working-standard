@@ -1,6 +1,6 @@
 {
   "name": "@caws/quality-gates",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CAWS Quality Gates - Automated code quality enforcement for CAWS projects",
   "main": "run-quality-gates.mjs",
   "type": "module",
@@ -39,7 +39,10 @@
   },
   "homepage": "https://github.com/Paths-Design/coding-agent-working-standard#readme",
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "ajv": "^8.12.0",
+    "ignore": "^5.2.0",
+    "js-yaml": "^4.1.0",
+    "micromatch": "^4.0.8"
   },
   "engines": {
     "node": ">=16.0.0"

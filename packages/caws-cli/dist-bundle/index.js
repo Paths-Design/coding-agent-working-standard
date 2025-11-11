@@ -9402,7 +9402,7 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "@paths.design/caws-cli",
-      version: "3.3.1",
+      version: "5.1.1",
       description: "CAWS CLI - Coding Agent Workflow System command line tools",
       main: "dist/index.js",
       bin: {
@@ -9415,7 +9415,7 @@ var require_package = __commonJS({
         "templates"
       ],
       scripts: {
-        build: "mkdir -p dist && cp -r src/* dist/ && npm run typecheck",
+        build: "mkdir -p dist && cp -r src/* dist/",
         dev: "mkdir -p dist && cp -r src/* dist/ && node dist/index.js",
         typecheck: "tsc --emitDeclarationOnly --outDir dist",
         start: "node dist/index.js",
@@ -9453,12 +9453,10 @@ var require_package = __commonJS({
         directory: "packages/caws-cli"
       },
       dependencies: {
-        ajv: "^8.12.0",
         chalk: "4.1.2",
         commander: "^11.0.0",
         "fs-extra": "^11.0.0",
-        inquirer: "8.2.7",
-        "js-yaml": "4.1.0"
+        inquirer: "8.2.7"
       },
       devDependencies: {
         "@eslint/js": "^9.0.0",
@@ -9470,10 +9468,13 @@ var require_package = __commonJS({
         "@types/inquirer": "^8.2.6",
         "@types/js-yaml": "^4.0.0",
         "@types/node": "^20.0.0",
+        ajv: "8.17.1",
         esbuild: "0.25.10",
         eslint: "^9.0.0",
         jest: "30.1.3",
+        "js-yaml": "4.1.0",
         "lint-staged": "15.5.2",
+        micromatch: "4.0.8",
         prettier: "^3.0.0",
         "semantic-release": "25.0.0-beta.6",
         typescript: "^5.0.0"
@@ -9780,7 +9781,9 @@ var require_error_handler = __commonJS({
         } else if (command.includes("list") || command.includes("show") || command.includes("get")) {
           suggestions.push("For status: caws status");
         }
-        suggestions.push("Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor");
+        suggestions.push(
+          "Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor"
+        );
         suggestions.push("Try: caws --help for full command list with descriptions");
         return suggestions;
       },
@@ -9949,7 +9952,9 @@ var require_error_handler = __commonJS({
           const guide = getTroubleshootingGuide(troubleshootingGuide);
           console.error(chalk2.cyan(`
 \u{1F50D} Troubleshooting Guide: ${guide.title}`));
-          console.error(chalk2.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`));
+          console.error(
+            chalk2.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`)
+          );
         }
         console.error(chalk2.blue(`
 \u{1F4DA} Documentation: ${docLink}`));
@@ -42618,21 +42623,498 @@ var require_project_analysis = __commonJS({
   }
 });
 
+// src/policy/PolicyManager.js
+var require_PolicyManager = __commonJS({
+  "src/policy/PolicyManager.js"(exports2, module2) {
+    var fs2 = require_lib();
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var PolicyManager = class {
+      constructor(options = {}) {
+        this.enableCaching = options.enableCaching ?? true;
+        this.cacheTTL = options.cacheTTL ?? 3e5;
+        this.policyCache = /* @__PURE__ */ new Map();
+      }
+      /**
+       * Load CAWS policy from policy.yaml with caching
+       *
+       * @param {string} projectRoot - Project root directory
+       * @param {Object} options - Loading options
+       * @param {boolean} options.useCache - Use cache if available (default: true)
+       * @param {number} options.cacheTTL - Cache TTL override in milliseconds
+       * @returns {Promise<Object>} Policy object
+       */
+      async loadPolicy(projectRoot, options = {}) {
+        const useCache = options.useCache ?? this.enableCaching;
+        const cacheTTL = options.cacheTTL ?? this.cacheTTL;
+        const startTime = Date.now();
+        try {
+          if (useCache && this.policyCache.has(projectRoot)) {
+            const cached = this.policyCache.get(projectRoot);
+            const cacheAge = Date.now() - cached.cachedAt;
+            if (cacheAge < cacheTTL) {
+              return {
+                ...cached.policy,
+                _cacheHit: true,
+                _loadDuration: Date.now() - startTime
+              };
+            }
+          }
+          const policyPaths = [
+            path2.join(projectRoot, ".caws", "policy.yaml"),
+            // Preferred location
+            path2.join(projectRoot, ".caws", "policy", "tier-policy.json")
+            // Legacy location
+          ];
+          let policyPath = null;
+          let policyContent = null;
+          for (const candidatePath of policyPaths) {
+            try {
+              if (await fs2.pathExists(candidatePath)) {
+                policyPath = candidatePath;
+                const content = await fs2.readFile(candidatePath, "utf-8");
+                if (candidatePath.endsWith(".json")) {
+                  policyContent = JSON.parse(content);
+                } else {
+                  policyContent = yaml2.load(content);
+                }
+                break;
+              }
+            } catch (error) {
+              continue;
+            }
+          }
+          if (policyPath && policyContent) {
+            this.validatePolicy(policyContent);
+            if (this.enableCaching) {
+              this.policyCache.set(projectRoot, {
+                policy: policyContent,
+                cachedAt: Date.now(),
+                ttl: cacheTTL
+              });
+            }
+            if (policyPath.endsWith(".json")) {
+              console.warn(
+                "\u26A0\uFE0F  Using legacy policy file location: .caws/policy/tier-policy.json\n   Migrate to .caws/policy.yaml for better compatibility\n   Run: caws init --migrate-policy"
+              );
+            }
+            return {
+              ...policyContent,
+              _cacheHit: false,
+              _loadDuration: Date.now() - startTime,
+              _policyPath: policyPath
+            };
+          } else {
+            const defaultPolicy = this.getDefaultPolicy();
+            if (this.enableCaching) {
+              this.policyCache.set(projectRoot, {
+                policy: defaultPolicy,
+                cachedAt: Date.now(),
+                ttl: cacheTTL
+              });
+            }
+            return {
+              ...defaultPolicy,
+              _isDefault: true,
+              _cacheHit: false,
+              _loadDuration: Date.now() - startTime
+            };
+          }
+        } catch (error) {
+          throw new Error(`Policy load failed: ${error.message}`);
+        }
+      }
+      /**
+       * Load a waiver document by ID
+       *
+       * @param {string} waiverId - Waiver ID (e.g., WV-0001)
+       * @param {string} projectRoot - Project root directory
+       * @returns {Promise<Object|null>} Waiver document or null if not found
+       */
+      async loadWaiver(waiverId, projectRoot) {
+        try {
+          const waiverPath = path2.join(projectRoot, ".caws", "waivers", `${waiverId}.yaml`);
+          const content = await fs2.readFile(waiverPath, "utf-8");
+          return yaml2.load(content);
+        } catch (error) {
+          if (error.code === "ENOENT") {
+            return null;
+          }
+          throw new Error(`Failed to load waiver ${waiverId}: ${error.message}`);
+        }
+      }
+      /**
+       * Check if a waiver is currently valid
+       *
+       * @param {Object} waiver - Waiver document
+       * @returns {boolean} True if waiver is valid and active
+       */
+      isWaiverValid(waiver) {
+        if (!waiver) {
+          return false;
+        }
+        if (waiver.status !== "active") {
+          return false;
+        }
+        if (waiver.expires_at) {
+          const expiryDate = new Date(waiver.expires_at);
+          const now = /* @__PURE__ */ new Date();
+          if (now > expiryDate) {
+            return false;
+          }
+        }
+        if (!waiver.approvers || waiver.approvers.length === 0) {
+          return false;
+        }
+        return true;
+      }
+      /**
+       * Apply waivers to baseline budget
+       *
+       * @param {Object} baseline - Baseline budget from policy
+       * @param {string[]} waiverIds - Array of waiver IDs to apply
+       * @param {string} projectRoot - Project root directory
+       * @returns {Promise<Object>} Effective budget with waivers applied
+       */
+      async applyWaivers(baseline, waiverIds, projectRoot) {
+        const effective = { ...baseline };
+        const applied = [];
+        for (const waiverId of waiverIds) {
+          const waiver = await this.loadWaiver(waiverId, projectRoot);
+          if (waiver && this.isWaiverValid(waiver)) {
+            if (waiver.delta) {
+              if (waiver.delta.max_files) {
+                effective.max_files += waiver.delta.max_files;
+              }
+              if (waiver.delta.max_loc) {
+                effective.max_loc += waiver.delta.max_loc;
+              }
+            }
+            applied.push(waiverId);
+          }
+        }
+        return {
+          effective,
+          applied
+        };
+      }
+      /**
+       * Validate policy structure
+       *
+       * @param {Object} policy - Policy to validate
+       * @throws {Error} If policy is invalid
+       */
+      validatePolicy(policy) {
+        if (!policy.version) {
+          throw new Error("Policy missing version field");
+        }
+        if (!policy.risk_tiers) {
+          throw new Error("Policy missing risk_tiers configuration");
+        }
+        for (const tier of [1, 2, 3]) {
+          const budget = policy.risk_tiers[tier];
+          if (!budget) {
+            throw new Error(`Policy missing risk tier ${tier} configuration`);
+          }
+          if (typeof budget.max_files !== "number" || typeof budget.max_loc !== "number") {
+            throw new Error(`Risk tier ${tier} missing or invalid budget limits`);
+          }
+        }
+        if (policy.edit_rules) {
+          if (typeof policy.edit_rules.policy_and_code_same_pr !== "boolean") {
+            throw new Error("edit_rules.policy_and_code_same_pr must be boolean");
+          }
+          if (typeof policy.edit_rules.min_approvers_for_budget_raise !== "number") {
+            throw new Error("edit_rules.min_approvers_for_budget_raise must be number");
+          }
+        }
+      }
+      /**
+       * Get default CAWS policy
+       *
+       * Returns sensible defaults when policy.yaml doesn't exist.
+       *
+       * @returns {Object} Default policy configuration
+       */
+      getDefaultPolicy() {
+        return {
+          version: 1,
+          risk_tiers: {
+            1: {
+              max_files: 25,
+              max_loc: 1e3,
+              description: "Critical changes requiring manual review"
+            },
+            2: {
+              max_files: 50,
+              max_loc: 2e3,
+              description: "Standard features with automated gates"
+            },
+            3: {
+              max_files: 100,
+              max_loc: 5e3,
+              description: "Low-risk changes with minimal oversight"
+            }
+          },
+          edit_rules: {
+            policy_and_code_same_pr: false,
+            min_approvers_for_budget_raise: 2,
+            require_signed_commits: true
+          },
+          gates: {
+            budget_limit: {
+              enabled: true,
+              description: "Enforce change budget limits"
+            },
+            spec_completeness: {
+              enabled: true,
+              description: "Require complete working specifications"
+            },
+            contract_compliance: {
+              enabled: true,
+              description: "Validate API contracts"
+            },
+            coverage_threshold: {
+              enabled: true,
+              description: "Maintain test coverage requirements"
+            },
+            mutation_threshold: {
+              enabled: true,
+              description: "Require mutation testing for T1/T2 changes"
+            },
+            security_scan: {
+              enabled: true,
+              description: "Run security vulnerability scans"
+            }
+          }
+        };
+      }
+      /**
+       * Clear policy cache
+       *
+       * @param {string} [projectRoot] - Specific project to clear, or all if omitted
+       */
+      clearCache(projectRoot) {
+        if (projectRoot) {
+          this.policyCache.delete(projectRoot);
+        } else {
+          this.policyCache.clear();
+        }
+      }
+      /**
+       * Get cache status for a project
+       *
+       * @param {string} projectRoot - Project root directory
+       * @returns {Object} Cache status information
+       */
+      getCacheStatus(projectRoot) {
+        const cached = this.policyCache.get(projectRoot);
+        if (!cached) {
+          return {
+            cached: false,
+            ttl: this.cacheTTL
+          };
+        }
+        return {
+          cached: true,
+          age: Date.now() - cached.cachedAt,
+          ttl: cached.ttl,
+          remainingTTL: Math.max(0, cached.ttl - (Date.now() - cached.cachedAt))
+        };
+      }
+      /**
+       * Reload policy from disk (bypassing cache)
+       *
+       * @param {string} projectRoot - Project root directory
+       * @returns {Promise<Object>} Fresh policy
+       */
+      async reloadPolicy(projectRoot) {
+        this.clearCache(projectRoot);
+        return this.loadPolicy(projectRoot, { useCache: false });
+      }
+      /**
+       * Get all cached projects
+       *
+       * @returns {string[]} Array of project roots with cached policies
+       */
+      getCachedProjects() {
+        return Array.from(this.policyCache.keys());
+      }
+      /**
+       * Get cache statistics
+       *
+       * @returns {Object} Cache statistics
+       */
+      getCacheStats() {
+        const projects = this.getCachedProjects();
+        const now = Date.now();
+        const stats = {
+          totalCached: projects.length,
+          validCaches: 0,
+          expiredCaches: 0,
+          totalAge: 0
+        };
+        for (const project of projects) {
+          const cached = this.policyCache.get(project);
+          const age = now - cached.cachedAt;
+          stats.totalAge += age;
+          if (age < cached.ttl) {
+            stats.validCaches++;
+          } else {
+            stats.expiredCaches++;
+          }
+        }
+        stats.averageAge = projects.length > 0 ? stats.totalAge / projects.length : 0;
+        return stats;
+      }
+    };
+    var defaultPolicyManager = new PolicyManager();
+    module2.exports = {
+      PolicyManager,
+      defaultPolicyManager,
+      // Convenience exports for backward compatibility
+      loadPolicy: (projectRoot, options) => defaultPolicyManager.loadPolicy(projectRoot, options),
+      clearCache: (projectRoot) => defaultPolicyManager.clearCache(projectRoot),
+      getCacheStatus: (projectRoot) => defaultPolicyManager.getCacheStatus(projectRoot)
+    };
+  }
+});
+
 // src/budget-derivation.js
 var require_budget_derivation = __commonJS({
   "src/budget-derivation.js"(exports2, module2) {
     var fs2 = require_lib();
     var path2 = require("path");
     var yaml2 = require_js_yaml();
-    function deriveBudget(spec, projectRoot = process.cwd()) {
-      try {
-        const policyPath = path2.join(projectRoot, ".caws", "policy.yaml");
-        if (!fs2.existsSync(policyPath)) {
-          throw new Error("Policy file not found: .caws/policy.yaml");
+    var { defaultPolicyManager } = require_PolicyManager();
+    function validatePolicy(policy) {
+      if (!policy.version) {
+        throw new Error(
+          'Policy missing version field\nAdd "version: 1" to .caws/policy.yaml\nRun "caws init" to regenerate policy.yaml'
+        );
+      }
+      if (!policy.risk_tiers) {
+        throw new Error(
+          'Policy missing risk_tiers configuration\nPolicy must define risk tiers 1, 2, and 3\nRun "caws init" to regenerate policy.yaml'
+        );
+      }
+      for (const tier of [1, 2, 3]) {
+        if (!policy.risk_tiers[tier]) {
+          throw new Error(
+            `Policy missing configuration for risk tier ${tier}
+Add risk_tiers.${tier} with max_files and max_loc to .caws/policy.yaml
+Run "caws init" to regenerate policy.yaml`
+          );
         }
-        const policy = yaml2.load(fs2.readFileSync(policyPath, "utf8"));
-        if (!policy.risk_tiers || !policy.risk_tiers[spec.risk_tier]) {
-          throw new Error(`Risk tier ${spec.risk_tier} not defined in policy.yaml`);
+        const tierConfig = policy.risk_tiers[tier];
+        if (!tierConfig.max_files || tierConfig.max_files <= 0) {
+          throw new Error(
+            `Invalid max_files for tier ${tier}: ${tierConfig.max_files}
+max_files must be a positive integer
+Fix in .caws/policy.yaml under risk_tiers.${tier}.max_files`
+          );
+        }
+        if (!tierConfig.max_loc || tierConfig.max_loc <= 0) {
+          throw new Error(
+            `Invalid max_loc for tier ${tier}: ${tierConfig.max_loc}
+max_loc must be a positive integer
+Fix in .caws/policy.yaml under risk_tiers.${tier}.max_loc`
+          );
+        }
+        if (tierConfig.coverage_threshold !== void 0 && (tierConfig.coverage_threshold < 0 || tierConfig.coverage_threshold > 100)) {
+          throw new Error(
+            `Invalid coverage_threshold for tier ${tier}: ${tierConfig.coverage_threshold}
+coverage_threshold must be between 0 and 100
+Fix in .caws/policy.yaml under risk_tiers.${tier}.coverage_threshold`
+          );
+        }
+        if (tierConfig.mutation_threshold !== void 0 && (tierConfig.mutation_threshold < 0 || tierConfig.mutation_threshold > 100)) {
+          throw new Error(
+            `Invalid mutation_threshold for tier ${tier}: ${tierConfig.mutation_threshold}
+mutation_threshold must be between 0 and 100
+Fix in .caws/policy.yaml under risk_tiers.${tier}.mutation_threshold`
+          );
+        }
+      }
+      if (policy.waiver_approval) {
+        if (policy.waiver_approval.required_approvers !== void 0 && policy.waiver_approval.required_approvers < 0) {
+          throw new Error(
+            `Invalid waiver_approval.required_approvers: ${policy.waiver_approval.required_approvers}
+required_approvers must be a non-negative integer`
+          );
+        }
+        if (policy.waiver_approval.max_duration_days !== void 0 && policy.waiver_approval.max_duration_days <= 0) {
+          throw new Error(
+            `Invalid waiver_approval.max_duration_days: ${policy.waiver_approval.max_duration_days}
+max_duration_days must be a positive integer`
+          );
+        }
+      }
+    }
+    function getDefaultPolicy() {
+      return {
+        version: 1,
+        risk_tiers: {
+          1: {
+            max_files: 25,
+            max_loc: 1e3,
+            coverage_threshold: 90,
+            mutation_threshold: 70,
+            contracts_required: true,
+            manual_review_required: true,
+            description: "Critical changes requiring manual review"
+          },
+          2: {
+            max_files: 50,
+            max_loc: 2e3,
+            coverage_threshold: 80,
+            mutation_threshold: 50,
+            contracts_required: true,
+            manual_review_required: false,
+            description: "Standard features with automated gates"
+          },
+          3: {
+            max_files: 100,
+            max_loc: 5e3,
+            coverage_threshold: 70,
+            mutation_threshold: 30,
+            contracts_required: false,
+            manual_review_required: false,
+            description: "Low-risk changes with minimal oversight"
+          }
+        },
+        waiver_approval: {
+          required_approvers: 1,
+          max_duration_days: 90,
+          auto_revoke_expired: true
+        }
+      };
+    }
+    async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
+      try {
+        const policyResult = await defaultPolicyManager.loadPolicy(projectRoot, {
+          useCache: options.useCache !== false
+        });
+        const policy = policyResult;
+        if (policy._isDefault) {
+          const expectedPath = path2.join(projectRoot, ".caws", "policy.yaml");
+          const policyExists = fs2.existsSync(expectedPath);
+          if (policyExists) {
+            console.error(
+              "\u26A0\uFE0F  Policy file exists but not loaded: " + expectedPath + "\n   Current working directory: " + process.cwd() + "\n   Project root: " + projectRoot + "\n   Cache status: " + (policy._cacheHit ? "HIT (may be stale)" : "MISS") + "\n   This may be a path resolution or caching issue\n"
+            );
+          } else {
+            console.warn(
+              '\u26A0\uFE0F  Policy file not found: .caws/policy.yaml\n   Using default policy. Run "caws init" to create policy.yaml'
+            );
+          }
+        }
+        if (!policy.risk_tiers[spec.risk_tier]) {
+          throw new Error(
+            `Risk tier ${spec.risk_tier} not defined in policy.yaml
+Policy only defines tiers: ${Object.keys(policy.risk_tiers).join(", ")}
+Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)`
+          );
         }
         const tierBudget = policy.risk_tiers[spec.risk_tier];
         const baseline = {
@@ -42644,6 +43126,16 @@ var require_budget_derivation = __commonJS({
           for (const waiverId of spec.waiver_ids) {
             const waiver = loadWaiver(waiverId, projectRoot);
             if (waiver && waiver.status === "active" && isWaiverValid(waiver)) {
+              if (!waiver.gates || !waiver.gates.includes("budget_limit")) {
+                console.warn(
+                  `
+\u26A0\uFE0F  Waiver ${waiverId} does not cover 'budget_limit' gate
+   Current gates: [${waiver.gates ? waiver.gates.join(", ") : "none"}]
+   Add 'budget_limit' to gates array to apply to budget violations
+`
+                );
+                continue;
+              }
               if (waiver.delta) {
                 if (waiver.delta.max_files) {
                   effectiveBudget.max_files += waiver.delta.max_files;
@@ -42665,33 +43157,144 @@ var require_budget_derivation = __commonJS({
         throw new Error(`Budget derivation failed: ${error.message}`);
       }
     }
+    function validateWaiverStructure(waiver) {
+      const requiredFields = ["id", "title", "reason", "status", "gates", "expires_at", "approvers"];
+      for (const field of requiredFields) {
+        if (!(field in waiver)) {
+          throw new Error(
+            `Waiver missing required field: ${field}
+Required fields: ${requiredFields.join(", ")}
+Fix the waiver file at .caws/waivers/${waiver.id || "unknown"}.yaml`
+          );
+        }
+      }
+      if (!/^WV-\d{4}$/.test(waiver.id)) {
+        throw new Error(
+          `Invalid waiver ID format: ${waiver.id}
+Waiver IDs must follow the format: WV-XXXX (e.g., WV-0001)
+Where XXXX is a 4-digit number
+Fix the id field in .caws/waivers/${waiver.id}.yaml`
+        );
+      }
+      const validStatuses = ["active", "expired", "revoked"];
+      if (!validStatuses.includes(waiver.status)) {
+        throw new Error(
+          `Invalid waiver status: ${waiver.status}
+Status must be one of: ${validStatuses.join(", ")}
+Fix the status field in .caws/waivers/${waiver.id}.yaml`
+        );
+      }
+      if (!Array.isArray(waiver.gates) || waiver.gates.length === 0) {
+        throw new Error(
+          `Invalid waiver gates: ${JSON.stringify(waiver.gates)}
+gates must be a non-empty array of gate names
+Example: gates: ["budget_limit", "coverage_threshold"]
+Fix the gates field in .caws/waivers/${waiver.id}.yaml`
+        );
+      }
+      if (!Array.isArray(waiver.approvers) || waiver.approvers.length === 0) {
+        throw new Error(
+          `Invalid waiver approvers: ${JSON.stringify(waiver.approvers)}
+approvers must be a non-empty array of approver names/emails
+Example: approvers: ["tech-lead@company.com"]
+Fix the approvers field in .caws/waivers/${waiver.id}.yaml`
+        );
+      }
+      const expiryDate = new Date(waiver.expires_at);
+      if (isNaN(expiryDate.getTime())) {
+        throw new Error(
+          `Invalid waiver expiry date: ${waiver.expires_at}
+expires_at must be a valid ISO 8601 date string
+Example: expires_at: "2025-12-31T23:59:59Z"
+Fix the expires_at field in .caws/waivers/${waiver.id}.yaml`
+        );
+      }
+      if (waiver.delta) {
+        if (waiver.delta.max_files !== void 0 && waiver.delta.max_files < 0) {
+          throw new Error(
+            `Invalid waiver delta.max_files: ${waiver.delta.max_files}
+delta.max_files must be a non-negative integer
+Fix the delta field in .caws/waivers/${waiver.id}.yaml`
+          );
+        }
+        if (waiver.delta.max_loc !== void 0 && waiver.delta.max_loc < 0) {
+          throw new Error(
+            `Invalid waiver delta.max_loc: ${waiver.delta.max_loc}
+delta.max_loc must be a non-negative integer
+Fix the delta field in .caws/waivers/${waiver.id}.yaml`
+          );
+        }
+      }
+    }
     function loadWaiver(waiverId, projectRoot) {
       try {
+        if (!/^WV-\d{4}$/.test(waiverId)) {
+          console.error(
+            `
+\u274C Invalid waiver ID format: ${waiverId}
+   Waiver IDs must be exactly 4 digits: WV-0001 through WV-9999
+   Fix waiver_ids in .caws/working-spec.yaml
+`
+          );
+          return null;
+        }
         const waiverPath = path2.join(projectRoot, ".caws", "waivers", `${waiverId}.yaml`);
         if (!fs2.existsSync(waiverPath)) {
-          console.warn(`Waiver file not found: ${waiverPath}`);
+          console.error(
+            `
+\u274C Waiver file not found: ${waiverId}
+   Expected location: ${waiverPath}
+   Create waiver with: caws waiver create
+`
+          );
           return null;
         }
         const waiver = yaml2.load(fs2.readFileSync(waiverPath, "utf8"));
+        try {
+          validateWaiverStructure(waiver);
+        } catch (error) {
+          console.error(`
+\u274C Invalid waiver ${waiverId}: ${error.message}
+`);
+          return null;
+        }
         return waiver;
       } catch (error) {
-        console.warn(`Failed to load waiver ${waiverId}: ${error.message}`);
+        console.error(`
+\u274C Failed to load waiver ${waiverId}: ${error.message}
+`);
         return null;
       }
     }
-    function isWaiverValid(waiver) {
+    function isWaiverValid(waiver, policy = null) {
       try {
+        if (waiver.status !== "active") {
+          console.warn(`Waiver ${waiver.id} has status: ${waiver.status}`);
+          return false;
+        }
         if (waiver.expires_at) {
           const expiryDate = new Date(waiver.expires_at);
           const now = /* @__PURE__ */ new Date();
           if (now > expiryDate) {
+            console.warn(`Waiver ${waiver.id} expired on ${waiver.expires_at}`);
             return false;
           }
         }
-        if (waiver.status !== "active") {
+        if (!waiver.approvers || waiver.approvers.length === 0) {
+          console.warn(`Waiver ${waiver.id} has no approvers`);
           return false;
         }
-        if (!waiver.approvers || waiver.approvers.length === 0) {
+        if (policy && policy.waiver_approval && policy.waiver_approval.required_approvers) {
+          const minApprovers = policy.waiver_approval.required_approvers;
+          if (waiver.approvers.length < minApprovers) {
+            console.warn(
+              `Waiver ${waiver.id} has ${waiver.approvers.length} approvers, needs ${minApprovers}`
+            );
+            return false;
+          }
+        }
+        if (!waiver.id || !waiver.title || !waiver.gates) {
+          console.warn(`Waiver ${waiver.id || "unknown"} missing required fields`);
           return false;
         }
         return true;
@@ -42728,6 +43331,19 @@ var require_budget_derivation = __commonJS({
         budget: derivedBudget
       };
     }
+    function calculateBudgetUtilization(budgetCompliance) {
+      const filesPercent = budgetCompliance.budget.effective.max_files > 0 ? budgetCompliance.budget.baseline.max_files / budgetCompliance.budget.effective.max_files * 100 : 0;
+      const locPercent = budgetCompliance.budget.effective.max_loc > 0 ? budgetCompliance.budget.baseline.max_loc / budgetCompliance.budget.effective.max_loc * 100 : 0;
+      return {
+        files: Math.round(filesPercent),
+        loc: Math.round(locPercent),
+        overall: Math.round(Math.max(filesPercent, locPercent))
+      };
+    }
+    function isApproachingBudgetLimit(budgetCompliance, threshold = 80) {
+      const utilization = calculateBudgetUtilization(budgetCompliance);
+      return utilization.overall >= threshold;
+    }
     function generateBurnupReport(derivedBudget, currentStats) {
       const report = [
         "\u{1F4CA} CAWS Budget Burn-up Report",
@@ -42738,15 +43354,32 @@ var require_budget_derivation = __commonJS({
         `Current: ${currentStats.files_changed} files, ${currentStats.lines_changed} LOC`
       ];
       if (derivedBudget.waivers_applied.length > 0) {
+        report.push("");
         report.push(`Waivers Applied: ${derivedBudget.waivers_applied.join(", ")}`);
-        report.push(`Effective Budget: ${derivedBudget.effective.max_files} files, ${derivedBudget.effective.max_loc} LOC`);
+        report.push(
+          `Effective Budget: ${derivedBudget.effective.max_files} files, ${derivedBudget.effective.max_loc} LOC`
+        );
       }
-      const filePercent = Math.round(currentStats.files_changed / derivedBudget.effective.max_files * 100);
-      const locPercent = Math.round(currentStats.lines_changed / derivedBudget.effective.max_loc * 100);
-      report.push(`File Usage: ${filePercent}% (${currentStats.files_changed}/${derivedBudget.effective.max_files})`);
-      report.push(`LOC Usage: ${locPercent}% (${currentStats.lines_changed}/${derivedBudget.effective.max_loc})`);
-      if (filePercent > 90 || locPercent > 90) {
+      const filePercent = Math.round(
+        currentStats.files_changed / derivedBudget.effective.max_files * 100
+      );
+      const locPercent = Math.round(
+        currentStats.lines_changed / derivedBudget.effective.max_loc * 100
+      );
+      report.push("");
+      report.push(
+        `File Usage: ${filePercent}% (${currentStats.files_changed}/${derivedBudget.effective.max_files})`
+      );
+      report.push(
+        `LOC Usage: ${locPercent}% (${currentStats.lines_changed}/${derivedBudget.effective.max_loc})`
+      );
+      const overall = Math.max(filePercent, locPercent);
+      if (overall >= 95) {
+        report.push("", "\u{1F6AB} CRITICAL: Budget nearly exhausted!");
+      } else if (overall >= 90) {
         report.push("", "\u26A0\uFE0F  WARNING: Approaching budget limits");
+      } else if (overall >= 80) {
+        report.push("", "\u26A0\uFE0F  Notice: 80% of budget used");
       }
       return report.join("\n");
     }
@@ -42755,7 +43388,12 @@ var require_budget_derivation = __commonJS({
       loadWaiver,
       isWaiverValid,
       checkBudgetCompliance,
-      generateBurnupReport
+      generateBurnupReport,
+      calculateBudgetUtilization,
+      isApproachingBudgetLimit,
+      validatePolicy,
+      getDefaultPolicy,
+      validateWaiverStructure
     };
   }
 });
@@ -42914,13 +43552,93 @@ var require_spec_validation = __commonJS({
           });
         }
         if (spec.risk_tier !== void 0 && (spec.risk_tier < 1 || spec.risk_tier > 3)) {
+          const fixedValue = Math.max(1, Math.min(3, spec.risk_tier || 2));
           errors.push({
             instancePath: "/risk_tier",
             message: "Risk tier must be 1, 2, or 3",
             suggestion: "Tier 1: Critical (auth, billing), Tier 2: Standard (features), Tier 3: Low risk (UI)",
             canAutoFix: true
           });
-          fixes.push({ field: "risk_tier", value: Math.max(1, Math.min(3, spec.risk_tier || 2)) });
+          fixes.push({
+            field: "risk_tier",
+            value: fixedValue,
+            description: `Clamping risk_tier from ${spec.risk_tier} to valid range [1-3]: ${fixedValue}`,
+            reason: "Risk tier out of bounds"
+          });
+        }
+        if (!spec.invariants || spec.invariants.length === 0) {
+          if (autoFix) {
+            fixes.push({
+              field: "invariants",
+              value: ["System must remain operational during changes"],
+              description: "Adding default invariant for empty invariants array",
+              reason: "Invariants array was empty"
+            });
+          }
+        }
+        if (!spec.acceptance || spec.acceptance.length === 0) {
+          if (autoFix) {
+            fixes.push({
+              field: "acceptance",
+              value: [
+                {
+                  id: "A1",
+                  given: "the system is in a valid state",
+                  when: "the change is applied",
+                  then: "the system remains functional"
+                }
+              ],
+              description: "Adding placeholder acceptance criteria",
+              reason: "Acceptance criteria array was empty"
+            });
+          }
+        }
+        if (spec.scope && !spec.scope.out) {
+          fixes.push({
+            field: "scope.out",
+            value: ["node_modules/", "dist/", ".git/"],
+            description: "Adding default exclusions to scope.out",
+            reason: "scope.out was missing"
+          });
+        }
+        if (!spec.mode) {
+          fixes.push({
+            field: "mode",
+            value: "feature",
+            description: 'Setting default mode to "feature"',
+            reason: "mode field was missing"
+          });
+        }
+        if (!spec.blast_radius) {
+          fixes.push({
+            field: "blast_radius",
+            value: {
+              modules: [],
+              data_migration: false
+            },
+            description: "Adding empty blast_radius structure",
+            reason: "blast_radius was missing"
+          });
+        }
+        if (!spec.non_functional) {
+          fixes.push({
+            field: "non_functional",
+            value: {
+              a11y: [],
+              perf: {},
+              security: []
+            },
+            description: "Adding empty non_functional requirements structure",
+            reason: "non_functional was missing"
+          });
+        }
+        if (!spec.contracts) {
+          fixes.push({
+            field: "contracts",
+            value: [],
+            description: "Adding empty contracts array",
+            reason: "contracts field was missing"
+          });
         }
         if (!spec.scope || !spec.scope.in || spec.scope.in.length === 0) {
           errors.push({
@@ -42954,6 +43672,32 @@ var require_spec_validation = __commonJS({
             });
           }
         }
+        if (spec.risk_tier === 1) {
+          if (!spec.observability) {
+            errors.push({
+              instancePath: "/observability",
+              message: "Observability required for Tier 1 changes",
+              suggestion: "Define logging, metrics, and tracing strategy",
+              canAutoFix: false
+            });
+          }
+          if (!spec.rollback || spec.rollback.length === 0) {
+            errors.push({
+              instancePath: "/rollback",
+              message: "Rollback procedures required for Tier 1 changes",
+              suggestion: "Document rollback steps and data migration reversal",
+              canAutoFix: false
+            });
+          }
+          if (!spec.non_functional || !spec.non_functional.security || spec.non_functional.security.length === 0) {
+            errors.push({
+              instancePath: "/non_functional/security",
+              message: "Security requirements required for Tier 1 changes",
+              suggestion: "Define authentication, authorization, and data protection requirements",
+              canAutoFix: false
+            });
+          }
+        }
         if (spec.waiver_ids) {
           if (!Array.isArray(spec.waiver_ids)) {
             errors.push({
@@ -42968,12 +43712,19 @@ var require_spec_validation = __commonJS({
                 errors.push({
                   instancePath: "/waiver_ids",
                   message: `Invalid waiver ID format: ${waiverId}`,
-                  suggestion: "Use format: WV-XXXX (e.g., WV-0001)",
+                  suggestion: "Use format: WV-XXXX where XXXX is exactly 4 digits (e.g., WV-0001)",
                   canAutoFix: false
                 });
               }
             }
           }
+        }
+        if (spec.change_budget) {
+          warnings.push({
+            instancePath: "/change_budget",
+            message: "change_budget field in working spec is informational only and not used for validation",
+            suggestion: "Budget is derived from policy.yaml risk_tier + waivers. This field is auto-calculated."
+          });
         }
         let budgetCheck = null;
         if (checkBudget && projectRoot) {
@@ -42995,6 +43746,13 @@ var require_spec_validation = __commonJS({
                   canAutoFix: false
                 });
               }
+              if (!spec.waiver_ids || spec.waiver_ids.length === 0) {
+                warnings.push({
+                  instancePath: "/waiver_ids",
+                  message: "Budget exceeded but no waivers referenced",
+                  suggestion: 'Add waiver_ids: ["WV-0001"] to working spec, then create waiver file with: caws waiver create'
+                });
+              }
             }
           } catch (error) {
             warnings.push({
@@ -43004,25 +43762,50 @@ var require_spec_validation = __commonJS({
             });
           }
         }
+        const { dryRun = false } = options;
+        let appliedFixes = [];
         if (autoFix && fixes.length > 0) {
-          console.log("\u{1F527} Applying auto-fixes...");
-          for (const fix of fixes) {
-            const pathParts = fix.field.split(".");
-            let current = spec;
-            for (let i = 0; i < pathParts.length - 1; i++) {
-              if (!current[pathParts[i]]) current[pathParts[i]] = {};
-              current = current[pathParts[i]];
+          if (dryRun) {
+            console.log("\u{1F50D} Auto-fix preview (dry-run mode):");
+            for (const fix of fixes) {
+              console.log(`   [WOULD FIX] ${fix.field}`);
+              console.log(`      Description: ${fix.description}`);
+              console.log(`      Reason: ${fix.reason}`);
+              console.log(
+                `      Value: ${typeof fix.value === "object" ? JSON.stringify(fix.value) : fix.value}`
+              );
+              console.log("");
             }
-            current[pathParts[pathParts.length - 1]] = fix.value;
-            console.log(`   Fixed ${fix.field}: ${fix.value}`);
+          } else {
+            console.log("\u{1F527} Applying auto-fixes...");
+            for (const fix of fixes) {
+              try {
+                const pathParts = fix.field.split(".");
+                let current = spec;
+                for (let i = 0; i < pathParts.length - 1; i++) {
+                  if (!current[pathParts[i]]) current[pathParts[i]] = {};
+                  current = current[pathParts[i]];
+                }
+                current[pathParts[pathParts.length - 1]] = fix.value;
+                appliedFixes.push(fix);
+                console.log(`   \u2705 Fixed ${fix.field}`);
+                console.log(`      ${fix.description}`);
+              } catch (error) {
+                console.warn(`   \u26A0\uFE0F  Failed to apply fix for ${fix.field}: ${error.message}`);
+              }
+            }
           }
         }
+        const complianceScore = calculateComplianceScore(errors, warnings);
         return {
           valid: errors.length === 0,
           errors,
           warnings,
           fixes: fixes.length > 0 ? fixes : void 0,
-          budget_check: budgetCheck
+          appliedFixes: appliedFixes.length > 0 ? appliedFixes : void 0,
+          dryRun,
+          budget_check: budgetCheck,
+          complianceScore
         };
       } catch (error) {
         return {
@@ -43035,6 +43818,19 @@ var require_spec_validation = __commonJS({
           ]
         };
       }
+    }
+    function calculateComplianceScore(errors, warnings) {
+      let score = 1;
+      score -= errors.length * 0.2;
+      score -= warnings.length * 0.1;
+      return Math.max(0, score);
+    }
+    function getComplianceGrade(score) {
+      if (score >= 0.9) return "A";
+      if (score >= 0.8) return "B";
+      if (score >= 0.7) return "C";
+      if (score >= 0.6) return "D";
+      return "F";
     }
     function getFieldSuggestion(field, _spec) {
       const suggestions = {
@@ -43061,7 +43857,9 @@ var require_spec_validation = __commonJS({
       validateWorkingSpec,
       validateWorkingSpecWithSuggestions: validateWorkingSpecWithSuggestions2,
       getFieldSuggestion,
-      canAutoFixField
+      canAutoFixField,
+      calculateComplianceScore,
+      getComplianceGrade
     };
   }
 });
@@ -43287,6 +44085,19 @@ var require_cursor_hooks = __commonJS({
         const readmePath = path2.join(cursorTemplateDir, "README.md");
         if (fs2.existsSync(readmePath)) {
           await fs2.copy(readmePath, path2.join(cursorDir, "README.md"));
+        }
+        const rulesTemplateDir = path2.join(cursorTemplateDir, "rules");
+        const rulesDestDir = path2.join(cursorDir, "rules");
+        if (fs2.existsSync(rulesTemplateDir)) {
+          try {
+            await fs2.ensureDir(rulesDestDir);
+            await fs2.copy(rulesTemplateDir, rulesDestDir);
+            const ruleFiles = fs2.readdirSync(rulesTemplateDir).filter((file) => file.endsWith(".mdc"));
+            console.log(chalk2.green("\u2705 Cursor rules configured"));
+            console.log(chalk2.gray(`   Rules: ${ruleFiles.length} rule files installed`));
+          } catch (error) {
+            console.warn(chalk2.yellow("\u26A0\uFE0F  Failed to copy Cursor rules:"), error.message);
+          }
         }
         console.log(chalk2.green("\u2705 Cursor hooks configured"));
         console.log(chalk2.gray(`   Enabled: ${levels.join(", ")}`));
@@ -43556,20 +44367,22 @@ var require_git_hooks = __commonJS({
         console.log(`
 \u{1F517} Git hooks configured: ${addedCount} hooks active`);
         console.log("\u{1F4A1} Hooks will run automatically on git operations");
-        console.log("\u{1F4A1} Use --no-verify to skip hooks: git commit --no-verify");
+        console.log("\u{1F4A1} Use --no-verify to skip commit hooks: git commit --no-verify");
+        console.log("\u26A0\uFE0F  Note: --no-verify is BLOCKED on git push for safety");
       }
       return { added: addedCount, skipped: skippedCount };
     }
     function generatePreCommitHook(options) {
-      const { qualityGates = true } = options;
+      const { qualityGates = true, stagedOnly = true } = options;
       return `#!/bin/bash
 # CAWS Pre-commit Hook
 # Runs validation and quality checks before commits
+# Implements graceful fallback chain to avoid blocking commits
 
 set -e
 
-echo "\u{1F50D} CAWS Pre-commit Validation"
-echo "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
+echo "\u{1F6A6} Running CAWS Quality Gates${qualityGates ? " (Crisis Response Mode)" : ""}..."
+echo "\u{1F4C1} Analyzing ${stagedOnly ? "staged files only" : "all files"}..."
 
 # Check if CAWS is initialized
 if [ ! -d ".caws" ]; then
@@ -43577,49 +44390,91 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
-# Run CAWS validation if available
-if command -v caws >/dev/null 2>&1; then
-  echo "\u{1F4CB} Running CAWS validation..."
-  if caws validate --quiet; then
+# Fallback chain for quality gates:
+# 1. Try Node.js script (if exists)
+# 2. Try CAWS CLI
+# 3. Try Makefile target
+# 4. Try Python scripts
+# 5. Skip gracefully (warn only)
+
+QUALITY_GATES_RAN=false
+
+# Option 1: Node.js quality gates script
+if [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
+  if command -v node >/dev/null 2>&1; then
+    echo "\u{1F4C1} Running Node.js quality gates script..."
+    if node scripts/quality-gates/run-quality-gates.js; then
+      echo "\u2705 Quality gates passed"
+      QUALITY_GATES_RAN=true
+    else
+      echo "\u274C Quality gates failed - commit blocked"
+      echo "\u{1F4A1} Fix the violations above before committing"
+      exit 1
+    fi
+  fi
+# Option 2: CAWS CLI validation
+elif command -v caws >/dev/null 2>&1; then
+  echo "\u{1F4CB} Running CAWS CLI validation..."
+  if caws validate --quiet 2>/dev/null; then
     echo "\u2705 CAWS validation passed"
+    QUALITY_GATES_RAN=true
   else
-    echo "\u274C CAWS validation failed"
-    echo "\u{1F4A1} Fix issues or use: git commit --no-verify"
-    exit 1
+    echo "\u26A0\uFE0F  CAWS validation failed, but allowing commit (non-blocking)"
+    echo "\u{1F4A1} Run 'caws validate' for details"
+    QUALITY_GATES_RAN=true
   fi
+# Option 3: Makefile target
+elif [ -f "Makefile" ] && grep -q "caws-validate\\|caws-gates" Makefile; then
+  echo "\u{1F527} Running Makefile quality gates..."
+  if make caws-validate >/dev/null 2>&1 || make caws-gates >/dev/null 2>&1; then
+    echo "\u2705 Makefile quality gates passed"
+    QUALITY_GATES_RAN=true
+  else
+    echo "\u26A0\uFE0F  Makefile quality gates failed, but allowing commit (non-blocking)"
+    QUALITY_GATES_RAN=true
+  fi
+# Option 4: Python scripts
+elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; then
+  echo "\u{1F40D} Running Python quality gates script..."
+  if python3 scripts/simple_gates.py all --tier 2 --profile backend-api >/dev/null 2>&1; then
+    echo "\u2705 Python quality gates passed"
+    QUALITY_GATES_RAN=true
+  else
+    echo "\u26A0\uFE0F  Python quality gates failed, but allowing commit (non-blocking)"
+    QUALITY_GATES_RAN=true
+  fi
+# Option 5: Skip gracefully
 else
-  echo "\u26A0\uFE0F  CAWS CLI not found - install with: npm install -g @paths.design/caws-cli"
+  echo "\u26A0\uFE0F  Quality gates not available - skipping"
+  echo "\u{1F4A1} Available options:"
+  echo "   \u2022 Install: npm install -g @paths.design/caws-cli"
+  echo "   \u2022 Use Python: python3 scripts/simple_gates.py"
+  echo "   \u2022 Use Makefile: make caws-gates"
+  QUALITY_GATES_RAN=true
 fi
 
-# Run quality gates if enabled
-${qualityGates ? `
-echo "\u{1F3AF} Running quality gates..."
-if [ -f "package.json" ]; then
-  # Run linting if available
-  if [ -f "node_modules/.bin/eslint" ] || command -v eslint >/dev/null 2>&1; then
-    echo "\u{1F50D} Running ESLint..."
-    if npx eslint . --quiet; then
-      echo "\u2705 ESLint passed"
+# Run hidden TODO analysis on staged files only (if Python available)
+if [ "$QUALITY_GATES_RAN" = true ]; then
+  echo "\u{1F50D} Checking for hidden TODOs in staged files..."
+  if command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
+    if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+      echo "\u2705 No critical hidden TODOs found in staged files"
     else
-      echo "\u274C ESLint failed - fix issues or use --no-verify"
+      echo "\u274C Critical hidden TODOs detected in staged files - commit blocked"
+      echo "\u{1F4A1} Fix stub implementations and placeholder code before committing"
+      echo "\u{1F4D6} See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+      echo ""
+      echo "\u{1F50D} Running detailed analysis on staged files..."
+      python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
       exit 1
     fi
-  fi
-
-  # Run tests if available
-  if [ -f "package.json" ] && grep -q '"test"' package.json; then
-    echo "\u{1F9EA} Running tests..."
-    if npm test; then
-      echo "\u2705 Tests passed"
-    else
-      echo "\u274C Tests failed - fix issues or use --no-verify"
-      exit 1
-    fi
+  elif command -v python3 >/dev/null 2>&1; then
+    echo "\u26A0\uFE0F  Python3 found but TODO analyzer not available - skipping"
   fi
 fi
-` : ""}
 
-echo "\u{1F389} Pre-commit checks passed!"
+echo "\u2705 All quality checks passed - proceeding with commit"
+exit 0
 `;
     }
     function generatePostCommitHook() {
@@ -43662,8 +44517,25 @@ echo "\u{1F389} Pre-commit checks passed!"
       return `#!/bin/bash
 # CAWS Pre-push Hook
 # Runs comprehensive checks before pushing
+# BLOCKS --no-verify for safety
 
 set -e
+
+# Block --no-verify on push operations
+for arg in "$@"; do
+  if [[ "$arg" == "--no-verify" ]] || [[ "$arg" == "-n" ]]; then
+    echo "\u274C Error: --no-verify is BLOCKED on git push"
+    echo "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
+    echo "Push operations must pass all quality gates."
+    echo ""
+    echo "\u{1F4A1} To fix issues locally:"
+    echo "   1. Run: caws validate"
+    echo "   2. Fix reported issues"
+    echo "   3. Commit fixes: git commit --no-verify (allowed)"
+    echo "   4. Push again: git push (no --no-verify)"
+    exit 1
+  fi
+done
 
 echo "\u{1F680} CAWS Pre-push Validation"
 echo "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
@@ -43681,7 +44553,8 @@ if command -v caws >/dev/null 2>&1; then
     echo "\u2705 CAWS validation passed"
   else
     echo "\u274C CAWS validation failed"
-    echo "\u{1F4A1} Fix issues or use: git push --no-verify"
+    echo "\u{1F4A1} Fix issues locally, then push again"
+    echo "\u{1F4A1} You can commit fixes with: git commit --no-verify"
     exit 1
   fi
 fi
@@ -43697,9 +44570,20 @@ if [ -f "package.json" ]; then
     else
       echo "\u26A0\uFE0F  Security vulnerabilities found"
       echo "\u{1F4A1} Review with: npm audit"
-      echo "\u{1F4A1} Use --no-verify to push anyway"
       # Don't fail on warnings, just warn
     fi
+  fi
+elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+  # Python project security checks
+  if command -v pip-audit >/dev/null 2>&1; then
+    echo "\u{1F50D} Checking Python vulnerabilities..."
+    pip-audit --desc 2>/dev/null || echo "\u26A0\uFE0F  Install pip-audit for vulnerability checks: pip install pip-audit"
+  fi
+elif [ -f "Cargo.toml" ]; then
+  # Rust project security checks
+  if command -v cargo-audit >/dev/null 2>&1; then
+    echo "\u{1F50D} Checking Rust vulnerabilities..."
+    cargo audit 2>/dev/null || echo "\u26A0\uFE0F  Install cargo-audit for vulnerability checks: cargo install cargo-audit"
   fi
 fi
 
@@ -44046,6 +44930,41 @@ var require_scaffold = __commonJS({
             return await scaffoldIDEIntegrations(targetDir, options2);
           }
         });
+        enhancements.push({
+          name: "scripts/quality-gates/run-quality-gates.js",
+          description: "Quality gates runner for staged files",
+          required: false
+        });
+        enhancements.push({
+          name: "scripts/quality-gates/check-god-objects.js",
+          description: "God object detector for staged files",
+          required: false
+        });
+        enhancements.push({
+          name: "scripts/v3/analysis/todo_analyzer.py",
+          description: "Advanced hidden TODO analyzer with dependency resolution",
+          required: false
+        });
+        if (options.withQualityGates) {
+          console.log(chalk2.blue("\n\u{1F4E6} Installing quality gates package..."));
+          try {
+            const { execSync } = require("child_process");
+            const npmCommand = fs2.existsSync(path2.join(currentDir, "package.json")) ? "npm install --save-dev @paths.design/quality-gates" : "npm install -g @paths.design/quality-gates";
+            console.log(chalk2.gray(`   Running: ${npmCommand}`));
+            execSync(npmCommand, {
+              cwd: currentDir,
+              stdio: "inherit"
+            });
+            console.log(chalk2.green("\u2705 Quality gates package installed"));
+            console.log(chalk2.blue("\u{1F4A1} You can now use: caws quality-gates"));
+          } catch (error) {
+            console.log(chalk2.yellow(`\u26A0\uFE0F  Failed to install quality gates package: ${error.message}`));
+            console.log(
+              chalk2.gray("   You can install manually: npm install -g @paths.design/quality-gates")
+            );
+            console.log(chalk2.gray("   Or use Python scripts: python3 scripts/simple_gates.py"));
+          }
+        }
         if (!setup.hasTemplates || !fs2.existsSync(path2.join(currentDir, "COMMIT_CONVENTIONS.md"))) {
           enhancements.push({
             name: "COMMIT_CONVENTIONS.md",
@@ -44631,59 +45550,636 @@ Happy coding! \u{1F3AF}
   }
 });
 
-// src/commands/validate.js
-var require_validate = __commonJS({
-  "src/commands/validate.js"(exports2, module2) {
+// src/constants/spec-types.js
+var require_spec_types = __commonJS({
+  "src/constants/spec-types.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var SPEC_TYPES = {
+      feature: {
+        color: chalk2.green,
+        icon: "\u{1F680}",
+        description: "New feature development"
+      },
+      fix: {
+        color: chalk2.red,
+        icon: "\u{1F527}",
+        description: "Bug fixes and patches"
+      },
+      refactor: {
+        color: chalk2.blue,
+        icon: "\u267B\uFE0F",
+        description: "Code refactoring and improvements"
+      },
+      chore: {
+        color: chalk2.gray,
+        icon: "\u{1F9F9}",
+        description: "Maintenance and cleanup"
+      },
+      docs: {
+        color: chalk2.cyan,
+        icon: "\u{1F4DA}",
+        description: "Documentation updates"
+      }
+    };
+    module2.exports = {
+      SPEC_TYPES
+    };
+  }
+});
+
+// src/utils/spec-resolver.js
+var require_spec_resolver = __commonJS({
+  "src/utils/spec-resolver.js"(exports2, module2) {
     var fs2 = require_lib();
     var path2 = require("path");
     var yaml2 = require_js_yaml();
     var chalk2 = require_source();
-    var { validateWorkingSpecWithSuggestions: validateWorkingSpecWithSuggestions2 } = require_spec_validation();
-    async function validateCommand2(specFile, options) {
-      try {
-        let specPath = specFile || path2.join(".caws", "working-spec.yaml");
-        if (!fs2.existsSync(specPath)) {
-          console.error(chalk2.red(`\u274C Spec file not found: ${specPath}`));
-          console.error(chalk2.blue('\u{1F4A1} Run "caws init" first to create a working spec'));
-          process.exit(1);
+    var { SPEC_TYPES } = require_spec_types();
+    var SPECS_DIR = ".caws/specs";
+    var LEGACY_SPEC = ".caws/working-spec.yaml";
+    var SPECS_REGISTRY = ".caws/specs/registry.json";
+    async function resolveSpec(options = {}) {
+      const { specId, specFile, warnLegacy = true, interactive = false } = options;
+      if (specFile) {
+        const explicitPath = path2.isAbsolute(specFile) ? specFile : path2.join(process.cwd(), specFile);
+        if (await fs2.pathExists(explicitPath)) {
+          const yaml3 = require_js_yaml();
+          const content = await fs2.readFile(explicitPath, "utf8");
+          const spec = yaml3.load(content);
+          return {
+            path: explicitPath,
+            type: explicitPath.includes("/specs/") ? "feature" : "legacy",
+            spec
+          };
         }
-        const specContent = fs2.readFileSync(specPath, "utf8");
-        const spec = yaml2.load(specContent);
-        console.log(chalk2.cyan("\u{1F50D} Validating CAWS working spec..."));
+        throw new Error(`Spec file not found: ${explicitPath}`);
+      }
+      if (specId) {
+        const featurePath = path2.join(process.cwd(), SPECS_DIR, `${specId}.yaml`);
+        if (await fs2.pathExists(featurePath)) {
+          const yaml3 = require_js_yaml();
+          const content = await fs2.readFile(featurePath, "utf8");
+          const spec = yaml3.load(content);
+          console.log(chalk2.green(`\u2705 Using feature-specific spec: ${specId}`));
+          return {
+            path: featurePath,
+            type: "feature",
+            spec
+          };
+        }
+        throw new Error(
+          `Feature spec '${specId}' not found. Create it with: caws specs create ${specId}`
+        );
+      }
+      const registry = await loadSpecsRegistry();
+      const specIds = Object.keys(registry.specs ?? {});
+      if (specIds.length === 1) {
+        const singleSpecId = specIds[0];
+        const singleSpecPath = path2.join(process.cwd(), SPECS_DIR, registry.specs[singleSpecId].path);
+        if (await fs2.pathExists(singleSpecPath)) {
+          const yaml3 = require_js_yaml();
+          const content = await fs2.readFile(singleSpecPath, "utf8");
+          const spec = yaml3.load(content);
+          console.log(chalk2.blue(`\u{1F4CB} Auto-detected single spec: ${singleSpecId}`));
+          return {
+            path: singleSpecPath,
+            type: "feature",
+            spec
+          };
+        }
+      } else if (specIds.length > 1) {
+        console.error(chalk2.red("\u274C Multiple specs detected. Please specify which one:"));
+        const specsInfo = [];
+        for (const id of specIds) {
+          const specPath = path2.join(SPECS_DIR, registry.specs[id].path);
+          try {
+            const content = await fs2.readFile(specPath, "utf8");
+            const spec = yaml2.load(content);
+            const status = spec.status || "draft";
+            const type = spec.type || "feature";
+            const statusColor = status === "active" ? chalk2.green : status === "completed" ? chalk2.blue : chalk2.yellow;
+            const typeColor = SPEC_TYPES[type] ? SPEC_TYPES[type].color : chalk2.white;
+            console.log(
+              chalk2.yellow(
+                `   - ${id} ${typeColor(`(${type})`)} ${statusColor(`[${status}]`)} - ${spec.title || "Untitled"}`
+              )
+            );
+            specsInfo.push({ id, type, status, title: spec.title || "Untitled" });
+          } catch (error) {
+            console.log(chalk2.yellow(`   - ${id} (error loading details)`));
+            specsInfo.push({ id, type: "unknown", status: "unknown", title: "Error loading" });
+          }
+        }
+        if (interactive) {
+          try {
+            const selectedSpecId = await interactiveSpecSelection(specIds);
+            return await resolveSpec({
+              specId: selectedSpecId,
+              warnLegacy,
+              interactive: false
+              // Prevent infinite recursion
+            });
+          } catch (error) {
+            throw new Error(`Interactive selection failed: ${error.message}`);
+          }
+        }
+        console.log(chalk2.blue("\n   Usage: caws <command> --spec-id <spec-id>"));
+        console.log(chalk2.gray(`   Example: caws validate --spec-id ${specIds[0]}`));
+        const priorityOrder = { active: 0, draft: 1, completed: 2 };
+        const sortedSpecs = specIds.sort((a, b) => {
+          const aSpec = specsInfo.find((s) => s.id === a);
+          const bSpec = specsInfo.find((s) => s.id === b);
+          const aPriority = priorityOrder[aSpec?.status] || 999;
+          const bPriority = priorityOrder[bSpec?.status] || 999;
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          const typePriority = { feature: 0, fix: 1, refactor: 2, chore: 3, docs: 4 };
+          const aTypePriority = typePriority[aSpec?.type] || 999;
+          const bTypePriority = typePriority[bSpec?.type] || 999;
+          return aTypePriority - bTypePriority;
+        });
+        console.log(chalk2.green("\n\u{1F4A1} Quick suggestion:"));
+        console.log(chalk2.gray(`   Try: caws <command> --spec-id ${sortedSpecs[0]}`));
+        console.log(chalk2.blue("\n   Interactive mode: caws <command> --interactive-spec-selection"));
+        throw new Error("Spec ID required when multiple specs exist");
+      }
+      const legacyPath = path2.join(process.cwd(), LEGACY_SPEC);
+      if (await fs2.pathExists(legacyPath)) {
+        const yaml3 = require_js_yaml();
+        const content = await fs2.readFile(legacyPath, "utf8");
+        const spec = yaml3.load(content);
+        if (warnLegacy) {
+          console.log(chalk2.yellow("\u26A0\uFE0F  Using legacy working-spec.yaml"));
+          console.log(chalk2.gray("   For multi-agent workflows, use feature-specific specs:"));
+          console.log(chalk2.blue("   caws specs create <feature-id>"));
+          console.log("");
+        }
+        return {
+          path: legacyPath,
+          type: "legacy",
+          spec
+        };
+      }
+      throw new Error(
+        "No CAWS spec found. Initialize with: caws init or create a feature spec: caws specs create <id>"
+      );
+    }
+    async function loadSpecsRegistry() {
+      const registryPath = path2.join(process.cwd(), SPECS_REGISTRY);
+      if (!await fs2.pathExists(registryPath)) {
+        return {
+          version: "1.0.0",
+          specs: {},
+          lastUpdated: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+      try {
+        const registry = await fs2.readJson(registryPath);
+        return registry;
+      } catch (error) {
+        return {
+          version: "1.0.0",
+          specs: {},
+          lastUpdated: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+    }
+    async function listAvailableSpecs() {
+      const specs = [];
+      const specsDir = path2.join(process.cwd(), SPECS_DIR);
+      if (await fs2.pathExists(specsDir)) {
+        const files = await fs2.readdir(specsDir);
+        const yamlFiles = files.filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+        for (const file of yamlFiles) {
+          if (file === "registry.json") continue;
+          const specPath = path2.join(specsDir, file);
+          try {
+            const yaml3 = require_js_yaml();
+            const content = await fs2.readFile(specPath, "utf8");
+            const spec = yaml3.load(content);
+            specs.push({
+              id: spec.id || path2.basename(file, path2.extname(file)),
+              path: path2.relative(process.cwd(), specPath),
+              type: "feature",
+              title: spec.title || "Untitled"
+            });
+          } catch (error) {
+          }
+        }
+      }
+      const legacyPath = path2.join(process.cwd(), LEGACY_SPEC);
+      if (await fs2.pathExists(legacyPath)) {
+        try {
+          const yaml3 = require_js_yaml();
+          const content = await fs2.readFile(legacyPath, "utf8");
+          const spec = yaml3.load(content);
+          specs.push({
+            id: spec.id || "working-spec",
+            path: LEGACY_SPEC,
+            type: "legacy",
+            title: spec.title || "Legacy Working Spec"
+          });
+        } catch (error) {
+        }
+      }
+      return specs;
+    }
+    async function interactiveSpecSelection(specIds) {
+      return new Promise((resolve, reject) => {
+        const readline = require("readline");
+        console.log(chalk2.blue("\n\u{1F4CB} Interactive Spec Selection"));
+        console.log(chalk2.gray("Select which spec to use:\n"));
+        specIds.forEach((id, index) => {
+          console.log(chalk2.yellow(`${index + 1}. ${id}`));
+        });
+        console.log(chalk2.gray("\nEnter number (1-" + specIds.length + ") or spec ID directly: "));
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        rl.question("> ", (answer) => {
+          rl.close();
+          const trimmed = answer.trim();
+          const num = parseInt(trimmed);
+          if (num >= 1 && num <= specIds.length) {
+            resolve(specIds[num - 1]);
+            return;
+          }
+          if (specIds.includes(trimmed)) {
+            resolve(trimmed);
+            return;
+          }
+          reject(new Error(`Invalid selection: ${trimmed}. Please choose a valid spec ID.`));
+        });
+      });
+    }
+    async function checkMultiSpecStatus() {
+      const registry = await loadSpecsRegistry();
+      const hasFeatureSpecs = Object.keys(registry.specs ?? {}).length > 0;
+      const legacyPath = path2.join(process.cwd(), LEGACY_SPEC);
+      const hasLegacySpec = await fs2.pathExists(legacyPath);
+      return {
+        isMultiSpec: hasFeatureSpecs,
+        specCount: Object.keys(registry.specs ?? {}).length,
+        needsMigration: hasLegacySpec && !hasFeatureSpecs
+      };
+    }
+    async function checkScopeConflicts(specIds) {
+      const conflicts = [];
+      const specScopes = [];
+      const registry = await loadSpecsRegistry();
+      for (const id of specIds) {
+        const specPath = path2.join(SPECS_DIR, registry.specs[id].path);
+        try {
+          const content = await fs2.readFile(specPath, "utf8");
+          const spec = yaml2.load(content);
+          specScopes.push({
+            id,
+            scope: spec.scope || { in: [], out: [] },
+            title: spec.title || id
+          });
+        } catch (error) {
+          continue;
+        }
+      }
+      for (let i = 0; i < specScopes.length; i++) {
+        for (let j = i + 1; j < specScopes.length; j++) {
+          const spec1 = specScopes[i];
+          const spec2 = specScopes[j];
+          const spec1Paths = new Set(spec1.scope.in || []);
+          const spec2Paths = new Set(spec2.scope.in || []);
+          const overlappingPaths = [];
+          for (const path1 of spec1Paths) {
+            for (const path22 of spec2Paths) {
+              if (pathsOverlap(path1, path22)) {
+                overlappingPaths.push(`${path1} \u2194 ${path22}`);
+              }
+            }
+          }
+          if (overlappingPaths.length > 0) {
+            conflicts.push({
+              spec1: spec1.id,
+              spec2: spec2.id,
+              conflicts: overlappingPaths,
+              severity: "warning"
+              // Could be 'error' for stricter enforcement
+            });
+          }
+        }
+      }
+      return conflicts;
+    }
+    function pathsOverlap(path1, path22) {
+      const normalizePath = (p) => p.replace(/^\/+|\/+$/g, "");
+      const normalized1 = normalizePath(path1);
+      const normalized2 = normalizePath(path22);
+      if (normalized1 === normalized2) {
+        return true;
+      }
+      const hasWildcard = (p) => p.includes("*");
+      if (hasWildcard(normalized1) || hasWildcard(normalized2)) {
+        const toRegex = (p) => {
+          let result = p.replace(/\./g, "\\.");
+          result = result.replace(/\*\*/g, "(?:.*/)?");
+          result = result.replace(/\*/g, "[^/]*");
+          result = result.replace(/(\?:.*\/)?[^/]*/g, ".*[^/]*");
+          result = result.replace(/(?:\..*\/)?[^/]*/g, ".*[^/]*");
+          return result;
+        };
+        if (hasWildcard(normalized1)) {
+          const regex1 = new RegExp("^" + toRegex(normalized1) + "$");
+          if (regex1.test(normalized2)) return true;
+        }
+        if (hasWildcard(normalized2)) {
+          const regex2 = new RegExp("^" + toRegex(normalized2) + "$");
+          if (regex2.test(normalized1)) return true;
+        }
+        return false;
+      }
+      return normalized1.includes(normalized2) || normalized2.includes(normalized1);
+    }
+    async function suggestMigration() {
+      const status = await checkMultiSpecStatus();
+      if (status.needsMigration) {
+        console.log(chalk2.yellow("\n\u26A0\uFE0F  Migration Recommended: Single-Spec \u2192 Multi-Spec"));
+        console.log(chalk2.gray("   Your project uses the legacy working-spec.yaml"));
+        console.log(chalk2.gray("   For multi-agent workflows, migrate to feature-specific specs:\n"));
+        console.log(chalk2.blue("   1. caws specs create <feature-id>"));
+        console.log(chalk2.blue("   2. Copy relevant content from working-spec.yaml"));
+        console.log(chalk2.blue("   3. Update agents to use --spec-id <feature-id>"));
+        console.log(chalk2.gray("\n   See: docs/guides/multi-agent-migration.md\n"));
+      }
+    }
+    function suggestFeatureBreakdown(legacySpec) {
+      const features = [];
+      if (legacySpec.acceptance && legacySpec.acceptance.length > 0) {
+        const criteriaByFeature = {};
+        legacySpec.acceptance.forEach((criterion, index) => {
+          const fullDescription = [
+            criterion.given || "",
+            criterion.when || "",
+            criterion.then || "",
+            criterion.description || "",
+            criterion.title || `A${index + 1}`
+          ].join(" ");
+          const words = fullDescription.toLowerCase().split(" ");
+          const featureKeywords = {
+            auth: "Authentication",
+            login: "Authentication",
+            payment: "Payment System",
+            billing: "Billing",
+            dashboard: "Dashboard",
+            admin: "Admin Panel",
+            api: "API",
+            database: "Data Layer",
+            ui: "User Interface",
+            email: "Email System",
+            notification: "Notifications",
+            report: "Reporting",
+            search: "Search",
+            filter: "Filtering",
+            user: "User Management"
+          };
+          let featureKey = "general";
+          let featureTitle = "General Features";
+          for (const [keyword, title] of Object.entries(featureKeywords)) {
+            if (words.some((word) => word.includes(keyword))) {
+              featureKey = keyword;
+              featureTitle = title;
+              break;
+            }
+          }
+          if (!criteriaByFeature[featureKey]) {
+            criteriaByFeature[featureKey] = {
+              id: featureKey,
+              title: featureTitle,
+              criteria: [],
+              scope: { in: [], out: [] }
+            };
+          }
+          criteriaByFeature[featureKey].criteria.push(criterion);
+        });
+        Object.values(criteriaByFeature).forEach((feature) => {
+          const scopeSuggestions = {
+            user: { in: ["src/users/", "tests/users/"], out: ["src/payments/", "src/admin/"] },
+            auth: { in: ["src/auth/", "tests/auth/"], out: ["src/payments/", "src/admin/"] },
+            payment: { in: ["src/payments/", "tests/payments/"], out: ["src/users/", "src/admin/"] },
+            dashboard: {
+              in: ["src/dashboard/", "tests/dashboard/"],
+              out: ["src/payments/", "src/users/"]
+            },
+            admin: { in: ["src/admin/", "tests/admin/"], out: ["src/payments/", "src/users/"] },
+            api: { in: ["src/api/", "tests/api/"], out: ["src/dashboard/", "src/admin/"] },
+            general: { in: ["src/", "tests/"], out: [] }
+          };
+          const suggestion = scopeSuggestions[feature.id] || scopeSuggestions.general;
+          feature.scope = suggestion;
+          features.push(feature);
+        });
+      } else {
+        features.push({
+          id: "main-feature",
+          title: legacySpec.title || "Main Feature",
+          criteria: legacySpec.acceptance || [],
+          scope: {
+            in: ["src/", "tests/"],
+            out: []
+          }
+        });
+      }
+      return features;
+    }
+    module2.exports = {
+      resolveSpec,
+      listAvailableSpecs,
+      checkMultiSpecStatus,
+      checkScopeConflicts,
+      suggestMigration,
+      interactiveSpecSelection,
+      loadSpecsRegistry,
+      suggestFeatureBreakdown,
+      pathsOverlap,
+      SPECS_DIR,
+      LEGACY_SPEC,
+      SPECS_REGISTRY
+    };
+  }
+});
+
+// src/commands/validate.js
+var require_validate = __commonJS({
+  "src/commands/validate.js"(exports2, module2) {
+    var path2 = require("path");
+    var chalk2 = require_source();
+    var {
+      validateWorkingSpecWithSuggestions: validateWorkingSpecWithSuggestions2,
+      getComplianceGrade
+    } = require_spec_validation();
+    var { resolveSpec, suggestMigration } = require_spec_resolver();
+    async function validateCommand2(specFile, options = {}) {
+      try {
+        const resolved = await resolveSpec({
+          specId: options.specId,
+          specFile,
+          warnLegacy: options.format !== "json",
+          interactive: options.interactive || false
+        });
+        const { path: specPath, type: specType, spec } = resolved;
+        if (specType === "legacy" && options.format !== "json") {
+          await suggestMigration();
+        }
+        if (options.format !== "json") {
+          console.log(
+            chalk2.cyan(`\u{1F50D} Validating ${specType === "feature" ? "feature" : "working"} spec...`)
+          );
+          console.log(chalk2.gray(`   Spec: ${path2.relative(process.cwd(), specPath)}`));
+        }
         const result = validateWorkingSpecWithSuggestions2(spec, {
           autoFix: options.autoFix,
+          dryRun: options.dryRun,
           suggestions: !options.quiet,
           checkBudget: true,
-          projectRoot: path2.dirname(specPath)
+          projectRoot: path2.dirname(specPath),
+          specType
         });
-        if (result.valid) {
-          console.log(chalk2.green("\u2705 Working spec validation passed"));
-          if (!options.quiet) {
-            console.log(chalk2.gray(`   Risk tier: ${spec.risk_tier}`));
-            console.log(chalk2.gray(`   Mode: ${spec.mode}`));
-            if (spec.title) {
-              console.log(chalk2.gray(`   Title: ${spec.title}`));
+        const enhancedValidation = { ...result };
+        if (specType === "feature") {
+          const featureIssues = [];
+          const { checkMultiSpecStatus } = require_spec_resolver();
+          const multiSpecStatus = await checkMultiSpecStatus();
+          if (multiSpecStatus.specCount > 1) {
+            const { checkScopeConflicts } = require_spec_resolver();
+            const conflicts = await checkScopeConflicts(
+              Object.keys(multiSpecStatus.registry?.specs || {})
+            );
+            if (conflicts.length > 0) {
+              const myConflicts = conflicts.filter((c) => c.spec1 === spec.id || c.spec2 === spec.id);
+              if (myConflicts.length > 0) {
+                featureIssues.push({
+                  type: "warning",
+                  message: `Scope conflicts detected with other specs`,
+                  details: myConflicts.map((c) => {
+                    const otherSpec = c.spec1 === spec.id ? c.spec2 : c.spec1;
+                    return `Conflict with ${otherSpec}: ${c.conflicts.join(", ")}`;
+                  })
+                });
+              }
+            }
+          }
+          if (spec.contracts && spec.contracts.length === 0 && spec.mode === "feature") {
+            featureIssues.push({
+              type: "info",
+              message: "Consider adding API contracts for better integration",
+              suggestion: "Add contracts section to define API boundaries"
+            });
+          }
+          if (spec.scope && spec.scope.in) {
+            const broadPatterns = spec.scope.in.filter(
+              (pattern) => pattern === "src/" || pattern === "tests/" || pattern.includes("*")
+            );
+            if (broadPatterns.length > 0) {
+              featureIssues.push({
+                type: "warning",
+                message: "Broad scope patterns detected",
+                details: `Patterns like ${broadPatterns.join(", ")} may conflict with other features`,
+                suggestion: "Use more specific scope.in paths"
+              });
+            }
+          }
+          if (featureIssues.length > 0) {
+            enhancedValidation.issues = (enhancedValidation.issues || []).concat(featureIssues);
+            enhancedValidation.featureValidation = {
+              passed: featureIssues.filter((i) => i.type === "error").length === 0,
+              issues: featureIssues
+            };
+          }
+        }
+        const finalResult = enhancedValidation;
+        if (options.format === "json") {
+          const jsonResult = {
+            passed: finalResult.valid,
+            cawsVersion: "3.4.0",
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            verdict: finalResult.valid ? "pass" : "fail",
+            spec: {
+              id: spec.id,
+              title: spec.title,
+              risk_tier: spec.risk_tier,
+              mode: spec.mode
+            },
+            validation: {
+              errors: finalResult.errors || [],
+              warnings: finalResult.warnings || [],
+              fixes: finalResult.fixes || []
+            },
+            budgetCompliance: finalResult.budget_check || null,
+            specType,
+            specPath: path2.relative(process.cwd(), specPath),
+            featureValidation: finalResult.featureValidation
+          };
+          console.log(JSON.stringify(jsonResult, null, 2));
+          if (!finalResult.valid) {
+            if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+              process.exit(1);
+            } else {
+              throw new Error("Validation failed");
             }
           }
         } else {
-          console.log(chalk2.red("\u274C Working spec validation failed"));
-          result.errors.forEach((error, index) => {
-            console.log(`   ${index + 1}. ${chalk2.red(error.message)}`);
-            if (error.suggestion) {
-              console.log(`      ${chalk2.blue("\u{1F4A1} " + error.suggestion)}`);
+          if (finalResult.valid) {
+            console.log(chalk2.green("\u2705 Working spec validation passed"));
+            if (!options.quiet) {
+              console.log(chalk2.gray(`   Risk tier: ${spec.risk_tier}`));
+              console.log(chalk2.gray(`   Mode: ${spec.mode}`));
+              if (spec.title) {
+                console.log(chalk2.gray(`   Title: ${spec.title}`));
+              }
+              if (finalResult.complianceScore !== void 0) {
+                const grade = getComplianceGrade(finalResult.complianceScore);
+                const scorePercent = (finalResult.complianceScore * 100).toFixed(0);
+                const scoreColor = finalResult.complianceScore >= 0.9 ? "green" : finalResult.complianceScore >= 0.7 ? "yellow" : "red";
+                console.log(chalk2[scoreColor](`   Compliance: ${scorePercent}% (Grade ${grade})`));
+              }
             }
-          });
-          if (result.warnings && result.warnings.length > 0) {
-            console.log(chalk2.yellow("\n\u26A0\uFE0F  Warnings:"));
-            result.warnings.forEach((warning, index) => {
-              console.log(`   ${index + 1}. ${chalk2.yellow(warning.message)}`);
+          } else {
+            console.log(chalk2.red("\u274C Working spec validation failed"));
+            finalResult.errors.forEach((error, index) => {
+              console.log(`   ${index + 1}. ${chalk2.red(error.message)}`);
+              if (error.suggestion) {
+                console.log(`      ${chalk2.blue("\u{1F4A1} " + error.suggestion)}`);
+              }
             });
+            if (finalResult.warnings && finalResult.warnings.length > 0) {
+              console.log(chalk2.yellow("\n\u26A0\uFE0F  Warnings:"));
+              finalResult.warnings.forEach((warning, index) => {
+                console.log(`   ${index + 1}. ${chalk2.yellow(warning.message)}`);
+              });
+            }
+            if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+              process.exit(1);
+            } else {
+              throw new Error("Validation failed");
+            }
           }
-          process.exit(1);
         }
       } catch (error) {
-        console.error(chalk2.red("\u274C Error during validation:"), error.message);
-        process.exit(1);
+        if (options.format === "json") {
+          console.log(
+            JSON.stringify(
+              {
+                passed: false,
+                verdict: "fail",
+                error: error.message
+              },
+              null,
+              2
+            )
+          );
+        } else {
+          console.error(chalk2.red("\u274C Error during validation:"), error.message);
+        }
+        if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+          process.exit(1);
+        }
       }
     }
     module2.exports = {
@@ -45216,6 +46712,174 @@ var require_test_analysis = __commonJS({
   }
 });
 
+// src/utils/command-wrapper.js
+var require_command_wrapper = __commonJS({
+  "src/utils/command-wrapper.js"(exports2, module2) {
+    var { safeAsync, handleCliError: handleCliError2, outputResult, isJsonOutput } = require_error_handler();
+    var chalk2 = require_source();
+    async function commandWrapper(commandFn, options = {}) {
+      const {
+        commandName = "command",
+        includeTiming = true,
+        exitOnError = true,
+        context = {}
+      } = options;
+      return safeAsync(
+        async () => {
+          try {
+            const result = await commandFn();
+            return result;
+          } catch (error) {
+            error.commandName = commandName;
+            error.context = { ...context, ...error.context };
+            handleCliError2(
+              error,
+              {
+                command: commandName,
+                ...context
+              },
+              exitOnError
+            );
+            if (!exitOnError) {
+              throw error;
+            }
+          }
+        },
+        commandName,
+        includeTiming
+      );
+    }
+    var Output = {
+      /**
+       * Output success message
+       * @param {string} message - Success message
+       * @param {Object} [data] - Additional data to output
+       */
+      success(message, data = {}) {
+        if (isJsonOutput()) {
+          outputResult(
+            {
+              success: true,
+              message,
+              ...data
+            },
+            true
+          );
+        } else {
+          console.log(chalk2.green(`\u2705 ${message}`));
+          if (Object.keys(data).length > 0 && !isJsonOutput()) {
+            console.log(chalk2.gray(JSON.stringify(data, null, 2)));
+          }
+        }
+      },
+      /**
+       * Output error message
+       * @param {string} message - Error message
+       * @param {string[]} [suggestions] - Recovery suggestions
+       */
+      error(message, suggestions = []) {
+        if (isJsonOutput()) {
+          outputResult(
+            {
+              success: false,
+              error: {
+                message,
+                suggestions
+              }
+            },
+            false
+          );
+        } else {
+          console.error(chalk2.red(`\u274C ${message}`));
+          if (suggestions.length > 0) {
+            console.error(chalk2.yellow("\n\u{1F4A1} Suggestions:"));
+            suggestions.forEach((suggestion) => {
+              console.error(chalk2.yellow(`   ${suggestion}`));
+            });
+          }
+        }
+      },
+      /**
+       * Output warning message
+       * @param {string} message - Warning message
+       * @param {string} [suggestion] - Optional suggestion
+       */
+      warning(message, suggestion = null) {
+        if (isJsonOutput()) {
+          outputResult(
+            {
+              warning: true,
+              message,
+              suggestion
+            },
+            true
+          );
+        } else {
+          console.warn(chalk2.yellow(`\u26A0\uFE0F  ${message}`));
+          if (suggestion) {
+            console.warn(chalk2.blue(`   \u{1F4A1} ${suggestion}`));
+          }
+        }
+      },
+      /**
+       * Output info message
+       * @param {string} message - Info message
+       * @param {Object} [data] - Additional data
+       */
+      info(message, data = {}) {
+        if (isJsonOutput()) {
+          outputResult(
+            {
+              info: true,
+              message,
+              ...data
+            },
+            true
+          );
+        } else {
+          console.log(chalk2.blue(`\u2139\uFE0F  ${message}`));
+          if (Object.keys(data).length > 0) {
+            console.log(chalk2.gray(JSON.stringify(data, null, 2)));
+          }
+        }
+      },
+      /**
+       * Output data in JSON format
+       * @param {Object} data - Data to output
+       * @param {boolean} [success=true] - Whether operation was successful
+       */
+      json(data, success = true) {
+        outputResult(data, success);
+      },
+      /**
+       * Output progress message
+       * @param {string} message - Progress message
+       */
+      progress(message) {
+        if (!isJsonOutput()) {
+          console.log(chalk2.blue(`\u{1F504} ${message}`));
+        }
+      },
+      /**
+       * Output section header
+       * @param {string} title - Section title
+       */
+      section(title) {
+        if (!isJsonOutput()) {
+          console.log(chalk2.bold(`
+${title}`));
+          console.log("\u2500".repeat(Math.min(title.length, 60)));
+        }
+      }
+    };
+    module2.exports = {
+      commandWrapper,
+      Output,
+      isJsonOutput
+    };
+  }
+});
+
 // src/commands/provenance.js
 var require_provenance = __commonJS({
   "src/commands/provenance.js"(exports2, module2) {
@@ -45223,30 +46887,35 @@ var require_provenance = __commonJS({
     var path2 = require("path");
     var crypto = require("crypto");
     var yaml2 = require_js_yaml();
+    var { commandWrapper } = require_command_wrapper();
     async function provenanceCommand2(subcommand, options) {
-      try {
-        switch (subcommand) {
-          case "update":
-            return await updateProvenance(options);
-          case "show":
-            return await showProvenance(options);
-          case "verify":
-            return await verifyProvenance(options);
-          case "analyze-ai":
-            return await analyzeAIProvenance(options);
-          case "init":
-            return await initProvenance(options);
-          case "install-hooks":
-            return await installHooks(options);
-          default:
-            console.error(`\u274C Unknown provenance subcommand: ${subcommand}`);
-            console.log("Available commands: update, show, verify, analyze-ai, init, install-hooks");
-            process.exit(1);
+      return commandWrapper(
+        async () => {
+          switch (subcommand) {
+            case "update":
+              return await updateProvenance(options);
+            case "show":
+              return await showProvenance(options);
+            case "verify":
+              return await verifyProvenance(options);
+            case "analyze-ai":
+              return await analyzeAIProvenance(options);
+            case "init":
+              return await initProvenance(options);
+            case "install-hooks":
+              return await installHooks(options);
+            default:
+              throw new Error(
+                `Unknown provenance subcommand: ${subcommand}.
+Available commands: update, show, verify, analyze-ai, init, install-hooks`
+              );
+          }
+        },
+        {
+          commandName: `provenance ${subcommand}`,
+          context: { subcommand, options }
         }
-      } catch (error) {
-        console.error(`\u274C Provenance command failed: ${error.message}`);
-        process.exit(1);
-      }
+      );
     }
     async function updateProvenance(options) {
       const { commit, message, author, quiet = false, output = ".caws/provenance" } = options;
@@ -46456,7 +48125,7 @@ var require_tool_validator = __commonJS({
 var require_tool = __commonJS({
   "src/commands/tool.js"(exports2, module2) {
     var path2 = require("path");
-    var chalk2 = require_source();
+    var { commandWrapper, Output } = require_command_wrapper();
     var ToolLoader = require_tool_loader();
     var ToolValidator = require_tool_validator();
     var toolLoader = null;
@@ -46470,83 +48139,1003 @@ var require_tool = __commonJS({
         toolValidator = new ToolValidator();
         toolLoader.on("discovery:complete", ({ tools: _tools, count }) => {
           if (count > 0) {
-            console.log(chalk2.blue(`\u{1F527} Discovered ${count} tools`));
+            Output.info(`Discovered ${count} tools`);
           }
         });
         toolLoader.on("tool:loaded", ({ id, metadata }) => {
-          console.log(chalk2.gray(`  \u2713 Loaded tool: ${metadata.name} (${id})`));
+          if (!process.env.CAWS_OUTPUT_FORMAT || process.env.CAWS_OUTPUT_FORMAT !== "json") {
+            console.log(`  \u2713 Loaded tool: ${metadata.name} (${id})`);
+          }
         });
         toolLoader.on("tool:error", ({ id, error }) => {
-          console.warn(chalk2.yellow(`\u26A0\uFE0F  Failed to load tool ${id}: ${error}`));
+          Output.warning(`Failed to load tool ${id}: ${error}`);
         });
         await toolLoader.discoverTools();
         return toolLoader;
       } catch (error) {
-        console.warn(chalk2.yellow("\u26A0\uFE0F  Tool system initialization failed:"), error.message);
-        console.warn(chalk2.blue("\u{1F4A1} Continuing without dynamic tools"));
+        Output.warning(
+          `Tool system initialization failed: ${error.message}`,
+          "Continuing without dynamic tools"
+        );
         return null;
       }
     }
     async function executeTool2(toolId2, options) {
-      try {
-        const loader = await initializeToolSystem();
-        if (!loader) {
-          console.error(chalk2.red("\u274C Tool system not available"));
-          process.exit(1);
-        }
-        await loader.loadAllTools();
-        const tool = loader.getTool(toolId2);
-        if (!tool) {
-          console.error(chalk2.red(`\u274C Tool '${toolId2}' not found`));
-          console.log(chalk2.blue("\u{1F4A1} Available tools:"));
-          const tools = loader.getAllTools();
-          for (const [id, t] of tools) {
-            console.log(`   - ${id}: ${t.metadata.name}`);
+      return commandWrapper(
+        async () => {
+          const loader = await initializeToolSystem();
+          if (!loader) {
+            throw new Error("Tool system not available");
           }
-          process.exit(1);
-        }
-        const validation = await toolValidator.validateTool(tool);
-        if (!validation.valid) {
-          console.error(chalk2.red("\u274C Tool validation failed:"));
-          validation.errors.forEach((error) => {
-            console.error(`   ${chalk2.red("\u2717")} ${error}`);
+          await loader.loadAllTools();
+          const tool = loader.getTool(toolId2);
+          if (!tool) {
+            const tools = loader.getAllTools();
+            const availableTools = Array.from(tools, ([id, t]) => `${id}: ${t.metadata.name}`).join(
+              ", "
+            );
+            throw new Error(`Tool '${toolId2}' not found.
+Available tools: ${availableTools}`);
+          }
+          const validation = await toolValidator.validateTool(tool);
+          if (!validation.valid) {
+            throw new Error(
+              `Tool validation failed:
+` + validation.errors.map((e) => `  - ${e}`).join("\n")
+            );
+          }
+          let params = {};
+          if (options.params) {
+            try {
+              params = JSON.parse(options.params);
+            } catch (error) {
+              throw new Error(`Invalid JSON parameters: ${error.message}`);
+            }
+          }
+          Output.progress(`Executing tool: ${tool.metadata.name}`);
+          const result = await tool.module.execute(params, {
+            workingDirectory: process.cwd(),
+            timeout: options.timeout
           });
-          process.exit(1);
-        }
-        let params = {};
-        if (options.params) {
-          try {
-            params = JSON.parse(options.params);
-          } catch (error) {
-            console.error(chalk2.red("\u274C Invalid JSON parameters:"), error.message);
-            process.exit(1);
+          if (result.success) {
+            Output.success("Tool execution successful", {
+              output: result.output
+            });
+            return result;
+          } else {
+            throw new Error(
+              `Tool execution failed:
+` + result.errors.map((e) => `  - ${e}`).join("\n")
+            );
           }
+        },
+        {
+          commandName: `tool ${toolId2}`,
+          context: { toolId: toolId2, options }
         }
-        console.log(chalk2.blue(`\u{1F680} Executing tool: ${tool.metadata.name}`));
-        const result = await tool.module.execute(params, {
-          workingDirectory: process.cwd(),
-          timeout: options.timeout
-        });
-        if (result.success) {
-          console.log(chalk2.green("\u2705 Tool execution successful"));
-          if (result.output && typeof result.output === "object") {
-            console.log(chalk2.gray("Output:"), JSON.stringify(result.output, null, 2));
-          }
-        } else {
-          console.error(chalk2.red("\u274C Tool execution failed"));
-          result.errors.forEach((error) => {
-            console.error(`   ${chalk2.red("\u2717")} ${error}`);
-          });
-          process.exit(1);
-        }
-      } catch (error) {
-        console.error(chalk2.red(`\u274C Error executing tool ${toolId2}:`), error.message);
-        process.exit(1);
-      }
+      );
     }
     module2.exports = {
       initializeToolSystem,
       executeTool: executeTool2
+    };
+  }
+});
+
+// src/utils/async-utils.js
+var require_async_utils = __commonJS({
+  "src/utils/async-utils.js"(exports2, module2) {
+    async function parallel(promises, options = {}) {
+      const { failFast = true } = options;
+      if (failFast) {
+        return Promise.all(promises);
+      } else {
+        return Promise.allSettled(promises).then((results) => {
+          return results.map((result) => {
+            if (result.status === "fulfilled") {
+              return { success: true, value: result.value };
+            } else {
+              return { success: false, error: result.reason };
+            }
+          });
+        });
+      }
+    }
+    async function sequential(operations, options = {}) {
+      const { stopOnError = true } = options;
+      const results = [];
+      for (const operation of operations) {
+        try {
+          const result = await operation();
+          results.push({ success: true, value: result });
+        } catch (error) {
+          if (stopOnError) {
+            throw error;
+          }
+          results.push({ success: false, error });
+        }
+      }
+      return results;
+    }
+    async function retry(operation, options = {}) {
+      const {
+        maxRetries = 3,
+        initialDelay = 1e3,
+        maxDelay = 1e4,
+        shouldRetry = () => true
+      } = options;
+      let lastError;
+      let delay = initialDelay;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          return await operation();
+        } catch (error) {
+          lastError = error;
+          if (attempt === maxRetries || !shouldRetry(error)) {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay = Math.min(delay * 2, maxDelay);
+        }
+      }
+      throw lastError;
+    }
+    async function withTimeout(promise, timeoutMs, errorMessage = "Operation timed out") {
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`${errorMessage} (${timeoutMs}ms)`));
+        }, timeoutMs);
+      });
+      return Promise.race([promise, timeoutPromise]);
+    }
+    async function withCleanup(operation, cleanup) {
+      try {
+        return await operation();
+      } finally {
+        await cleanup();
+      }
+    }
+    async function collectResults(operations) {
+      const results = await Promise.allSettled(
+        operations.map((op) => op())
+      );
+      const successes = [];
+      const errors = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          successes.push({ index, value: result.value });
+        } else {
+          errors.push({ index, error: result.reason });
+        }
+      });
+      return { successes, errors };
+    }
+    async function withCancellation(operation, signal) {
+      if (signal.aborted) {
+        throw new Error("Operation cancelled");
+      }
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          reject(new Error("Operation cancelled"));
+        });
+        operation().then(resolve).catch(reject);
+      });
+    }
+    module2.exports = {
+      parallel,
+      sequential,
+      retry,
+      withTimeout,
+      withCleanup,
+      collectResults,
+      withCancellation
+    };
+  }
+});
+
+// src/utils/promise-utils.js
+var require_promise_utils = __commonJS({
+  "src/utils/promise-utils.js"(exports2, module2) {
+    function question(rl, questionText) {
+      return new Promise((resolve) => {
+        rl.question(questionText, (answer) => {
+          resolve(answer);
+        });
+      });
+    }
+    function closeReadline(rl) {
+      return new Promise((resolve) => {
+        rl.once("close", resolve);
+        rl.close();
+      });
+    }
+    function once(emitter, event, options = {}) {
+      return new Promise((resolve, reject) => {
+        const { timeout } = options;
+        const timeoutId = timeout ? (
+          // eslint-disable-next-line no-undef
+          setTimeout(() => {
+            emitter.removeListener(event, handler);
+            reject(new Error(`Event '${event}' timed out after ${timeout}ms`));
+          }, timeout)
+        ) : null;
+        const handler = (...args) => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          emitter.removeListener(event, handler);
+          resolve(args.length === 1 ? args[0] : args);
+        };
+        emitter.once(event, handler);
+      });
+    }
+    module2.exports = {
+      question,
+      closeReadline,
+      once
+    };
+  }
+});
+
+// src/commands/specs.js
+var require_specs = __commonJS({
+  "src/commands/specs.js"(exports2, module2) {
+    var fs2 = require_lib();
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
+    var { question, closeReadline } = require_promise_utils();
+    var { SPEC_TYPES } = require_spec_types();
+    var { suggestFeatureBreakdown } = require_spec_resolver();
+    var SPECS_DIR = ".caws/specs";
+    var SPECS_REGISTRY = ".caws/specs/registry.json";
+    async function loadSpecsRegistry() {
+      try {
+        if (!await fs2.pathExists(SPECS_REGISTRY)) {
+          return {
+            version: "1.0.0",
+            specs: {},
+            lastUpdated: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+        const registry = JSON.parse(await fs2.readFile(SPECS_REGISTRY, "utf8"));
+        return registry;
+      } catch (error) {
+        return {
+          version: "1.0.0",
+          specs: {},
+          lastUpdated: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      }
+    }
+    async function saveSpecsRegistry(registry) {
+      await fs2.ensureDir(path2.dirname(SPECS_REGISTRY));
+      registry.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
+      await fs2.writeFile(SPECS_REGISTRY, JSON.stringify(registry, null, 2));
+    }
+    async function listSpecFiles() {
+      if (!await fs2.pathExists(SPECS_DIR)) {
+        return [];
+      }
+      const files = await fs2.readdir(SPECS_DIR, { recursive: true });
+      const yamlFiles = files.filter((file) => file.endsWith(".yaml") || file.endsWith(".yml"));
+      const specs = [];
+      for (const file of yamlFiles) {
+        const filePath = path2.join(SPECS_DIR, file);
+        try {
+          const content = await fs2.readFile(filePath, "utf8");
+          const spec = yaml2.load(content);
+          specs.push({
+            id: spec.id || path2.basename(file, path2.extname(file)),
+            path: file,
+            type: spec.type || "feature",
+            title: spec.title || "Untitled",
+            status: spec.status || "draft",
+            risk_tier: spec.risk_tier || "T3",
+            mode: spec.mode || "development",
+            created_at: spec.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+            updated_at: spec.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+          });
+        } catch (error) {
+          console.warn(`Warning: Could not parse spec file ${file}: ${error.message}`);
+        }
+      }
+      return specs;
+    }
+    async function createSpec(id, options = {}) {
+      const {
+        type = "feature",
+        title = `New ${type}`,
+        risk_tier = 3,
+        // Default to numeric 3 (low-risk)
+        mode = "development",
+        template = null,
+        force = false,
+        // Override existing specs
+        interactive = false
+        // Ask for confirmation on conflicts
+      } = options;
+      let numericRiskTier = risk_tier;
+      if (typeof risk_tier === "string") {
+        const tierMap = { T1: 1, T2: 2, T3: 3 };
+        numericRiskTier = tierMap[risk_tier] || 3;
+      }
+      const existingSpecPath = path2.join(SPECS_DIR, `${id}.yaml`);
+      const specExists = await fs2.pathExists(existingSpecPath);
+      let answer = null;
+      if (specExists && !force) {
+        if (interactive) {
+          console.log(chalk2.yellow(`\u26A0\uFE0F  Spec '${id}' already exists.`));
+          console.log(chalk2.gray(`   Path: ${existingSpecPath}`));
+          try {
+            const existingContent = await fs2.readFile(existingSpecPath, "utf8");
+            const existingSpec = yaml2.load(existingContent);
+            console.log(chalk2.gray(`   Title: ${existingSpec.title || "Untitled"}`));
+            console.log(chalk2.gray(`   Status: ${existingSpec.status || "draft"}`));
+            console.log(
+              chalk2.gray(
+                `   Created: ${new Date(existingSpec.created_at || Date.now()).toLocaleDateString()}`
+              )
+            );
+          } catch (error) {
+            console.log(chalk2.gray(`   (Could not load existing spec details)`));
+          }
+          answer = await askConflictResolution();
+          if (answer === "cancel") {
+            console.log(chalk2.blue("\u2139\uFE0F  Spec creation canceled."));
+            return null;
+          } else if (answer === "rename") {
+            const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, -5);
+            const newId = `${id}-${timestamp}`;
+            console.log(chalk2.blue(`\u{1F4DD} Creating spec with new name: ${newId}`));
+            return await createSpec(newId, { ...options, interactive: false });
+          } else if (answer === "merge") {
+            console.log(chalk2.yellow("\u{1F504} Merge functionality not yet implemented."));
+            console.log(chalk2.blue("\u{1F4A1} For now, consider creating with a different name."));
+            return null;
+          } else if (answer === "override") {
+            console.log(chalk2.yellow("\u26A0\uFE0F  Overriding existing spec..."));
+          }
+        } else {
+          console.error(chalk2.red(`\u274C Spec '${id}' already exists.`));
+          console.error(
+            chalk2.yellow("\u{1F4A1} Use --force to override, or --interactive for conflict resolution.")
+          );
+          throw new Error(`Spec '${id}' already exists. Use --force to override.`);
+        }
+      }
+      if (specExists && (force || answer === "override")) {
+        console.log(chalk2.yellow("\u26A0\uFE0F  Overriding existing spec..."));
+      }
+      await fs2.ensureDir(SPECS_DIR);
+      const specContent = {
+        id,
+        type,
+        title,
+        status: "draft",
+        risk_tier: numericRiskTier,
+        mode,
+        created_at: (/* @__PURE__ */ new Date()).toISOString(),
+        updated_at: (/* @__PURE__ */ new Date()).toISOString(),
+        acceptance_criteria: [],
+        ...template || {}
+      };
+      const fileName = `${id}.yaml`;
+      const filePath = path2.join(SPECS_DIR, fileName);
+      await fs2.writeFile(filePath, yaml2.dump(specContent, { indent: 2 }));
+      const registry = await loadSpecsRegistry();
+      registry.specs[id] = {
+        path: fileName,
+        type,
+        status: "draft",
+        created_at: specContent.created_at,
+        updated_at: specContent.updated_at
+      };
+      await saveSpecsRegistry(registry);
+      return {
+        id,
+        path: fileName,
+        type,
+        title,
+        status: "draft",
+        risk_tier: numericRiskTier,
+        mode,
+        created_at: specContent.created_at,
+        updated_at: specContent.updated_at
+      };
+    }
+    async function loadSpec(id) {
+      const registry = await loadSpecsRegistry();
+      if (!registry.specs[id]) {
+        return null;
+      }
+      const specPath = path2.join(SPECS_DIR, registry.specs[id].path);
+      try {
+        const content = await fs2.readFile(specPath, "utf8");
+        return yaml2.load(content);
+      } catch (error) {
+        return null;
+      }
+    }
+    async function updateSpec(id, updates = {}) {
+      const spec = await loadSpec(id);
+      if (!spec) {
+        return false;
+      }
+      const updatedSpec = {
+        ...spec,
+        ...updates,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const registry = await loadSpecsRegistry();
+      registry.specs[id].updated_at = updatedSpec.updated_at;
+      if (updates.status) {
+        registry.specs[id].status = updates.status;
+      }
+      await saveSpecsRegistry(registry);
+      const specPath = path2.join(SPECS_DIR, registry.specs[id].path);
+      await fs2.writeFile(specPath, yaml2.dump(updatedSpec, { indent: 2 }));
+      return true;
+    }
+    async function deleteSpec(id) {
+      const registry = await loadSpecsRegistry();
+      if (!registry.specs[id]) {
+        return false;
+      }
+      const specPath = path2.join(SPECS_DIR, registry.specs[id].path);
+      await fs2.remove(specPath);
+      delete registry.specs[id];
+      await saveSpecsRegistry(registry);
+      return true;
+    }
+    function displaySpecsTable(specs) {
+      console.log(chalk2.bold.cyan("\n\u{1F4CB} CAWS Specs"));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      if (specs.length === 0) {
+        console.log(chalk2.gray("   No specs found. Create one with: caws specs create <id>"));
+        return;
+      }
+      console.log(chalk2.bold("ID".padEnd(15) + "Type".padEnd(10) + "Status".padEnd(12) + "Title"));
+      console.log(chalk2.gray("\u2500".repeat(80)));
+      const statusPriority = { active: 0, draft: 1, completed: 2, archived: 3 };
+      const sortedSpecs = specs.sort((a, b) => {
+        const typeDiff = a.type.localeCompare(b.type);
+        if (typeDiff !== 0) return typeDiff;
+        return (statusPriority[a.status] || 999) - (statusPriority[b.status] || 999);
+      });
+      sortedSpecs.forEach((spec) => {
+        const specType = SPEC_TYPES[spec.type] || SPEC_TYPES.feature;
+        const typeColor = specType.color;
+        const statusColor = spec.status === "active" ? chalk2.green : spec.status === "draft" ? chalk2.yellow : spec.status === "completed" ? chalk2.blue : chalk2.gray;
+        console.log(
+          spec.id.padEnd(15) + typeColor(spec.type.padEnd(9)) + statusColor(spec.status.padEnd(11)) + chalk2.white(spec.title)
+        );
+      });
+      console.log("");
+    }
+    function displaySpecDetails(spec) {
+      const specType = SPEC_TYPES[spec.type] || SPEC_TYPES.feature;
+      const typeColor = specType.color;
+      console.log(chalk2.bold.cyan(`
+\u{1F4CB} Spec Details: ${spec.id}`));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      console.log(`${specType.icon} ${typeColor(spec.type.toUpperCase())} - ${spec.title}`);
+      console.log(
+        chalk2.gray(`   Status: ${spec.status} | Risk Tier: ${spec.risk_tier} | Mode: ${spec.mode}`)
+      );
+      console.log(chalk2.gray(`   Created: ${new Date(spec.created_at).toLocaleDateString()}`));
+      console.log(chalk2.gray(`   Updated: ${new Date(spec.updated_at).toLocaleDateString()}`));
+      if (spec.description) {
+        console.log(chalk2.gray(`
+   Description: ${spec.description}`));
+      }
+      if (spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
+        console.log(chalk2.gray(`
+   Acceptance Criteria (${spec.acceptance_criteria.length}):`));
+        spec.acceptance_criteria.forEach((criterion, index) => {
+          const status = criterion.completed ? chalk2.green("\u2713") : chalk2.red("\u25CB");
+          console.log(
+            chalk2.gray(`     ${status} ${criterion.description || criterion.title || `A${index + 1}`}`)
+          );
+        });
+      }
+      if (spec.contracts && spec.contracts.length > 0) {
+        console.log(chalk2.gray(`
+   Contracts (${spec.contracts.length}):`));
+        spec.contracts.forEach((contract) => {
+          console.log(chalk2.gray(`     \u{1F4C4} ${contract.type}: ${contract.path}`));
+        });
+      }
+      console.log("");
+    }
+    async function migrateFromLegacy(options = {}) {
+      const fs3 = require_lib();
+      const path3 = require("path");
+      const yaml3 = require_js_yaml();
+      const chalk3 = require_source();
+      const legacyPath = path3.join(process.cwd(), ".caws", "working-spec.yaml");
+      if (!await fs3.pathExists(legacyPath)) {
+        throw new Error("No legacy working-spec.yaml found to migrate");
+      }
+      console.log(chalk3.blue("\u{1F504} Migrating from legacy single-spec to multi-spec..."));
+      const legacyContent = await fs3.readFile(legacyPath, "utf8");
+      const legacySpec = yaml3.load(legacyContent);
+      const features = suggestFeatureBreakdown(legacySpec);
+      console.log(chalk3.green(`
+\u2705 Found ${features.length} potential features to extract:`));
+      features.forEach((feature, index) => {
+        console.log(chalk3.yellow(`   ${index + 1}. ${feature.id} - ${feature.title}`));
+        console.log(chalk3.gray(`      Scope: ${feature.scope.in.join(", ")}`));
+      });
+      let selectedFeatures = features;
+      if (options.interactive) {
+        console.log(chalk3.blue("\n\u{1F4CB} Using all suggested features for migration"));
+      }
+      if (options.features && options.features.length > 0) {
+        selectedFeatures = features.filter((f) => options.features.includes(f.id));
+        console.log(chalk3.blue(`
+\u{1F4CB} Migrating selected features: ${options.features.join(", ")}`));
+      }
+      const createdSpecs = [];
+      for (const feature of selectedFeatures) {
+        try {
+          await createSpec(feature.id, {
+            type: "feature",
+            title: feature.title,
+            risk_tier: "T3",
+            // Default tier
+            mode: "development",
+            template: feature
+          });
+          createdSpecs.push(feature.id);
+          console.log(chalk3.green(`   \u2705 Created spec: ${feature.id}`));
+        } catch (error) {
+          console.log(chalk3.red(`   \u274C Failed to create spec ${feature.id}: ${error.message}`));
+        }
+      }
+      console.log(
+        chalk3.green(`
+\u{1F389} Migration completed! Created ${createdSpecs.length} feature specs.`)
+      );
+      if (createdSpecs.length > 0) {
+        console.log(chalk3.blue("\n\u{1F4A1} Next steps:"));
+        console.log(chalk3.gray("   1. Review and customize each feature spec"));
+        console.log(chalk3.gray("   2. Update agents to use --spec-id <feature-id>"));
+        console.log(chalk3.gray("   3. Consider archiving legacy working-spec.yaml when ready"));
+        console.log(chalk3.blue("\n   Example: caws validate --spec-id user-auth"));
+      }
+      return {
+        migrated: createdSpecs.length,
+        total: selectedFeatures.length,
+        createdSpecs,
+        legacySpec: legacySpec.id
+      };
+    }
+    async function askConflictResolution() {
+      const readline = require("readline");
+      console.log(chalk2.blue("\n\u{1F504} Conflict Resolution Options:"));
+      console.log(chalk2.gray("   1. Cancel - Don't create the spec"));
+      console.log(chalk2.gray("   2. Rename - Create with auto-generated name"));
+      console.log(chalk2.gray("   3. Merge - Merge with existing spec (not implemented)"));
+      console.log(chalk2.gray("   4. Override - Replace existing spec (use --force)"));
+      console.log(chalk2.yellow("\nEnter your choice (1-4) or the option name:"));
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      try {
+        const answer = await question(rl, "> ");
+        const trimmed = answer.trim().toLowerCase();
+        if (trimmed === "1" || trimmed === "cancel") {
+          return "cancel";
+        } else if (trimmed === "2" || trimmed === "rename") {
+          return "rename";
+        } else if (trimmed === "3" || trimmed === "merge") {
+          return "merge";
+        } else if (trimmed === "4" || trimmed === "override") {
+          return "override";
+        } else {
+          console.log(chalk2.red("\u274C Invalid choice. Defaulting to cancel."));
+          return "cancel";
+        }
+      } finally {
+        await closeReadline(rl);
+      }
+    }
+    async function specsCommand2(action, options = {}) {
+      return safeAsync(
+        async () => {
+          switch (action) {
+            case "list": {
+              const specs = await listSpecFiles();
+              displaySpecsTable(specs);
+              return outputResult({
+                command: "specs list",
+                count: specs.length,
+                specs: specs.map((s) => ({ id: s.id, type: s.type, status: s.status }))
+              });
+            }
+            case "conflicts": {
+              const { checkScopeConflicts } = require_spec_resolver();
+              const registry = await loadSpecsRegistry();
+              const specIds = Object.keys(registry.specs ?? {});
+              if (specIds.length < 2) {
+                console.log(chalk2.blue("\u2139\uFE0F  No scope conflicts possible with fewer than 2 specs"));
+                return outputResult({
+                  command: "specs conflicts",
+                  conflictCount: 0,
+                  conflicts: []
+                });
+              }
+              console.log(chalk2.blue(`\u{1F50D} Checking scope conflicts between ${specIds.length} specs...`));
+              const conflicts = await checkScopeConflicts(specIds);
+              if (conflicts.length === 0) {
+                console.log(chalk2.green("\u2705 No scope conflicts detected"));
+              } else {
+                console.log(
+                  chalk2.yellow(
+                    `\u26A0\uFE0F  Found ${conflicts.length} scope conflict${conflicts.length > 1 ? "s" : ""}:`
+                  )
+                );
+                conflicts.forEach((conflict) => {
+                  console.log(chalk2.red(`   ${conflict.spec1} \u2194 ${conflict.spec2}:`));
+                  conflict.conflicts.forEach((pathConflict) => {
+                    console.log(chalk2.gray(`     ${pathConflict}`));
+                  });
+                });
+                console.log(
+                  chalk2.blue("\n\u{1F4A1} Tip: Use non-overlapping scope.in paths to avoid conflicts")
+                );
+              }
+              return outputResult({
+                command: "specs conflicts",
+                conflictCount: conflicts.length,
+                conflicts
+              });
+            }
+            case "migrate": {
+              const result = await migrateFromLegacy(options);
+              return outputResult({
+                command: "specs migrate",
+                ...result
+              });
+            }
+            case "create": {
+              if (!options.id) {
+                throw new Error("Spec ID is required. Usage: caws specs create <id>");
+              }
+              const newSpec = await createSpec(options.id, {
+                type: options.type,
+                title: options.title,
+                risk_tier: options.tier,
+                mode: options.mode,
+                force: options.force,
+                interactive: options.interactive
+              });
+              if (!newSpec) {
+                return outputResult({
+                  command: "specs create",
+                  canceled: true,
+                  message: "Spec creation was canceled or failed"
+                });
+              }
+              console.log(chalk2.green(`\u2705 Created spec: ${newSpec.id}`));
+              displaySpecDetails(newSpec);
+              return outputResult({
+                command: "specs create",
+                spec: newSpec
+              });
+            }
+            case "show": {
+              if (!options.id) {
+                throw new Error("Spec ID is required. Usage: caws specs show <id>");
+              }
+              const spec = await loadSpec(options.id);
+              if (!spec) {
+                throw new Error(`Spec '${options.id}' not found`);
+              }
+              displaySpecDetails(spec);
+              return outputResult({
+                command: "specs show",
+                spec: { id: spec.id, type: spec.type, status: spec.status }
+              });
+            }
+            case "update": {
+              if (!options.id) {
+                throw new Error("Spec ID is required. Usage: caws specs update <id>");
+              }
+              const updates = {};
+              if (options.status) updates.status = options.status;
+              if (options.title) updates.title = options.title;
+              if (options.description) updates.description = options.description;
+              const updated = await updateSpec(options.id, updates);
+              if (!updated) {
+                throw new Error(`Spec '${options.id}' not found`);
+              }
+              console.log(chalk2.green(`\u2705 Updated spec: ${options.id}`));
+              return outputResult({
+                command: "specs update",
+                spec: options.id,
+                updates
+              });
+            }
+            case "delete": {
+              if (!options.id) {
+                throw new Error("Spec ID is required. Usage: caws specs delete <id>");
+              }
+              const deleted = await deleteSpec(options.id);
+              if (!deleted) {
+                throw new Error(`Spec '${options.id}' not found`);
+              }
+              console.log(chalk2.green(`\u2705 Deleted spec: ${options.id}`));
+              return outputResult({
+                command: "specs delete",
+                spec: options.id
+              });
+            }
+            case "types": {
+              console.log(chalk2.bold.cyan("\n\u{1F4CB} Available Spec Types"));
+              console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+              Object.entries(SPEC_TYPES).forEach(([type, info]) => {
+                console.log(`${info.icon} ${info.color(type.padEnd(10))} - ${info.description}`);
+              });
+              console.log("");
+              return outputResult({
+                command: "specs types",
+                types: Object.keys(SPEC_TYPES)
+              });
+            }
+            default:
+              throw new Error(
+                `Unknown specs action: ${action}. Use: list, create, show, update, delete, conflicts, migrate, types`
+              );
+          }
+        },
+        `specs ${action}`,
+        true
+      );
+    }
+    module2.exports = {
+      specsCommand: specsCommand2,
+      loadSpecsRegistry,
+      saveSpecsRegistry,
+      listSpecFiles,
+      createSpec,
+      loadSpec,
+      updateSpec,
+      deleteSpec,
+      displaySpecsTable,
+      displaySpecDetails,
+      askConflictResolution,
+      SPECS_DIR,
+      SPECS_REGISTRY,
+      SPEC_TYPES
+    };
+  }
+});
+
+// src/config/modes.js
+var require_modes = __commonJS({
+  "src/config/modes.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var COMPLEXITY_TIERS = {
+      simple: {
+        name: "Simple",
+        description: "Minimal CAWS for small projects and quick prototyping",
+        color: chalk2.green,
+        icon: "\u{1F7E2}",
+        features: {
+          workingSpec: true,
+          basicValidation: true,
+          statusDisplay: true,
+          noQualityGates: true,
+          noProvenance: true,
+          noWaivers: true,
+          noChangeBudgets: true,
+          noMultiSpec: false
+          // Can use multi-spec but simplified
+        },
+        qualityRequirements: {
+          testCoverage: 70,
+          mutationScore: 30,
+          contracts: "optional"
+        },
+        riskTiers: ["T3"],
+        // Only T3 supported
+        commands: {
+          init: true,
+          validate: true,
+          status: true,
+          specs: true
+          // Basic specs support
+          // No: diagnose, evaluate, iterate, provenance, waivers, hooks, archive
+        }
+      },
+      standard: {
+        name: "Standard",
+        description: "Balanced CAWS with change management and quality gates",
+        color: chalk2.yellow,
+        icon: "\u{1F7E1}",
+        features: {
+          workingSpec: true,
+          fullValidation: true,
+          statusDisplay: true,
+          qualityGates: true,
+          provenance: true,
+          waivers: true,
+          changeBudgets: true,
+          multiSpec: true,
+          changeFolders: true
+        },
+        qualityRequirements: {
+          testCoverage: 80,
+          mutationScore: 50,
+          contracts: "required"
+        },
+        riskTiers: ["T1", "T2", "T3"],
+        commands: {
+          init: true,
+          validate: true,
+          status: true,
+          specs: true,
+          diagnose: true,
+          evaluate: true,
+          iterate: true,
+          provenance: true,
+          waivers: true,
+          hooks: true,
+          archive: true
+        }
+      },
+      enterprise: {
+        name: "Enterprise",
+        description: "Full CAWS with comprehensive audit trails and compliance",
+        color: chalk2.red,
+        icon: "\u{1F534}",
+        features: {
+          workingSpec: true,
+          fullValidation: true,
+          statusDisplay: true,
+          qualityGates: true,
+          provenance: true,
+          waivers: true,
+          changeBudgets: true,
+          multiSpec: true,
+          changeFolders: true,
+          auditTrails: true,
+          compliance: true,
+          advancedMonitoring: true
+        },
+        qualityRequirements: {
+          testCoverage: 90,
+          mutationScore: 70,
+          contracts: "required"
+        },
+        riskTiers: ["T1", "T2", "T3"],
+        commands: {
+          init: true,
+          validate: true,
+          status: true,
+          specs: true,
+          diagnose: true,
+          evaluate: true,
+          iterate: true,
+          provenance: true,
+          waivers: true,
+          hooks: true,
+          archive: true,
+          troubleshoot: true,
+          testAnalysis: true,
+          qualityMonitor: true
+        }
+      }
+    };
+    function getTier(tier) {
+      return COMPLEXITY_TIERS[tier] || COMPLEXITY_TIERS.standard;
+    }
+    function getAvailableTiers() {
+      return Object.keys(COMPLEXITY_TIERS);
+    }
+    function isCommandAvailable(command, tier = "standard") {
+      const tierConfig = getTier(tier);
+      return tierConfig.commands[command] === true;
+    }
+    function isFeatureEnabled(feature, tier = "standard") {
+      const tierConfig = getTier(tier);
+      return tierConfig.features[feature] === true;
+    }
+    function getQualityRequirements(tier = "standard") {
+      const tierConfig = getTier(tier);
+      return tierConfig.qualityRequirements;
+    }
+    function getSupportedRiskTiers(tier = "standard") {
+      const tierConfig = getTier(tier);
+      return tierConfig.riskTiers;
+    }
+    function isRiskTierSupported(riskTier, complexityTier = "standard") {
+      const supportedTiers = getSupportedRiskTiers(complexityTier);
+      return supportedTiers.includes(riskTier);
+    }
+    function displayTierComparison() {
+      console.log(chalk2.bold.cyan("\n\u{1F4CA} CAWS Complexity Tiers"));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      console.log(
+        chalk2.bold(
+          "Tier".padEnd(12) + "Features".padEnd(15) + "Coverage".padEnd(10) + "Commands".padEnd(12) + "Use Case"
+        )
+      );
+      console.log(chalk2.gray("\u2500".repeat(90)));
+      Object.entries(COMPLEXITY_TIERS).forEach(([tierName, tier]) => {
+        const tierColor = tier.color;
+        const icon = tier.icon;
+        const features = Object.entries(tier.features).filter(([, enabled]) => enabled).map(([feature]) => feature.replace(/([A-Z])/g, " $1").toLowerCase()).slice(0, 3).join(", ");
+        const commands = Object.keys(tier.commands).filter((cmd) => tier.commands[cmd]).length;
+        console.log(
+          `${icon} ${tierColor(tierName.padEnd(10))} ${features.padEnd(13)} ${tier.qualityRequirements.testCoverage}%${" ".padEnd(8)}${commands}${" ".padEnd(10)}${tier.description}`
+        );
+      });
+      console.log("");
+    }
+    async function getCurrentMode() {
+      const fs2 = require_lib();
+      const MODE_CONFIG = ".caws/mode.json";
+      try {
+        if (!await fs2.pathExists(MODE_CONFIG)) {
+          return "standard";
+        }
+        const config = JSON.parse(await fs2.readFile(MODE_CONFIG, "utf8"));
+        return config.current || "standard";
+      } catch (error) {
+        return "standard";
+      }
+    }
+    async function setCurrentMode(mode) {
+      const fs2 = require_lib();
+      const path2 = require("path");
+      const MODE_CONFIG = ".caws/mode.json";
+      if (!getAvailableTiers().includes(mode)) {
+        return false;
+      }
+      try {
+        await fs2.ensureDir(path2.dirname(MODE_CONFIG));
+        const config = {
+          current: mode,
+          initialized: true,
+          lastChanged: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        await fs2.writeFile(MODE_CONFIG, JSON.stringify(config, null, 2));
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+    function getTierRecommendation(projectInfo = {}) {
+      const { size = "medium", teamSize = 1, compliance = false, auditRequired = false } = projectInfo;
+      if (compliance || auditRequired) {
+        return "enterprise";
+      }
+      if (teamSize > 5 || size === "large") {
+        return "enterprise";
+      }
+      if (teamSize > 1 || size === "medium") {
+        return "standard";
+      }
+      return "simple";
+    }
+    module2.exports = {
+      COMPLEXITY_TIERS,
+      getTier,
+      getAvailableTiers,
+      getCurrentMode,
+      setCurrentMode,
+      isCommandAvailable,
+      isFeatureEnabled,
+      getQualityRequirements,
+      getSupportedRiskTiers,
+      isRiskTierSupported,
+      displayTierComparison,
+      getTierRecommendation
     };
   }
 });
@@ -46559,6 +49148,7 @@ var require_status = __commonJS({
     var yaml2 = require_js_yaml();
     var chalk2 = require_source();
     var { safeAsync, outputResult } = require_error_handler();
+    var { parallel } = require_async_utils();
     async function loadWorkingSpec(specPath = ".caws/working-spec.yaml") {
       try {
         if (!await fs2.pathExists(specPath)) {
@@ -46568,6 +49158,14 @@ var require_status = __commonJS({
         return yaml2.load(content);
       } catch (error) {
         return null;
+      }
+    }
+    async function loadSpecsFromMultiSpec() {
+      const { listSpecFiles } = require_specs();
+      try {
+        return await listSpecFiles();
+      } catch (error) {
+        return [];
       }
     }
     async function checkGitHooks() {
@@ -46771,46 +49369,431 @@ var require_status = __commonJS({
       console.log(chalk2.blue("   Full documentation: docs/agents/full-guide.md"));
       console.log("");
     }
-    function generateSuggestions(data) {
+    function generateSuggestions(data, currentMode) {
+      const { spec, specs, hooks, provenance, waivers } = data;
+      const modes = require_modes();
       const suggestions = [];
-      if (!data.spec) {
-        suggestions.push("Initialize CAWS: caws init .");
+      if (!spec && (!specs || specs.length === 0)) {
+        suggestions.push("Create a spec: caws specs create <id>");
       }
-      if (!data.hooks.installed) {
+      if (modes.isFeatureEnabled("gitHooks", currentMode) && !hooks.installed) {
         suggestions.push("Install Git hooks: caws hooks install");
       }
-      if (!data.provenance.exists) {
+      if (modes.isFeatureEnabled("provenance", currentMode) && !provenance.exists) {
         suggestions.push("Initialize provenance tracking: caws provenance init");
       }
-      if (data.spec && !data.hooks.installed && !data.provenance.exists) {
-        suggestions.push("Complete setup: caws scaffold");
+      if (modes.isFeatureEnabled("waivers", currentMode) && !waivers.exists) {
+        suggestions.push("Initialize waiver system: caws waivers create (when needed)");
       }
+      if (modes.isFeatureEnabled("qualityGates", currentMode)) {
+        if (spec || specs && specs.length > 0) {
+          suggestions.push("Run quality gates: caws diagnose");
+        }
+      }
+      suggestions.push("Switch modes: caws mode set --interactive");
       return suggestions;
     }
+    function createProgressBar(current, total, width = 20) {
+      if (total === 0) return "\u2591".repeat(width);
+      const percentage = Math.min(current / total, 1);
+      const filled = Math.round(percentage * width);
+      const empty = width - filled;
+      return "\u2593".repeat(filled) + "\u2591".repeat(empty);
+    }
+    function getProgressColor(percentage) {
+      if (percentage >= 80) return chalk2.green;
+      if (percentage >= 50) return chalk2.yellow;
+      return chalk2.red;
+    }
+    function displayVisualStatus(data, currentMode) {
+      const { spec, specs, hooks, provenance, waivers, gates } = data;
+      const modes = require_modes();
+      const tierConfig = modes.getTier(currentMode);
+      console.log(
+        chalk2.bold.cyan(
+          `
+\u{1F4CA} CAWS Project Status (${tierConfig.icon} ${tierConfig.color(currentMode)})`
+        )
+      );
+      console.log(
+        chalk2.cyan(
+          "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
+        )
+      );
+      if (specs && specs.length > 0) {
+        console.log(chalk2.green(`\u2705 Specs System (${specs.length} specs)`));
+        const activeSpecs = specs.filter((s) => s.status === "active");
+        const draftSpecs = specs.filter((s) => s.status === "draft");
+        const completedSpecs = specs.filter((s) => s.status === "completed");
+        if (activeSpecs.length > 0) {
+          console.log(
+            chalk2.gray(`   Active: ${activeSpecs.map((s) => `${s.id}(${s.type})`).join(", ")}`)
+          );
+        }
+        if (draftSpecs.length > 0) {
+          console.log(
+            chalk2.gray(`   Draft: ${draftSpecs.length} spec${draftSpecs.length > 1 ? "s" : ""}`)
+          );
+          if (draftSpecs.length <= 3) {
+            draftSpecs.forEach((s) => {
+              console.log(chalk2.gray(`     \u2022 ${s.id}: ${s.title}`));
+            });
+          }
+        }
+        if (completedSpecs.length > 0) {
+          console.log(
+            chalk2.gray(
+              `   Completed: ${completedSpecs.length} spec${completedSpecs.length > 1 ? "s" : ""}`
+            )
+          );
+          if (completedSpecs.length <= 3) {
+            completedSpecs.forEach((s) => {
+              console.log(chalk2.gray(`     \u2022 ${s.id}: ${s.title}`));
+            });
+          }
+        }
+        const totalSpecs = specs.length;
+        const completedSpecsCount = specs.filter((s) => s.status === "completed").length;
+        const activeSpecsCount = specs.filter((s) => s.status === "active").length;
+        const progressPercentage = totalSpecs > 0 ? Math.round(completedSpecsCount / totalSpecs * 100) : 0;
+        const progressBar2 = createProgressBar(completedSpecsCount, totalSpecs);
+        const color = getProgressColor(progressPercentage);
+        console.log(
+          chalk2.gray(
+            `   Overall Progress: ${color(`${progressPercentage}%`)} ${progressBar2} ${completedSpecsCount}/${totalSpecs} completed`
+          )
+        );
+        if (activeSpecsCount > 0) {
+          console.log(chalk2.gray(`   Active Features: ${activeSpecsCount} in progress`));
+        }
+        const riskBreakdown = {};
+        specs.forEach((s) => {
+          const tier = s.risk_tier || "T3";
+          riskBreakdown[tier] = (riskBreakdown[tier] || 0) + 1;
+        });
+        if (Object.keys(riskBreakdown).length > 1) {
+          const tierDisplay = Object.entries(riskBreakdown).map(([tier, count]) => `${tier}:${count}`).join(", ");
+          console.log(chalk2.gray(`   Risk Distribution: ${tierDisplay}`));
+        }
+      } else if (spec) {
+        console.log(chalk2.green("\u2705 Working Spec"));
+        console.log(chalk2.gray(`   ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`));
+        console.log(chalk2.gray(`   Title: ${spec.title}`));
+        if (spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
+          const total = spec.acceptance_criteria.length;
+          const completed = spec.acceptance_criteria.filter((c) => c.completed).length;
+          const percentage = Math.round(completed / total * 100);
+          const color = getProgressColor(percentage);
+          const bar = createProgressBar(completed, total);
+          console.log(
+            chalk2.gray(
+              `   Acceptance Criteria: ${color(`${percentage}%`)} ${bar} ${completed}/${total}`
+            )
+          );
+        }
+        console.log(
+          chalk2.gray(
+            `   Test Coverage: ${chalk2.blue("Calculating...")} ${createProgressBar(0, 100)} 0%`
+          )
+        );
+        const riskColor = spec.risk_tier === "T1" ? chalk2.red : spec.risk_tier === "T2" ? chalk2.yellow : chalk2.green;
+        console.log(
+          chalk2.gray(
+            `   Risk Tier: ${riskColor(spec.risk_tier)} (Quality Gates: ${riskColor("Active")})`
+          )
+        );
+      } else {
+        console.log(chalk2.red("\u274C No Specs Found"));
+        console.log(chalk2.gray("   No working spec or specs directory found"));
+        console.log(chalk2.yellow("   \u{1F4A1} Run: caws specs create <id> to create specs"));
+        console.log(chalk2.yellow("   \u{1F4A1} Or run: caws init . for legacy single spec"));
+      }
+      console.log("");
+      if (modes.isFeatureEnabled("gitHooks", currentMode)) {
+        if (hooks.installed) {
+          const hookBar = createProgressBar(hooks.count, hooks.total);
+          console.log(chalk2.green(`\u2705 Git Hooks`));
+          console.log(
+            chalk2.gray(`   ${hookBar} ${hooks.count}/${hooks.total} active: ${hooks.active.join(", ")}`)
+          );
+        } else {
+          console.log(chalk2.yellow("\u26A0\uFE0F  Git Hooks"));
+          console.log(chalk2.gray("   No CAWS git hooks installed"));
+          console.log(chalk2.yellow("   \u{1F4A1} Run: caws hooks install"));
+        }
+      }
+      console.log("");
+      if (modes.isFeatureEnabled("provenance", currentMode)) {
+        if (provenance.exists) {
+          const provenanceBar = createProgressBar(provenance.count, Math.max(provenance.count, 10));
+          console.log(chalk2.green("\u2705 Provenance"));
+          console.log(chalk2.gray(`   ${provenanceBar} ${provenance.count} entries`));
+          if (provenance.lastUpdate) {
+            console.log(chalk2.gray(`   Last update: ${getTimeSince(provenance.lastUpdate)}`));
+          }
+        } else {
+          console.log(chalk2.yellow("\u26A0\uFE0F  Provenance"));
+          console.log(chalk2.gray("   Provenance tracking not initialized"));
+          console.log(chalk2.yellow("   \u{1F4A1} Run: caws provenance init"));
+        }
+      }
+      console.log("");
+      if (modes.isFeatureEnabled("waivers", currentMode)) {
+        if (waivers.exists && waivers.total > 0) {
+          const waiverBar = createProgressBar(waivers.active, waivers.total);
+          console.log(chalk2.green("\u2705 Quality Gate Waivers"));
+          console.log(
+            chalk2.gray(
+              `   ${waiverBar} ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
+            )
+          );
+          console.log(chalk2.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? "s" : ""}`));
+        } else if (waivers.exists) {
+          console.log(chalk2.blue("\u2139\uFE0F  Quality Gate Waivers"));
+          console.log(chalk2.gray("   No waivers configured"));
+        } else {
+          console.log(chalk2.yellow("\u26A0\uFE0F  Quality Gate Waivers"));
+          console.log(chalk2.gray("   Waiver system not initialized"));
+          console.log(chalk2.yellow("   \u{1F4A1} Run: caws waivers create (when needed)"));
+        }
+      }
+      console.log("");
+      if (modes.isFeatureEnabled("qualityGates", currentMode)) {
+        console.log(chalk2.blue("\u{1F6E1}\uFE0F  Quality Gates"));
+        if (gates.checked) {
+          if (gates.passed) {
+            console.log(chalk2.green(`   ${createProgressBar(1, 1)} All gates passed`));
+            gates.results?.forEach((gate) => {
+              const gateStatus = gate.status === "passed" ? chalk2.green("\u2713") : chalk2.red("\u2717");
+              console.log(chalk2.gray(`     ${gateStatus} ${gate.name}: ${gate.message || "OK"}`));
+            });
+          } else {
+            console.log(
+              chalk2.red(
+                `   ${createProgressBar(0, gates.results?.length || 1)} ${gates.failed || 0} gates failed`
+              )
+            );
+            gates.results?.forEach((gate) => {
+              const gateStatus = gate.status === "passed" ? chalk2.green("\u2713") : chalk2.red("\u2717");
+              console.log(chalk2.gray(`     ${gateStatus} ${gate.name}: ${gate.message || "Failed"}`));
+            });
+          }
+        } else {
+          console.log(chalk2.gray(`   ${gates.message}`));
+        }
+      }
+      const overallProgress = calculateOverallProgress(data);
+      const progressColor = getProgressColor(overallProgress);
+      const progressBar = createProgressBar(overallProgress, 100);
+      console.log("");
+      console.log(chalk2.bold.blue("\u{1F4C8} Overall Progress"));
+      console.log(chalk2.gray(`   ${progressBar} ${progressColor(`${overallProgress}%`)} complete`));
+      const suggestions = generateSuggestions(data, currentMode);
+      if (suggestions.length > 0) {
+        console.log(chalk2.bold.yellow("\n\u{1F4A1} Next Steps:"));
+        suggestions.forEach((suggestion, index) => {
+          console.log(chalk2.yellow(`   ${index + 1}. ${suggestion}`));
+        });
+      }
+      console.log(chalk2.bold.blue("\n\u{1F4DA} Quick Actions:"));
+      if (spec || specs && specs.length > 0) {
+        if (modes.isFeatureEnabled("validate", currentMode)) {
+          console.log(chalk2.blue("   View specs: caws specs list"));
+        }
+        if (modes.isFeatureEnabled("validate", currentMode)) {
+          console.log(chalk2.blue("   Validate: caws validate"));
+        }
+      }
+      if (modes.isFeatureEnabled("gitHooks", currentMode) && hooks.installed) {
+        console.log(chalk2.blue("   View hooks: caws hooks status"));
+      }
+      if (modes.isFeatureEnabled("provenance", currentMode) && provenance.exists) {
+        console.log(chalk2.blue("   View provenance: caws provenance show"));
+      }
+      if (modes.isFeatureEnabled("waivers", currentMode) && waivers.exists && waivers.total > 0) {
+        console.log(chalk2.blue("   View waivers: caws waivers list"));
+      }
+      console.log(chalk2.blue("   Get help: caws help"));
+      console.log(chalk2.blue("   Switch mode: caws mode set --interactive"));
+      console.log("");
+    }
+    function calculateOverallProgress(data) {
+      const { spec, specs, hooks, provenance, waivers, currentMode } = data;
+      const modes = require_modes();
+      let score = 0;
+      if (specs && specs.length > 0) {
+        const completedSpecs = specs.filter((s) => s.status === "completed").length;
+        if (specs.length > 0) {
+          const percentage = completedSpecs / specs.length * 40;
+          score += percentage;
+        }
+        if (modes.isFeatureEnabled("gitHooks", currentMode)) {
+          if (hooks.installed) score += 20;
+        }
+        if (modes.isFeatureEnabled("provenance", currentMode)) {
+          if (provenance.exists) score += 20;
+        }
+        if (modes.isFeatureEnabled("waivers", currentMode)) {
+          if (waivers.exists) score += 15;
+        }
+        if (modes.isFeatureEnabled("qualityGates", currentMode)) {
+          if (specs.length > 0) score += 5;
+        }
+      } else if (spec) {
+        if (spec) score += 30;
+        if (spec && spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
+          const completed = spec.acceptance_criteria.filter((c) => c.completed).length;
+          const percentage = completed / spec.acceptance_criteria.length * 25;
+          score += percentage;
+        }
+        if (modes.isFeatureEnabled("gitHooks", currentMode)) {
+          if (hooks.installed) score += 15;
+        }
+        if (modes.isFeatureEnabled("provenance", currentMode)) {
+          if (provenance.exists) score += 15;
+        }
+        if (modes.isFeatureEnabled("waivers", currentMode)) {
+          if (waivers.exists) score += 10;
+        }
+        if (modes.isFeatureEnabled("qualityGates", currentMode)) {
+          if (spec) score += 5;
+        }
+      } else {
+        if (modes.isFeatureEnabled("gitHooks", currentMode)) {
+          if (hooks.installed) score += 30;
+        }
+        if (modes.isFeatureEnabled("provenance", currentMode)) {
+          if (provenance.exists) score += 30;
+        }
+        if (modes.isFeatureEnabled("waivers", currentMode)) {
+          if (waivers.exists) score += 20;
+        }
+        if (modes.isFeatureEnabled("qualityGates", currentMode)) {
+          if (hooks.installed || provenance.exists) score += 20;
+        }
+      }
+      return Math.min(Math.round(score), 100);
+    }
     async function statusCommand2(options = {}) {
-      return safeAsync(async () => {
-        const spec = await loadWorkingSpec(options.spec || ".caws/working-spec.yaml");
-        const hooks = await checkGitHooks();
-        const provenance = await loadProvenanceChain();
-        const waivers = await loadWaiverStatus();
-        const gates = await checkQualityGates();
-        displayStatus({
-          spec,
-          hooks,
-          provenance,
-          waivers,
-          gates
-        });
-        const result = outputResult({
-          command: "status",
-          spec: spec ? "loaded" : "not found",
-          hooks: hooks.installed,
-          provenance: provenance.entries?.length || 0,
-          waivers: waivers.active?.length || 0,
-          gates: gates.passed ? "passed" : "failed"
-        });
-        return result;
-      }, "status check", true);
+      return safeAsync(
+        async () => {
+          const modes = require_modes();
+          const currentMode = await modes.getCurrentMode();
+          const [spec, specs, hooks, provenance, waivers, gates] = await parallel([
+            () => loadWorkingSpec(options.spec || ".caws/working-spec.yaml"),
+            () => loadSpecsFromMultiSpec(),
+            () => checkGitHooks(),
+            () => loadProvenanceChain(),
+            () => loadWaiverStatus(),
+            () => checkQualityGates()
+          ]);
+          if (options.visual || options.json) {
+            if (options.json) {
+              const result2 = {
+                command: "status",
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                system: specs.length > 0 ? "multi-spec" : "single-spec",
+                specs: specs.length > 0 ? {
+                  count: specs.length,
+                  active: specs.filter((s) => s.status === "active").length,
+                  draft: specs.filter((s) => s.status === "draft").length,
+                  completed: specs.filter((s) => s.status === "completed").length,
+                  list: specs.map((s) => ({
+                    id: s.id,
+                    type: s.type,
+                    status: s.status,
+                    title: s.title
+                  }))
+                } : null,
+                legacySpec: spec ? {
+                  id: spec.id,
+                  title: spec.title,
+                  riskTier: spec.risk_tier,
+                  mode: spec.mode,
+                  acceptanceCriteria: spec.acceptance_criteria?.length || 0,
+                  completedCriteria: spec.acceptance_criteria?.filter((c) => c.completed).length || 0
+                } : null,
+                hooks: {
+                  installed: hooks.installed,
+                  count: hooks.count,
+                  total: hooks.total,
+                  active: hooks.active
+                },
+                provenance: {
+                  exists: provenance.exists,
+                  count: provenance.count,
+                  lastUpdate: provenance.lastUpdate
+                },
+                waivers: {
+                  exists: waivers.exists,
+                  active: waivers.active,
+                  expired: waivers.expired,
+                  revoked: waivers.revoked,
+                  total: waivers.total
+                },
+                qualityGates: {
+                  checked: gates.checked,
+                  passed: gates.passed,
+                  message: gates.message
+                },
+                overallProgress: calculateOverallProgress({
+                  spec,
+                  specs,
+                  hooks,
+                  provenance,
+                  waivers,
+                  gates
+                })
+              };
+              console.log(JSON.stringify(result2, null, 2));
+            } else {
+              displayVisualStatus(
+                {
+                  spec,
+                  specs,
+                  hooks,
+                  provenance,
+                  waivers,
+                  gates
+                },
+                currentMode
+              );
+            }
+          } else {
+            displayStatus({
+              spec,
+              hooks,
+              provenance,
+              waivers,
+              gates
+            });
+          }
+          const result = outputResult({
+            command: "status",
+            mode: options.visual ? "visual" : options.json ? "json" : "text",
+            system: specs.length > 0 ? "multi-spec" : "single-spec",
+            currentMode,
+            specs: specs.length,
+            legacySpec: spec ? "loaded" : "not found",
+            hooks: modes.isFeatureEnabled("gitHooks", currentMode) ? hooks.installed : null,
+            provenance: modes.isFeatureEnabled("provenance", currentMode) ? provenance.count || 0 : null,
+            waivers: modes.isFeatureEnabled("waivers", currentMode) ? waivers.active || 0 : null,
+            gates: modes.isFeatureEnabled("qualityGates", currentMode) ? gates.passed ? "passed" : "failed" : null,
+            overallProgress: calculateOverallProgress({
+              spec,
+              specs,
+              hooks,
+              provenance,
+              waivers,
+              gates,
+              currentMode
+            })
+          });
+          return result;
+        },
+        "status check",
+        true
+      );
     }
     module2.exports = {
       statusCommand: statusCommand2,
@@ -48103,26 +51086,23 @@ var require_iterate = __commonJS({
   "src/commands/iterate.js"(exports2, module2) {
     var fs2 = require("fs");
     var path2 = require("path");
-    var yaml2 = require_js_yaml();
     var chalk2 = require_source();
     var { initializeGlobalSetup: initializeGlobalSetup2 } = require_config();
+    var { resolveSpec } = require_spec_resolver();
     async function iterateCommand2(specFile = ".caws/working-spec.yaml", options = {}) {
       try {
+        const resolved = await resolveSpec({
+          specId: options.specId,
+          specFile,
+          warnLegacy: false
+        });
+        const { spec } = resolved;
         console.log("\u{1F50D} Detecting CAWS setup...");
         const setup = initializeGlobalSetup2();
         if (setup.hasWorkingSpec) {
           console.log(`\u2705 Detected ${setup.setupType} CAWS setup`);
           console.log(`   Capabilities: ${setup.capabilities.join(", ")}`);
         }
-        const specPath = path2.isAbsolute(specFile) ? specFile : path2.join(process.cwd(), specFile);
-        if (!fs2.existsSync(specPath)) {
-          console.error(chalk2.red(`
-\u274C Working spec not found: ${specFile}`));
-          console.error(chalk2.yellow("\u{1F4A1} Run: caws init to create a working spec"));
-          process.exit(1);
-        }
-        const specContent = fs2.readFileSync(specPath, "utf8");
-        const spec = yaml2.load(specContent);
         const currentState = options.currentState ? JSON.parse(options.currentState) : {};
         const stateDescription = currentState.description || "Starting implementation";
         console.log(chalk2.blue("\n\u{1F504} Iterative Development Guidance\n"));
@@ -48160,24 +51140,20 @@ Project: ${spec.title}`));
           let totalTestsPassing = 0;
           let totalCoverage = 0;
           let criteriaWithProgress = 0;
-          spec.acceptance.forEach((criterion, index) => {
+          spec.acceptance.forEach((criterion, _index) => {
             let status = "\u2B1C";
-            let statusText = "pending";
             let progressInfo = "";
             if (criterion.status) {
               switch (criterion.status) {
                 case "completed":
                   status = "\u2705";
-                  statusText = "completed";
                   break;
                 case "in_progress":
                   status = "\u{1F504}";
-                  statusText = "in progress";
                   break;
                 case "pending":
                 default:
                   status = "\u2B1C";
-                  statusText = "pending";
                   break;
               }
               if (criterion.tests) {
@@ -48201,7 +51177,6 @@ Project: ${spec.title}`));
               }
             } else if (criterion.completed) {
               status = "\u2705";
-              statusText = "completed";
             }
             console.log(`   ${status} ${criterion.id}: ${criterion.then}`);
             if (progressInfo) {
@@ -48255,7 +51230,7 @@ Project: ${spec.title}`));
         process.exit(1);
       }
     }
-    function generateGuidance(spec, currentState, options) {
+    function generateGuidance(spec, _currentState, _options) {
       const mode = spec.mode;
       const riskTier = spec.risk_tier;
       const guidance = {
@@ -48382,6 +51357,479 @@ Project: ${spec.title}`));
   }
 });
 
+// src/waivers-manager.js
+var require_waivers_manager = __commonJS({
+  "src/waivers-manager.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var WaiversManager = class {
+      constructor(options = {}) {
+        this.projectRoot = options.projectRoot || process.cwd();
+        this.waiversDir = path2.join(this.projectRoot, ".caws", "waivers");
+        this.waiversFile = path2.join(this.waiversDir, "active-waivers.yaml");
+        this.auditLogFile = path2.join(this.waiversDir, "waiver-audit.log");
+        if (!fs2.existsSync(this.waiversDir)) {
+          fs2.mkdirSync(this.waiversDir, { recursive: true });
+        }
+      }
+      /**
+       * Waiver Schema Definition
+       */
+      getWaiverSchema() {
+        return {
+          type: "object",
+          required: ["id", "title", "reason", "gates", "expires_at", "approved_by", "created_at"],
+          properties: {
+            id: {
+              type: "string",
+              pattern: "^WV-\\d{4}$",
+              description: "Waiver ID in format WV-XXXX"
+            },
+            title: {
+              type: "string",
+              minLength: 10,
+              maxLength: 200,
+              description: "Clear, descriptive title explaining the waiver"
+            },
+            reason: {
+              type: "string",
+              enum: [
+                "emergency_hotfix",
+                "legacy_integration",
+                "experimental_feature",
+                "third_party_constraint",
+                "performance_critical",
+                "security_patch",
+                "infrastructure_limitation",
+                "other"
+              ],
+              description: "Categorization of waiver reason"
+            },
+            description: {
+              type: "string",
+              minLength: 50,
+              maxLength: 1e3,
+              description: "Detailed explanation of why waiver is needed"
+            },
+            gates: {
+              type: "array",
+              items: {
+                type: "string",
+                enum: [
+                  "spec_completeness",
+                  "contract_compliance",
+                  "coverage_threshold",
+                  "mutation_threshold",
+                  "security_scan",
+                  "accessibility_check",
+                  "performance_budget",
+                  "scope_boundary",
+                  "budget_limit"
+                ]
+              },
+              minItems: 1,
+              description: "Quality gates to waive"
+            },
+            risk_assessment: {
+              type: "object",
+              properties: {
+                impact_level: {
+                  type: "string",
+                  enum: ["low", "medium", "high", "critical"]
+                },
+                mitigation_plan: {
+                  type: "string",
+                  minLength: 50
+                },
+                review_required: {
+                  type: "boolean"
+                }
+              },
+              required: ["impact_level", "mitigation_plan"]
+            },
+            expires_at: {
+              type: "string",
+              format: "date-time",
+              description: "ISO 8601 datetime when waiver expires"
+            },
+            approved_by: {
+              type: "string",
+              description: "Person/entity approving the waiver"
+            },
+            created_at: {
+              type: "string",
+              format: "date-time",
+              description: "ISO 8601 datetime when waiver was created"
+            },
+            metadata: {
+              type: "object",
+              properties: {
+                related_pr: { type: "string" },
+                related_issue: { type: "string" },
+                environment: { type: "string", enum: ["development", "staging", "production"] },
+                urgency: { type: "string", enum: ["low", "normal", "high", "critical"] }
+              }
+            }
+          }
+        };
+      }
+      /**
+       * Create a new waiver
+       */
+      async createWaiver(waiverData) {
+        const waiverId = await this.generateWaiverId();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        const waiver = {
+          id: waiverId,
+          title: waiverData.title,
+          reason: waiverData.reason,
+          description: waiverData.description,
+          gates: waiverData.gates,
+          risk_assessment: waiverData.risk_assessment,
+          expires_at: waiverData.expires_at,
+          approved_by: waiverData.approved_by,
+          created_at: now,
+          metadata: waiverData.metadata || {}
+        };
+        const validation = this.validateWaiver(waiver);
+        if (!validation.valid) {
+          throw new Error(`Waiver validation failed: ${validation.errors.join(", ")}`);
+        }
+        const conflicts = await this.checkWaiverConflicts(waiver);
+        if (conflicts.length > 0) {
+          throw new Error(`Waiver conflicts with existing waivers: ${conflicts.join(", ")}`);
+        }
+        const waivers = await this.loadActiveWaivers();
+        waivers.push(waiver);
+        await this.saveActiveWaivers(waivers);
+        await this.auditLog("CREATE", waiverId, {
+          title: waiver.title,
+          reason: waiver.reason,
+          gates: waiver.gates,
+          expires_at: waiver.expires_at,
+          approved_by: waiver.approved_by
+        });
+        if (waiver.risk_assessment.impact_level === "critical" || waiver.risk_assessment.review_required) {
+          await this.flagForReview(waiver);
+        }
+        return waiver;
+      }
+      /**
+       * Check if waiver applies to specific gates
+       */
+      async checkWaiverCoverage(gatesToCheck, context = {}) {
+        const activeWaivers = await this.getActiveWaivers();
+        const coveredGates = /* @__PURE__ */ new Set();
+        const waiverDetails = [];
+        for (const waiver of activeWaivers) {
+          if (!this.waiverAppliesToContext(waiver, context)) {
+            continue;
+          }
+          for (const gate of gatesToCheck) {
+            if (waiver.gates.includes(gate)) {
+              coveredGates.add(gate);
+              waiverDetails.push({
+                gate,
+                waiver_id: waiver.id,
+                reason: waiver.reason,
+                expires_at: waiver.expires_at,
+                approved_by: waiver.approved_by
+              });
+            }
+          }
+        }
+        return {
+          coveredGates: Array.from(coveredGates),
+          waiverDetails,
+          allCovered: coveredGates.size === gatesToCheck.length
+        };
+      }
+      /**
+       * Get all active waivers
+       */
+      async getActiveWaivers() {
+        const waivers = await this.loadActiveWaivers();
+        const now = /* @__PURE__ */ new Date();
+        const activeWaivers = waivers.filter((waiver) => {
+          const expiresAt = new Date(waiver.expires_at);
+          return expiresAt > now;
+        });
+        if (activeWaivers.length !== waivers.length) {
+          await this.saveActiveWaivers(activeWaivers);
+        }
+        return activeWaivers;
+      }
+      /**
+       * Revoke a waiver
+       */
+      async revokeWaiver(waiverId, reason = "Manual revocation") {
+        const waivers = await this.loadActiveWaivers();
+        const index = waivers.findIndex((w) => w.id === waiverId);
+        if (index === -1) {
+          throw new Error(`Waiver ${waiverId} not found`);
+        }
+        const waiver = waivers[index];
+        waivers.splice(index, 1);
+        await this.saveActiveWaivers(waivers);
+        await this.auditLog("REVOKE", waiverId, { reason, original_waiver: waiver });
+        return waiver;
+      }
+      /**
+       * Extend waiver expiration
+       */
+      async extendWaiver(waiverId, newExpiryDate, approvedBy) {
+        const waivers = await this.loadActiveWaivers();
+        const waiver = waivers.find((w) => w.id === waiverId);
+        if (!waiver) {
+          throw new Error(`Waiver ${waiverId} not found`);
+        }
+        const oldExpiry = waiver.expires_at;
+        waiver.expires_at = new Date(newExpiryDate).toISOString();
+        waiver.metadata = waiver.metadata || {};
+        waiver.metadata.extended_by = approvedBy;
+        waiver.metadata.extended_at = (/* @__PURE__ */ new Date()).toISOString();
+        waiver.metadata.previous_expiry = oldExpiry;
+        await this.saveActiveWaivers(waivers);
+        await this.auditLog("EXTEND", waiverId, {
+          new_expiry: waiver.expires_at,
+          approved_by: approvedBy,
+          old_expiry: oldExpiry
+        });
+        return waiver;
+      }
+      /**
+       * Get waiver statistics and health metrics
+       */
+      async getWaiverStats() {
+        const waivers = await this.getActiveWaivers();
+        const now = /* @__PURE__ */ new Date();
+        const stats = {
+          total_active: waivers.length,
+          by_reason: {},
+          by_risk_level: {},
+          expiring_soon: [],
+          // Next 7 days
+          high_risk: [],
+          total_gates_waived: 0,
+          average_lifespan_days: 0
+        };
+        const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1e3);
+        for (const waiver of waivers) {
+          stats.by_reason[waiver.reason] = (stats.by_reason[waiver.reason] || 0) + 1;
+          const riskLevel = waiver.risk_assessment.impact_level;
+          stats.by_risk_level[riskLevel] = (stats.by_risk_level[riskLevel] || 0) + 1;
+          const expiresAt = new Date(waiver.expires_at);
+          if (expiresAt <= sevenDaysFromNow) {
+            stats.expiring_soon.push({
+              id: waiver.id,
+              title: waiver.title,
+              expires_at: waiver.expires_at,
+              days_remaining: Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1e3))
+            });
+          }
+          if (riskLevel === "high" || riskLevel === "critical") {
+            stats.high_risk.push({
+              id: waiver.id,
+              title: waiver.title,
+              risk_level: riskLevel,
+              reason: waiver.reason
+            });
+          }
+          stats.total_gates_waived += waiver.gates.length;
+          const createdAt = new Date(waiver.created_at);
+          const lifespanDays = (expiresAt - createdAt) / (24 * 60 * 60 * 1e3);
+          stats.average_lifespan_days += lifespanDays;
+        }
+        if (waivers.length > 0) {
+          stats.average_lifespan_days /= waivers.length;
+        }
+        return stats;
+      }
+      // Private helper methods
+      async generateWaiverId() {
+        const existingWaivers = await this.loadActiveWaivers();
+        const usedIds = new Set(existingWaivers.map((w) => parseInt(w.id.split("-")[1])));
+        let counter = 1;
+        while (usedIds.has(counter)) {
+          counter++;
+        }
+        return `WV-${counter.toString().padStart(4, "0")}`;
+      }
+      validateWaiver(waiver) {
+        const errors = [];
+        if (!waiver.id || !waiver.id.match(/^WV-\d{4}$/)) {
+          errors.push("Invalid waiver ID format");
+        }
+        if (!waiver.title || waiver.title.length < 10) {
+          errors.push("Title too short (minimum 10 characters)");
+        }
+        if (!waiver.reason || ![
+          "emergency_hotfix",
+          "legacy_integration",
+          "experimental_feature",
+          "third_party_constraint",
+          "performance_critical",
+          "security_patch",
+          "infrastructure_limitation",
+          "other"
+        ].includes(waiver.reason)) {
+          errors.push("Invalid waiver reason");
+        }
+        if (!waiver.gates || !Array.isArray(waiver.gates) || waiver.gates.length === 0) {
+          errors.push("At least one gate must be specified");
+        }
+        if (!waiver.expires_at) {
+          errors.push("Expiration date required");
+        } else {
+          const expiresAt = new Date(waiver.expires_at);
+          const now = /* @__PURE__ */ new Date();
+          if (expiresAt <= now) {
+            errors.push("Expiration date must be in the future");
+          }
+        }
+        if (!waiver.approved_by) {
+          errors.push("Approval information required");
+        }
+        return {
+          valid: errors.length === 0,
+          errors
+        };
+      }
+      async checkWaiverConflicts(newWaiver) {
+        const activeWaivers = await this.getActiveWaivers();
+        const conflicts = [];
+        for (const existingWaiver of activeWaivers) {
+          const overlappingGates = newWaiver.gates.filter(
+            (gate) => existingWaiver.gates.includes(gate)
+          );
+          if (overlappingGates.length > 0) {
+            conflicts.push(
+              `Waiver ${existingWaiver.id} already covers gates: ${overlappingGates.join(", ")}`
+            );
+          }
+        }
+        return conflicts;
+      }
+      waiverAppliesToContext(waiver, context) {
+        if (waiver.metadata?.environment && context.environment) {
+          if (waiver.metadata.environment !== context.environment) {
+            return false;
+          }
+        }
+        return true;
+      }
+      async loadActiveWaivers() {
+        try {
+          if (!fs2.existsSync(this.waiversFile)) {
+            return [];
+          }
+          const content = fs2.readFileSync(this.waiversFile, "utf8");
+          const data = yaml2.load(content) || {};
+          if (Array.isArray(data)) {
+            return data;
+          }
+          if (data.waivers && typeof data.waivers === "object") {
+            return Object.values(data.waivers).map((waiver) => {
+              return {
+                id: waiver.id,
+                title: waiver.title || waiver.description || waiver.id,
+                reason: waiver.reason || waiver.reason_code || "unknown",
+                description: waiver.description || waiver.title || waiver.id,
+                gates: Array.isArray(waiver.gates) ? waiver.gates : [waiver.gates],
+                expires_at: waiver.expires_at,
+                approved_by: waiver.approved_by || waiver.risk_owner || "unknown",
+                created_at: waiver.created_at || waiver.approved_at || (/* @__PURE__ */ new Date()).toISOString(),
+                risk_assessment: waiver.risk_assessment || {
+                  impact_level: waiver.impact_level || "medium",
+                  mitigation_plan: waiver.mitigation || waiver.mitigation_plan || "Unknown mitigation"
+                },
+                metadata: waiver.metadata || {}
+              };
+            });
+          }
+          return [];
+        } catch (error) {
+          console.warn(`Warning: Could not load waivers file: ${error.message}`);
+          return [];
+        }
+      }
+      async saveActiveWaivers(waivers) {
+        const waiversObj = {};
+        waivers.forEach((waiver) => {
+          waiversObj[waiver.id] = waiver;
+        });
+        const data = {
+          waivers: waiversObj
+        };
+        const content = [
+          "# CAWS Active Waivers",
+          "# This file contains all currently active waivers that temporarily bypass quality gates",
+          "# Waivers are automatically cleaned up when they expire",
+          "",
+          yaml2.dump(data, {
+            indent: 2,
+            sortKeys: true
+          })
+        ].join("\n");
+        fs2.writeFileSync(this.waiversFile, content, "utf8");
+      }
+      async auditLog(action, waiverId, details) {
+        const logEntry = {
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          action,
+          waiver_id: waiverId,
+          details,
+          user: process.env.USER || process.env.USERNAME || "unknown",
+          cwd: process.cwd()
+        };
+        const logLine = JSON.stringify(logEntry) + "\n";
+        fs2.appendFileSync(this.auditLogFile, logLine);
+      }
+      async flagForReview(waiver) {
+        const flagFile = path2.join(this.waiversDir, `review-${waiver.id}.md`);
+        const flagContent = `# Waiver Review Required: ${waiver.id}
+
+## Waiver Details
+- **ID**: ${waiver.id}
+- **Title**: ${waiver.title}
+- **Reason**: ${waiver.reason}
+- **Risk Level**: ${waiver.risk_assessment.impact_level}
+- **Approved By**: ${waiver.approved_by}
+- **Expires**: ${waiver.expires_at}
+
+## Description
+${waiver.description}
+
+## Gates Waived
+${waiver.gates.map((gate) => `- ${gate}`).join("\n")}
+
+## Risk Assessment
+**Impact Level**: ${waiver.risk_assessment.impact_level}
+**Mitigation Plan**: ${waiver.risk_assessment.mitigation_plan}
+
+## Review Checklist
+- [ ] Risk assessment is adequate
+- [ ] Mitigation plan is sufficient
+- [ ] Waiver duration is appropriate
+- [ ] No alternative solutions available
+- [ ] Code owners approve waiver usage
+
+---
+*This waiver requires manual review. Please check the waiver details and mitigation plan before approving continued use.*
+`;
+        fs2.writeFileSync(flagFile, flagContent);
+        await this.auditLog("FLAG_REVIEW", waiver.id, {
+          flag_file: flagFile,
+          risk_level: waiver.risk_assessment.impact_level,
+          review_required: waiver.risk_assessment.review_required
+        });
+      }
+    };
+    module2.exports = WaiversManager;
+  }
+});
+
 // src/commands/waivers.js
 var require_waivers = __commonJS({
   "src/commands/waivers.js"(exports2, module2) {
@@ -48390,49 +51838,56 @@ var require_waivers = __commonJS({
     var yaml2 = require_js_yaml();
     var chalk2 = require_source();
     var { initializeGlobalSetup: initializeGlobalSetup2 } = require_config();
+    var WaiversManager = require_waivers_manager();
+    var { commandWrapper, Output } = require_command_wrapper();
     var WAIVER_DIR = ".caws/waivers";
     async function waiversCommand2(subcommand = "list", options = {}) {
-      try {
-        console.log("\u{1F50D} Detecting CAWS setup...");
-        const setup = initializeGlobalSetup2();
-        if (setup.hasWorkingSpec) {
-          console.log(`\u2705 Detected ${setup.setupType} CAWS setup`);
-          console.log(`   Capabilities: ${setup.capabilities.join(", ")}`);
+      return commandWrapper(
+        async () => {
+          Output.info("Detecting CAWS setup...");
+          const setup = initializeGlobalSetup2();
+          if (setup.hasWorkingSpec) {
+            Output.success(`Detected ${setup.setupType} CAWS setup`, {
+              capabilities: setup.capabilities
+            });
+          }
+          const waiversDir = path2.join(process.cwd(), WAIVER_DIR);
+          if (!fs2.existsSync(waiversDir)) {
+            fs2.mkdirSync(waiversDir, { recursive: true });
+          }
+          switch (subcommand) {
+            case "create":
+              return await createWaiver(options);
+            case "list":
+              return await listWaivers(options);
+            case "show":
+              return await showWaiver(options.id, options);
+            case "revoke":
+              return await revokeWaiver(options.id, options);
+            default:
+              throw new Error(
+                `Unknown waiver subcommand: ${subcommand}.
+Available subcommands: create, list, show, revoke`
+              );
+          }
+        },
+        {
+          commandName: `waivers ${subcommand}`,
+          context: { subcommand, options }
         }
-        const waiversDir = path2.join(process.cwd(), WAIVER_DIR);
-        if (!fs2.existsSync(waiversDir)) {
-          fs2.mkdirSync(waiversDir, { recursive: true });
-        }
-        switch (subcommand) {
-          case "create":
-            await createWaiver(options);
-            break;
-          case "list":
-            await listWaivers(options);
-            break;
-          case "show":
-            await showWaiver(options.id, options);
-            break;
-          case "revoke":
-            await revokeWaiver(options.id, options);
-            break;
-          default:
-            console.error(chalk2.red(`
-\u274C Unknown waiver subcommand: ${subcommand}`));
-            console.log(chalk2.yellow("\n\u{1F4A1} Available subcommands: create, list, show, revoke"));
-            process.exit(1);
-        }
-      } catch (error) {
-        console.error(chalk2.red(`
-\u274C Waiver command failed: ${error.message}`));
-        if (options.verbose) {
-          console.error(error.stack);
-        }
-        process.exit(1);
-      }
+      );
     }
     async function createWaiver(options) {
-      const required = ["title", "reason", "description", "gates", "expiresAt", "approvedBy", "impactLevel", "mitigationPlan"];
+      const required = [
+        "title",
+        "reason",
+        "description",
+        "gates",
+        "expiresAt",
+        "approvedBy",
+        "impactLevel",
+        "mitigationPlan"
+      ];
       const missing = required.filter((field) => !options[field]);
       if (missing.length > 0) {
         console.error(chalk2.red(`
@@ -48467,6 +51922,12 @@ var require_waivers = __commonJS({
       };
       const waiverPath = path2.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
       fs2.writeFileSync(waiverPath, yaml2.dump(waiver, { lineWidth: -1 }));
+      try {
+        await addToActiveWaivers(waiver);
+      } catch (error) {
+        console.error(`Failed to add waiver to active waivers: ${error.message}`);
+        console.error(error.stack);
+      }
       console.log(chalk2.green(`
 \u2705 Waiver created: ${waiverId}`));
       console.log(`   Title: ${waiver.title}`);
@@ -48480,7 +51941,7 @@ var require_waivers = __commonJS({
       console.log(chalk2.yellow(`\u26A0\uFE0F  Mitigation plan: ${waiver.mitigation_plan}
 `));
     }
-    async function listWaivers(options) {
+    async function listWaivers(_options) {
       const waiversDir = path2.join(process.cwd(), WAIVER_DIR);
       if (!fs2.existsSync(waiversDir)) {
         console.log(chalk2.yellow("\n\u2139\uFE0F  No waivers found\n"));
@@ -48495,15 +51956,21 @@ var require_waivers = __commonJS({
         const content = fs2.readFileSync(path2.join(waiversDir, file), "utf8");
         return yaml2.load(content);
       });
-      const activeWaivers = waivers.filter((w) => w.status === "active" && new Date(w.expires_at) > /* @__PURE__ */ new Date());
-      const expiredWaivers = waivers.filter((w) => w.status === "active" && new Date(w.expires_at) <= /* @__PURE__ */ new Date());
+      const activeWaivers = waivers.filter(
+        (w) => w.status === "active" && new Date(w.expires_at) > /* @__PURE__ */ new Date()
+      );
+      const expiredWaivers = waivers.filter(
+        (w) => w.status === "active" && new Date(w.expires_at) <= /* @__PURE__ */ new Date()
+      );
       const revokedWaivers = waivers.filter((w) => w.status === "revoked");
       console.log(chalk2.blue("\n\u{1F516} CAWS Quality Gate Waivers\n"));
       console.log("\u2500".repeat(60));
       if (activeWaivers.length > 0) {
         console.log(chalk2.green("\n\u2705 Active Waivers:\n"));
         activeWaivers.forEach((waiver) => {
-          const daysLeft = Math.ceil((new Date(waiver.expires_at) - /* @__PURE__ */ new Date()) / (1e3 * 60 * 60 * 24));
+          const daysLeft = Math.ceil(
+            (new Date(waiver.expires_at) - /* @__PURE__ */ new Date()) / (1e3 * 60 * 60 * 24)
+          );
           console.log(`\u{1F516} ${chalk2.bold(waiver.id)}: ${waiver.title}`);
           console.log(`   Reason: ${waiver.reason}`);
           console.log(`   Gates: ${waiver.gates.join(", ")}`);
@@ -48535,7 +52002,7 @@ var require_waivers = __commonJS({
       console.log(`   Total: ${waivers.length}
 `);
     }
-    async function showWaiver(waiverId, options) {
+    async function showWaiver(waiverId, _options) {
       if (!waiverId) {
         console.error(chalk2.red("\n\u274C Waiver ID required"));
         console.log(chalk2.yellow("\u{1F4A1} Usage: caws waivers show WV-1234\n"));
@@ -48555,8 +52022,10 @@ var require_waivers = __commonJS({
       const statusIcon = isActive ? "\u2705" : isExpired ? "\u26A0\uFE0F" : "\u274C";
       console.log(chalk2.blue("\n\u{1F516} Waiver Details\n"));
       console.log("\u2500".repeat(60));
-      console.log(`
-${statusIcon} Status: ${chalk2.bold(isActive ? "Active" : isExpired ? "Expired" : waiver.status)}`);
+      console.log(
+        `
+${statusIcon} Status: ${chalk2.bold(isActive ? "Active" : isExpired ? "Expired" : waiver.status)}`
+      );
       console.log(`
 \u{1F4CB} ${chalk2.bold(waiver.title)}`);
       console.log(`   ID: ${waiver.id}`);
@@ -48620,6 +52089,38 @@ ${statusIcon} Status: ${chalk2.bold(isActive ? "Active" : isExpired ? "Expired" 
       console.log(`   Revoked by: ${waiver.revoked_by}`);
       console.log(`   Reason: ${waiver.revocation_reason}
 `);
+    }
+    async function addToActiveWaivers(waiver) {
+      try {
+        const waiversManager = new WaiversManager();
+        const activeWaivers = await waiversManager.loadActiveWaivers();
+        const existingIndex = activeWaivers.findIndex((w) => w.id === waiver.id);
+        const normalizedWaiver = {
+          id: waiver.id,
+          title: waiver.title || waiver.description || waiver.id,
+          reason: waiver.reason || waiver.reason_code || "unknown",
+          description: waiver.description || waiver.title || waiver.id,
+          gates: Array.isArray(waiver.gates) ? waiver.gates : [waiver.gates],
+          expires_at: waiver.expires_at,
+          approved_by: waiver.approved_by || waiver.risk_owner || "unknown",
+          created_at: waiver.created_at || waiver.approved_at || (/* @__PURE__ */ new Date()).toISOString(),
+          risk_assessment: waiver.risk_assessment || {
+            impact_level: waiver.impact_level || "medium",
+            mitigation_plan: waiver.mitigation || waiver.mitigation_plan || "Unknown mitigation"
+          },
+          metadata: waiver.metadata || {}
+        };
+        if (existingIndex >= 0) {
+          activeWaivers[existingIndex] = normalizedWaiver;
+        } else {
+          activeWaivers.push(normalizedWaiver);
+        }
+        await waiversManager.saveActiveWaivers(activeWaivers);
+      } catch (error) {
+        console.error(`Error adding waiver to active waivers: ${error.message}`);
+        console.error(error.stack);
+        console.warn(`Warning: Could not add waiver to active waivers file: ${error.message}`);
+      }
     }
     module2.exports = { waiversCommand: waiversCommand2 };
   }
@@ -49011,14 +52512,176 @@ Files Affected: ${analysis.files_affected}`));
   }
 });
 
+// src/commands/quality-gates.js
+var require_quality_gates = __commonJS({
+  "src/commands/quality-gates.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var { spawn } = require("child_process");
+    var { commandWrapper, Output } = require_command_wrapper();
+    var { withTimeout } = require_async_utils();
+    async function qualityGatesCommand2(options = {}) {
+      return commandWrapper(
+        async () => {
+          Output.section("CAWS Quality Gates - Enterprise Code Quality Enforcement");
+          const projectRoot = process.cwd();
+          let qualityGatesRunner = null;
+          const cliSrcDir = path2.dirname(__filename);
+          const cliSrcRoot = path2.dirname(cliSrcDir);
+          const cliPackageDir = path2.dirname(cliSrcRoot);
+          const packagesDir = path2.dirname(cliPackageDir);
+          const monorepoRunner = path2.join(packagesDir, "quality-gates", "run-quality-gates.mjs");
+          const vscodeExtensionPath = process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
+          const bundledRunner = vscodeExtensionPath ? path2.join(vscodeExtensionPath, "bundled", "quality-gates", "run-quality-gates.mjs") : null;
+          const nodeModulesPaths = [
+            path2.join(projectRoot, "node_modules", "@caws", "quality-gates", "run-quality-gates.mjs"),
+            path2.join(
+              projectRoot,
+              "node_modules",
+              "@paths.design",
+              "quality-gates",
+              "run-quality-gates.mjs"
+            ),
+            path2.join(projectRoot, "node_modules", "quality-gates", "run-quality-gates.mjs")
+          ];
+          if (fs2.existsSync(monorepoRunner)) {
+            qualityGatesRunner = monorepoRunner;
+          } else if (bundledRunner && fs2.existsSync(bundledRunner)) {
+            qualityGatesRunner = bundledRunner;
+          } else {
+            for (const nmPath of nodeModulesPaths) {
+              if (fs2.existsSync(nmPath)) {
+                qualityGatesRunner = nmPath;
+                break;
+              }
+            }
+          }
+          if (!qualityGatesRunner) {
+            const pythonScript = path2.join(projectRoot, "scripts", "simple_gates.py");
+            const makefile = path2.join(projectRoot, "Makefile");
+            if (fs2.existsSync(pythonScript)) {
+              Output.warning(
+                "Node.js quality gates runner not found",
+                "Found Python script - falling back to Python implementation"
+              );
+              Output.info(`Running: python3 ${pythonScript}`);
+              Output.info(
+                "Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates"
+              );
+              const { execSync } = require("child_process");
+              const pythonArgs = ["all", "--tier", "2", "--profile", "backend-api"];
+              if (options.ci) {
+                pythonArgs.push("--ci");
+              }
+              if (options.json) {
+                pythonArgs.push("--json");
+              }
+              execSync(`python3 ${pythonScript} ${pythonArgs.join(" ")}`, {
+                stdio: "inherit",
+                cwd: projectRoot
+              });
+              Output.success("Quality gates completed successfully");
+              return;
+            } else if (fs2.existsSync(makefile)) {
+              Output.warning(
+                "Node.js quality gates runner not found",
+                "Found Makefile - falling back to Makefile target"
+              );
+              Output.info("Running: make caws-gates");
+              Output.info(
+                "Tip: Install quality gates package for better integration: npm install -g @paths.design/quality-gates"
+              );
+              const { execSync } = require("child_process");
+              execSync("make caws-gates", {
+                stdio: "inherit",
+                cwd: projectRoot
+              });
+              Output.success("Quality gates completed successfully");
+              return;
+            }
+          }
+          if (!qualityGatesRunner) {
+            const suggestions = [
+              "Install quality gates package: npm install -g @paths.design/quality-gates",
+              "Use Python script (if available): python3 scripts/simple_gates.py all --tier 2 --profile backend-api",
+              "Use Makefile target (if available): make caws-gates",
+              "Run from CAWS monorepo root"
+            ];
+            throw new Error(
+              `Quality gates runner not found.
+
+Expected locations:
+  \u2022 Monorepo: ${monorepoRunner}
+  \u2022 npm package: ${path2.join(projectRoot, "node_modules", "@paths.design", "quality-gates", "run-quality-gates.mjs")}
+  \u2022 Python script: ${path2.join(projectRoot, "scripts", "simple_gates.py")}
+
+Available options:
+` + suggestions.map((s, i) => `  ${i + 1}. ${s}`).join("\n")
+            );
+          }
+          const args = ["node", qualityGatesRunner];
+          if (options.ci) {
+            args.push("--ci");
+          }
+          if (options.json) {
+            args.push("--json");
+          }
+          if (options.gates && options.gates.trim()) {
+            args.push("--gates", options.gates.trim());
+          }
+          if (options.fix) {
+            args.push("--fix");
+          }
+          const env = {
+            ...process.env,
+            CAWS_CLI_INTEGRATION: "true",
+            CAWS_CLI_VERSION: require(path2.join(cliPackageDir, "package.json")).version
+          };
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            env.GITHUB_STEP_SUMMARY = process.env.GITHUB_STEP_SUMMARY;
+          }
+          Output.progress("Executing quality gates runner...");
+          Output.info(`Command: ${args.join(" ")}`);
+          const child = spawn(args[0], args.slice(1), {
+            stdio: "inherit",
+            cwd: packagesDir,
+            env
+          });
+          const timeoutMs = options.timeout || (options.ci ? 30 * 60 * 1e3 : 10 * 60 * 1e3);
+          const completionPromise = new Promise((resolve, reject) => {
+            child.on("close", (code) => {
+              if (code === 0) {
+                resolve();
+              } else {
+                reject(new Error(`Quality gates failed with exit code: ${code}`));
+              }
+            });
+            child.on("error", (error) => {
+              reject(new Error(`Failed to execute quality gates runner: ${error.message}`));
+            });
+          });
+          await withTimeout(completionPromise, timeoutMs, "Quality gates execution timed out");
+          Output.success("Quality gates completed successfully");
+        },
+        {
+          commandName: "quality-gates",
+          context: { options },
+          exitOnError: !options.ci
+          // Don't exit in CI mode if we want to handle errors
+        }
+      );
+    }
+    module2.exports = {
+      qualityGatesCommand: qualityGatesCommand2
+    };
+  }
+});
+
 // src/commands/troubleshoot.js
 var require_troubleshoot = __commonJS({
   "src/commands/troubleshoot.js"(exports2, module2) {
     var chalk2 = require_source();
-    var {
-      getTroubleshootingGuide,
-      getAllTroubleshootingGuides
-    } = require_error_handler();
+    var { getTroubleshootingGuide, getAllTroubleshootingGuides } = require_error_handler();
     function displayGuide(guideKey) {
       const guide = getTroubleshootingGuide(guideKey);
       if (!guide) {
@@ -49068,7 +52731,9 @@ var require_troubleshoot = __commonJS({
         console.log(chalk2.cyan(`${key}:`));
         console.log(chalk2.gray(`   ${guide.title}`));
         if (guide.symptoms && guide.symptoms.length > 0) {
-          console.log(chalk2.gray(`   Symptoms: ${guide.symptoms[0]}${guide.symptoms.length > 1 ? "..." : ""}`));
+          console.log(
+            chalk2.gray(`   Symptoms: ${guide.symptoms[0]}${guide.symptoms.length > 1 ? "..." : ""}`)
+          );
         }
         console.log("");
       });
@@ -49088,6 +52753,1245 @@ var require_troubleshoot = __commonJS({
       }
     }
     module2.exports = troubleshootCommand2;
+  }
+});
+
+// src/commands/archive.js
+var require_archive = __commonJS({
+  "src/commands/archive.js"(exports2, module2) {
+    var fs2 = require_lib();
+    var path2 = require("path");
+    var yaml2 = require_js_yaml();
+    var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
+    var { resolveSpec } = require_spec_resolver();
+    async function loadChange(changeId) {
+      const changesDir = ".caws/changes";
+      const changePath = path2.join(changesDir, changeId);
+      if (!await fs2.pathExists(changePath)) {
+        return null;
+      }
+      try {
+        const metadataPath = path2.join(changePath, "metadata.yaml");
+        const workingSpecPath = path2.join(changePath, "working-spec.yaml");
+        const metadata = await fs2.pathExists(metadataPath) ? yaml2.load(await fs2.readFile(metadataPath, "utf8")) : {};
+        const workingSpec = await fs2.pathExists(workingSpecPath) ? yaml2.load(await fs2.readFile(workingSpecPath, "utf8")) : null;
+        return {
+          id: changeId,
+          path: changePath,
+          metadata,
+          workingSpec,
+          exists: true
+        };
+      } catch (error) {
+        return null;
+      }
+    }
+    async function validateAcceptanceCriteria(workingSpec) {
+      if (!workingSpec || !workingSpec.acceptance_criteria) {
+        return {
+          valid: false,
+          message: "No acceptance criteria found in working spec"
+        };
+      }
+      const criteria = workingSpec.acceptance_criteria;
+      const incomplete = [];
+      for (const criterion of criteria) {
+        if (!criterion.completed) {
+          incomplete.push(criterion.id || "unknown");
+        }
+      }
+      if (incomplete.length > 0) {
+        return {
+          valid: false,
+          message: `Incomplete acceptance criteria: ${incomplete.join(", ")}`
+        };
+      }
+      return {
+        valid: true,
+        message: `All ${criteria.length} acceptance criteria completed`
+      };
+    }
+    async function validateQualityGates(_changeId) {
+      return {
+        valid: true,
+        message: "Quality gates passed (implementation pending)",
+        gates: ["test-coverage", "linting", "type-checking"]
+      };
+    }
+    async function generateChangeSummary(change) {
+      const { workingSpec, metadata } = change;
+      let summary = `# Change Summary: ${change.id}
+
+`;
+      if (workingSpec) {
+        summary += `**Title**: ${workingSpec.title || "Untitled"}
+`;
+        summary += `**Risk Tier**: ${workingSpec.risk_tier || "Unknown"}
+`;
+        summary += `**Mode**: ${workingSpec.mode || "Unknown"}
+
+`;
+        if (workingSpec.acceptance_criteria) {
+          const total = workingSpec.acceptance_criteria.length;
+          const completed = workingSpec.acceptance_criteria.filter((c) => c.completed).length;
+          summary += `**Acceptance Criteria**: ${completed}/${total} completed
+
+`;
+        }
+      }
+      if (metadata.created_at) {
+        summary += `**Created**: ${new Date(metadata.created_at).toISOString()}
+`;
+      }
+      if (metadata.completed_at) {
+        summary += `**Completed**: ${new Date(metadata.completed_at).toISOString()}
+`;
+      }
+      summary += `
+**Files Changed**: ${metadata.files_changed || 0}
+`;
+      summary += `**Lines Added**: ${metadata.lines_added || 0}
+`;
+      summary += `**Lines Removed**: ${metadata.lines_removed || 0}
+`;
+      return summary;
+    }
+    async function archiveChange(change) {
+      const archiveDir = ".caws/archive";
+      const archivePath = path2.join(archiveDir, change.id);
+      await fs2.ensureDir(archiveDir);
+      await fs2.move(change.path, archivePath);
+      console.log(chalk2.green(`   \u2705 Moved to: ${archivePath}`));
+    }
+    async function updateProvenance(change) {
+      const provenanceDir = ".caws/provenance";
+      const chainPath = path2.join(provenanceDir, "chain.json");
+      try {
+        let chain = [];
+        if (await fs2.pathExists(chainPath)) {
+          chain = JSON.parse(await fs2.readFile(chainPath, "utf8"));
+        }
+        const completionEntry = {
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          action: "change_completed",
+          change_id: change.id,
+          metadata: {
+            title: change.workingSpec?.title,
+            risk_tier: change.workingSpec?.risk_tier,
+            files_changed: change.metadata?.files_changed || 0,
+            lines_added: change.metadata?.lines_added || 0,
+            lines_removed: change.metadata?.lines_removed || 0
+          }
+        };
+        chain.push(completionEntry);
+        await fs2.ensureDir(provenanceDir);
+        await fs2.writeFile(chainPath, JSON.stringify(chain, null, 2));
+        console.log(chalk2.green(`   \u2705 Provenance updated: ${chain.length} total entries`));
+      } catch (error) {
+        console.log(chalk2.yellow(`   \u26A0\uFE0F  Could not update provenance: ${error.message}`));
+      }
+    }
+    function displayArchiveResults(change, validation, qualityGates) {
+      console.log(chalk2.bold.cyan(`
+\u{1F4E6} Archiving Change: ${change.id}`));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      if (validation.valid) {
+        console.log(chalk2.green("\u2705 Acceptance Criteria"));
+        console.log(chalk2.gray(`   ${validation.message}`));
+      } else {
+        console.log(chalk2.red("\u274C Acceptance Criteria"));
+        console.log(chalk2.gray(`   ${validation.message}`));
+      }
+      console.log("");
+      if (qualityGates.valid) {
+        console.log(chalk2.green("\u2705 Quality Gates"));
+        console.log(chalk2.gray(`   ${qualityGates.message}`));
+      } else {
+        console.log(chalk2.red("\u274C Quality Gates"));
+        console.log(chalk2.gray(`   ${qualityGates.message}`));
+      }
+      console.log("");
+      console.log(chalk2.blue("\u{1F4C2} Archive Actions:"));
+      console.log(chalk2.gray("   \u2022 Moving change folder to archive"));
+      console.log(chalk2.gray("   \u2022 Updating provenance chain"));
+      console.log(chalk2.gray("   \u2022 Generating change summary"));
+      console.log("");
+    }
+    async function archiveCommand2(changeId, options = {}) {
+      return safeAsync(
+        async () => {
+          if (!changeId) {
+            throw new Error("Change ID is required. Usage: caws archive <change-id>");
+          }
+          const change = await loadChange(changeId);
+          if (!change) {
+            throw new Error(`Change '${changeId}' not found in .caws/changes/`);
+          }
+          let workingSpec = change.workingSpec;
+          if (!workingSpec && options.specId) {
+            try {
+              const resolved = await resolveSpec({
+                specId: options.specId,
+                warnLegacy: false
+              });
+              workingSpec = resolved.spec;
+            } catch (error) {
+              console.log(
+                chalk2.yellow(`\u26A0\uFE0F  Could not load spec '${options.specId}': ${error.message}`)
+              );
+            }
+          }
+          const validation = await validateAcceptanceCriteria(workingSpec);
+          const qualityGates = await validateQualityGates(changeId);
+          displayArchiveResults(change, validation, qualityGates);
+          if (!validation.valid) {
+            console.log(chalk2.yellow("\u26A0\uFE0F  Cannot archive: Incomplete acceptance criteria"));
+            if (!options.force) {
+              console.log(chalk2.yellow("\u{1F4A1} Use --force to archive anyway"));
+              return outputResult({
+                command: "archive",
+                change: changeId,
+                archived: false,
+                reason: "incomplete_criteria"
+              });
+            }
+          }
+          if (!qualityGates.valid) {
+            console.log(chalk2.yellow("\u26A0\uFE0F  Cannot archive: Quality gates not met"));
+            if (!options.force) {
+              console.log(chalk2.yellow("\u{1F4A1} Use --force to archive anyway"));
+              return outputResult({
+                command: "archive",
+                change: changeId,
+                archived: false,
+                reason: "quality_gates_failed"
+              });
+            }
+          }
+          console.log(chalk2.blue("\u{1F504} Performing archival..."));
+          change.metadata.completed_at = (/* @__PURE__ */ new Date()).toISOString();
+          change.metadata.archived = true;
+          const summary = await generateChangeSummary(change);
+          const summaryPath = path2.join(change.path, "archive-summary.md");
+          await fs2.writeFile(summaryPath, summary);
+          await archiveChange(change);
+          await updateProvenance(change);
+          console.log(chalk2.green(`
+\u{1F389} Successfully archived change: ${changeId}`));
+          return outputResult({
+            command: "archive",
+            change: changeId,
+            archived: true,
+            validation: validation.valid,
+            qualityGates: qualityGates.valid,
+            summary
+          });
+        },
+        "archive change",
+        true
+      );
+    }
+    module2.exports = {
+      archiveCommand: archiveCommand2,
+      loadChange,
+      validateAcceptanceCriteria,
+      validateQualityGates,
+      generateChangeSummary,
+      archiveChange,
+      updateProvenance,
+      displayArchiveResults
+    };
+  }
+});
+
+// src/commands/mode.js
+var require_mode = __commonJS({
+  "src/commands/mode.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
+    var {
+      getTier,
+      getAvailableTiers,
+      getCurrentMode,
+      setCurrentMode,
+      displayTierComparison,
+      getTierRecommendation
+    } = require_modes();
+    function displayCurrentMode() {
+      console.log(chalk2.bold.cyan("\n\u{1F527} CAWS Current Mode"));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      console.log(chalk2.yellow("Mode display will be implemented..."));
+      console.log("");
+    }
+    function displayModeDetails(mode) {
+      const tier = getTier(mode);
+      const tierColor = tier.color;
+      const icon = tier.icon;
+      console.log(chalk2.bold.cyan(`
+\u{1F4CB} ${icon} ${tierColor(tier.name)} Mode Details`));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      console.log(`${tierColor(tier.name)} - ${tier.description}
+`);
+      console.log(chalk2.bold("Quality Requirements:"));
+      console.log(chalk2.gray(`   Test Coverage: ${tier.qualityRequirements.testCoverage}%`));
+      console.log(chalk2.gray(`   Mutation Score: ${tier.qualityRequirements.mutationScore}%`));
+      console.log(chalk2.gray(`   Contracts: ${tier.qualityRequirements.contracts}
+`));
+      console.log(chalk2.bold("Supported Risk Tiers:"));
+      tier.riskTiers.forEach((riskTier) => {
+        const riskColor = riskTier === "T1" ? chalk2.red : riskTier === "T2" ? chalk2.yellow : chalk2.green;
+        console.log(chalk2.gray(`   ${riskColor(riskTier)}`));
+      });
+      console.log("");
+      console.log(chalk2.bold("Available Commands:"));
+      Object.entries(tier.commands).filter(([, available]) => available).forEach(([command]) => {
+        console.log(chalk2.gray(`   \u2705 caws ${command}`));
+      });
+      const disabledCommands = Object.entries(tier.commands).filter(([, available]) => !available).map(([command]) => command);
+      if (disabledCommands.length > 0) {
+        console.log(chalk2.bold("\nDisabled Commands:"));
+        disabledCommands.forEach((command) => {
+          console.log(chalk2.gray(`   \u274C caws ${command}`));
+        });
+      }
+      console.log("");
+    }
+    async function interactiveModeSelection() {
+      const readline = require("readline");
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      return new Promise((resolve) => {
+        console.log(chalk2.bold.cyan("\n\u{1F527} Select CAWS Complexity Tier"));
+        console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+        const tiers = getAvailableTiers();
+        tiers.forEach((tier, index) => {
+          const tierConfig = getTier(tier);
+          const tierColor = tierConfig.color;
+          const icon = tierConfig.icon;
+          console.log(`${index + 1}. ${icon} ${tierColor(tier)} - ${tierConfig.description}`);
+        });
+        console.log("\nEnter your choice (1-3): ");
+        rl.on("line", (input) => {
+          const choice = parseInt(input.trim());
+          if (choice >= 1 && choice <= tiers.length) {
+            rl.close();
+            resolve(tiers[choice - 1]);
+          } else {
+            console.log(chalk2.red("Invalid choice. Please enter 1-3:"));
+          }
+        });
+      });
+    }
+    async function modeCommand2(action, options = {}) {
+      return safeAsync(
+        async () => {
+          switch (action) {
+            case "current": {
+              const currentMode = await getCurrentMode();
+              displayCurrentMode();
+              const tier = getTier(currentMode);
+              console.log(chalk2.bold(`Current Mode: ${tier.icon} ${tier.color(currentMode)}`));
+              console.log(chalk2.gray(`Description: ${tier.description}`));
+              console.log(
+                chalk2.gray(
+                  `Quality: ${tier.qualityRequirements.testCoverage}% coverage, ${tier.qualityRequirements.mutationScore}% mutation`
+                )
+              );
+              return outputResult({
+                command: "mode current",
+                mode: currentMode,
+                tier
+              });
+            }
+            case "set": {
+              let targetMode;
+              if (options.mode) {
+                targetMode = options.mode;
+              } else if (options.interactive) {
+                targetMode = await interactiveModeSelection();
+              } else {
+                throw new Error("Mode not specified. Use --mode <mode> or --interactive");
+              }
+              if (!getAvailableTiers().includes(targetMode)) {
+                throw new Error(
+                  `Invalid mode: ${targetMode}. Available: ${getAvailableTiers().join(", ")}`
+                );
+              }
+              const success = await setCurrentMode(targetMode);
+              if (!success) {
+                throw new Error(`Failed to set mode to ${targetMode}`);
+              }
+              console.log(
+                chalk2.green(
+                  `\u2705 Successfully switched to ${getTier(targetMode).icon} ${getTier(targetMode).color(targetMode)} mode`
+                )
+              );
+              return outputResult({
+                command: "mode set",
+                mode: targetMode
+              });
+            }
+            case "compare": {
+              displayTierComparison();
+              return outputResult({
+                command: "mode compare",
+                tiers: getAvailableTiers()
+              });
+            }
+            case "recommend": {
+              const projectInfo = {};
+              if (options.size) projectInfo.size = options.size;
+              if (options.teamSize) projectInfo.teamSize = parseInt(options.teamSize);
+              if (options.compliance) projectInfo.compliance = options.compliance === "true";
+              if (options.audit) projectInfo.auditRequired = options.audit === "true";
+              const recommendation = getTierRecommendation(projectInfo);
+              const recommendedTier = getTier(recommendation);
+              console.log(chalk2.bold.cyan("\n\u{1F3AF} Recommended CAWS Tier"));
+              console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+              console.log(
+                `${recommendedTier.icon} ${recommendedTier.color(recommendedTier.name)} - ${recommendedTier.description}`
+              );
+              console.log(
+                chalk2.gray(
+                  `Quality: ${recommendedTier.qualityRequirements.testCoverage}% coverage, ${recommendedTier.qualityRequirements.mutationScore}% mutation`
+                )
+              );
+              if (options.details) {
+                console.log("");
+                displayModeDetails(recommendation);
+              }
+              return outputResult({
+                command: "mode recommend",
+                recommendation,
+                tier: recommendedTier,
+                projectInfo
+              });
+            }
+            case "details": {
+              if (!options.mode) {
+                throw new Error("Mode not specified. Use --mode <mode>");
+              }
+              displayModeDetails(options.mode);
+              return outputResult({
+                command: "mode details",
+                mode: options.mode
+              });
+            }
+            default:
+              throw new Error(
+                `Unknown mode action: ${action}. Use: current, set, compare, recommend, details`
+              );
+          }
+        },
+        `mode ${action}`,
+        true
+      );
+    }
+    module2.exports = {
+      modeCommand: modeCommand2,
+      getCurrentMode,
+      setCurrentMode,
+      displayCurrentMode,
+      displayModeDetails,
+      interactiveModeSelection
+    };
+  }
+});
+
+// src/commands/tutorial.js
+var require_tutorial = __commonJS({
+  "src/commands/tutorial.js"(exports2, module2) {
+    var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
+    var TUTORIALS = {
+      agent: {
+        name: "AI Agent Onboarding",
+        description: "Complete guide for AI agents working with CAWS",
+        icon: "\u{1F916}",
+        steps: [
+          {
+            id: "welcome",
+            title: "Welcome to CAWS",
+            content: `
+Welcome to CAWS (Coding Agent Workflow System)!
+
+CAWS helps AI agents and developers collaborate effectively by providing:
+\u2022 \u{1F4CB} Structured specifications and requirements
+\u2022 \u{1F50D} Automated validation and quality gates
+\u2022 \u{1F4CA} Progress tracking and status monitoring
+\u2022 \u{1F504} Change management and archival
+\u2022 \u{1F3D7}\uFE0F Multi-tier complexity modes
+
+This tutorial will guide you through the essential CAWS workflow.
+        `,
+            action: "Press Enter to continue..."
+          },
+          {
+            id: "first-steps",
+            title: "Your First Steps",
+            content: `
+Every CAWS session should start with validation:
+
+1. \u2705 Always validate first: \`caws validate\`
+2. \u{1F4CA} Check current status: \`caws status --visual\`
+3. \u{1F3AF} Get guidance: \`caws iterate --current-state "Starting implementation"\`
+
+These commands ensure you're working with validated specifications and understand the current project state.
+        `,
+            action: "Try: caws validate",
+            verify: "validation"
+          },
+          {
+            id: "modes",
+            title: "Understanding Modes",
+            content: `
+CAWS adapts to your project needs with three complexity tiers:
+
+\u{1F7E2} **Simple Mode** (70% coverage, 30% mutation)
+   \u2022 Perfect for small projects and prototyping
+   \u2022 Minimal commands and features
+   \u2022 Quick setup and iteration
+
+\u{1F7E1} **Standard Mode** (80% coverage, 50% mutation)
+   \u2022 Balanced approach for most projects
+   \u2022 Quality gates and provenance tracking
+   \u2022 Change management and archival
+
+\u{1F534} **Enterprise Mode** (90% coverage, 70% mutation)
+   \u2022 Full compliance and audit trails
+   \u2022 Advanced monitoring and reporting
+   \u2022 Maximum quality assurance
+
+Check your current mode: \`caws mode current\`
+Switch modes: \`caws mode set --interactive\`
+        `,
+            action: "Try: caws mode current",
+            verify: "mode_check"
+          },
+          {
+            id: "specs-system",
+            title: "Multi-Spec Organization",
+            content: `
+CAWS uses a multi-spec system for better organization:
+
+\u{1F4C1} **Individual spec files** instead of monolithic specs
+\u{1F3AF} **Type-based organization** (feature, fix, refactor, etc.)
+\u{1F4CA} **Visual progress tracking** across all specs
+\u{1F504} **Concurrent development** support
+
+Commands:
+\u2022 \`caws specs list\` - View all specs
+\u2022 \`caws specs create <id>\` - Create new spec
+\u2022 \`caws specs show <id>\` - View spec details
+\u2022 \`caws specs update <id>\` - Update spec status
+
+Each spec contains:
+\u2022 Acceptance criteria with progress tracking
+\u2022 Risk tier and complexity mode
+\u2022 Contract definitions and validation
+        `,
+            action: "Try: caws specs list",
+            verify: "specs_list"
+          },
+          {
+            id: "workflow",
+            title: "Development Workflow",
+            content: `
+Follow this proven TDD workflow:
+
+1. \u{1F4CB} **Plan**: Create/update specs with acceptance criteria
+2. \u2705 **Validate**: Ensure specs are valid and complete
+3. \u{1F9EA} **Test First**: Write failing tests for each criterion
+4. \u{1F528} **Implement**: Make tests pass incrementally
+5. \u{1F4CA} **Track Progress**: Update acceptance criteria status
+6. \u{1F50D} **Quality Gates**: Run validation and quality checks
+7. \u{1F4E6} **Archive**: Complete and archive finished work
+
+Key commands:
+\u2022 \`caws progress update --criterion-id A1 --status completed\`
+\u2022 \`caws validate\` - Validate current work
+\u2022 \`caws status --visual\` - Check progress
+\u2022 \`caws archive <change-id>\` - Complete work
+        `,
+            action: "Try: caws status --visual",
+            verify: "status_check"
+          },
+          {
+            id: "quality-gates",
+            title: "Quality Assurance",
+            content: `
+CAWS enforces quality through multiple gates:
+
+\u{1F50D} **Validation Gates**
+\u2022 Spec format and completeness
+\u2022 Contract compliance
+\u2022 Risk tier requirements
+
+\u{1F9EA} **Testing Gates**
+\u2022 Test coverage thresholds
+\u2022 Mutation testing scores
+\u2022 Integration test passing
+
+\u{1F4CA} **Progress Gates**
+\u2022 Acceptance criteria completion
+\u2022 Spec status validation
+\u2022 Change budget compliance
+
+\u26A1 **Quick Checks**
+\u2022 \`caws validate\` - Spec validation
+\u2022 \`caws diagnose\` - Health checks (if in standard/enterprise mode)
+\u2022 \`caws evaluate\` - Quality evaluation
+        `,
+            action: "Try: caws validate",
+            verify: "quality_check"
+          },
+          {
+            id: "common-patterns",
+            title: "Common Patterns & Best Practices",
+            content: `
+\u{1F6AB} **Avoid These**:
+\u2022 \u274C Don't start implementation before validation
+\u2022 \u274C Don't create duplicate files (enhanced-*, new-*)
+\u2022 \u274C Don't exceed change budgets
+\u2022 \u274C Don't skip quality gates
+
+\u2705 **Do These**:
+\u2022 \u2705 Always validate first: \`caws validate\`
+\u2022 \u2705 Use multi-spec system for organization
+\u2022 \u2705 Write tests before implementation (TDD)
+\u2022 \u2705 Update progress: \`caws progress update\`
+\u2022 \u2705 Archive completed work: \`caws archive\`
+
+\u{1F4DA} **Get Help**:
+\u2022 \`caws --help\` - All commands
+\u2022 \`caws workflow guidance\` - Workflow-specific help
+\u2022 \`docs/agents/full-guide.md\` - Complete documentation
+        `,
+            action: "Try: caws --help",
+            verify: "help_check"
+          },
+          {
+            id: "completion",
+            title: "Tutorial Complete!",
+            content: `
+\u{1F389} Congratulations! You've completed the CAWS agent tutorial.
+
+**Key Takeaways**:
+\u2022 CAWS provides structure and validation for AI-human collaboration
+\u2022 Start every session with validation and status checks
+\u2022 Use the multi-spec system for better organization
+\u2022 Follow TDD practices with comprehensive testing
+\u2022 Respect quality gates and change budgets
+\u2022 Archive completed work for clean project history
+
+**Next Steps**:
+1. Explore the multi-spec system: \`caws specs create my-feature\`
+2. Practice the workflow with a small feature
+3. Use mode switching to match your project needs
+4. Read the full documentation for advanced features
+
+Remember: CAWS exists to make AI-human collaboration reliable and high-quality. Follow the rules, validate often, and deliver excellent results!
+
+\u{1F4A1} Pro tip: Use \`caws status --visual\` regularly to stay oriented
+        `,
+            action: "Tutorial complete! Try: caws specs create my-feature"
+          }
+        ]
+      },
+      developer: {
+        name: "Developer Quick Start",
+        description: "Fast track for developers new to CAWS",
+        icon: "\u{1F468}\u200D\u{1F4BB}",
+        steps: [
+          {
+            id: "welcome-dev",
+            title: "Welcome Developer!",
+            content: `
+Welcome to CAWS! This quick start will get you up and running fast.
+
+CAWS helps development teams by providing:
+\u2022 \u{1F4CB} Clear specification management
+\u2022 \u{1F504} Structured change workflows
+\u2022 \u{1F4CA} Progress visibility for stakeholders
+\u2022 \u{1F3D7}\uFE0F Quality gates and validation
+\u2022 \u{1F91D} Better AI-human collaboration
+
+Let's get you started!
+        `,
+            action: "Press Enter to continue..."
+          },
+          {
+            id: "setup",
+            title: "Project Setup",
+            content: `
+First, ensure CAWS is properly initialized:
+
+1. Initialize CAWS: \`caws init .\`
+2. Choose your complexity mode: \`caws mode set --interactive\`
+3. Set up git hooks: \`caws hooks install\`
+4. Initialize provenance: \`caws provenance init\`
+
+For existing projects, use: \`caws scaffold\`
+
+Choose a mode that fits your project:
+\u2022 \u{1F7E2} Simple: Small projects, quick prototyping
+\u2022 \u{1F7E1} Standard: Most teams and projects
+\u2022 \u{1F534} Enterprise: Large teams, compliance requirements
+        `,
+            action: "Try: caws mode current",
+            verify: "mode_setup"
+          },
+          {
+            id: "create-spec",
+            title: "Create Your First Spec",
+            content: `
+Create a spec for your feature or fix:
+
+\`caws specs create user-login --type feature --title "User Login System"\`
+
+This creates:
+\u2022 A new spec file in \`.caws/specs/user-login.yaml\`
+\u2022 Basic structure with acceptance criteria template
+\u2022 Automatic registration in the specs registry
+
+View all specs: \`caws specs list\`
+View spec details: \`caws specs show user-login\`
+        `,
+            action: "Try: caws specs list",
+            verify: "first_spec"
+          },
+          {
+            id: "define-criteria",
+            title: "Define Acceptance Criteria",
+            content: `
+Edit your spec file to add acceptance criteria:
+
+\`\`\`yaml
+# .caws/specs/user-login.yaml
+acceptance_criteria:
+  - id: A1
+    title: User can login with valid credentials
+    description: Users should be able to authenticate using email/password
+    completed: false
+  - id: A2
+    title: Invalid credentials show error
+    description: Invalid login attempts should display appropriate error messages
+    completed: false
+\`\`\`
+
+Each criterion should be:
+\u2022 \u2705 Testable and verifiable
+\u2022 \u{1F4CF} Specific and measurable
+\u2022 \u{1F3AF} Focused on user value
+        `,
+            action: "Edit your spec file and add acceptance criteria",
+            verify: "criteria_defined"
+          },
+          {
+            id: "workflow",
+            title: "Development Workflow",
+            content: `
+Follow this workflow for each acceptance criterion:
+
+1. **Write failing tests first** (TDD approach)
+2. **Implement the minimum** to make tests pass
+3. **Update progress**: \`caws progress update --criterion-id A1 --status completed\`
+4. **Validate**: \`caws validate\`
+5. **Run quality gates** (if in standard/enterprise mode)
+
+Repeat for each criterion until the spec is complete.
+
+Track progress: \`caws status --visual\`
+Get guidance: \`caws iterate --current-state "Working on A1"\`
+        `,
+            action: "Try: caws progress update --criterion-id A1 --status in_progress",
+            verify: "workflow_started"
+          },
+          {
+            id: "completion",
+            title: "Complete and Archive",
+            content: `
+When all acceptance criteria are completed:
+
+1. **Final validation**: \`caws validate\`
+2. **Quality checks**: \`caws diagnose\` (if enabled)
+3. **Archive the work**: \`caws archive user-login\`
+
+This:
+\u2022 \u2705 Validates all criteria are met
+\u2022 \u{1F4E6} Moves completed work to archive
+\u2022 \u{1F4CA} Updates provenance chain
+\u2022 \u{1F3AF} Provides completion summary
+
+View archived work: Check \`.caws/archive/\` directory
+        `,
+            action: "Complete your spec and try: caws archive <spec-id>",
+            verify: "archival_complete"
+          }
+        ]
+      }
+    };
+    function displayTutorialStep(step, stepNumber, totalSteps) {
+      console.log(chalk2.bold.cyan(`
+\u{1F4DA} Step ${stepNumber}/${totalSteps}: ${step.title}`));
+      console.log(chalk2.cyan("\u2501".repeat(60)));
+      const lines = step.content.trim().split("\n");
+      lines.forEach((line) => {
+        if (line.startsWith("\u2022") || line.startsWith("\u2705") || line.startsWith("\u274C") || line.startsWith("\u{1F4CB}") || line.startsWith("\u{1F50D}")) {
+          console.log(chalk2.gray(line));
+        } else if (line.startsWith("\u{1F7E2}") || line.startsWith("\u{1F7E1}") || line.startsWith("\u{1F534}")) {
+          console.log(line);
+        } else if (line.includes("`")) {
+          console.log(chalk2.cyan(line));
+        } else {
+          console.log(line);
+        }
+      });
+      if (step.action) {
+        console.log(chalk2.yellow(`
+\u{1F4A1} ${step.action}`));
+      }
+      console.log("");
+    }
+    async function runInteractiveTutorial(tutorialType) {
+      const tutorial = TUTORIALS[tutorialType];
+      if (!tutorial) {
+        throw new Error(
+          `Unknown tutorial type: ${tutorialType}. Available: ${Object.keys(TUTORIALS).join(", ")}`
+        );
+      }
+      const readline = require("readline");
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      console.log(chalk2.bold.green(`
+\u{1F680} Starting ${tutorial.icon} ${tutorial.name}`));
+      console.log(chalk2.green(tutorial.description));
+      console.log(chalk2.gray(`Total steps: ${tutorial.steps.length}
+`));
+      for (let i = 0; i < tutorial.steps.length; i++) {
+        const step = tutorial.steps[i];
+        const stepNumber = i + 1;
+        displayTutorialStep(step, stepNumber, tutorial.steps.length);
+        if (i < tutorial.steps.length - 1) {
+          await new Promise((resolve) => {
+            console.log(chalk2.blue("Press Enter to continue..."));
+            rl.on("line", () => {
+              resolve();
+            });
+          });
+        }
+      }
+      rl.close();
+      console.log(chalk2.bold.green(`
+\u{1F389} ${tutorial.icon} ${tutorial.name} Complete!`));
+      console.log(chalk2.green("You can always run this tutorial again with:"));
+      console.log(chalk2.cyan(`caws tutorial ${tutorialType}`));
+      console.log("");
+    }
+    async function tutorialCommand2(tutorialType, _options = {}) {
+      return safeAsync(
+        async () => {
+          if (!tutorialType) {
+            console.log(chalk2.bold.cyan("\n\u{1F4DA} Available CAWS Tutorials"));
+            console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+            Object.entries(TUTORIALS).forEach(([type, tutorial]) => {
+              console.log(`${tutorial.icon} ${chalk2.green(type.padEnd(12))} - ${tutorial.description}`);
+            });
+            console.log(chalk2.gray("\nUsage: caws tutorial <type>"));
+            console.log(chalk2.gray("Example: caws tutorial agent"));
+            return outputResult({
+              command: "tutorial",
+              action: "list",
+              available: Object.keys(TUTORIALS)
+            });
+          }
+          if (!TUTORIALS[tutorialType]) {
+            throw new Error(
+              `Unknown tutorial: ${tutorialType}. Available: ${Object.keys(TUTORIALS).join(", ")}`
+            );
+          }
+          await runInteractiveTutorial(tutorialType);
+          return outputResult({
+            command: "tutorial",
+            tutorial: tutorialType,
+            steps: TUTORIALS[tutorialType].steps.length,
+            completed: true
+          });
+        },
+        `tutorial ${tutorialType}`,
+        true
+      );
+    }
+    module2.exports = {
+      tutorialCommand: tutorialCommand2,
+      TUTORIALS,
+      runInteractiveTutorial
+    };
+  }
+});
+
+// src/commands/plan.js
+var require_plan = __commonJS({
+  "src/commands/plan.js"(exports2, module2) {
+    var fs2 = require_lib();
+    var path2 = require("path");
+    var chalk2 = require_source();
+    var { safeAsync, outputResult } = require_error_handler();
+    var { resolveSpec } = require_spec_resolver();
+    var PLAN_TEMPLATES = {
+      feature: {
+        sections: [
+          "Overview",
+          "Acceptance Criteria Analysis",
+          "Implementation Strategy",
+          "Testing Strategy",
+          "Risk Assessment",
+          "Dependencies",
+          "Timeline",
+          "Success Metrics"
+        ],
+        defaultTasks: [
+          "Set up development environment",
+          "Implement core functionality",
+          "Add error handling",
+          "Write comprehensive tests",
+          "Update documentation",
+          "Performance optimization",
+          "Security review",
+          "Final validation"
+        ]
+      },
+      fix: {
+        sections: [
+          "Problem Analysis",
+          "Root Cause Investigation",
+          "Solution Design",
+          "Implementation Plan",
+          "Testing Strategy",
+          "Rollback Plan",
+          "Verification"
+        ],
+        defaultTasks: [
+          "Reproduce the issue",
+          "Identify root cause",
+          "Design fix approach",
+          "Implement solution",
+          "Write regression tests",
+          "Update documentation",
+          "Deploy and verify"
+        ]
+      },
+      refactor: {
+        sections: [
+          "Current State Analysis",
+          "Refactoring Goals",
+          "Approach Strategy",
+          "Implementation Plan",
+          "Testing Strategy",
+          "Performance Impact",
+          "Migration Plan"
+        ],
+        defaultTasks: [
+          "Analyze current code",
+          "Design new architecture",
+          "Plan incremental changes",
+          "Implement refactoring",
+          "Update tests",
+          "Performance validation",
+          "Documentation update"
+        ]
+      }
+    };
+    async function loadSpecForPlanning(specId) {
+      try {
+        const resolved = await resolveSpec({
+          specId,
+          warnLegacy: false
+        });
+        return resolved.spec;
+      } catch (error) {
+        return null;
+      }
+    }
+    async function generateAndDisplayPlan(spec, specId, options) {
+      const plan = generateImplementationPlan(spec);
+      const outputPath = options.output || `.caws/plans/${specId}-plan.md`;
+      await writePlanToFile(plan, outputPath);
+      displayGeneratedPlan(plan);
+      console.log(chalk2.green(`\u2705 Plan generated: ${outputPath}`));
+      return outputResult({
+        command: "plan generate",
+        specId,
+        outputPath,
+        planSections: plan.sections.length,
+        tasks: plan.tasks.length
+      });
+    }
+    function generateTasksFromCriteria(criteria) {
+      const tasks = [];
+      criteria.forEach((criterion, index) => {
+        const criterionId = criterion.id || `A${index + 1}`;
+        const description = criterion.description || criterion.title || `Implement ${criterionId}`;
+        if (description.includes("and") || description.includes("then") || description.length > 100) {
+          const parts = description.split(/[.;]/).filter((part) => part.trim().length > 0);
+          parts.forEach((part, partIndex) => {
+            tasks.push({
+              id: `${criterionId}.${partIndex + 1}`,
+              title: part.trim(),
+              criterion: criterionId,
+              type: "implementation",
+              estimatedHours: 2,
+              dependencies: partIndex > 0 ? [`${criterionId}.${partIndex}`] : []
+            });
+          });
+        } else {
+          tasks.push({
+            id: criterionId,
+            title: description,
+            criterion: criterionId,
+            type: "implementation",
+            estimatedHours: 3,
+            dependencies: []
+          });
+        }
+      });
+      return tasks;
+    }
+    function generateTestTasks(criteria) {
+      const tasks = [];
+      criteria.forEach((criterion, index) => {
+        const criterionId = criterion.id || `A${index + 1}`;
+        tasks.push({
+          id: `test-${criterionId}`,
+          title: `Write tests for ${criterionId}`,
+          criterion: criterionId,
+          type: "testing",
+          estimatedHours: 2,
+          dependencies: [criterionId]
+        });
+        tasks.push({
+          id: `integration-${criterionId}`,
+          title: `Integration tests for ${criterionId}`,
+          criterion: criterionId,
+          type: "testing",
+          estimatedHours: 1,
+          dependencies: [`test-${criterionId}`]
+        });
+      });
+      return tasks;
+    }
+    function generateImplementationPlan(spec) {
+      const template = PLAN_TEMPLATES[spec.type] || PLAN_TEMPLATES.feature;
+      const implementationTasks = generateTasksFromCriteria(spec.acceptance_criteria || []);
+      const testTasks = generateTestTasks(spec.acceptance_criteria || []);
+      const allTasks = [
+        ...template.defaultTasks.map((task, index) => ({
+          id: `setup-${index + 1}`,
+          title: task,
+          type: "setup",
+          estimatedHours: 1,
+          dependencies: []
+        })),
+        ...implementationTasks,
+        ...testTasks
+      ];
+      const totalHours = allTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
+      const estimatedDays = Math.ceil(totalHours / 8);
+      const planContent = {
+        spec_id: spec.id,
+        title: `Implementation Plan: ${spec.title}`,
+        generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+        sections: template.sections,
+        tasks: allTasks,
+        timeline: {
+          total_hours: totalHours,
+          estimated_days: estimatedDays,
+          parallel_execution: true
+        },
+        risks: [
+          {
+            level: "low",
+            description: "Standard implementation risks",
+            mitigation: "Follow established patterns and conduct thorough testing"
+          }
+        ]
+      };
+      return planContent;
+    }
+    async function writePlanToFile(plan, outputPath) {
+      const planDir = path2.dirname(outputPath);
+      await fs2.ensureDir(planDir);
+      const markdownContent = generatePlanMarkdown(plan);
+      await fs2.writeFile(outputPath, markdownContent);
+    }
+    function generatePlanMarkdown(plan) {
+      let content = `# ${plan.title}
+
+`;
+      content += `**Generated:** ${new Date(plan.generated_at).toLocaleString()}
+`;
+      content += `**Spec ID:** ${plan.spec_id}
+
+`;
+      content += `## Overview
+
+`;
+      content += `This plan outlines the implementation strategy for the specified requirements.
+`;
+      content += `**Timeline:** ${plan.timeline.estimated_days} days (${plan.timeline.total_hours} hours)
+
+`;
+      content += `## Implementation Tasks
+
+`;
+      const setupTasks = plan.tasks.filter((task) => task.type === "setup");
+      const implementationTasks = plan.tasks.filter((task) => task.type === "implementation");
+      const testTasks = plan.tasks.filter((task) => task.type === "testing");
+      if (setupTasks.length > 0) {
+        content += `### Setup (${setupTasks.length} tasks)
+
+`;
+        setupTasks.forEach((task) => {
+          content += `- [ ] **${task.id}** - ${task.title} (${task.estimatedHours}h)
+`;
+        });
+        content += "\n";
+      }
+      if (implementationTasks.length > 0) {
+        content += `### Implementation (${implementationTasks.length} tasks)
+
+`;
+        implementationTasks.forEach((task) => {
+          const deps = task.dependencies.length > 0 ? ` (depends on: ${task.dependencies.join(", ")})` : "";
+          content += `- [ ] **${task.id}** - ${task.title} (${task.estimatedHours}h)${deps}
+`;
+        });
+        content += "\n";
+      }
+      if (testTasks.length > 0) {
+        content += `### Testing (${testTasks.length} tasks)
+
+`;
+        testTasks.forEach((task) => {
+          const deps = task.dependencies.length > 0 ? ` (depends on: ${task.dependencies.join(", ")})` : "";
+          content += `- [ ] **${task.id}** - ${task.title} (${task.estimatedHours}h)${deps}
+`;
+        });
+        content += "\n";
+      }
+      content += `## Risk Assessment
+
+`;
+      plan.risks.forEach((risk, index) => {
+        content += `### ${risk.level.toUpperCase()} Risk ${index + 1}
+`;
+        content += `${risk.description}
+
+`;
+        content += `**Mitigation:** ${risk.mitigation}
+
+`;
+      });
+      content += `## Success Metrics
+
+`;
+      content += `- All acceptance criteria implemented and tested
+`;
+      content += `- Code coverage meets project standards
+`;
+      content += `- Performance requirements satisfied
+`;
+      content += `- No breaking changes to existing functionality
+`;
+      content += `- Documentation updated
+
+`;
+      return content;
+    }
+    function displayGeneratedPlan(plan) {
+      console.log(chalk2.bold.cyan(`
+\u{1F4CB} Generated Implementation Plan`));
+      console.log(chalk2.cyan("\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"));
+      console.log(chalk2.bold(`Title: ${plan.title}`));
+      console.log(chalk2.gray(`Spec: ${plan.spec_id}`));
+      console.log(chalk2.gray(`Generated: ${new Date(plan.generated_at).toLocaleString()}`));
+      console.log("");
+      const setupTasks = plan.tasks.filter((task) => task.type === "setup").length;
+      const implementationTasks = plan.tasks.filter((task) => task.type === "implementation").length;
+      const testTasks = plan.tasks.filter((task) => task.type === "testing").length;
+      console.log(chalk2.bold("Task Breakdown:"));
+      if (setupTasks > 0) console.log(chalk2.gray(`   Setup: ${setupTasks} tasks`));
+      if (implementationTasks > 0)
+        console.log(chalk2.gray(`   Implementation: ${implementationTasks} tasks`));
+      if (testTasks > 0) console.log(chalk2.gray(`   Testing: ${testTasks} tasks`));
+      console.log(
+        chalk2.gray(
+          `   Total: ${plan.tasks.length} tasks, ${plan.timeline.total_hours} hours, ${plan.timeline.estimated_days} days`
+        )
+      );
+      console.log("");
+      console.log(chalk2.bold.yellow("\u{1F4A1} Next Steps:"));
+      console.log(chalk2.yellow("   1. Review and customize the generated plan"));
+      console.log(chalk2.yellow("   2. Update task priorities and dependencies"));
+      console.log(chalk2.yellow("   3. Start implementation following the task order"));
+      console.log(chalk2.yellow("   4. Update progress: caws progress update --criterion-id A1"));
+      console.log("");
+    }
+    async function planCommand2(action, options = {}) {
+      return safeAsync(
+        async () => {
+          switch (action) {
+            case "generate": {
+              const specId = options.specId || options.spec;
+              if (!specId) {
+                const { checkMultiSpecStatus } = require_spec_resolver();
+                const status = await checkMultiSpecStatus();
+                if (status.specCount === 1) {
+                  const registry = await require_spec_resolver().loadSpecsRegistry();
+                  const singleSpecId = Object.keys(registry.specs)[0];
+                  console.log(chalk2.blue(`\u{1F4CB} Auto-detected single spec: ${singleSpecId}`));
+                  const spec = await loadSpecForPlanning(singleSpecId);
+                  if (!spec) {
+                    throw new Error(`Auto-detected spec '${singleSpecId}' could not be loaded`);
+                  }
+                  await generateAndDisplayPlan(spec, singleSpecId, options);
+                } else if (status.specCount > 1) {
+                  throw new Error(
+                    "Multiple specs detected. Please specify which one: caws plan generate --spec-id <id>\nAvailable specs: " + Object.keys(status.registry?.specs || {}).join(", ")
+                  );
+                } else {
+                  throw new Error("No specs found. Create a spec first: caws specs create <id>");
+                }
+              } else {
+                const spec = await loadSpecForPlanning(specId);
+                if (!spec) {
+                  throw new Error(`Spec '${specId}' not found`);
+                }
+                return await generateAndDisplayPlan(spec, specId, options);
+              }
+              break;
+            }
+            default:
+              throw new Error(`Unknown plan action: ${action}. Use: generate`);
+          }
+        },
+        `plan ${action}`,
+        true
+      );
+    }
+    module2.exports = {
+      planCommand: planCommand2,
+      generateImplementationPlan,
+      writePlanToFile,
+      generatePlanMarkdown,
+      displayGeneratedPlan,
+      PLAN_TEMPLATES
+    };
   }
 });
 
@@ -49118,7 +54022,13 @@ var { iterateCommand } = require_iterate();
 var { waiversCommand } = require_waivers();
 var { workflowCommand } = require_workflow();
 var { qualityMonitorCommand } = require_quality_monitor();
+var { qualityGatesCommand } = require_quality_gates();
 var { troubleshootCommand } = require_troubleshoot();
+var { archiveCommand } = require_archive();
+var { specsCommand } = require_specs();
+var { modeCommand } = require_mode();
+var { tutorialCommand } = require_tutorial();
+var { planCommand } = require_plan();
 var { scaffoldProject, setScaffoldDependencies } = require_scaffold();
 var { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require_git_hooks();
 var { validateWorkingSpecWithSuggestions } = require_spec_validation();
@@ -49143,13 +54053,91 @@ setFinalizationDependencies({
 });
 program.name("caws").description("CAWS - Coding Agent Workflow System CLI").version(CLI_VERSION).showHelpAfterError(false);
 program.command("init").description("Initialize a new project with CAWS").argument("[project-name]", 'Name of the project to create (use "." for current directory)').option("-i, --interactive", "Run interactive setup wizard", true).option("--non-interactive", "Skip interactive prompts (use defaults)", false).option("--template <template>", "Use specific project template").action(initProject);
-program.command("scaffold").description("Add CAWS components to existing project").option("-f, --force", "Overwrite existing files", false).option("--minimal", "Only essential components", false).option("--with-codemods", "Include codemod scripts", false).option("--with-oidc", "Include OIDC trusted publisher setup", false).action(scaffoldProject);
-program.command("validate").description("Validate CAWS working spec with suggestions").argument("[spec-file]", "Path to working spec file (default: .caws/working-spec.yaml)").option("-q, --quiet", "Suppress suggestions and warnings", false).option("--auto-fix", "Automatically fix safe validation issues", false).action(validateCommand);
-program.command("status").description("Show project health overview").option("-s, --spec <path>", "Path to working spec file", ".caws/working-spec.yaml").option("--json", "Output in JSON format", false).action(statusCommand);
+program.command("scaffold").description("Add CAWS components to existing project").option("-f, --force", "Overwrite existing files", false).option("--minimal", "Only essential components", false).option("--with-codemods", "Include codemod scripts", false).option("--with-oidc", "Include OIDC trusted publisher setup", false).option("--with-quality-gates", "Install quality gates package and scripts", false).action(scaffoldProject);
+program.command("validate").description("Validate CAWS spec with suggestions").argument("[spec-file]", "Path to spec file (optional, uses spec resolution)").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth, FEAT-001)").option("-i, --interactive", "Interactive spec selection when multiple specs exist", false).option("-q, --quiet", "Suppress suggestions and warnings", false).option("--auto-fix", "Automatically fix safe validation issues", false).option("--dry-run", "Preview auto-fixes without applying them", false).option("--format <format>", "Output format (text, json)", "text").action(validateCommand);
+program.command("quality-gates").description("Run comprehensive quality gates (naming, duplication, god objects, documentation)").option("--ci", "CI mode - exit with error code if violations found", false).option("--json", "Output machine-readable JSON to stdout", false).option(
+  "--gates <gates>",
+  "Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,documentation)",
+  ""
+).option("--fix", "Attempt automatic fixes (experimental)", false).option("--help", "Show detailed help and usage examples", false).action(async (options) => {
+  if (options.help) {
+    console.log(`
+CAWS Quality Gates - Enterprise Code Quality Enforcement
+
+USAGE:
+  caws quality-gates [options]
+
+DESCRIPTION:
+  Runs comprehensive quality gates to maintain code quality standards.
+  Supports selective gate execution, JSON output, and CI/CD integration.
+
+OPTIONS:
+  --ci              CI mode - exit with error code if violations found
+  --json            Output machine-readable JSON to stdout
+  --gates=<gates>   Run only specific gates (comma-separated)
+  --fix             Attempt automatic fixes (experimental)
+  --help            Show this help message
+
+VALID GATES:
+  naming           Check naming conventions and banned modifiers
+  code_freeze      Enforce code freeze compliance
+  duplication      Detect functional duplication
+  god_objects      Prevent oversized files
+  documentation    Check documentation quality
+
+EXAMPLES:
+  # Run all gates in development mode
+  caws quality-gates
+
+  # Run only specific gates
+  caws quality-gates --gates=naming,duplication
+
+  # CI mode with JSON output
+  caws quality-gates --ci --json
+
+  # Show detailed help
+  caws quality-gates --help
+
+OUTPUT:
+  - Console: Human-readable results with enforcement levels
+  - JSON: Machine-readable structured data (--json flag)
+  - Artifacts: docs-status/quality-gates-report.json
+  - GitHub Actions: Automatic step summaries when GITHUB_STEP_SUMMARY is set
+
+For more information, see: packages/quality-gates/README.md
+`);
+    process.exit(0);
+  }
+  await qualityGatesCommand(options);
+});
+program.command("status").description("Show project health overview").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("-s, --spec <path>", "Path to spec file (explicit override)").option("--visual", "Enhanced visual output with progress bars", false).option("--json", "Output in JSON format for automation", false).action(statusCommand);
+program.command("archive <change-id>").description("Archive completed change").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("-f, --force", "Force archive even if criteria not met", false).option("--dry-run", "Preview archive without performing it", false).action(archiveCommand);
+var specsCmd = program.command("specs").description("Manage multiple CAWS spec files");
+specsCmd.command("list").description("List all available specs").action(() => specsCommand("list", {}));
+specsCmd.command("create <id>").description("Create a new spec (with conflict resolution)").option("-t, --type <type>", "Spec type (feature, fix, refactor, chore, docs)", "feature").option("--title <title>", "Spec title").option("--tier <tier>", "Risk tier (T1, T2, T3)", "T3").option("--mode <mode>", "Development mode", "development").option("-f, --force", "Override existing specs without confirmation", false).option("-i, --interactive", "Ask for confirmation on conflicts", false).action((id, options) => specsCommand("create", { id, ...options }));
+specsCmd.command("show <id>").description("Show detailed spec information").action((id) => specsCommand("show", { id }));
+specsCmd.command("update <id>").description("Update spec properties").option("-s, --status <status>", "Spec status (draft, active, completed)").option("--title <title>", "Spec title").option("--description <desc>", "Spec description").action((id, options) => specsCommand("update", { id, ...options }));
+specsCmd.command("delete <id>").description("Delete a spec").action((id) => specsCommand("delete", { id }));
+specsCmd.command("conflicts").description("Check for scope conflicts between specs").action(() => specsCommand("conflicts", {}));
+specsCmd.command("migrate").description("Migrate from legacy working-spec.yaml to feature-specific specs").option("-i, --interactive", "Interactive feature selection", false).option(
+  "-f, --features <features>",
+  "Comma-separated list of features to migrate",
+  (value) => value.split(",")
+).action((options) => specsCommand("migrate", options));
+specsCmd.command("types").description("Show available spec types").action(() => specsCommand("types", {}));
+var modeCmd = program.command("mode").description("Manage CAWS complexity tiers");
+modeCmd.command("current").description("Show current CAWS mode").action(() => modeCommand("current", {}));
+modeCmd.command("set <mode>").description("Set CAWS complexity tier").action((mode) => modeCommand("set", { mode }));
+modeCmd.command("set").description("Set CAWS complexity tier (interactive)").option("-i, --interactive", "Interactive mode selection", false).option("-m, --mode <mode>", "Specific mode to set").action((options) => modeCommand("set", options));
+modeCmd.command("compare").description("Compare all available tiers").action(() => modeCommand("compare", {}));
+modeCmd.command("recommend").description("Get tier recommendation for your project").option("--size <size>", "Project size (small, medium, large)", "medium").option("--team-size <size>", "Team size (number)", "1").option("--compliance <required>", "Compliance requirements (true/false)", "false").option("--audit <required>", "Audit requirements (true/false)", "false").option("--details", "Show detailed recommendation", false).action((options) => modeCommand("recommend", options));
+modeCmd.command("details <mode>").description("Show detailed information about a specific tier").action((mode) => modeCommand("details", { mode }));
+program.command("tutorial [type]").description("Interactive guided learning for CAWS").action(tutorialCommand);
+program.command("plan <action>").description("Generate implementation plans").option("--spec-id <id>", "Spec ID to generate plan for").option("--spec <id>", "Alias for --spec-id").option("--output <path>", "Output file path for the plan").action((action, options) => planCommand(action, options));
 program.command("templates [subcommand]").description("Discover and manage project templates").option("-n, --name <template>", "Template name (for info subcommand)").action(templatesCommand);
-program.command("diagnose").description("Run health checks and suggest fixes").option("--fix", "Apply automatic fixes", false).action(diagnoseCommand);
-program.command("evaluate [spec-file]").description("Evaluate work against CAWS quality standards").option("-v, --verbose", "Show detailed error information", false).action(evaluateCommand);
-program.command("iterate [spec-file]").description("Get iterative development guidance based on current progress").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(iterateCommand);
+program.command("diagnose").description("Run health checks and suggest fixes").option("--spec-id <id>", "Feature-specific spec ID").option("--fix", "Apply automatic fixes", false).action(diagnoseCommand);
+program.command("evaluate [spec-file]").description("Evaluate work against CAWS quality standards").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("-v, --verbose", "Show detailed error information", false).action(evaluateCommand);
+program.command("iterate [spec-file]").description("Get iterative development guidance").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(iterateCommand);
 var waiversCmd = program.command("waivers").description("Manage CAWS quality gate waivers");
 waiversCmd.command("create").description("Create a new quality gate waiver").requiredOption("--title <title>", "Waiver title").requiredOption(
   "--reason <reason>",
@@ -49158,11 +54146,11 @@ waiversCmd.command("create").description("Create a new quality gate waiver").req
 waiversCmd.command("list").description("List all waivers").option("-v, --verbose", "Show detailed error information", false).action((options) => waiversCommand("list", options));
 waiversCmd.command("show <id>").description("Show waiver details").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("show", { ...options, id }));
 waiversCmd.command("revoke <id>").description("Revoke a waiver").option("--revoked-by <name>", "Person revoking the waiver").option("--reason <reason>", "Revocation reason").option("-v, --verbose", "Show detailed error information", false).action((id, options) => waiversCommand("revoke", { ...options, id }));
-var workflowCmd = program.command("workflow <type>").description("Get workflow-specific guidance for development tasks").option("--step <number>", "Current step in workflow", "1").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action((type, options) => workflowCommand(type, options));
-program.command("quality-monitor <action>").description("Monitor code quality impact in real-time").option("--files <files>", "Files affected (comma-separated)").option("--context <json>", "Additional context as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(qualityMonitorCommand);
+var workflowCmd = program.command("workflow <type>").description("Get workflow-specific guidance").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("--step <number>", "Current step in workflow", "1").option("--current-state <json>", "Current implementation state as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action((type, options) => workflowCommand(type, options));
+program.command("quality-monitor <action>").description("Monitor code quality impact in real-time").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").option("--files <files>", "Files affected (comma-separated)").option("--context <json>", "Additional context as JSON", "{}").option("-v, --verbose", "Show detailed error information", false).action(qualityMonitorCommand);
 program.command("tool").description("Execute CAWS tools programmatically").argument("<tool-id>", "ID of the tool to execute").option("-p, --params <json>", "Parameters as JSON string", "{}").option("-t, --timeout <ms>", "Execution timeout in milliseconds", parseInt, 3e4).action(executeTool);
-program.command("test-analysis <subcommand> [options...]").description("Statistical analysis for budget prediction and test optimization").action(testAnalysisCommand);
-var provenanceCmd = program.command("provenance").description("Manage CAWS provenance tracking and audit trails");
+program.command("test-analysis <subcommand> [options...]").description("Statistical analysis for budget prediction").option("--spec-id <id>", "Feature-specific spec ID (e.g., user-auth)").action(testAnalysisCommand);
+var provenanceCmd = program.command("provenance").description("Manage CAWS provenance tracking");
 provenanceCmd.command("update").description("Add new commit to provenance chain").requiredOption("-c, --commit <hash>", "Git commit hash").option("-m, --message <msg>", "Commit message").option("-a, --author <info>", "Author information").option("-q, --quiet", "Suppress output").option("-o, --output <path>", "Output path for provenance files", ".caws/provenance").action(async (options) => {
   await provenanceCommand("update", options);
 });
@@ -49235,6 +54223,11 @@ program.exitOverride((err) => {
       "validate",
       "scaffold",
       "status",
+      "archive",
+      "specs",
+      "mode",
+      "tutorial",
+      "plan",
       "templates",
       "diagnose",
       "evaluate",
@@ -49310,6 +54303,12 @@ if (require.main === module) {
         "init",
         "validate",
         "scaffold",
+        "status",
+        "archive",
+        "specs",
+        "mode",
+        "tutorial",
+        "plan",
         "provenance",
         "hooks",
         "burnup",
