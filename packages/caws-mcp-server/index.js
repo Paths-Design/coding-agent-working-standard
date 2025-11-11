@@ -32,37 +32,39 @@ function stripAnsi(text) {
   // - OSC (Operating System Command): ESC] ... BEL or ESC\
   // - Other escape sequences: ESC followed by various characters
   // DO NOT remove newlines (\n = 0x0A) or carriage returns (\r = 0x0D) - they're essential for JSON-RPC
-  return text
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b[[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
-    // eslint-disable-next-line no-control-regex
-    .replace(/\u001b./g, '') // Any remaining escape sequences
-    // Only remove problematic control characters, NOT newlines or carriage returns
-    // Keep: \n (0x0A), \r (0x0D), \t (0x09)
-    // Remove: other control chars that might corrupt JSON
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+  return (
+    text
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b\[[0-9;]*m/g, '') // CSI codes (colors, styles)
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b\]8;[^;]*;[^\u0007]*\u0007/g, '') // OSC hyperlinks
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b\][0-9]+;[^\u0007]*\u0007/g, '') // Other OSC codes
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b\][^\u0007]*\u0007/g, '') // OSC codes ending with BEL
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b\][^\u001b\\]*\\/g, '') // OSC codes ending with ESC\
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b[[\]()#;?]?[0-9;:]*[A-Za-z]/g, '') // Other escape sequences
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u001b./g, '') // Any remaining escape sequences
+      // Only remove problematic control characters, NOT newlines or carriage returns
+      // Keep: \n (0x0A), \r (0x0D), \t (0x09)
+      // Remove: other control chars that might corrupt JSON
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+  );
 }
 
 // Ensure stdout is completely clean for MCP protocol
 // Only strip ANSI codes - DO NOT interfere with valid JSON-RPC messages
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-process.stdout.write = function(chunk, encoding, fd) {
+process.stdout.write = function (chunk, encoding, fd) {
   const str = chunk.toString();
-  
+
   // Check if this looks like a JSON-RPC message (starts with { or [)
   const isJsonRpc = /^[\s]*[{[]/.test(str);
-  
+
   if (isJsonRpc) {
     // This is likely a JSON-RPC message from MCP SDK - only strip ANSI codes, preserve everything else
     // Don't use trim() - JSON-RPC messages end with newlines which are essential
@@ -109,7 +111,7 @@ function getProjectRoot(workingDirectory = process.cwd()) {
   if (process.env.VSCODE_WORKSPACE_ROOT) {
     return process.env.VSCODE_WORKSPACE_ROOT;
   }
-  
+
   // Try to find git root from working directory
   try {
     const gitRoot = execSync('git', ['rev-parse', '--show-toplevel'], {
@@ -135,10 +137,12 @@ function resolveQualityGatesModule(moduleName) {
     path.join(__dirname, '..', 'quality-gates', moduleName),
     // Bundled alternative - if quality-gates is in same directory
     path.join(__dirname, 'quality-gates', moduleName),
+    // Published npm package (priority for external projects)
+    path.join(process.cwd(), 'node_modules', '@paths.design', 'quality-gates', moduleName),
     // Development (monorepo) - from MCP server to quality-gates
     path.join(__dirname, '..', '..', 'packages', 'quality-gates', moduleName),
-    // Node modules (if published as separate package)
-    path.join(process.cwd(), 'node_modules', '@paths.design', 'caws-quality-gates', moduleName),
+    // Legacy monorepo local copy (fallback)
+    path.join(process.cwd(), 'node_modules', '@caws', 'quality-gates', moduleName),
   ];
 
   const attemptedPaths = [];
@@ -166,8 +170,9 @@ function resolveQualityGatesModule(moduleName) {
   attemptedPaths.push(fallbackPath);
 
   // Provide helpful error message with attempted paths
-  const errorMessage = `Quality gates module "${moduleName}" not found. Attempted paths:\n` +
-    attemptedPaths.map(p => `  - ${p}`).join('\n') +
+  const errorMessage =
+    `Quality gates module "${moduleName}" not found. Attempted paths:\n` +
+    attemptedPaths.map((p) => `  - ${p}`).join('\n') +
     `\n\nCurrent directory: ${__dirname}\n` +
     `Working directory: ${process.cwd()}\n` +
     `\nTroubleshooting:\n` +
@@ -183,9 +188,9 @@ function resolveQualityGatesModule(moduleName) {
  */
 function execCawsCommand(command, options = {}) {
   try {
-  const result = execSync(command, {
-    encoding: 'utf8',
-    maxBuffer: 1024 * 1024,
+    const result = execSync(command, {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
       env: {
         ...process.env,
         NO_COLOR: '1',
@@ -196,9 +201,9 @@ function execCawsCommand(command, options = {}) {
         CI: 'true', // Many tools check CI env var to disable colors
       },
       stdio: ['pipe', 'pipe', 'pipe'], // Explicitly separate stdout/stderr
-    ...options,
-  });
-  // Strip any remaining ANSI codes as a safety measure
+      ...options,
+    });
+    // Strip any remaining ANSI codes as a safety measure
     // Do multiple passes to catch any edge cases
     let cleaned = stripAnsi(result);
     cleaned = stripAnsi(cleaned); // Second pass for nested codes
@@ -1238,7 +1243,7 @@ class CawsMcpServer extends Server {
 
       // Execute the quality gates runner directly
       const { spawn } = await import('child_process');
-      
+
       // Try multiple locations for quality gates runner:
       // 1. Bundled in VS Code extension (when MCP server runs from extension)
       // 2. Monorepo structure (development)
@@ -1260,7 +1265,15 @@ class CawsMcpServer extends Server {
           'quality-gates',
           'run-quality-gates.mjs'
         ),
-        // npm package
+        // Published npm package (priority)
+        path.join(
+          process.cwd(),
+          'node_modules',
+          '@paths.design',
+          'quality-gates',
+          'run-quality-gates.mjs'
+        ),
+        // Legacy monorepo local copy (fallback)
         path.join(process.cwd(), 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
         path.join(process.cwd(), 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
       ].filter(Boolean);
@@ -1431,13 +1444,14 @@ class CawsMcpServer extends Server {
     try {
       // Import the exception framework using path resolver
       const exceptionFrameworkPath = resolveQualityGatesModule('shared-exception-framework.mjs');
-      
+
       // Set NODE_PATH to include quality-gates node_modules for ES module resolution
       const qualityGatesDir = path.dirname(fileURLToPath(exceptionFrameworkPath));
       const originalNodePath = process.env.NODE_PATH || '';
       const qualityGatesNodeModules = path.join(qualityGatesDir, 'node_modules');
-      process.env.NODE_PATH = qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
-      
+      process.env.NODE_PATH =
+        qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
+
       let loadExceptionConfig, setProjectRoot;
       try {
         const module = await import(exceptionFrameworkPath);
@@ -1507,8 +1521,9 @@ class CawsMcpServer extends Server {
     } catch (error) {
       // Provide helpful error message with troubleshooting guidance
       const errorMessage = error.message || 'Unknown error';
-      const isPathError = errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
-      
+      const isPathError =
+        errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
+
       return {
         content: [
           {
@@ -1518,7 +1533,7 @@ class CawsMcpServer extends Server {
                 success: false,
                 error: errorMessage,
                 command: 'caws_quality_exceptions_list',
-                suggestion: isPathError 
+                suggestion: isPathError
                   ? 'Exception framework not available. Ensure quality-gates package is bundled with extension or available in monorepo.'
                   : 'Check error message for details and verify exception framework is properly configured.',
                 exceptions: [], // Return empty list on error for graceful degradation
@@ -1548,13 +1563,14 @@ class CawsMcpServer extends Server {
     try {
       // Import the exception framework using path resolver
       const exceptionFrameworkPath = resolveQualityGatesModule('shared-exception-framework.mjs');
-      
+
       // Set NODE_PATH to include quality-gates node_modules for ES module resolution
       const qualityGatesDir = path.dirname(fileURLToPath(exceptionFrameworkPath));
       const originalNodePath = process.env.NODE_PATH || '';
       const qualityGatesNodeModules = path.join(qualityGatesDir, 'node_modules');
-      process.env.NODE_PATH = qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
-      
+      process.env.NODE_PATH =
+        qualityGatesNodeModules + (originalNodePath ? path.delimiter + originalNodePath : '');
+
       let addException, setProjectRoot;
       try {
         const module = await import(exceptionFrameworkPath);
@@ -1609,8 +1625,9 @@ class CawsMcpServer extends Server {
     } catch (error) {
       // Provide helpful error message with troubleshooting guidance
       const errorMessage = error.message || 'Unknown error';
-      const isPathError = errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
-      
+      const isPathError =
+        errorMessage.includes('not found') || errorMessage.includes('Cannot find module');
+
       return {
         content: [
           {
@@ -1620,7 +1637,7 @@ class CawsMcpServer extends Server {
                 success: false,
                 error: errorMessage,
                 command: 'caws_quality_exceptions_create',
-                suggestion: isPathError 
+                suggestion: isPathError
                   ? 'Exception framework not available. Ensure quality-gates package is bundled with extension or available in monorepo.'
                   : 'Check error message for details. Verify all required parameters are provided and exception framework is properly configured.',
                 exception: null, // Return null on error for graceful degradation
@@ -3310,7 +3327,7 @@ async function main() {
   // Disable monitoring in MCP mode - it can cause stdout pollution
   // Monitoring uses file watchers and yaml parsing which may emit logs
   process.env.CAWS_DISABLE_MONITORING = 'true';
-  
+
   // Don't log in MCP mode - logs can leak ANSI codes to stdout
   // MCP server is now running silently
 }

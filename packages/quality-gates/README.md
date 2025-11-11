@@ -110,7 +110,47 @@ Fix the violations above before committing
 
 ## 🛠️ Usage
 
+### Installation
+
+**From npm (recommended):**
+
+```bash
+# Install as dev dependency
+npm install --save-dev @paths.design/quality-gates
+
+# Or install globally
+npm install -g @paths.design/quality-gates
+```
+
+**In CAWS monorepo:**
+
+```bash
+# Use local package directly
+node packages/quality-gates/run-quality-gates.mjs
+```
+
 ### Quick Start
+
+**With npm package:**
+
+```bash
+# Run all quality gates (development mode)
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs
+
+# Or if installed globally
+caws-quality-gates
+
+# Run all gates in CI mode (strict enforcement)
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci
+
+# Get machine-readable JSON output
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --json
+
+# Run only specific gates
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --gates=naming,duplication
+```
+
+**In monorepo (development):**
 
 ```bash
 # Run all quality gates (development mode)
@@ -130,6 +170,20 @@ node packages/quality-gates/run-quality-gates.mjs --gates=naming,duplication
 
 #### 1. Local Development (Interactive)
 
+**With npm package:**
+
+```bash
+# Standard development check
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs
+
+# Focus on specific areas during development
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --gates=naming
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --gates=god_objects
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --gates=duplication
+```
+
+**In monorepo:**
+
 ```bash
 # Standard development check
 node packages/quality-gates/run-quality-gates.mjs
@@ -141,6 +195,22 @@ node packages/quality-gates/run-quality-gates.mjs --gates=duplication
 ```
 
 #### 2. CI/CD Integration
+
+**With npm package:**
+
+```bash
+# GitHub Actions / CI pipeline
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci
+
+# With step summary (GitHub Actions)
+GITHUB_STEP_SUMMARY=/tmp/summary.md node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci
+
+# Matrix builds (test specific gates)
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci --gates=naming
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci --gates=duplication
+```
+
+**In monorepo:**
 
 ```bash
 # GitHub Actions / CI pipeline
@@ -169,12 +239,25 @@ caws quality-gates --ci --json
 
 #### 4. Pre-commit Hook
 
+**With npm package:**
+
+```bash
+# Setup pre-commit hook
+echo '#!/bin/bash
+node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci' > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+**In monorepo:**
+
 ```bash
 # Setup pre-commit hook
 echo '#!/bin/bash
 node packages/quality-gates/run-quality-gates.mjs --ci' > .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
+
+**Note:** CAWS scaffold automatically sets up pre-commit hooks that detect and use the installed package.
 
 ### Command Line Options
 

@@ -1,5 +1,5 @@
 {
-  "name": "@caws/quality-gates",
+  "name": "@paths.design/quality-gates",
   "version": "1.0.1",
   "description": "CAWS Quality Gates - Automated code quality enforcement for CAWS projects",
   "main": "run-quality-gates.mjs",
@@ -8,7 +8,19 @@
     "caws-quality-gates": "./run-quality-gates.mjs"
   },
   "files": [
-    "*.mjs",
+    "check-code-freeze.mjs",
+    "check-duplication.mjs",
+    "check-functional-duplication.mjs",
+    "check-god-objects.mjs",
+    "check-naming.mjs",
+    "doc-quality-auto-fixer.mjs",
+    "doc-quality-linter.mjs",
+    "file-scope-manager.mjs",
+    "manage-naming-exceptions.mjs",
+    "monitor-refactoring-progress.mjs",
+    "run-quality-gates.mjs",
+    "shared-exception-framework.mjs",
+    "todo-analyzer.mjs",
     "templates/",
     "docs-status/",
     "README.md"
@@ -18,16 +30,20 @@
     "lint": "echo 'Linting not configured for quality gates'",
     "typecheck": "echo 'Type checking not required for quality gates (ES modules)'",
     "validate": "node run-quality-gates.mjs --help",
-    "build": "echo 'Quality gates do not require building'"
+    "build": "echo 'Quality gates do not require building'",
+    "prepublishOnly": "node -e \"console.log('Publishing quality-gates package...')\""
   },
   "keywords": [
     "caws",
     "quality-gates",
     "code-quality",
     "automation",
-    "ci-cd"
+    "ci-cd",
+    "code-review",
+    "static-analysis",
+    "linter"
   ],
-  "author": "@darianrosebrook",
+  "author": "Paths Design <hello@paths.design>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -38,6 +54,10 @@
     "url": "https://github.com/Paths-Design/coding-agent-working-standard/issues"
   },
   "homepage": "https://github.com/Paths-Design/coding-agent-working-standard#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
   "dependencies": {
     "ajv": "^8.12.0",
     "ignore": "^5.2.0",

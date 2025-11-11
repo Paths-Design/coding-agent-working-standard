@@ -42,7 +42,16 @@
     "micromatch": "4.0.8"
   },
   "peerDependencies": {
-    "@paths.design/caws-cli": "*"
+    "@paths.design/caws-cli": "*",
+    "@paths.design/quality-gates": "*"
+  },
+  "peerDependenciesMeta": {
+    "@paths.design/caws-cli": {
+      "optional": false
+    },
+    "@paths.design/quality-gates": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18.0.0"

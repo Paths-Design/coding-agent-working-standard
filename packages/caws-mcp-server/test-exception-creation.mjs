@@ -3,19 +3,24 @@
  * Test script to verify exception creation works correctly
  */
 
-import { fileURLToPath, pathToFileURL } from 'url';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function resolveQualityGatesModule(moduleName) {
   const possiblePaths = [
+    // Published npm package (priority)
+    path.join(process.cwd(), 'node_modules', '@paths.design', 'quality-gates', moduleName),
+    // Development (monorepo)
     path.join(__dirname, '..', '..', 'packages', 'quality-gates', moduleName),
+    // Bundled (VS Code extension)
     path.join(__dirname, 'quality-gates', moduleName),
     path.join(__dirname, '..', 'quality-gates', moduleName),
-    path.join(process.cwd(), 'node_modules', '@paths.design', 'caws-quality-gates', moduleName),
+    // Legacy monorepo local copy (fallback)
+    path.join(process.cwd(), 'node_modules', '@caws', 'quality-gates', moduleName),
   ];
 
   for (const modulePath of possiblePaths) {
@@ -50,7 +55,7 @@ try {
   const reason = 'Test exception - active development';
   const approvedBy = 'darianrosebrook';
   const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
-  
+
   // Calculate expiresInDays from expiresAt
   const expiresDate = new Date(expiresAt);
   const now = new Date();
@@ -77,10 +82,10 @@ try {
     console.log('   Exception ID:', result.exception.id);
     console.log('   Gate:', result.exception.gate);
     console.log('   Expires at:', result.exception.expires_at);
-    
+
     // Verify it was saved
     const config = loadExceptionConfig();
-    const savedException = config.exceptions.find(e => e.id === result.exception.id);
+    const savedException = config.exceptions.find((e) => e.id === result.exception.id);
     if (savedException) {
       console.log('✅ Exception saved to config');
     } else {
@@ -96,7 +101,3 @@ try {
   console.error('Stack:', e.stack);
   process.exit(1);
 }
-
-
-
-

@@ -1,0 +1,29 @@
+# Test files (not needed in published package)
+test-*.mjs
+test-debug.mjs
+test-cli-reliability.mjs
+test-minimal.mjs
+
+# Python files (not needed in published package)
+*.py
+
+# Configuration files (users should copy from templates/)
+*.qualitygatesrc.yaml
+!templates/*.qualitygatesrc.yaml
+
+# Development files
+.git/
+.gitignore
+.npmignore
+PUBLISHING.md
+
+# Lock files (will be regenerated)
+docs-status/quality-gates.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
