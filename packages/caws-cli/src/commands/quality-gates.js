@@ -51,9 +51,9 @@ async function qualityGatesCommand(options = {}) {
         ? path.join(vscodeExtensionPath, 'bundled', 'quality-gates', 'run-quality-gates.mjs')
         : null;
 
-      // Option 3: Check node_modules for quality-gates package
+      // Option 3: Check node_modules for quality-gates package (prioritize published package)
       const nodeModulesPaths = [
-        path.join(projectRoot, 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
+        // Published npm package (priority)
         path.join(
           projectRoot,
           'node_modules',
@@ -61,6 +61,8 @@ async function qualityGatesCommand(options = {}) {
           'quality-gates',
           'run-quality-gates.mjs'
         ),
+        // Legacy monorepo local copy (fallback)
+        path.join(projectRoot, 'node_modules', '@caws', 'quality-gates', 'run-quality-gates.mjs'),
         path.join(projectRoot, 'node_modules', 'quality-gates', 'run-quality-gates.mjs'),
       ];
 

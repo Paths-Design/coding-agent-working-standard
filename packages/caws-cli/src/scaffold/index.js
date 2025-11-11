@@ -10,6 +10,7 @@ const chalk = require('chalk');
 
 // Import detection utilities
 const { detectCAWSSetup } = require('../utils/detection');
+const { detectsPublishing } = require('../utils/project-analysis');
 
 // Import git hooks scaffolding
 const { scaffoldGitHooks } = require('./git-hooks');
@@ -311,47 +312,152 @@ async function scaffoldProject(options) {
       },
     });
 
-    // Add quality gates scripts for staged file analysis
-    enhancements.push({
-      name: 'scripts/quality-gates/run-quality-gates.js',
-      description: 'Quality gates runner for staged files',
-      required: false,
-    });
-
-    enhancements.push({
-      name: 'scripts/quality-gates/check-god-objects.js',
-      description: 'God object detector for staged files',
-      required: false,
-    });
-
-    enhancements.push({
-      name: 'scripts/v3/analysis/todo_analyzer.py',
-      description: 'Advanced hidden TODO analyzer with dependency resolution',
-      required: false,
-    });
-
-    // Install quality gates package if requested
+    // Add quality gates package and configuration if requested
+    // Note: These are optional - git hooks fall back to CAWS CLI if package isn't installed
     if (options.withQualityGates) {
-      console.log(chalk.blue('\n📦 Installing quality gates package...'));
+      // Copy quality gates configuration files from templates
+      enhancements.push({
+        name: 'duplication.qualitygatesrc.yaml',
+        description: 'Duplication gate configuration',
+        required: false,
+        sourcePath: path.join(
+          __dirname,
+          '../../quality-gates/templates/duplication.qualitygatesrc.yaml'
+        ),
+      });
+
+      enhancements.push({
+        name: 'godObject.qualitygatesrc.yaml',
+        description: 'God objects gate configuration',
+        required: false,
+        sourcePath: path.join(
+          __dirname,
+          '../../quality-gates/templates/godObject.qualitygatesrc.yaml'
+        ),
+      });
+
+      // Create docs-status directory structure
+      enhancements.push({
+        name: 'docs-status',
+        description: 'Quality gates status directory',
+        required: false,
+        customHandler: async (targetDir) => {
+          const docsStatusDir = path.join(targetDir, 'docs-status');
+          await fs.ensureDir(docsStatusDir);
+
+          // Copy template files from quality-gates package
+          const qualityGatesTemplates = path.join(
+            __dirname,
+            '../../quality-gates/templates/docs-status'
+          );
+          if (fs.existsSync(qualityGatesTemplates)) {
+            await fs.copy(qualityGatesTemplates, docsStatusDir);
+            return { added: 1, skipped: 0 };
+          }
+          return { added: 1, skipped: 0 };
+        },
+      });
+
+      // Install quality gates package
+      console.log(chalk.blue('\n📦 Setting up quality gates package...'));
       try {
         const { execSync } = require('child_process');
-        const npmCommand = fs.existsSync(path.join(currentDir, 'package.json'))
-          ? 'npm install --save-dev @paths.design/quality-gates'
-          : 'npm install -g @paths.design/quality-gates';
 
-        console.log(chalk.gray(`   Running: ${npmCommand}`));
-        execSync(npmCommand, {
-          cwd: currentDir,
-          stdio: 'inherit',
-        });
-        console.log(chalk.green('✅ Quality gates package installed'));
-        console.log(chalk.blue('💡 You can now use: caws quality-gates'));
-      } catch (error) {
-        console.log(chalk.yellow(`⚠️  Failed to install quality gates package: ${error.message}`));
+        // Check if we're in monorepo (can copy files directly) or need npm install
+        const qualityGatesPath = path.resolve(__dirname, '../../../quality-gates');
+        const isMonorepo = fs.existsSync(qualityGatesPath);
+
+        if (isMonorepo && fs.existsSync(path.join(currentDir, 'package.json'))) {
+          // In monorepo - copy files directly instead of installing package
+          console.log(
+            chalk.gray('   Detected monorepo structure - copying quality gates files...')
+          );
+
+          const qualityGatesDest = path.join(currentDir, 'node_modules', '@caws', 'quality-gates');
+          await fs.ensureDir(qualityGatesDest);
+
+          // Copy all .mjs files
+          const mjsFiles = fs.readdirSync(qualityGatesPath).filter((f) => f.endsWith('.mjs'));
+          for (const file of mjsFiles) {
+            await fs.copy(path.join(qualityGatesPath, file), path.join(qualityGatesDest, file));
+          }
+
+          // Copy templates directory
+          if (fs.existsSync(path.join(qualityGatesPath, 'templates'))) {
+            await fs.copy(
+              path.join(qualityGatesPath, 'templates'),
+              path.join(qualityGatesDest, 'templates')
+            );
+          }
+
+          // Copy package.json for dependencies
+          await fs.copy(
+            path.join(qualityGatesPath, 'package.json'),
+            path.join(qualityGatesDest, 'package.json')
+          );
+
+          // Install dependencies
+          console.log(chalk.gray('   Installing quality gates dependencies...'));
+          execSync('npm install --production --no-audit --no-fund', {
+            cwd: qualityGatesDest,
+            stdio: 'inherit',
+          });
+
+          console.log(chalk.green('✅ Quality gates files copied and dependencies installed'));
+        } else if (fs.existsSync(path.join(currentDir, 'package.json'))) {
+          // Regular project - try to install from npm (when published)
+          console.log(chalk.gray('   Installing @paths.design/quality-gates package...'));
+
+          try {
+            const npmCommand = 'npm install --save-dev @paths.design/quality-gates';
+            execSync(npmCommand, {
+              cwd: currentDir,
+              stdio: 'inherit',
+            });
+            console.log(chalk.green('✅ Quality gates package installed from npm'));
+          } catch (npmError) {
+            console.log(
+              chalk.yellow('⚠️  Package not found on npm - quality gates will use local files')
+            );
+            console.log(
+              chalk.gray(
+                '   Package will be available once published as @paths.design/quality-gates'
+              )
+            );
+            console.log(
+              chalk.gray('   For now, quality gates will work via CAWS CLI or local scripts')
+            );
+          }
+        } else {
+          // No package.json - suggest global install or manual setup
+          console.log(chalk.yellow('⚠️  No package.json found - skipping package installation'));
+          console.log(chalk.gray('   Options:'));
+          console.log(
+            chalk.gray('   • Install globally: npm install -g @paths.design/quality-gates')
+          );
+          console.log(
+            chalk.gray(
+              '   • Create package.json and run: npm install --save-dev @paths.design/quality-gates'
+            )
+          );
+          console.log(chalk.gray('   • Use CAWS CLI: caws quality-gates'));
+        }
+
         console.log(
-          chalk.gray('   You can install manually: npm install -g @paths.design/quality-gates')
+          chalk.blue(
+            '💡 You can now use: node node_modules/@paths.design/quality-gates/run-quality-gates.mjs'
+          )
         );
-        console.log(chalk.gray('   Or use Python scripts: python3 scripts/simple_gates.py'));
+        console.log(chalk.blue('   Or: caws quality-gates'));
+      } catch (error) {
+        console.log(chalk.yellow(`⚠️  Failed to set up quality gates package: ${error.message}`));
+        console.log(
+          chalk.gray(
+            '   You can install manually: npm install --save-dev @paths.design/quality-gates'
+          )
+        );
+        console.log(chalk.gray('   Or globally: npm install -g @paths.design/quality-gates'));
+        console.log(chalk.gray('   Or use CAWS CLI: caws quality-gates'));
       }
     }
 
@@ -377,16 +483,26 @@ async function scaffoldProject(options) {
       });
     }
 
-    // Add OIDC setup guide if requested or not minimal
-    if (
-      (options.withOidc || (!options.minimal && !options.withOidc)) &&
-      (!setup.isEnhanced || !fs.existsSync(path.join(currentDir, 'OIDC_SETUP.md')))
-    ) {
+    // Add OIDC setup guide only if:
+    // 1. Explicitly requested with --with-oidc flag, OR
+    // 2. Project detects publishing configuration (package.json with publishConfig, pyproject.toml, etc.)
+    const needsOidc = options.withOidc || detectsPublishing(currentDir);
+    const oidcExists = fs.existsSync(path.join(currentDir, 'OIDC_SETUP.md'));
+
+    if (needsOidc && !oidcExists) {
       enhancements.push({
         name: 'OIDC_SETUP.md',
         description: 'OIDC trusted publisher setup guide',
         required: false,
       });
+    } else if (needsOidc && oidcExists) {
+      console.log(chalk.gray('⏭️  Skipped OIDC_SETUP.md (already exists)'));
+    } else if (!needsOidc && !options.minimal) {
+      // Inform user that OIDC is available but not needed
+      console.log(
+        chalk.blue('ℹ️  OIDC setup skipped (project does not appear to publish packages)')
+      );
+      console.log(chalk.gray('   Add --with-oidc flag if you plan to publish packages later'));
     }
 
     // For enhanced setups, preserve existing tools
@@ -424,13 +540,20 @@ async function scaffoldProject(options) {
         continue;
       }
 
-      if (!setup?.templateDir) {
+      // Handle custom sourcePath (for quality gates configs from monorepo)
+      const sourcePath = enhancement.sourcePath
+        ? enhancement.sourcePath
+        : setup?.templateDir
+          ? path.join(setup.templateDir, enhancement.name)
+          : null;
+
+      if (!sourcePath && !enhancement.sourcePath) {
         console.warn(
           chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)
         );
         continue;
       }
-      const sourcePath = path.join(setup.templateDir, enhancement.name);
+
       const destPath = path.join(currentDir, enhancement.name);
 
       if (!fs.existsSync(destPath)) {
@@ -497,6 +620,10 @@ async function scaffoldProject(options) {
 
       // Check if OIDC was added
       const oidcAdded = addedFiles.some((file) => file.includes('OIDC_SETUP'));
+      const qualityGatesAdded = addedFiles.some(
+        (file) => file.includes('quality-gates') || file.includes('todo_analyzer')
+      );
+
       if (oidcAdded) {
         console.log('2. Set up OIDC trusted publisher (see OIDC_SETUP.md)');
         console.log('3. Push to trigger automated publishing');
@@ -504,7 +631,18 @@ async function scaffoldProject(options) {
       } else {
         console.log('2. Customize your working spec in .caws/working-spec.yaml');
         console.log('3. Run validation: caws validate --suggestions');
-        console.log('4. Your existing CAWS tools remain unchanged');
+        if (!qualityGatesAdded && !options.minimal) {
+          console.log(
+            chalk.gray('4. Note: Quality gates scripts skipped (git hooks use CAWS CLI by default)')
+          );
+          console.log(
+            chalk.gray(
+              '   Add --with-quality-gates flag if you want local scripts without global CLI'
+            )
+          );
+        } else {
+          console.log('4. Your existing CAWS tools remain unchanged');
+        }
       }
     }
 

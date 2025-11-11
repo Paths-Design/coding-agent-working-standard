@@ -147,10 +147,36 @@ fi
 
 QUALITY_GATES_RAN=false
 
-# Option 1: Node.js quality gates script
-if [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
+# Option 1: Quality gates package (installed via npm)
+if [ -f "node_modules/@paths.design/quality-gates/run-quality-gates.mjs" ]; then
   if command -v node >/dev/null 2>&1; then
-    echo "📁 Running Node.js quality gates script..."
+    echo "📁 Running quality gates package..."
+    if node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci; then
+      echo "✅ Quality gates passed"
+      QUALITY_GATES_RAN=true
+    else
+      echo "❌ Quality gates failed - commit blocked"
+      echo "💡 Fix the violations above before committing"
+      exit 1
+    fi
+  fi
+# Option 1b: Quality gates package (monorepo/local copy)
+elif [ -f "node_modules/@caws/quality-gates/run-quality-gates.mjs" ]; then
+  if command -v node >/dev/null 2>&1; then
+    echo "📁 Running quality gates package (local)..."
+    if node node_modules/@caws/quality-gates/run-quality-gates.mjs --ci; then
+      echo "✅ Quality gates passed"
+      QUALITY_GATES_RAN=true
+    else
+      echo "❌ Quality gates failed - commit blocked"
+      echo "💡 Fix the violations above before committing"
+      exit 1
+    fi
+  fi
+# Option 2: Legacy Node.js quality gates script (deprecated)
+elif [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
+  if command -v node >/dev/null 2>&1; then
+    echo "📁 Running legacy Node.js quality gates script..."
     if node scripts/quality-gates/run-quality-gates.js; then
       echo "✅ Quality gates passed"
       QUALITY_GATES_RAN=true
@@ -160,7 +186,7 @@ if [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
       exit 1
     fi
   fi
-# Option 2: CAWS CLI validation
+# Option 3: CAWS CLI validation
 elif command -v caws >/dev/null 2>&1; then
   echo "📋 Running CAWS CLI validation..."
   if caws validate --quiet 2>/dev/null; then
@@ -195,16 +221,48 @@ elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; the
 else
   echo "⚠️  Quality gates not available - skipping"
   echo "💡 Available options:"
-  echo "   • Install: npm install -g @paths.design/caws-cli"
+  echo "   • Install quality gates: npm install --save-dev @paths.design/quality-gates"
+  echo "   • Install CAWS CLI: npm install -g @paths.design/caws-cli"
   echo "   • Use Python: python3 scripts/simple_gates.py"
   echo "   • Use Makefile: make caws-gates"
   QUALITY_GATES_RAN=true
 fi
 
-# Run hidden TODO analysis on staged files only (if Python available)
+# Run hidden TODO analysis on staged files only (if available)
 if [ "$QUALITY_GATES_RAN" = true ]; then
   echo "🔍 Checking for hidden TODOs in staged files..."
-  if command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
+  # Try quality gates package TODO analyzer first (published package)
+  if [ -f "node_modules/@paths.design/quality-gates/todo-analyzer.mjs" ]; then
+    if command -v node >/dev/null 2>&1; then
+      if node node_modules/@paths.design/quality-gates/todo-analyzer.mjs --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+        echo "✅ No critical hidden TODOs found in staged files"
+      else
+        echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+        echo "💡 Fix stub implementations and placeholder code before committing"
+        echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+        echo ""
+        echo "🔍 Running detailed analysis on staged files..."
+        node node_modules/@paths.design/quality-gates/todo-analyzer.mjs --staged-only --min-confidence 0.8
+        exit 1
+      fi
+    fi
+  # Try quality gates package TODO analyzer (monorepo/local copy)
+  elif [ -f "node_modules/@caws/quality-gates/todo-analyzer.mjs" ]; then
+    if command -v node >/dev/null 2>&1; then
+      if node node_modules/@caws/quality-gates/todo-analyzer.mjs --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+        echo "✅ No critical hidden TODOs found in staged files"
+      else
+        echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+        echo "💡 Fix stub implementations and placeholder code before committing"
+        echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+        echo ""
+        echo "🔍 Running detailed analysis on staged files..."
+        node node_modules/@caws/quality-gates/todo-analyzer.mjs --staged-only --min-confidence 0.8
+        exit 1
+      fi
+    fi
+  # Fallback to legacy Python analyzer
+  elif command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
     if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
       echo "✅ No critical hidden TODOs found in staged files"
     else
