@@ -1,5 +1,5 @@
 {
-  "name": "caws-mcp-server",
+  "name": "@paths.design/caws-mcp-server",
   "version": "1.1.2",
   "description": "CAWS Model Context Protocol server for AI agent integration",
   "type": "module",
@@ -64,5 +64,9 @@
   "bugs": {
     "url": "https://github.com/paths-design/caws/issues"
   },
-  "homepage": "https://github.com/paths-design/caws#readme"
+  "homepage": "https://github.com/paths-design/caws#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  }
 }

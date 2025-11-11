@@ -26,7 +26,7 @@ const PACKAGES = [
     path: 'packages/caws-vscode-extension/package.json',
     version: '4.1.1',
   },
-  { name: 'caws-mcp-server', path: 'packages/caws-mcp-server/package.json', version: '1.1.1' },
+  { name: '@paths.design/caws-mcp-server', path: 'packages/caws-mcp-server/package.json', version: '1.1.2' },
   // Quality gates are bundled with CAWS, not published separately
 ];
 
@@ -72,7 +72,7 @@ function checkBuildOutputs() {
       description: 'Extension compiled output',
     },
     {
-      name: 'caws-mcp-server',
+      name: '@paths.design/caws-mcp-server',
       path: 'packages/caws-mcp-server/index.js',
       description: 'MCP server entry point',
     },

@@ -3,7 +3,7 @@
 CAWS monorepo contains multiple publishable packages that need independent versioning and releases:
 
 - `@paths.design/caws-cli` - CLI tools
-- `caws-mcp-server` - MCP server
+- `@paths.design/caws-mcp-server` - MCP server
 - `@paths.design/quality-gates` - Quality gates package
 
 ## Current Approach
@@ -71,7 +71,7 @@ Each package is released based on commit scope:
 | Scope | Package | Release Type |
 |-------|---------|--------------|
 | `cli` | `@paths.design/caws-cli` | Minor (feat) / Patch (fix) |
-| `mcp-server` | `caws-mcp-server` | Minor (feat) / Patch (fix) |
+| `mcp-server` | `@paths.design/caws-mcp-server` | Minor (feat) / Patch (fix) |
 | `quality-gates` | `@paths.design/quality-gates` | Minor (feat) / Patch (fix) |
 
 ## Future Improvements
@@ -97,8 +97,8 @@ npm run build
 npm publish
 
 # 4. Create git tag
-git tag caws-mcp-server-v$(node -p "require('./package.json').version")
-git push origin caws-mcp-server-v$(node -p "require('./package.json').version")
+git tag @paths.design/caws-mcp-server-v$(node -p "require('./package.json').version")
+git push origin @paths.design/caws-mcp-server-v$(node -p "require('./package.json').version")
 ```
 
 ## Troubleshooting

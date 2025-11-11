@@ -26,7 +26,7 @@ const PACKAGES = [
     }
   },
   {
-    name: 'caws-mcp-server',
+    name: '@paths.design/caws-mcp-server',
     path: 'packages/caws-mcp-server',
     scope: 'mcp-server',
     config: {
