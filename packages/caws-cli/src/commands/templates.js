@@ -7,6 +7,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
+const { findPackageRoot } = require('../utils/detection');
 
 /**
  * Built-in template definitions
@@ -64,11 +65,20 @@ const BUILTIN_TEMPLATES = {
 
 /**
  * Get template directory path
+ * Works in both development and global install scenarios
  * @returns {string|null} Template directory path or null
  */
 function getTemplateDir() {
+  // Find package root using shared utility
+  const packageRoot = findPackageRoot(__dirname);
+  
   const possiblePaths = [
+    // First: Try templates relative to package root (works in dev and global install)
+    path.join(packageRoot, 'templates'),
+    // Fallback: Try relative to current file location (for development)
     path.join(__dirname, '../../templates'),
+    path.join(__dirname, '../templates'),
+    // Legacy fallbacks
     path.join(process.cwd(), 'packages/caws-cli/templates'),
     path.join(process.cwd(), 'templates'),
   ];

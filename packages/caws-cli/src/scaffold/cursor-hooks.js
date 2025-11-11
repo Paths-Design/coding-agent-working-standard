@@ -9,7 +9,7 @@ const path = require('path');
 const chalk = require('chalk');
 
 // Import detection utilities
-const { detectCAWSSetup } = require('../utils/detection');
+const { detectCAWSSetup, findPackageRoot } = require('../utils/detection');
 
 /**
  * Scaffold Cursor hooks for a CAWS project
@@ -28,9 +28,17 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
 
     // Determine template directory - prefer bundled templates
     const setup = detectCAWSSetup(projectDir);
-    const bundledTemplateDir = path.join(__dirname, '../../templates');
+    
+    // Find package root using shared utility
+    const packageRoot = findPackageRoot(__dirname);
+    
+    // Try templates relative to package root first (works in both dev and global install)
+    const bundledTemplateDir = path.join(packageRoot, 'templates');
+    const fallbackTemplateDir = path.join(__dirname, '../../templates');
     const templateDir = fs.existsSync(bundledTemplateDir)
       ? bundledTemplateDir
+      : fs.existsSync(fallbackTemplateDir)
+      ? fallbackTemplateDir
       : setup.templateDir || path.resolve(__dirname, '../templates');
 
     const cursorTemplateDir = path.join(templateDir, '.cursor');

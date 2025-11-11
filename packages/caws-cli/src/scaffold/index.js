@@ -9,7 +9,7 @@ const path = require('path');
 const chalk = require('chalk');
 
 // Import detection utilities
-const { detectCAWSSetup } = require('../utils/detection');
+const { detectCAWSSetup, findPackageRoot } = require('../utils/detection');
 const { detectsPublishing } = require('../utils/project-analysis');
 
 // Import git hooks scaffolding
@@ -23,8 +23,33 @@ const CLI_VERSION = require('../../package.json').version;
  * @param {string} targetDir - Target directory for scaffolding
  * @param {Object} options - Scaffold options
  */
+/**
+ * Find the template directory using robust path resolution
+ * Works in both development and global install scenarios
+ * @returns {string|null} Template directory path or null
+ */
+function findTemplateDir() {
+  // Find package root using shared utility
+  const packageRoot = findPackageRoot(__dirname);
+  
+  // Try templates relative to package root first (works in both dev and global install)
+  const possiblePaths = [
+    path.join(packageRoot, 'templates'),
+    path.resolve(__dirname, '../../templates'), // Dev fallback
+    path.resolve(__dirname, '../templates'), // Legacy fallback
+  ];
+  
+  for (const testPath of possiblePaths) {
+    if (fs.existsSync(testPath)) {
+      return testPath;
+    }
+  }
+  
+  return null;
+}
+
 async function scaffoldIDEIntegrations(targetDir, options) {
-  const templateDir = path.join(__dirname, '../../templates');
+  const templateDir = findTemplateDir() || path.join(__dirname, '../../templates');
 
   console.log(chalk.cyan('🎨 Setting up IDE integrations...'));
 
@@ -192,19 +217,24 @@ async function scaffoldProject(options) {
       setup.templateDir = cawsSetup.templateDir;
       setup.hasTemplateDir = true;
     } else if (!setup.templateDir) {
-      // Try to find template directory using absolute paths that work in CI
+      // Try to find template directory using robust path resolution
       const possiblePaths = [
-        // 1. Bundled templates in CLI package (for global installs) - CHECK THIS FIRST!
+        // 1. Use the helper function to find templates (works in dev and global install)
+        findTemplateDir(),
+        // 2. Bundled templates relative to package root
+        path.join(findPackageRoot(__dirname), 'templates'),
+        // 3. Legacy fallback paths
         path.join(__dirname, '../../templates'),
-        // 2. CI paths
+        path.join(__dirname, '../templates'),
+        // 4. CI paths
         '/home/runner/work/coding-agent-working-standard/coding-agent-working-standard/packages/caws-template',
         '/workspace/packages/caws-template',
         '/caws/packages/caws-template',
-        // 3. Monorepo relative paths
+        // 5. Monorepo relative paths
         path.resolve(process.cwd(), '../../../packages/caws-template'),
         path.resolve(process.cwd(), '../../packages/caws-template'),
         path.resolve(process.cwd(), '../packages/caws-template'),
-      ];
+      ].filter(Boolean); // Remove null values
 
       for (const testPath of possiblePaths) {
         if (fs.existsSync(testPath)) {

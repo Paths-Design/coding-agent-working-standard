@@ -9,6 +9,25 @@ const path = require('path');
 const chalk = require('chalk');
 
 /**
+ * Find the package root directory by looking for package.json
+ * Works in both development (src/) and production (dist/) scenarios
+ * @param {string} startDir - Directory to start searching from (defaults to __dirname)
+ * @returns {string} Package root directory path
+ */
+function findPackageRoot(startDir = __dirname) {
+  let packageRoot = startDir;
+  for (let i = 0; i < 5; i++) {
+    const packageJsonPath = path.join(packageRoot, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      return packageRoot;
+    }
+    packageRoot = path.dirname(packageRoot);
+  }
+  // Fallback to startDir if package.json not found
+  return startDir;
+}
+
+/**
  * Detect CAWS setup in a directory
  * @param {string} cwd - Current working directory
  * @returns {Object} Setup information
@@ -93,10 +112,17 @@ function detectCAWSSetup(cwd = process.cwd()) {
 
   // Check for template directory - try multiple possible locations
   let templateDir = null;
+
+  // Find package root using shared utility
+  const packageRoot = findPackageRoot(__dirname);
+
   const possibleTemplatePaths = [
-    // FIRST: Try bundled templates (for npm-installed CLI)
-    { path: path.resolve(__dirname, '../templates'), source: 'bundled with CLI' },
-    { path: path.resolve(__dirname, 'templates'), source: 'bundled with CLI (fallback)' },
+    // FIRST: Try bundled templates relative to package root (works in dev and global install)
+    { path: path.join(packageRoot, 'templates'), source: 'bundled with CLI (package root)' },
+    // Fallback: Try relative to current file location (for development)
+    { path: path.resolve(__dirname, '../../templates'), source: 'bundled with CLI (dev fallback)' },
+    { path: path.resolve(__dirname, '../templates'), source: 'bundled with CLI (legacy fallback)' },
+    { path: path.resolve(__dirname, 'templates'), source: 'bundled with CLI (legacy fallback 2)' },
     // Try relative to current working directory (for monorepo setups)
     { path: path.resolve(cwd, '../caws-template'), source: 'monorepo parent directory' },
     { path: path.resolve(cwd, '../../caws-template'), source: 'monorepo grandparent' },
@@ -171,4 +197,5 @@ function detectCAWSSetup(cwd = process.cwd()) {
 
 module.exports = {
   detectCAWSSetup,
+  findPackageRoot,
 };
