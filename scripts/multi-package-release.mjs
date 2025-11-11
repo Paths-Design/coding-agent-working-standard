@@ -90,7 +90,7 @@ function getLastTag(packageName) {
 }
 
 /**
- * Create package-specific semantic-release config
+ * Create package-specific semantic-release config as JavaScript module
  */
 function createPackageConfig(pkg) {
   const config = {
@@ -152,7 +152,8 @@ function createPackageConfig(pkg) {
     ]
   };
   
-  return JSON.stringify(config, null, 2);
+  // Return as CommonJS module for better compatibility with semantic-release
+  return `module.exports = ${JSON.stringify(config, null, 2)};`;
 }
 
 /**
@@ -161,15 +162,24 @@ function createPackageConfig(pkg) {
 function releasePackage(pkg) {
   console.log(`\n📦 Releasing ${pkg.name}...`);
   
-  const configPath = path.join(rootDir, `.releaserc.${pkg.scope}.json`);
+  // Use .cjs extension to explicitly mark as CommonJS (works with semantic-release)
+  const configPath = path.join(rootDir, `.releaserc.${pkg.scope}.cjs`);
   const config = createPackageConfig(pkg);
   
   try {
-    // Write temporary config
+    // Write temporary config as CommonJS module
     writeFileSync(configPath, config);
     
-    // Run semantic-release
-    execSync(`npx semantic-release --extends .releaserc.${pkg.scope}.json`, {
+    // Verify file was created
+    if (!existsSync(configPath)) {
+      throw new Error(`Failed to create config file: ${configPath}`);
+    }
+    
+    // Use relative path from root directory (semantic-release resolves from cwd)
+    const configPathRelative = `.releaserc.${pkg.scope}.cjs`;
+    
+    // Run semantic-release with relative path
+    execSync(`npx semantic-release --extends ${configPathRelative}`, {
       cwd: rootDir,
       stdio: 'inherit',
       env: {
