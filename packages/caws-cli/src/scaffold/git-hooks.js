@@ -411,13 +411,13 @@ if command -v caws >/dev/null 2>&1; then
       echo ""
       echo "💡 If this is infrastructure/setup work, you can create a waiver:"
       echo "   caws waivers create \\"
-      echo "     --title=\"Initial CAWS setup\" \\"
+      echo "     --title='Initial CAWS setup' \\"
       echo "     --reason=infrastructure_limitation \\"
       echo "     --gates=contracts \\"
-      echo "     --expires-at=\"2024-12-31T23:59:59Z\" \\"
-      echo "     --approved-by=\"@your-team\" \\"
+      echo "     --expires-at='2024-12-31T23:59:59Z' \\"
+      echo "     --approved-by='@your-team' \\"
       echo "     --impact-level=low \\"
-      echo "     --mitigation-plan=\"Contracts will be added as features are developed\""
+      echo "     --mitigation-plan='Contracts will be added as features are developed'"
     fi
     
     echo ""

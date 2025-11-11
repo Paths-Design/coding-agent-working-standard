@@ -483,7 +483,8 @@ Happy coding! 🎯
     console.log('2. Customize the specification for your needs');
     
     // Show contract requirements if Tier 1 or 2
-    const riskTier = answers?.riskTier || defaultAnswers?.riskTier || 2;
+    // Use answers if available (interactive mode), otherwise default to 2
+    const riskTier = answers?.riskTier || 2;
     if (riskTier === 1 || riskTier === 2) {
       console.log(chalk.yellow('\n⚠️  Important: Contract Requirements'));
       console.log(`   Tier ${riskTier} changes require at least one contract.`);
