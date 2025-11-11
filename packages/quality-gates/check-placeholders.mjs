@@ -312,8 +312,10 @@ export async function checkPlaceholders(options = {}) {
   const {
     files = [],
     config = DEFAULT_CONFIG,
-    enforcement = getGlobalEnforcementLevel(),
+    enforcement,
   } = options;
+  
+  const effectiveEnforcement = enforcement ?? getGlobalEnforcementLevel('placeholders');
 
   const violations = [];
   const filesToCheck = files.length > 0 ? files : await getFilesToCheck();
@@ -388,7 +390,7 @@ export async function checkPlaceholders(options = {}) {
     }
   }
 
-  return processViolations(violations, 'placeholders', enforcement);
+  return processViolations('placeholders', violations, undefined, { enforcement: effectiveEnforcement });
 }
 
 // CLI execution

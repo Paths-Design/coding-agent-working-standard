@@ -1460,7 +1460,6 @@ class QualityGateRunner {
     try {
       const placeholderResults = await checkPlaceholders({
         files: this.filesToCheck,
-        enforcement: getGlobalEnforcementLevel(),
       });
 
       // Report warnings (approved exceptions)
