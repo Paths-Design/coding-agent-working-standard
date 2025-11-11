@@ -1,3 +1,33 @@
+# [7.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v6.0.0...v7.0.0) (2025-11-11)
+
+
+### Bug Fixes
+
+* **quality-gates:** fix placeholder gate enforcement level handling ([33f6722](https://github.com/Paths-Design/coding-agent-working-standard/commit/33f672294e093784dd65552f3bf7a3a61d97ea04))
+* **release:** handle npm workspace restrictions in manual release script ([e36df34](https://github.com/Paths-Design/coding-agent-working-standard/commit/e36df34e812866b153667a066adca27d1751ff45))
+* **release:** skip already-published versions in manual release script ([d590285](https://github.com/Paths-Design/coding-agent-working-standard/commit/d590285a92babce444591ae473500bf5394ea87e))
+* **release:** use absolute paths for semantic-release config files ([2819fe6](https://github.com/Paths-Design/coding-agent-working-standard/commit/2819fe619dbda9cdb6c7965afda80e4255dad0d3))
+* **release:** use CommonJS config files for semantic-release compatibility ([13dcb95](https://github.com/Paths-Design/coding-agent-working-standard/commit/13dcb95e58a294ac44e17b79952896938249eb90))
+
+
+### Features
+
+* **caws-types:** add placeholder governance types and helpers ([2ec676b](https://github.com/Paths-Design/coding-agent-working-standard/commit/2ec676b71cb7ba89c6a5a167f517b16bb2dc01d9))
+* **cli:** prioritize published [@paths](https://github.com/paths).design/quality-gates package ([303c66a](https://github.com/Paths-Design/coding-agent-working-standard/commit/303c66a756f8e22d7995701b037c8fae2709c43f))
+* **cli:** update quality gates help text with new gates ([63740e1](https://github.com/Paths-Design/coding-agent-working-standard/commit/63740e1b65f30b551dca912c7f52708ab92cf098))
+* **mcp-server:** rename to [@paths](https://github.com/paths).design/caws-mcp-server ([aa7f36c](https://github.com/Paths-Design/coding-agent-working-standard/commit/aa7f36cf12a40dcbc70ecb48edb832ed4f0b3ce5))
+* **mcp-server:** support published [@paths](https://github.com/paths).design/quality-gates package ([2794ae2](https://github.com/Paths-Design/coding-agent-working-standard/commit/2794ae2854d61aaeb8514388f9d6d3087c71397d))
+* **quality-gates:** add placeholder governance gate ([26325ff](https://github.com/Paths-Design/coding-agent-working-standard/commit/26325ff8c30e22a56b6a8a357a255941dc0407ea))
+* **release:** add multi-package semantic-release support ([7f4ebb0](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f4ebb09f1801f4a8c5a217ad6dafc32f014cde7))
+* **vscode-extension:** use esbuild for dependency bundling ([17eed0c](https://github.com/Paths-Design/coding-agent-working-standard/commit/17eed0c234e238aa5518c634750e8a12c86c831f))
+
+
+### BREAKING CHANGES
+
+* **mcp-server:** Package renamed from caws-mcp-server to @paths.design/caws-mcp-server
+* **release:** None - backward compatible with existing CLI releases
+* **cli:** None - backward compatible with existing setups
+
 # [6.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v5.1.0...v6.0.0) (2025-11-11)
 
 
