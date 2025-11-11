@@ -1,3 +1,15 @@
+# [6.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v5.1.0...v6.0.0) (2025-11-11)
+
+
+### Bug Fixes
+
+* **quality-gates:** fix context scoping for push and CI validation ([ee4386d](https://github.com/Paths-Design/coding-agent-working-standard/commit/ee4386d377322c6dbf07f3d5ab9ad6eba302a9ed))
+
+
+### BREAKING CHANGES
+
+* **quality-gates:** push context now validates entire repository before push
+
 ## [5.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v5.0.0...v5.0.1) (2025-10-30)
 
 
