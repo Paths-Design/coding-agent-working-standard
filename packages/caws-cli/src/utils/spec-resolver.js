@@ -108,7 +108,14 @@ async function resolveSpec(options = {}) {
       const specPath = path.join(SPECS_DIR, registry.specs[id].path);
       try {
         const content = await fs.readFile(specPath, 'utf8');
-        const spec = yaml.load(content);
+        let spec;
+        try {
+          spec = yaml.load(content);
+        } catch (yamlError) {
+          console.log(chalk.yellow(`   - ${id} (YAML syntax error: ${yamlError.message})`));
+          specsInfo.push({ id, type: 'unknown', status: 'unknown', title: 'YAML error' });
+          continue;
+        }
         const status = spec.status || 'draft';
         const type = spec.type || 'feature';
         const statusColor =
@@ -122,7 +129,7 @@ async function resolveSpec(options = {}) {
         );
         specsInfo.push({ id, type, status, title: spec.title || 'Untitled' });
       } catch (error) {
-        console.log(chalk.yellow(`   - ${id} (error loading details)`));
+        console.log(chalk.yellow(`   - ${id} (error loading details: ${error.message})`));
         specsInfo.push({ id, type: 'unknown', status: 'unknown', title: 'Error loading' });
       }
     }
@@ -363,7 +370,20 @@ async function checkScopeConflicts(specIds) {
 
     try {
       const content = await fs.readFile(specPath, 'utf8');
-      const spec = yaml.load(content);
+      let spec;
+      try {
+        spec = yaml.load(content);
+      } catch (yamlError) {
+        const relativePath = path.relative(process.cwd(), specPath);
+        throw new Error(
+          `Invalid YAML syntax in ${relativePath}: ${yamlError.message}\n` +
+            (yamlError.mark
+              ? `   Line ${yamlError.mark.line + 1}, Column ${yamlError.mark.column + 1}\n`
+              : '') +
+            (yamlError.mark?.snippet ? `   ${yamlError.mark.snippet}\n` : '') +
+            `💡 Fix YAML syntax errors or use 'caws specs create <id>' for proper structure`
+        );
+      }
 
       specScopes.push({
         id,

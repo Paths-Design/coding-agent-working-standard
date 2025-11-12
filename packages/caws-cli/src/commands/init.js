@@ -17,6 +17,7 @@ const { generateWorkingSpec } = require('../generators/working-spec');
 const { finalizeProject } = require('../utils/finalization');
 const { scaffoldCursorHooks } = require('../scaffold/cursor-hooks');
 const { scaffoldIDEIntegrations } = require('../scaffold/index');
+const { updateGitignore } = require('../utils/gitignore-updater');
 
 /**
  * Initialize a new project with CAWS
@@ -421,6 +422,17 @@ Happy coding! 🎯
       console.log(chalk.blue('🎨 Setting up IDE integrations...'));
       await scaffoldIDEIntegrations(process.cwd(), { force: false });
 
+      // Update .gitignore to exclude CAWS local runtime files
+      console.log(chalk.blue('📝 Updating .gitignore...'));
+      const gitignoreUpdated = await updateGitignore(process.cwd());
+      if (gitignoreUpdated) {
+        console.log(chalk.green('✅ Updated .gitignore to exclude CAWS local runtime files'));
+        console.log(
+          chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
+        );
+        console.log(chalk.gray('   Ignored: Agent runtime, temp files, logs (local-only)'));
+      }
+
       // Finalize project
       await finalizeProject(projectName, options, answers);
     } else {
@@ -468,7 +480,7 @@ Happy coding! 🎯
         experimentalSandbox: '',
         aiConfidence: 0.8,
         uncertaintyAreas: '',
-        complexityFactors: ''
+        complexityFactors: '',
       };
 
       const specContent = generateWorkingSpec(defaultAnswers);
@@ -496,6 +508,17 @@ Happy coding! 🎯
       console.log(chalk.blue('🎨 Setting up IDE integrations...'));
       await scaffoldIDEIntegrations(process.cwd(), { force: false });
 
+      // Update .gitignore to exclude CAWS local runtime files
+      console.log(chalk.blue('📝 Updating .gitignore...'));
+      const gitignoreUpdated = await updateGitignore(process.cwd());
+      if (gitignoreUpdated) {
+        console.log(chalk.green('✅ Updated .gitignore to exclude CAWS local runtime files'));
+        console.log(
+          chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
+        );
+        console.log(chalk.gray('   Ignored: Agent runtime, temp files, logs (local-only)'));
+      }
+
       // Finalize project
       await finalizeProject(projectName, options, defaultAnswers);
     }
@@ -505,7 +528,7 @@ Happy coding! 🎯
     console.log(chalk.blue('\nNext steps:'));
     console.log('1. Review .caws/working-spec.yaml');
     console.log('2. Customize the specification for your needs');
-    
+
     // Show contract requirements if Tier 1 or 2
     // Use answers if available (interactive mode), otherwise default to 2
     const riskTier = answers?.riskTier || 2;
@@ -519,7 +542,7 @@ Happy coding! 🎯
       console.log(chalk.gray('       description: "Project-level CAWS configuration"'));
       console.log('   Or use "chore" mode for maintenance work (mode: chore)');
     }
-    
+
     console.log('\n📋 Recommended Setup Workflow:');
     console.log('   1. Review .caws/working-spec.yaml');
     console.log('   2. Run: caws scaffold (adds tools and templates)');
@@ -535,7 +558,7 @@ Happy coding! 🎯
     if (error.stack) {
       console.error(chalk.gray(error.stack));
     }
-    
+
     // Cleanup on error (only for new directory creation)
     if (projectName && projectName !== '.' && fs.existsSync(projectName)) {
       try {

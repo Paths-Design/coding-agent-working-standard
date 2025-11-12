@@ -182,10 +182,10 @@ async function loadWaiverStatus() {
  */
 async function checkQualityGates() {
   // For now, return a placeholder
-  // In full implementation, this would run actual gate checks
+  // Quality gates are available via CLI or MCP
   return {
     checked: false,
-    message: 'Run: node apps/tools/caws/gates.js for full gate status',
+    message: 'Run: caws quality-gates or use MCP tool caws_quality_gates_run for full gate status',
   };
 }
 

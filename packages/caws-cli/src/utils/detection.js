@@ -73,9 +73,10 @@ function detectCAWSSetup(cwd = process.cwd()) {
   const specFiles = files.filter((f) => f.endsWith('-spec.yaml'));
   const hasMultipleSpecs = specFiles.length > 1;
 
-  // Check for tools directory (enhanced setup)
-  const toolsDir = path.join(cwd, 'apps/tools/caws');
-  const hasTools = fs.existsSync(toolsDir);
+  // Check for tools directory (enhanced setup) - check new location first
+  const toolsDir = path.join(cwd, '.caws/tools');
+  const legacyToolsDir = path.join(cwd, 'apps/tools/caws');
+  const hasTools = fs.existsSync(toolsDir) || fs.existsSync(legacyToolsDir);
 
   // Determine setup type
   let setupType = 'basic';

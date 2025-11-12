@@ -19,8 +19,13 @@ const { safeAsync } = require('./error-handler');
 class ToolLoader extends EventEmitter {
   constructor(options = {}) {
     super();
+    // Check new location first, fall back to legacy location
+    const newToolsDir = path.join(process.cwd(), '.caws/tools');
+    const legacyToolsDir = path.join(process.cwd(), 'apps/tools/caws');
+    const defaultToolsDir = fs.existsSync(newToolsDir) ? newToolsDir : legacyToolsDir;
+
     this.options = {
-      toolsDir: options.toolsDir || path.join(process.cwd(), 'apps/tools/caws'),
+      toolsDir: options.toolsDir || defaultToolsDir,
       cacheEnabled: options.cacheEnabled !== false,
       timeout: options.timeout || 10000,
       maxTools: options.maxTools || 50,

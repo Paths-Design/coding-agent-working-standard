@@ -202,7 +202,46 @@ async function createSpec(id, options = {}) {
   const filePath = path.join(SPECS_DIR, fileName);
 
   // Write spec file
-  await fs.writeFile(filePath, yaml.dump(specContent, { indent: 2 }));
+  const yamlContent = yaml.dump(specContent, { indent: 2 });
+  await fs.writeFile(filePath, yamlContent);
+
+  // Validate written file (YAML syntax and structure)
+  try {
+    const writtenContent = await fs.readFile(filePath, 'utf8');
+    const parsed = yaml.load(writtenContent);
+
+    // Validate YAML syntax was preserved
+    if (!parsed || typeof parsed !== 'object') {
+      await fs.remove(filePath);
+      throw new Error('Failed to parse written spec file - invalid YAML structure');
+    }
+
+    // Validate spec structure using CAWS validation
+    const { validateWorkingSpec } = require('../validation/spec-validation');
+    const validation = validateWorkingSpec(parsed);
+
+    if (!validation.valid) {
+      await fs.remove(filePath);
+      const errorMessages = validation.errors
+        .map((e) => `${e.instancePath}: ${e.message}`)
+        .join('; ');
+      throw new Error(`Spec validation failed: ${errorMessages}`);
+    }
+  } catch (error) {
+    // Clean up invalid file if it exists
+    if (await fs.pathExists(filePath)) {
+      await fs.remove(filePath);
+    }
+
+    // Re-throw with helpful message
+    if (error.message.includes('YAMLException') || error.message.includes('yaml')) {
+      throw new Error(
+        `Failed to create valid spec: YAML syntax error. ${error.message}\n` +
+          '💡 Consider using the interactive mode: caws specs create <id> --interactive'
+      );
+    }
+    throw error;
+  }
 
   // Update registry
   const registry = await loadSpecsRegistry();

@@ -240,41 +240,44 @@ async function checkTestFiles() {
  * @returns {Promise<Object>} Check result
  */
 async function checkCAWSTools() {
-  const toolsPath = 'apps/tools/caws';
+  // Check new location first, then legacy location for backward compatibility
+  const toolsPath = '.caws/tools';
+  const legacyToolsPath = 'apps/tools/caws';
 
-  if (!(await fs.pathExists(toolsPath))) {
+  if (!(await fs.pathExists(toolsPath)) && !(await fs.pathExists(legacyToolsPath))) {
     return {
-      passed: false,
-      severity: 'low',
-      message: 'CAWS tools directory not found',
-      fix: 'Scaffold tools: caws scaffold',
+      passed: true,
+      severity: 'info',
+      message: 'CAWS tools directory not found (optional - use CLI commands instead)',
+      fix: 'Core functionality available via: caws validate, caws quality-gates, caws provenance',
       autoFixable: false,
     };
   }
 
-  // Check for essential tools
-  const essentialTools = ['validate.js', 'gates.js', 'provenance.js'];
-  let missingTools = [];
+  // Tools directory exists - check for specialized tools (not core CLI duplicates)
+  const specializedTools = ['flake-detector.ts', 'spec-test-mapper.ts', 'perf-budgets.ts'];
+  const foundTools = [];
 
-  for (const tool of essentialTools) {
-    if (!(await fs.pathExists(path.join(toolsPath, tool)))) {
-      missingTools.push(tool);
+  for (const tool of specializedTools) {
+    if (await fs.pathExists(path.join(toolsPath, tool))) {
+      foundTools.push(tool);
     }
   }
 
-  if (missingTools.length > 0) {
+  if (foundTools.length === 0) {
     return {
-      passed: false,
-      severity: 'medium',
-      message: `Missing ${missingTools.length} essential tools`,
-      fix: 'Re-scaffold tools: caws scaffold --force',
+      passed: true,
+      severity: 'info',
+      message: 'No specialized tools found (optional - use CLI commands for core functionality)',
+      fix: 'Core functionality available via: caws validate, caws quality-gates, caws provenance',
       autoFixable: false,
     };
   }
 
   return {
     passed: true,
-    message: 'All essential CAWS tools present',
+    message: `Found ${foundTools.length} specialized tool(s): ${foundTools.join(', ')}`,
+    note: 'Core functionality (validate, quality-gates, provenance) available via CLI commands',
   };
 }
 
@@ -484,7 +487,9 @@ async function diagnoseCommand(options = {}) {
       console.log(chalk.blue('   • Run: caws status --visual to view project health'));
       console.log(chalk.blue('   • Run: caws validate to check working spec'));
       console.log(chalk.blue('   • Optional: Create .caws/policy.yaml for custom budgets'));
-      console.log(chalk.blue('   • Start implementing: caws iterate --current-state "Ready to begin"'));
+      console.log(
+        chalk.blue('   • Start implementing: caws iterate --current-state "Ready to begin"')
+      );
     }
   } catch (error) {
     console.error(chalk.red('\n❌ Error running diagnosis:'), error.message);

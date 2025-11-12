@@ -49,15 +49,19 @@ function initializeGlobalSetup() {
 function loadProvenanceTools() {
   if (provenanceTools) return provenanceTools; // Already loaded
 
-  // Try multiple possible locations for provenance tools
+  // Provenance tools are now handled by CLI command (caws provenance)
+  // Legacy tool loading removed - use CLI instead
+  // Try multiple possible locations for provenance tools (legacy support)
   const possiblePaths = [
-    // 1. Bundled templates in CLI package (for global installs)
-    path.join(__dirname, '../../templates/apps/tools/caws/provenance.js'),
-    // 2. Local project templates
+    // 1. New location (if someone manually adds it)
+    path.join(process.cwd(), '.caws/tools/provenance.js'),
+    // 2. Legacy location (for backward compatibility)
     path.join(process.cwd(), 'apps/tools/caws/provenance.js'),
-    // 3. Template package in monorepo
+    // 3. Bundled templates in CLI package (legacy)
+    path.join(__dirname, '../../templates/.caws/tools/provenance.js'),
+    // 4. Template package in monorepo (legacy)
     path.join(__dirname, '../../../caws-template/apps/tools/caws/provenance.js'),
-    // 4. Detected setup template directory
+    // 5. Detected setup template directory
     null, // Will be set from setup if available
   ];
 
@@ -65,7 +69,7 @@ function loadProvenanceTools() {
   try {
     const setup = cawsSetup || initializeGlobalSetup();
     if (setup?.hasTemplateDir && setup?.templateDir) {
-      possiblePaths[3] = path.join(setup.templateDir, 'apps/tools/caws/provenance.js');
+      possiblePaths[4] = path.join(setup.templateDir, '.caws/tools/provenance.js');
     }
   } catch (setupError) {
     // Continue without detected setup
@@ -97,8 +101,13 @@ function initializeLanguageSupport() {
   if (languageSupport) return languageSupport;
 
   try {
-    // Try multiple possible locations for language support
+    // Language support tools removed - use CLI instead
+    // Try multiple possible locations for language support (legacy support)
     const possiblePaths = [
+      // New location (if someone manually adds it)
+      path.join(process.cwd(), '.caws/tools/language-support.js'),
+      // Legacy locations
+      path.join(process.cwd(), 'apps/tools/caws/language-support.js'),
       path.join(__dirname, '../../../caws-template/apps/tools/caws/language-support.js'),
       path.join(__dirname, '../../../../caws-template/apps/tools/caws/language-support.js'),
       path.join(process.cwd(), 'packages/caws-template/apps/tools/caws/language-support.js'),

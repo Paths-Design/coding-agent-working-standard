@@ -15,9 +15,15 @@ const crypto = require('crypto');
  */
 class ToolValidator {
   constructor(options = {}) {
+    // Check new location first, fall back to legacy location
+    const newAllowlistPath = path.join(process.cwd(), '.caws/tools-allow.json');
+    const legacyAllowlistPath = path.join(process.cwd(), 'apps/tools/caws/tools-allow.json');
+    const defaultAllowlistPath = fs.existsSync(newAllowlistPath)
+      ? newAllowlistPath
+      : legacyAllowlistPath;
+
     this.options = {
-      allowlistPath:
-        options.allowlistPath || path.join(process.cwd(), 'apps/tools/caws/tools-allow.json'),
+      allowlistPath: options.allowlistPath || defaultAllowlistPath,
       strictMode: options.strictMode !== false,
       maxFileSize: options.maxFileSize || 1024 * 1024, // 1MB
       ...options,

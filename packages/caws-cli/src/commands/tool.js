@@ -23,9 +23,8 @@ async function initializeToolSystem() {
   if (toolLoader) return toolLoader;
 
   try {
-    toolLoader = new ToolLoader({
-      toolsDir: path.join(process.cwd(), 'apps/tools/caws'),
-    });
+    // ToolLoader now checks .caws/tools first, then falls back to legacy location
+    toolLoader = new ToolLoader();
 
     toolValidator = new ToolValidator();
 

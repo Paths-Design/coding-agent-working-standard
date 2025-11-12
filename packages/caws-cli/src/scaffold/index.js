@@ -14,6 +14,7 @@ const { detectsPublishing } = require('../utils/project-analysis');
 
 // Import git hooks scaffolding
 const { scaffoldGitHooks } = require('./git-hooks');
+const { updateGitignore } = require('../utils/gitignore-updater');
 
 // CLI version from package.json
 const CLI_VERSION = require('../../package.json').version;
@@ -31,20 +32,20 @@ const CLI_VERSION = require('../../package.json').version;
 function findTemplateDir() {
   // Find package root using shared utility
   const packageRoot = findPackageRoot(__dirname);
-  
+
   // Try templates relative to package root first (works in both dev and global install)
   const possiblePaths = [
     path.join(packageRoot, 'templates'),
     path.resolve(__dirname, '../../templates'), // Dev fallback
     path.resolve(__dirname, '../templates'), // Legacy fallback
   ];
-  
+
   for (const testPath of possiblePaths) {
     if (fs.existsSync(testPath)) {
       return testPath;
     }
   }
-  
+
   return null;
 }
 
@@ -301,11 +302,31 @@ async function scaffoldProject(options) {
     // Determine what enhancements to add based on setup type and options
     const enhancements = [];
 
-    // Add CAWS tools directory structure (matches test expectations)
+    // Add CAWS tools to .caws/ directory (keeps all CAWS files together)
     enhancements.push({
-      name: 'apps/tools/caws',
+      name: '.caws/tools',
       description: 'CAWS tools directory',
       required: true,
+    });
+    enhancements.push({
+      name: '.caws/schemas',
+      description: 'CAWS JSON schemas',
+      required: true,
+    });
+    enhancements.push({
+      name: '.caws/templates',
+      description: 'CAWS templates',
+      required: true,
+    });
+    enhancements.push({
+      name: '.caws/waivers.yml',
+      description: 'CAWS waivers configuration',
+      required: false,
+    });
+    enhancements.push({
+      name: '.caws/tools-allow.json',
+      description: 'CAWS tools allowlist',
+      required: false,
     });
 
     // Add codemods if requested or not minimal
@@ -457,6 +478,19 @@ async function scaffoldProject(options) {
             console.log(
               chalk.gray('   For now, quality gates will work via CAWS CLI or local scripts')
             );
+
+            // Copy todo-analyzer.mjs locally as fallback if available
+            const qualityGatesPath = path.resolve(__dirname, '../../../quality-gates');
+            const todoAnalyzerSource = path.join(qualityGatesPath, 'todo-analyzer.mjs');
+            if (fs.existsSync(todoAnalyzerSource)) {
+              const scriptsDir = path.join(currentDir, 'scripts');
+              await fs.ensureDir(scriptsDir);
+              const todoAnalyzerDest = path.join(scriptsDir, 'todo-analyzer.mjs');
+              await fs.copy(todoAnalyzerSource, todoAnalyzerDest);
+              console.log(
+                chalk.green('✅ Copied todo-analyzer.mjs to scripts/ directory (local fallback)')
+              );
+            }
           }
         } else {
           // No package.json - suggest global install or manual setup
@@ -601,12 +635,14 @@ async function scaffoldProject(options) {
           try {
             // Check if the enhancement name looks like a file (has extension)
             const hasExtension = path.extname(enhancement.name).length > 0;
-            
+
             if (hasExtension) {
               // Create an empty file for file-like enhancements
               await fs.ensureDir(path.dirname(destPath));
               await fs.writeFile(destPath, '');
-              console.log(chalk.yellow(`⚠️  Created empty ${enhancement.description} (template not found)`));
+              console.log(
+                chalk.yellow(`⚠️  Created empty ${enhancement.description} (template not found)`)
+              );
               console.log(chalk.gray(`   Template expected at: ${sourcePath}`));
             } else {
               // Create directory for directory-like enhancements
@@ -696,6 +732,16 @@ async function scaffoldProject(options) {
 
     if (options.force) {
       console.log(chalk.yellow('\n⚠️  Force mode was used - review changes carefully'));
+    }
+
+    // Update .gitignore to exclude CAWS local runtime files
+    const gitignoreUpdated = await updateGitignore(targetDir);
+    if (gitignoreUpdated) {
+      console.log(chalk.green('\n✅ Updated .gitignore to exclude CAWS local runtime files'));
+      console.log(
+        chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
+      );
+      console.log(chalk.gray('   Ignored: Agent runtime, temp files, logs (local-only)'));
     }
 
     // Save provenance manifest if tools are available

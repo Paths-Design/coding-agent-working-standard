@@ -196,18 +196,58 @@ function checkHiddenTodos(stagedFiles) {
   console.log(`📁 Found ${supportedFiles.length} staged files to analyze for TODOs`);
 
   try {
-    // Check if TODO analyzer exists
-    const analyzerPath = path.join(process.cwd(), 'scripts/v3/analysis/todo_analyzer.py');
-    if (!fs.existsSync(analyzerPath)) {
+    // Find TODO analyzer .mjs file (preferred - no Python dependency)
+    const possiblePaths = [
+      // Published npm package (priority)
+      path.join(
+        process.cwd(),
+        'node_modules',
+        '@paths.design',
+        'quality-gates',
+        'todo-analyzer.mjs'
+      ),
+      // Legacy monorepo local copy
+      path.join(process.cwd(), 'node_modules', '@caws', 'quality-gates', 'todo-analyzer.mjs'),
+      // Monorepo structure (development)
+      path.join(process.cwd(), 'packages', 'quality-gates', 'todo-analyzer.mjs'),
+      // Local copy in scripts directory (if scaffolded)
+      path.join(process.cwd(), 'scripts', 'todo-analyzer.mjs'),
+      // Legacy Python analyzer (deprecated)
+      path.join(process.cwd(), 'scripts', 'v3', 'analysis', 'todo_analyzer.py'),
+    ];
+
+    let analyzerPath = null;
+    let usePython = false;
+
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath)) {
+        analyzerPath = testPath;
+        usePython = testPath.endsWith('.py');
+        break;
+      }
+    }
+
+    if (!analyzerPath) {
       console.warn('⚠️  TODO analyzer not found - skipping TODO analysis');
+      console.warn(
+        '💡 Install @paths.design/quality-gates: npm install --save-dev @paths.design/quality-gates'
+      );
       return { todos: [], blocking: 0, total: 0 };
     }
 
+    if (usePython) {
+      console.warn('⚠️  Using legacy Python TODO analyzer (deprecated)');
+      console.warn(
+        '💡 Install @paths.design/quality-gates for Node.js version: npm install --save-dev @paths.design/quality-gates'
+      );
+    }
+
     // Run the TODO analyzer with staged files
-    const result = execSync(
-      `python3 ${analyzerPath} --staged-only --min-confidence ${CONFIG.todoConfidenceThreshold}`,
-      { encoding: 'utf8', cwd: process.cwd() }
-    );
+    const command = usePython
+      ? `python3 ${analyzerPath} --staged-only --min-confidence ${CONFIG.todoConfidenceThreshold}`
+      : `node ${analyzerPath} --staged-only --ci-mode --min-confidence ${CONFIG.todoConfidenceThreshold}`;
+
+    const result = execSync(command, { encoding: 'utf8', cwd: process.cwd() });
 
     // Parse the output to extract TODO count
     const lines = result.split('\n');

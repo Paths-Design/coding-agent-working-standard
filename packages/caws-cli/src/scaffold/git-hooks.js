@@ -138,6 +138,100 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
+# Check for git locks before proceeding
+if [ -f ".git/index.lock" ]; then
+  LOCK_AGE=$(($(date +%s) - $(stat -f %m .git/index.lock 2>/dev/null || stat -c %Y .git/index.lock 2>/dev/null || echo 0)))
+  LOCK_AGE_MINUTES=$((LOCK_AGE / 60))
+  
+  if [ $LOCK_AGE_MINUTES -gt 5 ]; then
+    echo "⚠️  Stale git lock detected (${LOCK_AGE_MINUTES} minutes old)"
+    echo "💡 This may indicate a crashed git process"
+    echo "💡 Remove stale lock: rm .git/index.lock"
+    echo "⚠️  Warning: Check for running git/editor processes before removing"
+    exit 1
+  else
+    echo "⚠️  Git lock detected (${LOCK_AGE_MINUTES} minutes old)"
+    echo "💡 Another git process may be running"
+    echo "💡 Wait for the other process to complete, or check for running processes"
+    exit 1
+  fi
+fi
+
+# Validate YAML syntax for all CAWS spec files
+echo "🔍 Validating YAML syntax for CAWS spec files..."
+YAML_VALIDATION_FAILED=false
+
+# Find all staged .yaml/.yml files in .caws directory
+STAGED_YAML_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.caws/.*\.(yaml|yml)$' || true)
+
+if [ -n "$STAGED_YAML_FILES" ]; then
+  # Use Node.js to validate YAML if available
+  if command -v node >/dev/null 2>&1; then
+    # Try to use CAWS CLI for validation
+    if command -v caws >/dev/null 2>&1; then
+      for file in $STAGED_YAML_FILES; do
+        if [ -f "$file" ]; then
+          # Use Node.js to validate YAML syntax
+          if ! node -e "
+            const yaml = require('js-yaml');
+            const fs = require('fs');
+            try {
+              const content = fs.readFileSync('$file', 'utf8');
+              yaml.load(content);
+              process.exit(0);
+            } catch (error) {
+              console.error('❌ Invalid YAML in $file');
+              console.error('   Error:', error.message);
+              if (error.mark) {
+                console.error('   Line:', error.mark.line + 1, 'Column:', error.mark.column + 1);
+                if (error.mark.snippet) console.error('   ' + error.mark.snippet);
+              }
+              process.exit(1);
+            }
+          " 2>&1; then
+            YAML_VALIDATION_FAILED=true
+          fi
+        fi
+      done
+    else
+      # Fallback: use node directly with js-yaml
+      for file in $STAGED_YAML_FILES; do
+        if [ -f "$file" ]; then
+          if ! node -e "
+            const yaml = require('js-yaml');
+            const fs = require('fs');
+            try {
+              const content = fs.readFileSync('$file', 'utf8');
+              yaml.load(content);
+              process.exit(0);
+            } catch (error) {
+              console.error('❌ Invalid YAML in $file');
+              console.error('   Error:', error.message);
+              if (error.mark) {
+                console.error('   Line:', error.mark.line + 1, 'Column:', error.mark.column + 1);
+                if (error.mark.snippet) console.error('   ' + error.mark.snippet);
+              }
+              process.exit(1);
+            }
+          " 2>&1; then
+            YAML_VALIDATION_FAILED=true
+          fi
+        fi
+      done
+    fi
+  else
+    echo "⚠️  Node.js not available - skipping YAML validation"
+    echo "💡 Install Node.js to enable YAML syntax validation"
+  fi
+fi
+
+if [ "$YAML_VALIDATION_FAILED" = true ]; then
+  echo "❌ YAML syntax validation failed - commit blocked"
+  echo "💡 Fix YAML syntax errors above before committing"
+  echo "💡 Consider using 'caws specs create <id>' instead of manual creation"
+  exit 1
+fi
+
 # Fallback chain for quality gates:
 # 1. Try Node.js script (if exists)
 # 2. Try CAWS CLI
@@ -231,38 +325,41 @@ fi
 # Run hidden TODO analysis on staged files only (if available)
 if [ "$QUALITY_GATES_RAN" = true ]; then
   echo "🔍 Checking for hidden TODOs in staged files..."
-  # Try quality gates package TODO analyzer first (published package)
+  
+  # Find TODO analyzer .mjs file (preferred - no Python dependency)
+  TODO_ANALYZER=""
+  
+  # Try quality gates package TODO analyzer (published package)
   if [ -f "node_modules/@paths.design/quality-gates/todo-analyzer.mjs" ]; then
-    if command -v node >/dev/null 2>&1; then
-      if node node_modules/@paths.design/quality-gates/todo-analyzer.mjs --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
-        echo "✅ No critical hidden TODOs found in staged files"
-      else
-        echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
-        echo "💡 Fix stub implementations and placeholder code before committing"
-        echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
-        echo ""
-        echo "🔍 Running detailed analysis on staged files..."
-        node node_modules/@paths.design/quality-gates/todo-analyzer.mjs --staged-only --min-confidence 0.8
-        exit 1
-      fi
-    fi
+    TODO_ANALYZER="node_modules/@paths.design/quality-gates/todo-analyzer.mjs"
   # Try quality gates package TODO analyzer (monorepo/local copy)
   elif [ -f "node_modules/@caws/quality-gates/todo-analyzer.mjs" ]; then
-    if command -v node >/dev/null 2>&1; then
-      if node node_modules/@caws/quality-gates/todo-analyzer.mjs --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
-        echo "✅ No critical hidden TODOs found in staged files"
-      else
-        echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
-        echo "💡 Fix stub implementations and placeholder code before committing"
-        echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
-        echo ""
-        echo "🔍 Running detailed analysis on staged files..."
-        node node_modules/@caws/quality-gates/todo-analyzer.mjs --staged-only --min-confidence 0.8
-        exit 1
-      fi
+    TODO_ANALYZER="node_modules/@caws/quality-gates/todo-analyzer.mjs"
+  # Try monorepo structure (development)
+  elif [ -f "packages/quality-gates/todo-analyzer.mjs" ]; then
+    TODO_ANALYZER="packages/quality-gates/todo-analyzer.mjs"
+  # Try local copy in scripts directory (if scaffolded)
+  elif [ -f "scripts/todo-analyzer.mjs" ]; then
+    TODO_ANALYZER="scripts/todo-analyzer.mjs"
+  fi
+  
+  # Run TODO analyzer if found
+  if [ -n "$TODO_ANALYZER" ] && command -v node >/dev/null 2>&1; then
+    if node "$TODO_ANALYZER" --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+      echo "✅ No critical hidden TODOs found in staged files"
+    else
+      echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+      echo "💡 Fix stub implementations and placeholder code before committing"
+      echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+      echo ""
+      echo "🔍 Running detailed analysis on staged files..."
+      node "$TODO_ANALYZER" --staged-only --min-confidence 0.8
+      exit 1
     fi
-  # Fallback to legacy Python analyzer
+  # Fallback to legacy Python analyzer (deprecated - will be removed)
   elif command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
+    echo "⚠️  Using legacy Python TODO analyzer (deprecated)"
+    echo "💡 Install @paths.design/quality-gates for Node.js version: npm install --save-dev @paths.design/quality-gates"
     if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
       echo "✅ No critical hidden TODOs found in staged files"
     else
@@ -274,8 +371,9 @@ if [ "$QUALITY_GATES_RAN" = true ]; then
       python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
       exit 1
     fi
-  elif command -v python3 >/dev/null 2>&1; then
-    echo "⚠️  Python3 found but TODO analyzer not available - skipping"
+  else
+    echo "⚠️  TODO analyzer not available - skipping hidden TODO check"
+    echo "💡 Install @paths.design/quality-gates for TODO analysis: npm install --save-dev @paths.design/quality-gates"
   fi
 fi
 

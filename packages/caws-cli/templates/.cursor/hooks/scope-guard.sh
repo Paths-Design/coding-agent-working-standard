@@ -22,7 +22,7 @@ if [ ! -f ".caws/working-spec.yaml" ] && [ ! -f ".caws/working-spec.yml" ]; then
 fi
 
 # Check if scope-guard tool exists
-if [ -f "apps/tools/caws/scope-guard.js" ]; then
+if [ -f ".caws/tools/scope-guard.js" ]; then
   # Extract file paths from attachments
   FILE_PATHS=$(echo "$ATTACHMENTS" | jq -r '.[] | select(.type=="file") | .file_path' 2>/dev/null || echo "")
   
@@ -31,7 +31,7 @@ if [ -f "apps/tools/caws/scope-guard.js" ]; then
     OUT_OF_SCOPE=()
     while IFS= read -r file; do
       if [ -n "$file" ]; then
-        if ! node apps/tools/caws/scope-guard.js check "$file" 2>/dev/null; then
+        if ! node .caws/tools/scope-guard.js check "$file" 2>/dev/null; then
           OUT_OF_SCOPE+=("$file")
         fi
       fi

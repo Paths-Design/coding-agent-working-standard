@@ -61,7 +61,9 @@ function generateWorkingSpec(answers) {
       .split('\n')
       .map((i) => i.trim())
       .filter((i) => i),
-    acceptance: (answers.acceptanceCriteria || 'Given current state, when action occurs, then expected result')
+    acceptance: (
+      answers.acceptanceCriteria || 'Given current state, when action occurs, then expected result'
+    )
       .split('\n')
       .filter((a) => a.trim())
       .map((criteria, index) => {
@@ -117,7 +119,7 @@ function generateWorkingSpec(answers) {
           },
         ];
       }
-      
+
       // For Tier 1 & 2, provide minimal project_setup contract if none specified
       const riskTier = answers.riskTier || 2;
       if (riskTier === 1 || riskTier === 2) {
@@ -125,11 +127,12 @@ function generateWorkingSpec(answers) {
           {
             type: 'project_setup',
             path: '.caws/working-spec.yaml',
-            description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
+            description:
+              'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
           },
         ];
       }
-      
+
       // Tier 3 doesn't require contracts
       return [];
     })(),

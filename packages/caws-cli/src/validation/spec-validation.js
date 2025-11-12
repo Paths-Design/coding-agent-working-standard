@@ -240,15 +240,18 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
 
     // Validate scope.out doesn't contain glob patterns
     if (spec.scope && spec.scope.out && Array.isArray(spec.scope.out)) {
-      const globPatterns = spec.scope.out.filter((pattern) => pattern.includes('*') || pattern.includes('?'));
+      const globPatterns = spec.scope.out.filter(
+        (pattern) => pattern.includes('*') || pattern.includes('?')
+      );
       if (globPatterns.length > 0) {
         errors.push({
           instancePath: '/scope/out',
           message: `Unsupported glob patterns in scope.out: ${globPatterns.join(', ')}`,
-          suggestion: 'Use directory paths only (e.g., __pycache__/ instead of *.pyc or **/*.pyc). Python cache files are already covered by __pycache__/',
+          suggestion:
+            'Use directory paths only (e.g., __pycache__/ instead of *.pyc or **/*.pyc). Python cache files are already covered by __pycache__/',
           canAutoFix: true,
         });
-        
+
         // Auto-fix: remove glob patterns and keep only directory paths
         if (autoFix) {
           const fixedOut = spec.scope.out
@@ -260,7 +263,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
               }
               return pattern;
             });
-          
+
           fixes.push({
             field: 'scope.out',
             value: fixedOut,
@@ -362,7 +365,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
         const suggestion = isChoreMode
           ? 'For infrastructure/setup work, add a minimal project_setup contract or create a waiver'
           : 'Add API contracts (OpenAPI, GraphQL, etc.) or change mode to "chore" for maintenance work';
-        
+
         errors.push({
           instancePath: '/contracts',
           message: `Contracts required for Tier ${spec.risk_tier} changes`,
@@ -374,7 +377,8 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
                   {
                     type: 'project_setup',
                     path: '.caws/working-spec.yaml',
-                    description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
+                    description:
+                      'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.',
                   },
                 ],
               }
@@ -422,6 +426,48 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
           suggestion: 'Define authentication, authorization, and data protection requirements',
           canAutoFix: false,
         });
+      }
+    }
+
+    // Validate rollback format if present (for all tiers)
+    if (spec.rollback !== undefined) {
+      if (!Array.isArray(spec.rollback)) {
+        errors.push({
+          instancePath: '/rollback',
+          message: 'rollback must be an array of strings',
+          suggestion: 'Use format: ["Step 1", "Step 2", "Step 3"]',
+          canAutoFix: false,
+        });
+      } else {
+        // Check for duplicates
+        const uniqueSteps = [...new Set(spec.rollback)];
+        if (uniqueSteps.length !== spec.rollback.length) {
+          warnings.push({
+            instancePath: '/rollback',
+            message: 'Duplicate entries found in rollback array',
+            suggestion: 'Remove duplicate entries',
+          });
+
+          if (autoFix) {
+            fixes.push({
+              field: 'rollback',
+              value: uniqueSteps,
+              description: 'Removed duplicate rollback entries',
+              reason: 'Duplicate entries detected',
+            });
+          }
+        }
+
+        // Validate each entry is a string
+        const invalidEntries = spec.rollback.filter((entry) => typeof entry !== 'string');
+        if (invalidEntries.length > 0) {
+          errors.push({
+            instancePath: '/rollback',
+            message: `Invalid rollback entries (must be strings): ${invalidEntries.length}`,
+            suggestion: 'All rollback entries must be string descriptions',
+            canAutoFix: false,
+          });
+        }
       }
     }
 

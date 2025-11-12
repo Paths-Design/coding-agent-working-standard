@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "7.0.2",
+  "version": "7.0.3",
   "description": "CAWS CLI - Coding Agent Workflow System command line tools",
   "main": "dist/index.js",
   "bin": {
@@ -13,7 +13,7 @@
     "templates"
   ],
   "scripts": {
-    "build": "mkdir -p dist && cp -r src/* dist/",
+    "build": "mkdir -p dist && cp -r src/* dist/ && cp -r templates dist/ 2>/dev/null || true",
     "dev": "mkdir -p dist && cp -r src/* dist/ && node dist/index.js",
     "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
