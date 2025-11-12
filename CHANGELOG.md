@@ -1,3 +1,25 @@
+# [8.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v7.0.2...v8.0.0) (2025-11-12)
+
+
+### Bug Fixes
+
+* **cli:** prevent glob patterns in scope.out and auto-generate policy.yaml ([8d886f3](https://github.com/Paths-Design/coding-agent-working-standard/commit/8d886f367af004840492cb54b9bd8b57bda34f4f))
+* **cli:** resolve linting errors for language-agnostic quality gates ([fd6beb9](https://github.com/Paths-Design/coding-agent-working-standard/commit/fd6beb996022f0f2646598759c0a2822ffea31a9))
+* **tests:** fix fs.readFile mocks to return written content ([c16cd01](https://github.com/Paths-Design/coding-agent-working-standard/commit/c16cd01267530d2601d83e20cd9a8cb701cc0f06))
+* **tests:** improve fs.readFile mock to return written content ([22c6485](https://github.com/Paths-Design/coding-agent-working-standard/commit/22c6485b4a01bf487a66480275404ab0aaf9da06))
+
+
+### Features
+
+* **cli:** add language-agnostic quality gates support ([f5bd60e](https://github.com/Paths-Design/coding-agent-working-standard/commit/f5bd60ea8ffc8308ab6965beaf5e74c4b21c767d))
+* **cli:** add language-agnostic quality gates support ([1977772](https://github.com/Paths-Design/coding-agent-working-standard/commit/19777725a743c77857cb02d555d3d54ae933e8ac))
+* **cli:** add language-agnostic quality gates support ([5daa280](https://github.com/Paths-Design/coding-agent-working-standard/commit/5daa280874c1276e94729fe965847812f24a0d00))
+
+
+### BREAKING CHANGES
+
+* **cli:** Quality gates suggestions now based on runtime availability rather than detected project language. Works universally across all programming languages (Python, Rust, Go, Java, C#, PHP, etc.).
+
 # [7.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v6.0.0...v7.0.0) (2025-11-11)
 
 
