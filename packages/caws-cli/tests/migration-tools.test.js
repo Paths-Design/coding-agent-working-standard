@@ -25,6 +25,7 @@ jest.mock('js-yaml', () => {
 describe('Migration Tools', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
 
     // Mock console methods
     jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -33,6 +34,14 @@ describe('Migration Tools', () => {
 
     // Mock process.exit
     jest.spyOn(process, 'exit').mockImplementation(() => {});
+
+    // Reset fs mocks to default implementations
+    fs.pathExists.mockResolvedValue(false);
+    fs.readFile.mockResolvedValue('');
+    fs.writeFile.mockResolvedValue(undefined);
+    fs.ensureDir.mockResolvedValue(undefined);
+    fs.readdir.mockResolvedValue([]);
+    fs.remove.mockResolvedValue(undefined);
 
     // No need to clear mocks for createSpec since we're testing the real function
   });
