@@ -19,6 +19,14 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Ensure fs.writeFile and fs.readFile are jest mock functions
+    if (!jest.isMockFunction(fs.writeFile)) {
+      fs.writeFile = jest.fn();
+    }
+    if (!jest.isMockFunction(fs.readFile)) {
+      fs.readFile = jest.fn();
+    }
+
     // Mock console methods
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -57,15 +65,30 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content by file path and return it when read
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
+
+      // Mock fs.readFile to return stored content
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        return writtenFiles.get(normalizedPath) || '';
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(resolvedPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
 
       const result = await createSpec('new-spec', {
@@ -458,15 +481,30 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content by file path and return it when read
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
+
+      // Mock fs.readFile to return stored content
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        return writtenFiles.get(normalizedPath) || '';
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(resolvedPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
 
       const result = await specsCommand('create', { id: 'test-spec', force: true });
@@ -484,15 +522,30 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content by file path and return it when read
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
+
+      // Mock fs.readFile to return stored content
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        return writtenFiles.get(normalizedPath) || '';
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(resolvedPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
 
       const result = await specsCommand('create', { id: 'test-spec', interactive: true });
@@ -546,15 +599,30 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content by file path and return it when read
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
+
+      // Mock fs.readFile to return stored content
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        return writtenFiles.get(normalizedPath) || '';
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(resolvedPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
 
       // Simulate CLI call with --force
@@ -573,15 +641,30 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content by file path and return it when read
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
+
+      // Mock fs.readFile to return stored content
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        return writtenFiles.get(normalizedPath) || '';
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(resolvedPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
 
       // Simulate CLI call with --interactive

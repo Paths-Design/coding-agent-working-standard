@@ -208,23 +208,38 @@ describe('Migration Tools', () => {
         // Return false for spec files to allow creation
         return Promise.resolve(false);
       });
-      
-      // Capture written content by file path and return it when read
+
+      // Use a shared Map to store written content
       const writtenFiles = new Map();
+
+      // Mock fs.writeFile to store content
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        const normalizedPath = path.normalize(filePath);
-        writtenFiles.set(normalizedPath, content);
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
+        writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
-      
-      // Return legacy spec when reading working-spec.yaml, written content for new specs
+
+      // Mock fs.readFile to return stored content or legacy spec
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        const normalizedPath = path.normalize(filePath);
-        if (normalizedPath.includes('working-spec.yaml')) {
+        // Return legacy spec when reading working-spec.yaml
+        const readPath = path.resolve(filePath);
+        if (readPath.includes('working-spec.yaml') || filePath.includes('working-spec.yaml')) {
           return 'id: PROJ-001\nacceptance: []';
         }
-        return writtenFiles.get(normalizedPath) || '';
+
+        const fileName = path.basename(filePath);
+        // Try multiple keys
+        return (
+          writtenFiles.get(readPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(fileName) ||
+          ''
+        );
       });
-      
+
       fs.ensureDir.mockResolvedValue(undefined);
       require('js-yaml').load = jest.fn().mockReturnValue(legacySpec);
 
