@@ -154,9 +154,13 @@ async function createSpec(id, options = {}) {
         console.log(chalk.blue('ℹ️  Spec creation canceled.'));
         return null;
       } else if (answer === 'rename') {
-        // Generate new name with timestamp suffix
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const newId = `${id}-${timestamp}`;
+        // Generate new name with valid PREFIX-NUMBER format
+        // Extract prefix from existing ID or use default
+        const prefixMatch = id.match(/^([A-Z]+)-\d+$/);
+        const prefix = prefixMatch ? prefixMatch[1] : 'FEAT';
+        // Generate sequential number based on timestamp
+        const number = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+        const newId = `${prefix}-${number}`;
         console.log(chalk.blue(`📝 Creating spec with new name: ${newId}`));
         return await createSpec(newId, { ...options, interactive: false });
       } else if (answer === 'merge') {
@@ -184,8 +188,9 @@ async function createSpec(id, options = {}) {
   await fs.ensureDir(SPECS_DIR);
 
   // Generate spec content with all required fields
-  const specContent = {
-    id,
+  // Merge template carefully to preserve required fields and structure
+  const defaultSpec = {
+    id, // Always use the provided id parameter
     type,
     title,
     status: 'draft',
@@ -212,7 +217,45 @@ async function createSpec(id, options = {}) {
       security: [],
     },
     contracts: [],
+  };
+
+  // Merge template, but preserve required structure
+  // Map template.criteria to acceptance if present
+  const templateAcceptance = template?.criteria || template?.acceptance;
+  
+  const specContent = {
+    ...defaultSpec,
     ...(template || {}),
+    // Always preserve these critical fields
+    id, // Never allow template to override id
+    // Map criteria to acceptance if template uses criteria
+    acceptance: templateAcceptance || defaultSpec.acceptance,
+    acceptance_criteria: templateAcceptance || defaultSpec.acceptance_criteria,
+    // Deep merge scope if template provides it
+    scope: template?.scope
+      ? {
+          in: template.scope.in || defaultSpec.scope.in,
+          out: template.scope.out || defaultSpec.scope.out,
+        }
+      : defaultSpec.scope,
+    // Deep merge blast_radius if template provides it
+    blast_radius: template?.blast_radius
+      ? {
+          modules: template.blast_radius.modules || defaultSpec.blast_radius.modules,
+          data_migration:
+            template.blast_radius.data_migration !== undefined
+              ? template.blast_radius.data_migration
+              : defaultSpec.blast_radius.data_migration,
+        }
+      : defaultSpec.blast_radius,
+    // Deep merge non_functional if template provides it
+    non_functional: template?.non_functional
+      ? {
+          a11y: template.non_functional.a11y || defaultSpec.non_functional.a11y,
+          perf: template.non_functional.perf || defaultSpec.non_functional.perf,
+          security: template.non_functional.security || defaultSpec.non_functional.security,
+        }
+      : defaultSpec.non_functional,
   };
 
   // Create file path

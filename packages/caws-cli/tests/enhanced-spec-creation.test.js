@@ -137,11 +137,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
 
       await expect(createSpec('FEAT-002', {})).rejects.toThrow(
-        "Spec 'existing-spec' already exists. Use --force to override."
+        "Spec 'FEAT-002' already exists. Use --force to override."
       );
 
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("Spec 'existing-spec' already exists")
+        expect.stringContaining("Spec 'FEAT-002' already exists")
       );
     });
 
@@ -260,7 +260,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       const result = await createSpec('FEAT-002', { interactive: true });
 
-      expect(result.id).toContain('FEAT-002-');
+      expect(result.id).toMatch(/^FEAT-\d+$/);
       expect(console.log).toHaveBeenCalledWith(
         expect.stringContaining('Creating spec with new name')
       );
