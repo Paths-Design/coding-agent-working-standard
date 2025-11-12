@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { execSync } = require('child_process');
+const { getTodoAnalyzerSuggestion } = require('./project-analysis');
 
 /**
  * Quality Gate Configuration
@@ -229,17 +230,17 @@ function checkHiddenTodos(stagedFiles) {
 
     if (!analyzerPath) {
       console.warn('⚠️  TODO analyzer not found - skipping TODO analysis');
-      console.warn(
-        '💡 Install @paths.design/quality-gates: npm install --save-dev @paths.design/quality-gates'
-      );
+      const suggestion = getTodoAnalyzerSuggestion(process.cwd());
+      console.warn('💡 Available options for TODO analysis:');
+      console.warn(suggestion);
       return { todos: [], blocking: 0, total: 0 };
     }
 
     if (usePython) {
       console.warn('⚠️  Using legacy Python TODO analyzer (deprecated)');
-      console.warn(
-        '💡 Install @paths.design/quality-gates for Node.js version: npm install --save-dev @paths.design/quality-gates'
-      );
+      const suggestion = getTodoAnalyzerSuggestion(process.cwd());
+      console.warn('💡 Consider upgrading to Node.js version:');
+      console.warn(suggestion);
     }
 
     // Run the TODO analyzer with staged files

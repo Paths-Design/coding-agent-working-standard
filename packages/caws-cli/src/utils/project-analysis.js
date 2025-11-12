@@ -111,9 +111,7 @@ function detectsPublishing(cwd = process.cwd()) {
   // Check package.json for npm publishing
   if (files.includes('package.json')) {
     try {
-      const packageJson = JSON.parse(
-        fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')
-      );
+      const packageJson = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
 
       // Indicators of publishing:
       // - Has publishConfig
@@ -123,9 +121,7 @@ function detectsPublishing(cwd = process.cwd()) {
       const hasPublishConfig = packageJson.publishConfig;
       const hasPublishScript =
         packageJson.scripts &&
-        Object.keys(packageJson.scripts).some((key) =>
-          key.toLowerCase().includes('publish')
-        );
+        Object.keys(packageJson.scripts).some((key) => key.toLowerCase().includes('publish'));
       const hasScopedName = packageJson.name && packageJson.name.startsWith('@');
       const hasRepository = packageJson.repository;
 
@@ -140,16 +136,13 @@ function detectsPublishing(cwd = process.cwd()) {
   // Check pyproject.toml for PyPI publishing
   if (files.includes('pyproject.toml')) {
     try {
-      const pyprojectContent = fs.readFileSync(
-        path.join(cwd, 'pyproject.toml'),
-        'utf8'
-      );
+      const pyprojectContent = fs.readFileSync(path.join(cwd, 'pyproject.toml'), 'utf8');
 
       // Check for build system and project metadata (indicates publishable package)
       const hasBuildSystem = pyprojectContent.includes('[build-system]');
       const hasProjectMetadata = pyprojectContent.includes('[project]');
-      const hasToolPublish = pyprojectContent.includes('[tool.publish]') ||
-                            pyprojectContent.includes('[tool.twine]');
+      const hasToolPublish =
+        pyprojectContent.includes('[tool.publish]') || pyprojectContent.includes('[tool.twine]');
 
       if ((hasBuildSystem && hasProjectMetadata) || hasToolPublish) {
         return true;
@@ -177,10 +170,7 @@ function detectsPublishing(cwd = process.cwd()) {
       const workflowFiles = fs.readdirSync(workflowsPath);
       for (const workflowFile of workflowFiles) {
         if (workflowFile.endsWith('.yml') || workflowFile.endsWith('.yaml')) {
-          const workflowContent = fs.readFileSync(
-            path.join(workflowsPath, workflowFile),
-            'utf8'
-          );
+          const workflowContent = fs.readFileSync(path.join(workflowsPath, workflowFile), 'utf8');
           // Check for common publishing actions/commands
           if (
             workflowContent.includes('npm publish') ||
@@ -201,8 +191,178 @@ function detectsPublishing(cwd = process.cwd()) {
   return false;
 }
 
+/**
+ * Detect primary programming language(s) used in project
+ * @param {string} cwd - Current working directory
+ * @returns {Object} Language detection result with primary language and indicators
+ */
+function detectProjectLanguage(cwd = process.cwd()) {
+  const files = fs.readdirSync(cwd);
+  const indicators = {
+    javascript: false,
+    typescript: false,
+    python: false,
+    rust: false,
+    go: false,
+    java: false,
+    csharp: false,
+    php: false,
+  };
+
+  // JavaScript/TypeScript indicators
+  if (files.includes('package.json')) {
+    indicators.javascript = true;
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+      const allDeps = {
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.devDependencies || {}),
+      };
+      if ('typescript' in allDeps || files.includes('tsconfig.json')) {
+        indicators.typescript = true;
+        indicators.javascript = false; // TypeScript supersedes JavaScript
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+  }
+
+  // Python indicators
+  if (
+    files.includes('requirements.txt') ||
+    files.includes('pyproject.toml') ||
+    files.includes('setup.py') ||
+    files.includes('Pipfile') ||
+    files.includes('poetry.lock') ||
+    files.some((f) => f.endsWith('.py'))
+  ) {
+    indicators.python = true;
+  }
+
+  // Rust indicators
+  if (files.includes('Cargo.toml') || files.some((f) => f.endsWith('.rs'))) {
+    indicators.rust = true;
+  }
+
+  // Go indicators
+  if (
+    files.includes('go.mod') ||
+    files.includes('go.sum') ||
+    files.some((f) => f.endsWith('.go'))
+  ) {
+    indicators.go = true;
+  }
+
+  // Java indicators
+  if (
+    files.includes('pom.xml') ||
+    files.includes('build.gradle') ||
+    files.some((f) => f.endsWith('.java'))
+  ) {
+    indicators.java = true;
+  }
+
+  // C# indicators
+  if (
+    files.some((f) => f.endsWith('.csproj')) ||
+    files.some((f) => f.endsWith('.sln')) ||
+    files.some((f) => f.endsWith('.cs'))
+  ) {
+    indicators.csharp = true;
+  }
+
+  // PHP indicators
+  if (
+    files.includes('composer.json') ||
+    files.includes('composer.lock') ||
+    files.some((f) => f.endsWith('.php'))
+  ) {
+    indicators.php = true;
+  }
+
+  // Determine primary language (priority order)
+  let primaryLanguage = 'unknown';
+  if (indicators.typescript) {
+    primaryLanguage = 'typescript';
+  } else if (indicators.javascript) {
+    primaryLanguage = 'javascript';
+  } else if (indicators.python) {
+    primaryLanguage = 'python';
+  } else if (indicators.rust) {
+    primaryLanguage = 'rust';
+  } else if (indicators.go) {
+    primaryLanguage = 'go';
+  } else if (indicators.java) {
+    primaryLanguage = 'java';
+  } else if (indicators.csharp) {
+    primaryLanguage = 'csharp';
+  } else if (indicators.php) {
+    primaryLanguage = 'php';
+  }
+
+  return {
+    primary: primaryLanguage,
+    indicators,
+    hasNodeJs: indicators.javascript || indicators.typescript,
+    hasPython: indicators.python,
+  };
+}
+
+/**
+ * Get language-agnostic suggestion for TODO analyzer installation
+ * Focuses on runtime availability (Node.js/npx) rather than project language
+ * @param {string} cwd - Current working directory
+ * @returns {string} Installation suggestion message
+ */
+function getTodoAnalyzerSuggestion(cwd = process.cwd()) {
+  // Check runtime availability (language-agnostic)
+  let hasNodeJs = false;
+  let hasNpx = false;
+  try {
+    const { execSync } = require('child_process');
+    execSync('command -v node', { encoding: 'utf8', stdio: 'ignore' });
+    hasNodeJs = true;
+    execSync('command -v npx', { encoding: 'utf8', stdio: 'ignore' });
+    hasNpx = true;
+  } catch (e) {
+    // Node.js/npx not available
+  }
+
+  const suggestions = [];
+
+  if (hasNpx) {
+    // npx available - works for any language, no installation needed
+    suggestions.push(
+      '   • Use npx (no installation required): npx --yes @paths.design/quality-gates'
+    );
+    suggestions.push('   • Install package: npm install --save-dev @paths.design/quality-gates');
+  } else if (hasNodeJs) {
+    // Node.js available but npx not found (unusual)
+    suggestions.push('   • Install package: npm install --save-dev @paths.design/quality-gates');
+    suggestions.push(
+      '   • Install npx: npm install -g npx (then use: npx --yes @paths.design/quality-gates)'
+    );
+  } else {
+    // Node.js not available - suggest installation
+    suggestions.push(
+      '   • Install Node.js: https://nodejs.org/ (then use: npx --yes @paths.design/quality-gates)'
+    );
+    suggestions.push('   • Use CAWS MCP server: caws quality-gates (via MCP)');
+  }
+
+  // Check for project-specific scripts (language-agnostic - if they exist, suggest them)
+  const pythonScript = path.join(cwd, 'scripts', 'v3', 'analysis', 'todo_analyzer.py');
+  if (fs.existsSync(pythonScript)) {
+    suggestions.push(`   • Use project script: python3 ${pythonScript}`);
+  }
+
+  return suggestions.join('\n');
+}
+
 module.exports = {
   detectProjectType,
   shouldInitInCurrentDirectory,
   detectsPublishing,
+  detectProjectLanguage,
+  getTodoAnalyzerSuggestion,
 };

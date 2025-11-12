@@ -44,14 +44,66 @@ async function qualityGatesCommand(options = {}) {
       const packagesDir = path.dirname(cliPackageDir);
       const monorepoRunner = path.join(packagesDir, 'quality-gates', 'run-quality-gates.mjs');
 
-      // Option 2: Check VS Code extension bundled (if running from extension context)
+      // Option 2: Check globally installed CLI for bundled quality gates
+      let globalCliPath = null;
+      try {
+        const { execSync } = require('child_process');
+        const whichCaws = execSync('which caws', { encoding: 'utf8', stdio: 'pipe' }).trim();
+        if (whichCaws) {
+          // Resolve symlink to actual path
+          const realPath = fs.realpathSync(whichCaws);
+          const globalCliDir = path.dirname(realPath);
+          // Check for bundled quality gates in global CLI installation
+          const possibleBundledPaths = [
+            path.join(
+              globalCliDir,
+              '..',
+              'lib',
+              'node_modules',
+              '@paths.design',
+              'caws-cli',
+              'node_modules',
+              '@paths.design',
+              'quality-gates',
+              'run-quality-gates.mjs'
+            ),
+            path.join(
+              globalCliDir,
+              '..',
+              'lib',
+              'node_modules',
+              '@paths.design',
+              'quality-gates',
+              'run-quality-gates.mjs'
+            ),
+            path.join(
+              globalCliDir,
+              '..',
+              'node_modules',
+              '@paths.design',
+              'quality-gates',
+              'run-quality-gates.mjs'
+            ),
+          ];
+          for (const bundledPath of possibleBundledPaths) {
+            if (fs.existsSync(bundledPath)) {
+              globalCliPath = bundledPath;
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore errors finding global CLI
+      }
+
+      // Option 3: Check VS Code extension bundled (if running from extension context)
       const vscodeExtensionPath =
         process.env.VSCODE_EXTENSION_PATH || process.env.VSCODE_EXTENSION_DIR;
       const bundledRunner = vscodeExtensionPath
         ? path.join(vscodeExtensionPath, 'bundled', 'quality-gates', 'run-quality-gates.mjs')
         : null;
 
-      // Option 3: Check node_modules for quality-gates package (prioritize published package)
+      // Option 4: Check node_modules for quality-gates package (prioritize published package)
       const nodeModulesPaths = [
         // Published npm package (priority)
         path.join(
@@ -69,6 +121,8 @@ async function qualityGatesCommand(options = {}) {
       // Try all possible paths in order
       if (fs.existsSync(monorepoRunner)) {
         qualityGatesRunner = monorepoRunner;
+      } else if (globalCliPath) {
+        qualityGatesRunner = globalCliPath;
       } else if (bundledRunner && fs.existsSync(bundledRunner)) {
         qualityGatesRunner = bundledRunner;
       } else {
@@ -132,14 +186,98 @@ async function qualityGatesCommand(options = {}) {
         }
       }
 
-      // If still no runner found, provide helpful error
+      // Option 5: Try npx (no installation required) - works if Node.js is available
       if (!qualityGatesRunner) {
-        const suggestions = [
-          'Install quality gates package: npm install -g @paths.design/quality-gates',
-          'Use Python script (if available): python3 scripts/simple_gates.py all --tier 2 --profile backend-api',
-          'Use Makefile target (if available): make caws-gates',
-          'Run from CAWS monorepo root',
-        ];
+        try {
+          const { execSync } = require('child_process');
+          // Check if npx is available
+          execSync('command -v npx', { encoding: 'utf8', stdio: 'ignore' });
+
+          Output.info('Using npx to run quality gates (no installation required)...');
+
+          // Build npx command - the package exposes 'caws-quality-gates' bin command
+          // Use npx to download and run without installing
+          const npxArgs = ['npx', '--yes', '@paths.design/quality-gates'];
+
+          // Map CLI options to runner options
+          if (options.ci) {
+            npxArgs.push('--ci');
+          }
+          if (options.json) {
+            npxArgs.push('--json');
+          }
+          if (options.gates && options.gates.trim()) {
+            npxArgs.push('--gates', options.gates.trim());
+          }
+          if (options.fix) {
+            npxArgs.push('--fix');
+          }
+
+          Output.progress('Executing quality gates via npx...');
+          Output.info(`Command: ${npxArgs.join(' ')}`);
+
+          // Execute via npx
+          const { execSync: execSyncNpx } = require('child_process');
+          execSyncNpx(npxArgs.join(' '), {
+            stdio: 'inherit',
+            cwd: projectRoot,
+            env: {
+              ...process.env,
+              CAWS_CLI_INTEGRATION: 'true',
+              CAWS_CLI_VERSION: require(path.join(cliPackageDir, 'package.json')).version,
+            },
+          });
+
+          Output.success('Quality gates completed successfully');
+          return;
+        } catch (npxError) {
+          // npx not available or failed - continue to error message
+        }
+      }
+
+      // If still no runner found, provide helpful error with language-agnostic suggestions
+      if (!qualityGatesRunner) {
+        // Check if Node.js/npx is available (language-agnostic check)
+        let hasNodeJs = false;
+        try {
+          const { execSync } = require('child_process');
+          execSync('command -v node', { encoding: 'utf8', stdio: 'ignore' });
+          execSync('command -v npx', { encoding: 'utf8', stdio: 'ignore' });
+          hasNodeJs = true;
+        } catch (e) {
+          // Node.js/npx not available
+        }
+
+        const suggestions = [];
+
+        if (hasNodeJs) {
+          // Node.js available - suggest npx (works for any language, no installation)
+          suggestions.push(
+            'Use npx (no installation required): npx --yes @paths.design/quality-gates'
+          );
+          suggestions.push('Install globally: npm install -g @paths.design/quality-gates');
+          suggestions.push('Install locally: npm install --save-dev @paths.design/quality-gates');
+        } else {
+          // Node.js not available - suggest installation or alternatives
+          suggestions.push('Install Node.js to use quality gates: https://nodejs.org/');
+          suggestions.push(
+            'Then use: npx --yes @paths.design/quality-gates (no installation required)'
+          );
+          suggestions.push('Or install globally: npm install -g @paths.design/quality-gates');
+        }
+
+        // Language-agnostic fallback options (if they exist)
+        const pythonScript = path.join(projectRoot, 'scripts', 'simple_gates.py');
+        const makefile = path.join(projectRoot, 'Makefile');
+
+        if (fs.existsSync(pythonScript)) {
+          suggestions.push(`Use project script: python3 ${pythonScript} all --tier 2`);
+        }
+        if (fs.existsSync(makefile)) {
+          suggestions.push('Use Makefile target: make caws-gates');
+        }
+
+        suggestions.push('Run from CAWS monorepo root (if developing CAWS itself)');
 
         throw new Error(
           'Quality gates runner not found.\n\n' +

@@ -6,6 +6,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const { detectProjectLanguage, getTodoAnalyzerSuggestion } = require('../utils/project-analysis');
 
 /**
  * Scaffold git hooks for CAWS provenance tracking
@@ -39,7 +40,7 @@ async function scaffoldGitHooks(projectDir, options = {}) {
       name: 'pre-commit',
       description: 'Pre-commit validation and quality checks',
       enabled: validation || qualityGates,
-      content: generatePreCommitHook({ validation, qualityGates }),
+      content: generatePreCommitHook({ validation, qualityGates, projectDir }),
     },
     {
       name: 'post-commit',
@@ -120,7 +121,11 @@ async function scaffoldGitHooks(projectDir, options = {}) {
  * Implements fallback chain: Node script → CLI → Python scripts → Skip gracefully
  */
 function generatePreCommitHook(options) {
-  const { qualityGates = true, stagedOnly = true } = options;
+  const { qualityGates = true, stagedOnly = true, projectDir = process.cwd() } = options;
+
+  // Detect project language for appropriate suggestions
+  const lang = detectProjectLanguage(projectDir);
+  const todoSuggestion = getTodoAnalyzerSuggestion(projectDir);
 
   return `#!/bin/bash
 # CAWS Pre-commit Hook
@@ -144,13 +149,13 @@ if [ -f ".git/index.lock" ]; then
   LOCK_AGE_MINUTES=$((LOCK_AGE / 60))
   
   if [ $LOCK_AGE_MINUTES -gt 5 ]; then
-    echo "⚠️  Stale git lock detected (${LOCK_AGE_MINUTES} minutes old)"
+    echo "⚠️  Stale git lock detected (\${LOCK_AGE_MINUTES} minutes old)"
     echo "💡 This may indicate a crashed git process"
     echo "💡 Remove stale lock: rm .git/index.lock"
     echo "⚠️  Warning: Check for running git/editor processes before removing"
     exit 1
   else
-    echo "⚠️  Git lock detected (${LOCK_AGE_MINUTES} minutes old)"
+    echo "⚠️  Git lock detected (\${LOCK_AGE_MINUTES} minutes old)"
     echo "💡 Another git process may be running"
     echo "💡 Wait for the other process to complete, or check for running processes"
     exit 1
@@ -326,42 +331,49 @@ fi
 if [ "$QUALITY_GATES_RAN" = true ]; then
   echo "🔍 Checking for hidden TODOs in staged files..."
   
-  # Find TODO analyzer .mjs file (preferred - no Python dependency)
-  TODO_ANALYZER=""
+  TODO_CHECK_RAN=false
   
-  # Try quality gates package TODO analyzer (published package)
-  if [ -f "node_modules/@paths.design/quality-gates/todo-analyzer.mjs" ]; then
-    TODO_ANALYZER="node_modules/@paths.design/quality-gates/todo-analyzer.mjs"
-  # Try quality gates package TODO analyzer (monorepo/local copy)
-  elif [ -f "node_modules/@caws/quality-gates/todo-analyzer.mjs" ]; then
-    TODO_ANALYZER="node_modules/@caws/quality-gates/todo-analyzer.mjs"
-  # Try monorepo structure (development)
-  elif [ -f "packages/quality-gates/todo-analyzer.mjs" ]; then
-    TODO_ANALYZER="packages/quality-gates/todo-analyzer.mjs"
-  # Try local copy in scripts directory (if scaffolded)
-  elif [ -f "scripts/todo-analyzer.mjs" ]; then
-    TODO_ANALYZER="scripts/todo-analyzer.mjs"
+  # Option 1: Find TODO analyzer .mjs file (if installed locally)
+  if [ "$TODO_CHECK_RAN" = false ]; then
+    TODO_ANALYZER=""
+    
+    # Try quality gates package TODO analyzer (published package)
+    if [ -f "node_modules/@paths.design/quality-gates/todo-analyzer.mjs" ]; then
+      TODO_ANALYZER="node_modules/@paths.design/quality-gates/todo-analyzer.mjs"
+    # Try quality gates package TODO analyzer (monorepo/local copy)
+    elif [ -f "node_modules/@caws/quality-gates/todo-analyzer.mjs" ]; then
+      TODO_ANALYZER="node_modules/@caws/quality-gates/todo-analyzer.mjs"
+    # Try monorepo structure (development)
+    elif [ -f "packages/quality-gates/todo-analyzer.mjs" ]; then
+      TODO_ANALYZER="packages/quality-gates/todo-analyzer.mjs"
+    # Try local copy in scripts directory (if scaffolded)
+    elif [ -f "scripts/todo-analyzer.mjs" ]; then
+      TODO_ANALYZER="scripts/todo-analyzer.mjs"
+    fi
+    
+    # Run TODO analyzer if found
+    if [ -n "$TODO_ANALYZER" ] && command -v node >/dev/null 2>&1; then
+      if node "$TODO_ANALYZER" --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
+        echo "✅ No critical hidden TODOs found in staged files"
+        TODO_CHECK_RAN=true
+      else
+        echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
+        echo "💡 Fix stub implementations and placeholder code before committing"
+        echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
+        echo ""
+        echo "🔍 Running detailed analysis on staged files..."
+        node "$TODO_ANALYZER" --staged-only --min-confidence 0.8
+        exit 1
+      fi
+    fi
   fi
   
-  # Run TODO analyzer if found
-  if [ -n "$TODO_ANALYZER" ] && command -v node >/dev/null 2>&1; then
-    if node "$TODO_ANALYZER" --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
-      echo "✅ No critical hidden TODOs found in staged files"
-    else
-      echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
-      echo "💡 Fix stub implementations and placeholder code before committing"
-      echo "📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification"
-      echo ""
-      echo "🔍 Running detailed analysis on staged files..."
-      node "$TODO_ANALYZER" --staged-only --min-confidence 0.8
-      exit 1
-    fi
-  # Fallback to legacy Python analyzer (deprecated - will be removed)
-  elif command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
+  # Option 2: Fallback to legacy Python analyzer (deprecated - will be removed)
+  if [ "$TODO_CHECK_RAN" = false ] && command -v python3 >/dev/null 2>&1 && [ -f "scripts/v3/analysis/todo_analyzer.py" ]; then
     echo "⚠️  Using legacy Python TODO analyzer (deprecated)"
-    echo "💡 Install @paths.design/quality-gates for Node.js version: npm install --save-dev @paths.design/quality-gates"
     if python3 scripts/v3/analysis/todo_analyzer.py --staged-only --ci-mode --min-confidence 0.8 >/dev/null 2>&1; then
       echo "✅ No critical hidden TODOs found in staged files"
+      TODO_CHECK_RAN=true
     else
       echo "❌ Critical hidden TODOs detected in staged files - commit blocked"
       echo "💡 Fix stub implementations and placeholder code before committing"
@@ -371,9 +383,16 @@ if [ "$QUALITY_GATES_RAN" = true ]; then
       python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
       exit 1
     fi
-  else
+  fi
+  
+  # Option 3: No analyzer available - show language-aware suggestions
+  if [ "$TODO_CHECK_RAN" = false ]; then
     echo "⚠️  TODO analyzer not available - skipping hidden TODO check"
-    echo "💡 Install @paths.design/quality-gates for TODO analysis: npm install --save-dev @paths.design/quality-gates"
+    echo "💡 Available options for TODO analysis:"
+${todoSuggestion
+  .split('\n')
+  .map((line) => `    echo "${line.replace(/"/g, '\\"')}"`)
+  .join('\n')}
   fi
 fi
 

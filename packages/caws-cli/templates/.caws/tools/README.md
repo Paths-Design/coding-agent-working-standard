@@ -18,3 +18,4 @@ node .caws/tools/scope-guard.js check .caws/working-spec.yaml
 
 The `.cursor/hooks/scope-guard.sh` hook automatically uses this tool to validate file attachments against working spec scope boundaries.
 
+
