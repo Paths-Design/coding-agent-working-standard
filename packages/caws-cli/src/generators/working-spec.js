@@ -42,10 +42,20 @@ function generateWorkingSpec(answers) {
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s),
-      out: (answers.scopeOut || 'node_modules/, dist/')
+      out: (answers.scopeOut || 'node_modules/, dist/, build/')
         .split(',')
         .map((s) => s.trim())
-        .filter((s) => s),
+        .filter((s) => s)
+        // Remove glob patterns - scope.out should only contain directory paths
+        .filter((s) => !s.includes('*') && !s.includes('?'))
+        // Ensure paths end with / for directories or are explicit file paths
+        .map((s) => {
+          // If it's a directory pattern without trailing slash, add it
+          if (!s.includes('.') && !s.endsWith('/')) {
+            return s + '/';
+          }
+          return s;
+        }),
     },
     invariants: (answers.projectInvariants || 'System maintains data consistency')
       .split('\n')

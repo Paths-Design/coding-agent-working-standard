@@ -238,6 +238,39 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
+    // Validate scope.out doesn't contain glob patterns
+    if (spec.scope && spec.scope.out && Array.isArray(spec.scope.out)) {
+      const globPatterns = spec.scope.out.filter((pattern) => pattern.includes('*') || pattern.includes('?'));
+      if (globPatterns.length > 0) {
+        errors.push({
+          instancePath: '/scope/out',
+          message: `Unsupported glob patterns in scope.out: ${globPatterns.join(', ')}`,
+          suggestion: 'Use directory paths only (e.g., __pycache__/ instead of *.pyc or **/*.pyc). Python cache files are already covered by __pycache__/',
+          canAutoFix: true,
+        });
+        
+        // Auto-fix: remove glob patterns and keep only directory paths
+        if (autoFix) {
+          const fixedOut = spec.scope.out
+            .filter((pattern) => !pattern.includes('*') && !pattern.includes('?'))
+            .map((pattern) => {
+              // Ensure directory paths end with /
+              if (!pattern.includes('.') && !pattern.endsWith('/')) {
+                return pattern + '/';
+              }
+              return pattern;
+            });
+          
+          fixes.push({
+            field: 'scope.out',
+            value: fixedOut,
+            description: `Removed glob patterns from scope.out: ${globPatterns.join(', ')}`,
+            reason: 'Glob patterns are not supported in scope.out',
+          });
+        }
+      }
+    }
+
     // Auto-fix missing scope.out
     if (spec.scope && !spec.scope.out) {
       fixes.push({

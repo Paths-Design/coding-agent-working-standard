@@ -196,10 +196,11 @@ async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
             '   This may be a path resolution or caching issue\n'
         );
       } else {
-        console.warn(
-          '⚠️  Policy file not found: .caws/policy.yaml\n' +
-            '   Using default policy. Run "caws init" to create policy.yaml'
-        );
+        // Policy.yaml is optional - defaults work fine, so don't warn unnecessarily
+        // Only show info message if user explicitly wants to see it
+        if (options.showPolicyInfo !== false) {
+          // Silent by default - policy.yaml is optional
+        }
       }
     }
 

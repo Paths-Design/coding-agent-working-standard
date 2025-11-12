@@ -361,6 +361,18 @@ async function initProject(projectName, options) {
       await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
       console.log(chalk.green('✅ Created .caws/working-spec.yaml'));
 
+      // Optionally create policy.yaml (optional - defaults work fine)
+      const policyPath = path.join('.caws', 'policy.yaml');
+      if (!fs.existsSync(policyPath)) {
+        const { PolicyManager } = require('../policy/PolicyManager');
+        const policyManager = new PolicyManager();
+        const defaultPolicy = policyManager.getDefaultPolicy();
+        const yaml = require('js-yaml');
+        const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
+        await fs.writeFile(policyPath, policyContent);
+        console.log(chalk.green('✅ Created .caws/policy.yaml (optional - defaults work fine)'));
+      }
+
       // Generate additional files if requested
       if (answers.generateExamples) {
         console.log(chalk.blue('📝 Generating example files...'));
@@ -463,6 +475,18 @@ Happy coding! 🎯
       await fs.ensureDir('.caws');
       await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
       console.log(chalk.green('✅ Created .caws/working-spec.yaml'));
+
+      // Optionally create policy.yaml (optional - defaults work fine)
+      const policyPath = path.join('.caws', 'policy.yaml');
+      if (!fs.existsSync(policyPath)) {
+        const { PolicyManager } = require('../policy/PolicyManager');
+        const policyManager = new PolicyManager();
+        const defaultPolicy = policyManager.getDefaultPolicy();
+        const yaml = require('js-yaml');
+        const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
+        await fs.writeFile(policyPath, policyContent);
+        console.log(chalk.green('✅ Created .caws/policy.yaml (optional - defaults work fine)'));
+      }
 
       // Setup Cursor hooks by default in non-interactive mode
       console.log(chalk.blue('🎯 Setting up Cursor hooks...'));
