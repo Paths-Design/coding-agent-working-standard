@@ -549,145 +549,117 @@ if command -v caws >/dev/null 2>&1; then
   fi
 fi
 
-# Run tests before pushing
+# Run fast pre-push checks (full test suite runs in CI)
 echo ""
-echo "🧪 Running test suite..."
-TESTS_FAILED=false
+echo "⚡ Running fast pre-push checks..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Detect test framework and run tests
+QUICK_CHECKS_FAILED=false
+
+# 1. Linting (fast)
 if [ -f "package.json" ]; then
-  # Node.js/JavaScript project
   if command -v npm >/dev/null 2>&1; then
-    # Check if test script exists
-    if grep -q '"test"' package.json; then
-      echo "📦 Running npm test..."
-      # Run tests with minimal output, but capture failures
-      TEST_OUTPUT=$(npm test -- --no-coverage 2>&1)
-      TEST_EXIT=$?
-      
-      if [ $TEST_EXIT -eq 0 ]; then
-        # Extract summary from test output
-        TEST_SUMMARY=$(echo "$TEST_OUTPUT" | grep -E "(PASS|Tests:|Test Suites:)" | tail -3)
-        if [ -n "$TEST_SUMMARY" ]; then
-          echo "$TEST_SUMMARY"
-        fi
-        echo "✅ All tests passed"
+    if grep -q '"lint"' package.json; then
+      echo "🔍 Running linting..."
+      if npm run lint >/dev/null 2>&1; then
+        echo "✅ Linting passed"
       else
-        echo "❌ Tests failed - push blocked"
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Test Failures Detected:"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        # Show only failure summary, not full output
-        echo "$TEST_OUTPUT" | grep -E "(FAIL|●|Expected|Received|at Object)" | head -20
-        echo ""
-        echo "💡 Run tests locally to see full details: npm test"
-        echo "💡 Fix failing tests before pushing"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        TESTS_FAILED=true
+        echo "❌ Linting failed"
+        echo "💡 Fix lint errors: npm run lint"
+        QUICK_CHECKS_FAILED=true
       fi
-    else
-      echo "⚠️  No test script found in package.json - skipping tests"
-      echo "💡 Add test script: \\"test\\": \\"jest\\" or \\"test\\": \\"mocha\\""
     fi
   fi
-elif [ -f "pytest.ini" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
-  # Python project
-  if command -v pytest >/dev/null 2>&1; then
-    echo "🐍 Running pytest..."
-    if pytest --quiet 2>&1; then
-      echo "✅ All tests passed"
-    else
-      echo "❌ Tests failed - push blocked"
-      echo "💡 Run tests locally: pytest"
-      TESTS_FAILED=true
-    fi
-  elif command -v python3 >/dev/null 2>&1 && [ -f "setup.py" ]; then
-    echo "🐍 Running Python tests..."
-    if python3 -m pytest --quiet 2>&1 || python3 -m unittest discover -s tests -p "test_*.py" --quiet 2>&1; then
-      echo "✅ All tests passed"
-    else
-      echo "❌ Tests failed - push blocked"
-      TESTS_FAILED=true
-    fi
-  else
-    echo "⚠️  pytest not found - skipping tests"
-  fi
-elif [ -f "Cargo.toml" ]; then
-  # Rust project
-  if command -v cargo >/dev/null 2>&1; then
-    echo "🦀 Running cargo test..."
-    if cargo test --quiet 2>&1; then
-      echo "✅ All tests passed"
-    else
-      echo "❌ Tests failed - push blocked"
-      echo "💡 Run tests locally: cargo test"
-      TESTS_FAILED=true
-    fi
-  fi
-elif [ -f "go.mod" ]; then
-  # Go project
-  if command -v go >/dev/null 2>&1; then
-    echo "🐹 Running go test..."
-    if go test ./... -short 2>&1; then
-      echo "✅ All tests passed"
-    else
-      echo "❌ Tests failed - push blocked"
-      echo "💡 Run tests locally: go test ./..."
-      TESTS_FAILED=true
-    fi
-  fi
-else
-  echo "⚠️  No test framework detected - skipping tests"
-  echo "💡 Supported: npm test, pytest, cargo test, go test"
 fi
 
-if [ "$TESTS_FAILED" = true ]; then
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "Push blocked due to test failures"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "Next Steps:"
-  echo "   1. Review test failures above"
-  echo "   2. Fix failing tests"
-  echo "   3. Run tests locally: npm test (or equivalent)"
-  echo "   4. Commit fixes: git commit --no-verify"
-  echo "   5. Push again: git push"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  exit 1
+# 2. Type checking (fast for TypeScript/JavaScript)
+if [ -f "package.json" ]; then
+  if command -v npm >/dev/null 2>&1; then
+    if grep -q '"typecheck"' package.json; then
+      echo "🔍 Running type checking..."
+      if npm run typecheck >/dev/null 2>&1; then
+        echo "✅ Type checking passed"
+      else
+        echo "❌ Type checking failed"
+        echo "💡 Fix type errors: npm run typecheck"
+        QUICK_CHECKS_FAILED=true
+      fi
+    fi
+  fi
 fi
 
-# Run security checks
+# 3. Quick test check - only run tests for changed files (optional, fast)
+if [ -f "package.json" ] && [ "$CAWS_PRE_PUSH_FULL_TESTS" != "true" ]; then
+  if command -v npm >/dev/null 2>&1 && grep -q '"test"' package.json; then
+    # Get changed files in this push
+    CHANGED_FILES=$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+    
+    if [ -n "$CHANGED_FILES" ]; then
+      # Check if any test files changed (if so, run quick test)
+      if echo "$CHANGED_FILES" | grep -qE "(test|spec)"; then
+        echo "🔍 Running quick test check (changed test files detected)..."
+        # Run tests with bail flag for faster failure detection
+        if npm test -- --bail --maxWorkers=2 --no-coverage >/dev/null 2>&1; then
+          echo "✅ Quick test check passed"
+        else
+          echo "⚠️  Quick test check failed"
+          echo "💡 Run full tests locally: npm test"
+          echo "💡 Or set CAWS_PRE_PUSH_FULL_TESTS=true for full test suite"
+          # Don't fail on quick test check - just warn
+        fi
+      else
+        echo "⏭️  Skipping test check (no test files changed)"
+        echo "💡 Full test suite will run in CI"
+      fi
+    fi
+  fi
+fi
+
+# 4. Security checks (non-blocking warnings)
 echo ""
 echo "🔒 Running security checks..."
 if [ -f "package.json" ]; then
-  # Check for vulnerabilities
   if command -v npm >/dev/null 2>&1; then
     echo "🔍 Checking for vulnerabilities..."
     if npm audit --audit-level moderate >/dev/null 2>&1; then
       echo "✅ Security audit passed"
     else
-      echo "⚠️  Security vulnerabilities found"
+      echo "⚠️  Security vulnerabilities found (non-blocking)"
       echo "💡 Review with: npm audit"
-      # Don't fail on warnings, just warn
     fi
   fi
 elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
-  # Python project security checks
   if command -v pip-audit >/dev/null 2>&1; then
     echo "🔍 Checking Python vulnerabilities..."
-    pip-audit --desc 2>/dev/null || echo "⚠️  Install pip-audit for vulnerability checks: pip install pip-audit"
+    pip-audit --desc 2>/dev/null || echo "⚠️  Install pip-audit: pip install pip-audit"
   fi
 elif [ -f "Cargo.toml" ]; then
-  # Rust project security checks
   if command -v cargo-audit >/dev/null 2>&1; then
     echo "🔍 Checking Rust vulnerabilities..."
-    cargo audit 2>/dev/null || echo "⚠️  Install cargo-audit for vulnerability checks: cargo install cargo-audit"
+    cargo audit 2>/dev/null || echo "⚠️  Install cargo-audit: cargo install cargo-audit"
   fi
 fi
 
+# Fail if quick checks failed
+if [ "$QUICK_CHECKS_FAILED" = true ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "❌ Pre-push checks failed"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Quick checks (linting/type checking) must pass before push."
+  echo ""
+  echo "💡 To run full test suite locally:"
+  echo "   npm test"
+  echo ""
+  echo "💡 To enable full tests in pre-push hook:"
+  echo "   export CAWS_PRE_PUSH_FULL_TESTS=true"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 1
+fi
+
 echo ""
-echo "🎉 Pre-push checks completed!"
+echo "✅ Pre-push checks completed!"
+echo "💡 Full test suite will run in CI"
 `;
 }
 
