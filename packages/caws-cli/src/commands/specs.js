@@ -503,9 +503,10 @@ function displaySpecDetails(spec) {
 /**
  * Migrate from legacy working-spec.yaml to feature-specific specs
  * @param {Object} options - Migration options
+ * @param {Function} [createSpecFn] - Function to create specs (for testing)
  * @returns {Promise<Object>} Migration result
  */
-async function migrateFromLegacy(options = {}) {
+async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   const fs = require('fs-extra');
   const path = require('path');
   const yaml = require('js-yaml');
@@ -574,7 +575,7 @@ async function migrateFromLegacy(options = {}) {
         featureCounter++;
       }
 
-      await createSpec(specId, {
+      await createSpecFn(specId, {
         type: 'feature',
         title: feature.title,
         risk_tier: 'T3', // Default tier
@@ -718,7 +719,11 @@ async function specsCommand(action, options = {}) {
         }
 
         case 'migrate': {
-          const result = await migrateFromLegacy(options);
+          // Allow tests to inject createSpec function
+          const createSpecFn = options._createSpecFn || createSpec;
+          const migrationOptions = { ...options };
+          delete migrationOptions._createSpecFn; // Remove test-only option
+          const result = await migrateFromLegacy(migrationOptions, createSpecFn);
 
           return outputResult({
             command: 'specs migrate',

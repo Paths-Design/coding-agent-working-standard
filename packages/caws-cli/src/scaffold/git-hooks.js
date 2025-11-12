@@ -599,8 +599,8 @@ if [ -f "package.json" ]; then
       echo "✅ Full test suite passed"
       rm -f /tmp/pre-push-test-full.log
     else
-      FULL_TEST_EXIT_CODE=${PIPESTATUS[0]}
-      echo "❌ Full test suite failed (exit code: ${FULL_TEST_EXIT_CODE})"
+      FULL_TEST_EXIT_CODE=\${PIPESTATUS[0]}
+      echo "❌ Full test suite failed (exit code: \${FULL_TEST_EXIT_CODE})"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo "Test output (last 100 lines):"
       tail -100 /tmp/pre-push-test-full.log 2>/dev/null || echo "No test output captured"

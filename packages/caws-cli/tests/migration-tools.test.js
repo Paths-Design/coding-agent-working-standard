@@ -206,9 +206,9 @@ describe('Migration Tools', () => {
     });
 
     test('should handle selective feature migration', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      // Mock yaml.load first before requiring the module
       const yaml = require('js-yaml');
-
+      
       // Legacy spec with multiple features (auth and payment)
       const legacySpec = {
         id: 'PROJ-001',
@@ -228,19 +228,13 @@ describe('Migration Tools', () => {
         ],
       };
 
-      // Convert to YAML string
-      const legacySpecYaml = yaml.dump(legacySpec);
-
       // Mock fs.pathExists - return true for legacy spec
       fs.pathExists.mockImplementation((filePath) => {
         return Promise.resolve(String(filePath).includes('working-spec.yaml'));
       });
 
-      // Mock fs.readFile - simple: if path contains 'working-spec.yaml', return YAML
+      // Mock fs.readFile - return empty string (content doesn't matter since we mock yaml.load)
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        if (String(filePath).includes('working-spec.yaml')) {
-          return legacySpecYaml;
-        }
         if (String(filePath).includes('registry.json')) {
           return JSON.stringify({
             version: '1.0.0',
@@ -251,29 +245,42 @@ describe('Migration Tools', () => {
         return '';
       });
 
+      // Mock yaml.load to return the legacy spec directly (same approach as passing test)
+      yaml.load = jest.fn().mockReturnValue(legacySpec);
+
       // Mock fs.writeFile and fs.ensureDir
       fs.writeFile.mockResolvedValue(undefined);
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Mock createSpec to track what gets created
+      // Now require the specs module
+      const specsModule = require('../src/commands/specs');
+      const { specsCommand } = specsModule;
       const createdSpecs = [];
-      const originalCreateSpec = require('../src/commands/specs').createSpec;
-      require('../src/commands/specs').createSpec = jest.fn(async (id, options) => {
+      
+      // Create a mock createSpec function to inject
+      const mockCreateSpec = jest.fn(async (id, options) => {
         createdSpecs.push({ id, options });
         return { id, type: options.type, title: options.title };
       });
 
-      // Run migration with only 'auth' feature
-      const result = await specsCommand('migrate', { features: ['auth'] });
+      // Run migration with only 'auth' feature, injecting mock createSpec
+      const result = await specsCommand('migrate', { 
+        features: ['auth'],
+        _createSpecFn: mockCreateSpec, // Test-only injection point
+      });
 
       // Verify only auth feature was migrated
       expect(result.migrated).toBe(1);
       expect(createdSpecs.length).toBe(1);
       expect(createdSpecs[0].options.title).toBe('Authentication');
-      expect(fs.writeFile).toHaveBeenCalled();
-
-      // Restore createSpec
-      require('../src/commands/specs').createSpec = originalCreateSpec;
+      expect(mockCreateSpec).toHaveBeenCalledTimes(1);
+      expect(mockCreateSpec).toHaveBeenCalledWith(
+        expect.stringMatching(/^AUTH-\d{3}$/),
+        expect.objectContaining({
+          type: 'feature',
+          title: 'Authentication',
+        })
+      );
     });
 
     test('should handle migration creation failures', async () => {
@@ -308,7 +315,7 @@ describe('Migration Tools', () => {
 
   describe('Migration Command Integration', () => {
     test('should pass options to migration function', async () => {
-      const { specsCommand } = require('../src/commands/specs');
+      // Mock yaml.load first before requiring the module
       const yaml = require('js-yaml');
 
       // Legacy spec with auth feature
@@ -324,19 +331,13 @@ describe('Migration Tools', () => {
         ],
       };
 
-      // Convert to YAML string
-      const legacySpecYaml = yaml.dump(legacySpec);
-
       // Mock fs.pathExists - return true for legacy spec
       fs.pathExists.mockImplementation((filePath) => {
         return Promise.resolve(String(filePath).includes('working-spec.yaml'));
       });
 
-      // Mock fs.readFile - simple: if path contains 'working-spec.yaml', return YAML
+      // Mock fs.readFile - return empty string (content doesn't matter since we mock yaml.load)
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        if (String(filePath).includes('working-spec.yaml')) {
-          return legacySpecYaml;
-        }
         if (String(filePath).includes('registry.json')) {
           return JSON.stringify({
             version: '1.0.0',
@@ -347,32 +348,43 @@ describe('Migration Tools', () => {
         return '';
       });
 
+      // Mock yaml.load to return the legacy spec directly (same approach as passing test)
+      yaml.load = jest.fn().mockReturnValue(legacySpec);
+
       // Mock fs.writeFile and fs.ensureDir
       fs.writeFile.mockResolvedValue(undefined);
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Mock createSpec to track what gets created
+      // Now require the specs module
+      const specsModule = require('../src/commands/specs');
+      const { specsCommand } = specsModule;
       const createdSpecs = [];
-      const originalCreateSpec = require('../src/commands/specs').createSpec;
-      require('../src/commands/specs').createSpec = jest.fn(async (id, options) => {
+      
+      // Create a mock createSpec function to inject
+      const mockCreateSpec = jest.fn(async (id, options) => {
         createdSpecs.push({ id, options });
         return { id, type: options.type, title: options.title };
       });
 
-      // Run migration with interactive and features options
+      // Run migration with interactive and features options, injecting mock createSpec
       const result = await specsCommand('migrate', {
         interactive: true,
         features: ['auth'],
+        _createSpecFn: mockCreateSpec, // Test-only injection point
       });
 
       // Verify migration completed and options were used
       expect(result.migrated).toBe(1);
       expect(createdSpecs.length).toBe(1);
       expect(createdSpecs[0].options.title).toBe('Authentication');
-      expect(fs.writeFile).toHaveBeenCalled();
-
-      // Restore createSpec
-      require('../src/commands/specs').createSpec = originalCreateSpec;
+      expect(mockCreateSpec).toHaveBeenCalledTimes(1);
+      expect(mockCreateSpec).toHaveBeenCalledWith(
+        expect.stringMatching(/^AUTH-\d{3}$/),
+        expect.objectContaining({
+          type: 'feature',
+          title: 'Authentication',
+        })
+      );
     });
 
     test('should handle unknown migration options', async () => {
