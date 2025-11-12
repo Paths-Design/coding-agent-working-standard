@@ -183,7 +183,7 @@ async function createSpec(id, options = {}) {
   // Ensure specs directory exists
   await fs.ensureDir(SPECS_DIR);
 
-  // Generate spec content
+  // Generate spec content with all required fields
   const specContent = {
     id,
     type,
@@ -193,7 +193,25 @@ async function createSpec(id, options = {}) {
     mode,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    acceptance_criteria: [],
+    // Required fields for validation
+    blast_radius: {
+      modules: [],
+      data_migration: false,
+    },
+    operational_rollback_slo: '5m',
+    scope: {
+      in: ['src/', 'tests/'],
+      out: ['node_modules/', 'dist/', 'build/'],
+    },
+    invariants: ['System maintains data consistency'],
+    acceptance: [], // Note: validation expects 'acceptance', not 'acceptance_criteria'
+    acceptance_criteria: [], // Keep for backward compatibility
+    non_functional: {
+      a11y: [],
+      perf: {},
+      security: [],
+    },
+    contracts: [],
     ...(template || {}),
   };
 
@@ -480,15 +498,31 @@ async function migrateFromLegacy(options = {}) {
   }
 
   if (options.features && options.features.length > 0) {
+    // Filter by original feature IDs (before transformation)
     selectedFeatures = features.filter((f) => options.features.includes(f.id));
-    console.log(chalk.blue(`\n📋 Migrating selected features: ${options.features.join(', ')}`));
+    if (selectedFeatures.length === 0) {
+      console.log(chalk.yellow(`⚠️  No features found matching: ${options.features.join(', ')}`));
+      console.log(chalk.gray(`   Available features: ${features.map((f) => f.id).join(', ')}`));
+    } else {
+      console.log(chalk.blue(`\n📋 Migrating selected features: ${options.features.join(', ')}`));
+    }
   }
 
   // Create each feature spec
   const createdSpecs = [];
+  let featureCounter = 1;
   for (const feature of selectedFeatures) {
     try {
-      await createSpec(feature.id, {
+      // Transform feature ID to proper format (PREFIX-NUMBER) if needed
+      let specId = feature.id;
+      if (!/^[A-Z]+-\d+$/.test(specId)) {
+        // Convert 'auth' -> 'FEAT-001', 'payment' -> 'FEAT-002', etc.
+        const prefix = specId.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        specId = `${prefix || 'FEAT'}-${String(featureCounter).padStart(3, '0')}`;
+        featureCounter++;
+      }
+
+      await createSpec(specId, {
         type: 'feature',
         title: feature.title,
         risk_tier: 'T3', // Default tier
@@ -496,8 +530,8 @@ async function migrateFromLegacy(options = {}) {
         template: feature,
       });
 
-      createdSpecs.push(feature.id);
-      console.log(chalk.green(`   ✅ Created spec: ${feature.id}`));
+      createdSpecs.push(specId);
+      console.log(chalk.green(`   ✅ Created spec: ${specId}`));
     } catch (error) {
       console.log(chalk.red(`   ❌ Failed to create spec ${feature.id}: ${error.message}`));
     }

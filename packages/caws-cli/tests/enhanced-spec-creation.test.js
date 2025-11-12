@@ -9,7 +9,16 @@ const path = require('path');
 
 // Mock dependencies
 jest.mock('fs-extra');
-jest.mock('js-yaml');
+
+// Mock js-yaml but delegate to real implementation for dump/load
+jest.mock('js-yaml', () => {
+  const actualYaml = jest.requireActual('js-yaml');
+  return {
+    ...actualYaml,
+    dump: jest.fn((...args) => actualYaml.dump(...args)),
+    load: jest.fn((...args) => actualYaml.load(...args)),
+  };
+});
 
 // Don't mock the specs module - we want to test the real createSpec function
 
@@ -91,15 +100,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         );
       });
 
-      const result = await createSpec('new-spec', {
+      const result = await createSpec('FEAT-001', {
         type: 'feature',
         title: 'New Feature',
         risk_tier: 2,
       });
 
       expect(result).toEqual({
-        id: 'new-spec',
-        path: 'new-spec.yaml',
+        id: 'FEAT-001',
+        path: 'FEAT-001.yaml',
         type: 'feature',
         title: 'New Feature',
         status: 'draft',
@@ -118,7 +127,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -127,7 +136,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(true); // Spec exists
       fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
 
-      await expect(createSpec('existing-spec', {})).rejects.toThrow(
+      await expect(createSpec('FEAT-002', {})).rejects.toThrow(
         "Spec 'existing-spec' already exists. Use --force to override."
       );
 
@@ -142,7 +151,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -164,9 +173,9 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         return yaml.dump(existingSpec);
       });
 
-      const result = await createSpec('existing-spec', { force: true });
+      const result = await createSpec('FEAT-002', { force: true });
 
-      expect(result.id).toBe('existing-spec');
+      expect(result.id).toBe('FEAT-002');
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Overriding existing spec'));
     });
 
@@ -175,7 +184,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -198,7 +207,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
-      const result = await createSpec('existing-spec', { interactive: true });
+      const result = await createSpec('FEAT-002', { interactive: true });
 
       expect(result).toBeNull();
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Spec creation canceled'));
@@ -210,7 +219,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -249,9 +258,9 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
-      const result = await createSpec('existing-spec', { interactive: true });
+      const result = await createSpec('FEAT-002', { interactive: true });
 
-      expect(result.id).toContain('existing-spec-');
+      expect(result.id).toContain('FEAT-002-');
       expect(console.log).toHaveBeenCalledWith(
         expect.stringContaining('Creating spec with new name')
       );
@@ -262,7 +271,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -285,7 +294,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
-      const result = await createSpec('existing-spec', { interactive: true });
+      const result = await createSpec('FEAT-002', { interactive: true });
 
       expect(result).toBeNull();
       expect(console.log).toHaveBeenCalledWith(
@@ -299,7 +308,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec
       const existingSpec = {
-        id: 'existing-spec',
+        id: 'FEAT-002',
         title: 'Existing Feature',
         status: 'active',
         created_at: '2025-01-01T00:00:00Z',
@@ -335,9 +344,9 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       jest.spyOn(require('readline'), 'createInterface').mockReturnValue(mockRl);
 
-      const result = await createSpec('existing-spec', { interactive: true });
+      const result = await createSpec('FEAT-002', { interactive: true });
 
-      expect(result.id).toBe('existing-spec');
+      expect(result.id).toBe('FEAT-002');
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Overriding existing spec'));
     });
   });
@@ -507,11 +516,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         );
       });
 
-      const result = await specsCommand('create', { id: 'test-spec', force: true });
+      const result = await specsCommand('create', { id: 'FEAT-003', force: true });
 
       expect(result.command).toBe('specs create');
       expect(result.spec).toBeDefined();
-      expect(result.spec.id).toBe('test-spec');
+      expect(result.spec.id).toBe('FEAT-003');
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
@@ -548,11 +557,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         );
       });
 
-      const result = await specsCommand('create', { id: 'test-spec', interactive: true });
+      const result = await specsCommand('create', { id: 'FEAT-003', interactive: true });
 
       expect(result.command).toBe('specs create');
       expect(result.spec).toBeDefined();
-      expect(result.spec.id).toBe('test-spec');
+      expect(result.spec.id).toBe('FEAT-003');
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
@@ -561,7 +570,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Mock existing spec to trigger conflict resolution
       const existingSpec = {
-        id: 'test-spec',
+        id: 'FEAT-003',
         title: 'Existing Spec',
         status: 'active',
       };
@@ -583,7 +592,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
       require('readline').createInterface.mockReturnValue(mockRl);
 
-      const result = await specsCommand('create', { id: 'test-spec', interactive: true });
+      const result = await specsCommand('create', { id: 'FEAT-003', interactive: true });
 
       expect(result.command).toBe('specs create');
       expect(result.canceled).toBe(true);
@@ -626,11 +635,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Simulate CLI call with --force
-      const result = await specsCommand('create', { id: 'test-spec', force: true });
+      const result = await specsCommand('create', { id: 'FEAT-003', force: true });
 
       expect(result.command).toBe('specs create');
       expect(result.spec).toBeDefined();
-      expect(result.spec.id).toBe('test-spec');
+      expect(result.spec.id).toBe('FEAT-003');
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
@@ -668,11 +677,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Simulate CLI call with --interactive
-      const result = await specsCommand('create', { id: 'test-spec', interactive: true });
+      const result = await specsCommand('create', { id: 'FEAT-003', interactive: true });
 
       expect(result.command).toBe('specs create');
       expect(result.spec).toBeDefined();
-      expect(result.spec.id).toBe('test-spec');
+      expect(result.spec.id).toBe('FEAT-003');
       expect(fs.writeFile).toHaveBeenCalled();
     });
   });

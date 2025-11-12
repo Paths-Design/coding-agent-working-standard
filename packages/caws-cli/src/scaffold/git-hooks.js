@@ -462,8 +462,8 @@ for arg in "$@"; do
     echo "💡 To fix issues locally:"
     echo "   1. Run: caws validate"
     echo "   2. Fix reported issues"
-    echo "   3. Commit fixes: git commit --no-verify (allowed)"
-    echo "   4. Push again: git push (no --no-verify)"
+    echo "   3. Commit fixes: git commit --no-verify \\(allowed\\)"
+    echo "   4. Push again: git push \\(no --no-verify\\)"
     exit 1
   fi
 done
@@ -541,8 +541,8 @@ if command -v caws >/dev/null 2>&1; then
     echo "Next Steps:"
     echo "   1. Review errors above"
     echo "   2. Fix issues in .caws/working-spec.yaml"
-    echo "   3. Run: caws validate (to verify fixes)"
-    echo "   4. Commit fixes: git commit --no-verify (allowed)"
+    echo "   3. Run: caws validate \\(to verify fixes\\)"
+    echo "   4. Commit fixes: git commit --no-verify \\(allowed\\)"
     echo "   5. Push again: git push"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
@@ -601,7 +601,7 @@ fi
 
 # Basic commit message validation
 if [ \${#COMMIT_MSG} -lt 10 ]; then
-  echo "❌ Commit message too short (minimum 10 characters)"
+  echo "❌ Commit message too short \\(minimum 10 characters\\)"
   echo "💡 Write descriptive commit messages"
   exit 1
 fi
@@ -718,4 +718,9 @@ module.exports = {
   scaffoldGitHooks,
   removeGitHooks,
   checkGitHooksStatus,
+  // Export generator functions for testing
+  generatePrePushHook,
+  generatePreCommitHook,
+  generatePostCommitHook,
+  generateCommitMsgHook,
 };
