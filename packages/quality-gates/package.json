@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/quality-gates",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CAWS Quality Gates - Automated code quality enforcement for CAWS projects",
   "main": "run-quality-gates.mjs",
   "type": "module",
