@@ -512,6 +512,10 @@ async function suggestMigration() {
 function suggestFeatureBreakdown(legacySpec) {
   const features = [];
 
+  if (!legacySpec) {
+    return features;
+  }
+
   if (legacySpec.acceptance && legacySpec.acceptance.length > 0) {
     // Group acceptance criteria by logical features
     const criteriaByFeature = {};

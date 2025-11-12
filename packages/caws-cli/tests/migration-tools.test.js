@@ -11,12 +11,18 @@ const path = require('path');
 jest.mock('fs-extra');
 
 // Mock js-yaml but delegate to real implementation for dump/load
+// Note: We need to ensure load works correctly for migration tests
 jest.mock('js-yaml', () => {
   const actualYaml = jest.requireActual('js-yaml');
   return {
     ...actualYaml,
     dump: jest.fn((...args) => actualYaml.dump(...args)),
-    load: jest.fn((...args) => actualYaml.load(...args)),
+    load: jest.fn((...args) => {
+      const result = actualYaml.load(...args);
+      // If load returns null/undefined, it means the YAML is invalid or empty
+      // This helps us catch mock issues in tests
+      return result;
+    }),
   };
 });
 
@@ -37,7 +43,9 @@ describe('Migration Tools', () => {
 
     // Reset fs mocks to default implementations
     fs.pathExists.mockResolvedValue(false);
-    fs.readFile.mockResolvedValue('');
+    // Reset readFile mock - each test will set up its own implementation
+    // Use mockReset to clear previous implementations but keep the mock structure
+    fs.readFile.mockReset();
     fs.writeFile.mockResolvedValue(undefined);
     fs.ensureDir.mockResolvedValue(undefined);
     fs.readdir.mockResolvedValue([]);
@@ -199,7 +207,9 @@ describe('Migration Tools', () => {
 
     test('should handle selective feature migration', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
+      // Legacy spec with multiple features (auth and payment)
       const legacySpec = {
         id: 'PROJ-001',
         acceptance: [
@@ -218,67 +228,52 @@ describe('Migration Tools', () => {
         ],
       };
 
-      // Mock fs.pathExists to return true for legacy spec, false for new specs
+      // Convert to YAML string
+      const legacySpecYaml = yaml.dump(legacySpec);
+
+      // Mock fs.pathExists - return true for legacy spec
       fs.pathExists.mockImplementation((filePath) => {
-        if (filePath.includes('working-spec.yaml')) {
-          return Promise.resolve(true);
-        }
-        // Return false for spec files to allow creation
-        return Promise.resolve(false);
+        return Promise.resolve(String(filePath).includes('working-spec.yaml'));
       });
 
-      // Use a shared Map to store written content
-      const writtenFiles = new Map();
-
-      // Mock fs.writeFile to store content
-      fs.writeFile.mockImplementation(async (filePath, content) => {
-        const resolvedPath = path.resolve(filePath);
-        const fileName = path.basename(filePath);
-        // Store by multiple keys for flexible matching
-        writtenFiles.set(resolvedPath, content);
-        writtenFiles.set(filePath, content);
-        writtenFiles.set(fileName, content);
-      });
-
-      // Mock fs.readFile to return stored content or legacy spec
+      // Mock fs.readFile - simple: if path contains 'working-spec.yaml', return YAML
       fs.readFile.mockImplementation(async (filePath, encoding) => {
-        // Return legacy spec when reading working-spec.yaml
-        const readPath = path.resolve(filePath);
-        const normalizedPath = path.normalize(filePath);
-        if (readPath.includes('working-spec.yaml') || filePath.includes('working-spec.yaml')) {
-          // Return YAML string that will be parsed by yaml.load
-          return require('js-yaml').dump(legacySpec);
+        if (String(filePath).includes('working-spec.yaml')) {
+          return legacySpecYaml;
         }
-
-        const fileName = path.basename(filePath);
-        // Try multiple keys - check both resolved and original paths
-        const content =
-          writtenFiles.get(readPath) ||
-          writtenFiles.get(filePath) ||
-          writtenFiles.get(normalizedPath) ||
-          writtenFiles.get(fileName) ||
-          '';
-        
-        // If still empty and it's a spec file, try to find by pattern
-        if (!content && filePath.includes('.caws/specs') && fileName.endsWith('.yaml')) {
-          // Try to find any written file that matches the pattern
-          for (const [key, value] of writtenFiles.entries()) {
-            if (key.includes(fileName) || key.endsWith(fileName)) {
-              return value;
-            }
-          }
+        if (String(filePath).includes('registry.json')) {
+          return JSON.stringify({
+            version: '1.0.0',
+            specs: {},
+            lastUpdated: new Date().toISOString(),
+          });
         }
-        
-        return content;
+        return '';
       });
 
+      // Mock fs.writeFile and fs.ensureDir
+      fs.writeFile.mockResolvedValue(undefined);
       fs.ensureDir.mockResolvedValue(undefined);
-      // Don't override yaml.load - let it use the real implementation
 
+      // Mock createSpec to track what gets created
+      const createdSpecs = [];
+      const originalCreateSpec = require('../src/commands/specs').createSpec;
+      require('../src/commands/specs').createSpec = jest.fn(async (id, options) => {
+        createdSpecs.push({ id, options });
+        return { id, type: options.type, title: options.title };
+      });
+
+      // Run migration with only 'auth' feature
       const result = await specsCommand('migrate', { features: ['auth'] });
 
+      // Verify only auth feature was migrated
       expect(result.migrated).toBe(1);
+      expect(createdSpecs.length).toBe(1);
+      expect(createdSpecs[0].options.title).toBe('Authentication');
       expect(fs.writeFile).toHaveBeenCalled();
+
+      // Restore createSpec
+      require('../src/commands/specs').createSpec = originalCreateSpec;
     });
 
     test('should handle migration creation failures', async () => {
@@ -314,28 +309,10 @@ describe('Migration Tools', () => {
   describe('Migration Command Integration', () => {
     test('should pass options to migration function', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
-      // Mock fs.pathExists to return true for legacy spec, false for new specs
-      fs.pathExists.mockImplementation((filePath) => {
-        if (filePath.includes('working-spec.yaml')) {
-          return Promise.resolve(true);
-        }
-        // Return false for spec files to allow creation
-        return Promise.resolve(false);
-      });
-      fs.ensureDir.mockResolvedValue(undefined);
-
-      // Capture written content by file path and return it when read
-      const writtenFiles = new Map();
-      fs.writeFile.mockImplementation(async (filePath, content) => {
-        const resolvedPath = path.resolve(filePath);
-        const fileName = path.basename(filePath);
-        // Store by multiple keys for flexible matching
-        writtenFiles.set(resolvedPath, content);
-        writtenFiles.set(filePath, content);
-        writtenFiles.set(fileName, content);
-      });
-      const mockLegacySpec = {
+      // Legacy spec with auth feature
+      const legacySpec = {
         id: 'PROJ-001',
         acceptance: [
           {
@@ -347,43 +324,55 @@ describe('Migration Tools', () => {
         ],
       };
 
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
-        // Return legacy spec for working-spec.yaml, written content for new specs
-        const readPath = path.resolve(filePath);
-        const normalizedPath = path.normalize(filePath);
-        if (readPath.includes('working-spec.yaml') || filePath.includes('working-spec.yaml')) {
-          return require('js-yaml').dump(mockLegacySpec);
-        }
-        
-        const fileName = path.basename(filePath);
-        // Try multiple keys - check both resolved and original paths
-        const content =
-          writtenFiles.get(readPath) ||
-          writtenFiles.get(filePath) ||
-          writtenFiles.get(normalizedPath) ||
-          writtenFiles.get(fileName) ||
-          '';
-        
-        // If still empty and it's a spec file, try to find by pattern
-        if (!content && filePath.includes('.caws/specs') && fileName.endsWith('.yaml')) {
-          // Try to find any written file that matches the pattern
-          for (const [key, value] of writtenFiles.entries()) {
-            if (key.includes(fileName) || key.endsWith(fileName)) {
-              return value;
-            }
-          }
-        }
-        
-        return content;
+      // Convert to YAML string
+      const legacySpecYaml = yaml.dump(legacySpec);
+
+      // Mock fs.pathExists - return true for legacy spec
+      fs.pathExists.mockImplementation((filePath) => {
+        return Promise.resolve(String(filePath).includes('working-spec.yaml'));
       });
 
+      // Mock fs.readFile - simple: if path contains 'working-spec.yaml', return YAML
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        if (String(filePath).includes('working-spec.yaml')) {
+          return legacySpecYaml;
+        }
+        if (String(filePath).includes('registry.json')) {
+          return JSON.stringify({
+            version: '1.0.0',
+            specs: {},
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+        return '';
+      });
+
+      // Mock fs.writeFile and fs.ensureDir
+      fs.writeFile.mockResolvedValue(undefined);
+      fs.ensureDir.mockResolvedValue(undefined);
+
+      // Mock createSpec to track what gets created
+      const createdSpecs = [];
+      const originalCreateSpec = require('../src/commands/specs').createSpec;
+      require('../src/commands/specs').createSpec = jest.fn(async (id, options) => {
+        createdSpecs.push({ id, options });
+        return { id, type: options.type, title: options.title };
+      });
+
+      // Run migration with interactive and features options
       const result = await specsCommand('migrate', {
         interactive: true,
-        features: ['auth'], // This will match the feature ID generated by suggestFeatureBreakdown
+        features: ['auth'],
       });
 
+      // Verify migration completed and options were used
       expect(result.migrated).toBe(1);
+      expect(createdSpecs.length).toBe(1);
+      expect(createdSpecs[0].options.title).toBe('Authentication');
       expect(fs.writeFile).toHaveBeenCalled();
+
+      // Restore createSpec
+      require('../src/commands/specs').createSpec = originalCreateSpec;
     });
 
     test('should handle unknown migration options', async () => {

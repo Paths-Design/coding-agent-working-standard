@@ -522,6 +522,14 @@ async function migrateFromLegacy(options = {}) {
   const legacyContent = await fs.readFile(legacyPath, 'utf8');
   const legacySpec = yaml.load(legacyContent);
 
+  if (!legacySpec) {
+    throw new Error('Legacy working-spec.yaml is empty or invalid');
+  }
+
+  if (!legacySpec.acceptance || !Array.isArray(legacySpec.acceptance)) {
+    throw new Error('Legacy working-spec.yaml must have an acceptance array');
+  }
+
   // Suggest feature breakdown based on acceptance criteria
   const features = suggestFeatureBreakdown(legacySpec);
 
@@ -544,8 +552,9 @@ async function migrateFromLegacy(options = {}) {
     // Filter by original feature IDs (before transformation)
     selectedFeatures = features.filter((f) => options.features.includes(f.id));
     if (selectedFeatures.length === 0) {
-      console.log(chalk.yellow(`⚠️  No features found matching: ${options.features.join(', ')}`));
-      console.log(chalk.gray(`   Available features: ${features.map((f) => f.id).join(', ')}`));
+      const errorMsg = `No features found matching: ${options.features.join(', ')}. Available features: ${features.map((f) => f.id).join(', ')}`;
+      console.log(chalk.yellow(`⚠️  ${errorMsg}`));
+      throw new Error(errorMsg);
     } else {
       console.log(chalk.blue(`\n📋 Migrating selected features: ${options.features.join(', ')}`));
     }
