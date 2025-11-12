@@ -549,9 +549,10 @@ if command -v caws >/dev/null 2>&1; then
   fi
 fi
 
-# Run fast pre-push checks (full test suite runs in CI)
+# Run full pre-push checks (full test suite required before push)
+# Note: Pre-commit uses filtered tests for speed, but push requires full suite
 echo ""
-echo "⚡ Running fast pre-push checks..."
+echo "⚡ Running full pre-push checks (full test suite required)..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 QUICK_CHECKS_FAILED=false
@@ -588,29 +589,25 @@ if [ -f "package.json" ]; then
   fi
 fi
 
-# 3. Quick test check - only run tests for changed files (optional, fast)
-if [ -f "package.json" ] && [ "$CAWS_PRE_PUSH_FULL_TESTS" != "true" ]; then
+# 3. Run FULL test suite (required for push) - no filtering
+# Pre-commit uses filtered tests for speed, but push requires full suite
+if [ -f "package.json" ]; then
   if command -v npm >/dev/null 2>&1 && grep -q '"test"' package.json; then
-    # Get changed files in this push
-    CHANGED_FILES=$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
-    
-    if [ -n "$CHANGED_FILES" ]; then
-      # Check if any test files changed (if so, run quick test)
-      if echo "$CHANGED_FILES" | grep -qE "(test|spec)"; then
-        echo "🔍 Running quick test check (changed test files detected)..."
-        # Run tests with bail flag for faster failure detection
-        if npm test -- --bail --maxWorkers=2 --no-coverage >/dev/null 2>&1; then
-          echo "✅ Quick test check passed"
-        else
-          echo "⚠️  Quick test check failed"
-          echo "💡 Run full tests locally: npm test"
-          echo "💡 Or set CAWS_PRE_PUSH_FULL_TESTS=true for full test suite"
-          # Don't fail on quick test check - just warn
-        fi
-      else
-        echo "⏭️  Skipping test check (no test files changed)"
-        echo "💡 Full test suite will run in CI"
-      fi
+    echo "🧪 Running FULL test suite (required for push)..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    if npm test 2>&1 | tee /tmp/pre-push-test-full.log; then
+      echo "✅ Full test suite passed"
+      rm -f /tmp/pre-push-test-full.log
+    else
+      FULL_TEST_EXIT_CODE=${PIPESTATUS[0]}
+      echo "❌ Full test suite failed (exit code: ${FULL_TEST_EXIT_CODE})"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "Test output (last 100 lines):"
+      tail -100 /tmp/pre-push-test-full.log 2>/dev/null || echo "No test output captured"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "💡 Fix test failures before pushing: npm test"
+      rm -f /tmp/pre-push-test-full.log
+      QUICK_CHECKS_FAILED=true
     fi
   fi
 fi
@@ -640,26 +637,25 @@ elif [ -f "Cargo.toml" ]; then
   fi
 fi
 
-# Fail if quick checks failed
+# Fail if any checks failed
 if [ "$QUICK_CHECKS_FAILED" = true ]; then
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "❌ Pre-push checks failed"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "Quick checks (linting/type checking) must pass before push."
+  echo "All checks (linting/type checking/full test suite) must pass before push."
   echo ""
-  echo "💡 To run full test suite locally:"
-  echo "   npm test"
-  echo ""
-  echo "💡 To enable full tests in pre-push hook:"
-  echo "   export CAWS_PRE_PUSH_FULL_TESTS=true"
+  echo "💡 Fix failures before pushing:"
+  echo "   - Linting: npm run lint"
+  echo "   - Type checking: npm run typecheck"
+  echo "   - Tests: npm test"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   exit 1
 fi
 
 echo ""
 echo "✅ Pre-push checks completed!"
-echo "💡 Full test suite will run in CI"
+echo "💡 All quality gates passed - ready to push"
 `;
 }
 
