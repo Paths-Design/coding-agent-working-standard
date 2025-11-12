@@ -261,9 +261,20 @@ describe('Migration Tools', () => {
         // Return false for spec files to allow creation
         return Promise.resolve(false);
       });
-      fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        // Return legacy spec for working-spec.yaml, written content for new specs
+        if (filePath.includes('working-spec.yaml')) {
+          return 'id: PROJ-001\nacceptance: []';
+        }
+        return writtenContent;
+      });
 
       const mockLegacySpec = {
         id: 'PROJ-001',
@@ -277,7 +288,13 @@ describe('Migration Tools', () => {
         ],
       };
 
-      require('js-yaml').load = jest.fn().mockReturnValue(mockLegacySpec);
+      require('js-yaml').load = jest.fn().mockImplementation((content) => {
+        // Return legacy spec for legacy content, parse written content otherwise
+        if (content === 'id: PROJ-001\nacceptance: []' || content.includes('PROJ-001')) {
+          return mockLegacySpec;
+        }
+        return require('js-yaml').load(content);
+      });
 
       const result = await specsCommand('migrate', {
         interactive: true,

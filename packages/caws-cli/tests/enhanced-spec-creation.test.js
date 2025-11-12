@@ -52,10 +52,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('createSpec with conflict detection', () => {
     test('should create new spec when no conflicts exist', async () => {
       const { createSpec } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        return writtenContent;
+      });
 
       const result = await createSpec('new-spec', {
         type: 'feature',
@@ -104,6 +113,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should handle force override of existing spec', async () => {
       const { createSpec } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       // Mock existing spec
       const existingSpec = {
@@ -114,9 +124,20 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
 
       fs.pathExists.mockResolvedValue(true); // Spec exists
-      fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        // Return existing spec on first read (conflict check), then written content
+        if (writtenContent) {
+          return writtenContent;
+        }
+        return yaml.dump(existingSpec);
+      });
 
       const result = await createSpec('existing-spec', { force: true });
 
@@ -160,6 +181,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should handle interactive conflict resolution - rename', async () => {
       const { createSpec } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       // Mock existing spec
       const existingSpec = {
@@ -173,9 +195,20 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         .mockResolvedValueOnce(true) // First call: existing spec exists
         .mockResolvedValueOnce(false); // Second call: new spec doesn't exist
 
-      fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        // Return existing spec on first read (conflict check), then written content
+        if (writtenContent) {
+          return writtenContent;
+        }
+        return yaml.dump(existingSpec);
+      });
 
       // Mock readline to return '2' (rename)
       const mockRl = {
@@ -237,6 +270,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should handle interactive conflict resolution - override', async () => {
       const { createSpec } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       // Mock existing spec
       const existingSpec = {
@@ -247,9 +281,20 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
 
       fs.pathExists.mockResolvedValue(true);
-      fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        // Return existing spec on first read (conflict check), then written content
+        if (writtenContent) {
+          return writtenContent;
+        }
+        return yaml.dump(existingSpec);
+      });
 
       // Mock readline to return '4' (override)
       const mockRl = {
@@ -406,10 +451,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('specsCommand integration with conflict resolution', () => {
     test('should pass force option to createSpec', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        return writtenContent;
+      });
 
       const result = await specsCommand('create', { id: 'test-spec', force: true });
 
@@ -421,10 +475,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should pass interactive option to createSpec', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        return writtenContent;
+      });
 
       const result = await specsCommand('create', { id: 'test-spec', interactive: true });
 
@@ -472,10 +535,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('CLI integration', () => {
     test('should pass force option from CLI to specsCommand', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        return writtenContent;
+      });
 
       // Simulate CLI call with --force
       const result = await specsCommand('create', { id: 'test-spec', force: true });
@@ -488,10 +560,19 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should pass interactive option from CLI to specsCommand', async () => {
       const { specsCommand } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
+
+      // Capture written content and return it when read
+      let writtenContent = '';
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        writtenContent = content;
+      });
+      fs.readFile.mockImplementation(async (filePath) => {
+        return writtenContent;
+      });
 
       // Simulate CLI call with --interactive
       const result = await specsCommand('create', { id: 'test-spec', interactive: true });
