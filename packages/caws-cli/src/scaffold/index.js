@@ -735,7 +735,7 @@ async function scaffoldProject(options) {
     }
 
     // Update .gitignore to exclude CAWS local runtime files
-    const gitignoreUpdated = await updateGitignore(targetDir);
+    const gitignoreUpdated = await updateGitignore(currentDir);
     if (gitignoreUpdated) {
       console.log(chalk.green('\n✅ Updated .gitignore to exclude CAWS local runtime files'));
       console.log(

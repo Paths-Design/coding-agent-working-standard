@@ -6,7 +6,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const { detectProjectLanguage, getTodoAnalyzerSuggestion } = require('../utils/project-analysis');
+const { getTodoAnalyzerSuggestion } = require('../utils/project-analysis');
 
 /**
  * Scaffold git hooks for CAWS provenance tracking
@@ -123,8 +123,7 @@ async function scaffoldGitHooks(projectDir, options = {}) {
 function generatePreCommitHook(options) {
   const { qualityGates = true, stagedOnly = true, projectDir = process.cwd() } = options;
 
-  // Detect project language for appropriate suggestions
-  const lang = detectProjectLanguage(projectDir);
+  // Get language-agnostic suggestions based on runtime availability
   const todoSuggestion = getTodoAnalyzerSuggestion(projectDir);
 
   return `#!/bin/bash
@@ -167,7 +166,7 @@ echo "🔍 Validating YAML syntax for CAWS spec files..."
 YAML_VALIDATION_FAILED=false
 
 # Find all staged .yaml/.yml files in .caws directory
-STAGED_YAML_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.caws/.*\.(yaml|yml)$' || true)
+STAGED_YAML_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.caws/.*\\.(yaml|yml)$' || true)
 
 if [ -n "$STAGED_YAML_FILES" ]; then
   # Use Node.js to validate YAML if available

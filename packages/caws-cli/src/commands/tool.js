@@ -4,7 +4,6 @@
  * @author @darianrosebrook
  */
 
-const path = require('path');
 const { commandWrapper, Output } = require('../utils/command-wrapper');
 
 // Import tool system
