@@ -57,13 +57,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
-        return writtenContent;
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        return writtenFiles.get(normalizedPath) || '';
       });
 
       const result = await createSpec('new-spec', {
@@ -456,13 +458,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
-        return writtenContent;
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        return writtenFiles.get(normalizedPath) || '';
       });
 
       const result = await specsCommand('create', { id: 'test-spec', force: true });
@@ -480,13 +484,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
-        return writtenContent;
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        return writtenFiles.get(normalizedPath) || '';
       });
 
       const result = await specsCommand('create', { id: 'test-spec', interactive: true });
@@ -540,13 +546,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
-        return writtenContent;
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        return writtenFiles.get(normalizedPath) || '';
       });
 
       // Simulate CLI call with --force
@@ -565,13 +573,15 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
-        return writtenContent;
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        return writtenFiles.get(normalizedPath) || '';
       });
 
       // Simulate CLI call with --interactive

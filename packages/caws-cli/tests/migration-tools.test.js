@@ -208,9 +208,24 @@ describe('Migration Tools', () => {
         // Return false for spec files to allow creation
         return Promise.resolve(false);
       });
-      fs.readFile.mockResolvedValue('id: PROJ-001\nacceptance: []');
+      
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        const normalizedPath = path.normalize(filePath);
+        writtenFiles.set(normalizedPath, content);
+      });
+      
+      // Return legacy spec when reading working-spec.yaml, written content for new specs
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
+        const normalizedPath = path.normalize(filePath);
+        if (normalizedPath.includes('working-spec.yaml')) {
+          return 'id: PROJ-001\nacceptance: []';
+        }
+        return writtenFiles.get(normalizedPath) || '';
+      });
+      
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.writeFile.mockResolvedValue(undefined);
       require('js-yaml').load = jest.fn().mockReturnValue(legacySpec);
 
       const result = await specsCommand('migrate', { features: ['auth'] });
@@ -263,17 +278,17 @@ describe('Migration Tools', () => {
       });
       fs.ensureDir.mockResolvedValue(undefined);
 
-      // Capture written content and return it when read
-      let writtenContent = '';
+      // Capture written content by file path and return it when read
+      const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
-        writtenContent = content;
+        writtenFiles.set(filePath, content);
       });
-      fs.readFile.mockImplementation(async (filePath) => {
+      fs.readFile.mockImplementation(async (filePath, encoding) => {
         // Return legacy spec for working-spec.yaml, written content for new specs
         if (filePath.includes('working-spec.yaml')) {
           return 'id: PROJ-001\nacceptance: []';
         }
-        return writtenContent;
+        return writtenFiles.get(filePath) || '';
       });
 
       const mockLegacySpec = {
