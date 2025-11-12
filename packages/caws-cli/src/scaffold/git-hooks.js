@@ -549,7 +549,116 @@ if command -v caws >/dev/null 2>&1; then
   fi
 fi
 
+# Run tests before pushing
+echo ""
+echo "🧪 Running test suite..."
+TESTS_FAILED=false
+
+# Detect test framework and run tests
+if [ -f "package.json" ]; then
+  # Node.js/JavaScript project
+  if command -v npm >/dev/null 2>&1; then
+    # Check if test script exists
+    if grep -q '"test"' package.json; then
+      echo "📦 Running npm test..."
+      # Run tests with minimal output, but capture failures
+      TEST_OUTPUT=$(npm test -- --no-coverage 2>&1)
+      TEST_EXIT=$?
+      
+      if [ $TEST_EXIT -eq 0 ]; then
+        # Extract summary from test output
+        TEST_SUMMARY=$(echo "$TEST_OUTPUT" | grep -E "(PASS|Tests:|Test Suites:)" | tail -3)
+        if [ -n "$TEST_SUMMARY" ]; then
+          echo "$TEST_SUMMARY"
+        fi
+        echo "✅ All tests passed"
+      else
+        echo "❌ Tests failed - push blocked"
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Test Failures Detected:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        # Show only failure summary, not full output
+        echo "$TEST_OUTPUT" | grep -E "(FAIL|●|Expected|Received|at Object)" | head -20
+        echo ""
+        echo "💡 Run tests locally to see full details: npm test"
+        echo "💡 Fix failing tests before pushing"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        TESTS_FAILED=true
+      fi
+    else
+      echo "⚠️  No test script found in package.json - skipping tests"
+      echo "💡 Add test script: \\"test\\": \\"jest\\" or \\"test\\": \\"mocha\\""
+    fi
+  fi
+elif [ -f "pytest.ini" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+  # Python project
+  if command -v pytest >/dev/null 2>&1; then
+    echo "🐍 Running pytest..."
+    if pytest --quiet 2>&1; then
+      echo "✅ All tests passed"
+    else
+      echo "❌ Tests failed - push blocked"
+      echo "💡 Run tests locally: pytest"
+      TESTS_FAILED=true
+    fi
+  elif command -v python3 >/dev/null 2>&1 && [ -f "setup.py" ]; then
+    echo "🐍 Running Python tests..."
+    if python3 -m pytest --quiet 2>&1 || python3 -m unittest discover -s tests -p "test_*.py" --quiet 2>&1; then
+      echo "✅ All tests passed"
+    else
+      echo "❌ Tests failed - push blocked"
+      TESTS_FAILED=true
+    fi
+  else
+    echo "⚠️  pytest not found - skipping tests"
+  fi
+elif [ -f "Cargo.toml" ]; then
+  # Rust project
+  if command -v cargo >/dev/null 2>&1; then
+    echo "🦀 Running cargo test..."
+    if cargo test --quiet 2>&1; then
+      echo "✅ All tests passed"
+    else
+      echo "❌ Tests failed - push blocked"
+      echo "💡 Run tests locally: cargo test"
+      TESTS_FAILED=true
+    fi
+  fi
+elif [ -f "go.mod" ]; then
+  # Go project
+  if command -v go >/dev/null 2>&1; then
+    echo "🐹 Running go test..."
+    if go test ./... -short 2>&1; then
+      echo "✅ All tests passed"
+    else
+      echo "❌ Tests failed - push blocked"
+      echo "💡 Run tests locally: go test ./..."
+      TESTS_FAILED=true
+    fi
+  fi
+else
+  echo "⚠️  No test framework detected - skipping tests"
+  echo "💡 Supported: npm test, pytest, cargo test, go test"
+fi
+
+if [ "$TESTS_FAILED" = true ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Push blocked due to test failures"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Next Steps:"
+  echo "   1. Review test failures above"
+  echo "   2. Fix failing tests"
+  echo "   3. Run tests locally: npm test (or equivalent)"
+  echo "   4. Commit fixes: git commit --no-verify"
+  echo "   5. Push again: git push"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 1
+fi
+
 # Run security checks
+echo ""
 echo "🔒 Running security checks..."
 if [ -f "package.json" ]; then
   # Check for vulnerabilities
@@ -577,6 +686,7 @@ elif [ -f "Cargo.toml" ]; then
   fi
 fi
 
+echo ""
 echo "🎉 Pre-push checks completed!"
 `;
 }
