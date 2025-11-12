@@ -222,7 +222,7 @@ async function createSpec(id, options = {}) {
   // Merge template, but preserve required structure
   // Map template.criteria to acceptance if present
   const templateAcceptance = template?.criteria || template?.acceptance;
-  
+
   const specContent = {
     ...defaultSpec,
     ...(template || {}),
@@ -576,7 +576,11 @@ async function migrateFromLegacy(options = {}) {
       createdSpecs.push(specId);
       console.log(chalk.green(`   ✅ Created spec: ${specId}`));
     } catch (error) {
+      // Log full error details for debugging
       console.log(chalk.red(`   ❌ Failed to create spec ${feature.id}: ${error.message}`));
+      if (process.env.DEBUG_MIGRATION) {
+        console.log(chalk.gray(`   Error details: ${error.stack}`));
+      }
     }
   }
 

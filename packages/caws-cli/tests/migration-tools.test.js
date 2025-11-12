@@ -235,19 +235,32 @@ describe('Migration Tools', () => {
       fs.readFile.mockImplementation(async (filePath, encoding) => {
         // Return legacy spec when reading working-spec.yaml
         const readPath = path.resolve(filePath);
+        const normalizedPath = path.normalize(filePath);
         if (readPath.includes('working-spec.yaml') || filePath.includes('working-spec.yaml')) {
           // Return YAML string that will be parsed by yaml.load
           return require('js-yaml').dump(legacySpec);
         }
 
         const fileName = path.basename(filePath);
-        // Try multiple keys
-        return (
+        // Try multiple keys - check both resolved and original paths
+        const content =
           writtenFiles.get(readPath) ||
           writtenFiles.get(filePath) ||
+          writtenFiles.get(normalizedPath) ||
           writtenFiles.get(fileName) ||
-          ''
-        );
+          '';
+        
+        // If still empty and it's a spec file, try to find by pattern
+        if (!content && filePath.includes('.caws/specs') && fileName.endsWith('.yaml')) {
+          // Try to find any written file that matches the pattern
+          for (const [key, value] of writtenFiles.entries()) {
+            if (key.includes(fileName) || key.endsWith(fileName)) {
+              return value;
+            }
+          }
+        }
+        
+        return content;
       });
 
       fs.ensureDir.mockResolvedValue(undefined);
@@ -306,7 +319,12 @@ describe('Migration Tools', () => {
       // Capture written content by file path and return it when read
       const writtenFiles = new Map();
       fs.writeFile.mockImplementation(async (filePath, content) => {
+        const resolvedPath = path.resolve(filePath);
+        const fileName = path.basename(filePath);
+        // Store by multiple keys for flexible matching
+        writtenFiles.set(resolvedPath, content);
         writtenFiles.set(filePath, content);
+        writtenFiles.set(fileName, content);
       });
       const mockLegacySpec = {
         id: 'PROJ-001',
@@ -322,10 +340,32 @@ describe('Migration Tools', () => {
 
       fs.readFile.mockImplementation(async (filePath, encoding) => {
         // Return legacy spec for working-spec.yaml, written content for new specs
-        if (filePath.includes('working-spec.yaml')) {
+        const readPath = path.resolve(filePath);
+        const normalizedPath = path.normalize(filePath);
+        if (readPath.includes('working-spec.yaml') || filePath.includes('working-spec.yaml')) {
           return require('js-yaml').dump(mockLegacySpec);
         }
-        return writtenFiles.get(filePath) || '';
+        
+        const fileName = path.basename(filePath);
+        // Try multiple keys - check both resolved and original paths
+        const content =
+          writtenFiles.get(readPath) ||
+          writtenFiles.get(filePath) ||
+          writtenFiles.get(normalizedPath) ||
+          writtenFiles.get(fileName) ||
+          '';
+        
+        // If still empty and it's a spec file, try to find by pattern
+        if (!content && filePath.includes('.caws/specs') && fileName.endsWith('.yaml')) {
+          // Try to find any written file that matches the pattern
+          for (const [key, value] of writtenFiles.entries()) {
+            if (key.includes(fileName) || key.endsWith(fileName)) {
+              return value;
+            }
+          }
+        }
+        
+        return content;
       });
 
       const result = await specsCommand('migrate', {
