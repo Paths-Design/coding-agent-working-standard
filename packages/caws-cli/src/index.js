@@ -142,6 +142,8 @@ program
     ''
   )
   .option('--fix', 'Attempt automatic fixes (experimental)', false)
+  .option('--context <context>', 'Execution context: commit (staged files), push (all tracked files), or ci (all tracked files)', 'commit')
+  .option('--all-files', 'Check all tracked files (equivalent to --context=ci)', false)
   .option('--help', 'Show detailed help and usage examples', false)
   .action(async (options) => {
     // Handle --help flag
@@ -161,6 +163,8 @@ OPTIONS:
   --json            Output machine-readable JSON to stdout
   --gates=<gates>   Run only specific gates (comma-separated)
   --fix             Attempt automatic fixes (experimental)
+  --context=<ctx>   Execution context: commit (staged files), push (all tracked), ci (all tracked)
+  --all-files       Check all tracked files (shortcut for --context=ci)
   --help            Show this help message
 
 VALID GATES:
@@ -181,6 +185,12 @@ EXAMPLES:
 
   # CI mode with JSON output
   caws quality-gates --ci --json
+
+  # Check all files in repository (not just staged)
+  caws quality-gates --all-files
+
+  # Use specific context
+  caws quality-gates --context=ci
 
   # Show detailed help
   caws quality-gates --help

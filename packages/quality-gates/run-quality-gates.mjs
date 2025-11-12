@@ -98,6 +98,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
 import { checkPlaceholders } from './check-placeholders.mjs';
@@ -207,6 +208,12 @@ class QualityGateRunner {
 
     /** @type {Waiver[]} */
     this.activeWaivers = [];
+
+    /** @type {Set<NodeJS.Timeout>} */
+    this.activeTimeouts = new Set();
+
+    /** @type {Array<{event: string, handler: Function}>} */
+    this.eventListeners = [];
 
     /** @type {'commit'|'push'|'ci'} */
     this.context;
@@ -467,12 +474,29 @@ class QualityGateRunner {
   setupCleanupHandlers() {
     const cleanup = () => {
       try {
+        // Clear all active timeouts
+        this.clearAllTimeouts();
+
+        // Remove all event listeners
+        this.removeAllEventListeners();
+
         // Release lock
         this.releaseLock();
+
+        // Clear temporary caches
+        this.clearTemporaryCaches();
 
         // Clear caches on crash (since analysis may be incomplete)
         if (this.filesToCheck && this.filesToCheck.length > 0) {
           this.clearCachesOnFileChanges();
+        }
+
+        // Flush stdout/stderr before exit
+        if (process.stdout && typeof process.stdout.flush === 'function') {
+          process.stdout.flush();
+        }
+        if (process.stderr && typeof process.stderr.flush === 'function') {
+          process.stderr.flush();
         }
 
         if (DEBUG_MODE) {
@@ -484,22 +508,67 @@ class QualityGateRunner {
     };
 
     // Handle common termination signals
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-    process.on('uncaughtException', (error) => {
+    const sigintHandler = () => {
+      cleanup();
+      process.exit(130); // Standard exit code for SIGINT
+    };
+    const sigtermHandler = () => {
+      cleanup();
+      process.exit(143); // Standard exit code for SIGTERM
+    };
+    const uncaughtExceptionHandler = (error) => {
       console.error('Uncaught exception:', error);
       cleanup();
       process.exit(1);
-    });
-    process.on('unhandledRejection', (reason, promise) => {
+    };
+    const unhandledRejectionHandler = (reason, promise) => {
       console.error('Unhandled rejection at:', promise, 'reason:', reason);
       cleanup();
       process.exit(1);
-    });
+    };
+
+    process.on('SIGINT', sigintHandler);
+    process.on('SIGTERM', sigtermHandler);
+    process.on('uncaughtException', uncaughtExceptionHandler);
+    process.on('unhandledRejection', unhandledRejectionHandler);
+
+    // Store references for cleanup
+    this.eventListeners.push(
+      { event: 'SIGINT', handler: sigintHandler },
+      { event: 'SIGTERM', handler: sigtermHandler },
+      { event: 'uncaughtException', handler: uncaughtExceptionHandler },
+      { event: 'unhandledRejection', handler: unhandledRejectionHandler }
+    );
 
     if (DEBUG_MODE) {
       this.debugLog.push('Cleanup handlers installed');
     }
+  }
+
+  /**
+   * Clears all active timeouts to prevent hanging.
+   * @returns {void}
+   */
+  clearAllTimeouts() {
+    for (const timeout of this.activeTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.activeTimeouts.clear();
+  }
+
+  /**
+   * Removes all registered event listeners to prevent memory leaks.
+   * @returns {void}
+   */
+  removeAllEventListeners() {
+    for (const { event, handler } of this.eventListeners) {
+      try {
+        process.removeListener(event, handler);
+      } catch (error) {
+        // Ignore errors removing listeners
+      }
+    }
+    this.eventListeners = [];
   }
 
   /**
@@ -630,9 +699,11 @@ class QualityGateRunner {
    *
    * Context priority (highest to lowest):
    * 1. --context=<value> command-line flag
-   * 2. --ci flag or CI environment variable
-   * 3. CAWS_ENFORCEMENT_CONTEXT environment variable
-   * 4. Default: 'commit'
+   * 2. --all-files flag (shortcut for --context=ci)
+   * 3. --ci flag or CI environment variable
+   * 4. CAWS_ENFORCEMENT_CONTEXT environment variable
+   * 5. Git hook detection (defaults to 'commit' if in hook, 'ci' if manual)
+   * 6. Default: 'ci' for manual runs, 'commit' for git hooks
    *
    * Context affects:
    * - File scope (staged vs. all files)
@@ -642,7 +713,15 @@ class QualityGateRunner {
    * @returns {'commit'|'push'|'ci'} Execution context
    */
   determineContext() {
-    // Check for explicit --context flag first
+    // Check for --all-files flag first (shortcut for --context=ci)
+    if (process.argv.includes('--all-files')) {
+      if (DEBUG_MODE) {
+        this.debugLog.push(`Context set via --all-files flag: ci`);
+      }
+      return 'ci';
+    }
+
+    // Check for explicit --context flag
     for (const arg of process.argv) {
       if (arg.startsWith('--context=')) {
         const context = arg.substring('--context='.length);
@@ -672,23 +751,115 @@ class QualityGateRunner {
       }
       return 'push';
     } else {
-      if (DEBUG_MODE) {
-        this.debugLog.push(`Context defaulted to: commit`);
+      // Detect if running in a git hook context
+      const isGitHook = this.isGitHookContext();
+      
+      if (isGitHook) {
+        // In git hook context, default to 'commit' (staged files only)
+        if (DEBUG_MODE) {
+          this.debugLog.push(`Context defaulted to: commit (detected git hook context)`);
+        }
+        return 'commit';
+      } else {
+        // Manual run (not in git hook), default to 'ci' (all files)
+        if (DEBUG_MODE) {
+          this.debugLog.push(`Context defaulted to: ci (manual run, not in git hook)`);
+        }
+        return 'ci';
       }
-      return 'commit';
     }
+  }
+
+  /**
+   * Detects if running in a git hook context.
+   * 
+   * Checks for:
+   * - GIT_DIR environment variable (set by git hooks)
+   * - GIT_INDEX_FILE environment variable (set by git hooks)
+   * - Parent process name containing 'git' (git hook scripts)
+   * - Script path in .git/hooks directory
+   * 
+   * @returns {boolean} True if running in git hook context
+   */
+  isGitHookContext() {
+    // Check environment variables set by git hooks
+    if (process.env.GIT_DIR || process.env.GIT_INDEX_FILE) {
+      if (DEBUG_MODE) {
+        this.debugLog.push(`Git hook detected via environment: GIT_DIR=${process.env.GIT_DIR || 'not set'}, GIT_INDEX_FILE=${process.env.GIT_INDEX_FILE || 'not set'}`);
+      }
+      return true;
+    }
+
+    // Check if parent process is git-related
+    try {
+      const ppid = process.ppid;
+      if (ppid) {
+        // Try to get parent process name (platform-specific)
+        let parentCmd = '';
+        try {
+          if (process.platform === 'win32') {
+            parentCmd = execSync(`wmic process where processid=${ppid} get name /value`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+          } else {
+            parentCmd = execSync(`ps -p ${ppid} -o comm=`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+          }
+          if (parentCmd && parentCmd.toLowerCase().includes('git')) {
+            if (DEBUG_MODE) {
+              this.debugLog.push(`Git hook detected via parent process: ${parentCmd}`);
+            }
+            return true;
+          }
+        } catch (e) {
+          // Ignore errors checking parent process
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+
+    // Check if script is being run from .git/hooks directory
+    try {
+      const scriptPath = process.argv[1] || '';
+      if (scriptPath.includes('.git/hooks')) {
+        if (DEBUG_MODE) {
+          this.debugLog.push(`Git hook detected via script path: ${scriptPath}`);
+        }
+        return true;
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+
+    return false;
   }
 
   getFilesForContext() {
     // Get files to check based on context
+    // This is a read-only operation - never modifies git state
     try {
       return getFilesToCheck(this.context);
     } catch (error) {
+      // Handle detached HEAD gracefully - don't fail, just use empty file list
+      if (error.message && error.message.includes('HEAD does not point to a branch')) {
+        if (DEBUG_MODE) {
+          this.debugLog.push('Detached HEAD detected, using empty file list');
+        }
+        return [];
+      }
+
       console.warn(
         `Warning: Failed to determine files for context '${this.context}': ${error.message}`
       );
+
+      // In commit context with no staged files, return empty array gracefully
+      if (this.context === 'commit') {
+        if (DEBUG_MODE) {
+          this.debugLog.push('Commit context with no staged files, returning empty list');
+        }
+        return [];
+      }
+
+      // For push/ci contexts, try fallback
       console.warn('Falling back to checking all files in repository');
-      // Fallback: try to get all files
       try {
         return getFilesToCheck('ci'); // CI context scans entire repo
       } catch (fallbackError) {
@@ -730,13 +901,16 @@ class QualityGateRunner {
         if (DEBUG_MODE) {
           this.debugLog.push(`Gate ${gateName} timed out after ${gateDuration}ms`);
         }
+        this.activeTimeouts.delete(timeout);
         resolve();
       }, timeoutMs);
+      this.activeTimeouts.add(timeout);
 
       try {
         await gateFunction();
         const gateDuration = Date.now() - gateStartTime;
         clearTimeout(timeout);
+        this.activeTimeouts.delete(timeout);
         this.gateTimings[gateName] = gateDuration;
         if (DEBUG_MODE) {
           this.debugLog.push(`Gate ${gateName} completed in ${gateDuration}ms`);
@@ -745,6 +919,7 @@ class QualityGateRunner {
       } catch (error) {
         const gateDuration = Date.now() - gateStartTime;
         clearTimeout(timeout);
+        this.activeTimeouts.delete(timeout);
         console.error(`   ${gateName} gate failed:`, error.message);
         this.violations.push({
           gate: gateName,
@@ -785,11 +960,77 @@ class QualityGateRunner {
     this.acquireLock();
 
     try {
+      // Handle zero staged files gracefully in commit context
+      if (this.context === 'commit' && this.filesToCheck.length === 0) {
+        if (!QUIET_MODE && !JSON_MODE) {
+          console.log('Running Quality Gates - Crisis Response Mode');
+          console.log('='.repeat(50));
+          console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
+          console.log(`Files to check: ${this.filesToCheck.length}`);
+          console.log('='.repeat(50));
+          console.log('\n⚠️  No files staged for commit.');
+          console.log('Quality gates did not run - 0 files were checked.');
+          console.log('\nThis is informational only. No quality checks were performed.');
+          console.log('\nTo run quality gates on all files in the repository:');
+          console.log('  • Use --all-files flag: caws quality-gates --all-files');
+          console.log('  • Or use --context=ci: caws quality-gates --context=ci');
+          console.log('  • Or use --context=push: caws quality-gates --context=push');
+        }
+
+        // Write minimal report for consistency
+        try {
+          const root = process.cwd();
+          const outDir = 'docs-status';
+          const reportPath = `${outDir}/quality-gates-report.json`;
+          fs.mkdirSync(outDir, { recursive: true });
+          fs.writeFileSync(
+            reportPath,
+            JSON.stringify(
+              {
+                timestamp: new Date().toISOString(),
+                context: this.context,
+                files_scoped: 0,
+                warnings: [],
+                violations: [],
+                waivers: { active: 0, applied: 0, details: [] },
+                performance: {
+                  total_execution_time_ms: Date.now() - this.startTime,
+                  gate_timings: {},
+                },
+                message: 'No files staged - gates skipped',
+              },
+              null,
+              2
+            )
+          );
+        } catch {}
+
+        // Cleanup and exit gracefully
+        this.clearAllTimeouts();
+        this.removeAllEventListeners();
+        this.releaseLock();
+        this.clearTemporaryCaches();
+
+        if (process.stdout && typeof process.stdout.flush === 'function') {
+          process.stdout.flush();
+        }
+        if (process.stderr && typeof process.stderr.flush === 'function') {
+          process.stderr.flush();
+        }
+
+        // Exit cleanly
+        process.exit(0);
+        return;
+      }
+
       if (!QUIET_MODE && !JSON_MODE) {
         console.log('Running Quality Gates - Crisis Response Mode');
         console.log('='.repeat(50));
         console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
-        console.log(`Files to check: ${this.filesToCheck.length}`);
+        console.log(`Files to check: ${this.filesToCheck.length} file(s)`);
+        if (this.filesToCheck.length > 0 && this.filesToCheck.length <= 10) {
+          console.log(`Files: ${this.filesToCheck.map(f => path.relative(process.cwd(), f)).join(', ')}`);
+        }
         console.log('='.repeat(50));
       }
 
@@ -885,8 +1126,13 @@ class QualityGateRunner {
 
       // Report results
       this.reportResults();
+    } catch (error) {
+      // Ensure cleanup on error
+      this.releaseLock();
+      this.clearTemporaryCaches();
+      throw error;
     } finally {
-      // Always release lock
+      // Always release lock (in case reportResults didn't exit)
       this.releaseLock();
     }
   }
@@ -1677,6 +1923,9 @@ class QualityGateRunner {
       console.log('\n' + '='.repeat(50));
       console.log('QUALITY GATES RESULTS');
       console.log('='.repeat(50));
+      console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
+      console.log(`Files checked: ${this.filesToCheck.length} file(s)`);
+      console.log('='.repeat(50));
     }
 
     // Check waivers for each violation
@@ -1750,12 +1999,19 @@ class QualityGateRunner {
       }
     } else {
       if (!QUIET_MODE && !JSON_MODE) {
-        const statusMsg =
-          waivedViolations.length > 0
-            ? `QUALITY GATES PASSED (${waivedViolations.length} violations waived)`
-            : 'ALL QUALITY GATES PASSED';
-        console.log(`\n✅ ${statusMsg}`);
-        console.log('Commit allowed - quality maintained!');
+        // Different message if no files were checked
+        if (this.filesToCheck.length === 0) {
+          console.log(`\n⚠️  QUALITY GATES SKIPPED`);
+          console.log('No files were checked - nothing to validate.');
+          console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
+        } else {
+          const statusMsg =
+            waivedViolations.length > 0
+              ? `QUALITY GATES PASSED (${waivedViolations.length} violations waived)`
+              : 'ALL QUALITY GATES PASSED';
+          console.log(`\n✅ ${statusMsg}`);
+          console.log(`Checked ${this.filesToCheck.length} file(s) - quality maintained!`);
+        }
 
         // Clear temporary caches on successful exit
         this.clearTemporaryCaches();
@@ -1840,9 +2096,26 @@ class QualityGateRunner {
       }
     } catch {}
 
+    // Ensure cleanup runs before exit
+    this.clearAllTimeouts();
+    this.removeAllEventListeners();
+    this.releaseLock();
+    this.clearTemporaryCaches();
+
+    // Flush stdout/stderr before exiting
+    if (process.stdout && typeof process.stdout.flush === 'function') {
+      process.stdout.flush();
+    }
+    if (process.stderr && typeof process.stderr.flush === 'function') {
+      process.stderr.flush();
+    }
+
     // Only block commit if there are non-waived violations
     const nonWaivedViolations = this.violations.filter((v) => !v.waivedBy);
-    process.exit(nonWaivedViolations.length ? 1 : 0);
+    const exitCode = nonWaivedViolations.length ? 1 : 0;
+
+    // Exit synchronously after cleanup
+    process.exit(exitCode);
   }
 }
 
@@ -1874,6 +2147,7 @@ USAGE:
 OPTIONS:
   --ci              Run in CI mode (strict enforcement, blocks on warnings)
   --context=<ctx>   Set context explicitly (commit, push, ci)
+  --all-files       Check all tracked files (equivalent to --context=ci)
   --json            Output machine-readable JSON to stdout
   --quiet           Suppress all console output except JSON/errors
   --debug           Enable debug output with timing and detailed logging

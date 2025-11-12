@@ -212,6 +212,12 @@ async function qualityGatesCommand(options = {}) {
           if (options.fix) {
             npxArgs.push('--fix');
           }
+          // Handle context options: --all-files takes precedence, then --context
+          if (options.allFiles) {
+            npxArgs.push('--context=ci');
+          } else if (options.context && options.context !== 'commit') {
+            npxArgs.push(`--context=${options.context}`);
+          }
 
           Output.progress('Executing quality gates via npx...');
           Output.info(`Command: ${npxArgs.join(' ')}`);
@@ -310,6 +316,13 @@ async function qualityGatesCommand(options = {}) {
         args.push('--fix');
       }
 
+      // Handle context options: --all-files takes precedence, then --context
+      if (options.allFiles) {
+        args.push('--context=ci');
+      } else if (options.context && options.context !== 'commit') {
+        args.push(`--context=${options.context}`);
+      }
+
       // Add CAWS-specific environment variables for integration
       const env = {
         ...process.env,
@@ -336,7 +349,47 @@ async function qualityGatesCommand(options = {}) {
       const timeoutMs = options.timeout || (options.ci ? 30 * 60 * 1000 : 10 * 60 * 1000);
 
       const completionPromise = new Promise((resolve, reject) => {
+        let resolved = false;
+
+        // Handle process termination signals
+        const signalHandlers = {
+          SIGINT: () => {
+            if (!resolved && !child.killed && child.pid) {
+              child.kill('SIGINT');
+            }
+          },
+          SIGTERM: () => {
+            if (!resolved && !child.killed && child.pid) {
+              child.kill('SIGTERM');
+            }
+          },
+        };
+
+        process.on('SIGINT', signalHandlers.SIGINT);
+        process.on('SIGTERM', signalHandlers.SIGTERM);
+
+        const cleanup = () => {
+          if (resolved) return;
+          resolved = true;
+
+          // Remove signal handlers
+          try {
+            process.removeListener('SIGINT', signalHandlers.SIGINT);
+            process.removeListener('SIGTERM', signalHandlers.SIGTERM);
+          } catch (e) {
+            // Ignore errors removing listeners
+          }
+
+          // Remove event listeners to prevent memory leaks
+          try {
+            child.removeAllListeners();
+          } catch (e) {
+            // Ignore errors removing listeners
+          }
+        };
+
         child.on('close', (code) => {
+          cleanup();
           if (code === 0) {
             resolve();
           } else {
@@ -345,12 +398,36 @@ async function qualityGatesCommand(options = {}) {
         });
 
         child.on('error', (error) => {
+          cleanup();
           reject(new Error(`Failed to execute quality gates runner: ${error.message}`));
         });
       });
 
-      await withTimeout(completionPromise, timeoutMs, 'Quality gates execution timed out');
-      Output.success('Quality gates completed successfully');
+      try {
+        await withTimeout(completionPromise, timeoutMs, 'Quality gates execution timed out');
+        Output.success('Quality gates completed successfully');
+      } catch (error) {
+        // Ensure child process is killed on timeout or error
+        try {
+          if (!child.killed && child.pid) {
+            child.kill('SIGTERM');
+            // Give it a moment to exit gracefully, then force kill
+            // eslint-disable-next-line no-undef
+            setTimeout(() => {
+              if (!child.killed && child.pid) {
+                try {
+                  child.kill('SIGKILL');
+                } catch (e) {
+                  // Ignore errors killing process
+                }
+              }
+            }, 1000);
+          }
+        } catch (killError) {
+          // Ignore errors killing process
+        }
+        throw error;
+      }
     },
     {
       commandName: 'quality-gates',

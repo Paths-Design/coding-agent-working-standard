@@ -372,10 +372,20 @@ function listRepoFiles(root) {
 }
 function listStagedFiles(root) {
   // Include Adds, Copies, Modifications, Renames, Type changes, Unmerged, Unknown, Submodule changes
-  const out = gitBuf(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMRTUXB'], {
-    cwd: root,
-  });
-  return splitNul(out);
+  // This is a read-only operation - never modifies git state
+  try {
+    const out = gitBuf(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMRTUXB'], {
+      cwd: root,
+    });
+    return splitNul(out);
+  } catch (error) {
+    // Handle detached HEAD gracefully - return empty array instead of failing
+    if (error.message && error.message.includes('HEAD does not point to a branch')) {
+      return [];
+    }
+    // Re-throw other errors
+    throw error;
+  }
 }
 function resolveBaseRef(root, fallback) {
   try {
