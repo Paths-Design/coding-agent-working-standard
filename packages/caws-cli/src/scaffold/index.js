@@ -597,10 +597,22 @@ async function scaffoldProject(options) {
             console.warn(chalk.yellow(`⚠️  Failed to add ${enhancement.name}:`), copyError.message);
           }
         } else {
-          // If source doesn't exist in template, create the directory structure
+          // If source doesn't exist in template, check if it should be a file or directory
           try {
-            await fs.ensureDir(destPath);
-            console.log(chalk.green(`✅ Created ${enhancement.description}`));
+            // Check if the enhancement name looks like a file (has extension)
+            const hasExtension = path.extname(enhancement.name).length > 0;
+            
+            if (hasExtension) {
+              // Create an empty file for file-like enhancements
+              await fs.ensureDir(path.dirname(destPath));
+              await fs.writeFile(destPath, '');
+              console.log(chalk.yellow(`⚠️  Created empty ${enhancement.description} (template not found)`));
+              console.log(chalk.gray(`   Template expected at: ${sourcePath}`));
+            } else {
+              // Create directory for directory-like enhancements
+              await fs.ensureDir(destPath);
+              console.log(chalk.green(`✅ Created ${enhancement.description}`));
+            }
             addedCount++;
             addedFiles.push(enhancement.name);
           } catch (createError) {
