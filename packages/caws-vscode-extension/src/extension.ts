@@ -1181,7 +1181,7 @@ async function runQualityGatesStatus(): Promise<void> {
           30000
         )
       ),
-    ]);
+    ]) as any;
 
     if (result.content && result.content[0]) {
       const status = result.content[0].text;
