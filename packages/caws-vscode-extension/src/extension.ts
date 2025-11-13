@@ -754,7 +754,7 @@ async function runQualityGates(): Promise<void> {
           args: args,
         });
 
-        const result = await Promise.race([toolPromise, timeoutPromise]) as any;
+        const result = (await Promise.race([toolPromise, timeoutPromise])) as any;
 
         if (!result.content || !result.content[0]) {
           throw new Error('Invalid quality gates result: missing content');
@@ -789,13 +789,14 @@ async function runQualityGates(): Promise<void> {
         updateQualityStatus();
       }
     );
-  } catch (error: any) {
-    if (error.message.includes('timed out')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates timed out. Try again or check if the MCP server is running.'
       );
     } else {
-      vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+      vscode.window.showErrorMessage(`Quality gates failed: ${errorMessage}`);
     }
   }
 }
@@ -1151,13 +1152,14 @@ async function runQualityGatesInteractive(): Promise<void> {
         }
       }
     );
-  } catch (error: any) {
-    if (error.message.includes('timed out')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates timed out. Try again or check if the MCP server is running.'
       );
     } else {
-      vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+      vscode.window.showErrorMessage(`Quality gates failed: ${errorMessage}`);
     }
   }
 }
@@ -1170,7 +1172,7 @@ async function runQualityGatesStatus(): Promise<void> {
       return;
     }
 
-    const result = await Promise.race([
+    const result = (await Promise.race([
       mcpClient.callTool('caws_quality_gates_status', {
         workingDirectory: workspaceFolder.uri.fsPath,
         json: false,
@@ -1181,9 +1183,9 @@ async function runQualityGatesStatus(): Promise<void> {
           30000
         )
       ),
-    ]) as any;
+    ])) as { content?: Array<{ text?: string }> };
 
-    if (result.content && result.content[0]) {
+    if (result.content && result.content[0] && result.content[0].text) {
       const status = result.content[0].text;
 
       // Show in output channel
@@ -1196,13 +1198,14 @@ async function runQualityGatesStatus(): Promise<void> {
 
       vscode.window.showInformationMessage('Quality gates status displayed');
     }
-  } catch (error: any) {
-    if (error.message?.includes('timed out')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates status timed out. Try again or check if the MCP server is running.'
       );
     } else {
-      vscode.window.showErrorMessage(`Failed to get quality gates status: ${error}`);
+      vscode.window.showErrorMessage(`Failed to get quality gates status: ${errorMessage}`);
     }
   }
 }
