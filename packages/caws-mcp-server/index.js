@@ -1228,6 +1228,9 @@ class CawsMcpServer extends Server {
       workingDirectory = process.cwd(),
     } = args;
 
+    let qualityGatesPath = null;
+    let possiblePaths = [];
+
     try {
       // Build command arguments
       const cliArgs = [];
@@ -1309,7 +1312,7 @@ class CawsMcpServer extends Server {
         }, 30000);
 
         const child = spawn('node', [qualityGatesPath, ...cliArgs], {
-          cwd: _workingDirectory,
+          cwd: workingDirectory,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
             ...process.env,
