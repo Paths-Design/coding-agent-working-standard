@@ -746,7 +746,7 @@ async function runQualityGates(): Promise<void> {
         progress.report({ message: 'Running quality gates on staged files...' });
 
         // Add timeout protection to prevent hanging
-        const timeoutPromise = new Promise((_, reject) => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Quality gates timed out after 60 seconds')), 60000);
         });
 
@@ -754,7 +754,7 @@ async function runQualityGates(): Promise<void> {
           args: args,
         });
 
-        const result = await Promise.race([toolPromise, timeoutPromise]);
+        const result = await Promise.race([toolPromise, timeoutPromise]) as any;
 
         if (!result.content || !result.content[0]) {
           throw new Error('Invalid quality gates result: missing content');
