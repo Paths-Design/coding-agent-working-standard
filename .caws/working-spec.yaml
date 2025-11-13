@@ -17,7 +17,7 @@ threats:
   - "Increased complexity in provenance tracking"
 scope:
   in: ["packages/caws-cli/src/", "packages/caws-cli/templates/", "docs/", "*.md"]
-  out: ["node_modules/", "packages/*/dist/", "packages/*/node_modules/", ".git/"]
+  out: ["node_modules/", "packages/caws-cli/dist/", "packages/caws-mcp-server/dist/", "packages/quality-gates/dist/", "packages/caws-cli/node_modules/", "packages/caws-mcp-server/node_modules/", "packages/quality-gates/node_modules/", ".git/"]
 invariants:
   - "Provenance tracking remains secure and tamper-proof"
   - "CLI commands provide clear feedback and guidance"
@@ -55,5 +55,7 @@ migrations:
   - "Add git hooks templates and scaffolding"
   - "Update documentation with new UX features"
 rollback:
-  strategy: "Revert CLI changes, keep provenance data intact"
-  data_backup: "Export existing provenance chains before migration"
+  - "Revert CLI command structure changes"
+  - "Keep provenance data intact"
+  - "Export existing provenance chains before migration"
+  - "Restore previous CLI version if needed"
