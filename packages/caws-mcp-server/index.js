@@ -19,6 +19,9 @@ process.env.PINO_LOG_PRETTY = 'false'; // Another pino pretty print variable
 process.env.PINO_COLORIZE = 'false'; // Disable pino colorization
 process.env.TERM = 'dumb'; // Dumb terminal (no colors)
 
+// Import Node.js globals that ESLint doesn't recognize
+const { setTimeout: globalSetTimeout, clearTimeout: globalClearTimeout } = globalThis;
+
 /**
  * Strip ANSI escape codes from text output
  * This prevents color codes from corrupting JSON responses
@@ -1294,7 +1297,7 @@ class CawsMcpServer extends Server {
 
       return new Promise((resolve, reject) => {
         // Set timeout to prevent hanging (30 seconds)
-        const timeoutId = setTimeout(() => {
+        const timeoutId = globalSetTimeout(() => {
           try {
             if (child && !child.killed) {
               child.kill('SIGTERM');
@@ -1328,7 +1331,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('close', (_code) => {
-          clearTimeout(timeoutId); // Clear timeout on completion
+          globalClearTimeout(timeoutId); // Clear timeout on completion
           const output = stripAnsi(stdout || stderr);
           resolve({
             content: [
@@ -1341,7 +1344,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('error', (spawnError) => {
-          clearTimeout(timeoutId);
+          globalClearTimeout(timeoutId);
           reject({
             content: [
               {
@@ -1375,6 +1378,7 @@ class CawsMcpServer extends Server {
       });
     } catch (error) {
       // Enhanced error handling with more context
+      const workingDir = workingDirectory || process.cwd();
       return {
         content: [
           {
@@ -1384,7 +1388,7 @@ class CawsMcpServer extends Server {
                 success: false,
                 error: error.message,
                 command: 'caws_quality_gates_run',
-                workingDirectory: workingDirectory || process.cwd(),
+                workingDirectory: workingDir,
                 qualityGatesPath: qualityGatesPath || 'not found',
                 attemptedPaths: possiblePaths || [],
               },
