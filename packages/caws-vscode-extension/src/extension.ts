@@ -241,7 +241,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
       try {
         const configContent = fs.readFileSync(mcpConfigPath, 'utf8');
         mcpConfig = JSON.parse(configContent);
-      } catch (error) {
+      } catch (error: any) {
         getLogger().warn('Failed to parse existing MCP config, will create new one', error);
       }
     }
@@ -284,7 +284,7 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
           });
         }
       });
-  } catch (error) {
+  } catch (error: any) {
     getLogger().error('Failed to register CAWS MCP server with Cursor', error);
     // Don't show error to user - this is a nice-to-have feature
   }
@@ -347,7 +347,7 @@ async function runCawsInit(): Promise<void> {
         }
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`CAWS init failed: ${error}`);
   }
 }
@@ -403,7 +403,7 @@ async function runCawsScaffold(): Promise<void> {
         }
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`CAWS scaffold failed: ${error}`);
   }
 }
@@ -443,7 +443,7 @@ async function installHooks(): Promise<void> {
         }
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Hooks installation failed: ${error}`);
   }
 }
@@ -463,7 +463,7 @@ async function checkHooksStatus(): Promise<void> {
     outputChannel.clear();
     outputChannel.append(statusResult.output);
     outputChannel.show();
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Hooks status check failed: ${error}`);
   }
 }
@@ -512,7 +512,7 @@ async function runCawsEvaluation(): Promise<void> {
         updateQualityStatus();
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`CAWS evaluation failed: ${error}`);
   }
 }
@@ -541,7 +541,7 @@ async function runCawsIteration(): Promise<void> {
     } else {
       vscode.window.showErrorMessage(`CAWS guidance failed: ${guidance.error || 'Unknown error'}`);
     }
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`CAWS iteration guidance failed: ${error}`);
   }
 }
@@ -557,7 +557,7 @@ async function getAvailableSpecs(): Promise<
     if (result.content && result.content[0]) {
       return JSON.parse(result.content[0].text);
     }
-  } catch (error) {
+  } catch (error: any) {
     // Fallback to legacy spec if available
   }
   return [];
@@ -630,7 +630,7 @@ async function runCawsSpecsList(): Promise<void> {
 
     outputChannel.show();
     vscode.window.showInformationMessage(`Found ${specs.length} CAWS specs - check output channel`);
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to list specs: ${error}`);
   }
 }
@@ -674,7 +674,7 @@ async function runCawsSpecsCreate(): Promise<void> {
       vscode.window.showInformationMessage(`Created spec: ${specId}`);
       runCawsSpecsList(); // Refresh the list
     }
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to create spec: ${error}`);
   }
 }
@@ -701,7 +701,7 @@ async function runCawsSpecsShow(): Promise<void> {
     );
 
     // TODO: Read and display full spec content in a webview or output channel
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to show spec: ${error}`);
   }
 }
@@ -789,7 +789,7 @@ async function runQualityGates(): Promise<void> {
         updateQualityStatus();
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     if (error.message.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates timed out. Try again or check if the MCP server is running.'
@@ -830,7 +830,7 @@ async function runCawsValidation(): Promise<void> {
     outputChannel.show();
 
     vscode.window.showInformationMessage('CAWS validation completed - check output channel');
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`CAWS validation failed: ${error}`);
   }
 }
@@ -853,7 +853,7 @@ async function createWaiver(): Promise<void> {
     outputChannel.clear();
     outputChannel.append(output);
     outputChannel.show();
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Waiver creation failed: ${error}`);
   }
 }
@@ -1151,7 +1151,7 @@ async function runQualityGatesInteractive(): Promise<void> {
         }
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     if (error.message.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates timed out. Try again or check if the MCP server is running.'
@@ -1272,7 +1272,7 @@ async function runQualityExceptionsList(): Promise<void> {
         vscode.window.showInformationMessage('No quality exceptions found');
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to list quality exceptions: ${error}`);
   }
 }
@@ -1351,7 +1351,7 @@ async function runQualityExceptionsCreate(): Promise<void> {
         vscode.window.showErrorMessage(`Failed to create exception: ${data.error}`);
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to create quality exception: ${error}`);
   }
 }
@@ -1409,7 +1409,7 @@ async function runRefactorProgressCheck(): Promise<void> {
         }
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     vscode.window.showErrorMessage(`Refactor progress check failed: ${error}`);
   }
 }
@@ -1431,7 +1431,7 @@ async function updateQualityStatus(): Promise<void> {
 
       statusBar.updateStatus(score, status);
     }
-  } catch (error) {
+  } catch (error: any) {
     // Silently fail status updates
   }
 }
