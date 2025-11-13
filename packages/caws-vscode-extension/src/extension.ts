@@ -1196,8 +1196,8 @@ async function runQualityGatesStatus(): Promise<void> {
 
       vscode.window.showInformationMessage('Quality gates status displayed');
     }
-  } catch (error) {
-    if (error.message.includes('timed out')) {
+  } catch (error: any) {
+    if (error.message?.includes('timed out')) {
       vscode.window.showErrorMessage(
         'Quality gates status timed out. Try again or check if the MCP server is running.'
       );
