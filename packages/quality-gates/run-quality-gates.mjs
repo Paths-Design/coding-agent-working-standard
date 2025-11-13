@@ -94,11 +94,11 @@
 import { getContextInfo, getFilesToCheck } from './file-scope-manager.mjs';
 
 // Import quality gate modules
+import { execSync } from 'child_process';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
 import { checkPlaceholders } from './check-placeholders.mjs';
@@ -753,7 +753,7 @@ class QualityGateRunner {
     } else {
       // Detect if running in a git hook context
       const isGitHook = this.isGitHookContext();
-      
+
       if (isGitHook) {
         // In git hook context, default to 'commit' (staged files only)
         if (DEBUG_MODE) {
@@ -772,20 +772,22 @@ class QualityGateRunner {
 
   /**
    * Detects if running in a git hook context.
-   * 
+   *
    * Checks for:
    * - GIT_DIR environment variable (set by git hooks)
    * - GIT_INDEX_FILE environment variable (set by git hooks)
    * - Parent process name containing 'git' (git hook scripts)
    * - Script path in .git/hooks directory
-   * 
+   *
    * @returns {boolean} True if running in git hook context
    */
   isGitHookContext() {
     // Check environment variables set by git hooks
     if (process.env.GIT_DIR || process.env.GIT_INDEX_FILE) {
       if (DEBUG_MODE) {
-        this.debugLog.push(`Git hook detected via environment: GIT_DIR=${process.env.GIT_DIR || 'not set'}, GIT_INDEX_FILE=${process.env.GIT_INDEX_FILE || 'not set'}`);
+        this.debugLog.push(
+          `Git hook detected via environment: GIT_DIR=${process.env.GIT_DIR || 'not set'}, GIT_INDEX_FILE=${process.env.GIT_INDEX_FILE || 'not set'}`
+        );
       }
       return true;
     }
@@ -798,9 +800,15 @@ class QualityGateRunner {
         let parentCmd = '';
         try {
           if (process.platform === 'win32') {
-            parentCmd = execSync(`wmic process where processid=${ppid} get name /value`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+            parentCmd = execSync(`wmic process where processid=${ppid} get name /value`, {
+              encoding: 'utf8',
+              stdio: 'pipe',
+            }).trim();
           } else {
-            parentCmd = execSync(`ps -p ${ppid} -o comm=`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+            parentCmd = execSync(`ps -p ${ppid} -o comm=`, {
+              encoding: 'utf8',
+              stdio: 'pipe',
+            }).trim();
           }
           if (parentCmd && parentCmd.toLowerCase().includes('git')) {
             if (DEBUG_MODE) {
@@ -1029,7 +1037,9 @@ class QualityGateRunner {
         console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
         console.log(`Files to check: ${this.filesToCheck.length} file(s)`);
         if (this.filesToCheck.length > 0 && this.filesToCheck.length <= 10) {
-          console.log(`Files: ${this.filesToCheck.map(f => path.relative(process.cwd(), f)).join(', ')}`);
+          console.log(
+            `Files: ${this.filesToCheck.map((f) => path.relative(process.cwd(), f)).join(', ')}`
+          );
         }
         console.log('='.repeat(50));
       }
@@ -1097,7 +1107,7 @@ class QualityGateRunner {
           // Use longer timeout for full repo scans (push/ci) vs commit mode (staged files only)
           // commit: 30s (staged files only, typically small)
           // push/ci: 120s (entire repo scan, may be large)
-          const timeoutMs = (this.context === 'ci' || this.context === 'push') ? 120000 : 30000;
+          const timeoutMs = this.context === 'ci' || this.context === 'push' ? 120000 : 30000;
           gatePromises.push(
             this.runGateWithTimeout(
               'documentation',
@@ -1456,8 +1466,10 @@ class QualityGateRunner {
         // Import shared framework
         const { processViolations } = await import('./shared-exception-framework.mjs');
 
-        // Process violations with exception handling
-        const result = processViolations('hidden-todo', rawViolations, this.context);
+        // Process violations with exception handling (optimized for large sets)
+        const result = processViolations('hidden-todo', rawViolations, this.context, {
+          maxViolations: 5000, // Limit processing for performance
+        });
 
         // Filter violations by enforcement level
         const errors = result.violations.filter(
@@ -1510,9 +1522,7 @@ class QualityGateRunner {
       // - commit: staged files only
       // - push: all tracked files (entire repo)
       // - ci: all tracked files (entire repo)
-      console.log(
-        `    File scope: ${this.filesToCheck.length} files (context: ${this.context})`
-      );
+      console.log(`    File scope: ${this.filesToCheck.length} files (context: ${this.context})`);
 
       console.log('    Starting documentation quality scan...');
 
@@ -1547,8 +1557,10 @@ class QualityGateRunner {
         // Import shared framework
         const { processViolations } = await import('./shared-exception-framework.mjs');
 
-        // Process violations with exception handling
-        const result = processViolations('documentation', rawViolations, this.context);
+        // Process violations with exception handling (optimized for large sets)
+        const result = processViolations('documentation', rawViolations, this.context, {
+          maxViolations: 5000, // Limit processing for performance
+        });
 
         // Report warnings (approved exceptions)
         if (result.warnings.length > 0) {

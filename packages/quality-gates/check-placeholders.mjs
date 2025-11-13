@@ -85,9 +85,7 @@ function extractPlaceholders(content, filePath) {
   }
 
   // Try to find Degradations section
-  const degradationsMatch = content.match(
-    /##?\s*Degradations?\s*\n([\s\S]*?)(?=\n##|\n---|$)/
-  );
+  const degradationsMatch = content.match(/##?\s*Degradations?\s*\n([\s\S]*?)(?=\n##|\n---|$)/);
   if (degradationsMatch) {
     const degradationsText = degradationsMatch[1];
     // Parse bullet points with placeholder IDs
@@ -148,9 +146,7 @@ function validatePlaceholderSchema(placeholder, filePath) {
  */
 function checkDanglingPromises(content, filePath, declaredPlaceholders) {
   const violations = [];
-  const placeholderIds = new Set(
-    declaredPlaceholders.map((p) => p.id || '').filter(Boolean)
-  );
+  const placeholderIds = new Set(declaredPlaceholders.map((p) => p.id || '').filter(Boolean));
   const debtNotes = declaredPlaceholders
     .map((p) => p.debt_note || '')
     .join(' ')
@@ -170,9 +166,7 @@ function checkDanglingPromises(content, filePath, declaredPlaceholders) {
       const contextStart = Math.max(0, matchIndex - 100);
       const contextEnd = Math.min(content.length, matchIndex + 100);
       const context = content.substring(contextStart, contextEnd);
-      const hasPlaceholderRef = Array.from(placeholderIds).some((id) =>
-        context.includes(id)
-      );
+      const hasPlaceholderRef = Array.from(placeholderIds).some((id) => context.includes(id));
 
       if (!matchesDebtNote && !hasPlaceholderRef) {
         violations.push({
@@ -182,8 +176,7 @@ function checkDanglingPromises(content, filePath, declaredPlaceholders) {
           file: filePath,
           line: lineNumber,
           severity: 'block',
-          suggestion:
-            'Either add a placeholder entry for this degradation or remove the promise',
+          suggestion: 'Either add a placeholder entry for this degradation or remove the promise',
         });
       }
     }
@@ -247,8 +240,7 @@ function checkDebtBudget(placeholders, filePath, resultType, config) {
 
   // Check per-artifact limits
   const maxForType =
-    config.maxPlaceholdersPerArtifact[resultType] ??
-    config.maxPlaceholdersPerArtifact.doc;
+    config.maxPlaceholdersPerArtifact[resultType] ?? config.maxPlaceholdersPerArtifact.doc;
 
   if (placeholders.length > maxForType) {
     violations.push({
@@ -275,9 +267,7 @@ function checkDebtBudget(placeholders, filePath, resultType, config) {
   }
 
   // Check for blocking placeholders
-  const blocking = placeholders.filter(
-    (p) => p.impact === 'blocks_acceptance'
-  );
+  const blocking = placeholders.filter((p) => p.impact === 'blocks_acceptance');
   if (blocking.length > 0) {
     violations.push({
       gate: 'placeholders',
@@ -298,8 +288,7 @@ function checkDebtBudget(placeholders, filePath, resultType, config) {
 function detectResultType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (['.md', '.txt', '.rst'].includes(ext)) return 'doc';
-  if (['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go'].includes(ext))
-    return 'code';
+  if (['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go'].includes(ext)) return 'code';
   if (['.json', '.yaml', '.yml'].includes(ext)) return 'json';
   if (filePath.includes('test') || filePath.includes('spec')) return 'test';
   return 'doc';
@@ -309,12 +298,8 @@ function detectResultType(filePath) {
  * Main placeholder validation function
  */
 export async function checkPlaceholders(options = {}) {
-  const {
-    files = [],
-    config = DEFAULT_CONFIG,
-    enforcement,
-  } = options;
-  
+  const { files = [], config = DEFAULT_CONFIG, enforcement } = options;
+
   const effectiveEnforcement = enforcement ?? getGlobalEnforcementLevel('placeholders');
 
   const violations = [];
@@ -342,8 +327,7 @@ export async function checkPlaceholders(options = {}) {
             violations.push({
               gate: 'placeholders',
               type: 'status_mismatch',
-              message:
-                'Status is "degraded" but no placeholders array provided',
+              message: 'Status is "degraded" but no placeholders array provided',
               file: filePath,
               severity: 'block',
               suggestion: 'Add placeholders array or change status to "ok"',
@@ -353,8 +337,7 @@ export async function checkPlaceholders(options = {}) {
             violations.push({
               gate: 'placeholders',
               type: 'status_mismatch',
-              message:
-                'Placeholders exist but status is not "degraded"',
+              message: 'Placeholders exist but status is not "degraded"',
               file: filePath,
               severity: 'block',
               suggestion: 'Change status to "degraded" when placeholders are present',
@@ -366,19 +349,13 @@ export async function checkPlaceholders(options = {}) {
       }
 
       // P2: Debt budget
-      violations.push(
-        ...checkDebtBudget(placeholders, filePath, resultType, config)
-      );
+      violations.push(...checkDebtBudget(placeholders, filePath, resultType, config));
 
       // P3: No dangling promises
-      violations.push(
-        ...checkDanglingPromises(content, filePath, placeholders)
-      );
+      violations.push(...checkDanglingPromises(content, filePath, placeholders));
 
       // P4: Non-degradable scopes
-      violations.push(
-        ...checkNonDegradableScopes(placeholders, filePath, config)
-      );
+      violations.push(...checkNonDegradableScopes(placeholders, filePath, config));
     } catch (error) {
       violations.push({
         gate: 'placeholders',
@@ -390,7 +367,10 @@ export async function checkPlaceholders(options = {}) {
     }
   }
 
-  return processViolations('placeholders', violations, undefined, { enforcement: effectiveEnforcement });
+  return processViolations('placeholders', violations, undefined, {
+    enforcement: effectiveEnforcement,
+    maxViolations: 5000, // Performance limit for large codebases
+  });
 }
 
 // CLI execution
@@ -398,9 +378,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   checkPlaceholders()
     .then((result) => {
       if (result.violations.length > 0) {
-        console.error(
-          `Found ${result.violations.length} placeholder violation(s)`
-        );
+        console.error(`Found ${result.violations.length} placeholder violation(s)`);
         process.exit(1);
       }
     })
@@ -409,4 +387,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(1);
     });
 }
-

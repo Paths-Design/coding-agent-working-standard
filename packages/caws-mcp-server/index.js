@@ -1293,8 +1293,20 @@ class CawsMcpServer extends Server {
       }
 
       return new Promise((resolve, reject) => {
+        // Set timeout to prevent hanging (30 seconds)
+        const timeout = setTimeout(() => {
+          try {
+            if (child && !child.killed) {
+              child.kill('SIGTERM');
+            }
+          } catch (killError) {
+            // Ignore kill errors
+          }
+          reject(new Error('Quality gates execution timed out after 30 seconds'));
+        }, 30000);
+
         const child = spawn('node', [qualityGatesPath, ...cliArgs], {
-          cwd: workingDirectory,
+          cwd: _workingDirectory,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
             ...process.env,
@@ -1316,6 +1328,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('close', (_code) => {
+          clearTimeout(timeout); // Clear timeout on completion
           const output = stripAnsi(stdout || stderr);
           resolve({
             content: [
@@ -1324,6 +1337,19 @@ class CawsMcpServer extends Server {
                 text: output,
               },
             ],
+          });
+        });
+
+        child.on('error', (spawnError) => {
+          clearTimeout(timeout);
+          reject({
+            content: [
+              {
+                type: 'text',
+                text: `Failed to start quality gates: ${spawnError.message}`,
+              },
+            ],
+            isError: true,
           });
         });
 
@@ -1348,6 +1374,7 @@ class CawsMcpServer extends Server {
         });
       });
     } catch (error) {
+      // Enhanced error handling with more context
       return {
         content: [
           {
@@ -1357,6 +1384,9 @@ class CawsMcpServer extends Server {
                 success: false,
                 error: error.message,
                 command: 'caws_quality_gates_run',
+                workingDirectory: _workingDirectory,
+                qualityGatesPath: qualityGatesPath || 'not found',
+                attemptedPaths: possiblePaths,
               },
               null,
               2

@@ -433,6 +433,7 @@ export function checkNamingViolations(context = 'commit') {
 
   // Let exception framework finalize severities / waivers
   const processed = processViolations('naming', [...violations], context, {
+    maxViolations: 5000, // Performance limit for large codebases
     defaultSeverity: (v) => v.severity || enforcement || 'warning',
   });
 

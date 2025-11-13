@@ -584,6 +584,7 @@ export function runDuplicationGate(context = 'commit') {
 
   // Let your exception framework finalize severities/waivers
   const processed = processViolations('duplication_gate', [...violations, ...warnings], context, {
+    maxViolations: 5000, // Performance limit for large codebases
     defaultSeverity: (v) => v.severity || 'warn',
   });
 

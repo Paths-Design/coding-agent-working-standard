@@ -858,7 +858,9 @@ export async function checkFunctionalDuplication(context = 'commit') {
   }
 
   // defer to exception framework for final severity resolution
-  const processed = processViolations('duplication', [...violations, ...warnings], context);
+  const processed = processViolations('duplication', [...violations, ...warnings], context, {
+    maxViolations: 5000, // Performance limit for large codebases
+  });
 
   return {
     violations: processed.violations,

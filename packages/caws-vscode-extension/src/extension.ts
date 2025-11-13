@@ -745,9 +745,16 @@ async function runQualityGates(): Promise<void> {
       async (progress) => {
         progress.report({ message: 'Running quality gates on staged files...' });
 
-        const result = await mcpClient.callTool('caws_quality_gates', {
+        // Add timeout protection to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Quality gates timed out after 60 seconds')), 60000);
+        });
+
+        const toolPromise = mcpClient.callTool('caws_quality_gates', {
           args: args,
         });
+
+        const result = await Promise.race([toolPromise, timeoutPromise]);
 
         if (!result.content || !result.content[0]) {
           throw new Error('Invalid quality gates result: missing content');
@@ -783,7 +790,13 @@ async function runQualityGates(): Promise<void> {
       }
     );
   } catch (error) {
-    vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+    if (error.message.includes('timed out')) {
+      vscode.window.showErrorMessage(
+        'Quality gates timed out. Try again or check if the MCP server is running.'
+      );
+    } else {
+      vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+    }
   }
 }
 
@@ -1139,7 +1152,13 @@ async function runQualityGatesInteractive(): Promise<void> {
       }
     );
   } catch (error) {
-    vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+    if (error.message.includes('timed out')) {
+      vscode.window.showErrorMessage(
+        'Quality gates timed out. Try again or check if the MCP server is running.'
+      );
+    } else {
+      vscode.window.showErrorMessage(`Quality gates failed: ${error}`);
+    }
   }
 }
 
@@ -1151,10 +1170,18 @@ async function runQualityGatesStatus(): Promise<void> {
       return;
     }
 
-    const result = await mcpClient.callTool('caws_quality_gates_status', {
-      workingDirectory: workspaceFolder.uri.fsPath,
-      json: false,
-    });
+    const result = await Promise.race([
+      mcpClient.callTool('caws_quality_gates_status', {
+        workingDirectory: workspaceFolder.uri.fsPath,
+        json: false,
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Quality gates status timed out after 30 seconds')),
+          30000
+        )
+      ),
+    ]);
 
     if (result.content && result.content[0]) {
       const status = result.content[0].text;
@@ -1170,7 +1197,13 @@ async function runQualityGatesStatus(): Promise<void> {
       vscode.window.showInformationMessage('Quality gates status displayed');
     }
   } catch (error) {
-    vscode.window.showErrorMessage(`Failed to get quality gates status: ${error}`);
+    if (error.message.includes('timed out')) {
+      vscode.window.showErrorMessage(
+        'Quality gates status timed out. Try again or check if the MCP server is running.'
+      );
+    } else {
+      vscode.window.showErrorMessage(`Failed to get quality gates status: ${error}`);
+    }
   }
 }
 

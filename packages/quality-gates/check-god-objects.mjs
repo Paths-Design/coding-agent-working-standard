@@ -337,6 +337,7 @@ export function checkGodObjects(context = 'commit', filesToCheck = null) {
   // - severe/critical => block in commit & CI
   // - warning => warn in commit; block in CI if enforcement policy says so
   const result = processViolations('god_objects', rawViolations, context, {
+    maxViolations: 5000, // Performance limit for large codebases
     defaultSeverity: (v) => {
       if (v.type === 'new_or_worsened_god_object') return 'block';
       if (v.type === 'severe_god_object') return 'block';

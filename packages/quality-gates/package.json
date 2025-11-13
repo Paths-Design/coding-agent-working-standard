@@ -13,6 +13,7 @@
     "check-functional-duplication.mjs",
     "check-god-objects.mjs",
     "check-naming.mjs",
+    "check-placeholders.mjs",
     "doc-quality-auto-fixer.mjs",
     "doc-quality-linter.mjs",
     "file-scope-manager.mjs",

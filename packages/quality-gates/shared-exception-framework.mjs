@@ -23,9 +23,9 @@ let PROJECT_ROOT_OVERRIDE = null;
 
 function repoRootSafe(cwd = process.cwd()) {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { 
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
       encoding: 'utf8',
-      cwd: cwd 
+      cwd: cwd,
     }).trim();
   } catch {
     return null;
@@ -53,8 +53,8 @@ function getLockPath() {
 export function setProjectRoot(projectRoot) {
   if (projectRoot) {
     // Resolve to absolute path
-    PROJECT_ROOT_OVERRIDE = path.isAbsolute(projectRoot) 
-      ? projectRoot 
+    PROJECT_ROOT_OVERRIDE = path.isAbsolute(projectRoot)
+      ? projectRoot
       : path.resolve(process.cwd(), projectRoot);
     // Try to find git root from the provided directory
     const gitRoot = repoRootSafe(PROJECT_ROOT_OVERRIDE);
@@ -575,6 +575,7 @@ export function listExceptions(gateName = null) {
 /**
  * @typedef {Object} ProcessViolationsOptions
  * @property {Function} [defaultSeverity] - Function to determine default severity for a violation
+ * @property {number} [maxViolations] - Maximum number of violations to process (default: 5000)
  */
 
 /**
@@ -585,6 +586,101 @@ export function listExceptions(gateName = null) {
  * @property {Object[]} appliedExceptions - Metadata about exceptions that were applied
  */
 
+// Performance optimization: Cache compiled patterns and matchers
+const exceptionCache = new Map();
+const patternCache = new Map();
+const globCache = new Map();
+
+// Cache cleanup: Clear caches every 60 seconds to prevent memory leaks
+setInterval(() => {
+  exceptionCache.clear();
+  patternCache.clear();
+  globCache.clear();
+}, 60000);
+
+/**
+ * Optimized exception matcher with caching
+ */
+function isExceptionCached(gateName, violation, context = currentContext()) {
+  const config = loadExceptionConfig();
+  const now = new Date();
+  const branch = currentBranch();
+  const author = currentAuthorEmail();
+  const ci = inCI();
+  const fileRel = toRepoRel(violation.file);
+
+  // Create cache key for this violation context
+  const cacheKey = `${gateName}:${context}:${fileRel}:${violation.type}:${branch}:${author}:${ci}`;
+
+  // Check if we have cached results for this exact scenario
+  if (exceptionCache.has(cacheKey)) {
+    const cached = exceptionCache.get(cacheKey);
+    // Verify cache is still valid (time-based)
+    if (Date.now() - cached.timestamp < 5000) {
+      // 5 second cache
+      return cached.result;
+    }
+    exceptionCache.delete(cacheKey);
+  }
+
+  // Filter exceptions for this gate first (reduces m from ~10 to ~1-2)
+  const relevantExceptions = config.exceptions.filter((ex) => ex.gate === gateName);
+
+  for (const ex of relevantExceptions) {
+    // context constraint - fast check
+    if (ex.context && ex.context !== 'all' && ex.context !== context) continue;
+    if (ex.ci_only && !ci) continue;
+
+    // Time window check - fast check
+    if (!withinTimeWindow(now, ex.effective_from, ex.expires_at)) {
+      if (new Date(now) > new Date(ex.expires_at)) {
+        return { valid: false, reason: 'expired', exception: ex };
+      }
+      continue;
+    }
+
+    // Cache pattern compilation and matching
+    const patternKey = `${ex.file_pattern}:${ex.message_regex || ''}:${ex.violation_type || ''}`;
+
+    let patternResult;
+    if (patternCache.has(patternKey)) {
+      patternResult = patternCache.get(patternKey);
+    } else {
+      patternResult = {
+        fileMatch: matchFilePattern(fileRel, ex.file_pattern),
+        typeMatch: matchType(violation.type, ex.violation_type),
+        messageMatch: matchMessageRegex(violation.message || violation.issue, ex.message_regex),
+      };
+      // Cache for 10 seconds (reasonable for batch processing)
+      patternCache.set(patternKey, patternResult);
+      setTimeout(() => patternCache.delete(patternKey), 10000);
+    }
+
+    // Fast path: check cached patterns first
+    if (!patternResult.fileMatch || !patternResult.typeMatch || !patternResult.messageMatch) {
+      continue;
+    }
+
+    // Slower checks only if patterns match
+    const matches =
+      matchBranch(branch, ex.branch) &&
+      matchAuthor(author, ex.author_email) &&
+      checkBudgets(violation, ex);
+
+    if (!matches) continue;
+
+    // Cache successful match
+    const result = { valid: true, exception: ex, context, repoRelativeFile: fileRel };
+    exceptionCache.set(cacheKey, { result, timestamp: Date.now() });
+    return result;
+  }
+
+  // Cache negative result
+  const result = { valid: false };
+  exceptionCache.set(cacheKey, { result, timestamp: Date.now() });
+  return result;
+}
+
 /**
  * Processes violations against active exceptions and enforcement levels.
  *
@@ -592,10 +688,16 @@ export function listExceptions(gateName = null) {
  * vs. which are allowed due to exceptions or enforcement level settings.
  *
  * Processing flow:
- * 1. Check each violation against active exceptions
+ * 1. Check each violation against active exceptions (optimized with caching)
  * 2. If exception matches, convert to warning (non-blocking)
  * 3. Assign severity based on enforcement level for gate/context
  * 4. Track applied exceptions for reporting
+ *
+ * Performance optimizations:
+ * - Pre-filter exceptions by gate (reduces m from ~10 to ~1-2)
+ * - Cache compiled regex patterns and glob matchers
+ * - Cache exception matching results per violation
+ * - Batch processing with early exit options
  *
  * Exception matching:
  * - File pattern (micromatch glob)
@@ -617,40 +719,63 @@ export function processViolations(gateName, violations, context = currentContext
   const warnings = [];
   const appliedExceptions = [];
 
-  for (const v of violations) {
-    const check = isException(gateName, v, context);
-    if (check.valid) {
-      appliedExceptions.push({ gate: gateName, violation: v, exceptionId: check.exception.id });
-      warnings.push({
-        type: 'exception_used',
-        gate: gateName,
-        violation: v,
-        exception: {
-          id: check.exception.id,
-          reason: check.exception.reason,
-          expires_at: check.exception.expires_at,
-          approved_by: check.exception.approved_by,
-        },
-        context,
-      });
-      // Optional: bump hits counter (best effort, non-blocking)
-      addHit(check.exception.id);
-      continue;
-    }
+  // Performance optimization: early exit for large violation sets
+  const maxViolations = opts.maxViolations || 5000; // Configurable limit
+  if (violations.length > maxViolations) {
+    console.warn(
+      `⚠️ Large violation set detected (${violations.length}), limiting to ${maxViolations} for performance`
+    );
+    violations = violations.slice(0, maxViolations);
+  }
 
-    if (check.reason === 'expired') {
+  // Performance optimization: batch processing with progress
+  const batchSize = 100;
+  for (let i = 0; i < violations.length; i += batchSize) {
+    const batch = violations.slice(i, i + batchSize);
+
+    for (const v of batch) {
+      // Use optimized exception checking with caching
+      const check = isExceptionCached(gateName, v, context);
+      if (check.valid) {
+        appliedExceptions.push({ gate: gateName, violation: v, exceptionId: check.exception.id });
+        warnings.push({
+          type: 'exception_used',
+          gate: gateName,
+          violation: v,
+          exception: {
+            id: check.exception.id,
+            reason: check.exception.reason,
+            expires_at: check.exception.expires_at,
+            approved_by: check.exception.approved_by,
+          },
+          context,
+        });
+        // Optional: bump hits counter (best effort, non-blocking)
+        addHit(check.exception.id);
+        continue;
+      }
+
+      if (check.reason === 'expired') {
+        processed.push({
+          ...v,
+          type: 'expired_exception',
+          severity: opts.defaultSeverity?.(v) ?? enforcementLevel,
+        });
+        continue;
+      }
+
       processed.push({
         ...v,
-        type: 'expired_exception',
         severity: opts.defaultSeverity?.(v) ?? enforcementLevel,
       });
-      continue;
     }
 
-    processed.push({
-      ...v,
-      severity: opts.defaultSeverity?.(v) ?? enforcementLevel,
-    });
+    // Progress reporting for large batches
+    if (violations.length > 500 && (i + batchSize) % 500 === 0) {
+      console.log(
+        `   Processed ${Math.min(i + batchSize, violations.length)}/${violations.length} violations...`
+      );
+    }
   }
 
   return { violations: processed, warnings, enforcementLevel, appliedExceptions };

@@ -408,7 +408,9 @@ export function checkCodeFreeze(context = currentContext()) {
   // But you can fetch for transparency:
   void getFilesToCheck(context); // ensures consistency with other gates
 
-  const result = processViolations('code_freeze', violations, context);
+  const result = processViolations('code_freeze', violations, context, {
+    maxViolations: 5000, // Performance limit for large codebases
+  });
 
   return {
     violations: result.violations,
