@@ -1294,7 +1294,7 @@ class CawsMcpServer extends Server {
 
       return new Promise((resolve, reject) => {
         // Set timeout to prevent hanging (30 seconds)
-        const timeout = setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           try {
             if (child && !child.killed) {
               child.kill('SIGTERM');
@@ -1328,7 +1328,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('close', (_code) => {
-          clearTimeout(timeout); // Clear timeout on completion
+          clearTimeout(timeoutId); // Clear timeout on completion
           const output = stripAnsi(stdout || stderr);
           resolve({
             content: [
@@ -1341,7 +1341,7 @@ class CawsMcpServer extends Server {
         });
 
         child.on('error', (spawnError) => {
-          clearTimeout(timeout);
+          clearTimeout(timeoutId);
           reject({
             content: [
               {
@@ -1384,9 +1384,9 @@ class CawsMcpServer extends Server {
                 success: false,
                 error: error.message,
                 command: 'caws_quality_gates_run',
-                workingDirectory: _workingDirectory,
+                workingDirectory: workingDirectory || process.cwd(),
                 qualityGatesPath: qualityGatesPath || 'not found',
-                attemptedPaths: possiblePaths,
+                attemptedPaths: possiblePaths || [],
               },
               null,
               2
