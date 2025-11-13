@@ -33,7 +33,8 @@
     "format": "prettier --write src/**/*.js tests/**/*.js",
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
-    "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup"
+    "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
+    "prepare": "husky"
   },
   "keywords": [
     "caws",
@@ -69,6 +70,7 @@
     "ajv": "8.17.1",
     "esbuild": "0.25.10",
     "eslint": "^9.0.0",
+    "husky": "9.1.7",
     "jest": "30.1.3",
     "js-yaml": "4.1.0",
     "lint-staged": "15.5.2",

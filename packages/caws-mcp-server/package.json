@@ -16,7 +16,8 @@
     "test:coverage": "jest --coverage",
     "lint": "npx eslint index.js",
     "typecheck": "echo 'MCP Server type checking not configured (ES modules)'",
-    "format": "prettier --write index.js"
+    "format": "prettier --write index.js",
+    "prepare": "husky"
   },
   "keywords": [
     "caws",
@@ -39,6 +40,7 @@
     "@eslint/js": "^9.0.0",
     "ajv": "8.17.1",
     "eslint": "^9.0.0",
+    "husky": "9.1.7",
     "micromatch": "4.0.8"
   },
   "peerDependencies": {

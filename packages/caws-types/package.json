@@ -14,7 +14,8 @@
     "clean": "rm -rf dist",
     "lint": "echo 'Types package does not need linting'",
     "test": "echo 'Types package does not need testing'",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "prepare": "husky"
   },
   "keywords": [
     "caws",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "ajv": "8.17.1",
+    "husky": "9.1.7",
     "js-yaml": "4.1.0",
     "micromatch": "4.0.8",
     "typescript": "^5.3.3"
