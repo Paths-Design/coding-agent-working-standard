@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
+const { execSync } = require('child_process');
 const { safeAsync, outputResult } = require('../error-handler');
 const { parallel } = require('../utils/async-utils');
 
@@ -181,12 +182,112 @@ async function loadWaiverStatus() {
  * @returns {Promise<Object>} Quality gates status
  */
 async function checkQualityGates() {
-  // For now, return a placeholder
-  // Quality gates are available via CLI or MCP
   return {
     checked: false,
     message: 'Run: caws quality-gates or use MCP tool caws_quality_gates_run for full gate status',
   };
+}
+
+/**
+ * Get test coverage from coverage reports
+ * Looks for common coverage report locations and formats
+ * @returns {Promise<Object>} Coverage data with percentage and details
+ */
+async function getTestCoverage() {
+  const coverageLocations = [
+    // Jest/Istanbul coverage
+    { path: 'coverage/coverage-summary.json', type: 'istanbul' },
+    { path: 'coverage/lcov-report/index.html', type: 'lcov-html' },
+    { path: 'coverage/coverage-final.json', type: 'istanbul-final' },
+    // NYC coverage
+    { path: '.nyc_output/coverage-summary.json', type: 'nyc' },
+    // C8 coverage
+    { path: 'coverage/c8/coverage-summary.json', type: 'c8' },
+  ];
+
+  try {
+    for (const loc of coverageLocations) {
+      const coveragePath = path.join(process.cwd(), loc.path);
+      if (await fs.pathExists(coveragePath)) {
+        if (loc.type === 'istanbul' || loc.type === 'nyc' || loc.type === 'c8') {
+          const content = await fs.readFile(coveragePath, 'utf8');
+          const data = JSON.parse(content);
+
+          // Istanbul/NYC format has a "total" key with coverage percentages
+          if (data.total) {
+            const lines = data.total.lines?.pct || 0;
+            const statements = data.total.statements?.pct || 0;
+            const branches = data.total.branches?.pct || 0;
+            const functions = data.total.functions?.pct || 0;
+
+            return {
+              available: true,
+              percentage: Math.round((lines + statements + branches + functions) / 4),
+              lines: Math.round(lines),
+              statements: Math.round(statements),
+              branches: Math.round(branches),
+              functions: Math.round(functions),
+              source: loc.path,
+            };
+          }
+        } else if (loc.type === 'istanbul-final') {
+          // coverage-final.json has per-file data, need to aggregate
+          const content = await fs.readFile(coveragePath, 'utf8');
+          const data = JSON.parse(content);
+
+          let totalStatements = 0;
+          let coveredStatements = 0;
+
+          for (const file of Object.values(data)) {
+            const s = file.s || {};
+            for (const count of Object.values(s)) {
+              totalStatements++;
+              if (count > 0) coveredStatements++;
+            }
+          }
+
+          if (totalStatements > 0) {
+            const percentage = Math.round((coveredStatements / totalStatements) * 100);
+            return {
+              available: true,
+              percentage,
+              source: loc.path,
+            };
+          }
+        }
+      }
+    }
+
+    // Try running test coverage command if no reports found
+    try {
+      // Check if package.json has a coverage script
+      const pkgPath = path.join(process.cwd(), 'package.json');
+      if (await fs.pathExists(pkgPath)) {
+        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
+        if (pkg.scripts && (pkg.scripts.coverage || pkg.scripts['test:coverage'])) {
+          return {
+            available: false,
+            percentage: null,
+            message: 'Run npm run coverage to generate coverage report',
+          };
+        }
+      }
+    } catch {
+      // Ignore package.json errors
+    }
+
+    return {
+      available: false,
+      percentage: null,
+      message: 'No coverage report found',
+    };
+  } catch (error) {
+    return {
+      available: false,
+      percentage: null,
+      message: `Error reading coverage: ${error.message}`,
+    };
+  }
 }
 
 /**
@@ -388,7 +489,7 @@ function getProgressColor(percentage) {
  * @param {Object} data - Status data
  * @param {string} currentMode - Current CAWS mode
  */
-function displayVisualStatus(data, currentMode) {
+async function displayVisualStatus(data, currentMode) {
   const { spec, specs, hooks, provenance, waivers, gates } = data;
   const modes = require('../config/modes');
   const tierConfig = modes.getTier(currentMode);
@@ -497,12 +598,35 @@ function displayVisualStatus(data, currentMode) {
       );
     }
 
-    // Test Coverage (placeholder for now)
-    console.log(
-      chalk.gray(
-        `   Test Coverage: ${chalk.blue('Calculating...')} ${createProgressBar(0, 100)} 0%`
-      )
-    );
+    // Test Coverage
+    const coverage = await getTestCoverage();
+    if (coverage.available && coverage.percentage !== null) {
+      const coverageColor =
+        coverage.percentage >= 80
+          ? chalk.green
+          : coverage.percentage >= 50
+            ? chalk.yellow
+            : chalk.red;
+      const coverageBar = createProgressBar(coverage.percentage, 100);
+      console.log(
+        chalk.gray(
+          `   Test Coverage: ${coverageColor(`${coverage.percentage}%`)} ${coverageBar}`
+        )
+      );
+      if (coverage.lines !== undefined) {
+        console.log(
+          chalk.gray(
+            `                  Lines: ${coverage.lines}% | Branches: ${coverage.branches}% | Functions: ${coverage.functions}%`
+          )
+        );
+      }
+    } else {
+      console.log(
+        chalk.gray(
+          `   Test Coverage: ${chalk.yellow('N/A')} ${createProgressBar(0, 100)} ${chalk.gray(coverage.message || 'No report')}`
+        )
+      );
+    }
 
     // Risk Tier Indicator
     const riskColor =
@@ -839,7 +963,7 @@ async function statusCommand(options = {}) {
           console.log(JSON.stringify(result, null, 2));
         } else {
           // Visual output
-          displayVisualStatus(
+          await displayVisualStatus(
             {
               spec,
               specs,
