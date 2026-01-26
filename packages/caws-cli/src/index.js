@@ -2,7 +2,8 @@
 
 /**
  * @fileoverview CAWS CLI - Scaffolding tool for Coding Agent Workflow System
- * Provides commands to initialize new projects and scaffold existing ones with CAWS
+ * Provides commands to initialize new projects and scaffold existing ones with CAWS.
+ * Includes spec management, quality gates, and AI-assisted development workflows.
  * @author @darianrosebrook
  */
 
