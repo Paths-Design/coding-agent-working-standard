@@ -1,0 +1,21 @@
+{
+  "branches": ["main"],
+  "repositoryUrl": "https://github.com/Paths-Design/coding-agent-working-standard.git",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "angular",
+        "releaseRules": [
+          { "type": "feat", "scope": "cli", "release": "minor" },
+          { "type": "fix", "scope": "cli", "release": "patch" },
+          { "type": "perf", "scope": "cli", "release": "patch" },
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" }
+        ]
+      }
+    ],
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/npm"
+  ]
+}
