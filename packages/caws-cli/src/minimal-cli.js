@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * @fileoverview Minimal CAWS CLI to test Chalk functionality
+ * @fileoverview Minimal CAWS CLI for quick command testing
+ * Provides basic CLI structure with version and help commands.
  * @author @darianrosebrook
  */
 
