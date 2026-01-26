@@ -266,8 +266,9 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       );
     });
 
-    test('should handle interactive conflict resolution - merge (not implemented)', async () => {
+    test('should handle interactive conflict resolution - merge', async () => {
       const { createSpec } = require('../src/commands/specs');
+      const yaml = require('js-yaml');
 
       // Mock existing spec
       const existingSpec = {
@@ -277,8 +278,28 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         created_at: '2025-01-01T00:00:00Z',
       };
 
+      // Mock registry with the existing spec
+      const mockRegistry = {
+        version: '1.0.0',
+        specs: {
+          'FEAT-002': {
+            path: 'FEAT-002.yaml',
+            title: 'Existing Feature',
+            status: 'active',
+          },
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+
       fs.pathExists.mockResolvedValue(true);
-      fs.readFile.mockResolvedValue(require('js-yaml').dump(existingSpec));
+      fs.readFile.mockImplementation(async (filePath) => {
+        if (String(filePath).includes('registry.json')) {
+          return JSON.stringify(mockRegistry);
+        }
+        return yaml.dump(existingSpec);
+      });
+      fs.writeFile.mockResolvedValue(undefined);
+      fs.ensureDir.mockResolvedValue(undefined);
 
       // Mock readline to return '3' (merge)
       const mockRl = {
@@ -296,9 +317,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       const result = await createSpec('FEAT-002', { interactive: true });
 
-      expect(result).toBeNull();
+      // Merge should complete and return the merged spec
+      expect(result).not.toBeNull();
+      expect(result.id).toBe('FEAT-002');
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('Merge functionality not yet implemented')
+        expect.stringContaining('Merging')
       );
     });
 
