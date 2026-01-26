@@ -1,4 +1,25 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-npm run lint && npm test
+# Pre-push checks that mirror CI/CD pipeline
+# This prevents pushing code that will fail in CI
+
+echo "Running pre-push checks..."
+
+# 1. Lint (fast, catches syntax errors)
+echo "  [1/4] Linting..."
+npm run lint || exit 1
+
+# 2. Security audit (critical only - high has unfixable transitive deps)
+echo "  [2/4] Security audit..."
+npm audit --audit-level=critical || exit 1
+
+# 3. Build (ensures TypeScript compiles)
+echo "  [3/4] Building..."
+npm run build || exit 1
+
+# 4. Tests (most comprehensive check)
+echo "  [4/4] Running tests..."
+npm test || exit 1
+
+echo "Pre-push checks passed!"
