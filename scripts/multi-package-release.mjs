@@ -103,24 +103,29 @@ function createPackageConfig(pkg) {
       [
         '@semantic-release/commit-analyzer',
         {
-          preset: 'angular',
-          // Monorepo: let Angular preset defaults handle types (feat=minor, fix=patch)
-          // Add scoped rules that ensure our package's commits are recognized
+          // Don't use preset - define everything explicitly to avoid conflicts
+          parserOpts: {
+            headerPattern: /^(\w*)(?:\(([\w\-\/\.]*)\))?: (.*)$/,
+            headerCorrespondence: ['type', 'scope', 'subject'],
+            noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
+          },
           releaseRules: [
-            // Scoped commits for this package - these match before defaults
+            // Scoped commits for this package
             { type: 'feat', scope: pkg.scope, release: 'minor' },
             { type: 'fix', scope: pkg.scope, release: 'patch' },
             { type: 'perf', scope: pkg.scope, release: 'patch' },
-            // Alternative scope
+            { type: 'revert', scope: pkg.scope, release: 'patch' },
+            // Breaking changes
+            { breaking: true, scope: pkg.scope, release: 'major' },
+            // Alternative scope format
             { type: 'feat', scope: `packages/${pkg.path.split('/').pop()}`, release: 'minor' },
             { type: 'fix', scope: `packages/${pkg.path.split('/').pop()}`, release: 'patch' },
-            // Note: We're NOT blocking other commits - they'll fall through to Angular defaults
-            // This means unscoped feat/fix will also trigger releases, but we filter by
-            // file changes in hasPackageChanges() before running semantic-release
+            // Default fallbacks (no scope required - allows unscoped commits)
+            { type: 'feat', release: 'minor' },
+            { type: 'fix', release: 'patch' },
+            { type: 'perf', release: 'patch' },
+            { breaking: true, release: 'major' },
           ],
-          parserOpts: {
-            noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
-          },
         },
       ],
       '@semantic-release/release-notes-generator',
