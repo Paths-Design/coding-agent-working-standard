@@ -104,23 +104,16 @@ function createPackageConfig(pkg) {
         '@semantic-release/commit-analyzer',
         {
           preset: 'angular',
+          // Simplified release rules - let's see what actually happens
+          // The preset 'angular' has default rules but releaseRules extends/overrides them
           releaseRules: [
-            { revert: true, release: 'patch' },
-            { breaking: true, release: 'major' },
+            // Major: breaking changes for this package
+            { breaking: true, scope: pkg.scope, release: 'major' },
+            // Minor: feat for this package
             { type: 'feat', scope: pkg.scope, release: 'minor' },
+            // Patch: fix/perf for this package
             { type: 'fix', scope: pkg.scope, release: 'patch' },
-            { type: 'feat', scope: `packages/${pkg.path.split('/').pop()}`, release: 'minor' },
-            { type: 'fix', scope: `packages/${pkg.path.split('/').pop()}`, release: 'patch' },
-            { type: 'feat', release: false },
-            { type: 'fix', release: false },
-            { type: 'perf', release: 'patch' },
-            { type: 'revert', release: 'patch' },
-            { type: 'docs', release: false },
-            { type: 'chore', release: false },
-            { type: 'refactor', release: false },
-            { type: 'test', release: false },
-            { type: 'build', release: false },
-            { type: 'ci', release: false },
+            { type: 'perf', scope: pkg.scope, release: 'patch' },
           ],
           parserOpts: {
             noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
