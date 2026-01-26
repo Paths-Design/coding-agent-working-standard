@@ -157,10 +157,22 @@ function createPackageConfig(pkg) {
  */
 function releasePackage(pkg) {
   console.log(`\n📦 Releasing ${pkg.name}...`);
+  console.log(`   Package scope: ${pkg.scope}`);
+  console.log(`   Package path: ${pkg.path}`);
 
   // Use .cjs extension to explicitly mark as CommonJS (works with semantic-release)
   const configPath = path.join(rootDir, `.releaserc.${pkg.scope}.cjs`);
   const config = createPackageConfig(pkg);
+
+  // Debug: Print the release rules being used
+  console.log(`   Release rules for ${pkg.scope}:`);
+  const configObj = JSON.parse(config.replace('module.exports = ', '').replace(/;$/, ''));
+  const commitAnalyzer = configObj.plugins.find(p => Array.isArray(p) && p[0] === '@semantic-release/commit-analyzer');
+  if (commitAnalyzer && commitAnalyzer[1]?.releaseRules) {
+    commitAnalyzer[1].releaseRules.forEach((rule, i) => {
+      console.log(`      ${i + 1}. ${JSON.stringify(rule)}`);
+    });
+  }
 
   try {
     // Write temporary config as CommonJS module
