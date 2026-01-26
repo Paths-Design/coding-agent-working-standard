@@ -8,6 +8,7 @@ on:
       - 'packages/caws-cli/**'
       - 'packages/caws-mcp-server/**'
       - 'packages/quality-gates/**'
+      - 'scripts/**'
       - '.releaserc.json'
       - 'CHANGELOG.md'
       - 'package.json'
