@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * @fileoverview Minimal CAWS CLI for quick command testing
- * Provides basic CLI structure with version and help commands.
+ * @fileoverview Minimal CAWS CLI for testing and development
+ * Provides a lightweight CLI structure with version and help commands
+ * for quick verification of CLI functionality.
  * @author @darianrosebrook
  */
 
