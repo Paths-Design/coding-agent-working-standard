@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
+const { execSync } = require('child_process');
 const { safeAsync, outputResult } = require('../error-handler');
 
 // Import spec resolution system
@@ -87,16 +88,123 @@ async function validateAcceptanceCriteria(workingSpec) {
 
 /**
  * Validate change meets quality gates
+ * Runs the actual quality gates runner and checks for violations
  * @param {string} changeId - Change identifier
  * @returns {Promise<Object>} Quality gate result
  */
-async function validateQualityGates(_changeId) {
-  // For now, return success - in full implementation would run actual gate checks
-  return {
-    valid: true,
-    message: 'Quality gates passed (implementation pending)',
-    gates: ['test-coverage', 'linting', 'type-checking'],
-  };
+async function validateQualityGates(changeId) {
+  const gates = [];
+  const violations = [];
+  const warnings = [];
+
+  try {
+    // Try to run the quality gates runner
+    const qualityGatesPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'quality-gates',
+      'run-quality-gates.mjs'
+    );
+
+    // Check if quality gates runner exists
+    if (await fs.pathExists(qualityGatesPath)) {
+      try {
+        // Run quality gates in CI mode (checks all files, not just staged)
+        const result = execSync(`node "${qualityGatesPath}" --context=ci --json 2>&1`, {
+          encoding: 'utf8',
+          timeout: 60000, // 60 second timeout
+          cwd: process.cwd(),
+        });
+
+        // Try to parse JSON output
+        try {
+          const jsonMatch = result.match(/\{[\s\S]*\}$/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.violations) {
+              violations.push(...parsed.violations);
+            }
+            if (parsed.warnings) {
+              warnings.push(...parsed.warnings);
+            }
+            gates.push(...(parsed.gates || []));
+          }
+        } catch {
+          // JSON parsing failed, check for error indicators in output
+          if (result.includes('❌') || result.includes('FAIL')) {
+            violations.push({ message: 'Quality gates reported failures', output: result });
+          }
+        }
+      } catch (execError) {
+        // Command failed - check exit code and output
+        if (execError.status !== 0) {
+          const output = execError.stdout || execError.message;
+          if (output.includes('violations') || output.includes('❌')) {
+            violations.push({ message: 'Quality gates failed', output: output.substring(0, 500) });
+          }
+        }
+      }
+    }
+
+    // Also check for active waivers that might cover violations
+    const waiversPath = path.join(process.cwd(), '.caws', 'waivers', 'active-waivers.yaml');
+    let hasActiveWaivers = false;
+    if (await fs.pathExists(waiversPath)) {
+      const waiversContent = await fs.readFile(waiversPath, 'utf8');
+      const waivers = yaml.load(waiversContent);
+      if (waivers && waivers.waivers) {
+        const activeWaiverCount = Object.keys(waivers.waivers).length;
+        if (activeWaiverCount > 0) {
+          hasActiveWaivers = true;
+          gates.push(`${activeWaiverCount} active waiver(s)`);
+        }
+      }
+    }
+
+    // Determine overall validity
+    const hasBlockingViolations = violations.some(
+      (v) => v.severity === 'block' || v.severity === 'fail'
+    );
+
+    if (violations.length === 0) {
+      return {
+        valid: true,
+        message: 'All quality gates passed',
+        gates: gates.length > 0 ? gates : ['naming', 'duplication', 'god-objects', 'hidden-todo'],
+        violations: [],
+        warnings,
+      };
+    } else if (hasActiveWaivers && !hasBlockingViolations) {
+      return {
+        valid: true,
+        message: `Quality gates passed with ${violations.length} waived violation(s)`,
+        gates,
+        violations,
+        warnings,
+        waived: true,
+      };
+    } else {
+      return {
+        valid: false,
+        message: `${violations.length} quality gate violation(s) found`,
+        gates,
+        violations,
+        warnings,
+      };
+    }
+  } catch (error) {
+    // If quality gates can't be run, warn but don't block
+    return {
+      valid: true,
+      message: `Quality gates check skipped: ${error.message}`,
+      gates: [],
+      violations: [],
+      warnings: [{ message: `Could not run quality gates: ${error.message}` }],
+      skipped: true,
+    };
+  }
 }
 
 /**

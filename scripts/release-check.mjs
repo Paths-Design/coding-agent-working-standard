@@ -18,6 +18,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..');
 
+/**
+ * Check if items exist at specified paths and report status
+ * @param {string} title - Section title
+ * @param {string} emoji - Emoji for the section
+ * @param {Array<{name: string, path: string}>} items - Items to check
+ */
+function checkItemsExist(title, emoji, items) {
+  console.log(`${emoji} ${title}\n`);
+  for (const item of items) {
+    const itemPath = join(ROOT_DIR, item.path);
+    if (existsSync(itemPath)) {
+      console.log(`✅ ${item.name}: exists`);
+    } else {
+      console.log(`❌ ${item.name}: missing`);
+    }
+  }
+  console.log('');
+}
+
 const PACKAGES = [
   { name: 'caws', path: 'package.json', version: '3.2.0' },
   { name: 'caws-cli', path: 'packages/caws-cli/package.json', version: '4.1.1' },
@@ -219,24 +238,13 @@ function checkGitStatus() {
 }
 
 function checkCICDWorkflows() {
-  console.log('🔄 Checking CI/CD workflows...\n');
-
   const workflows = [
     { name: 'PR Checks', path: '.github/workflows/pr-checks.yml' },
     { name: 'CAWS Gate', path: '.github/workflows/caws-gate.yml' },
     { name: 'CAWS Guards', path: '.github/workflows/caws-guards.yml' },
     { name: 'Release', path: '.github/workflows/release.yml' },
   ];
-
-  for (const workflow of workflows) {
-    const workflowPath = join(ROOT_DIR, workflow.path);
-    if (existsSync(workflowPath)) {
-      console.log(`✅ ${workflow.name}: Workflow exists`);
-    } else {
-      console.log(`❌ ${workflow.name}: Workflow missing`);
-    }
-  }
-  console.log('');
+  checkItemsExist('Checking CI/CD workflows...', '🔄', workflows);
 }
 
 function checkSemanticRelease() {
@@ -261,23 +269,12 @@ function checkSemanticRelease() {
 }
 
 function checkDocumentation() {
-  console.log('📚 Checking documentation...\n');
-
   const docs = [
     { name: 'README', path: 'README.md' },
     { name: 'CHANGELOG', path: 'CHANGELOG.md' },
     { name: 'Release Checklist', path: 'docs/release/RELEASE_CHECKLIST.md' },
   ];
-
-  for (const doc of docs) {
-    const docPath = join(ROOT_DIR, doc.path);
-    if (existsSync(docPath)) {
-      console.log(`✅ ${doc.name}: Documentation exists`);
-    } else {
-      console.log(`⚠️  ${doc.name}: Documentation missing`);
-    }
-  }
-  console.log('');
+  checkItemsExist('Checking documentation...', '📚', docs);
 }
 
 function main() {

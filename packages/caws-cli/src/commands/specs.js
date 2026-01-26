@@ -164,9 +164,9 @@ async function createSpec(id, options = {}) {
         console.log(chalk.blue(`📝 Creating spec with new name: ${newId}`));
         return await createSpec(newId, { ...options, interactive: false });
       } else if (answer === 'merge') {
-        console.log(chalk.yellow('🔄 Merge functionality not yet implemented.'));
-        console.log(chalk.blue('💡 For now, consider creating with a different name.'));
-        return null;
+        // Merge new spec data with existing spec
+        console.log(chalk.blue('🔄 Merging with existing spec...'));
+        return await mergeSpec(id, options);
       } else if (answer === 'override') {
         console.log(chalk.yellow('⚠️  Overriding existing spec...'));
       }
@@ -386,6 +386,133 @@ async function updateSpec(id, updates = {}) {
 }
 
 /**
+ * Merge new spec data with an existing spec
+ * Combines acceptance criteria, updates metadata, preserves history
+ * @param {string} id - Spec identifier
+ * @param {Object} options - Options including new spec data to merge
+ * @returns {Promise<Object>} Merged spec
+ */
+async function mergeSpec(id, options = {}) {
+  const existingSpec = await loadSpec(id);
+  if (!existingSpec) {
+    throw new Error(`Spec '${id}' not found`);
+  }
+
+  console.log(chalk.blue(`\n📋 Merging into existing spec: ${id}`));
+  console.log(chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+
+  // Show existing spec summary
+  console.log(chalk.gray(`Existing spec:`));
+  console.log(chalk.gray(`   Title: ${existingSpec.title}`));
+  console.log(chalk.gray(`   Status: ${existingSpec.status}`));
+  console.log(
+    chalk.gray(`   Acceptance Criteria: ${existingSpec.acceptance_criteria?.length || 0}`)
+  );
+  console.log('');
+
+  // Prepare merge data from options
+  const {
+    title: newTitle,
+    description: newDescription,
+    acceptance_criteria: newCriteria,
+    mode: newMode,
+    risk_tier: newRiskTier,
+  } = options;
+
+  const mergedSpec = { ...existingSpec };
+
+  // Track what was merged
+  const mergeLog = [];
+
+  // Merge title (prefer new if provided)
+  if (newTitle && newTitle !== existingSpec.title) {
+    mergedSpec.title = newTitle;
+    mergeLog.push(`Title updated: "${existingSpec.title}" → "${newTitle}"`);
+  }
+
+  // Merge description
+  if (newDescription) {
+    if (existingSpec.description) {
+      mergedSpec.description = `${existingSpec.description}\n\n---\n\n${newDescription}`;
+      mergeLog.push('Description appended');
+    } else {
+      mergedSpec.description = newDescription;
+      mergeLog.push('Description added');
+    }
+  }
+
+  // Merge acceptance criteria (append new ones, avoid duplicates)
+  if (newCriteria && Array.isArray(newCriteria) && newCriteria.length > 0) {
+    const existingCriteria = existingSpec.acceptance_criteria || [];
+    const existingIds = new Set(existingCriteria.map((c) => c.id));
+
+    const criteriaToAdd = newCriteria.filter((c) => !existingIds.has(c.id));
+    if (criteriaToAdd.length > 0) {
+      mergedSpec.acceptance_criteria = [...existingCriteria, ...criteriaToAdd];
+      mergeLog.push(`Added ${criteriaToAdd.length} new acceptance criteria`);
+    }
+
+    // Also update the 'acceptance' array if it exists
+    if (existingSpec.acceptance) {
+      const existingAcceptIds = new Set(existingSpec.acceptance.map((a) => a.id));
+      const acceptToAdd = newCriteria.filter((c) => !existingAcceptIds.has(c.id));
+      if (acceptToAdd.length > 0) {
+        mergedSpec.acceptance = [...existingSpec.acceptance, ...acceptToAdd];
+      }
+    }
+  }
+
+  // Merge mode (prefer higher tier if both provided)
+  if (newMode && newMode !== existingSpec.mode) {
+    // Mode priority: crisis > standard > minimal
+    const modePriority = { minimal: 1, standard: 2, crisis: 3 };
+    if ((modePriority[newMode] || 0) > (modePriority[existingSpec.mode] || 0)) {
+      mergedSpec.mode = newMode;
+      mergeLog.push(`Mode upgraded: ${existingSpec.mode} → ${newMode}`);
+    }
+  }
+
+  // Merge risk tier (prefer higher risk if both provided)
+  if (newRiskTier && newRiskTier !== existingSpec.risk_tier) {
+    // Risk priority: T1 > T2 > T3
+    const riskPriority = { T3: 1, T2: 2, T1: 3, 3: 1, 2: 2, 1: 3 };
+    if ((riskPriority[newRiskTier] || 0) > (riskPriority[existingSpec.risk_tier] || 0)) {
+      mergedSpec.risk_tier = newRiskTier;
+      mergeLog.push(`Risk tier updated: ${existingSpec.risk_tier} → ${newRiskTier}`);
+    }
+  }
+
+  // Update metadata
+  mergedSpec.updated_at = new Date().toISOString();
+
+  // Add merge history entry
+  if (!mergedSpec.history) {
+    mergedSpec.history = [];
+  }
+  mergedSpec.history.push({
+    action: 'merge',
+    timestamp: new Date().toISOString(),
+    changes: mergeLog,
+  });
+
+  // Save merged spec
+  await updateSpec(id, mergedSpec);
+
+  // Display merge results
+  console.log(chalk.green('✅ Merge completed:'));
+  if (mergeLog.length > 0) {
+    mergeLog.forEach((change) => {
+      console.log(chalk.gray(`   • ${change}`));
+    });
+  } else {
+    console.log(chalk.gray('   • No changes needed (specs were identical)'));
+  }
+  console.log('');
+
+  return mergedSpec;
+}
+
+/**
  * Delete a spec file
  * @param {string} id - Spec identifier
  * @returns {Promise<boolean>} Success status
@@ -544,9 +671,12 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   let selectedFeatures = features;
 
   if (options.interactive) {
-    // For now, just use all suggested features
-    // In a full implementation, this would prompt for selection
-    console.log(chalk.blue('\n📋 Using all suggested features for migration'));
+    selectedFeatures = await selectFeaturesInteractively(features);
+    if (selectedFeatures.length === 0) {
+      console.log(chalk.yellow('⚠️  No features selected. Migration cancelled.'));
+      return { migrated: 0, total: features.length, createdSpecs: [], legacySpec: legacySpec.id };
+    }
+    console.log(chalk.blue(`\n📋 Migrating ${selectedFeatures.length} selected features`));
   }
 
   if (options.features && options.features.length > 0) {
@@ -612,6 +742,54 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
     createdSpecs,
     legacySpec: legacySpec.id,
   };
+}
+
+/**
+ * Interactive feature selection for migration
+ * @param {Array} features - Array of suggested features
+ * @returns {Promise<Array>} Selected features
+ */
+async function selectFeaturesInteractively(features) {
+  const readline = require('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  console.log(chalk.cyan('\n📋 Select features to migrate:\n'));
+  features.forEach((f, i) => {
+    const scope = f.scope?.in?.join(', ') || 'N/A';
+    console.log(`  ${chalk.yellow(i + 1)}. ${chalk.bold(f.id || f.name)} - ${f.title || f.description}`);
+    console.log(chalk.gray(`     Scope: ${scope}`));
+  });
+  console.log(chalk.cyan(`\nEnter numbers separated by commas, or 'all' for all features:`));
+  console.log(chalk.gray(`Example: 1,3,5 or all`));
+
+  try {
+    const answer = await question(rl, '> ');
+    const trimmed = answer.trim().toLowerCase();
+
+    if (trimmed === 'all' || trimmed === '*') {
+      return features;
+    }
+
+    if (trimmed === '' || trimmed === 'none' || trimmed === 'q' || trimmed === 'quit') {
+      return [];
+    }
+
+    // Parse comma-separated numbers
+    const indices = trimmed
+      .split(',')
+      .map(n => parseInt(n.trim(), 10) - 1)
+      .filter(i => !isNaN(i) && i >= 0 && i < features.length);
+
+    // Remove duplicates and sort
+    const uniqueIndices = [...new Set(indices)].sort((a, b) => a - b);
+
+    return features.filter((_, i) => uniqueIndices.includes(i));
+  } finally {
+    await closeReadline(rl);
+  }
 }
 
 /**

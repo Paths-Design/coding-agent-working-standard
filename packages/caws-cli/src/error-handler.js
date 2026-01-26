@@ -5,104 +5,12 @@
  */
 
 const chalk = require('chalk');
-
-/**
- * Error categories for better user experience
- */
-const ERROR_CATEGORIES = {
-  VALIDATION: 'validation',
-  PERMISSION: 'permission',
-  FILESYSTEM: 'filesystem',
-  NETWORK: 'network',
-  CONFIGURATION: 'configuration',
-  USER_INPUT: 'user_input',
-  DEPENDENCY: 'dependency',
-  UNKNOWN: 'unknown',
-};
-
-/**
- * Error code mappings for common system errors
- */
-const ERROR_CODES = {
-  EACCES: ERROR_CATEGORIES.PERMISSION,
-  EPERM: ERROR_CATEGORIES.PERMISSION,
-  ENOENT: ERROR_CATEGORIES.FILESYSTEM,
-  ENOTFOUND: ERROR_CATEGORIES.NETWORK,
-  ECONNREFUSED: ERROR_CATEGORIES.NETWORK,
-  ETIMEDOUT: ERROR_CATEGORIES.NETWORK,
-  ENOSPC: ERROR_CATEGORIES.FILESYSTEM,
-  EEXIST: ERROR_CATEGORIES.FILESYSTEM,
-  EISDIR: ERROR_CATEGORIES.FILESYSTEM,
-  ENOTDIR: ERROR_CATEGORIES.FILESYSTEM,
-};
-
-/**
- * Get error category from error object or message
- * @param {Error|string} error - Error object or message
- * @returns {string} Error category
- */
-function getErrorCategory(error) {
-  const errorMessage = typeof error === 'string' ? error : error.message;
-  const errorCode = typeof error === 'object' && error.code ? error.code : null;
-
-  // Check error codes first
-  if (errorCode && ERROR_CODES[errorCode]) {
-    return ERROR_CODES[errorCode];
-  }
-
-  // Check message patterns
-  const lowerMessage = errorMessage.toLowerCase();
-
-  if (
-    lowerMessage.includes('validation') ||
-    lowerMessage.includes('invalid') ||
-    lowerMessage.includes('required')
-  ) {
-    return ERROR_CATEGORIES.VALIDATION;
-  }
-
-  if (
-    lowerMessage.includes('permission') ||
-    lowerMessage.includes('access') ||
-    lowerMessage.includes('denied')
-  ) {
-    return ERROR_CATEGORIES.PERMISSION;
-  }
-
-  if (
-    lowerMessage.includes('file') ||
-    lowerMessage.includes('directory') ||
-    lowerMessage.includes('path')
-  ) {
-    return ERROR_CATEGORIES.FILESYSTEM;
-  }
-
-  if (
-    lowerMessage.includes('network') ||
-    lowerMessage.includes('connection') ||
-    lowerMessage.includes('timeout')
-  ) {
-    return ERROR_CATEGORIES.NETWORK;
-  }
-
-  if (
-    lowerMessage.includes('config') ||
-    lowerMessage.includes('setting') ||
-    lowerMessage.includes('option')
-  ) {
-    return ERROR_CATEGORIES.CONFIGURATION;
-  }
-
-  if (
-    lowerMessage.includes('input') ||
-    lowerMessage.includes('prompt') ||
-    lowerMessage.includes('answer')
-  ) {
-    return ERROR_CATEGORIES.USER_INPUT;
-  }
-
-  return ERROR_CATEGORIES.UNKNOWN;
-}
+const {
+  ERROR_CATEGORIES,
+  ERROR_CODES,
+  getErrorCategory,
+  getCategorySuggestions,
+} = require('./utils/error-categories');
 
 /**
  * Enhanced error class with category and recovery suggestions

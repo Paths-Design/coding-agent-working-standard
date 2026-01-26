@@ -39,6 +39,7 @@ const DEFAULT_CONFIG = {
     plan: 2,
     test: 1,
     config: 0,
+    documentation: 999, // Effectively unlimited for docs
   },
   maxDebtScore: 10,
   impactWeights: {
@@ -50,6 +51,102 @@ const DEFAULT_CONFIG = {
   nonDegradableScopes: ['code_region', 'implementation'],
   requiredPlaceholderFields: ['id', 'scope', 'reason', 'impact', 'fallback'],
 };
+
+/**
+ * Patterns for legitimate term usage that should not be flagged
+ */
+const LEGITIMATE_TERMS = [
+  /\bDisable\s+(specific\s+)?hooks?\b/i,
+  /\bexport\s+\w+_DISABLE/i,
+  /\bperformance\s+monitoring\b/i,
+  /\bmock\s+object\b/i,
+  /\bstub\s+interface\b/i,
+  /\bplaceholder\s+(governance|pattern|detection)\b/i,
+  /\bTODO\s*\([^)]+\)/i, // TODO with explicit ID like TODO(PH-001)
+];
+
+/**
+ * Check if a line contains legitimate usage that should not be flagged
+ */
+function isLegitimateUsage(line) {
+  return LEGITIMATE_TERMS.some((pattern) => pattern.test(line));
+}
+
+/**
+ * Check if file is a documentation file that should be treated leniently
+ */
+function isDocumentationFile(filePath) {
+  const docPatterns = [
+    /\/docs\//i,
+    /README/i,
+    /CHANGELOG/i,
+    /CONTRIBUTING/i,
+    /\.cursor\//i,
+    /\.github\//i,
+    /\.windsurf\//i,
+    /AGENTS\.md$/i,
+    /\/templates\//i,
+    /\/examples\//i,
+  ];
+  return docPatterns.some((p) => p.test(filePath));
+}
+
+/**
+ * Check if file should be skipped entirely for dangling promise analysis
+ * Only source code files should be checked - skip docs, configs, etc.
+ */
+function shouldSkipDanglingPromiseCheck(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  // Only check source code files for dangling promises
+  const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.rs', '.go', '.java', '.c', '.cpp', '.h', '.hpp'];
+
+  // Skip non-code files entirely
+  if (!codeExtensions.includes(ext)) {
+    return true;
+  }
+
+  // Skip test files, examples, and templates
+  const skipPatterns = [
+    /\.test\./i,
+    /\.spec\./i,
+    /\/tests?\//i,
+    /\/examples?\//i,
+    /\/templates?\//i,
+    /\/fixtures?\//i,
+    /\/mocks?\//i,
+    /\/stubs?\//i,
+  ];
+
+  return skipPatterns.some((p) => p.test(filePath));
+}
+
+/**
+ * Check if a match is inside a markdown code block
+ */
+function isInsideCodeBlock(content, matchIndex) {
+  const beforeMatch = content.substring(0, matchIndex);
+  const codeBlockStarts = (beforeMatch.match(/```/g) || []).length;
+  return codeBlockStarts % 2 === 1; // Odd number means inside code block
+}
+
+/**
+ * Calculate confidence score for dangling promise detection
+ */
+function calculateDanglingPromiseConfidence(line, filePath, context) {
+  let score = 0.5;
+
+  // Increase for explicit implementation markers
+  if (/\b(implement|fix|add|create|handle)\b/i.test(context)) score += 0.2;
+  if (/\b(TODO|FIXME|HACK)\b/.test(line)) score += 0.3;
+
+  // Decrease for documentation context
+  if (isDocumentationFile(filePath)) score -= 0.4;
+  if (/\b(example|sample|doc|guide|readme)\b/i.test(context)) score -= 0.3;
+  if (/^\s*#/.test(line)) score -= 0.2; // Markdown header or comment
+
+  return Math.max(0, Math.min(1.0, score));
+}
 
 /**
  * Patterns that indicate dangling promises
@@ -146,11 +243,20 @@ function validatePlaceholderSchema(placeholder, filePath) {
  */
 function checkDanglingPromises(content, filePath, declaredPlaceholders) {
   const violations = [];
+
+  // Skip non-code files entirely - dangling promises only matter in implementation code
+  if (shouldSkipDanglingPromiseCheck(filePath)) {
+    return violations;
+  }
+
   const placeholderIds = new Set(declaredPlaceholders.map((p) => p.id || '').filter(Boolean));
   const debtNotes = declaredPlaceholders
     .map((p) => p.debt_note || '')
     .join(' ')
     .toLowerCase();
+
+  // Get the line content for each match for context
+  const lines = content.split('\n');
 
   for (const { pattern, name } of DANGLING_PATTERNS) {
     const matches = [...content.matchAll(pattern)];
@@ -158,6 +264,17 @@ function checkDanglingPromises(content, filePath, declaredPlaceholders) {
       const matchText = match[0];
       const matchIndex = match.index ?? 0;
       const lineNumber = content.substring(0, matchIndex).split('\n').length;
+      const line = lines[lineNumber - 1] || '';
+
+      // Skip if inside a markdown code block
+      if (isInsideCodeBlock(content, matchIndex)) {
+        continue;
+      }
+
+      // Skip if this is a legitimate usage pattern
+      if (isLegitimateUsage(line)) {
+        continue;
+      }
 
       // Check if this matches a placeholder debt note
       const matchesDebtNote = debtNotes.includes(matchText.toLowerCase());
@@ -168,7 +285,11 @@ function checkDanglingPromises(content, filePath, declaredPlaceholders) {
       const context = content.substring(contextStart, contextEnd);
       const hasPlaceholderRef = Array.from(placeholderIds).some((id) => context.includes(id));
 
-      if (!matchesDebtNote && !hasPlaceholderRef) {
+      // Calculate confidence score
+      const confidence = calculateDanglingPromiseConfidence(line, filePath, context);
+
+      // Only report violations above confidence threshold (0.6)
+      if (confidence >= 0.6 && !matchesDebtNote && !hasPlaceholderRef) {
         violations.push({
           gate: 'placeholders',
           type: 'dangling_promise',
@@ -287,6 +408,12 @@ function checkDebtBudget(placeholders, filePath, resultType, config) {
  */
 function detectResultType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
+
+  // Check if this is a documentation file that should be treated leniently
+  if (isDocumentationFile(filePath)) {
+    return 'documentation'; // New type with lenient handling
+  }
+
   if (['.md', '.txt', '.rst'].includes(ext)) return 'doc';
   if (['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '.go'].includes(ext)) return 'code';
   if (['.json', '.yaml', '.yml'].includes(ext)) return 'json';

@@ -5,6 +5,59 @@
  */
 
 const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
+const { execSync } = require('child_process');
+
+/**
+ * Get actual budget statistics from git history
+ * Analyzes changes since last tag or initial commit
+ * @param {string} specDir - Project directory
+ * @returns {Object|null} Budget stats or null on failure
+ */
+function getActualBudgetStats(specDir) {
+  const cwd = specDir || process.cwd();
+  try {
+    // Get base ref (last tag or initial commit)
+    let baseRef;
+    try {
+      baseRef = execSync('git describe --tags --abbrev=0 2>/dev/null', {
+        cwd,
+        encoding: 'utf8'
+      }).trim();
+    } catch {
+      // No tags found, use initial commit
+      baseRef = execSync('git rev-list --max-parents=0 HEAD', {
+        cwd,
+        encoding: 'utf8'
+      }).trim();
+    }
+
+    // Count files changed since base ref
+    const filesOutput = execSync(`git diff --name-only ${baseRef}..HEAD`, {
+      cwd,
+      encoding: 'utf8'
+    });
+    const files_changed = filesOutput.trim().split('\n').filter(Boolean).length;
+
+    // Count lines changed (added + removed)
+    const numstatOutput = execSync(`git diff --numstat ${baseRef}..HEAD`, {
+      cwd,
+      encoding: 'utf8'
+    });
+    let lines_changed = 0;
+    for (const line of numstatOutput.trim().split('\n').filter(Boolean)) {
+      const [added, removed] = line.split('\t');
+      // Handle binary files (shown as '-')
+      const addedNum = added === '-' ? 0 : parseInt(added, 10) || 0;
+      const removedNum = removed === '-' ? 0 : parseInt(removed, 10) || 0;
+      lines_changed += addedNum + removedNum;
+    }
+
+    return { files_changed, lines_changed };
+  } catch {
+    // Git not available or not a repository
+    return null;
+  }
+}
 
 /**
  * Basic validation of working spec
@@ -511,14 +564,14 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       try {
         const derivedBudget = deriveBudget(spec, projectRoot);
 
-        // Mock current stats for now - in real implementation this would analyze git changes
-        const mockStats = {
-          files_changed: 50, // This would be calculated from actual changes
-          lines_changed: 5000,
-          risk_tier: spec.risk_tier,
+        // Get actual stats from git history
+        const actualStats = getActualBudgetStats(projectRoot) || {
+          files_changed: 0,
+          lines_changed: 0,
         };
+        actualStats.risk_tier = spec.risk_tier;
 
-        budgetCheck = checkBudgetCompliance(derivedBudget, mockStats);
+        budgetCheck = checkBudgetCompliance(derivedBudget, actualStats);
 
         if (!budgetCheck.compliant) {
           for (const violation of budgetCheck.violations) {

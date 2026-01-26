@@ -347,43 +347,201 @@ class CawsMonitor {
 
   /**
    * Calculate progress for a single acceptance criterion
+   * Uses multiple signals: explicit completion status, test results, and file analysis
    */
   async calculateCriterionProgress(criterion) {
-    // This is a simplified implementation - in practice, you'd parse test results,
-    // check for implemented features, etc.
-    // For now, we'll use a mock progress calculation
-
-    const criterionText = JSON.stringify(criterion).toLowerCase();
-
-    // Mock progress based on file existence and content patterns
-    let progress = 0;
-
-    try {
-      // Check if related files exist
-      const files = await fs.readdir(process.cwd());
-      const relevantFiles = files.filter(
-        (file) =>
-          file.includes('test') ||
-          file.includes('spec') ||
-          file.includes(criterion.id.toLowerCase())
-      );
-
-      if (relevantFiles.length > 0) progress += 30;
-
-      // Check if tests directory exists
-      if ((await fs.pathExists('tests')) || (await fs.pathExists('test'))) progress += 20;
-
-      // Check if implementation files exist
-      if ((await fs.pathExists('src')) || (await fs.pathExists('lib'))) progress += 25;
-
-      // Check for documentation
-      if ((await fs.pathExists('README.md')) || (await fs.pathExists('docs'))) progress += 25;
-    } catch (error) {
-      // If we can't read files, assume minimal progress
-      progress = 10;
+    // If criterion has explicit completion status, use that
+    if (criterion.completed === true) {
+      return 100;
+    }
+    if (criterion.completed === false) {
+      // Still check for partial progress
+    }
+    if (typeof criterion.progress === 'number') {
+      return criterion.progress;
     }
 
-    return Math.min(100, Math.max(0, progress));
+    let progress = 0;
+    const criterionId = (criterion.id || '').toLowerCase();
+    const criterionText = JSON.stringify(criterion).toLowerCase();
+
+    try {
+      // 1. Check for test results in coverage reports (40 points max)
+      const testProgress = await this.checkTestProgress(criterionId, criterionText);
+      progress += testProgress;
+
+      // 2. Check for related implementation files (30 points max)
+      const implProgress = await this.checkImplementationProgress(criterionId);
+      progress += implProgress;
+
+      // 3. Check for documentation (15 points max)
+      const docProgress = await this.checkDocumentationProgress(criterionId);
+      progress += docProgress;
+
+      // 4. Check for related commits/changes (15 points max)
+      const commitProgress = await this.checkCommitProgress(criterionId);
+      progress += commitProgress;
+
+    } catch (error) {
+      this.logger.debug({ err: error }, 'Error calculating criterion progress');
+      progress = 10; // Minimal progress if we can't analyze
+    }
+
+    return Math.min(100, Math.max(0, Math.round(progress)));
+  }
+
+  /**
+   * Check test results for criterion-related tests
+   */
+  async checkTestProgress(criterionId, criterionText) {
+    let testScore = 0;
+
+    try {
+      // Check for test coverage report
+      const coveragePath = path.join(process.cwd(), 'coverage', 'coverage-summary.json');
+      if (await fs.pathExists(coveragePath)) {
+        const coverage = JSON.parse(await fs.readFile(coveragePath, 'utf8'));
+        if (coverage.total && coverage.total.lines) {
+          const lineCoverage = coverage.total.lines.pct || 0;
+          testScore += Math.min(20, lineCoverage / 5); // Up to 20 points for 100% coverage
+        }
+      }
+
+      // Check for test files related to this criterion
+      const testDirs = ['tests', 'test', '__tests__', 'spec'];
+      for (const testDir of testDirs) {
+        if (await fs.pathExists(testDir)) {
+          const testFiles = await this.findFilesRecursive(testDir, ['.test.', '.spec.', '_test.']);
+          const relatedTests = testFiles.filter(
+            (f) => f.toLowerCase().includes(criterionId) || criterionText.includes(path.basename(f, path.extname(f)))
+          );
+          if (relatedTests.length > 0) {
+            testScore += 20; // Found related test files
+            break;
+          } else if (testFiles.length > 0) {
+            testScore += 10; // Has tests but not specifically for this criterion
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, 'Error checking test progress');
+    }
+
+    return Math.min(40, testScore);
+  }
+
+  /**
+   * Check for implementation files related to criterion
+   */
+  async checkImplementationProgress(criterionId) {
+    let implScore = 0;
+
+    try {
+      const srcDirs = ['src', 'lib', 'packages'];
+      for (const srcDir of srcDirs) {
+        if (await fs.pathExists(srcDir)) {
+          implScore += 15; // Source directory exists
+
+          // Check for files that might relate to this criterion
+          const srcFiles = await this.findFilesRecursive(srcDir, ['.js', '.ts', '.jsx', '.tsx']);
+          const relatedFiles = srcFiles.filter((f) => f.toLowerCase().includes(criterionId));
+          if (relatedFiles.length > 0) {
+            implScore += 15; // Found related implementation files
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, 'Error checking implementation progress');
+    }
+
+    return Math.min(30, implScore);
+  }
+
+  /**
+   * Check for documentation related to criterion
+   */
+  async checkDocumentationProgress(criterionId) {
+    let docScore = 0;
+
+    try {
+      // Check README
+      if (await fs.pathExists('README.md')) {
+        const readme = await fs.readFile('README.md', 'utf8');
+        if (readme.toLowerCase().includes(criterionId)) {
+          docScore += 10;
+        } else {
+          docScore += 5;
+        }
+      }
+
+      // Check docs directory
+      if (await fs.pathExists('docs')) {
+        docScore += 5;
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, 'Error checking documentation progress');
+    }
+
+    return Math.min(15, docScore);
+  }
+
+  /**
+   * Check git commits for criterion-related changes
+   */
+  async checkCommitProgress(criterionId) {
+    let commitScore = 0;
+
+    try {
+      const { execSync } = await import('child_process');
+
+      // Check for commits mentioning this criterion
+      const commits = execSync(`git log --oneline --all --grep="${criterionId}" 2>/dev/null || true`, {
+        encoding: 'utf8',
+        cwd: process.cwd(),
+      }).trim();
+
+      if (commits) {
+        const commitCount = commits.split('\n').filter(Boolean).length;
+        commitScore = Math.min(15, commitCount * 5); // 5 points per commit, max 15
+      }
+    } catch (error) {
+      // Git not available or not a repo
+      this.logger.debug({ err: error }, 'Error checking commit progress');
+    }
+
+    return commitScore;
+  }
+
+  /**
+   * Find files recursively matching patterns
+   */
+  async findFilesRecursive(dir, patterns, maxDepth = 3) {
+    const results = [];
+
+    async function scan(currentDir, depth) {
+      if (depth > maxDepth) return;
+
+      try {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry.name);
+          if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+            await scan(fullPath, depth + 1);
+          } else if (entry.isFile()) {
+            if (patterns.some((p) => entry.name.includes(p))) {
+              results.push(fullPath);
+            }
+          }
+        }
+      } catch {
+        // Ignore permission errors
+      }
+    }
+
+    await scan(dir, 0);
+    return results;
   }
 
   /**
@@ -480,8 +638,8 @@ class CawsMonitor {
         : null,
     };
 
-    // In a real implementation, this would emit to connected clients,
-    // update dashboards, send notifications, etc.
+    // Status is available via getStatus() for clients to poll or
+    // integrate with dashboards and notification systems.
 
     // Log status summary
     const budgets = Array.from(this.budgets.entries()).map(([type, budget]) => ({

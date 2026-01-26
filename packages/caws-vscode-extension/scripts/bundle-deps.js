@@ -18,6 +18,9 @@ const glob = require('glob');
 const EXTENSION_ROOT = path.resolve(__dirname, '..');
 const MONOREPO_ROOT = path.resolve(EXTENSION_ROOT, '../..');
 const BUNDLED_DIR = path.join(EXTENSION_ROOT, 'bundled');
+const SDK_SOURCE = path.join(MONOREPO_ROOT, 'node_modules', '@modelcontextprotocol', 'sdk', 'dist');
+const SDK_DEST = path.join(BUNDLED_DIR, 'mcp-sdk');
+const ZOD_SRC = path.join(MONOREPO_ROOT, 'node_modules', 'zod');
 
 async function main() {
   console.log('Starting CAWS extension dependency bundling...\n');
@@ -191,6 +194,35 @@ async function main() {
     });
 
     console.log('✅ Bundled Quality Gates\n');
+
+    // Copy MCP SDK runtime (dist) so extension can load without external deps
+    if (await fs.pathExists(SDK_SOURCE)) {
+      console.log('Bundling MCP SDK runtime...');
+      await fs.ensureDir(SDK_DEST);
+      await fs.copy(SDK_SOURCE, SDK_DEST);
+      // Copy SDK package.json for module resolution metadata
+      const sdkPkgSrc = path.join(
+        MONOREPO_ROOT,
+        'node_modules',
+        '@modelcontextprotocol',
+        'sdk',
+        'package.json'
+      );
+      if (await fs.pathExists(sdkPkgSrc)) {
+        await fs.copy(sdkPkgSrc, path.join(SDK_DEST, 'package.json'));
+      }
+      // Copy zod dependency required at runtime (others are not needed for client)
+      const zodDest = path.join(SDK_DEST, 'node_modules', 'zod');
+      if (await fs.pathExists(ZOD_SRC)) {
+        await fs.ensureDir(path.join(SDK_DEST, 'node_modules'));
+        await fs.copy(ZOD_SRC, zodDest);
+      } else {
+        console.warn('⚠️  zod dependency not found for MCP SDK; runtime may fail if not present');
+      }
+      console.log('✅ Bundled MCP SDK runtime\n');
+    } else {
+      console.warn('⚠️  MCP SDK dist not found; SDK will be resolved from node_modules at runtime');
+    }
 
     // Create bundled info file
     const bundledInfo = {

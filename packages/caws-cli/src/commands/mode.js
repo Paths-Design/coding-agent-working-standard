@@ -18,13 +18,32 @@ const {
 
 /**
  * Display current mode status
+ * @param {string} currentMode - The current mode to display
  */
-function displayCurrentMode() {
+function displayCurrentMode(currentMode) {
+  const tier = getTier(currentMode);
+
   console.log(chalk.bold.cyan('\n🔧 CAWS Current Mode'));
   console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
 
-  // This will be implemented when we load the current mode
-  console.log(chalk.yellow('Mode display will be implemented...'));
+  console.log(chalk.bold(`Active Mode: ${tier.icon} ${tier.color(currentMode)}`));
+  console.log(chalk.gray(`Description: ${tier.description}`));
+  console.log('');
+
+  // Quality requirements
+  console.log(chalk.bold('Quality Requirements:'));
+  console.log(chalk.gray(`   Test Coverage: ≥${tier.qualityRequirements.testCoverage}%`));
+  console.log(chalk.gray(`   Mutation Score: ≥${tier.qualityRequirements.mutationScore}%`));
+  console.log(chalk.gray(`   Contracts: ${tier.qualityRequirements.contracts}`));
+  console.log('');
+
+  // Risk tiers supported
+  console.log(chalk.bold('Supported Risk Tiers:'));
+  tier.riskTiers.forEach((riskTier) => {
+    const riskColor =
+      riskTier === 'T1' ? chalk.red : riskTier === 'T2' ? chalk.yellow : chalk.green;
+    console.log(chalk.gray(`   ${riskColor(riskTier)}`));
+  });
   console.log('');
 }
 
@@ -128,21 +147,12 @@ async function modeCommand(action, options = {}) {
       switch (action) {
         case 'current': {
           const currentMode = await getCurrentMode();
-          displayCurrentMode();
-
-          const tier = getTier(currentMode);
-          console.log(chalk.bold(`Current Mode: ${tier.icon} ${tier.color(currentMode)}`));
-          console.log(chalk.gray(`Description: ${tier.description}`));
-          console.log(
-            chalk.gray(
-              `Quality: ${tier.qualityRequirements.testCoverage}% coverage, ${tier.qualityRequirements.mutationScore}% mutation`
-            )
-          );
+          displayCurrentMode(currentMode);
 
           return outputResult({
             command: 'mode current',
             mode: currentMode,
-            tier: tier,
+            tier: getTier(currentMode),
           });
         }
 

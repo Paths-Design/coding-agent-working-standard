@@ -82,12 +82,117 @@ class WaiverPatternLearner {
   }
 
   /**
-   * Load historical working specs (mock implementation)
+   * Load historical working specs from git history
+   * Retrieves past versions of spec files to analyze patterns
    */
   loadHistoricalSpecs() {
-    // In a real implementation, this would load from git history or a local cache
-    // For v0.1, we'll use mock data based on waivers
-    return [];
+    const { execSync } = require('child_process');
+    const specs = [];
+
+    try {
+      // Get list of commits that modified spec files
+      const specPaths = [
+        '.caws/working-spec.yaml',
+        '.caws/specs/*.yaml',
+      ];
+
+      for (const specPattern of specPaths) {
+        try {
+          // Get commits that touched spec files
+          const logOutput = execSync(
+            `git log --pretty=format:"%H" --follow -- "${specPattern}" 2>/dev/null | head -20`,
+            { cwd: this.projectRoot, encoding: 'utf8' }
+          ).trim();
+
+          if (!logOutput) continue;
+
+          const commits = logOutput.split('\n').filter(Boolean);
+
+          for (const commitHash of commits) {
+            try {
+              // Get the list of files matching the pattern at that commit
+              const filesOutput = execSync(
+                `git ls-tree -r --name-only ${commitHash} -- "${specPattern}" 2>/dev/null`,
+                { cwd: this.projectRoot, encoding: 'utf8' }
+              ).trim();
+
+              if (!filesOutput) continue;
+
+              const files = filesOutput.split('\n').filter(Boolean);
+
+              for (const filePath of files) {
+                try {
+                  // Get the spec content at that commit
+                  const specContent = execSync(
+                    `git show ${commitHash}:"${filePath}" 2>/dev/null`,
+                    { cwd: this.projectRoot, encoding: 'utf8' }
+                  );
+
+                  const spec = yaml.load(specContent);
+                  if (spec && spec.id) {
+                    // Get commit date for context
+                    const commitDate = execSync(
+                      `git show -s --format=%ci ${commitHash}`,
+                      { cwd: this.projectRoot, encoding: 'utf8' }
+                    ).trim();
+
+                    specs.push({
+                      ...spec,
+                      _commit: commitHash.substring(0, 7),
+                      _date: commitDate,
+                      _file: filePath,
+                    });
+                  }
+                } catch {
+                  // Skip files that can't be loaded
+                }
+              }
+            } catch {
+              // Skip commits with issues
+            }
+          }
+        } catch {
+          // Pattern didn't match any files
+        }
+      }
+
+      // Also check archived specs in .caws/archive/
+      const archiveDir = path.join(this.projectRoot, '.caws', 'archive');
+      if (fs.existsSync(archiveDir)) {
+        const archiveFiles = fs.readdirSync(archiveDir)
+          .filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+
+        for (const file of archiveFiles) {
+          try {
+            const archivePath = path.join(archiveDir, file);
+            const spec = yaml.load(fs.readFileSync(archivePath, 'utf8'));
+            if (spec && spec.id) {
+              specs.push({
+                ...spec,
+                _source: 'archive',
+                _file: file,
+              });
+            }
+          } catch {
+            // Skip invalid archive files
+          }
+        }
+      }
+
+      // Deduplicate by spec ID, keeping the most recent version
+      const uniqueSpecs = new Map();
+      for (const spec of specs) {
+        const existing = uniqueSpecs.get(spec.id);
+        if (!existing || (spec._date && (!existing._date || spec._date > existing._date))) {
+          uniqueSpecs.set(spec.id, spec);
+        }
+      }
+
+      return Array.from(uniqueSpecs.values());
+    } catch (error) {
+      console.warn(`Failed to load historical specs: ${error.message}`);
+      return [];
+    }
   }
 
   /**
@@ -186,16 +291,41 @@ class WaiverPatternLearner {
 class ProjectSimilarityMatcher {
   constructor(projectRoot = process.cwd()) {
     this.projectRoot = projectRoot;
+    this.patternLearner = new WaiverPatternLearner(projectRoot);
   }
 
   /**
    * Find projects similar to the current spec
+   * Uses real historical specs from git history when available
    */
   findSimilarProjects(currentSpec) {
-    // For v0.1, we'll use mock historical data based on waiver patterns
-    // In a real implementation, this would load from git history or local cache
+    // Load real historical specs first
+    const historicalSpecs = this.patternLearner.loadHistoricalSpecs();
 
-    const mockHistoricalProjects = [
+    // Convert historical specs to project format with budget data
+    const historicalProjects = historicalSpecs
+      .filter(spec => spec.id !== currentSpec.id) // Exclude current spec
+      .map(spec => this.specToProject(spec));
+
+    // If we have real historical data, use it
+    if (historicalProjects.length > 0) {
+      return historicalProjects
+        .map((project) => ({
+          project: project.id,
+          similarity_score: this.calculateSimilarity(currentSpec, project),
+          budget_accuracy: project.allocated_budget.files > 0
+            ? project.actual_budget.files / project.allocated_budget.files
+            : 1.0,
+          waiver_count: project.waivers?.length || 0,
+          details: project,
+        }))
+        .filter((p) => p.similarity_score > 0.3)
+        .sort((a, b) => b.similarity_score - a.similarity_score)
+        .slice(0, 5);
+    }
+
+    // Fallback to demo data if no historical specs found
+    const demoProjects = [
       {
         id: 'PROJ-0123',
         title: 'API Enhancement',
@@ -231,9 +361,9 @@ class ProjectSimilarityMatcher {
       },
     ];
 
-    // Add a mock project similar to ARCH-0001 for demonstration
+    // Add a demo project similar to ARCH-0001 for demonstration
     if (currentSpec.id === 'ARCH-0001') {
-      mockHistoricalProjects.push({
+      demoProjects.push({
         id: 'ARCH-0002',
         title: 'Policy System Refactor',
         risk_tier: 1,
@@ -246,7 +376,7 @@ class ProjectSimilarityMatcher {
       });
     }
 
-    return mockHistoricalProjects
+    return demoProjects
       .map((project) => ({
         project: project.id,
         similarity_score: this.calculateSimilarity(currentSpec, project),
@@ -257,6 +387,69 @@ class ProjectSimilarityMatcher {
       .filter((p) => p.similarity_score > 0.3) // Lower threshold for demonstration
       .sort((a, b) => b.similarity_score - a.similarity_score)
       .slice(0, 5); // Top 5 matches
+  }
+
+  /**
+   * Convert a spec object to project format for similarity comparison
+   */
+  specToProject(spec) {
+    // Extract budget info from spec
+    const budget = spec.budget || spec.scope?.budget || {};
+    const allocatedFiles = budget.max_files || budget.files || 50;
+    const allocatedLoc = budget.max_loc || budget.loc || 5000;
+
+    // If spec has actual metrics, use them; otherwise estimate from allocated
+    const actualFiles = spec.metrics?.files_changed || spec.actual_files || allocatedFiles;
+    const actualLoc = spec.metrics?.lines_changed || spec.actual_loc || allocatedLoc;
+
+    // Extract tech stack from spec metadata
+    let techStack = spec.tech_stack || spec.metadata?.tech_stack || 'unknown';
+    if (!techStack || techStack === 'unknown') {
+      // Try to infer from title or description
+      const text = `${spec.title || ''} ${spec.description || ''}`.toLowerCase();
+      if (text.includes('react') || text.includes('ui') || text.includes('component')) {
+        techStack = 'react';
+      } else if (text.includes('api') || text.includes('node') || text.includes('server')) {
+        techStack = 'node';
+      } else if (text.includes('python') || text.includes('django') || text.includes('flask')) {
+        techStack = 'python';
+      }
+    }
+
+    // Extract feature type
+    let featureType = spec.feature_type || spec.type || 'general';
+    if (featureType === 'general') {
+      const text = `${spec.title || ''} ${spec.description || ''}`.toLowerCase();
+      if (text.includes('api') || text.includes('endpoint')) {
+        featureType = 'api';
+      } else if (text.includes('ui') || text.includes('component') || text.includes('view')) {
+        featureType = 'ui';
+      } else if (text.includes('data') || text.includes('migration') || text.includes('database')) {
+        featureType = 'data';
+      } else if (text.includes('refactor') || text.includes('architecture')) {
+        featureType = 'architecture';
+      }
+    }
+
+    return {
+      id: spec.id,
+      title: spec.title || spec.name || spec.id,
+      risk_tier: spec.risk_tier || spec.tier || 2,
+      mode: spec.mode || 'feature',
+      tech_stack: techStack,
+      feature_type: featureType,
+      actual_budget: {
+        files: actualFiles,
+        loc: actualLoc,
+      },
+      allocated_budget: {
+        files: allocatedFiles,
+        loc: allocatedLoc,
+      },
+      waivers: spec.waivers || [],
+      _source: spec._source,
+      _date: spec._date,
+    };
   }
 
   /**

@@ -952,5 +952,77 @@
     },
     "previous_hash": "1db23b6034046847e1ec39d948ccde99dfb8db2e733ec10132e9f07caa85b99f",
     "hash": "07af79df130eb13f7e9572e657fbc4b9191ed9cbb1a3ea2afc383325e68343da"
+  },
+  {
+    "id": "prov-1763069231019",
+    "timestamp": "2025-11-13T21:27:11.019Z",
+    "commit": {
+      "hash": "d9c479bd87f09aa5e8e4d1c59e4ddb4f73674264",
+      "message": "chore(packages/caws-cli): trigger release for git hooks integration",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-11-13T21:27:11.020Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "07af79df130eb13f7e9572e657fbc4b9191ed9cbb1a3ea2afc383325e68343da",
+    "hash": "5f92a85c24060543cab3453822ba35c76069fcd60d87a766d1f5456eefffb641"
+  },
+  {
+    "id": "prov-1763069247120",
+    "timestamp": "2025-11-13T21:27:27.120Z",
+    "commit": {
+      "hash": "c53646a5a388ac24a4ea11789db3a8c1a09ffaca",
+      "message": "fix(packages/caws-cli): add git hooks integration support",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "unknown",
+      "last_validated": "2025-11-13T21:27:27.121Z"
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor tracking API not configured"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "Cursor checkpoint API not configured"
+    },
+    "previous_hash": "5f92a85c24060543cab3453822ba35c76069fcd60d87a766d1f5456eefffb641",
+    "hash": "e52ecc73b69d552504404bce8afaf665e50f2424c0865af1e7d8c09cc836ab2c"
   }
 ]

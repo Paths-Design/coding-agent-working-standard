@@ -12,8 +12,8 @@
 // Force JSON-only logging for MCP server (no colors or pretty printing)
 // This must be set before any imports that might initialize the logger
 process.env.CAWS_MCP_SERVER = 'true';
-process.env.NO_COLOR = '1'; // Disable ANSI colors globally
-process.env.FORCE_COLOR = '0'; // Explicitly disable colors
+process.env.NO_COLOR = '1';
+process.env.FORCE_COLOR = '0';
 process.env.PINO_PRETTY_PRINT = 'false'; // Disable pino pretty printing
 process.env.PINO_LOG_PRETTY = 'false'; // Another pino pretty print variable
 process.env.PINO_COLORIZE = 'false'; // Disable pino colorization
@@ -1066,7 +1066,17 @@ class CawsMcpServer extends Server {
       }
 
       const specContent = fs.readFileSync(specPath, 'utf8');
-      const spec = JSON.parse(specContent); // Assume JSON for now, can extend to YAML
+
+      // Determine file format by extension and parse accordingly
+      const isYaml = specPath.endsWith('.yaml') || specPath.endsWith('.yml');
+      let spec;
+
+      if (isYaml) {
+        const yaml = await import('js-yaml');
+        spec = yaml.load(specContent);
+      } else {
+        spec = JSON.parse(specContent);
+      }
 
       // Find and update the acceptance criterion
       const criterion = spec.acceptance?.find((a) => a.id === criterionId);
@@ -1084,8 +1094,13 @@ class CawsMcpServer extends Server {
       if (coverage !== undefined) criterion.coverage = coverage;
       criterion.last_updated = new Date().toISOString();
 
-      // Write back the updated spec
-      fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+      // Write back the updated spec in the same format
+      if (isYaml) {
+        const yaml = await import('js-yaml');
+        fs.writeFileSync(specPath, yaml.dump(spec, { indent: 2 }), 'utf8');
+      } else {
+        fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+      }
 
       return {
         content: [

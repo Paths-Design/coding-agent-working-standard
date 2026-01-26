@@ -10,8 +10,8 @@
 
 import { execFileSync } from 'child_process';
 import fs from 'fs';
-import yaml from 'js-yaml';
 import ignore from 'ignore';
+import yaml from 'js-yaml';
 import micromatch from 'micromatch';
 import path from 'path';
 
@@ -199,7 +199,7 @@ function repoRoot() {
  */
 function loadGitignore(root) {
   const ig = ignore();
-  
+
   // Load repository root .gitignore (primary source)
   // Git ls-files already respects .gitignore, so this is mainly for edge cases
   const gitignorePath = path.join(root, '.gitignore');
@@ -211,7 +211,7 @@ function loadGitignore(root) {
       // Ignore errors reading .gitignore file
     }
   }
-  
+
   return ig;
 }
 
@@ -424,7 +424,7 @@ function listPushFiles(root, baseRef) {
 /** ----------------------- normalization & selection ----------------------- */
 function filterAndNormalize(relPaths, root, cfg) {
   const match = makeMatcher(cfg);
-  
+
   // Load .gitignore patterns once for this batch
   let gitignoreInstance = null;
   try {
@@ -433,7 +433,7 @@ function filterAndNormalize(relPaths, root, cfg) {
     // If we can't load .gitignore, continue without it (fail open)
     // git ls-files already respects .gitignore, so this is mainly for edge cases
   }
-  
+
   // First pass: apply include/exclude globs, .gitignore, and basic existence checks
   const keptRel = [];
   const extlessAbs = [];
@@ -441,7 +441,7 @@ function filterAndNormalize(relPaths, root, cfg) {
   for (const rel of relPaths) {
     if (!rel) continue;
     if (!match(rel)) continue;
-    
+
     // Check .gitignore (additional safety check, git ls-files already filters but this catches edge cases)
     if (gitignoreInstance && shouldIgnoreByGitignore(rel, gitignoreInstance)) {
       continue;
@@ -468,12 +468,12 @@ function filterAndNormalize(relPaths, root, cfg) {
     const shebangs = shebangMapFor(extlessAbs);
     for (const abs of extlessAbs) {
       const rel = path.relative(root, abs);
-      
+
       // Check .gitignore for extensionless files too
       if (gitignoreInstance && shouldIgnoreByGitignore(rel, gitignoreInstance)) {
         continue;
       }
-      
+
       if (shebangs.get(abs)) {
         keptRel.push(rel);
       } else {
@@ -550,7 +550,8 @@ export function getFilesToCheck(context = 'commit') {
 
   let rel;
   if (context === 'commit') rel = listStagedFiles(root);
-  else if (context === 'push') rel = listRepoFiles(root); // Scan entire repo before push
+  else if (context === 'push')
+    rel = listRepoFiles(root); // Scan entire repo before push
   else if (context === 'ci') rel = listRepoFiles(root);
   else rel = listStagedFiles(root);
 
@@ -600,6 +601,20 @@ export function getContextInfo(context) {
     scope: 'unknown',
     gitCommand: 'fallback',
   };
+}
+
+/**
+ * Gets the git repository root directory.
+ *
+ * Uses `git rev-parse --show-toplevel` to determine the root of the
+ * current git repository. This is the correct way to get the project
+ * root when running quality gates from any directory within the repo.
+ *
+ * @returns {string} Absolute path to the repository root
+ * @throws {Error} If not in a git repository
+ */
+export function getRepoRoot() {
+  return repoRoot();
 }
 
 /** ----------------------- CLI (manual test) ----------------------- */

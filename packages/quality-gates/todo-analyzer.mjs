@@ -148,6 +148,127 @@ class HiddenTodoAnalyzer {
       // Rust doc comment patterns when mentioning TODO system types
       /^\s*\/\/[!]\/.*\btodo\b.*(template|instance|step|integration|system)\b/i,
       /^\s*\/\/\/.*\btodo\b.*(template|instance|step|integration|system)\b/i,
+      // Linter directive patterns - these are intentional control comments, not TODOs
+      /eslint-disable/i,
+      /eslint-enable/i,
+      /prettier-ignore/i,
+      /stylelint-disable/i,
+      /tslint:disable/i,
+      /jshint\s+ignore/i,
+      /noinspection/i,
+      /@ts-ignore/i,
+      /@ts-expect-error/i,
+      /@ts-nocheck/i,
+      /type:\s*ignore/i,
+      /noqa/i,
+      /nosec/i,
+      // Variable/function names that legitimately contain "disabled" or "mock"
+      /\b\w+Disabled\b/,
+      /\bdisabled\w+\b/,
+      /\bisDisabled\b/,
+      /\bsetDisabled\b/,
+      /\bmockFn\b/,
+      /\bmockImpl\b/,
+      /\bjest\.mock\b/i,
+      /\bvi\.mock\b/i,
+      // Command/help text mentioning feature names
+      /hidden-todo\s+Detect/i,
+      /placeholder.*governance/i,
+      // Type declarations and variable names containing "placeholder" or "violation"
+      /PlaceholderViolation/,
+      /PlaceholderEntry/,
+      /PlaceholderResult/,
+      /PlaceholderConfig/,
+      /placeholder-helpers/,
+      /placeholder-types/,
+      /check-placeholder/,
+      /\bconst\s+\w*[Vv]iolations?\s*[=:]/,
+      /\blet\s+\w*[Vv]iolations?\s*[=:]/,
+      /\bfunction\s+\w*[Pp]laceholder/,
+      /\bclass\s+\w*[Pp]laceholder/,
+      /\binterface\s+\w*[Pp]laceholder/,
+      /\btype\s+\w*[Pp]laceholder/,
+      // Import/export statements
+      /import\s+.*placeholder/i,
+      /export\s+.*placeholder/i,
+      /from\s+['"].*placeholder/i,
+      // Template literals and string messages about placeholders (error messages, logs)
+      /message:\s*[`'"].*placeholder/i,
+      /message:\s*[`'"].*Found\s+\$/i,
+      /console\.(log|warn|error)\s*\([`'"].*placeholder/i,
+      /throw\s+new\s+Error\s*\([`'"].*placeholder/i,
+      // Quality gates self-referential patterns (code that checks for placeholders)
+      /dangling\s+promise/i,
+      /acceptance\s+criteria/i,
+      /non-degradable\s+scope/i,
+      // Error class/function definitions for TODO handling
+      /class\s+Hidden[Tt]odo/,
+      /function\s+\w*[Hh]idden[Tt]odo/,
+      /[Hh]idden[Tt]odo[Ee]rror/,
+      /todo-analyzer/,
+      /todoAnalyzer/,
+      /TODO_ANALYZER/,
+      // Shell script path checking patterns (in template strings)
+      /\[ -f ".*todo.*" \]/i,
+      /elif \[ -f ".*todo.*" \]/i,
+      // Configuration variable names
+      /todoConfidenceThreshold/,
+      /todoCount/,
+      // Help text and CLI descriptions
+      /hidden-todo\s/,
+      /gates.*hidden-todo/i,
+      // Placeholder system self-referential code (placeholder-helpers, placeholder-types)
+      /placeholder-helpers/,
+      /placeholder-types/,
+      /PlaceholderValidation/,
+      /PlaceholderImpact/,
+      /requiredPlaceholderFields/,
+      /validImpacts.*Placeholder/,
+      /blocking_placeholder/,
+      /Placeholder.*schema.*valid/i,
+      /Placeholder.*registry.*valid/i,
+      /Gate P\d/,  // Gate references like "Gate P1"
+      /degraded.*placeholder/i,
+      /placeholder.*array.*provided/i,
+      /const\s+placeholder\s+/,
+      /for.*const.*placeholder.*of/,
+      /keyof\s+Placeholder/,
+      // Regex patterns being defined (not actual TODOs)
+      /\/\\b(TODO|TBD)\\b\/gi/,
+      // Shell script template strings (echo messages about placeholders)
+      /echo\s+["'].*placeholder/i,
+      /echo\s+["'].*stub/i,
+      /echo\s+["'].*TODO/i,
+      // Chalk/console messages about features
+      /chalk\.(gray|yellow|blue).*For now/i,
+      /chalk\.(gray|yellow|blue).*quality gates/i,
+      // Configuration comments explaining "Disable X" settings
+      /\/\/\s*(Disable|disable)\s+(buffering|colors|formatting|colorization|TTY|monitoring|pino)/i,
+      /\/\/\s*(Explicitly|Completely)\s+disable/i,
+      /\/\/.*check.*CI.*env.*var.*disable/i,
+      /CAWS_DISABLE_MONITORING/,
+      /PINO_COLORIZE/,
+      // More placeholder-helpers self-referential patterns
+      /validating.*placeholder/i,
+      /managing.*placeholder/i,
+      /placeholder.*degradation/i,
+      /blocks_acceptance/,
+      // JSDoc comments describing TODO/error handling functionality
+      /\*\s+Hidden\s+TODO\s+Detection/,
+      /\*\s+Create\s+a\s+hidden\s+TODO/,
+      // Parse comments in utility code
+      /\/\/\s*Parse.*output.*extract.*TODO/i,
+      // VS Code extension API properties (placeHolder is a legitimate VS Code API property)
+      /placeHolder:\s*[`'"]/,
+      /\{\s*placeHolder:/,
+      /placeHolder:\s*['"][^'"]*['"]/,
+      // VS Code QuickPick and InputBox options
+      /showQuickPick\s*\([^)]*placeHolder/i,
+      /showInputBox\s*\([^)]*placeHolder/i,
+      /createQuickPick.*placeHolder/i,
+      // VS Code markdown extension patterns
+      /ImageMagick.*Placeholder/i,
+      /simple\s+placeholder\s+icon/i,
     ];
 
     // Language-specific code stub detection
@@ -207,6 +328,9 @@ class HiddenTodoAnalyzer {
       '.git',
       'target',
       'dist',
+      'dist-bundle',
+      'bundled',
+      'out',
       'build',
       '__pycache__',
       '.venv',
@@ -255,9 +379,10 @@ class HiddenTodoAnalyzer {
    */
   async analyzeProject(showProgress = true, scopedFiles = null, engineeringSuggestions = false) {
     const allIssues = [];
+    // When scopedFiles is provided, still filter to only analyzable code files
     const filesToAnalyze =
       scopedFiles && scopedFiles.length > 0
-        ? scopedFiles
+        ? scopedFiles.filter((f) => this.shouldAnalyzeFile(f))
         : this.findFilesToAnalyze();
 
     if (showProgress && filesToAnalyze.length > 0) {
@@ -338,7 +463,9 @@ class HiddenTodoAnalyzer {
    */
   shouldAnalyzeFile(filePath) {
     const ext = path.extname(filePath).toLowerCase();
-    return [
+
+    // Only analyze code files, not documentation, config, or data files
+    const codeExtensions = [
       '.js',
       '.jsx',
       '.ts',
@@ -351,7 +478,43 @@ class HiddenTodoAnalyzer {
       '.c',
       '.h',
       '.hpp',
-    ].includes(ext);
+    ];
+
+    if (!codeExtensions.includes(ext)) {
+      return false;
+    }
+
+    const normalizedPath = filePath.replace(/\\/g, '/');
+
+    // Skip build output, bundles, and generated code
+    const skipPathSegments = [
+      '/dist/',
+      '/dist-bundle/',
+      '/bundled/',
+      '/out/',
+      '/build/',
+      '/node_modules/',
+      '/.git/',
+    ];
+
+    if (skipPathSegments.some(p => normalizedPath.includes(p))) {
+      return false;
+    }
+
+    // Skip documentation and config directories even for code files
+    const skipPaths = [
+      '/docs/',
+      '/.cursor/',
+      '/.github/',
+      '/.windsurf/',
+      '/templates/',
+      '/examples/',
+      '/fixtures/',
+      '/tests/',
+      '/test/',
+    ];
+
+    return !skipPaths.some(p => normalizedPath.includes(p));
   }
 
   /**
@@ -851,6 +1014,11 @@ class HiddenTodoAnalyzer {
         let suggestedFix = '';
 
         if (isCommentish || !this.commentsOnly) {
+          // Early exit: skip lines that match exclusion patterns (linter directives, type names, etc.)
+          if (this.isTodoSystemDocumentation(line)) {
+            continue;
+          }
+
           // Fast path: broad keyword match
           if (
             this.quickKeyword.test(line) &&

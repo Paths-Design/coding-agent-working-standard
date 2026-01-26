@@ -149,7 +149,7 @@ function listTemplates() {
   const totalTemplates = Object.keys(templates).length;
 
   if (totalAvailable < totalTemplates) {
-    console.log(chalk.yellow(`\n⏳ ${totalTemplates - totalAvailable} templates coming soon`));
+    console.log(chalk.yellow(`\n⏳ ${totalTemplates - totalAvailable} additional templates in development`));
   }
 
   console.log(chalk.blue('\n📚 Learn more:'));
@@ -181,7 +181,7 @@ function showTemplateInfo(templateId) {
   console.log(chalk.white(`Risk Tier: ${template.tier}`));
   console.log(
     chalk.white(
-      `Status: ${template.available ? chalk.green('Available') : chalk.yellow('Coming Soon')}`
+      `Status: ${template.available ? chalk.green('Available') : chalk.yellow('In Development')}`
     )
   );
 

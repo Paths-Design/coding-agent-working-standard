@@ -13,41 +13,28 @@ export interface McpToolResult {
 }
 
 export class CawsMcpClient {
-  private mcpProcess: cp.ChildProcess | null = null;
-  private requestId = 0;
+  private transport: any = null;
+  private client: any = null;
   private logger = getLogger().createChild('McpClient');
-  private pendingRequests = new Map<
-    number,
-    { resolve: Function; reject: Function; timeout: NodeJS.Timeout }
-  >();
-  private initialized = false;
+  private initPromise: Promise<void> | null = null;
+  private workspaceRoot: string | undefined;
 
   constructor() {
-    // Initialize MCP server asynchronously
-    this.initializeMcpServer().catch((error) => {
-      this.logger.error('Failed to initialize MCP server in constructor', error);
-    });
+    this.workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    this.initPromise = this.initializeMcpClient();
   }
 
-  private async initializeMcpServer(): Promise<void> {
+  private async initializeMcpClient(): Promise<void> {
     try {
-      // Use bundled MCP server from extension
       const extensionPath = vscode.extensions.getExtension(
         'paths-design.caws-vscode-extension'
       )?.extensionPath;
       let mcpServerPath: string;
 
       if (extensionPath) {
-        // Try bundled version first
         const bundledPath = path.join(extensionPath, 'bundled', 'mcp-server', 'index.js');
-        if (fs.existsSync(bundledPath)) {
-          mcpServerPath = bundledPath;
-        } else {
-          // Fall back to system installation
-          mcpServerPath = this.getFallbackMcpPath();
-        }
+        mcpServerPath = fs.existsSync(bundledPath) ? bundledPath : this.getFallbackMcpPath();
       } else {
-        // No extension path, use fallback
         mcpServerPath = this.getFallbackMcpPath();
       }
 
@@ -57,184 +44,113 @@ export class CawsMcpClient {
         );
       }
 
-      // Start MCP server process
-      this.mcpProcess = cp.spawn('node', [mcpServerPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd(),
-        env: {
-          ...process.env,
-          VSCODE_EXTENSION_PATH: extensionPath || '',
-          VSCODE_EXTENSION_DIR: extensionPath || '',
-        },
+      const env = {
+        ...process.env,
+        VSCODE_EXTENSION_PATH: extensionPath || '',
+        VSCODE_EXTENSION_DIR: extensionPath || '',
+        ...(this.workspaceRoot && {
+          CURSOR_WORKSPACE_ROOT: this.workspaceRoot,
+          VSCODE_WORKSPACE_ROOT: this.workspaceRoot,
+        }),
+      };
+
+      // Resolve MCP SDK from bundled copy if present, otherwise fall back to node_modules.
+      const sdkBase =
+        extensionPath &&
+        (await fs.promises
+          .stat(path.join(extensionPath, 'bundled', 'mcp-sdk'))
+          .then(() => true)
+          .catch(() => false))
+          ? path.join(extensionPath, 'bundled', 'mcp-sdk')
+          : null;
+
+      const sdkStdioModule = sdkBase
+        ? path.join(sdkBase, 'client', 'stdio.js')
+        : '@modelcontextprotocol/sdk/client/stdio.js';
+      const sdkClientModule = sdkBase
+        ? path.join(sdkBase, 'client', 'index.js')
+        : '@modelcontextprotocol/sdk/client/index.js';
+
+      const { StdioClientTransport } = await import(sdkStdioModule);
+      const { Client } = await import(sdkClientModule);
+
+      this.transport = new StdioClientTransport({
+        command: 'node',
+        args: [mcpServerPath],
+        env,
+        stderr: 'inherit',
       });
 
-      // Set up MCP protocol handlers
-      this.setupMcpProtocol();
+      this.transport.onerror = (error: Error) => {
+        this.logger.error('MCP transport error', error);
+      };
 
-      // Initialize MCP handshake
-      await this.initializeMcpProtocol();
-      this.initialized = true;
+      this.transport.onclose = () => {
+        this.logger.warn('MCP transport closed');
+        this.client = null;
+        this.transport = null;
+      };
 
-      this.logger.info('MCP server initialized successfully');
-    } catch (error) {
-      this.logger.error('Failed to initialize MCP server', error);
-      // Fall back to direct CLI calls
-      this.mcpProcess = null;
-    }
-  }
+      await this.transport.start();
 
-  private setupMcpProtocol(): void {
-    if (!this.mcpProcess) return;
-
-    if (this.mcpProcess.stdout) {
-      this.mcpProcess.stdout.on('data', (data) => {
-        this.handleMcpResponse(data);
-      });
-    }
-
-    if (this.mcpProcess.stderr) {
-      this.mcpProcess.stderr.on('data', (data) => {
-        this.logger.debug('MCP Server stderr', { data: data.toString() });
-      });
-    }
-
-    this.mcpProcess.on('exit', (code) => {
-      this.logger.info('MCP Server exited', { exitCode: code });
-      this.mcpProcess = null;
-    });
-  }
-
-  private async initializeMcpProtocol(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const initRequest = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: {
-            name: 'caws-vscode-extension',
-            version: '0.9.3',
+      this.client = new Client(
+        { name: 'caws-vscode-extension', version: '0.9.3' },
+        {
+          capabilities: {
+            tools: {},
+            resources: {},
+            prompts: {},
+            sampling: {},
+            logging: {},
           },
-        },
-      };
-
-      const initHandler = (data: Buffer) => {
-        try {
-          const response = JSON.parse(data.toString());
-          if (response.id === 1) {
-            if (this.mcpProcess?.stdout) {
-              this.mcpProcess.stdout.removeListener('data', initHandler);
-            }
-
-            if (response.error) {
-              reject(new Error(`MCP initialization failed: ${response.error.message}`));
-            } else {
-              // Send initialized notification
-              const initializedNotification = {
-                jsonrpc: '2.0',
-                method: 'notifications/initialized',
-              };
-              this.mcpProcess?.stdin?.write(JSON.stringify(initializedNotification) + '\n');
-              resolve();
-            }
-          }
-        } catch (error) {
-          // Continue listening for valid response
         }
-      };
+      );
 
-      if (this.mcpProcess?.stdout) {
-        this.mcpProcess.stdout.on('data', initHandler);
-      }
-
-      // Send initialization request
-      this.mcpProcess?.stdin?.write(JSON.stringify(initRequest) + '\n');
-
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (this.mcpProcess?.stdout) {
-          this.mcpProcess.stdout.removeListener('data', initHandler);
-        }
-        reject(new Error('MCP initialization timeout'));
-      }, 10000);
-    });
+      await this.client.connect(this.transport);
+      this.logger.info('MCP client connected successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize MCP client', error);
+      this.client = null;
+      this.transport = null;
+    }
   }
 
-  private handleMcpResponse(data: Buffer): void {
-    try {
-      const response = JSON.parse(data.toString());
-      // Handle pending requests
-      const pendingRequest = this.pendingRequests.get(response.id);
-      if (pendingRequest) {
-        this.pendingRequests.delete(response.id);
-        clearTimeout(pendingRequest.timeout);
-
-        if (response.error) {
-          pendingRequest.reject(new Error(response.error.message));
-        } else {
-          pendingRequest.resolve(response.result);
-        }
-      }
-    } catch (error) {
-      this.logger.debug('Received non-JSON data from MCP server', { data: data.toString() });
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.initializeMcpClient();
     }
+    await this.initPromise;
   }
 
   async callTool(toolName: string, parameters: any = {}): Promise<McpToolResult> {
-    // Wait for MCP initialization (with timeout)
-    if (!this.initialized) {
-      await new Promise((resolve) => {
-        const checkInit = () => {
-          if (this.initialized || !this.mcpProcess) {
-            resolve(void 0);
-          } else {
-            setTimeout(checkInit, 100);
-          }
-        };
-        setTimeout(() => resolve(void 0), 5000); // 5 second timeout
-        checkInit();
-      });
+    await this.ensureInitialized();
+
+    if (this.client) {
+      try {
+        return await this.callMcpTool(toolName, parameters);
+      } catch (error) {
+        this.logger.warn('MCP tool call failed, falling back to CLI', error as Error);
+      }
     }
 
-    if (this.mcpProcess && this.mcpProcess.stdin && this.initialized) {
-      // Use MCP protocol
-      return this.callMcpTool(toolName, parameters);
-    } else {
-      // Fall back to direct CLI calls
-      return this.callCliTool(toolName, parameters);
-    }
+    // Fall back to direct CLI calls
+    return this.callCliTool(toolName, parameters);
   }
 
   private async callMcpTool(toolName: string, parameters: any): Promise<McpToolResult> {
-    return new Promise((resolve, reject) => {
-      if (!this.mcpProcess || !this.mcpProcess.stdin || !this.initialized) {
-        reject(new Error('MCP server not available or not initialized'));
-        return;
-      }
+    if (!this.client) {
+      throw new Error('MCP client not available or not initialized');
+    }
 
-      const requestId = ++this.requestId;
-      const request = {
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'tools/call',
-        params: {
-          name: toolName,
-          arguments: parameters,
-        },
-      };
-
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        reject(new Error('MCP request timeout'));
-      }, 30000);
-
-      this.pendingRequests.set(requestId, { resolve, reject, timeout });
-
-      // Send request
-      this.mcpProcess.stdin.write(JSON.stringify(request) + '\n');
+    const result = await this.client.callTool({
+      name: toolName,
+      arguments: parameters,
     });
+
+    return {
+      content: result.content ?? [],
+      isError: result.isError,
+    };
   }
 
   private async callCliTool(toolName: string, parameters: any): Promise<McpToolResult> {
@@ -476,9 +392,12 @@ export class CawsMcpClient {
   }
 
   dispose(): void {
-    if (this.mcpProcess) {
-      this.mcpProcess.kill();
-      this.mcpProcess = null;
+    if (this.transport) {
+      void this.transport.close().catch((error: Error) => {
+        this.logger.warn('Failed to close MCP transport', error);
+      });
+      this.transport = null;
     }
+    this.client = null;
   }
 }

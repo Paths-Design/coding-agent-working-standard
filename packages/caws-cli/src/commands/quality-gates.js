@@ -339,9 +339,11 @@ async function qualityGatesCommand(options = {}) {
       Output.info(`Command: ${args.join(' ')}`);
 
       // Execute the quality gates runner with timeout
+      // CRITICAL: Must run from projectRoot (user's current directory) so that
+      // git commands resolve correctly to the user's repository, not the CLI installation
       const child = spawn(args[0], args.slice(1), {
         stdio: 'inherit',
-        cwd: packagesDir,
+        cwd: projectRoot,
         env: env,
       });
 

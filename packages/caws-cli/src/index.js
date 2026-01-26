@@ -435,12 +435,8 @@ program
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(qualityMonitorCommand);
 
-// Troubleshoot command - temporarily disabled due to registration issue
-// program
-//   .command('troubleshoot [guide]')
-//   .description('Display troubleshooting guides for common CAWS issues')
-//   .option('-l, --list', 'List all available troubleshooting guides', false)
-//   .action(troubleshootCommand);
+// Troubleshoot command available via: caws diagnose --troubleshoot <guide>
+// The standalone command was consolidated into the diagnose command.
 
 // Tool command
 program

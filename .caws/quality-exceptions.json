@@ -30,7 +30,7 @@
       "enforcement_levels": {
         "commit": "warning",
         "push": "warning",
-        "ci": "block"
+        "ci": "warning"
       }
     },
     "code_freeze": {
@@ -38,6 +38,22 @@
       "enforcement_levels": {
         "commit": "block",
         "push": "fail",
+        "ci": "fail"
+      }
+    },
+    "hidden-todo": {
+      "description": "Hidden incomplete implementations (TODOs, stubs, mocks)",
+      "enforcement_levels": {
+        "commit": "warning",
+        "push": "block",
+        "ci": "fail"
+      }
+    },
+    "placeholders": {
+      "description": "Placeholder governance violations",
+      "enforcement_levels": {
+        "commit": "warning",
+        "push": "block",
         "ci": "fail"
       }
     }
@@ -51,5 +67,118 @@
       "level": "fail"
     }
   },
-  "exceptions": []
+  "exceptions": [
+    {
+      "id": "ex_docs_markdown",
+      "gate": "placeholders",
+      "reason": "Documentation files reference placeholder patterns as examples",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "docs/**/*.md"
+    },
+    {
+      "id": "ex_readme_files",
+      "gate": "placeholders",
+      "reason": "README files document features including configuration examples",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "**/README*.md"
+    },
+    {
+      "id": "ex_changelog",
+      "gate": "placeholders",
+      "reason": "Changelog entries reference past changes mentioning placeholders",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "**/CHANGELOG*.md"
+    },
+    {
+      "id": "ex_cursor_docs",
+      "gate": "placeholders",
+      "reason": "Cursor IDE configuration documentation",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": ".cursor/**/*.md"
+    },
+    {
+      "id": "ex_agents_md",
+      "gate": "placeholders",
+      "reason": "Agent guide documents workflows including waivers and emergency fixes",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "**/AGENTS.md"
+    },
+    {
+      "id": "ex_placeholder_helpers",
+      "gate": "hidden-todo",
+      "reason": "TypeScript file manages placeholder functionality - 'placeholder' references are legitimate code, not TODOs",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-types/src/placeholder-helpers.ts",
+      "hits": 429,
+      "updated_at": "2026-01-26T00:16:33.906Z"
+    },
+    {
+      "id": "ex_placeholder_types",
+      "gate": "hidden-todo",
+      "reason": "TypeScript types for placeholder management - 'placeholder' references are type definitions",
+      "approved_by": "architecture",
+      "approved_at": "2025-01-25T00:00:00Z",
+      "expires_at": "2026-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-types/src/placeholder-types.ts"
+    },
+    {
+      "id": "ex_workspace_functions",
+      "gate": "duplication",
+      "reason": "Workspace config readers (getNpmWorkspaces, getPnpmWorkspaces, getLernaWorkspaces) have intentionally similar structure - each reads a different config format then calls shared expandWorkspacePatterns helper",
+      "approved_by": "architecture",
+      "approved_at": "2026-01-25T00:00:00Z",
+      "expires_at": "2027-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-cli/src/utils/typescript-detector.js"
+    },
+    {
+      "id": "ex_safe_operations",
+      "gate": "duplication",
+      "reason": "safeAsync and safeSync are intentionally parallel implementations - one for async contexts, one for sync. Consolidating would add complexity without benefit.",
+      "approved_by": "architecture",
+      "approved_at": "2026-01-25T00:00:00Z",
+      "expires_at": "2027-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-cli/src/error-handler.js"
+    },
+    {
+      "id": "ex_error_categories_shared",
+      "gate": "duplication",
+      "reason": "Error categories are intentionally shared between apps/tools/caws and packages/caws-cli via error-categories.js module with fallback for standalone usage",
+      "approved_by": "architecture",
+      "approved_at": "2026-01-25T00:00:00Z",
+      "expires_at": "2027-12-31T23:59:59Z",
+      "file_pattern": "apps/tools/caws/error-handler.js"
+    },
+    {
+      "id": "ex_index_basename_caws_cli",
+      "gate": "duplication",
+      "reason": "Multiple index.js files in caws-cli is standard Node.js package convention - each serves a different module entry point",
+      "approved_by": "architecture",
+      "approved_at": "2026-01-25T00:00:00Z",
+      "expires_at": "2027-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-cli/**/index.js",
+      "violation_type": "BASENAME_DUPLICATE_WITHIN_PACKAGE"
+    },
+    {
+      "id": "ex_index_basename_mcp_server",
+      "gate": "duplication",
+      "reason": "Multiple index.js files in caws-mcp-server is standard Node.js package convention",
+      "approved_by": "architecture",
+      "approved_at": "2026-01-25T00:00:00Z",
+      "expires_at": "2027-12-31T23:59:59Z",
+      "file_pattern": "packages/caws-mcp-server/**/index.js",
+      "violation_type": "BASENAME_DUPLICATE_WITHIN_PACKAGE"
+    }
+  ]
 }

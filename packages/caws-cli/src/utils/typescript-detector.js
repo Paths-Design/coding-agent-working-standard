@@ -101,10 +101,40 @@ function detectTestFramework(projectDir = process.cwd(), packageJson = null) {
 }
 
 /**
- * Get workspace directories from package.json
+ * Expand workspace glob patterns to actual directories
+ * Shared helper for npm, pnpm, and lerna workspace resolution
+ * @param {string[]} patterns - Workspace patterns (may include globs like "packages/*")
  * @param {string} projectDir - Project directory path
- * @returns {string[]} Array of workspace directories
+ * @returns {string[]} Array of resolved workspace directory paths
  */
+function expandWorkspacePatterns(patterns, projectDir) {
+  const workspaceDirs = [];
+  for (const pattern of patterns) {
+    if (pattern.includes('*')) {
+      const baseDir = pattern.split('*')[0];
+      const fullBaseDir = path.join(projectDir, baseDir);
+
+      if (fs.existsSync(fullBaseDir)) {
+        const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const wsPath = path.join(fullBaseDir, entry.name);
+            if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+              workspaceDirs.push(wsPath);
+            }
+          }
+        }
+      }
+    } else {
+      const wsPath = path.join(projectDir, pattern);
+      if (fs.existsSync(path.join(wsPath, 'package.json'))) {
+        workspaceDirs.push(wsPath);
+      }
+    }
+  }
+  return workspaceDirs;
+}
+
 /**
  * Get workspace directories from npm/yarn package.json workspaces
  * @param {string} projectDir - Project directory path
@@ -120,36 +150,7 @@ function getNpmWorkspaces(projectDir) {
   try {
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const workspaces = packageJson.workspaces || [];
-
-    // Convert glob patterns to actual directories (simple implementation)
-    const workspaceDirs = [];
-    for (const ws of workspaces) {
-      // Handle simple patterns like "packages/*" or "iterations/*"
-      if (ws.includes('*')) {
-        const baseDir = ws.split('*')[0];
-        const fullBaseDir = path.join(projectDir, baseDir);
-
-        if (fs.existsSync(fullBaseDir)) {
-          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const wsPath = path.join(fullBaseDir, entry.name);
-              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-                workspaceDirs.push(wsPath);
-              }
-            }
-          }
-        }
-      } else {
-        // Direct path
-        const wsPath = path.join(projectDir, ws);
-        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-          workspaceDirs.push(wsPath);
-        }
-      }
-    }
-
-    return workspaceDirs;
+    return expandWorkspacePatterns(workspaces, projectDir);
   } catch (error) {
     return [];
   }
@@ -171,35 +172,7 @@ function getPnpmWorkspaces(projectDir) {
     const yaml = require('js-yaml');
     const config = yaml.load(fs.readFileSync(pnpmFile, 'utf8'));
     const workspacePatterns = config.packages || [];
-
-    // Convert glob patterns to actual directories
-    const workspaceDirs = [];
-    for (const pattern of workspacePatterns) {
-      if (pattern.includes('*')) {
-        const baseDir = pattern.split('*')[0];
-        const fullBaseDir = path.join(projectDir, baseDir);
-
-        if (fs.existsSync(fullBaseDir)) {
-          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const wsPath = path.join(fullBaseDir, entry.name);
-              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-                workspaceDirs.push(wsPath);
-              }
-            }
-          }
-        }
-      } else {
-        // Direct path
-        const wsPath = path.join(projectDir, pattern);
-        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-          workspaceDirs.push(wsPath);
-        }
-      }
-    }
-
-    return workspaceDirs;
+    return expandWorkspacePatterns(workspacePatterns, projectDir);
   } catch (error) {
     return [];
   }
@@ -220,35 +193,7 @@ function getLernaWorkspaces(projectDir) {
   try {
     const config = JSON.parse(fs.readFileSync(lernaFile, 'utf8'));
     const workspacePatterns = config.packages || ['packages/*'];
-
-    // Convert glob patterns to actual directories
-    const workspaceDirs = [];
-    for (const pattern of workspacePatterns) {
-      if (pattern.includes('*')) {
-        const baseDir = pattern.split('*')[0];
-        const fullBaseDir = path.join(projectDir, baseDir);
-
-        if (fs.existsSync(fullBaseDir)) {
-          const entries = fs.readdirSync(fullBaseDir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const wsPath = path.join(fullBaseDir, entry.name);
-              if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-                workspaceDirs.push(wsPath);
-              }
-            }
-          }
-        }
-      } else {
-        // Direct path
-        const wsPath = path.join(projectDir, pattern);
-        if (fs.existsSync(path.join(wsPath, 'package.json'))) {
-          workspaceDirs.push(wsPath);
-        }
-      }
-    }
-
-    return workspaceDirs;
+    return expandWorkspacePatterns(workspacePatterns, projectDir);
   } catch (error) {
     return [];
   }
@@ -416,6 +361,7 @@ module.exports = {
   getNpmWorkspaces,
   getPnpmWorkspaces,
   getLernaWorkspaces,
+  expandWorkspacePatterns,
   checkHoistedDependency,
   checkTypeScriptTestConfig,
   generateRecommendations,

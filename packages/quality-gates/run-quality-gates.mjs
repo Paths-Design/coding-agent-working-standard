@@ -91,7 +91,7 @@
  * @property {Object} [debug] - Debug information (only if DEBUG_MODE enabled)
  */
 
-import { getContextInfo, getFilesToCheck } from './file-scope-manager.mjs';
+import { getContextInfo, getFilesToCheck, getRepoRoot } from './file-scope-manager.mjs';
 
 // Import quality gate modules
 import { execSync } from 'child_process';
@@ -102,6 +102,10 @@ import { fileURLToPath } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
 import { checkPlaceholders } from './check-placeholders.mjs';
+
+// Import progress and caching utilities
+import { GateProgressTracker, Spinner, shouldRender } from './progress.mjs';
+import { getAllCacheStats, clearAllCaches } from './cache-manager.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -223,6 +227,12 @@ class QualityGateRunner {
 
     /** @type {string[]} */
     this.filesToCheck;
+
+    /** @type {GateProgressTracker|null} */
+    this.progressTracker = null;
+
+    /** @type {boolean} */
+    this.showProgress = shouldRender() && !QUIET_MODE && !JSON_MODE;
 
     try {
       this.context = this.determineContext();
@@ -900,7 +910,9 @@ class QualityGateRunner {
 
       const timeout = setTimeout(() => {
         const gateDuration = Date.now() - gateStartTime;
-        console.error(`   ${gateName} gate timed out after ${timeoutMs}ms`);
+        if (!this.showProgress) {
+          console.error(`   ${gateName} gate timed out after ${timeoutMs}ms`);
+        }
         this.violations.push({
           gate: gateName,
           type: 'timeout',
@@ -908,6 +920,10 @@ class QualityGateRunner {
         });
         if (DEBUG_MODE) {
           this.debugLog.push(`Gate ${gateName} timed out after ${gateDuration}ms`);
+        }
+        // Update progress tracker with timeout status
+        if (this.progressTracker) {
+          this.progressTracker.completeGate(gateName, 'error', `${gateName}: timed out`);
         }
         this.activeTimeouts.delete(timeout);
         resolve();
@@ -923,12 +939,24 @@ class QualityGateRunner {
         if (DEBUG_MODE) {
           this.debugLog.push(`Gate ${gateName} completed in ${gateDuration}ms`);
         }
+        // Update progress tracker with success status
+        if (this.progressTracker) {
+          const gateViolations = this.violations.filter(v => v.gate === gateName).length;
+          const gateWarnings = this.warnings.filter(w => w.gate === gateName).length;
+          const status = gateViolations > 0 ? 'error' : (gateWarnings > 0 ? 'warning' : 'success');
+          const message = gateViolations > 0
+            ? `${gateName}: ${gateViolations} violations`
+            : (gateWarnings > 0 ? `${gateName}: ${gateWarnings} warnings` : `${gateName}: passed`);
+          this.progressTracker.completeGate(gateName, status, message);
+        }
         resolve();
       } catch (error) {
         const gateDuration = Date.now() - gateStartTime;
         clearTimeout(timeout);
         this.activeTimeouts.delete(timeout);
-        console.error(`   ${gateName} gate failed:`, error.message);
+        if (!this.showProgress) {
+          console.error(`   ${gateName} gate failed:`, error.message);
+        }
         this.violations.push({
           gate: gateName,
           type: 'gate_error',
@@ -936,6 +964,10 @@ class QualityGateRunner {
         });
         if (DEBUG_MODE) {
           this.debugLog.push(`Gate ${gateName} failed after ${gateDuration}ms: ${error.message}`);
+        }
+        // Update progress tracker with error status
+        if (this.progressTracker) {
+          this.progressTracker.completeGate(gateName, 'error', `${gateName}: failed`);
         }
         resolve(); // Continue with other gates
       }
@@ -1052,17 +1084,25 @@ class QualityGateRunner {
         );
       }
 
+      // Initialize progress tracker for visual feedback
+      if (this.showProgress) {
+        this.progressTracker = new GateProgressTracker();
+        this.progressTracker.fileStats.total = this.filesToCheck.length;
+      }
+
       const gatePromises = [];
 
       // Gate 1: Naming Conventions
       if (!GATES_FILTER || GATES_FILTER.has('naming')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking naming conventions...');
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking naming conventions...');
+        if (this.progressTracker) this.progressTracker.startGate('naming', this.filesToCheck.length);
         gatePromises.push(this.runGateWithTimeout('naming', () => this.runNamingGate(), 10000));
       }
 
       // Gate 1.5: Code Freeze (Crisis Response)
       if (!GATES_FILTER || GATES_FILTER.has('code_freeze')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking code freeze compliance...');
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking code freeze compliance...');
+        if (this.progressTracker) this.progressTracker.startGate('code_freeze');
         gatePromises.push(
           this.runGateWithTimeout('code_freeze', () => this.runCodeFreezeGate(), 5000)
         );
@@ -1070,7 +1110,8 @@ class QualityGateRunner {
 
       // Gate 2: Duplication Prevention (can be slow)
       if (!GATES_FILTER || GATES_FILTER.has('duplication')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking duplication...');
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking duplication...');
+        if (this.progressTracker) this.progressTracker.startGate('duplication', this.filesToCheck.length);
         gatePromises.push(
           this.runGateWithTimeout('duplication', () => this.runDuplicationGate(), 60000)
         );
@@ -1078,7 +1119,8 @@ class QualityGateRunner {
 
       // Gate 3: God Object Prevention
       if (!GATES_FILTER || GATES_FILTER.has('god_objects')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking god objects...');
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking god objects...');
+        if (this.progressTracker) this.progressTracker.startGate('god_objects', this.filesToCheck.length);
         gatePromises.push(
           this.runGateWithTimeout('god_objects', () => this.runGodObjectGate(), 10000)
         );
@@ -1086,8 +1128,9 @@ class QualityGateRunner {
 
       // Gate 4: Hidden TODO Analysis
       if (!GATES_FILTER || GATES_FILTER.has('hidden-todo')) {
-        if (!QUIET_MODE && !JSON_MODE)
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE)
           console.log('\nChecking for hidden incomplete implementations...');
+        if (this.progressTracker) this.progressTracker.startGate('hidden-todo', this.filesToCheck.length);
         gatePromises.push(
           this.runGateWithTimeout('hidden-todo', () => this.runHiddenTodoQualityGate(), 20000)
         );
@@ -1098,12 +1141,13 @@ class QualityGateRunner {
         // Skip documentation gate in commit context if no files are staged
         // (full repo scan is too slow and not needed for commit validation)
         if (this.context === 'commit' && this.filesToCheck.length === 0) {
-          if (!QUIET_MODE && !JSON_MODE) {
+          if (!this.showProgress && !QUIET_MODE && !JSON_MODE) {
             console.log('\nChecking documentation quality...');
             console.log('   Skipping documentation gate (no files staged)');
           }
         } else {
-          if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
+          if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
+          if (this.progressTracker) this.progressTracker.startGate('documentation', this.filesToCheck.length);
           // Use longer timeout for full repo scans (push/ci) vs commit mode (staged files only)
           // commit: 30s (staged files only, typically small)
           // push/ci: 120s (entire repo scan, may be large)
@@ -1120,18 +1164,36 @@ class QualityGateRunner {
 
       // Gate 6: Placeholder Governance
       if (!GATES_FILTER || GATES_FILTER.has('placeholders')) {
-        if (!QUIET_MODE && !JSON_MODE) console.log('\nChecking placeholder governance...');
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking placeholder governance...');
+        if (this.progressTracker) this.progressTracker.startGate('placeholders', this.filesToCheck.length);
         gatePromises.push(
           this.runGateWithTimeout('placeholders', () => this.runPlaceholdersGate(), 15000)
         );
       }
 
+      // Start progress display
+      if (this.progressTracker) {
+        this.progressTracker.start();
+      }
+
       // Wait for all gates to complete (with their own error handling)
       await Promise.all(gatePromises);
+
+      // Stop progress display
+      if (this.progressTracker) {
+        this.progressTracker.stop();
+      }
 
       if (DEBUG_MODE) {
         this.debugLog.push(`All gates completed`);
         this.debugLog.push(`Total execution time: ${Date.now() - this.startTime}ms`);
+      }
+
+      // Log cache statistics if any caching occurred
+      const cacheStats = getAllCacheStats();
+      if (cacheStats.totalHits + cacheStats.totalMisses > 0 && DEBUG_MODE) {
+        this.debugLog.push(`Cache stats: ${cacheStats.overallHitRate} hit rate`);
+        this.debugLog.push(`  Hits: ${cacheStats.totalHits}, Misses: ${cacheStats.totalMisses}`);
       }
 
       // Report results
@@ -1425,7 +1487,7 @@ class QualityGateRunner {
 
     try {
       const todoAnalyzerPath = join(__dirname, 'todo-analyzer.mjs');
-      const projectRoot = join(__dirname, '..', '..');
+      const projectRoot = getRepoRoot();
 
       // Check if the TODO analyzer script exists
       if (!fs.existsSync(todoAnalyzerPath)) {
@@ -1506,10 +1568,8 @@ class QualityGateRunner {
 
   async runDocumentationQualityGate() {
     try {
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const projectRoot = join(__dirname, '..', '..');
       const docLinterPath = join(__dirname, 'doc-quality-linter.mjs');
+      const projectRoot = getRepoRoot();
 
       // Check if the documentation linter script exists
       if (!fs.existsSync(docLinterPath)) {
@@ -2055,6 +2115,7 @@ class QualityGateRunner {
         performance: {
           total_execution_time_ms: Date.now() - this.startTime,
           gate_timings: this.gateTimings,
+          cache: getAllCacheStats(),
         },
         debug: DEBUG_MODE
           ? {

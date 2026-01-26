@@ -8,8 +8,81 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
+const { execSync } = require('child_process');
 
 const { deriveBudget, generateBurnupReport } = require('../budget-derivation');
+
+/**
+ * Get actual git change statistics from the repository
+ * Analyzes changes since the last tag or initial commit
+ * @param {string} specDir - Directory containing the spec file
+ * @returns {Object} Stats with files_changed, lines_added, lines_removed, lines_changed
+ */
+function getGitChangeStats(specDir) {
+  try {
+    const cwd = specDir || process.cwd();
+
+    // Find the base reference - prefer last tag, fall back to first commit
+    let baseRef;
+    try {
+      baseRef = execSync('git describe --tags --abbrev=0 2>/dev/null', {
+        cwd,
+        encoding: 'utf8',
+      }).trim();
+    } catch {
+      // No tags, use first commit
+      try {
+        baseRef = execSync('git rev-list --max-parents=0 HEAD', {
+          cwd,
+          encoding: 'utf8',
+        }).trim();
+      } catch {
+        // Not a git repo or no commits
+        return null;
+      }
+    }
+
+    // Get file change count
+    const filesOutput = execSync(`git diff --name-only ${baseRef}..HEAD`, {
+      cwd,
+      encoding: 'utf8',
+    });
+    const filesChanged = filesOutput.trim().split('\n').filter(Boolean).length;
+
+    // Get line statistics using --numstat
+    const numstatOutput = execSync(`git diff --numstat ${baseRef}..HEAD`, {
+      cwd,
+      encoding: 'utf8',
+    });
+
+    let linesAdded = 0;
+    let linesRemoved = 0;
+
+    numstatOutput
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .forEach((line) => {
+        const [added, removed] = line.split('\t');
+        // Skip binary files (shown as '-')
+        if (added !== '-' && removed !== '-') {
+          linesAdded += parseInt(added, 10) || 0;
+          linesRemoved += parseInt(removed, 10) || 0;
+        }
+      });
+
+    return {
+      files_changed: filesChanged,
+      lines_added: linesAdded,
+      lines_removed: linesRemoved,
+      lines_changed: linesAdded + linesRemoved,
+      base_ref: baseRef,
+    };
+  } catch (error) {
+    // Return null if git analysis fails
+    return null;
+  }
+}
 
 /**
  * Burn-up command handler
@@ -32,15 +105,34 @@ async function burnupCommand(specFile) {
     // Derive budget
     const derivedBudget = deriveBudget(spec, path.dirname(specPath));
 
-    // Mock current stats - in real implementation this would analyze actual git changes
-    const mockStats = {
-      files_changed: 50, // This would be calculated from actual changes
-      lines_changed: 5000,
-      risk_tier: spec.risk_tier,
-    };
+    // Get actual git change statistics
+    const gitStats = getGitChangeStats(path.dirname(specPath));
+
+    let currentStats;
+    if (gitStats) {
+      currentStats = {
+        files_changed: gitStats.files_changed,
+        lines_changed: gitStats.lines_changed,
+        lines_added: gitStats.lines_added,
+        lines_removed: gitStats.lines_removed,
+        risk_tier: spec.risk_tier,
+        base_ref: gitStats.base_ref,
+      };
+      console.log(chalk.gray(`   Analyzing changes since: ${gitStats.base_ref}`));
+    } else {
+      // Fallback if git analysis fails (not in a repo or no commits)
+      console.log(chalk.yellow('   ⚠️  Could not analyze git history, using zero values'));
+      currentStats = {
+        files_changed: 0,
+        lines_changed: 0,
+        lines_added: 0,
+        lines_removed: 0,
+        risk_tier: spec.risk_tier,
+      };
+    }
 
     // Generate report
-    const report = generateBurnupReport(derivedBudget, mockStats);
+    const report = generateBurnupReport(derivedBudget, currentStats);
 
     console.log(report);
 
@@ -63,15 +155,22 @@ async function burnupCommand(specFile) {
 
     console.log(
       chalk.gray(
-        `   Current Usage: ${mockStats.files_changed} files, ${mockStats.lines_changed} LOC`
+        `   Current Usage: ${currentStats.files_changed} files, ${currentStats.lines_changed} LOC`
       )
     );
+    if (currentStats.lines_added !== undefined) {
+      console.log(
+        chalk.gray(
+          `   Breakdown: +${currentStats.lines_added} added, -${currentStats.lines_removed} removed`
+        )
+      );
+    }
 
     const filePercent = Math.round(
-      (mockStats.files_changed / derivedBudget.effective.max_files) * 100
+      (currentStats.files_changed / derivedBudget.effective.max_files) * 100
     );
     const locPercent = Math.round(
-      (mockStats.lines_changed / derivedBudget.effective.max_loc) * 100
+      (currentStats.lines_changed / derivedBudget.effective.max_loc) * 100
     );
 
     if (filePercent > 90 || locPercent > 90) {

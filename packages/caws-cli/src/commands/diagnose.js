@@ -11,7 +11,7 @@ const chalk = require('chalk');
 
 // Import utilities
 const { checkTypeScriptTestConfig } = require('../utils/typescript-detector');
-const { configureJestForTypeScript } = require('../generators/jest-config');
+const { configureJestForTypeScript } = require('../generators/jest-config-generator');
 
 /**
  * Health check: Working spec validity

@@ -219,11 +219,29 @@ async function registerMcpServerWithCursor(context: vscode.ExtensionContext): Pr
     const os = require('os');
 
     // Get bundled MCP server path
-    const mcpServerPath = path.join(context.extensionPath, 'bundled', 'mcp-server', 'index.js');
+    let mcpServerPath = path.join(context.extensionPath, 'bundled', 'mcp-server', 'index.js');
 
+    // If bundled path doesn't exist, try fallback paths
     if (!fs.existsSync(mcpServerPath)) {
-      getLogger().warn('CAWS MCP server not found in bundle, skipping auto-registration');
-      return;
+      getLogger().warn('CAWS MCP server not found in bundle, trying fallback paths');
+
+      // Try monorepo packages path (for development)
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspaceRoot) {
+        const monorepoPath = path.join(workspaceRoot, 'packages', 'caws-mcp-server', 'index.js');
+        if (fs.existsSync(monorepoPath)) {
+          mcpServerPath = monorepoPath;
+          getLogger().info('Using monorepo MCP server path', { path: mcpServerPath });
+        } else {
+          getLogger().warn(
+            'CAWS MCP server not found in any fallback location, skipping auto-registration'
+          );
+          return;
+        }
+      } else {
+        getLogger().warn('No workspace root available for fallback, skipping auto-registration');
+        return;
+      }
     }
 
     // Cursor MCP configuration path (similar to VS Code settings)

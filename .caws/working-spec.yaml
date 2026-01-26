@@ -6,7 +6,7 @@ title: Major UX improvements for CAWS provenance tracking system
 risk_tier: 1
 mode: feature
 # Budget managed via waiver WV-0002 for comprehensive UX improvements
-waiver_ids: ["WV-0002"]  # Provenance UX improvements waiver
+waiver_ids: ["WV-0002"] # Provenance UX improvements waiver
 blast_radius:
   modules: ["caws-cli", "provenance", "git-hooks"]
   data_migration: false
@@ -16,8 +16,19 @@ threats:
   - "Git hooks may conflict with existing workflows"
   - "Increased complexity in provenance tracking"
 scope:
-  in: ["packages/caws-cli/src/", "packages/caws-cli/templates/", "docs/", "*.md"]
-  out: ["node_modules/", "packages/caws-cli/dist/", "packages/caws-mcp-server/dist/", "packages/quality-gates/dist/", "packages/caws-cli/node_modules/", "packages/caws-mcp-server/node_modules/", "packages/quality-gates/node_modules/", ".git/"]
+  in:
+    ["packages/caws-cli/src/", "packages/caws-cli/templates/", "docs/", "*.md"]
+  out:
+    [
+      "node_modules/",
+      "packages/caws-cli/dist/",
+      "packages/caws-mcp-server/dist/",
+      "packages/quality-gates/dist/",
+      "packages/caws-cli/node_modules/",
+      "packages/caws-mcp-server/node_modules/",
+      "packages/quality-gates/node_modules/",
+      ".git/",
+    ]
 invariants:
   - "Provenance tracking remains secure and tamper-proof"
   - "CLI commands provide clear feedback and guidance"

@@ -7,7 +7,7 @@
   "license": "MIT",
   "engines": {
     "vscode": "^1.74.0",
-    "node": ">=22.14.0"
+    "node": ">=18.0.0"
   },
   "categories": [
     "Linters",
@@ -237,6 +237,7 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.2",
     "ws": "^8.13.0"
   },
   "repository": {

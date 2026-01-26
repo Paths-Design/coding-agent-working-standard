@@ -8,7 +8,36 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const yaml = require('js-yaml');
+const { execSync } = require('child_process');
 const { commandWrapper } = require('../utils/command-wrapper');
+
+/**
+ * Get quality gates status from saved report
+ * @returns {Object} Quality gates status
+ */
+function getQualityGatesStatus() {
+  const reportPath = path.join(process.cwd(), '.caws', 'quality-gates-report.json');
+
+  if (fs.existsSync(reportPath)) {
+    try {
+      const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+      return {
+        status: report.passed ? 'passing' : 'failing',
+        last_validated: report.timestamp || new Date().toISOString(),
+        violations: report.violations || 0,
+        gates: report.gates || {}
+      };
+    } catch (error) {
+      // Fall through to default
+    }
+  }
+
+  return {
+    status: 'not_validated',
+    last_validated: null,
+    violations: null
+  };
+}
 
 /**
  * Provenance command handler
@@ -87,12 +116,7 @@ async function updateProvenance(options) {
       mode: spec.mode,
       waiver_ids: spec.waiver_ids || [],
     },
-    quality_gates: {
-      // This would be populated by recent validation results
-      // For now, we'll mark as unknown
-      status: 'unknown',
-      last_validated: new Date().toISOString(),
-    },
+    quality_gates: getQualityGatesStatus(),
     agent: {
       type: detectAgentType(),
       confidence_level: null, // Would be populated by agent actions
@@ -407,6 +431,67 @@ function analyzeQualityMetrics(aiEntries) {
 /**
  * Analyze checkpoint usage patterns
  */
+/**
+ * Calculate actual revert rate from git history
+ * Analyzes commits for revert patterns and calculates the percentage
+ * @param {number} maxCommits - Maximum number of commits to analyze
+ * @returns {number} Revert rate as a decimal (0.0 - 1.0)
+ */
+function calculateRevertRate(maxCommits = 500) {
+  try {
+    // Get total commit count (limited)
+    const logOutput = execSync(`git log --oneline -n ${maxCommits} 2>/dev/null`, {
+      encoding: 'utf8',
+      cwd: process.cwd(),
+    }).trim();
+
+    if (!logOutput) {
+      return 0;
+    }
+
+    const totalCommits = logOutput.split('\n').filter(Boolean).length;
+
+    // Count revert commits (commits with "revert" in the message)
+    const revertOutput = execSync(
+      `git log --oneline -n ${maxCommits} --grep="[Rr]evert" 2>/dev/null || true`,
+      {
+        encoding: 'utf8',
+        cwd: process.cwd(),
+      }
+    ).trim();
+
+    const revertCommits = revertOutput ? revertOutput.split('\n').filter(Boolean).length : 0;
+
+    // Also check for reset/force-push patterns in reflog if available
+    let additionalReverts = 0;
+    try {
+      const reflogOutput = execSync(`git reflog --oneline -n ${maxCommits} 2>/dev/null || true`, {
+        encoding: 'utf8',
+        cwd: process.cwd(),
+      }).trim();
+
+      if (reflogOutput) {
+        const reflogLines = reflogOutput.split('\n').filter(Boolean);
+        additionalReverts = reflogLines.filter(
+          (line) => line.includes('reset:') || line.includes('checkout:')
+        ).length;
+        // Weight reflog reverts less since they may not be actual code reverts
+        additionalReverts = Math.floor(additionalReverts * 0.1);
+      }
+    } catch {
+      // Reflog not available or failed
+    }
+
+    const totalReverts = revertCommits + additionalReverts;
+    const revertRate = totalCommits > 0 ? totalReverts / totalCommits : 0;
+
+    return Math.min(1.0, revertRate); // Cap at 100%
+  } catch {
+    // Git not available or not a repo
+    return 0;
+  }
+}
+
 function analyzeCheckpointUsage(aiEntries) {
   const entriesWithCheckpoints = aiEntries.filter(
     (entry) => entry.checkpoints?.available && entry.checkpoints.checkpoints?.length > 0
@@ -416,8 +501,8 @@ function analyzeCheckpointUsage(aiEntries) {
     .filter((entry) => entry.checkpoints?.available)
     .reduce((sum, entry) => sum + (entry.checkpoints.checkpoints?.length || 0), 0);
 
-  // Mock revert rate - in real implementation, this would track actual reverts
-  const revertRate = 0.15; // 15% estimated revert rate
+  // Calculate actual revert rate from git history
+  const revertRate = calculateRevertRate();
 
   return {
     entriesWithCheckpoints,
@@ -753,57 +838,63 @@ function provideAIInsights(contributionPatterns, qualityMetrics, checkpointAnaly
 
 /**
  * Get Cursor AI code tracking data for a commit
+ * Uses Cursor's AI Code Tracking API (Enterprise feature)
+ * @see https://cursor.com/docs/account/teams/ai-code-tracking-api
  * @param {string} commitHash - Git commit hash to analyze
  * @returns {Promise<Object>} AI code tracking data
  */
 async function getCursorTrackingData(commitHash) {
+  const apiUrl = process.env.CURSOR_TRACKING_API;
+  const apiKey = process.env.CURSOR_API_KEY;
+
+  if (!apiUrl || !apiKey) {
+    return {
+      available: false,
+      reason: 'Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.',
+      documentation: 'https://cursor.com/docs/account/teams/ai-code-tracking-api'
+    };
+  }
+
   try {
-    // Check if Cursor tracking API is available
-    if (!process.env.CURSOR_TRACKING_API || !process.env.CURSOR_PROJECT_ID) {
-      return { available: false, reason: 'Cursor tracking API not configured' };
+    // Basic auth: base64(apiKey:) - Cursor API uses API key with empty password
+    const auth = Buffer.from(`${apiKey}:`).toString('base64');
+
+    const response = await fetch(`${apiUrl}/analytics/ai-code/commits`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      return {
+        available: false,
+        reason: `Cursor API error: ${response.status} ${response.statusText}`
+      };
     }
 
-    // In a real implementation, this would call the Cursor API
-    // For now, we'll return a mock structure showing what data would be available
-    const mockTrackingData = {
+    const data = await response.json();
+
+    // Find commit-specific data if available
+    const commitData = data.commits?.find(c => c.commit_hash === commitHash) || data;
+
+    // Transform API response to our internal format
+    return {
       available: true,
       commit_hash: commitHash,
-      ai_code_breakdown: {
-        tab_completions: {
-          lines_added: 45,
-          percentage: 35,
-          files_affected: ['src/utils.js', 'tests/utils.test.js'],
-        },
-        composer_chat: {
-          lines_added: 78,
-          percentage: 60,
-          files_affected: ['src/new-feature.js', 'src/api.js'],
-          checkpoints_created: 3,
-        },
-        manual_human: {
-          lines_added: 5,
-          percentage: 5,
-          files_affected: ['README.md'],
-        },
+      ai_code_breakdown: commitData.ai_code_breakdown || {
+        tab_completions: { lines_added: 0, percentage: 0, files_affected: [] },
+        composer_chat: { lines_added: 0, percentage: 0, files_affected: [], checkpoints_created: 0 },
+        manual_human: { lines_added: 0, percentage: 0, files_affected: [] },
       },
-      change_groups: [
-        {
-          change_id: 'cg_12345',
-          type: 'composer_session',
-          lines_ai_generated: 42,
-          lines_human_edited: 8,
-          confidence_score: 0.85,
-          timestamp: new Date().toISOString(),
-        },
-      ],
-      quality_metrics: {
-        ai_code_quality_score: 0.78,
-        human_override_rate: 0.12,
-        acceptance_rate: 0.94,
+      change_groups: commitData.change_groups || [],
+      quality_metrics: commitData.quality_metrics || {
+        ai_code_quality_score: 0,
+        human_override_rate: 0,
+        acceptance_rate: 0,
       },
     };
-
-    return mockTrackingData;
   } catch (error) {
     return {
       available: false,
@@ -888,62 +979,92 @@ async function initProvenance(options) {
 
 /**
  * Get Cursor Composer/Chat checkpoint data
- * @returns {Promise<Array>} Array of checkpoint data
+ * Reads from local .cursor/ directory since checkpoints are stored locally by Cursor Agent
+ * @returns {Promise<Object>} Checkpoint data
  */
 async function getCursorCheckpoints() {
-  try {
-    // Check if Cursor checkpoint API is available
-    if (!process.env.CURSOR_CHECKPOINT_API) {
-      return { available: false, reason: 'Cursor checkpoint API not configured' };
-    }
+  const cursorDir = path.join(process.cwd(), '.cursor');
 
-    // In a real implementation, this would call the Cursor checkpoint API
-    // For now, we'll return a mock structure
-    const mockCheckpoints = [
-      {
-        id: 'cp_001',
-        timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        description: 'Initial AI-generated function structure',
-        changes_summary: {
-          lines_added: 25,
-          lines_modified: 0,
-          files_affected: ['src/new-feature.js'],
-        },
-        ai_confidence: 0.82,
-        can_revert: true,
-      },
-      {
-        id: 'cp_002',
-        timestamp: new Date(Date.now() - 1800000).toISOString(), // 30 min ago
-        description: 'Added error handling and validation',
-        changes_summary: {
-          lines_added: 15,
-          lines_modified: 8,
-          files_affected: ['src/new-feature.js', 'tests/new-feature.test.js'],
-        },
-        ai_confidence: 0.91,
-        can_revert: true,
-      },
-      {
-        id: 'cp_003',
-        timestamp: new Date().toISOString(), // Current
-        description: 'Final implementation with documentation',
-        changes_summary: {
-          lines_added: 12,
-          lines_modified: 5,
-          files_affected: ['src/new-feature.js', 'README.md'],
-        },
-        ai_confidence: 0.88,
-        can_revert: false, // Latest checkpoint
-      },
+  if (!fs.existsSync(cursorDir)) {
+    return {
+      available: false,
+      reason: 'No .cursor directory found. Checkpoints are only available when using Cursor IDE.'
+    };
+  }
+
+  try {
+    // Look for checkpoint metadata in .cursor directory
+    // Cursor stores checkpoints locally during Composer/Agent sessions
+    const checkpointPatterns = [
+      '.cursor/**/checkpoint*.json',
+      '.cursor/**/checkpoints.json',
+      '.cursor/composer/checkpoints/*.json',
+      '.cursor/agent/checkpoints/*.json',
     ];
 
-    return { available: true, checkpoints: mockCheckpoints };
+    let checkpointFiles = [];
+    for (const pattern of checkpointPatterns) {
+      const glob = require('glob');
+      const matches = glob.sync(pattern, { cwd: process.cwd(), absolute: true });
+      checkpointFiles = checkpointFiles.concat(matches);
+    }
+
+    // Remove duplicates
+    checkpointFiles = [...new Set(checkpointFiles)];
+
+    if (checkpointFiles.length === 0) {
+      return {
+        available: false,
+        reason: 'No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions.'
+      };
+    }
+
+    // Parse checkpoint files and aggregate data
+    const checkpoints = [];
+    for (const file of checkpointFiles) {
+      try {
+        const content = await fs.readFile(file, 'utf8');
+        const data = JSON.parse(content);
+
+        // Handle both single checkpoint and array of checkpoints
+        if (Array.isArray(data)) {
+          checkpoints.push(...data);
+        } else if (data.checkpoints) {
+          checkpoints.push(...data.checkpoints);
+        } else if (data.id || data.timestamp) {
+          checkpoints.push(data);
+        }
+      } catch (parseError) {
+        // Skip invalid checkpoint files
+        continue;
+      }
+    }
+
+    if (checkpoints.length === 0) {
+      return {
+        available: false,
+        reason: 'No valid checkpoints found in checkpoint files.'
+      };
+    }
+
+    // Sort by timestamp (newest first)
+    checkpoints.sort((a, b) => {
+      const timeA = new Date(a.timestamp || 0).getTime();
+      const timeB = new Date(b.timestamp || 0).getTime();
+      return timeB - timeA;
+    });
+
+    // Mark latest checkpoint as non-revertible
+    if (checkpoints.length > 0) {
+      checkpoints[0].can_revert = false;
+    }
+
+    return { available: true, checkpoints };
   } catch (error) {
     return {
       available: false,
       error: error.message,
-      reason: 'Failed to retrieve Cursor checkpoint data',
+      reason: 'Failed to read Cursor checkpoint data',
     };
   }
 }

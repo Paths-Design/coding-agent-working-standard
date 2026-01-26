@@ -554,13 +554,31 @@ function collectNameCollisions(fileRegions, cfg) {
 }
 
 /* ------------------- file basename duplicates ------------------- */
+// Common entry point files that are expected to have duplicates across directories
+const ALLOWED_DUPLICATE_BASENAMES = new Set([
+  'index.js',
+  'index.ts',
+  'index.mjs',
+  'index.cjs',
+  'index.jsx',
+  'index.tsx',
+  'mod.rs',      // Rust module entry
+  'main.go',     // Go package entry
+  'main.rs',     // Rust binary entry
+  '__init__.py', // Python package entry
+]);
+
 function collectFileBasenameDuplicates(fileRegions, cfg, root) {
   const baseNameMapPerPkg = new Map(); // pkg|basename -> count
 
   for (const fr of fileRegions) {
+    const basename = path.basename(fr.rel);
+    // Skip common entry point files that are expected to have duplicates
+    if (ALLOWED_DUPLICATE_BASENAMES.has(basename)) continue;
+
     const pkgRoot = findPackageRoot(path.join(root, fr.rel), root, cfg.packageMarkers);
     const pkgKey = path.relative(root, pkgRoot);
-    const bnKey = `${pkgKey}|${path.basename(fr.rel)}`;
+    const bnKey = `${pkgKey}|${basename}`;
     baseNameMapPerPkg.set(bnKey, (baseNameMapPerPkg.get(bnKey) || 0) + 1);
   }
 

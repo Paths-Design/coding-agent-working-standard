@@ -16,6 +16,9 @@ const { detectsPublishing } = require('../utils/project-analysis');
 const { scaffoldGitHooks } = require('./git-hooks');
 const { updateGitignore } = require('../utils/gitignore-updater');
 
+// Import Claude Code hooks scaffolding
+const { scaffoldClaudeHooks } = require('./claude-hooks');
+
 // CLI version from package.json
 const CLI_VERSION = require('../../package.json').version;
 
@@ -120,7 +123,21 @@ async function scaffoldIDEIntegrations(targetDir, options) {
       dest: '.cursor/README.md',
       desc: 'Cursor integration documentation',
     },
+
+    // Claude Code hooks
+    {
+      src: '.claude/README.md',
+      dest: '.claude/README.md',
+      desc: 'Claude Code integration documentation',
+    },
   ];
+
+  // Setup Claude Code hooks
+  try {
+    await scaffoldClaudeHooks(targetDir, ['safety', 'quality', 'scope', 'audit']);
+  } catch (error) {
+    console.log(chalk.yellow(`⚠️  Claude Code hooks setup failed: ${error.message}`));
+  }
 
   for (const template of ideTemplates) {
     const srcPath = path.join(templateDir, template.src);
@@ -769,5 +786,6 @@ async function scaffoldProject(options) {
 module.exports = {
   scaffoldProject,
   scaffoldIDEIntegrations,
+  scaffoldClaudeHooks,
   setScaffoldDependencies,
 };
