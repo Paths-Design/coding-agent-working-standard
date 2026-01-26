@@ -104,16 +104,19 @@ function createPackageConfig(pkg) {
         '@semantic-release/commit-analyzer',
         {
           preset: 'angular',
-          // Simplified release rules - let's see what actually happens
-          // The preset 'angular' has default rules but releaseRules extends/overrides them
+          // Monorepo: let Angular preset defaults handle types (feat=minor, fix=patch)
+          // Add scoped rules that ensure our package's commits are recognized
           releaseRules: [
-            // Major: breaking changes for this package
-            { breaking: true, scope: pkg.scope, release: 'major' },
-            // Minor: feat for this package
+            // Scoped commits for this package - these match before defaults
             { type: 'feat', scope: pkg.scope, release: 'minor' },
-            // Patch: fix/perf for this package
             { type: 'fix', scope: pkg.scope, release: 'patch' },
             { type: 'perf', scope: pkg.scope, release: 'patch' },
+            // Alternative scope
+            { type: 'feat', scope: `packages/${pkg.path.split('/').pop()}`, release: 'minor' },
+            { type: 'fix', scope: `packages/${pkg.path.split('/').pop()}`, release: 'patch' },
+            // Note: We're NOT blocking other commits - they'll fall through to Angular defaults
+            // This means unscoped feat/fix will also trigger releases, but we filter by
+            // file changes in hasPackageChanges() before running semantic-release
           ],
           parserOpts: {
             noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
