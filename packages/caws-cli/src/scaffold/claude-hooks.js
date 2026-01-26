@@ -146,7 +146,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
  * @param {Set<string>} enabledHooks - Set of enabled hook script names
  * @returns {Object} Settings object for settings.json
  */
-function generateClaudeSettings(levels, enabledHooks) {
+function generateClaudeSettings(levels, _enabledHooks) {
   const settings = {
     hooks: {},
   };

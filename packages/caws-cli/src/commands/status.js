@@ -8,7 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
-const { execSync } = require('child_process');
+// child_process removed - execSync no longer used directly
 const { safeAsync, outputResult } = require('../error-handler');
 const { parallel } = require('../utils/async-utils');
 

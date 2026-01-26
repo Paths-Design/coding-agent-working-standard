@@ -92,7 +92,7 @@ async function validateAcceptanceCriteria(workingSpec) {
  * @param {string} changeId - Change identifier
  * @returns {Promise<Object>} Quality gate result
  */
-async function validateQualityGates(changeId) {
+async function validateQualityGates(_changeId) {
   const gates = [];
   const violations = [];
   const warnings = [];
