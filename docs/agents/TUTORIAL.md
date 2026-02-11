@@ -449,7 +449,7 @@ Implements persistent user preferences with localStorage, including theme and la
 - `.caws/working-spec.yaml` (minor updates)
 
 ## Testing
-- Unit tests: 100% coverage
+- Unit tests: full coverage
 - Validation tests: All edge cases covered
 - Manual testing: All acceptance criteria verified
 

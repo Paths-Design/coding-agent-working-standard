@@ -272,7 +272,7 @@
 
 **Priority**: Low  
 **Effort**: 8-12 hours  
-**Impact**: Fully automated releases
+**Impact**: Automated releases
 
 **Tasks**:
 

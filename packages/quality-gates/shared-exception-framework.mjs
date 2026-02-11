@@ -175,6 +175,10 @@ const DEFAULT_CONFIG = {
       description: 'Documentation quality violations',
       enforcement_levels: { commit: 'warning', push: 'warning', ci: 'block' },
     },
+    simplification: {
+      description: 'Simplification detection (stub replacement)',
+      enforcement_levels: { commit: 'block', push: 'block', ci: 'fail' },
+    },
     code_freeze: {
       description: 'Document freeze',
       enforcement_levels: { commit: 'block', push: 'fail', ci: 'fail' },
@@ -592,11 +596,13 @@ const patternCache = new Map();
 const globCache = new Map();
 
 // Cache cleanup: Clear caches every 60 seconds to prevent memory leaks
-setInterval(() => {
+// Use unref() so the timer does not prevent clean process exit
+const _cacheCleanupTimer = setInterval(() => {
   exceptionCache.clear();
   patternCache.clear();
   globCache.clear();
 }, 60000);
+_cacheCleanupTimer.unref();
 
 /**
  * Optimized exception matcher with caching

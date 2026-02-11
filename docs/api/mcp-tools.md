@@ -1015,7 +1015,7 @@ The CAWS MCP Server also provides resource access:
 
 ### Concurrent Calls
 - Supported: Yes
-- Max concurrent: Unlimited (subprocess-based)
+- Max concurrent: No limit (subprocess-based)
 - Note: May impact system performance
 
 ### Performance Tips

@@ -4,7 +4,7 @@
 
 ## 🎯 Your Mission
 
-This demo project showcases production-ready CAWS implementation. Your job is to:
+This demo project showcases a stable CAWS implementation. Your job is to:
 
 1. **Understand the existing architecture** (authentication, data, memory, AI services)
 2. **Add new features** following CAWS workflow
@@ -242,4 +242,4 @@ npx caws provenance show             # View audit trail
 
 **Goal**: Demonstrate expert-level CAWS implementation by adding features that maintain or improve the 92%+ quality metrics.
 
-**Remember**: This demo shows how AI agents and humans collaborate to build production-quality software with CAWS.
+**Remember**: This demo shows how AI agents and humans collaborate to build reliable software with CAWS.

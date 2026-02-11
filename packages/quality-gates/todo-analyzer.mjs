@@ -269,6 +269,18 @@ class HiddenTodoAnalyzer {
       // VS Code markdown extension patterns
       /ImageMagick.*Placeholder/i,
       /simple\s+placeholder\s+icon/i,
+      // UI labels and enum values referencing gate names (not actual TODOs)
+      /label:\s*['"]Hidden TODO['"]/,
+      /value:\s*['"]hidden-todo['"]/,
+      /['"]hidden-todo['"]/,
+      // Console output describing quality gate features (init command help text)
+      /console\.log\(.*guard.*stub/i,
+      /console\.log\(.*prevents?\s+stub/i,
+      // Code that invokes the TODO checker (quality-gates-utils calling checkHiddenTodos)
+      /checkHiddenTodos/,
+      /todoResults\./,
+      // Property assignments like disabled: false (not an incomplete implementation)
+      /^\s*disabled:\s*(true|false)\s*,?\s*$/,
     ];
 
     // Language-specific code stub detection
@@ -292,7 +304,7 @@ class HiddenTodoAnalyzer {
         returnMock: /return\s+\{.*?\};\s*\/\/\s*(MOCK|FAKE|DUMMY)/i,
       },
       python: {
-        functionStub: /^\s*def\s+\w+\(.*\):/gm,
+        functionStub: /^\s*def\s+\w+\(.*\):\s*pass\s*$/gm,
         passStmt: /^\s*pass\s*$/gm,
         ellipsisStmt: /^\s*\.\.\.\s*$/gm,
         raiseNotImpl: /^\s*raise\s+NotImplementedError/gm,
@@ -612,6 +624,12 @@ class HiddenTodoAnalyzer {
       /\/demo[^/]*\.rs$/,
       /\/demo[^/]*\.ts$/,
       /\/demo[^/]*\.js$/,
+
+      // Placeholder system files (files that ARE about placeholder governance)
+      /\/placeholder[^/]*\.rs$/,
+      /\/placeholder[^/]*\.ts$/,
+      /\/placeholder[^/]*\.js$/,
+      /\/placeholder[^/]*\.mjs$/,
     ];
 
     return domainPatterns.some((pattern) => pattern.test(relativePath));
@@ -644,6 +662,8 @@ class HiddenTodoAnalyzer {
       // Example files: skip BROAD_KEYWORD for example-related terms
       example: ['BROAD_KEYWORD'],
       demo: ['BROAD_KEYWORD'],
+      // Placeholder system files: these ARE about placeholder governance
+      placeholder: ['BROAD_KEYWORD'],
     };
 
     // Check which domain this file belongs to

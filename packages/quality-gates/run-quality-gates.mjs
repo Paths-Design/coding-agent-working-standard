@@ -100,8 +100,9 @@ import yaml from 'js-yaml';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
-import { checkNamingViolations, checkSymbolNaming } from './check-naming.mjs';
+import { checkNamingViolations, checkSymbolNaming, checkFileSprawl } from './check-naming.mjs';
 import { checkPlaceholders } from './check-placeholders.mjs';
+import { checkSimplification } from './check-simplification.mjs';
 
 // Import progress and caching utilities
 import { GateProgressTracker, Spinner, shouldRender } from './progress.mjs';
@@ -124,6 +125,7 @@ const VALID_GATES = new Set([
   'hidden-todo',
   'documentation',
   'placeholders',
+  'simplification',
 ]);
 
 if (DEBUG_MODE) {
@@ -1092,11 +1094,21 @@ class QualityGateRunner {
 
       const gatePromises = [];
 
+      // Scale gate timeouts based on context:
+      // - commit: base timeout (staged files only, typically small)
+      // - push: 2x (changed files since base)
+      // - ci: 4x (full repo scan)
+      const scaleTimeout = (baseMs) => {
+        if (this.context === 'ci') return baseMs * 4;
+        if (this.context === 'push') return baseMs * 2;
+        return baseMs;
+      };
+
       // Gate 1: Naming Conventions
       if (!GATES_FILTER || GATES_FILTER.has('naming')) {
         if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking naming conventions...');
         if (this.progressTracker) this.progressTracker.startGate('naming', this.filesToCheck.length);
-        gatePromises.push(this.runGateWithTimeout('naming', () => this.runNamingGate(), 10000));
+        gatePromises.push(this.runGateWithTimeout('naming', () => this.runNamingGate(), scaleTimeout(10000)));
       }
 
       // Gate 1.5: Code Freeze (Crisis Response)
@@ -1113,7 +1125,7 @@ class QualityGateRunner {
         if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking duplication...');
         if (this.progressTracker) this.progressTracker.startGate('duplication', this.filesToCheck.length);
         gatePromises.push(
-          this.runGateWithTimeout('duplication', () => this.runDuplicationGate(), 60000)
+          this.runGateWithTimeout('duplication', () => this.runDuplicationGate(), scaleTimeout(60000))
         );
       }
 
@@ -1122,7 +1134,7 @@ class QualityGateRunner {
         if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking god objects...');
         if (this.progressTracker) this.progressTracker.startGate('god_objects', this.filesToCheck.length);
         gatePromises.push(
-          this.runGateWithTimeout('god_objects', () => this.runGodObjectGate(), 10000)
+          this.runGateWithTimeout('god_objects', () => this.runGodObjectGate(), scaleTimeout(10000))
         );
       }
 
@@ -1132,14 +1144,13 @@ class QualityGateRunner {
           console.log('\nChecking for hidden incomplete implementations...');
         if (this.progressTracker) this.progressTracker.startGate('hidden-todo', this.filesToCheck.length);
         gatePromises.push(
-          this.runGateWithTimeout('hidden-todo', () => this.runHiddenTodoQualityGate(), 20000)
+          this.runGateWithTimeout('hidden-todo', () => this.runHiddenTodoQualityGate(), scaleTimeout(20000))
         );
       }
 
       // Gate 5: Documentation Quality
       if (!GATES_FILTER || GATES_FILTER.has('documentation')) {
         // Skip documentation gate in commit context if no files are staged
-        // (full repo scan is too slow and not needed for commit validation)
         if (this.context === 'commit' && this.filesToCheck.length === 0) {
           if (!this.showProgress && !QUIET_MODE && !JSON_MODE) {
             console.log('\nChecking documentation quality...');
@@ -1148,26 +1159,31 @@ class QualityGateRunner {
         } else {
           if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking documentation quality...');
           if (this.progressTracker) this.progressTracker.startGate('documentation', this.filesToCheck.length);
-          // Use longer timeout for full repo scans (push/ci) vs commit mode (staged files only)
-          // commit: 30s (staged files only, typically small)
-          // push/ci: 120s (entire repo scan, may be large)
-          const timeoutMs = this.context === 'ci' || this.context === 'push' ? 120000 : 30000;
           gatePromises.push(
             this.runGateWithTimeout(
               'documentation',
               () => this.runDocumentationQualityGate(),
-              timeoutMs
+              scaleTimeout(30000)
             )
           );
         }
       }
 
-      // Gate 6: Placeholder Governance
+      // Gate 6: Simplification Detection
+      if (!GATES_FILTER || GATES_FILTER.has('simplification')) {
+        if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking for simplification...');
+        if (this.progressTracker) this.progressTracker.startGate('simplification', this.filesToCheck.length);
+        gatePromises.push(
+          this.runGateWithTimeout('simplification', () => this.runSimplificationGate(), scaleTimeout(15000))
+        );
+      }
+
+      // Gate 7: Placeholder Governance
       if (!GATES_FILTER || GATES_FILTER.has('placeholders')) {
         if (!this.showProgress && !QUIET_MODE && !JSON_MODE) console.log('\nChecking placeholder governance...');
         if (this.progressTracker) this.progressTracker.startGate('placeholders', this.filesToCheck.length);
         gatePromises.push(
-          this.runGateWithTimeout('placeholders', () => this.runPlaceholdersGate(), 15000)
+          this.runGateWithTimeout('placeholders', () => this.runPlaceholdersGate(), scaleTimeout(15000))
         );
       }
 
@@ -1212,12 +1228,13 @@ class QualityGateRunner {
   async runNamingGate() {
     try {
       // Use hardened naming checker with context-based scoping
-      const [filenameResults, symbolViolations] = await Promise.all([
+      const [filenameResults, symbolViolations, sprawlResults] = await Promise.all([
         Promise.resolve(checkNamingViolations(this.context)),
         Promise.resolve(checkSymbolNaming(this.context)),
+        Promise.resolve(checkFileSprawl(this.context)),
       ]);
-      const allViolations = [...filenameResults.violations, ...symbolViolations];
-      const allWarnings = filenameResults.warnings;
+      const allViolations = [...filenameResults.violations, ...symbolViolations, ...sprawlResults.violations];
+      const allWarnings = [...filenameResults.warnings, ...sprawlResults.warnings];
 
       // Report warnings
       if (allWarnings.length > 0) {
@@ -1839,6 +1856,59 @@ class QualityGateRunner {
         gate: 'placeholders',
         type: 'error',
         message: `Placeholder governance check failed: ${error.message}`,
+      });
+    }
+  }
+
+  async runSimplificationGate() {
+    try {
+      const result = checkSimplification(this.context);
+
+      for (const warning of result.warnings) {
+        this.warnings.push({
+          gate: 'simplification',
+          type: warning.type,
+          message: warning.issue,
+          file: warning.file,
+          rule: warning.rule,
+        });
+      }
+
+      for (const violation of result.violations) {
+        const severity = violation.severity || 'block';
+        if (severity === 'fail' || severity === 'block') {
+          this.violations.push({
+            gate: 'simplification',
+            type: violation.type,
+            message: violation.issue,
+            file: violation.file,
+            rule: violation.rule,
+            severity,
+            details: violation.details,
+          });
+        } else {
+          this.warnings.push({
+            gate: 'simplification',
+            type: violation.type,
+            message: violation.issue,
+            file: violation.file,
+            rule: violation.rule,
+          });
+        }
+      }
+
+      if (!QUIET_MODE && !JSON_MODE) {
+        if (result.violations.length > 0) {
+          console.log(`   ${result.violations.length} simplification violations found`);
+        } else {
+          console.log('   No simplification violations found');
+        }
+      }
+    } catch (error) {
+      this.violations.push({
+        gate: 'simplification',
+        type: 'error',
+        message: `Simplification check failed: ${error.message}`,
       });
     }
   }

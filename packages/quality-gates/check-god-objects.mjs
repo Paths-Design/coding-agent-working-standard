@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Quality Gate: God Object Detector (Rust-focused, Git-correct, regression-aware)
+ * Quality Gate: God Object Detector (language-agnostic, Git-correct, regression-aware)
  *
  * @author: @darianrosebrook
  * @date: 2025-10-28
@@ -21,6 +21,7 @@ import { getEnforcementLevel, processViolations } from './shared-exception-frame
 
 // Optional: reuse the hardened file scope manager for staged file discovery
 import { getFilesToCheck } from './file-scope-manager.mjs';
+import { CODE_EXTENSIONS, commentStyleFor } from './language-support.mjs';
 
 /* ----------------------------- Git helpers ----------------------------- */
 
@@ -117,7 +118,7 @@ const DEFAULT_CONFIG = {
     // "**/src/server.rs": 25,     // Small headroom for server modules
     // "**/src/database.rs": 25,   // Small headroom for database modules
   },
-  excludeGlobs: ['**/target/**'],
+  excludeGlobs: ['**/target/**', '**/node_modules/**', '**/dist/**', '**/build/**', '**/vendor/**'],
 };
 
 function loadQualityConfig(root) {
@@ -140,13 +141,29 @@ function loadQualityConfig(root) {
 }
 
 /* ----------------------------- SLOC counting ----------------------------- */
-/** Rust-aware SLOC: ignores blank lines, // line comments, /* block comments *\/ (naïve but effective). */
-function countRustSloc(text) {
+/**
+ * Multi-language SLOC counter.
+ * Strips comments based on the file's comment style and counts non-empty lines.
+ *
+ * @param {string} text - File content
+ * @param {'c'|'hash'} style - Comment style ('c' for /\/ and /\* *\/, 'hash' for #)
+ * @returns {number} Source lines of code
+ */
+function countSloc(text, style = 'c') {
   let sloc = 0;
   let inBlock = false;
   for (const raw of text.split(/\r?\n/)) {
     let line = raw;
-    // strip inline // if not inside block
+
+    if (style === 'hash') {
+      // Strip # line comments
+      const idx = line.indexOf('#');
+      if (idx >= 0) line = line.slice(0, idx);
+      if (line.trim().length > 0) sloc++;
+      continue;
+    }
+
+    // C-style: strip inline // if not inside block
     if (!inBlock) {
       const idx = line.indexOf('//');
       if (idx >= 0) line = line.slice(0, idx);
@@ -201,13 +218,15 @@ function readBaseFile(root, baseRef, relPath) {
   }
 }
 
-function rustSlocAtStages(root, baseRef, relPath) {
+function slocAtStages(root, baseRef, relPath) {
   const staged = readStagedFile(root, relPath);
   if (staged === null) return { staged: null, base: null, delta: 0 };
-  const stagedSloc = countRustSloc(staged);
+  const ext = path.extname(relPath);
+  const style = commentStyleFor(ext);
+  const stagedSloc = countSloc(staged, style);
 
   const base = readBaseFile(root, baseRef, relPath);
-  const baseSloc = base === null ? 0 : countRustSloc(base);
+  const baseSloc = base === null ? 0 : countSloc(base, style);
 
   return { staged: stagedSloc, base: baseSloc, delta: stagedSloc - baseSloc };
 }
@@ -243,13 +262,14 @@ export function getFileSizes(context = 'commit') {
   const cfg = loadQualityConfig(root);
   const baseRef = resolveBaseRef(root, cfg.ciBaseRef);
 
-  // discover staged Rust files via scope manager; keep only *.rs
-  const absFiles = getFilesToCheck(context).filter((p) => p.endsWith('.rs'));
+  // Discover code files via scope manager, filtered to recognized code extensions
+  const codeExts = cfg.codeExtensions ? new Set(cfg.codeExtensions) : CODE_EXTENSIONS;
+  const absFiles = getFilesToCheck(context).filter((p) => codeExts.has(path.extname(p)));
   const relFiles = absFiles.map((a) => path.relative(root, a));
 
   const sizes = {};
   for (const rel of relFiles) {
-    const { staged } = rustSlocAtStages(root, baseRef, rel);
+    const { staged } = slocAtStages(root, baseRef, rel);
     if (typeof staged === 'number') sizes[path.join(root, rel)] = staged;
   }
   return sizes;
@@ -261,21 +281,22 @@ export function checkGodObjects(context = 'commit', filesToCheck = null) {
   const baseRef = resolveBaseRef(root, cfg.ciBaseRef);
   const thresholds = cfg.thresholds;
 
-  // select repo-relative Rust files
+  // Select code files, filtered to recognized code extensions
+  const codeExts = cfg.codeExtensions ? new Set(cfg.codeExtensions) : CODE_EXTENSIONS;
   let relFiles;
   if (Array.isArray(filesToCheck) && filesToCheck.length) {
     relFiles = filesToCheck
-      .filter((p) => p.endsWith('.rs'))
+      .filter((p) => codeExts.has(path.extname(p)))
       .map((p) => (path.isAbsolute(p) ? path.relative(root, p) : p));
   } else {
-    const abs = getFilesToCheck(context).filter((p) => p.endsWith('.rs'));
+    const abs = getFilesToCheck(context).filter((p) => codeExts.has(path.extname(p)));
     relFiles = abs.map((a) => path.relative(root, a));
   }
 
   const rawViolations = [];
 
   for (const rel of relFiles) {
-    const { staged, base, delta } = rustSlocAtStages(root, baseRef, rel);
+    const { staged, base, delta } = slocAtStages(root, baseRef, rel);
     if (staged === null) continue; // deleted/not staged
 
     const cls = classifySize(staged, thresholds);
@@ -375,13 +396,14 @@ function main() {
 
   // Stats
   const baseRef = resolveBaseRef(root, cfg.ciBaseRef);
-  const abs = getFilesToCheck(context).filter((p) => p.endsWith('.rs'));
+  const codeExtsForStats = cfg.codeExtensions ? new Set(cfg.codeExtensions) : CODE_EXTENSIONS;
+  const abs = getFilesToCheck(context).filter((p) => codeExtsForStats.has(path.extname(p)));
   const rel = abs.map((a) => path.relative(root, a));
   let severe = 0,
     critical = 0,
     warning = 0;
   for (const r of rel) {
-    const { staged } = rustSlocAtStages(root, baseRef, r);
+    const { staged } = slocAtStages(root, baseRef, r);
     if (staged == null) continue;
     const cls = classifySize(staged, cfg.thresholds);
     if (cls === 'severe') severe++;
@@ -389,7 +411,7 @@ function main() {
     else if (cls === 'warning') warning++;
   }
 
-  console.log('📊 God object (Rust SLOC) stats:');
+  console.log('God object (SLOC) stats:');
   console.log(`   - ${severe} files ≥ ${cfg.thresholds.severe} (severe)`);
   console.log(`   - ${critical} files ≥ ${cfg.thresholds.critical} (critical)`);
   console.log(`   - ${warning} files ≥ ${cfg.thresholds.warning} (warning)`);

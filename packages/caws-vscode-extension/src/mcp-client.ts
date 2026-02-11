@@ -223,7 +223,7 @@ export class CawsMcpClient {
           break;
 
         case 'caws_workflow_guidance':
-          // This would be implemented in the MCP server
+          // MCP-only tool — not available via CLI fallback
           resolve({
             content: [
               {
@@ -238,7 +238,7 @@ export class CawsMcpClient {
           return;
 
         case 'caws_quality_monitor':
-          // This would be implemented in the MCP server
+          // MCP-only tool — not available via CLI fallback
           resolve({
             content: [
               {

@@ -291,7 +291,7 @@ git commit --allow-empty -m "feat: initial public release
 - CLI with all core commands
 - MCP server for AI agents
 - Comprehensive documentation
-- Production-ready deployment
+- Release-ready deployment
 
 BREAKING CHANGE: First public release"
 

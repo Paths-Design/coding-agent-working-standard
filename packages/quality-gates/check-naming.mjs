@@ -22,6 +22,10 @@ import {
   getEnforcementLevel as getGlobalEnforcementLevel,
   processViolations,
 } from './shared-exception-framework.mjs';
+import {
+  CONVENTION_FILES as SHARED_CONVENTION_FILES,
+  PACKAGE_MARKERS,
+} from './language-support.mjs';
 
 /* ----------------------- config ----------------------- */
 
@@ -43,28 +47,19 @@ const DEFAULT_BANNED_MODIFIERS = [
 
 const DEFAULT_EXTS = [
   '.rs',
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.mts',
-  '.cts',
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
   '.swift',
   '.go',
-  '.java',
-  '.kt',
+  '.java', '.kt',
+  '.py', '.rb',
+  '.c', '.cpp', '.h', '.hpp', '.cc', '.cxx',
+  '.cs',
+  '.php',
+  '.scala',
+  '.ex', '.exs',
 ];
 
-const CONVENTION_FILES = new Set([
-  'lib.rs',
-  'mod.rs',
-  'main.rs',
-  'Cargo.toml',
-  'index.ts',
-  'index.js',
-]);
+const CONVENTION_FILES = SHARED_CONVENTION_FILES;
 
 const NAMING_EXC_JSON = '.caws/naming-exceptions.json';
 const CANONICAL_MAP_YAML = '.caws/canonical-map.yaml';
@@ -171,11 +166,12 @@ function normalizeStem(raw, policy) {
 }
 
 function crateRootOf(absPath, root) {
-  // Walk up to find Cargo.toml (crate boundary) or package.json (for TS)
+  // Walk up to find a package boundary marker (Cargo.toml, package.json, go.mod, etc.)
   let cur = path.dirname(absPath);
   while (cur.startsWith(root)) {
-    if (fs.existsSync(path.join(cur, 'Cargo.toml'))) return cur;
-    if (fs.existsSync(path.join(cur, 'package.json'))) return cur;
+    for (const marker of PACKAGE_MARKERS) {
+      if (fs.existsSync(path.join(cur, marker))) return cur;
+    }
     const parent = path.dirname(cur);
     if (parent === cur) break;
     cur = parent;
@@ -265,8 +261,13 @@ function symbolHeuristics(rel, stagedText, policy) {
         L
       )
     ) {
-      if (banned.test(L)) {
-        const m = L.match(banned);
+      // Extract just the symbol name — don't match against the value/initializer
+      const symbolMatch = L.match(
+        /\b(?:export\s+(?:default\s+)?(?:class|function|const|let|var|type|interface)|pub\s+(?:struct|enum|trait|mod|fn|impl))\s+(\w+)/
+      );
+      const symbolName = symbolMatch ? symbolMatch[1] : L.split('=')[0];
+      if (banned.test(symbolName)) {
+        const m = symbolName.match(banned);
         out.push({
           type: 'symbol_banned_modifier',
           file: rel,
@@ -488,6 +489,73 @@ function main() {
 
   console.log('No blocking naming violations.');
   process.exit(0);
+}
+
+/* ----------------------- file sprawl detection ----------------------- */
+
+const SPRAWL_PATTERNS = {
+  venvDirs: ['*venv*', '.venv', 'm-venv', 'env/', 'venv/'],
+  docSprawl: ['*-summary.md', '*-recap.md', '*-plan.md', 'sprint-*.md'],
+  shadowFiles: ['*-enhanced.*', '*-final.*', '*-v2.*', '*-copy.*'],
+};
+
+/**
+ * Check for file sprawl patterns in staged files
+ * @param {string} context - Execution context (commit, push, ci)
+ * @returns {{ violations: Array, warnings: Array }}
+ */
+export function checkFileSprawl(context = 'commit') {
+  const root = repoRoot();
+  const allFiles = getFilesToCheck(context);
+  const violations = [];
+  const warnings = [];
+
+  for (const absPath of allFiles) {
+    const rel = path.relative(root, absPath);
+    const basename = path.basename(rel);
+    const parts = rel.split(path.sep);
+
+    // Check venv directory sprawl
+    for (const pattern of SPRAWL_PATTERNS.venvDirs) {
+      for (const part of parts) {
+        if (micromatch.isMatch(part, pattern, { dot: true })) {
+          violations.push({
+            type: 'venv_sprawl',
+            file: rel,
+            issue: `Virtual environment directory detected: '${part}'`,
+            rule: 'Use a single designated venv path. Multiple venvs cause disk bloat and confusion.',
+            severity: 'block',
+            suggestion: 'Remove extra venvs. Set designatedVenvPath in .caws/scope.json.',
+          });
+          break;
+        }
+      }
+    }
+
+    // Check doc sprawl
+    if (micromatch.isMatch(basename, SPRAWL_PATTERNS.docSprawl, { dot: true })) {
+      warnings.push({
+        type: 'doc_sprawl',
+        file: rel,
+        issue: `Documentation sprawl pattern detected: '${basename}'`,
+        rule: 'Avoid creating many summary/recap/plan files. Consolidate documentation.',
+      });
+    }
+
+    // Check shadow file patterns
+    if (micromatch.isMatch(basename, SPRAWL_PATTERNS.shadowFiles, { dot: true })) {
+      violations.push({
+        type: 'shadow_file_sprawl',
+        file: rel,
+        issue: `Shadow file pattern detected: '${basename}'`,
+        rule: 'Do not create -enhanced, -final, -v2, or -copy variants. Modify the original file.',
+        severity: 'block',
+        suggestion: 'Merge changes into the original file and delete this variant.',
+      });
+    }
+  }
+
+  return { violations, warnings };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

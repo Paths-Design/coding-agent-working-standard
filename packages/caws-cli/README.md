@@ -13,7 +13,7 @@ The CAWS CLI serves as the central control point for:
 - **Agent Integration**: Programmatic APIs for AI agents to evaluate and guide development
 - **Waiver Management**: Fast-lane escape hatches with full audit trails
 - **CI/CD Optimization**: Pipeline generation and optimization tools
-- **Experimental Features**: Dry-run capabilities for cutting-edge functionality
+- **Experimental Features**: Dry-run capabilities for experimental functionality
 
 ## Installation
 

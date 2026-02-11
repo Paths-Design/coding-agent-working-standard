@@ -190,6 +190,31 @@ function repoRoot() {
   }
 }
 
+/**
+ * Detect if running inside a git worktree and return the common dir.
+ * @returns {{ isWorktree: boolean, commonDir: string|null, worktreeRoot: string }}
+ */
+function detectWorktreeContext() {
+  try {
+    const toplevel = git(['rev-parse', '--show-toplevel']).trim();
+    const commonDir = git(['rev-parse', '--git-common-dir']).trim();
+    const gitDir = git(['rev-parse', '--git-dir']).trim();
+
+    // If git-common-dir differs from git-dir, we're in a worktree
+    const resolvedCommon = path.resolve(toplevel, commonDir);
+    const resolvedGit = path.resolve(toplevel, gitDir);
+    const isWorktree = resolvedCommon !== resolvedGit;
+
+    return {
+      isWorktree,
+      commonDir: isWorktree ? resolvedCommon : null,
+      worktreeRoot: toplevel,
+    };
+  } catch {
+    return { isWorktree: false, commonDir: null, worktreeRoot: process.cwd() };
+  }
+}
+
 /** ----------------------- .gitignore support ----------------------- */
 /**
  * Loads .gitignore patterns from the repository root.
@@ -233,6 +258,11 @@ const DEFAULT_CONFIG = {
   presets: {
     rust: ['**/*.{rs,toml}', 'Cargo.toml', 'Cargo.lock'],
     web: ['**/*.{ts,tsx,js,jsx,mjs,cjs,cts,mts}', '**/*.{json,yml,yaml}'],
+    code: [
+      '**/*.{py,rb,go,java,kt,swift,scala,ex,exs,lua}',
+      '**/*.{c,cpp,cc,cxx,h,hpp}',
+      '**/*.{cs,php}',
+    ],
     docs: ['**/*.{md,mdx}'],
     styles: ['**/*.{css,scss,less}'],
     infra: [
@@ -251,9 +281,17 @@ const DEFAULT_CONFIG = {
       '**/*.{proto,sql}',
     ],
   },
-  usePresets: ['rust', 'web', 'docs', 'styles', 'infra'],
+  usePresets: ['rust', 'web', 'code', 'docs', 'styles', 'infra'],
   includeGlobs: [],
-  excludeGlobs: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/target/**', '**/.git/**'],
+  excludeGlobs: [
+    '**/node_modules/**', '**/dist/**', '**/dist-bundle/**', '**/build/**', '**/target/**', '**/.git/**',
+    '**/.next/**', '**/out/**', '**/__pycache__/**', '**/.tox/**',
+    '**/vendor/**',
+    '**/obj/**', '**/bin/**',
+    '**/.gradle/**', '**/.mypy_cache/**', '**/.pytest_cache/**',
+    '**/coverage/**', '**/.turbo/**', '**/.cache/**',
+    '**/.venv/**', '**/venv/**',
+  ],
   // Linguist filtering controls
   linguist: {
     excludeGenerated: true,
@@ -414,11 +452,16 @@ function safeOriginHead(root) {
   }
 }
 function listPushFiles(root, baseRef) {
-  const base = resolveBaseRef(root, baseRef);
-  const out = gitBuf(['diff', '--name-only', '-z', '--diff-filter=ACMRTUXB', `${base}...HEAD`], {
-    cwd: root,
-  });
-  return splitNul(out);
+  try {
+    const base = resolveBaseRef(root, baseRef);
+    const out = gitBuf(['diff', '--name-only', '-z', '--diff-filter=ACMRTUXB', `${base}...HEAD`], {
+      cwd: root,
+    });
+    return splitNul(out);
+  } catch {
+    // If push diff fails (no remote, detached HEAD, fresh repo), fall back to staged files
+    return listStagedFiles(root);
+  }
 }
 
 /** ----------------------- normalization & selection ----------------------- */
@@ -551,8 +594,8 @@ export function getFilesToCheck(context = 'commit') {
   let rel;
   if (context === 'commit') rel = listStagedFiles(root);
   else if (context === 'push')
-    rel = listRepoFiles(root); // Scan entire repo before push
-  else if (context === 'ci') rel = listRepoFiles(root);
+    rel = listPushFiles(root, cfg.ciBaseRef); // Changed files since base branch
+  else if (context === 'ci') rel = listRepoFiles(root); // Full suite: all tracked files
   else rel = listStagedFiles(root);
 
   const selectedRel = filterAndNormalize(rel, root, cfg);
@@ -586,9 +629,9 @@ export function getContextInfo(context) {
     };
   if (context === 'push')
     return {
-      description: 'all tracked files (validates entire repo before push)',
+      description: 'changed files since base branch',
       scope: 'push',
-      gitCommand: 'git ls-files -z --recurse-submodules',
+      gitCommand: 'git diff --name-only -z --diff-filter=ACMRTUXB base...HEAD',
     };
   if (context === 'ci')
     return {
@@ -616,6 +659,8 @@ export function getContextInfo(context) {
 export function getRepoRoot() {
   return repoRoot();
 }
+
+export { detectWorktreeContext };
 
 /** ----------------------- CLI (manual test) ----------------------- */
 if (import.meta.url === `file://${process.argv[1]}`) {

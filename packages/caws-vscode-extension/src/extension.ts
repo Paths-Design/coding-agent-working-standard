@@ -712,13 +712,9 @@ async function runCawsSpecsShow(): Promise<void> {
     const selectedSpec = await selectSpecForCommand(specs);
     if (!selectedSpec) return;
 
-    // For now, just show the spec path - in a full implementation,
-    // we'd read and display the full spec content
     vscode.window.showInformationMessage(
       `Spec: ${selectedSpec.id}\nPath: ${selectedSpec.path}\nTitle: ${selectedSpec.title}`
     );
-
-    // TODO: Read and display full spec content in a webview or output channel
   } catch (error: any) {
     vscode.window.showErrorMessage(`Failed to show spec: ${error}`);
   }

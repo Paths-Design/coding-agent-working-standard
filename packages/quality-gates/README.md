@@ -1,6 +1,6 @@
-# Quality Gates - Enterprise Code Quality Enforcement
+# Quality Gates - Code Quality Enforcement
 
-**Enterprise-grade quality gates for preventing functional duplication, architectural drift, and code quality regression.** These gates work cohesively to maintain code quality across development, CI/CD, and production environments.
+**Configurable quality gates for preventing functional duplication, architectural drift, and code quality regression.** These gates work cohesively to maintain code quality across development, CI/CD, and production environments.
 
 ## Priority Focus
 
@@ -26,7 +26,24 @@ Quality gates **block commits** that degrade code quality while enabling control
 - Purpose-first canonical names
 - Rust convention files (lib.rs, mod.rs) are ignored
 
-### 3. God Object Prevention (`check-god-objects.js`)
+### 3. Simplification Detection (`check-simplification.mjs`)
+
+**Blocks:** Files where implementations are replaced with stubs
+
+- LOC decrease >= 30% paired with new stub patterns (`pass`, `TODO`, `NotImplementedError`, `return null`)
+- Compares HEAD vs staged (commit) or merge-base vs HEAD (push/ci)
+- Detects renamed-and-simplified files via `git diff --find-renames`
+- Warns on large deletions even without stubs
+
+### 4. File Sprawl Detection (in `check-naming.mjs`)
+
+**Blocks:** Common file sprawl patterns from AI agents
+
+- Shadow files (`*-enhanced.*`, `*-final.*`, `*-v2.*`, `*-copy.*`)
+- Virtual environment sprawl (`*venv*`, `.venv`, `env/`)
+- Documentation sprawl (`*-summary.md`, `*-recap.md`, `*-plan.md`)
+
+### 5. God Object Prevention (`check-god-objects.js`)
 
 **Blocks:** Files exceeding size thresholds
 
@@ -330,12 +347,13 @@ chmod +x .git/hooks/pre-commit
 
 ### Valid Gate Names
 
-- `naming` - Naming conventions and banned modifiers
+- `naming` - Naming conventions, banned modifiers, and file sprawl detection
 - `code_freeze` - Code freeze compliance (blocks new features)
 - `duplication` - Functional duplication detection
 - `god_objects` - God object size limits
 - `hidden-todo` - Hidden incomplete implementations
 - `documentation` - Documentation quality checks
+- `simplification` - Detects implementations replaced with stubs
 - `placeholders` - Placeholder governance (explicit degradations)
 
 ### Output Formats
@@ -658,7 +676,7 @@ Quality gates are successful when they:
 - ✅ **Fast local feedback** (gate filtering, clear error messages)
 - ✅ **Comprehensive monitoring** (artifacts, metrics, trend analysis)
 - ✅ **Graceful error handling** (fail-open for development, fail-closed for CI)
-- ✅ **Enterprise-grade reliability** (consistent contexts, no emoji output)
+- ✅ **Consistent reliability** (consistent contexts, no emoji output)
 
 ### Enterprise Integration
 
@@ -667,4 +685,4 @@ Quality gates are successful when they:
 - ✅ **Audit compliance ready** (structured logs, violation tracking, exception management)
 - ✅ **Scalable architecture** (concurrent processing ready, file scoping, performance monitoring)
 
-**🎯 Mission Accomplished**: Enterprise-grade quality gates that prevent functional duplication while enabling controlled, monitored development workflows across all environments.
+**Target**: Configurable quality gates that prevent functional duplication while enabling controlled, monitored development workflows across all environments.

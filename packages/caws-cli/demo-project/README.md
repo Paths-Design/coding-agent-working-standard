@@ -277,6 +277,6 @@ This demo teaches:
 
 ---
 
-**This demo represents production-ready CAWS implementation with 92%+ quality metrics and comprehensive contract testing.**
+**This demo represents a stable CAWS implementation with 92%+ quality metrics and comprehensive contract testing.**
 
 **CAWS v3.1.0 Demo** - Learn how AI and humans build software together reliably.

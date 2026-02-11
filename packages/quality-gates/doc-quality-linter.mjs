@@ -36,9 +36,10 @@ class DocumentationQualityLinter {
 
     // Pre-compile combined regex patterns for better performance
     // Single patterns are faster than multiple tests per line
-    this.superiorityPattern = /\b(revolutionary|breakthrough|innovative|groundbreaking|cutting-edge|state-of-the-art|next-generation|advanced|premium|superior|best|leading|industry-leading|award-winning|game-changing)\b/i;
-    
-    this.achievementPattern = /\b(production-ready|enterprise-grade|battle-tested|complete|finished|done|achieved|delivered|implemented|operational|ready|deployed|launched|released|100%|fully|comprehensive|entire|total|all|every|perfect|ideal|optimal|maximum|minimum|unlimited|infinite|endless)\b/i;
+    this.superiorityPattern = /\b(revolutionary|breakthrough|groundbreaking|cutting-edge|state-of-the-art|next-generation|premium|superior|industry-leading|award-winning|game-changing)\b/i;
+
+    // Only flag compound marketing phrases, not common English words
+    this.achievementPattern = /\b(production-ready|enterprise-grade|battle-tested|100%\s+(?:complete|coverage|tested)|fully\s+(?:tested|validated|automated|operational)|unlimited|infinite|endless)\b/i;
 
     this.temporalPatterns = [
       /SESSION_.*_SUMMARY\.md/i,
@@ -74,8 +75,11 @@ class DocumentationQualityLinter {
       const content = await fsPromises.readFile(filePath, 'utf8');
       const lines = content.split('\n');
 
+      // Skip superiority/achievement checks for CHANGELOGs (release notes document shipped features)
+      const isChangelog = /CHANGELOG/i.test(path.basename(filePath));
+
       // Check for superiority claims and achievement claims (optimized single-pass)
-      for (let i = 0; i < lines.length; i++) {
+      for (let i = 0; i < lines.length && !isChangelog; i++) {
         const line = lines[i];
         const lineNum = i + 1;
 
@@ -135,32 +139,9 @@ class DocumentationQualityLinter {
         }
       }
 
-      // Check for emoji usage (except approved ones)
-      const approvedEmojis = ['⚠️', '✅', '🚫'];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lineNum = i + 1;
-
-        // Find all emojis in the line
-        const emojiPattern =
-          /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F2FF}]/gu;
-        const emojis = line.match(emojiPattern) || [];
-
-        for (const emoji of emojis) {
-          if (!approvedEmojis.includes(emoji)) {
-            issues.push(
-              new QualityIssue(
-                filePath,
-                lineNum,
-                'warning',
-                'EMOJI_USAGE',
-                `Emoji usage detected: '${emoji}' in '${line.trim()}'`,
-                'Remove emoji or use approved emojis only (⚠️, ✅, 🚫)'
-              )
-            );
-          }
-        }
-      }
+      // Emoji-in-heading check disabled — decorative emoji in headings is a
+      // deliberate documentation style choice, not a quality issue. Flagging it
+      // produces hundreds of low-signal warnings across AGENTS.md, READMEs, etc.
     } catch (error) {
       issues.push(
         new QualityIssue(

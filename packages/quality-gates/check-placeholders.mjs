@@ -63,13 +63,48 @@ const LEGITIMATE_TERMS = [
   /\bstub\s+interface\b/i,
   /\bplaceholder\s+(governance|pattern|detection)\b/i,
   /\bTODO\s*\([^)]+\)/i, // TODO with explicit ID like TODO(PH-001)
+  // Code that handles/detects TODOs (quality gate infrastructure)
+  /\bhidden[-_]?todo/i,
+  /\bcheckHiddenTodos\b/,
+  /\btodoAnalyzer\b/i,
+  /\btodoResults?\b/,
+  /\bHiddenTodoError\b/,
+  /\bcreateHiddenTodoError\b/,
+  /\bTODO\s+(analysis|analyzer|detection|checker|check|scanning|findings?)\b/i,
+  /\b(analyze|detect|check|scan|find|validate).*\bTODOs?\b/i,
+  // String literals containing TODO/TBD/later (quoted values)
+  /['"`].*\btodo\b.*['"`]/i,
+  /['"`].*\bTBD\b.*['"`]/,
+  // Scaffold/template code generating scripts
+  /\bcat\s*<<|heredoc|template/i,
 ];
+
+/**
+ * Check if "later" is used as plain English rather than a dangling promise.
+ * "later" is only suspicious when it signals deferred implementation intent,
+ * e.g. "implement later", "add this later", "TODO: do X later".
+ * Common prose like "plans to publish later" or "manually later" is fine.
+ */
+function isPlainEnglishLater(line) {
+  // Only flag "later" when preceded by implementation-intent verbs
+  const intentPattern = /\b(implement|add|create|fix|handle|build|write|do|finish|complete|refactor)\b.*\blater\b/i;
+  return !intentPattern.test(line);
+}
 
 /**
  * Check if a line contains legitimate usage that should not be flagged
  */
-function isLegitimateUsage(line) {
-  return LEGITIMATE_TERMS.some((pattern) => pattern.test(line));
+function isLegitimateUsage(line, matchName) {
+  if (LEGITIMATE_TERMS.some((pattern) => pattern.test(line))) {
+    return true;
+  }
+
+  // "later" needs special handling — it's a common English word
+  if (matchName === 'later' && isPlainEnglishLater(line)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -106,7 +141,7 @@ function shouldSkipDanglingPromiseCheck(filePath) {
     return true;
   }
 
-  // Skip test files, examples, and templates
+  // Skip test files, examples, templates, and scaffold generators
   const skipPatterns = [
     /\.test\./i,
     /\.spec\./i,
@@ -116,6 +151,8 @@ function shouldSkipDanglingPromiseCheck(filePath) {
     /\/fixtures?\//i,
     /\/mocks?\//i,
     /\/stubs?\//i,
+    /\/scaffold\//i,
+    /\/codemod\//i,
   ];
 
   return skipPatterns.some((p) => p.test(filePath));
@@ -272,7 +309,7 @@ function checkDanglingPromises(content, filePath, declaredPlaceholders) {
       }
 
       // Skip if this is a legitimate usage pattern
-      if (isLegitimateUsage(line)) {
+      if (isLegitimateUsage(line, name)) {
         continue;
       }
 
