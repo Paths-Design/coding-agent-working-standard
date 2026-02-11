@@ -64,7 +64,7 @@ async function exampleCommand(options) {
 
 - Some commands use `chalk` directly
 - Others use `outputResult()` helper
-- Inconsistent emoji usage (some use ✅❌⚠️, others don't)
+- Inconsistent emoji usage (some use status indicators, others don't)
 - Mixed JSON/text output handling
 
 **Recommendation:**
@@ -480,56 +480,56 @@ function validateOptions(options) {
 
 ### High Priority (Immediate Impact)
 
-1. **Error Handling Consistency** ⭐⭐⭐
+1. **Error Handling Consistency** [high]
    - High impact on UX
    - Medium effort
    - Improves debugging
 
-2. **Test Coverage Improvements** ⭐⭐⭐
+2. **Test Coverage Improvements** [high]
    - High impact on reliability
    - High effort
    - Prevents regressions
 
 ### Medium Priority (Strategic Value)
 
-3. **Output Formatting Standardization** ⭐⭐
+3. **Output Formatting Standardization** [medium]
    - Medium impact on UX
    - Low effort
    - Better consistency
 
-4. **Async Operation Consistency** ⭐⭐
+4. **Async Operation Consistency** [medium]
    - Medium impact on code quality
    - Medium effort
    - Better maintainability
 
-5. **Configuration Management** ⭐⭐
+5. **Configuration Management** [medium]
    - Medium impact on reliability
    - Medium effort
    - Better validation
 
 ### Low Priority (Nice to Have)
 
-6. **Performance Monitoring** ⭐
+6. **Performance Monitoring** [low]
    - Low immediate impact
    - Medium effort
    - Long-term value
 
-7. **Type Safety Improvements** ⭐
+7. **Type Safety Improvements** [low]
    - Medium impact on code quality
    - High effort
    - Better developer experience
 
-8. **Documentation Improvements** ⭐
+8. **Documentation Improvements** [low]
    - Medium impact on DX
    - Medium effort
    - Better onboarding
 
-9. **Code Organization** ⭐
+9. **Code Organization** [low]
    - Low immediate impact
    - Medium effort
    - Better maintainability
 
-10. **Resource Cleanup** ⭐
+10. **Resource Cleanup** [low]
     - Low immediate impact
     - Medium effort
     - Better reliability
@@ -568,27 +568,27 @@ function validateOptions(options) {
 
 ### Error Handling
 
-- ✅ All commands use unified error handler
-- ✅ Consistent error messages
-- ✅ Recovery suggestions provided
+- All commands use unified error handler
+- Consistent error messages
+- Recovery suggestions provided
 
 ### Test Coverage
 
-- ✅ 90%+ test pass rate
-- ✅ All integration tests passing
-- ✅ Edge cases covered
+- 90%+ test pass rate
+- All integration tests passing
+- Edge cases covered
 
 ### Code Quality
 
-- ✅ No commented-out code
-- ✅ Consistent async patterns
-- ✅ Proper resource cleanup
+- No commented-out code
+- Consistent async patterns
+- Proper resource cleanup
 
 ### Developer Experience
 
-- ✅ Clear error messages
-- ✅ Helpful suggestions
-- ✅ Comprehensive documentation
+- Clear error messages
+- Helpful suggestions
+- Comprehensive documentation
 
 ---
 

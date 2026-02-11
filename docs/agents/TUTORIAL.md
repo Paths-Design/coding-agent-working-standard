@@ -4,7 +4,7 @@
 
 ---
 
-## 🎯 Tutorial Overview
+## Tutorial Overview
 
 This tutorial walks you through implementing CAWS for a simple feature. We'll build a "user preferences" feature with proper planning, testing, and quality gates.
 
@@ -14,7 +14,7 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 
 ---
 
-## 📋 Tutorial Scenario
+## Tutorial Scenario
 
 **Feature**: Add user preferences storage to a web application
 
@@ -103,7 +103,7 @@ non_functional:
 caws validate --suggestions
 ```
 
-**Expected**: ✅ Valid spec
+**Expected**: Valid spec
 
 ---
 
@@ -348,7 +348,7 @@ export class PreferencesStorage {
 npm test
 ```
 
-**Expected**: All tests pass ✅
+**Expected**: All tests pass
 
 ---
 
@@ -372,7 +372,7 @@ find src/ tests/ -name "*.ts" -newer .caws/working-spec.yaml -exec wc -l {} + | 
 caws validate --quiet
 ```
 
-**Expected**: ✅ No validation errors
+**Expected**: No validation errors
 
 ### Check Coverage
 
@@ -385,15 +385,15 @@ npm run test:coverage
 ### Manual Verification
 
 1. **Acceptance Criteria**:
-   - ✅ Theme preference persists across sessions
-   - ✅ Invalid values are rejected with defaults
-   - ✅ Storage errors handled gracefully
+   - Theme preference persists across sessions
+   - Invalid values are rejected with defaults
+   - Storage errors handled gracefully
 
 2. **Invariants**:
-   - ✅ Preferences are validated before storage
-   - ✅ Invalid preferences fall back to defaults
-   - ✅ Storage errors don't crash the application
-   - ✅ TypeScript types prevent runtime errors
+   - Preferences are validated before storage
+   - Invalid preferences fall back to defaults
+   - Storage errors don't crash the application
+   - TypeScript types prevent runtime errors
 
 ---
 
@@ -454,10 +454,10 @@ Implements persistent user preferences with localStorage, including theme and la
 - Manual testing: All acceptance criteria verified
 
 ## Quality Gates
-- ✅ Validation: Working spec valid
-- ✅ Coverage: 85% branch coverage
-- ✅ Tests: All passing
-- ✅ Manual Review: Ready for review
+- Validation: Working spec valid
+- Coverage: 85% branch coverage
+- Tests: All passing
+- Manual Review: Ready for review
 
 ## Rollback Plan
 1. Remove preference imports from components
@@ -474,15 +474,15 @@ Implements persistent user preferences with localStorage, including theme and la
 
 ---
 
-## 🎉 Tutorial Complete!
+## Tutorial Complete!
 
 You've successfully implemented a CAWS-managed feature with:
 
-- ✅ Proper planning with working spec
-- ✅ Test-driven development
-- ✅ Quality gates and validation
-- ✅ Comprehensive documentation
-- ✅ Rollback planning
+- Proper planning with working spec
+- Test-driven development
+- Quality gates and validation
+- Comprehensive documentation
+- Rollback planning
 
 ### What You Learned
 
@@ -508,7 +508,7 @@ You've successfully implemented a CAWS-managed feature with:
 
 ---
 
-## 🧪 Bonus: Advanced Testing
+## Bonus: Advanced Testing
 
 For more robust testing, add property-based tests:
 
@@ -541,7 +541,7 @@ This ensures your storage works correctly with any valid input combination.
 
 ---
 
-**Happy coding with CAWS! 🎯**
+**Happy coding with CAWS!**
 
 **Tutorial Version**: 1.0  
 **CAWS Version**: 3.1.0  

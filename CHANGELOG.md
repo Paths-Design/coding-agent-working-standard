@@ -99,7 +99,7 @@
 
 # [4.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v3.4.0...v4.0.0) (2025-10-20)
 
-## 🚨 Breaking Changes
+## Breaking Changes
 
 ### Multi-Agent Architecture
 
@@ -196,7 +196,7 @@ Closes #TBD
 
 ## Week 1: Agent-Agency Pattern Integration
 
-### Performance Improvements ⚡
+### Performance Improvements
 
 - **policy:** Add PolicyManager with intelligent caching
   - TTL-based caching (5-minute default, configurable)
@@ -209,7 +209,7 @@ Closes #TBD
   - Consistent policy access across all commands
   - Reduced file I/O with intelligent caching
 
-### New Features ✨
+### New Features
 
 - **spec:** Add SpecFileManager for YAML ↔ JavaScript conversion
   - Bidirectional WorkingSpec ↔ YAML conversion
@@ -232,7 +232,7 @@ Closes #TBD
   - Implementation roadmap (Q4 2025 - Q2 2026)
   - Success criteria and metrics
 
-### Programmatic API 🔧
+### Programmatic API
 
 - **api:** Export PolicyManager for programmatic use
   - `PolicyManager` class with full configuration
@@ -243,7 +243,7 @@ Closes #TBD
   - `defaultSpecFileManager` singleton for convenience
   - Convenience exports: `specToYaml()`, `yamlToSpec()`, `readSpecFile()`, `writeSpecFile()`
 
-### Testing 🧪
+### Testing
 
 - **test:** Add comprehensive test suites for new modules
   - PolicyManager: 18 tests (100% coverage)
@@ -255,7 +255,7 @@ Closes #TBD
   - Use real temporary files instead of mocks
   - Improved test reliability and isolation
 
-### Documentation 📚
+### Documentation
 
 - **docs:** Add internal integration status documentation
   - `AGENT_AGENCY_INTEGRATION_STATUS.md` (481 lines)
@@ -849,7 +849,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [1.0.0] - 2024-12-26
 
-### 🚀 Initial Release
+### Initial Release
 
 #### Added
 
@@ -860,7 +860,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `@caws/template`: Project template with tools and configurations
   - `@caws/test-project`: Example project demonstrating CAWS usage
 
-#### 🛠️ Core Features
+#### Core Features
 
 - **Interactive Project Setup**: Guided configuration with validation
 - **Quality Gates System**: Automated validation and enforcement
@@ -894,7 +894,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Progress indicators and status updates
   - Error recovery with helpful guidance
 
-#### 📚 Documentation
+#### Documentation
 
 - **Comprehensive README**: Complete setup and usage guide
 - **API Documentation**: Full reference for all tools and commands
@@ -903,7 +903,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Security Policy**: Vulnerability reporting and security practices
 - **Code of Conduct**: Community standards and guidelines
 
-#### 🔧 Technical Implementation
+#### Technical Implementation
 
 - **TypeScript Support**: Full type safety across all packages
 - **Turborepo Optimization**: Parallel builds with smart caching
@@ -939,11 +939,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [1.1.0] - 2025-01-15
 
-### 🚀 Major Strategic Enhancements
+### Major Strategic Enhancements
 
 This release implements a comprehensive set of strategic improvements based on AI agent feedback and best practices in agent-driven development, significantly enhancing CAWS's flexibility, scalability, and developer experience.
 
-#### 🛡️ Fast-Lane Escape Hatches (Proposal #1)
+#### Fast-Lane Escape Hatches (Proposal #1)
 
 **NEW: Time-Boxed Waiver System**
 
@@ -971,7 +971,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Restricted to Tier 3 (low-risk) changes only
 - Feature flag and directory isolation enforcement
 
-#### 🧪 Test Meaningfulness Over Coverage (Proposal #2)
+#### Test Meaningfulness Over Coverage (Proposal #2)
 
 **NEW: Test Quality Analyzer** (`test-quality.js`)
 
@@ -994,7 +994,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Surviving mutant analysis and justification requirements
 - Integration with trust score calculation
 
-#### 🤖 AI Self-Assessment & Human Oversight (Proposal #3)
+#### AI Self-Assessment & Human Oversight (Proposal #3)
 
 **NEW: AI Confidence Tracking**
 
@@ -1007,7 +1007,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Dynamic oversight triggers based on confidence
 - Low-confidence warnings in CI/CD output
 
-#### 🌍 Multi-Language Support (Proposal #5)
+#### Multi-Language Support (Proposal #5)
 
 **NEW: Language Support System** (`language-support.js`)
 
@@ -1023,7 +1023,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Tool validation and availability checking
 - Multi-language project support
 
-#### ⚡ CI/CD Pipeline Optimization (Proposal #6)
+#### CI/CD Pipeline Optimization (Proposal #6)
 
 **NEW: CI Optimizer** (`ci-optimizer.js`)
 
@@ -1038,7 +1038,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Workflow analysis and optimization recommendations
 - Estimated time savings per optimization strategy
 
-#### 📊 Legacy Integration & Assessment (Proposal #7)
+#### Legacy Integration & Assessment (Proposal #7)
 
 **NEW: Legacy Assessor** (`legacy-assessor.js`)
 
@@ -1054,7 +1054,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Gap analysis and prioritized recommendations
 - Support for grandfathering legacy modules
 
-#### 🎯 Enhanced Trust Score & Quality Metrics
+#### Enhanced Trust Score & Quality Metrics
 
 **NEW: Advanced Trust Score Calculation**
 
@@ -1087,7 +1087,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Gap detection for untested requirements
 - Auto-generation of test stubs from specs
 
-#### 📈 Dashboard & Observability
+#### Dashboard & Observability
 
 **NEW: Real-Time Dashboard** (`dashboard.js`)
 
@@ -1099,7 +1099,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - SBOM and attestation validity checks
 - Trust score trends and analytics
 
-#### 🔧 Property-Based Testing Support
+#### Property-Based Testing Support
 
 **NEW: Property Testing Generator** (`property-testing.js`)
 
@@ -1109,7 +1109,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Setup file generation per language
 - Comprehensive documentation generation
 
-#### 📚 Documentation Improvements
+#### Documentation Improvements
 
 - Removed "phase" and "week" terminology from all documentation
 - Updated adoption roadmaps with milestone-based progression
@@ -1117,7 +1117,7 @@ This release implements a comprehensive set of strategic improvements based on A
 - Comprehensive examples for all new features
 - Multi-language setup guides
 
-### 🛠️ Improvements
+### Improvements
 
 - Enhanced CLI with AI assessment prompts
 - Improved error messages with actionable guidance
@@ -1125,24 +1125,24 @@ This release implements a comprehensive set of strategic improvements based on A
 - Expanded schema documentation
 - More granular gate control
 
-### 🔒 Security
+### Security
 
 - Enhanced provenance tracking with confidence levels
 - Better audit trail for human overrides and waivers
 - Improved tool allowlist for multi-language support
 - Strengthened supply chain validation
 
-### 📦 Breaking Changes
+### Breaking Changes
 
 - None - All new features are opt-in and backward compatible
 
-### 🐛 Bug Fixes
+### Bug Fixes
 
 - Fixed waiver expiration edge cases
 - Improved language detection reliability
 - Enhanced CI conditional logic for tier-based execution
 
-### ⚡ Performance
+### Performance
 
 - Tier-based CI optimization reduces low-risk PR time by ~60%
 - Selective test execution improves feedback loop speed

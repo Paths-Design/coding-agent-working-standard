@@ -2,21 +2,21 @@
 
 **Essential guide for AI agents working with CAWS projects**
 
-## 🚨 CRITICAL: Multi-Agent Workflow
+## CRITICAL: Multi-Agent Workflow
 
 **If multiple agents are working on this project, each MUST use feature-specific specs to avoid conflicts!**
 
 ### The Problem
 
-❌ Multiple agents editing `.caws/working-spec.yaml` = conflicts, overwritten work, chaos
+Multiple agents editing `.caws/working-spec.yaml` = conflicts, overwritten work, chaos
 
 ### The Solution
 
-✅ Each agent works on `.caws/specs/<feature-id>.yaml` = parallel work, no conflicts, success
+Each agent works on `.caws/specs/<feature-id>.yaml` = parallel work, no conflicts, success
 
-**📚 See [Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md) for complete details**
+**See [Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md) for complete details**
 
-## 🚀 Getting Started
+## Getting Started
 
 ### First Steps in Any CAWS Project
 
@@ -46,7 +46,7 @@ caws specs create my-feature
 caws init .
 ```
 
-### ✨ New Features for Better Agent Experience
+### New Features for Better Agent Experience
 
 ```bash
 # Enhanced visual status with progress bars
@@ -71,34 +71,73 @@ caws archive FEAT-001
 
 **You MUST:**
 
-- ✅ **Use feature-specific specs** (if multiple agents working on project)
-- ✅ **Always include `--spec-id`** when multiple specs exist
-- ✅ **Stay within your feature's scope** boundaries
-- ✅ **Validate before starting** any work
-- ✅ **Create contracts before implementation**
-- ✅ **Write tests first** (TDD approach)
-- ✅ **Meet quality tier requirements**
-- ✅ **Track all changes** for provenance
+- **Use feature-specific specs** (if multiple agents working on project)
+- **Always include `--spec-id`** when multiple specs exist
+- **Stay within your feature's scope** boundaries
+- **Validate before starting** any work
+- **Create contracts before implementation**
+- **Write tests first** (TDD approach)
+- **Meet quality tier requirements**
+- **Track all changes** for provenance
 
 **You MUST NOT:**
 
-- ❌ **Edit other agents' feature specs** or scope directories
-- ❌ **Work on `.caws/working-spec.yaml` if multiple agents exist**
-- ❌ Write implementation without validated specs
-- ❌ Create shadow files (`enhanced-*`, `new-*`)
-- ❌ Exceed change budgets
-- ❌ Skip quality gates
-- ❌ Include secrets in context
+- **Edit other agents' feature specs** or scope directories
+- **Work on `.caws/working-spec.yaml` if multiple agents exist**
+- Write implementation without validated specs
+- Create shadow files (`enhanced-*`, `new-*`)
+- Exceed change budgets
+- Skip quality gates
+- Include secrets in context
 
-## 📋 Complexity Tiers (CAWS Modes)
+## Complexity Tiers (CAWS Modes)
 
-CAWS supports three complexity tiers that adapt the system to your project needs:
+CAWS supports four complexity tiers that adapt the system to your project needs:
 
 | Tier              | Coverage | Mutation | Commands | Features                  | Use Case                          |
 | ----------------- | -------- | -------- | -------- | ------------------------- | --------------------------------- |
-| 🟢 **Simple**     | 70%+     | 30%+     | 4        | Basic validation, specs   | Small projects, quick prototyping |
-| 🟡 **Standard**   | 80%+     | 50%+     | 11       | Quality gates, provenance | Balanced teams, standard projects |
-| 🔴 **Enterprise** | 90%+     | 70%+     | 14       | Full audit, compliance    | Large teams, regulated projects   |
+| **Lite**       | —        | —        | 3        | Guardrails only, no specs | Multi-agent safety, local models  |
+| **Simple**     | 70%+     | 30%+     | 4        | Basic validation, specs   | Small projects, quick prototyping |
+| **Standard**   | 80%+     | 50%+     | 11       | Quality gates, provenance | Balanced teams, standard projects |
+| **Enterprise** | 90%+     | 70%+     | 14       | Full audit, compliance    | Large teams, regulated projects   |
+
+### CAWS-Lite Mode
+
+Lite mode provides guardrails without YAML spec ceremony. Designed for multi-agent workflows where less capable models need protection against catastrophic failures (git reinit, force push, file sprawl, simplification).
+
+**Guardrails active in Lite mode:**
+- Destructive command blocking (git push --force, git init, rm -rf, venv creation)
+- Scope fencing (edits outside allowed directories require confirmation)
+- File sprawl detection (blocks *-enhanced.*, *-final.*, *-v2.*, *-copy.*)
+- Simplification guard (prevents replacing implementations with stubs)
+- Git worktree isolation (optional physical scope separation)
+
+```bash
+# Initialize in lite mode
+caws init . --mode lite
+
+# Configuration is in .caws/scope.json (not working-spec.yaml)
+```
+
+### Git Worktree Isolation
+
+Use worktrees to give each agent a physically isolated workspace:
+
+```bash
+# Create an isolated worktree for a feature
+caws worktree create auth-feature --scope "src/auth/**"
+
+# List worktrees
+caws worktree list
+
+# Destroy when done
+caws worktree destroy auth-feature --delete-branch
+
+# Clean up stale entries
+caws worktree prune --max-age 7
+```
+
+See [Worktree Isolation Guide](docs/guides/worktree-isolation.md) for detailed patterns.
 
 ### Mode Management
 
@@ -107,6 +146,7 @@ CAWS supports three complexity tiers that adapt the system to your project needs
 caws mode current
 
 # Switch modes
+caws mode set lite
 caws mode set simple
 caws mode set standard
 caws mode set enterprise
@@ -128,15 +168,15 @@ caws mode recommend --size small --team-size 1
 - **Command availability** changes based on mode
 - **Progress calculation** adjusts for enabled features
 
-## 📋 Risk Tiers (Your Quality Contract)
+## Risk Tiers (Your Quality Contract)
 
 | Tier      | Coverage | Mutation | Contracts | Use Case                    |
 | --------- | -------- | -------- | --------- | --------------------------- |
-| 🔴 **T1** | 90%+     | 70%+     | Required  | Auth, billing, migrations   |
-| 🟡 **T2** | 80%+     | 50%+     | Required  | Features, APIs, data writes |
-| 🟢 **T3** | 70%+     | 30%+     | Optional  | UI, internal tools          |
+| **T1** | 90%+     | 70%+     | Required  | Auth, billing, migrations   |
+| **T2** | 80%+     | 50%+     | Required  | Features, APIs, data writes |
+| **T3** | 70%+     | 30%+     | Optional  | UI, internal tools          |
 
-## 🔄 Development Workflow
+## Development Workflow
 
 ### Phase 1: Plan & Validate
 
@@ -179,7 +219,7 @@ caws diagnose
 caws status
 ```
 
-## 🛠️ Essential Commands
+## Essential Commands
 
 ### Multi-Spec Workflow Commands (Use These!)
 
@@ -355,12 +395,12 @@ caws scaffold --with-oidc
 
 **Agent Guidance:**
 
-- ✅ If project publishes packages → OIDC setup is included automatically
-- ✅ If project is research/training/internal → OIDC is skipped (correct behavior)
-- ✅ If user asks about OIDC → Check project type and explain when it's needed
-- ❌ Don't add OIDC to non-publishing projects unless explicitly requested
+- If project publishes packages, OIDC setup is included automatically
+- If project is research/training/internal, OIDC is skipped (correct behavior)
+- If user asks about OIDC, check project type and explain when it's needed
+- Don't add OIDC to non-publishing projects unless explicitly requested
 
-## ⚠️ Critical Rules
+## Critical Rules
 
 ### Scope Boundaries
 
@@ -386,7 +426,7 @@ change_budget:
 - **T2**: 80% coverage, 50% mutation, contracts required
 - **T3**: 70% coverage, 30% mutation, contracts optional
 
-## 📚 Key Resources
+## Key Resources
 
 - **[Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md)** - **READ THIS FIRST** if multiple agents
 - **[Full Guide](docs/agents/full-guide.md)** - Complete documentation
@@ -394,7 +434,7 @@ change_budget:
 - **[Benchmarking](docs/internal/CAWS_AGENT_BENCHMARKING_FRAMEWORK.md)** - Performance testing
 - **[Demo Project](packages/caws-cli/demo-project/)** - Working example
 
-## 🎯 Success Metrics
+## Success Metrics
 
 **Agent excellence is measured by:**
 
@@ -404,7 +444,7 @@ change_budget:
 - **Test Effectiveness**: Comprehensive suites that catch mutations
 - **Scope Discipline**: Staying within defined boundaries
 
-## 🔄 Complete Workflow Examples
+## Complete Workflow Examples
 
 ### Example 1: New Feature Development (Multi-Agent TDD Approach)
 
@@ -490,9 +530,9 @@ caws status --visual
 caws archive REFACT-001
 ```
 
-## 🔍 Common Pitfalls & Solutions
+## Common Pitfalls & Solutions
 
-### ❌ Common Mistakes
+### Common Mistakes
 
 **Problem**: Starting implementation before validation
 **Solution**: Always run `caws validate` first - it catches issues early
@@ -512,7 +552,7 @@ caws archive REFACT-001
 **Problem**: Forcing archives without meeting criteria
 **Solution**: Use `--force` only for emergencies, document why
 
-### ✅ Best Practices
+### Best Practices
 
 - **Validate Often**: Run `caws validate` after any spec changes
 - **Use Visual Status**: `caws status --visual` shows progress clearly
@@ -521,7 +561,7 @@ caws archive REFACT-001
 - **Archive Properly**: Use `caws archive` to maintain clean change history
 - **Request Help**: Use `caws workflow guidance` when stuck
 
-## 📞 Getting Help
+## Getting Help
 
 ### Quick Help Commands
 
@@ -577,16 +617,16 @@ caws workflow guidance --workflowType refactor --currentStep 1
 
 ---
 
-## 🎯 Agent Success Framework
+## Agent Success Framework
 
 **Your mission**: Deliver reliable, high-quality code that meets CAWS standards while maintaining efficient collaboration with human developers.
 
 **Key Success Indicators**:
 
-- ✅ **Zero validation errors** before implementation
-- ✅ **Complete test coverage** meeting tier requirements
-- ✅ **Clean archival** of completed changes
-- ✅ **Proactive communication** about challenges and decisions
-- ✅ **Scope discipline** - staying within defined boundaries
+- **Zero validation errors** before implementation
+- **Complete test coverage** meeting tier requirements
+- **Clean archival** of completed changes
+- **Proactive communication** about challenges and decisions
+- **Scope discipline** - staying within defined boundaries
 
 **Remember**: CAWS exists to make AI-human collaboration reliable and high-quality. Follow the rules, validate often, and deliver excellent results. When in doubt, validate first and ask for guidance!

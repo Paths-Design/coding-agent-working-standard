@@ -75,8 +75,8 @@ node scripts/quality-gates/run-quality-gates.js  # ❌ File doesn't exist
 
 **Actual available scripts:**
 
-- `scripts/simple_gates.py` ✅ (Python script)
-- `make caws-gates` ✅ (calls Python script)
+- `scripts/simple_gates.py` (Python script)
+- `make caws-gates` (calls Python script)
 
 ### Root Cause
 
@@ -179,7 +179,7 @@ Working spec had YAML syntax error with `.pyc` pattern.
 
 ### Status
 
-✅ **RESOLVED** - Fixed by agent during session
+**RESOLVED** - Fixed by agent during session
 
 ---
 
@@ -187,10 +187,10 @@ Working spec had YAML syntax error with `.pyc` pattern.
 
 | Tool                                   | Status     | Use Case           | Notes                             |
 | -------------------------------------- | ---------- | ------------------ | --------------------------------- |
-| **CLI (`caws quality-gates`)**         | ⚠️ Partial | From monorepo root | Works in monorepo, fails globally |
-| **MCP (`caws_quality_gates_run`)**     | ❌ Broken  | Via MCP server     | `__filename` ES module issue      |
-| **Python (`scripts/simple_gates.py`)** | ✅ Working | From project root  | Most reliable option              |
-| **Makefile (`make caws-gates`)**       | ✅ Working | From project root  | Wrapper around Python script      |
+| **CLI (`caws quality-gates`)**         | Partial | From monorepo root | Works in monorepo, fails globally |
+| **MCP (`caws_quality_gates_run`)**     | Broken  | Via MCP server     | `__filename` ES module issue      |
+| **Python (`scripts/simple_gates.py`)** | Working | From project root  | Most reliable option              |
+| **Makefile (`make caws-gates`)**       | Working | From project root  | Wrapper around Python script      |
 
 ### Recommended Usage
 
@@ -281,17 +281,17 @@ python3 scripts/simple_gates.py all --tier 2 --profile backend-api
 
 ### Patterns to Avoid
 
-- ❌ Using `__filename` in ES modules
-- ❌ Hard-coding monorepo paths
-- ❌ Copying hooks without customization
-- ❌ Assuming single installation method
+- Avoid using `__filename` in ES modules
+- Avoid hard-coding monorepo paths
+- Avoid copying hooks without customization
+- Avoid assuming single installation method
 
 ### Patterns to Follow
 
-- ✅ Use `import.meta.url` in ES modules
-- ✅ Detect project structure dynamically
-- ✅ Customize hooks per project
-- ✅ Support multiple installation methods
+- Use `import.meta.url` in ES modules
+- Detect project structure dynamically
+- Customize hooks per project
+- Support multiple installation methods
 
 ---
 
@@ -319,13 +319,13 @@ python3 scripts/simple_gates.py all --tier 2 --profile backend-api
 
 Most CAWS tools work correctly, but three path resolution issues prevent quality gates from running in certain contexts:
 
-- ✅ **CLI validation**: Working
-- ✅ **CLI evaluate**: Working
-- ✅ **CLI status**: Working
-- ✅ **CLI diagnose**: Working
-- ✅ **Python scripts**: Working
-- ⚠️ **CLI quality-gates**: Works in monorepo only
-- ❌ **MCP quality-gates**: Broken (ES module issue)
-- ⚠️ **Pre-commit hooks**: May reference wrong paths
+- **CLI validation**: Working
+- **CLI evaluate**: Working
+- **CLI status**: Working
+- **CLI diagnose**: Working
+- **Python scripts**: Working
+- **CLI quality-gates**: Works in monorepo only [WARN]
+- **MCP quality-gates**: Broken (ES module issue) [FAIL]
+- **Pre-commit hooks**: May reference wrong paths [WARN]
 
 The primary blocker is the MCP server ES module issue. Once fixed, quality gates should work via both CLI and MCP server.

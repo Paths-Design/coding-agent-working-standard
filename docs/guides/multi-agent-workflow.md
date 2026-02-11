@@ -4,7 +4,7 @@
 
 ## The Problem (Anti-Pattern)
 
-❌ **WRONG**: Multiple agents working on `.caws/working-spec.yaml`
+**WRONG**: Multiple agents working on `.caws/working-spec.yaml`
 
 - Agent A working on user authentication
 - Agent B working on payment system
@@ -13,7 +13,7 @@
 
 ## The Solution (Correct Pattern)
 
-✅ **CORRECT**: Each agent works on their own feature spec in `.caws/specs/`
+**CORRECT**: Each agent works on their own feature spec in `.caws/specs/`
 
 - Agent A works on `.caws/specs/user-auth.yaml`
 - Agent B works on `.caws/specs/payment-system.yaml`
@@ -266,13 +266,13 @@ mv .caws/working-spec.yaml .caws/working-spec.yaml.legacy
 
 ### Pitfall 1: Forgetting `--spec-id`
 
-❌ **Problem**:
+**Problem**:
 
 ```bash
 caws validate  # Which spec? Multiple exist!
 ```
 
-✅ **Solution**:
+**Solution**:
 
 ```bash
 caws validate --spec-id user-auth  # Explicit
@@ -280,7 +280,7 @@ caws validate --spec-id user-auth  # Explicit
 
 ### Pitfall 2: Overlapping Scopes
 
-❌ **Problem**:
+**Problem**:
 
 ```yaml
 # user-auth.yaml
@@ -292,7 +292,7 @@ scope:
   in: ["src/"]  # Conflict with user-auth!
 ```
 
-✅ **Solution**:
+**Solution**:
 
 ```yaml
 # user-auth.yaml
@@ -308,14 +308,14 @@ scope:
 
 ### Pitfall 3: Using Legacy Working Spec
 
-❌ **Problem**:
+**Problem**:
 
 ```bash
 # Multiple agents all editing .caws/working-spec.yaml
 caws validate  # Defaults to legacy spec, conflicts!
 ```
 
-✅ **Solution**:
+**Solution**:
 
 ```bash
 # Each agent has their own spec
@@ -327,21 +327,21 @@ caws validate --spec-id payment-system
 
 ### 1. One Feature = One Spec
 
-✅ Each feature gets its own spec file
-✅ Clear ownership and boundaries
-✅ No conflicts between agents
+- Each feature gets its own spec file
+- Clear ownership and boundaries
+- No conflicts between agents
 
 ### 2. Always Use `--spec-id`
 
-✅ Explicit is better than implicit
-✅ Prevents accidental conflicts
-✅ Makes intent clear
+- Explicit is better than implicit
+- Prevents accidental conflicts
+- Makes intent clear
 
 ### 3. Non-Overlapping Scopes
 
-✅ Define clear `scope.in` boundaries
-✅ Explicitly exclude other features in `scope.out`
-✅ Prevents accidental modifications
+- Define clear `scope.in` boundaries
+- Explicitly exclude other features in `scope.out`
+- Prevents accidental modifications
 
 ### 4. Coordinate Cross-Feature Changes
 

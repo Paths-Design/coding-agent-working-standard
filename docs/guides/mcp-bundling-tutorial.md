@@ -600,12 +600,12 @@ Test the bundled MCP server:
 
 Bundling an MCP server for VSCode extension involves:
 
-1. ✅ Creating a bundling script using esbuild
-2. ✅ Bundling MCP server as a single ES module file
-3. ✅ Removing shebangs and cleaning up output
-4. ✅ Implementing MCP client with JSON-RPC protocol
-5. ✅ Spawning bundled server as child process
-6. ✅ Handling initialization and communication
-7. ✅ Proper error handling and cleanup
+1. Creating a bundling script using esbuild
+2. Bundling MCP server as a single ES module file
+3. Removing shebangs and cleaning up output
+4. Implementing MCP client with JSON-RPC protocol
+5. Spawning bundled server as child process
+6. Handling initialization and communication
+7. Proper error handling and cleanup
 
 This approach provides a self-contained extension that doesn't require external MCP server installation, making distribution and usage simpler for end users.

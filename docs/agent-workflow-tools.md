@@ -2,7 +2,7 @@
 
 This guide shows agents how to use CAWS tools to navigate quality gates and achieve their objectives without violating guardrails.
 
-## 🚫 When You Get Blocked: Actionable Solutions
+## When You Get Blocked: Actionable Solutions
 
 ### **Block: "Cannot edit .caws/policy.yaml"**
 
@@ -113,7 +113,7 @@ waiver_ids: ["WV-XXXX"]
 
 ---
 
-## 🛠️ Essential CAWS Tools for Agents
+## Essential CAWS Tools for Agents
 
 ### **caws validate** - Check compliance
 
@@ -177,7 +177,7 @@ caws agent iterate
 
 ---
 
-## 🔄 Complete Agent Workflow
+## Complete Agent Workflow
 
 ### **Daily Development Loop**:
 
@@ -206,7 +206,7 @@ caws agent iterate
 
 ---
 
-## ⚡ Quick Reference Commands
+## Quick Reference Commands
 
 | Situation             | Command                                      | Purpose                        |
 | --------------------- | -------------------------------------------- | ------------------------------ |
@@ -220,7 +220,7 @@ caws agent iterate
 
 ---
 
-## 🎯 Agent Operating Principles
+## Agent Operating Principles
 
 1. **Prevention over cure**: Use `caws validate` and `caws burnup` proactively
 2. **Waivers are normal**: Budget/scope exceptions happen - just follow the process
@@ -232,7 +232,7 @@ caws agent iterate
 
 ---
 
-## 📊 Advanced Test Analysis (Future Enhancement)
+## Advanced Test Analysis (Future Enhancement)
 
 ### **Vision: Learning Quality System**
 
@@ -359,11 +359,11 @@ class TestEffectivenessScorer {
 
 ### **Implementation Roadmap**
 
-#### **Phase 1: Correlation Analysis (v0.1 - ✅ IMPLEMENTED)**
+#### **Phase 1: Correlation Analysis (v0.1 - IMPLEMENTED)**
 
-- ✅ Waiver pattern analysis (`caws test-analysis analyze-patterns`)
-- ✅ Basic project similarity matching (`caws test-analysis find-similar`)
-- ✅ Statistical budget predictions (`caws test-analysis assess-budget`)
+- Waiver pattern analysis (`caws test-analysis analyze-patterns`)
+- Basic project similarity matching (`caws test-analysis find-similar`)
+- Statistical budget predictions (`caws test-analysis assess-budget`)
 - **Target**: 70% prediction accuracy
 - **Status**: Working with waiver data, ready for historical project data
 

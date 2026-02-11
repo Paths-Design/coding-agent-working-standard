@@ -267,12 +267,12 @@ npm run hooks:install
 
 | Platform | Integration Method | Real-time | Structured Workflows | Tool Access |
 |----------|-------------------|-----------|---------------------|-------------|
-| **Cursor** | Native hooks | ✅ Instant | ❌ | ✅ Direct |
-| **VS Code** | Extension + MCP | ✅ Real-time | ✅ Workflows | ✅ MCP tools |
-| **Windsurf** | Cascade workflows | ⚠️ Workflow-based | ✅ Structured | ✅ MCP tools |
-| **GitHub Copilot** | Preview SDK | ⚠️ Chat-based | ❌ | ✅ SDK tools |
-| **Generic IDEs** | MCP server | ❌ | ❌ | ✅ MCP tools |
-| **CLI Tools** | Direct API | ❌ | ✅ Scripts | ✅ Full API |
+| **Cursor** | Native hooks | Yes (Instant) | No | Yes (Direct) |
+| **VS Code** | Extension + MCP | Yes (Real-time) | Yes (Workflows) | Yes (MCP tools) |
+| **Windsurf** | Cascade workflows | Partial (Workflow-based) | Yes (Structured) | Yes (MCP tools) |
+| **GitHub Copilot** | Preview SDK | Partial (Chat-based) | No | Yes (SDK tools) |
+| **Generic IDEs** | MCP server | No | No | Yes (MCP tools) |
+| **CLI Tools** | Direct API | No | Yes (Scripts) | Yes (Full API) |
 
 ### Choosing Integration Strategy
 

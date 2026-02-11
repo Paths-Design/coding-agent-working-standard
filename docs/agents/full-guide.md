@@ -51,9 +51,9 @@ Risk tiers drive rigor and determine quality gates:
 
 | Tier      | Use Case                    | Coverage | Mutation | Contracts | Review   |
 | --------- | --------------------------- | -------- | -------- | --------- | -------- |
-| **🔴 T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
-| **🟡 T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
-| **🟢 T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
+| **T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
+| **T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
+| **T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
 
 **As an agent, you must:**
 
@@ -185,8 +185,8 @@ cat .caws/working-spec.yaml | grep -A 20 "acceptance:"
 
 **Implementation rules:**
 
-- ✅ **DO**: Edit existing modules, use injected dependencies, write deterministic code
-- ❌ **DON'T**: Create shadow files, hardcode timestamps/UUIDs, exceed change budget
+- **DO**: Edit existing modules, use injected dependencies, write deterministic code
+- **DON'T**: Create shadow files, hardcode timestamps/UUIDs, exceed change budget
 
 ### Phase 3: Verify (Must Pass Before PR)
 

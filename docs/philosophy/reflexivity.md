@@ -374,21 +374,21 @@ caws provenance analyze-ai --component caws-cli --metric waiver-rate
 
 ### Self-Audit Health
 
-- ✅ CAWS passes self-audit before every release
-- ✅ Self-audit coverage ≥95% of CAWS standards
-- ✅ Zero critical self-audit violations
+- CAWS passes self-audit before every release
+- Self-audit coverage ≥95% of CAWS standards
+- Zero critical self-audit violations
 
 ### Self-Waiver Reduction
 
-- ✅ Self-waiver rate decreases ≥50% over 6 months
-- ✅ All self-waivers time-bound with expiration
-- ✅ Mitigation plans documented for all exceptions
+- Self-waiver rate decreases ≥50% over 6 months
+- All self-waivers time-bound with expiration
+- Mitigation plans documented for all exceptions
 
 ### Philosophical Completeness
 
-- ✅ No components exempt from CAWS standards
-- ✅ Transparent audit trail for all releases
-- ✅ Public self-verdicts for accountability
+- No components exempt from CAWS standards
+- Transparent audit trail for all releases
+- Public self-verdicts for accountability
 
 ---
 

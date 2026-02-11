@@ -4,6 +4,34 @@
 
 ---
 
+## Architecture
+
+The MCP server uses a modular handler pattern. The original monolithic `index.js` (2976 SLOC) has been decomposed into a smaller core (`index.js`, 1421 SLOC) plus extracted modules:
+
+```
+src/
+  index.js                        — Core server setup, transport, and request routing
+  tool-definitions.js             — 24 MCP tool JSON Schema definitions
+  handlers/
+    quality-gates.js              — Quality gate execution, status, and exceptions handlers
+    slash-commands.js             — Slash command routing and specs CRUD handlers
+```
+
+Handlers are registered via an install function pattern:
+
+```javascript
+const { installQualityGatesHandlers } = require('./handlers/quality-gates.js');
+const { installSlashCommandHandlers } = require('./handlers/slash-commands.js');
+
+// In server setup:
+installQualityGatesHandlers(server);
+installSlashCommandHandlers(server);
+```
+
+Each handler module exports a single `install*Handlers(server)` function that registers its tool implementations on the shared server instance. Tool JSON Schema definitions live in `tool-definitions.js` and are referenced by the core `index.js` when responding to `ListTools` requests.
+
+---
+
 ## Structured Logging
 
 The MCP server now uses **pino** for high-performance structured logging:
@@ -66,12 +94,12 @@ this.logger.error({ err: error, file: filePath }, 'Error handling file change');
 
 ### Benefits
 
-- ✅ **Structured data**: Easy to parse and aggregate
-- ✅ **Performance**: Minimal overhead (asynchronous logging)
-- ✅ **Configurable**: JSON output for log aggregation
-- ✅ **Development-friendly**: Pretty output with colors
-- ✅ **Contextual**: Rich metadata in every log
-- ✅ **Standards-compliant**: Follows best practices
+- **Structured data**: Easy to parse and aggregate
+- **Performance**: Minimal overhead (asynchronous logging)
+- **Configurable**: JSON output for log aggregation
+- **Development-friendly**: Pretty output with colors
+- **Contextual**: Rich metadata in every log
+- **Standards-compliant**: Follows best practices
 
 ---
 

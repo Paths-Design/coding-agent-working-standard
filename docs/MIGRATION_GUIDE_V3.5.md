@@ -8,28 +8,28 @@ This guide helps you migrate existing CAWS projects to take advantage of new fea
 
 ## What's New in v3.5
 
-### ✨ TypeScript Type Definitions
+### TypeScript Type Definitions
 
 - New package: `@paths.design/caws-types`
 - Full type safety for TypeScript projects
 
-### ✨ Enhanced Policy Management
+### Enhanced Policy Management
 
 - Quality thresholds in policy.yaml
 - Waiver approval requirements
 - Tiered validation rules
 
-### ✨ JSON Output Format
+### JSON Output Format
 
 - `--format=json` flag for validation
 - Machine-readable results
 
-### ✨ Budget Utilization Tracking
+### Budget Utilization Tracking
 
 - Real-time budget percentage tracking
 - Proactive warnings at 80%, 90%, 95%
 
-### ✨ Tier-Specific Validation
+### Tier-Specific Validation
 
 - Tier 1 requires observability, rollback, security
 - Stricter governance for critical changes
@@ -241,7 +241,7 @@ caws status
 
 ## Breaking Changes
 
-### ⚠️ None
+### None
 
 All changes are **backward compatible**.
 
@@ -362,21 +362,21 @@ risk_tiers:
 
 ### For Developers
 
-- ✅ Better type safety (TypeScript)
-- ✅ Clearer validation errors
-- ✅ Proactive budget warnings
+- Better type safety (TypeScript)
+- Clearer validation errors
+- Proactive budget warnings
 
 ### For Teams
 
-- ✅ Enforced Tier 1 rigor
-- ✅ Policy-driven governance
-- ✅ Automated waiver expiry
+- Enforced Tier 1 rigor
+- Policy-driven governance
+- Automated waiver expiry
 
 ### For CI/CD
 
-- ✅ Machine-readable results
-- ✅ Easy pipeline integration
-- ✅ Consistent error formats
+- Machine-readable results
+- Easy pipeline integration
+- Consistent error formats
 
 ---
 

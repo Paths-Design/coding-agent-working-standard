@@ -2,7 +2,7 @@
 
 **How AI agents work with this CAWS demo project**
 
-## 🎯 Your Mission
+## Your Mission
 
 This demo project showcases a stable CAWS implementation. Your job is to:
 
@@ -11,7 +11,7 @@ This demo project showcases a stable CAWS implementation. Your job is to:
 3. **Maintain quality standards** (92% coverage, 78% mutation score)
 4. **Demonstrate best practices** in contract-first development
 
-## 🚀 Getting Started
+## Getting Started
 
 ### First Steps
 
@@ -41,7 +41,7 @@ acceptance: # Your implementation targets
     then: 'User logged in successfully'
 ```
 
-## 📋 Quality Requirements
+## Quality Requirements
 
 ### Tier 1 Standards (This Project)
 
@@ -52,13 +52,13 @@ acceptance: # Your implementation targets
 
 ### Never Violate These Rules
 
-- ✅ **Validate before coding**: `caws validate`
-- ✅ **Contracts before implementation**: Define APIs first
-- ✅ **Tests first**: TDD approach required
-- ✅ **Stay in scope**: Respect `scope.in` boundaries
-- ✅ **Track progress**: Use `caws progress update`
+- **Validate before coding**: `caws validate`
+- **Contracts before implementation**: Define APIs first
+- **Tests first**: TDD approach required
+- **Stay in scope**: Respect `scope.in` boundaries
+- **Track progress**: Use `caws progress update`
 
-## 🔄 Development Workflow
+## Development Workflow
 
 ### Phase 1: Understand & Plan
 
@@ -114,7 +114,7 @@ npx caws progress update --criterion-id A1 --status completed
 npx caws status
 ```
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### Services in This Demo
 
@@ -135,7 +135,7 @@ tests/contract/             # API contract tests
 tests/unit/                 # Unit test examples
 ```
 
-## 🧪 Testing Structure
+## Testing Structure
 
 ### Test Types Required
 
@@ -162,7 +162,7 @@ test('UserService.authenticate validates credentials', () => {
 });
 ```
 
-## 📊 Success Metrics
+## Success Metrics
 
 ### What Makes You Successful
 
@@ -174,13 +174,13 @@ test('UserService.authenticate validates credentials', () => {
 
 ### Common Pitfalls to Avoid
 
-- ❌ Starting implementation before validation
-- ❌ Creating `enhanced-*` files instead of refactoring
-- ❌ Writing code without tests
-- ❌ Exceeding change budgets (25 files, 1000 LOC)
-- ❌ Including secrets in prompts or code
+- Do not start implementation before validation
+- Do not create `enhanced-*` files instead of refactoring
+- Do not write code without tests
+- Do not exceed change budgets (25 files, 1000 LOC)
+- Do not include secrets in prompts or code
 
-## 🛠️ Essential Commands
+## Essential Commands
 
 ```bash
 # Validation & Planning
@@ -200,7 +200,7 @@ npx caws test-analysis assess-budget # Predict test needs
 npx caws provenance show             # View audit trail
 ```
 
-## 🎯 Example Tasks
+## Example Tasks
 
 ### Task 1: Add Password Reset Feature
 
@@ -223,7 +223,7 @@ npx caws provenance show             # View audit trail
 3. Add comprehensive tests
 4. Maintain existing performance
 
-## 📞 Getting Help
+## Getting Help
 
 1. **Read the contracts**: `docs/api/` - understand existing APIs
 2. **Study the tests**: `tests/` - learn testing patterns
@@ -231,7 +231,7 @@ npx caws provenance show             # View audit trail
 4. **Validate often**: `npx caws validate` - catch issues early
 5. **Check examples**: Study existing implementations
 
-## 📚 Resources
+## Resources
 
 - **[Full CAWS Guide](../../docs/agents/full-guide.md)** - Comprehensive system guide
 - **[Working Specs](../../docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Current specifications

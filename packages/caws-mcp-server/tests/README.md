@@ -40,20 +40,20 @@ npm test -- protocol-compliance.test.js
 
 ## Test Status
 
-### ✅ Implemented
+### Implemented
 - [x] Server initialization tests
 - [x] Tool listing validation
 - [x] Basic tool execution
 - [x] Error handling
 - [x] Performance benchmarks
 
-### 🚧 In Progress
+### In Progress
 - [ ] Full tool execution tests
 - [ ] Resource read/write tests
 - [ ] Integration with CLI tests
 - [ ] Timeout handling
 
-### 📋 Planned
+### Planned
 - [ ] Concurrent request tests
 - [ ] Memory leak tests
 - [ ] Load testing

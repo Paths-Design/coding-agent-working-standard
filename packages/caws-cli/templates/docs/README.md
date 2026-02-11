@@ -4,11 +4,11 @@
 This project is built with the **Coding Agent Workflow System (CAWS)** - an engineering-grade framework that ensures quality, reliability, and maintainability in AI-assisted development.
 
 ## Key Features
-- 🔒 **Quality Gates**: Automated validation of scope, budget, and standards
-- 🧪 **Comprehensive Testing**: Unit, contract, integration, and mutation testing
-- 📊 **Observability**: Structured logging, metrics, and tracing
-- 🔄 **Rollback Ready**: Feature flags and migration support
-- 📦 **Provenance Tracking**: SBOM and SLSA attestation generation
+- **Quality Gates**: Automated validation of scope, budget, and standards
+- **Comprehensive Testing**: Unit, contract, integration, and mutation testing
+- **Observability**: Structured logging, metrics, and tracing
+- **Rollback Ready**: Feature flags and migration support
+- **Provenance Tracking**: SBOM and SLSA attestation generation
 
 ## Getting Started
 

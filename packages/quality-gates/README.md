@@ -1,6 +1,6 @@
 # Quality Gates - Code Quality Enforcement
 
-**Configurable quality gates for preventing functional duplication, architectural drift, and code quality regression.** These gates work cohesively to maintain code quality across development, CI/CD, and production environments.
+**Configurable, language-agnostic quality gates for preventing functional duplication, architectural drift, and code quality regression.** These gates work cohesively to maintain code quality across development, CI/CD, and production environments, supporting Python, Go, Java, C#, Ruby, PHP, C++, Kotlin, Swift, Scala, Rust, and more.
 
 ## Priority Focus
 
@@ -15,25 +15,27 @@ Quality gates **block commits** that degrade code quality while enabling control
 - More than 692 duplicate struct names (CRITICAL - compilation conflicts)
 - More than 200 duplicate function names (NEW - business logic duplication)
 - More than 100 duplicate trait names (NEW - interface duplication)
-- More than 20 problematic duplicate filenames (excluding Rust conventions)
-- Rust convention files (lib.rs, mod.rs) are expected and allowed
+- More than 20 problematic duplicate filenames (excluding language convention files)
+- Convention files across languages (lib.rs, mod.rs, __init__.py, index.ts, etc.) are expected and allowed
 
-### 2. Naming Conventions (`check-naming.js`)
+### 2. Naming Conventions (`check-naming.mjs`)
 
 **Blocks:** Files/structs with banned modifiers indicating functional duplication
 
 - `enhanced-*`, `unified-*`, `new-*`, `final-*`, `copy-*`, `revamp-*`, `improved-*`
 - Purpose-first canonical names
-- Rust convention files (lib.rs, mod.rs) are ignored
+- Covers 20+ file extensions (`.rs`, `.py`, `.go`, `.java`, `.cs`, `.rb`, `.php`, `.cpp`, `.kt`, `.swift`, `.scala`, etc.)
+- Convention files across languages (lib.rs, mod.rs, __init__.py, index.ts, etc.) are ignored
 
 ### 3. Simplification Detection (`check-simplification.mjs`)
 
-**Blocks:** Files where implementations are replaced with stubs
+**Blocks:** Files where implementations are replaced with stubs or oversimplified code patterns
 
-- LOC decrease >= 30% paired with new stub patterns (`pass`, `TODO`, `NotImplementedError`, `return null`)
+- LOC decrease >= 30% paired with new stub patterns (`pass`, `TODO`, `NotImplementedError`, `return null`, `unimplemented!()`, `throw`, etc.)
 - Compares HEAD vs staged (commit) or merge-base vs HEAD (push/ci)
 - Detects renamed-and-simplified files via `git diff --find-renames`
 - Warns on large deletions even without stubs
+- Language-aware stub detection using `commentStyleFor(ext)` from `language-support.mjs`
 
 ### 4. File Sprawl Detection (in `check-naming.mjs`)
 
@@ -42,15 +44,28 @@ Quality gates **block commits** that degrade code quality while enabling control
 - Shadow files (`*-enhanced.*`, `*-final.*`, `*-v2.*`, `*-copy.*`)
 - Virtual environment sprawl (`*venv*`, `.venv`, `env/`)
 - Documentation sprawl (`*-summary.md`, `*-recap.md`, `*-plan.md`)
+- Build artifact directories are excluded from checks: `node_modules`, `target`, `dist`, `build`, `__pycache__`, `.tox`, `vendor`, `obj`, `.gradle`, `bin`, `.next`, `.nuxt`, and others
 
-### 5. God Object Prevention (`check-god-objects.js`)
+### 5. God Object Prevention (`check-god-objects.mjs`)
 
-**Blocks:** Files exceeding size thresholds
+**Blocks:** Files exceeding size thresholds across all supported languages
 
-- **3,000+ LOC**: Severe god objects (immediate intervention required)
-- **2,000+ LOC**: Critical god objects (CI/CD block)
-- ⚠️ **1,500+ LOC**: Warning (allows but flags for decomposition)
-- **<1,500 LOC**: Target for long-term maintainability
+- **3,000+ SLOC**: Severe god objects (immediate intervention required)
+- **2,000+ SLOC**: Critical god objects (CI/CD block)
+- **1,500+ SLOC**: Warning (allows but flags for decomposition)
+- **<1,500 SLOC**: Target for long-term maintainability
+
+Multi-language SLOC counting strips comments and blank lines per language. No longer limited to Rust; checks all code files recognized by `language-support.mjs`.
+
+## Shared Language Support (`language-support.mjs`)
+
+A shared module used by all gates to provide consistent multi-language behavior:
+
+- **`CODE_EXTENSIONS`** -- Map of file extensions to language metadata (`.rs`, `.py`, `.go`, `.java`, `.cs`, `.rb`, `.php`, `.cpp`, `.kt`, `.swift`, `.scala`, `.ts`, `.js`, etc.)
+- **`CONVENTION_FILES`** -- Set of known convention filenames that are expected duplicates (`lib.rs`, `mod.rs`, `__init__.py`, `index.ts`, `index.js`, `main.go`, etc.)
+- **`commentStyleFor(ext)`** -- Returns the comment syntax (line and block delimiters) for a given file extension, used by SLOC counting and stub detection
+
+Gates import from this module rather than maintaining their own extension lists.
 
 ## Key Features
 
@@ -73,15 +88,31 @@ node run-quality-gates.mjs  # Waived violations won't block commits
 **Waiver Display:**
 
 ```
-🔖 ACTIVE WAIVERS (1):
+ACTIVE WAIVERS (1):
    WV-0001: Extended CAWS feature implementation scope (63 days left)
       Gates: budget_limit
       Reason: experimental_feature
 
-✅ WAIVED VIOLATIONS (2) - ALLOWED:
+WAIVED VIOLATIONS (2) - ALLOWED:
    hidden-todo: PLACEHOLDER - Real implementation needed
    Waived by: WV-0001 (Emergency hotfix waiver)
 ```
+
+### Context-Aware File Scoping
+
+Quality gates scope the files they check based on the execution context:
+
+- **Commit context**: Checks staged files only
+- **Push context**: Checks files changed since the merge-base (not all tracked files), providing focused feedback on the actual changeset
+- **CI context**: Same as push context, scoped to changed-since-base files
+
+### Timeout Scaling
+
+Gate timeouts scale with context to accommodate larger file sets:
+
+- **Commit context**: Base timeout (default)
+- **Push context**: 2x base timeout
+- **CI context**: 4x base timeout
 
 ### Intelligent Cache Management
 
@@ -139,14 +170,14 @@ Fix the violations above before committing
 | Duplicate struct names                      | 692+     | ≤692      | CRITICAL    | HIGH     |
 | Duplicate function names                    | ~200     | ≤200      | CRITICAL    | HIGH     |
 | Duplicate trait names                       | ~100     | ≤100      | CRITICAL    | HIGH     |
-| Problematic filename duplicates             | ~20      | ≤20       | ⚠️ MODERATE | MEDIUM   |
-| Rust convention duplicates (lib.rs, mod.rs) | ~128     | N/A       | EXPECTED    | NONE     |
+| Problematic filename duplicates             | ~20      | ≤20       | MODERATE | MEDIUM   |
+| Convention file duplicates (lib.rs, __init__.py, etc.) | ~128     | N/A       | EXPECTED    | NONE     |
 | God objects >3K LOC                         | 11       | 0         | CRITICAL    | HIGH     |
 | God objects >2K LOC                         | Multiple | 0         | CRITICAL    | HIGH     |
 
-**Focus: Functional duplication must decrease, Rust conventions are expected.**
+**Focus: Functional duplication must decrease. Language convention files are expected duplicates.**
 
-## 🛠️ Usage
+## Usage
 
 ### Installation
 
@@ -451,9 +482,9 @@ Quality gates integrate with the **Functional Duplication Prevention** plan:
 1. **Automated Enforcement**: Gates prevent new functional duplication
 2. **Business Logic Consolidation**: Gates detect duplicate functions and traits
 3. **Interface Unification**: Gates prevent duplicate trait definitions
-4. **Structural Cleanup**: Gates allow Rust conventions while blocking problematic patterns
+4. **Structural Cleanup**: Gates allow language convention files while blocking problematic patterns
 
-## 📊 Monitoring & Artifacts
+## Monitoring & Artifacts
 
 ### Generated Artifacts
 
@@ -549,7 +580,7 @@ node packages/quality-gates/run-quality-gates.mjs --json > docs-status/quality-g
 jq '.violations | group_by(.gate) | map({gate: .[0].gate, count: length})' docs-status/quality-gates-report.json
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -636,9 +667,9 @@ git commit --no-verify
 node packages/quality-gates/run-quality-gates.mjs --gates=naming,god_objects  # Skip duplication
 ```
 
-**⚠️ Bypasses should only be used for critical hotfixes during crisis response.**
+**WARNING: Bypasses should only be used for critical hotfixes during crisis response.**
 
-## 📚 Related Documentation
+## Related Documentation
 
 - **Crisis Response Plan**: `docs/refactoring.md`
 - **CAWS Integration**: See CAWS documentation for workflow integration
@@ -653,36 +684,36 @@ node packages/quality-gates/run-quality-gates.mjs --gates=naming,god_objects  # 
 
 ---
 
-## ✅ Success Criteria
+## Success Criteria
 
 Quality gates are successful when they:
 
 ### Core Quality Enforcement
 
-- ✅ **Block functional duplication increases** (692+ struct, 200+ function, 100+ trait names)
-- ✅ **Prevent god object growth** (no files >3K LOC, strict 2K LOC limits)
-- ✅ **Enforce code freeze compliance** (block new features during freezes)
-- ✅ **Maintain architectural integrity** (no naming violations, proper scoping)
+- **Block functional duplication increases** (692+ struct, 200+ function, 100+ trait names)
+- **Prevent god object growth** (no files >3K LOC, strict 2K LOC limits)
+- **Enforce code freeze compliance** (block new features during freezes)
+- **Maintain architectural integrity** (no naming violations, proper scoping)
 
 ### Operational Excellence
 
-- ✅ **CI/CD integration works** (JSON output, GitHub summaries, artifact generation)
-- ✅ **Exception framework functions** (temporary waivers, audit trails, time-based expiry)
-- ✅ **Selective gate execution** (targeted testing, faster feedback loops)
-- ✅ **Machine-readable outputs** (JSON reports, dashboard integration)
+- **CI/CD integration works** (JSON output, GitHub summaries, artifact generation)
+- **Exception framework functions** (temporary waivers, audit trails, time-based expiry)
+- **Selective gate execution** (targeted testing, faster feedback loops)
+- **Machine-readable outputs** (JSON reports, dashboard integration)
 
 ### Developer Experience
 
-- ✅ **Fast local feedback** (gate filtering, clear error messages)
-- ✅ **Comprehensive monitoring** (artifacts, metrics, trend analysis)
-- ✅ **Graceful error handling** (fail-open for development, fail-closed for CI)
-- ✅ **Consistent reliability** (consistent contexts, no emoji output)
+- **Fast local feedback** (gate filtering, clear error messages)
+- **Comprehensive monitoring** (artifacts, metrics, trend analysis)
+- **Graceful error handling** (fail-open for development, fail-closed for CI)
+- **Consistent reliability** (consistent contexts, no emoji output)
 
 ### Enterprise Integration
 
-- ✅ **CAWS workflow compatible** (feature specs, progress tracking, provenance)
-- ✅ **Multi-environment support** (commit/push/ci contexts, environment detection)
-- ✅ **Audit compliance ready** (structured logs, violation tracking, exception management)
-- ✅ **Scalable architecture** (concurrent processing ready, file scoping, performance monitoring)
+- **CAWS workflow compatible** (feature specs, progress tracking, provenance)
+- **Multi-environment support** (commit/push/ci contexts, environment detection)
+- **Audit compliance ready** (structured logs, violation tracking, exception management)
+- **Scalable architecture** (concurrent processing ready, file scoping, performance monitoring)
 
 **Target**: Configurable quality gates that prevent functional duplication while enabling controlled, monitored development workflows across all environments.

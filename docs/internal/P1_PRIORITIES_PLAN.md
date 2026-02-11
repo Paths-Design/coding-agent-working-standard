@@ -1,7 +1,7 @@
 # P1 Priorities - Next Steps Plan
 
-**Date**: October 9, 2025  
-**Status**: P0 Complete ✅ - Planning P1  
+**Date**: October 9, 2025
+**Status**: P0 Complete - Planning P1
 **Version**: CAWS Extension v1.0.0
 
 ---
@@ -10,23 +10,23 @@
 
 Based on the successful P0 completion, here are the next priorities organized by impact and effort:
 
-### 1. Missing MCP Tools Implementation 🔴 HIGH PRIORITY
+### 1. Missing MCP Tools Implementation HIGH PRIORITY
 
 **Status**: 3 MCP tools have no CLI commands yet
 
 | MCP Tool                 | CLI Command              | Status          | Impact                     |
 | ------------------------ | ------------------------ | --------------- | -------------------------- |
-| `caws_workflow_guidance` | ❌ Not implemented       | **P1-CRITICAL** | Core agent workflow        |
-| `caws_quality_monitor`   | ❌ Not implemented       | **P1-HIGH**     | Real-time quality tracking |
-| `caws_test_analysis`     | ✅ Exists but not tested | **P1-MEDIUM**   | Budget optimization        |
+| `caws_workflow_guidance` | Not implemented       | **P1-CRITICAL** | Core agent workflow        |
+| `caws_quality_monitor`   | Not implemented       | **P1-HIGH**     | Real-time quality tracking |
+| `caws_test_analysis`     | Exists but not tested | **P1-MEDIUM**   | Budget optimization        |
 
 **Rationale**: These tools are exposed via MCP but have incomplete or missing CLI implementations. This breaks the 1:1 parity principle.
 
 ---
 
-### 2. Enhanced Error Handling 🟡 MEDIUM PRIORITY
+### 2. Enhanced Error Handling MEDIUM PRIORITY
 
-**Current State**: Basic error handling exists  
+**Current State**: Basic error handling exists
 **Improvements Needed**:
 
 - Context-aware error messages
@@ -53,9 +53,9 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 ---
 
-### 3. Performance Optimization 🟢 LOW PRIORITY
+### 3. Performance Optimization LOW PRIORITY
 
-**Current State**: Fast with bundled CLI (~2s response time)  
+**Current State**: Fast with bundled CLI (~2s response time)
 **Potential Improvements**:
 
 1. **CLI Invocation Caching**
@@ -77,7 +77,7 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 ---
 
-### 4. Additional CLI Commands 🔵 FEATURE EXPANSION
+### 4. Additional CLI Commands FEATURE EXPANSION
 
 **Commands to Implement**:
 
@@ -98,9 +98,9 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 ---
 
-### 5. IDE Integration Enhancements 🎨 USER EXPERIENCE
+### 5. IDE Integration Enhancements USER EXPERIENCE
 
-**Current State**: Basic MCP integration  
+**Current State**: Basic MCP integration
 **Enhancements**:
 
 1. **VS Code Tasks**
@@ -125,9 +125,9 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 ---
 
-### 6. Documentation & Examples 📚 ADOPTION
+### 6. Documentation & Examples ADOPTION
 
-**Current State**: Comprehensive guides exist  
+**Current State**: Comprehensive guides exist
 **Missing**:
 
 1. **Video Tutorials**
@@ -149,9 +149,9 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 ## Recommended P1 Roadmap
 
-### Sprint 1: Missing Tools (CRITICAL) 🔴
+### Sprint 1: Missing Tools (CRITICAL)
 
-**Duration**: 1-2 days  
+**Duration**: 1-2 days
 **Goal**: Achieve 100% CLI/MCP parity
 
 **Tasks**:
@@ -164,16 +164,16 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 **Acceptance Criteria**:
 
-- ✅ All MCP tools have working CLI commands
-- ✅ 100% CLI/MCP parity maintained
-- ✅ All tools tested end-to-end
-- ✅ Documentation updated
+- All MCP tools have working CLI commands
+- 100% CLI/MCP parity maintained
+- All tools tested end-to-end
+- Documentation updated
 
 ---
 
-### Sprint 2: Error Handling & UX (HIGH) 🟡
+### Sprint 2: Error Handling & UX (HIGH)
 
-**Duration**: 2-3 days  
+**Duration**: 2-3 days
 **Goal**: Better developer experience
 
 **Tasks**:
@@ -186,16 +186,15 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 **Acceptance Criteria**:
 
-- ✅ All errors have actionable suggestions
-- ✅ "Did you mean?" covers all commands
-- ✅ Progress shown for long operations
-- ✅ Help text comprehensive
+- All errors have actionable suggestions
+- "Did you mean?" covers all commands
+- Progress shown for long operations
+- Help text comprehensive
 
 ---
 
-### Sprint 3: IDE Integration (MEDIUM) 🎨
-
-**Duration**: 3-4 days  
+### Sprint 3: IDE Integration (MEDIUM)
+**Duration**: 3-4 days
 **Goal**: Native IDE experience
 
 **Tasks**:
@@ -208,16 +207,16 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 **Acceptance Criteria**:
 
-- ✅ CAWS commands in Command Palette
-- ✅ Issues show in Problems panel
-- ✅ Status bar shows project health
-- ✅ Keyboard shortcuts configured
+- CAWS commands in Command Palette
+- Issues show in Problems panel
+- Status bar shows project health
+- Keyboard shortcuts configured
 
 ---
 
-### Sprint 4: Performance & Polish (LOW) 🟢
+### Sprint 4: Performance & Polish (LOW)
 
-**Duration**: 2-3 days  
+**Duration**: 2-3 days
 **Goal**: Optimize and refine
 
 **Tasks**:
@@ -230,10 +229,10 @@ Error: Working spec not found at .caws/working-spec.yaml
 
 **Acceptance Criteria**:
 
-- ✅ Response time < 1s for cached operations
-- ✅ Validation 2x faster
-- ✅ Memory usage optimized
-- ✅ No performance regressions
+- Response time < 1s for cached operations
+- Validation 2x faster
+- Memory usage optimized
+- No performance regressions
 
 ---
 
@@ -307,8 +306,8 @@ caws quality-monitor code_edited --files "src/*.ts"
 
 ### 3. `caws_test_analysis` Tool (EXISTS - NEEDS TESTING)
 
-**Current State**: CLI command exists at `test-analysis`  
-**MCP Handler**: Implemented  
+**Current State**: CLI command exists at `test-analysis`
+**MCP Handler**: Implemented
 **Status**: Not tested in P0
 
 **Need**:
@@ -323,28 +322,28 @@ caws quality-monitor code_edited --files "src/*.ts"
 
 ### P1 Sprint 1 (Missing Tools)
 
-- ✅ 13/13 MCP tools have CLI implementations (currently 10/13)
-- ✅ 100% CLI/MCP parity achieved
-- ✅ All tools tested via MCP
-- ✅ Response time < 2s for all tools
+- 13/13 MCP tools have CLI implementations (currently 10/13)
+- 100% CLI/MCP parity achieved
+- All tools tested via MCP
+- Response time < 2s for all tools
 
 ### P1 Sprint 2 (Error Handling)
 
-- ✅ 90%+ errors have actionable suggestions
-- ✅ User satisfaction score > 4/5
-- ✅ Reduced support questions by 50%
+- 90%+ errors have actionable suggestions
+- User satisfaction score > 4/5
+- Reduced support questions by 50%
 
 ### P1 Sprint 3 (IDE Integration)
 
-- ✅ 5+ VS Code tasks defined
-- ✅ Problem matcher working for all diagnostics
-- ✅ Status bar updates in real-time
+- 5+ VS Code tasks defined
+- Problem matcher working for all diagnostics
+- Status bar updates in real-time
 
 ### P1 Sprint 4 (Performance)
 
-- ✅ Cached operations < 1s
-- ✅ Parallel validation 2x faster
-- ✅ Memory usage < 100MB
+- Cached operations < 1s
+- Parallel validation 2x faster
+- Memory usage < 100MB
 
 ---
 
@@ -366,7 +365,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 
 ## Decision Point: Where to Start?
 
-### Option A: Sprint 1 (Missing Tools) - RECOMMENDED ✅
+### Option A: Sprint 1 (Missing Tools) - RECOMMENDED
 
 **Pros**:
 
@@ -409,7 +408,7 @@ caws quality-monitor code_edited --files "src/*.ts"
 
 ## Recommendation
 
-**Start with P1 Sprint 1: Missing Tools** 🎯
+**Start with P1 Sprint 1: Missing Tools**
 
 **Rationale**:
 
@@ -454,9 +453,9 @@ caws quality-monitor code_edited --files "src/*.ts"
 
 Let me know if you'd like to:
 
-1. ✅ **Start P1 Sprint 1** - Implement missing tools
-2. 📋 **Refine the plan** - Adjust priorities
-3. 🔍 **Deep dive on specific tool** - More details before starting
-4. 📊 **Alternative approach** - Different P1 focus
+1. **Start P1 Sprint 1** - Implement missing tools
+2. **Refine the plan** - Adjust priorities
+3. **Deep dive on specific tool** - More details before starting
+4. **Alternative approach** - Different P1 focus
 
 I'm ready to implement when you are!

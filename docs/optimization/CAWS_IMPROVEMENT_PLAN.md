@@ -12,7 +12,7 @@ Combining diagnostic analysis and developer feedback, we've identified **5 criti
 
 ### Fix 1.1: MCP Server ES Module `__filename` Error
 
-**Status:** ❌ Broken  
+**Status:** Broken  
 **Impact:** Blocks quality gates via MCP server  
 **Effort:** Low (15 minutes)
 
@@ -36,7 +36,7 @@ const __filename = fileURLToPath(import.meta.url);
 
 ### Fix 1.2: Pre-Commit Hook Fallback Chain
 
-**Status:** ❌ Blocking Commits  
+**Status:** Blocking Commits  
 **Impact:** Prevents all commits when quality gates script missing  
 **Effort:** Medium (30 minutes)
 
@@ -63,7 +63,7 @@ Implement fallback chain:
 
 ### Fix 1.3: MCP Validate Tool - Detect Existing CLI
 
-**Status:** ⚠️ Inefficient  
+**Status:** Inefficient  
 **Impact:** Tries npx even when CLI installed globally  
 **Effort:** Low (15 minutes)
 
@@ -89,7 +89,7 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Fix 2.1: CLI Quality Gates Path Resolution
 
-**Status:** ⚠️ Works but Limited  
+**Status:** Works but Limited  
 **Impact:** Fails when CLI installed globally  
 **Effort:** Medium (45 minutes)
 
@@ -114,7 +114,7 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Fix 2.2: Standardize Policy File Location
 
-**Status:** ⚠️ Confusing  
+**Status:** Confusing  
 **Impact:** Users see warnings about missing policy.yaml  
 **Effort:** Low (20 minutes)
 
@@ -141,7 +141,7 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Fix 2.3: Quality Gates Installation Clarity
 
-**Status:** ⚠️ Unclear  
+**Status:** Unclear  
 **Impact:** Users don't know how to install quality gates  
 **Effort:** Medium (30 minutes)
 
@@ -170,7 +170,7 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Fix 3.1: Update Usage Guides
 
-**Status:** ⚠️ Outdated  
+**Status:** Outdated  
 **Impact:** Users confused about which tool to use  
 **Effort:** Low (20 minutes)
 
@@ -192,19 +192,19 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Phase 1: Critical Fixes (Day 1)
 
-1. ✅ Fix MCP Server `__filename` error
-2. ✅ Fix Pre-commit hook fallback chain
-3. ✅ Fix MCP validate CLI detection
+1. Fix MCP Server `__filename` error
+2. Fix Pre-commit hook fallback chain
+3. Fix MCP validate CLI detection
 
 ### Phase 2: High Priority (Day 2)
 
-4. ✅ Improve CLI quality gates path resolution
-5. ✅ Standardize policy file location
-6. ✅ Add quality gates installation clarity
+4. Improve CLI quality gates path resolution
+5. Standardize policy file location
+6. Add quality gates installation clarity
 
 ### Phase 3: Documentation (Day 3)
 
-7. ✅ Update usage guides and troubleshooting
+7. Update usage guides and troubleshooting
 
 ---
 
@@ -235,37 +235,37 @@ const cawsPath = which('caws') || 'npx @paths.design/caws-cli';
 
 ### Fix 1.1: MCP Server
 
-- ✅ `caws_quality_gates_run()` works without errors
-- ✅ Quality gates execute successfully via MCP
+- `caws_quality_gates_run()` works without errors
+- Quality gates execute successfully via MCP
 
 ### Fix 1.2: Pre-Commit Hook
 
-- ✅ Hook doesn't block commits when script missing
-- ✅ Falls back gracefully through chain
-- ✅ Provides clear warnings
+- Hook doesn't block commits when script missing
+- Falls back gracefully through chain
+- Provides clear warnings
 
 ### Fix 1.3: MCP Validate
 
-- ✅ Detects existing CLI installation
-- ✅ Uses `caws` command instead of npx when available
+- Detects existing CLI installation
+- Uses `caws` command instead of npx when available
 
 ### Fix 2.1: CLI Quality Gates
 
-- ✅ Works from monorepo root
-- ✅ Works with globally installed CLI (fallback to Python)
-- ✅ Provides clear error messages with alternatives
+- Works from monorepo root
+- Works with globally installed CLI (fallback to Python)
+- Provides clear error messages with alternatives
 
 ### Fix 2.2: Policy Files
 
-- ✅ Consistent policy file location
-- ✅ Backward compatibility maintained
-- ✅ No warnings about missing files
+- Consistent policy file location
+- Backward compatibility maintained
+- No warnings about missing files
 
 ### Fix 2.3: Quality Gates Installation
 
-- ✅ Clear installation instructions
-- ✅ Scaffold option available
-- ✅ Helpful error messages
+- Clear installation instructions
+- Scaffold option available
+- Helpful error messages
 
 ---
 

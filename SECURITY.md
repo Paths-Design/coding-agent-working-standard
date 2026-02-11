@@ -1,10 +1,10 @@
 # Security Policy
 
-## 🔒 Security Overview
+## Security Overview
 
 CAWS (Coding Agent Workflow System) prioritizes security through multiple layers of protection, including tool allowlisting, secret detection, provenance tracking, and comprehensive validation. This document outlines our security practices and vulnerability reporting process.
 
-## 🛡️ Security Features
+## Security Features
 
 ### Built-in Security Measures
 
@@ -38,7 +38,7 @@ CAWS (Coding Agent Workflow System) prioritizes security through multiple layers
 - SLSA (Supply chain Levels for Software Artifacts) attestations
 - Containerized builds with provenance
 
-## 🔍 Security Scanning
+## Security Scanning
 
 ### Automated Security Checks
 
@@ -57,7 +57,7 @@ All changes must pass security validation:
 - Compliance with tool allowlists
 - Valid provenance manifests
 
-## 📋 Vulnerability Reporting
+## Vulnerability Reporting
 
 ### Reporting Security Issues
 
@@ -93,7 +93,7 @@ Instead, report security issues privately to our security team at:
 - **Medium Priority**: Response within 72 hours, fix within 30 days
 - **Low Priority**: Response within 1 week, fix in next release
 
-## 🔐 Security Best Practices
+## Security Best Practices
 
 ### For Users
 
@@ -128,7 +128,7 @@ Instead, report security issues privately to our security team at:
 - Verify error handling doesn't leak information
 - Ensure compliance with security policies
 
-## 🚨 Security Incident Response
+## Security Incident Response
 
 ### Incident Detection
 
@@ -152,7 +152,7 @@ The security incident response team consists of:
 - **Public**: Transparent updates when appropriate
 - **Regulatory**: Compliance with legal reporting requirements
 
-## 🛠️ Security Tools Integration
+## Security Tools Integration
 
 ### Supported Security Tools
 
@@ -169,7 +169,7 @@ The security incident response team consists of:
 - Automated dependency monitoring
 - Container security scanning
 
-## 📊 Security Metrics
+## Security Metrics
 
 ### Trust Score Components
 
@@ -188,7 +188,7 @@ Security contributes significantly to the CAWS trust score:
 - Compliance with security policies
 - Incident response metrics
 
-## 🔄 Security Updates
+## Security Updates
 
 ### Patch Releases
 
@@ -205,11 +205,11 @@ Security fixes are released promptly:
 - **Routine**: Regular security improvements
 - **Optional**: Enhanced security features
 
-## 📞 Emergency Contacts
+## Emergency Contacts
 
 For urgent security matters requiring immediate attention:
 
-## 📜 Compliance
+## Compliance
 
 ### Standards Alignment
 
@@ -225,7 +225,7 @@ For urgent security matters requiring immediate attention:
 - Export control compliance
 - Open source licensing requirements
 
-## 🤝 Responsible Disclosure
+## Responsible Disclosure
 
 We support responsible disclosure practices:
 
@@ -235,7 +235,7 @@ We support responsible disclosure practices:
 4. **Credit Attribution**: Recognize reporters appropriately
 5. **No Retaliation**: No negative consequences for ethical security research
 
-## 📚 Security Resources
+## Security Resources
 
 - **Documentation**: Comprehensive security guides
 - **Examples**: Secure implementation patterns

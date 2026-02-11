@@ -4,9 +4,9 @@
 
 This demo project showcases the **Coding Agent Workflow System (CAWS)** in action. It demonstrates how AI agents and human developers collaborate using standardized workflows, automated quality gates, and comprehensive contract testing.
 
-## 🎯 What This Demo Shows
+## What This Demo Shows
 
-### ✅ **Complete CAWS Implementation**
+### **Complete CAWS Implementation**
 
 - Working specifications with acceptance criteria
 - Contract-first API development (OpenAPI + TypeScript)
@@ -14,20 +14,20 @@ This demo project showcases the **Coding Agent Workflow System (CAWS)** in actio
 - Automated quality gates and validation
 - Provenance tracking and audit trails
 
-### ✅ **Risk-Based Quality Tiers**
+### **Risk-Based Quality Tiers**
 
 - **Tier 1**: Critical authentication features
 - **Tier 2**: Standard features with contracts
 - **Tier 3**: Basic utilities and tooling
 
-### ✅ **Real-World Architecture**
+### **Real-World Architecture**
 
 - Multi-service architecture (API, data, memory, AI)
 - Contract testing between services
 - Performance monitoring and health checks
 - Comprehensive error handling
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -55,7 +55,7 @@ npm test
 npm run quality-gates
 ```
 
-## 📁 Architecture Overview
+## Architecture Overview
 
 ```
 demo-project/
@@ -76,7 +76,7 @@ demo-project/
 └── apps/tools/caws/     # CAWS utility tools
 ```
 
-## 🔄 Development Workflow Demo
+## Development Workflow Demo
 
 ### Phase 1: Specification & Planning
 
@@ -122,7 +122,7 @@ caws diagnose
 caws status
 ```
 
-## 🧪 Quality Metrics
+## Quality Metrics
 
 This demo achieves:
 
@@ -131,37 +131,37 @@ This demo achieves:
 - **Contract Compliance**: 100% (all APIs tested)
 - **Performance**: P95 < 250ms for all endpoints
 
-## 📋 Key Features Demonstrated
+## Key Features Demonstrated
 
-### 🔐 **Authentication Service (Tier 1)**
+### **Authentication Service (Tier 1)**
 
 - Secure password hashing with bcrypt
 - JWT token management
 - Session handling with Redis
 - Comprehensive security testing
 
-### 📊 **Data Layer (Tier 2)**
+### **Data Layer (Tier 2)**
 
 - PostgreSQL with vector extensions
 - Multi-level caching (L1/L2)
 - Connection pooling and transactions
 - Performance monitoring
 
-### 🧠 **Memory System (Tier 2)**
+### **Memory System (Tier 2)**
 
 - Multi-tenant memory isolation
 - Knowledge graph with relationships
 - Vector embeddings for similarity
 - Federated learning capabilities
 
-### 🤖 **AI Integration (Tier 2)**
+### **AI Integration (Tier 2)**
 
 - Local model management (Ollama)
 - Inference with performance monitoring
 - Evaluation and satisficing logic
 - Resource usage optimization
 
-## 🛠️ CAWS Tools Demonstrated
+## CAWS Tools Demonstrated
 
 ### Development Commands
 
@@ -188,7 +188,7 @@ caws provenance analyze-ai # AI effectiveness
 caws hooks status       # Git integration
 ```
 
-## 📊 Test Structure
+## Test Structure
 
 ```
 tests/
@@ -200,7 +200,7 @@ tests/
 └── axe/               # Accessibility tests
 ```
 
-## 🔍 Contract Testing
+## Contract Testing
 
 ### API Contracts
 
@@ -221,7 +221,7 @@ test('GET /users returns valid user array', async () => {
 });
 ```
 
-## 🎯 Learning Objectives
+## Learning Objectives
 
 This demo teaches:
 
@@ -231,28 +231,28 @@ This demo teaches:
 4. **Provenance Tracking**: Change attribution
 5. **Risk Management**: Tier-based rigor levels
 
-## 📚 Documentation
+## Documentation
 
-### 📖 **Guides**
+### **Guides**
 
 - **[Agent Quick Reference](../AGENTS.md)** - Essential agent guide
 - **[Full Agent Guide](../../docs/agents/full-guide.md)** - Comprehensive documentation
 - **[Benchmarking Framework](../../docs/internal/CAWS_AGENT_BENCHMARKING_FRAMEWORK.md)** - Agent testing
 
-### 🔧 **Technical Docs**
+### **Technical Docs**
 
 - **[Working Specifications](../../docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Current specs
 - **[API Contracts](docs/api/)** - OpenAPI specifications
 - **[Architecture](../../docs/guides/caws-developer-guide.md)** - System design
 
-### 🧪 **Examples**
+### **Examples**
 
 - **Working Spec**: `.caws/working-spec.yaml`
 - **Test Suites**: `tests/` directory
 - **API Contracts**: `docs/api/` directory
 - **CI/CD Pipeline**: `.github/workflows/`
 
-## 🤝 Contributing to This Demo
+## Contributing to This Demo
 
 ### For AI Agents
 
@@ -268,12 +268,12 @@ This demo teaches:
 3. **Approve changes**: Review Tier 1 modifications
 4. **Update documentation**: Keep guides current
 
-## 📞 Support & Resources
+## Support & Resources
 
-- **📖 CAWS Documentation**: See root `README.md`
-- **🐛 Issues**: Report problems with the demo
-- **💬 Agent Help**: Use `caws workflow guidance`
-- **🎯 Examples**: Study the test suites and contracts
+- **CAWS Documentation**: See root `README.md`
+- **Issues**: Report problems with the demo
+- **Agent Help**: Use `caws workflow guidance`
+- **Examples**: Study the test suites and contracts
 
 ---
 

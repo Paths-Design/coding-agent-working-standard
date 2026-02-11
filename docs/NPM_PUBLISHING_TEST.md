@@ -372,14 +372,14 @@ npm unpublish @paths.design/caws-cli@3.4.0
 
 First release is successful when:
 
-- ✅ Package published to npm
-- ✅ Installation works globally: `npm install -g @paths.design/caws-cli`
-- ✅ CLI commands execute correctly
-- ✅ Provenance attestation present
-- ✅ No critical security vulnerabilities
-- ✅ Bundle size < 5 MB
-- ✅ README displays correctly on npmjs.com
-- ✅ All CI/CD checks passing
+- Package published to npm
+- Installation works globally: `npm install -g @paths.design/caws-cli`
+- CLI commands execute correctly
+- Provenance attestation present
+- No critical security vulnerabilities
+- Bundle size < 5 MB
+- README displays correctly on npmjs.com
+- All CI/CD checks passing
 
 ---
 

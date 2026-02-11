@@ -254,10 +254,10 @@ Validate your working specification format and completeness.
 
 **Output Channel**:
 Results appear in "CAWS Validation" output channel with:
-- ✅ Validation passed messages
-- ❌ Error descriptions
-- 💡 Helpful suggestions
-- 🔧 Auto-fix recommendations
+- Validation passed messages
+- Error descriptions
+- Helpful suggestions
+- Auto-fix recommendations
 
 **When to Use**:
 - After editing working spec
@@ -776,13 +776,13 @@ Access via: `Preferences → Settings → Extensions → CAWS`
 
 ### 1. Working Spec Management
 
-✅ **Do**:
+**Do**:
 - Keep spec up-to-date with changes
 - Use clear, measurable acceptance criteria
 - Review and validate regularly
 - Version control your spec
 
-❌ **Don't**:
+**Don't**:
 - Leave spec unchanged for weeks
 - Use vague criteria
 - Skip validation
@@ -792,13 +792,13 @@ Access via: `Preferences → Settings → Extensions → CAWS`
 
 ### 2. Quality Evaluation
 
-✅ **Do**:
+**Do**:
 - Evaluate before commits
 - Address issues promptly
 - Track quality trends
 - Use waivers judiciously
 
-❌ **Don't**:
+**Don't**:
 - Skip evaluations
 - Ignore warnings
 - Accumulate technical debt
@@ -808,13 +808,13 @@ Access via: `Preferences → Settings → Extensions → CAWS`
 
 ### 3. Git Hooks
 
-✅ **Do**:
+**Do**:
 - Install hooks early
 - Keep hooks updated
 - Review hook output
 - Backup before updating
 
-❌ **Don't**:
+**Don't**:
 - Bypass hooks (--no-verify)
 - Ignore hook failures
 - Disable without team agreement
@@ -824,13 +824,13 @@ Access via: `Preferences → Settings → Extensions → CAWS`
 
 ### 4. Provenance Tracking
 
-✅ **Do**:
+**Do**:
 - Review provenance regularly
 - Use for retrospectives
 - Track AI effectiveness
 - Maintain audit trails
 
-❌ **Don't**:
+**Don't**:
 - Ignore provenance data
 - Skip initialization
 - Delete provenance files
@@ -840,13 +840,13 @@ Access via: `Preferences → Settings → Extensions → CAWS`
 
 ### 5. Team Workflows
 
-✅ **Do**:
+**Do**:
 - Share working specs
 - Coordinate on waivers
 - Review quality together
 - Learn from provenance
 
-❌ **Don't**:
+**Don't**:
 - Work in isolation
 - Create conflicting waivers
 - Skip team reviews
@@ -938,6 +938,6 @@ Now that you're familiar with the extension:
 4. **Explore the dashboards**
 5. **Join the community**
 
-Happy coding with CAWS! 🚀
+Happy coding with CAWS!
 
 

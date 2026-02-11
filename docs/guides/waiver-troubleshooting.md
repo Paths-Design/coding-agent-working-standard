@@ -22,11 +22,11 @@ cat .caws/waivers/WV-*.yaml | grep "^id:"
 
 **Examples**:
 
-- ✅ `WV-0001`
-- ✅ `WV-9999`
-- ❌ `WV-ARB-003-COMPLETION` (no descriptive text allowed)
-- ❌ `WV-1` (must be 4 digits, use `WV-0001`)
-- ❌ `waiver-001` (must start with `WV-`)
+- [PASS] `WV-0001`
+- [PASS] `WV-9999`
+- [FAIL] `WV-ARB-003-COMPLETION` (no descriptive text allowed)
+- [FAIL] `WV-1` (must be 4 digits, use `WV-0001`)
+- [FAIL] `waiver-001` (must start with `WV-`)
 
 **Fix**:
 

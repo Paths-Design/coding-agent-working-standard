@@ -1,15 +1,15 @@
 # CAWS MCP Tools Test Plan
 
-**Date**: October 9, 2025  
-**Version**: After esbuild bundling + CLI path fixes  
+**Date**: October 9, 2025
+**Version**: After esbuild bundling + CLI path fixes
 **Extension**: `caws-vscode-extension-1.0.0.vsix`
 
 ## Pre-Test Setup
 
-- ✅ Extension installed: `caws-vscode-extension-1.0.0.vsix`
-- ✅ CLI bundled with esbuild (2.0 MB)
-- ✅ All MCP handlers updated to use `../cli/index.js`
-- ✅ All command names fixed (`evaluate`, `iterate` not `agent evaluate`)
+- Extension installed: `caws-vscode-extension-1.0.0.vsix`
+- CLI bundled with esbuild (2.0 MB)
+- All MCP handlers updated to use `../cli/index.js`
+- All command names fixed (`evaluate`, `iterate` not `agent evaluate`)
 - ⏳ **REQUIRES CURSOR RESTART** to load new extension
 
 ---
@@ -20,31 +20,31 @@
 
 | Tool            | Command Called  | Expected Result                         | Status  | Notes                            |
 | --------------- | --------------- | --------------------------------------- | ------- | -------------------------------- |
-| `caws_init`     | `caws init`     | Project initialized with CAWS structure | ✅ PASS | Created .caws/ + working spec    |
-| `caws_scaffold` | `caws scaffold` | Components scaffolded, no ESM errors    | ✅ PASS | **NO ESM ERRORS!** esbuild wins! |
-| `caws_validate` | `caws validate` | Validates working spec                  | ✅ PASS | Validated tier 2 spec            |
+| `caws_init`     | `caws init`     | Project initialized with CAWS structure | PASS | Created .caws/ + working spec    |
+| `caws_scaffold` | `caws scaffold` | Components scaffolded, no ESM errors    | PASS | **NO ESM ERRORS!** esbuild wins! |
+| `caws_validate` | `caws validate` | Validates working spec                  | PASS | Validated tier 2 spec            |
 
 ### 2. Quality & Guidance Tools (NEW)
 
 | Tool                 | Command Called        | Expected Result      | Status  | Notes                        |
 | -------------------- | --------------------- | -------------------- | ------- | ---------------------------- |
-| `caws_evaluate`      | `caws evaluate`       | Quality score 0-100% | ✅ PASS | Got 80% (Grade B) - Perfect! |
-| `caws_iterate`       | `caws iterate`        | Iterative guidance   | ✅ PASS | TDD guidance provided        |
-| `caws_waiver_create` | `caws waivers create` | Waiver created       | ✅ PASS | Created WV-6916 successfully |
+| `caws_evaluate`      | `caws evaluate`       | Quality score 0-100% | PASS | Got 80% (Grade B) - Perfect! |
+| `caws_iterate`       | `caws iterate`        | Iterative guidance   | PASS | TDD guidance provided        |
+| `caws_waiver_create` | `caws waivers create` | Waiver created       | PASS | Created WV-6916 successfully |
 
 ### 3. Project Health Tools
 
 | Tool            | Command Called  | Expected Result       | Status  | Notes                    |
 | --------------- | --------------- | --------------------- | ------- | ------------------------ |
-| `caws_status`   | `caws status`   | Health overview       | ✅ PASS | Dashboard displayed      |
-| `caws_diagnose` | `caws diagnose` | Health checks + fixes | ✅ PASS | Found 3 issues, auto-fix |
+| `caws_status`   | `caws status`   | Health overview       | PASS | Dashboard displayed      |
+| `caws_diagnose` | `caws diagnose` | Health checks + fixes | PASS | Found 3 issues, auto-fix |
 
 ### 4. Provenance & Git Tools
 
 | Tool              | Command Called         | Expected Result      | Status  | Notes                       |
 | ----------------- | ---------------------- | -------------------- | ------- | --------------------------- |
-| `caws_provenance` | `caws provenance show` | Provenance dashboard | ✅ PASS | Shows "no data" as expected |
-| `caws_hooks`      | `caws hooks status`    | Git hooks status     | ✅ PASS | Shows 0/4 hooks active      |
+| `caws_provenance` | `caws provenance show` | Provenance dashboard | PASS | Shows "no data" as expected |
+| `caws_hooks`      | `caws hooks status`    | Git hooks status     | PASS | Shows 0/4 hooks active      |
 
 ### 5. Test Analysis Tools
 
@@ -102,19 +102,19 @@
 
 ### Before Fixes
 
-- ❌ ESM errors in `caws_scaffold`
-- ❌ `caws_evaluate` - Command not found
-- ❌ `caws_iterate` - Command not found
-- ❌ `caws_waiver_create` - Command not found
-- ⚠️ Slow response times (unbundled CLI)
+- ESM errors in `caws_scaffold`
+- `caws_evaluate` - Command not found
+- `caws_iterate` - Command not found
+- `caws_waiver_create` - Command not found
+- Slow response times (unbundled CLI)
 
 ### After Fixes
 
-- ✅ No ESM errors (esbuild bundles all dependencies)
-- ✅ `caws_evaluate` - Calls `caws evaluate` successfully
-- ✅ `caws_iterate` - Calls `caws iterate` successfully
-- ✅ `caws_waiver_create` - Calls `caws waivers create` successfully
-- ✅ Fast response times (2.0 MB bundled CLI)
+- No ESM errors (esbuild bundles all dependencies)
+- `caws_evaluate` - Calls `caws evaluate` successfully
+- `caws_iterate` - Calls `caws iterate` successfully
+- `caws_waiver_create` - Calls `caws waivers create` successfully
+- Fast response times (2.0 MB bundled CLI)
 
 ---
 
@@ -124,7 +124,7 @@
 2. Open test project or create new one
 3. Execute each tool via MCP (not terminal)
 4. Document results in this file
-5. Update status: ⏳ Pending → ✅ Pass / ❌ Fail
+5. Update status: ⏳ Pending → Pass / Fail
 
 ---
 
@@ -140,11 +140,11 @@
 
 ## Success Criteria
 
-- ✅ All 13 MCP tools functional
-- ✅ No ESM errors
-- ✅ Response times < 2s
-- ✅ New commands (`evaluate`, `iterate`, `waivers`) work
-- ✅ 1:1 parity with CLI commands
+- All 13 MCP tools functional
+- No ESM errors
+- Response times < 2s
+- New commands (`evaluate`, `iterate`, `waivers`) work
+- 1:1 parity with CLI commands
 
 ---
 

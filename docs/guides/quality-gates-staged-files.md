@@ -6,18 +6,18 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 
 ## Features
 
-### 🎯 **Staged Files Only**
+### **Staged Files Only**
 - Analyzes only files in git staging area (`git diff --cached --name-only`)
 - Eliminates false positives from untouched code
 - Fast execution focused on actual changes
 
-### 🏗️ **God Object Detection**
+### **God Object Detection**
 - Identifies files approaching or exceeding size thresholds
 - Configurable warning (1750 LOC) and critical (2000 LOC) limits
 - Language-specific analysis (Rust, TypeScript, JavaScript, Python)
 - **Crisis Mode**: Higher thresholds (3000 LOC) for emergency situations
 
-### 🔍 **Advanced Hidden TODO Analysis**
+### **Advanced Hidden TODO Analysis**
 - **Enhanced Pattern Detection**: Context-aware analysis with reduced false positives
 - **Code Stub Detection**: Identifies `pass`, `NotImplementedError`, `throw new Error("TODO")` patterns
 - **Engineering-Grade TODO Templates**: Automatic suggestions for CAWS-compliant TODO format
@@ -27,36 +27,36 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 - **CAWS Tier Integration**: Different thresholds and requirements based on project tier
 - **Crisis Mode**: Stricter confidence thresholds (0.9 vs 0.8) for emergency situations
 
-### 🎯 **CAWS Tier Integration**
+### **CAWS Tier Integration**
 - Tier 1: 90% coverage, 70% mutation, contracts required, manual review
 - Tier 2: 80% coverage, 50% mutation, contracts optional
 - Tier 3: 70% coverage, 30% mutation, basic checks
 
-### 🚨 **Waiver System Integration**
+### **Waiver System Integration**
 - Honors active waivers from `.caws/waivers.yml`
 - Supports waiver expiration and status validation
 - Gate-specific waiver matching
 - Audit trail for waived checks
 
-### 🚨 **Crisis Response Mode**
+### **Crisis Response Mode**
 - Automatic detection from working spec, environment, or commit messages
 - Relaxed thresholds for emergency situations
 - Clear crisis mode indicators in output
 - Guidance for creating waivers during crises
 
-### 👤 **Human Override Support**
+### **Human Override Support**
 - Respects human overrides from working spec
 - Bypasses quality gates when human override is active
 - Audit trail for override decisions
 
-### 📊 **Provenance Tracking**
+### **Provenance Tracking**
 - Automatic tracking of quality gate runs
 - Error statistics and classification
 - Agent type detection (Cursor IDE, VS Code, CLI)
 - Crisis mode and waiver tracking
 - JSONL journal format for analysis
 
-### 🔍 **Comprehensive Error Taxonomy**
+### **Comprehensive Error Taxonomy**
 - Structured error types with context and recovery strategies
 - Error classification by category, severity, and retryability
 - Recovery strategy recommendations
@@ -309,22 +309,22 @@ caws scaffold
 
 ## Benefits
 
-### ✅ **Focused Analysis**
+### **Focused Analysis**
 - Only analyzes files you're actually changing
 - Eliminates false positives from untouched code
 - Fast execution for rapid development cycles
 
-### ✅ **Engineering-Grade Standards**
+### **Engineering-Grade Standards**
 - Supports comprehensive TODO templates
 - CAWS tier-aware quality thresholds
 - Dependency resolution for blocking TODOs
 
-### ✅ **Developer Experience**
+### **Developer Experience**
 - Clear violation messages with file locations
 - Actionable recommendations
 - CI/CD integration with proper exit codes
 
-### ✅ **Quality Assurance**
+### **Quality Assurance**
 - Prevents god objects from entering codebase
 - Catches hidden TODOs and stub implementations
 - Maintains code quality standards

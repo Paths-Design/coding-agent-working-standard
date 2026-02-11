@@ -573,19 +573,19 @@ fi
 
 ### DO
 
-- ✅ Monitor CLI startup time
-- ✅ Track bundle size over time
-- ✅ Set up security alerts
-- ✅ Monitor npm download trends
-- ✅ Test health checks regularly
+- Monitor CLI startup time
+- Track bundle size over time
+- Set up security alerts
+- Monitor npm download trends
+- Test health checks regularly
 
 ### DON'T
 
-- ❌ Collect user data without consent
-- ❌ Track individual users
-- ❌ Send telemetry by default
-- ❌ Expose sensitive metrics publicly
-- ❌ Ignore security alerts
+- Do not collect user data without consent
+- Do not track individual users
+- Do not send telemetry by default
+- Do not expose sensitive metrics publicly
+- Do not ignore security alerts
 
 ---
 

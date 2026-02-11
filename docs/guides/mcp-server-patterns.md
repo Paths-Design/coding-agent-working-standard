@@ -85,19 +85,19 @@ class CAWSBaseTool {
    * Structured logging with levels
    */
   logInfo(message, metadata = {}) {
-    this.logger.info(`ℹ️  ${message}`, metadata);
+    this.logger.info(`[INFO] ${message}`, metadata);
   }
 
   logWarning(message, metadata = {}) {
-    this.logger.warn(`⚠️  ${message}`, metadata);
+    this.logger.warn(`[WARN] ${message}`, metadata);
   }
 
   logError(message, error, metadata = {}) {
-    this.logger.error(`❌ ${message}`, { error: error.message, ...metadata });
+    this.logger.error(`[ERROR] ${message}`, { error: error.message, ...metadata });
   }
 
   logSuccess(message, metadata = {}) {
-    this.logger.info(`✅ ${message}`, metadata);
+    this.logger.info(`[OK] ${message}`, metadata);
   }
 
   /**
@@ -479,12 +479,12 @@ class BudgetMonitor extends EventEmitter {
 const monitor = new BudgetMonitor();
 
 monitor.on('budget:warning', (alert) => {
-  console.log(`⚠️  Budget at ${alert.usage}% (threshold: ${alert.threshold}%)`);
+  console.log(`[WARN] Budget at ${alert.usage}% (threshold: ${alert.threshold}%)`);
   // Notify agents via MCP
 });
 
 monitor.on('budget:critical', (alert) => {
-  console.log(`🚫 Budget critical: ${alert.usage}%`);
+  console.log(`[CRITICAL] Budget critical: ${alert.usage}%`);
   // Block further changes or request human approval
 });
 
@@ -665,7 +665,7 @@ class CAWSMCPServer extends Server {
 
 ## Complete Example: CAWS MCP Server
 
-Putting it all together:
+Putting it all together. Note that the CAWS MCP server uses a **modular handler pattern**: tool definitions live in `src/tool-definitions.js`, and handler logic is split into domain-specific modules (e.g., `src/handlers/quality-gates.js`, `src/handlers/slash-commands.js`). Each module exports an `install*Handlers(server)` function that registers its tools on the shared server instance:
 
 ```javascript
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
@@ -673,6 +673,8 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { CAWSBaseTool } = require('./base-tool.js');
 const { BudgetMonitor } = require('./budget-monitor.js');
 const { ProvenanceTracker } = require('./provenance-tracker.js');
+const { installQualityGatesHandlers } = require('./handlers/quality-gates.js');
+const { installSlashCommandHandlers } = require('./handlers/slash-commands.js');
 
 class CAWSMCPServer extends Server {
   constructor() {
@@ -693,6 +695,10 @@ class CAWSMCPServer extends Server {
     this.provenance = new ProvenanceTracker();
 
     this.setupToolHandlers();
+
+    // Install modular handlers
+    installQualityGatesHandlers(this);
+    installSlashCommandHandlers(this);
   }
 
   setupToolHandlers() {

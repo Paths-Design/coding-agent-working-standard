@@ -2,7 +2,7 @@
 
 We welcome contributions from the community! This guide will help you get started with contributing to the CAWS (Coding Agent Workflow System) project.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js >= 18.0.0
@@ -25,7 +25,7 @@ npm run dev
 npm run test
 ```
 
-## 📝 Contribution Process
+## Contribution Process
 
 ### 1. Create an Issue
 Before starting work, open a GitHub issue to discuss:
@@ -101,7 +101,7 @@ Submit a pull request with:
 - **Test Results**: Show that all tests pass
 - **Screenshots**: If UI changes are involved
 
-## 🧪 Testing Guidelines
+## Testing Guidelines
 
 ### Test Categories
 1. **Unit Tests**: Test individual functions and components in isolation
@@ -131,7 +131,7 @@ describe('Working Spec Validation', () => {
 });
 ```
 
-## 📚 Documentation Guidelines
+## Documentation Guidelines
 
 ### README Updates
 - Keep the main README as the primary entry point
@@ -151,7 +151,7 @@ describe('Working Spec Validation', () => {
 - Specify input and output formats
 - Document error conditions
 
-## 🔒 Security Considerations
+## Security Considerations
 
 ### Secure Development Practices
 - Never commit secrets or credentials
@@ -165,7 +165,7 @@ describe('Working Spec Validation', () => {
 - Use responsible disclosure practices
 - Include reproduction steps and impact assessment
 
-## 🤝 Community Guidelines
+## Community Guidelines
 
 ### Communication Standards
 - Be respectful and constructive in discussions
@@ -185,7 +185,7 @@ describe('Working Spec Validation', () => {
 - Test suggested changes when possible
 - Approve when requirements are met
 
-## 📋 Pull Request Checklist
+## Pull Request Checklist
 
 Before submitting a PR, ensure:
 
@@ -198,7 +198,7 @@ Before submitting a PR, ensure:
 - [ ] **Quality Gates**: All validation checks pass
 - [ ] **Provenance**: Manifest updated if needed
 
-## 🐛 Bug Reports
+## Bug Reports
 
 When reporting bugs, include:
 
@@ -209,7 +209,7 @@ When reporting bugs, include:
 5. **Environment**: Node.js version, OS, etc.
 6. **Logs**: Any relevant error messages or logs
 
-## ✨ Feature Requests
+## Feature Requests
 
 When requesting features, include:
 
@@ -219,7 +219,7 @@ When requesting features, include:
 4. **Impact**: How it affects existing functionality
 5. **Implementation Ideas**: High-level implementation thoughts
 
-## 📞 Getting Help
+## Getting Help
 
 ### Support Channels
 - **GitHub Issues**: Bug reports and feature requests
@@ -233,7 +233,7 @@ When requesting features, include:
 - **Documentation**: Check README and docs for guidance
 - **Community**: Follow agent conduct rules
 
-## 🎯 Recognition
+## Recognition
 
 Contributors are recognized for their efforts through:
 - **GitHub Recognition**: Stars, forks, and mentions
@@ -241,7 +241,7 @@ Contributors are recognized for their efforts through:
 - **Documentation**: Author attribution where appropriate
 - **Community**: Recognition in community spaces
 
-## 📜 License
+## License
 
 By contributing to CAWS, you agree that your contributions will be licensed under the same MIT License that covers the project.
 

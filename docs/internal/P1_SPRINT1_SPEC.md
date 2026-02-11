@@ -1,7 +1,7 @@
 # P1 Sprint 1: Achieve True 100% CLI/MCP Parity
 
-**Priority**: 🔴 CRITICAL  
-**Duration**: 1-2 days  
+**Priority**: CRITICAL
+**Duration**: 1-2 days
 **Goal**: Move MCP server logic to CLI commands for 1:1 parity
 
 ---
@@ -20,7 +20,7 @@ Currently, 3 MCP tools have **hardcoded logic in the MCP server** instead of cal
 
 ## Current State Analysis
 
-### 1. `caws_workflow_guidance` ❌ NO CLI COMMAND
+### 1. `caws_workflow_guidance` NO CLI COMMAND
 
 **Current Implementation**: Hardcoded in MCP server
 
@@ -46,7 +46,7 @@ caws workflow <type> --step <number> [--context <json>]
 
 ---
 
-### 2. `caws_quality_monitor` ❌ NO CLI COMMAND
+### 2. `caws_quality_monitor` NO CLI COMMAND
 
 **Current Implementation**: Hardcoded in MCP server
 
@@ -68,7 +68,7 @@ caws quality-monitor <action> [--files <files>] [--context <json>]
 
 ---
 
-### 3. `caws_test_analysis` ⚠️ WRONG CLI PATH
+### 3. `caws_test_analysis` WRONG CLI PATH
 
 **Current Implementation**: Calls wrong path
 
@@ -79,7 +79,7 @@ const result = await execCommand(
   // Should be: ../cli/index.js
 ```
 
-**CLI Command**: ✅ Already exists as `caws test-analysis`
+**CLI Command**: Already exists as `caws test-analysis`
 
 **What's Needed**: Fix MCP handler path
 
@@ -358,17 +358,17 @@ caws_test_analysis
 
 ## Success Criteria
 
-- ✅ `caws workflow tdd --step 1` works from terminal
-- ✅ `caws workflow refactor --step 2` works from terminal
-- ✅ `caws workflow feature --step 3` works from terminal
-- ✅ `caws quality-monitor file_saved --files src/auth.ts` works
-- ✅ `caws quality-monitor code_edited` works
-- ✅ `caws quality-monitor test_run` works
-- ✅ `caws test-analysis assess-budget` works (path fixed)
-- ✅ All 3 tools work via MCP (no hardcoded logic)
-- ✅ MCP server < 1200 LOC (removed ~230 lines)
-- ✅ 13/13 MCP tools have CLI commands
-- ✅ 100% true CLI/MCP parity achieved
+- `caws workflow tdd --step 1` works from terminal
+- `caws workflow refactor --step 2` works from terminal
+- `caws workflow feature --step 3` works from terminal
+- `caws quality-monitor file_saved --files src/auth.ts` works
+- `caws quality-monitor code_edited` works
+- `caws quality-monitor test_run` works
+- `caws test-analysis assess-budget` works (path fixed)
+- All 3 tools work via MCP (no hardcoded logic)
+- MCP server < 1200 LOC (removed ~230 lines)
+- 13/13 MCP tools have CLI commands
+- 100% true CLI/MCP parity achieved
 
 ---
 

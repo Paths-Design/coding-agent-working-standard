@@ -4,7 +4,7 @@
 
 CAWS is a comprehensive framework that transforms how AI agents and human developers collaborate on software projects. It enforces quality, reliability, and maintainability through automated validation, provenance tracking, and contract-first development.
 
-## 🎯 What CAWS Is For
+## What CAWS Is For
 
 CAWS is designed for organizations and teams that want:
 
@@ -14,7 +14,7 @@ CAWS is designed for organizations and teams that want:
 - **Contract-First APIs**: API contracts defined before implementation
 - **Risk-Based Rigor**: Different quality requirements based on project risk
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -32,7 +32,7 @@ npm install -g @paths.design/caws-cli
 caws --version
 ```
 
-### ✨ What's New in v3.4.0
+### What's New in v3.4.0
 
 - **10x Performance Boost**: Intelligent policy caching for faster validation
 - **Programmatic API**: Type-safe JavaScript API for custom integrations
@@ -59,24 +59,24 @@ caws validate
 # Start development following CAWS workflow
 ```
 
-## 📋 How CAWS Works
+## How CAWS Works
 
 ### The CAWS Development Workflow
 
-1. **📝 Plan**: Create a validated working specification (`.caws/working-spec.yaml`)
-2. **🔗 Contract**: Define API contracts (OpenAPI, TypeScript interfaces)
-3. **🧪 Test**: Write tests first (TDD approach)
-4. **💻 Implement**: Code against contracts and tests
-5. **✅ Verify**: Run quality gates and validation
-6. **📊 Document**: Track provenance and update docs
+1. **Plan**: Create a validated working specification (`.caws/working-spec.yaml`)
+2. **Contract**: Define API contracts (OpenAPI, TypeScript interfaces)
+3. **Test**: Write tests first (TDD approach)
+4. **Implement**: Code against contracts and tests
+5. **Verify**: Run quality gates and validation
+6. **Document**: Track provenance and update docs
 
 ### Risk-Based Quality Tiers
 
 | Tier      | Use Case                    | Coverage | Mutation | Contracts | Review   |
 | --------- | --------------------------- | -------- | -------- | --------- | -------- |
-| 🔴 **T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
-| 🟡 **T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
-| 🟢 **T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
+| **T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
+| **T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
+| **T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
 
 ### Key Components
 
@@ -86,7 +86,7 @@ caws validate
 - **Contract Validation**: API contracts tested before and during implementation
 - **MCP Server**: Model Context Protocol server for AI agent integration
 
-## 🛠️ CLI Commands
+## CLI Commands
 
 ### Project Management
 
@@ -129,26 +129,26 @@ caws waivers list                 # List active waivers
 caws workflow guidance            # Get workflow-specific guidance
 ```
 
-## 📚 Documentation & Examples
+## Documentation & Examples
 
-### 📖 Comprehensive Guides
+### Comprehensive Guides
 
 - **[Agent Workflow Guide](docs/agents/full-guide.md)** - Complete guide for AI agents
 - **[Agent Integration Guide](docs/guides/agent-integration-guide.md)** - Technical integration details
 - **[Agent Workflow Extensions](docs/guides/agent-workflow-extensions.md)** - Advanced agent features
 
-### 🧪 Examples & Templates
+### Examples & Templates
 
 - **[Demo Project](packages/caws-cli/demo-project/)** - Complete working example
 - **[Template Project](packages/caws-cli/templates/)** - Project scaffolding templates
 
-### 🔍 Quality Assurance
+### Quality Assurance
 
 - **[Benchmarking Framework](docs/internal/CAWS_AGENT_BENCHMARKING_FRAMEWORK.md)** - Agent effectiveness testing
 - **[Specification Audit](docs/internal/SPEC_ALIGNMENT_AUDIT.md)** - Current implementation status
 - **[Validation Summary](docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Compliance verification
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### Core Components
 
@@ -206,7 +206,7 @@ Working Spec → Contract Generation → Test Writing → Implementation → Qua
    Schema        From Contracts         Approach     Contracts       Validation       & Analytics
 ```
 
-## 🤖 For AI Agents
+## For AI Agents
 
 ### Your Development Contract
 
@@ -229,24 +229,24 @@ When working on a CAWS project, you must:
 
 See the **[Agent Workflow Guide](docs/agents/full-guide.md)** for detailed instructions.
 
-## 📦 Packages
+## Packages
 
 ### Core Packages
 
 | Package                   | Description                                 | Status                  |
 | ------------------------- | ------------------------------------------- | ----------------------- |
-| **caws-cli**              | Command-line interface for CAWS operations  | ✅ Stable (v3.4.0)      |
-| **caws-mcp-server**       | Model Context Protocol server for AI agents | ✅ Stable (v1.0.0)      |
-| **caws-vscode-extension** | VS Code extension with CAWS integration     | 🧪 Pre-release (v0.9.0) |
+| **caws-cli**              | Command-line interface for CAWS operations  | Stable (v3.4.0)      |
+| **caws-mcp-server**       | Model Context Protocol server for AI agents | Stable (v1.0.0)      |
+| **caws-vscode-extension** | VS Code extension with CAWS integration     | Pre-release (v0.9.0) |
 
 ### Development Packages
 
 | Package                | Description                          | Status    |
 | ---------------------- | ------------------------------------ | --------- |
-| **caws-test-project**  | Reference implementation and testing | ✅ Stable |
-| **caws-cli/templates** | Project templates and scaffolding    | ✅ Stable |
+| **caws-test-project**  | Reference implementation and testing | Stable |
+| **caws-cli/templates** | Project templates and scaffolding    | Stable |
 
-## 🔧 Development
+## Development
 
 ### Building
 
@@ -284,7 +284,7 @@ caws/
 └── scripts/                      # Build and utility scripts
 ```
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details.
 
@@ -305,11 +305,11 @@ This project uses CAWS for its own development. All contributions must:
 - Include comprehensive contract definitions
 - Follow the established patterns and conventions
 
-## 📄 License
+## License
 
 **MIT License** - see [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Model Context Protocol** for the standardized agent interface
 - **OpenAPI Initiative** for API contract standards
@@ -318,12 +318,12 @@ This project uses CAWS for its own development. All contributions must:
 
 ---
 
-## 📞 Support & Community
+## Support & Community
 
-- **📖 Documentation**: [Full Agent Guide](docs/agents/full-guide.md)
-- **🐛 Issues**: [GitHub Issues](https://github.com/Paths-Design/coding-agent-working-standard/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
-- **📧 Email**: hello@paths.design
+- **Documentation**: [Full Agent Guide](docs/agents/full-guide.md)
+- **Issues**: [GitHub Issues](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
+- **Email**: hello@paths.design
 
 ---
 

@@ -1,7 +1,7 @@
 # Agent-Agency Additional Patterns & Opportunities
 
-**Date**: October 11, 2025  
-**Status**: Review & Prioritization  
+**Date**: October 11, 2025
+**Status**: Review & Prioritization
 **Context**: Post P0/P1 completion - identifying next wave of improvements
 
 ---
@@ -14,7 +14,7 @@ After completing the initial agent-agency integration (8/8 tasks), we've identif
 
 ## Discovered Patterns
 
-### 1. **Performance Tracking Integration** ⭐ HIGH VALUE
+### 1. **Performance Tracking Integration** HIGH VALUE
 
 **What they built:**
 
@@ -54,7 +54,7 @@ class SpecValidator {
 
 ---
 
-### 2. **Class-Based Architecture** ⭐ MEDIUM VALUE
+### 2. **Class-Based Architecture** MEDIUM VALUE
 
 **What they built:**
 
@@ -100,7 +100,7 @@ class SpecValidator {
 
 ---
 
-### 3. **Policy Validation on Load** ⭐ HIGH VALUE
+### 3. **Policy Validation on Load** HIGH VALUE
 
 **What they built:**
 
@@ -148,7 +148,7 @@ class PolicyLoader {
 
 ---
 
-### 4. **Waiver Structure Validation** ⭐ HIGH VALUE
+### 4. **Waiver Structure Validation** HIGH VALUE
 
 **What they built:**
 
@@ -190,7 +190,7 @@ class WaiverManager {
 
 ---
 
-### 5. **Default Policy Fallback** ⭐ MEDIUM VALUE
+### 5. **Default Policy Fallback** MEDIUM VALUE
 
 **What they built:**
 
@@ -229,7 +229,7 @@ class PolicyLoader {
 
 ---
 
-### 6. **Compliance Score Calculation** ⭐ MEDIUM VALUE
+### 6. **Compliance Score Calculation** MEDIUM VALUE
 
 **What they built:**
 
@@ -262,7 +262,7 @@ const complianceScore = Math.max(
 
 ---
 
-### 7. **Event-Driven Integration** ⭐ FUTURE
+### 7. **Event-Driven Integration** FUTURE
 
 **What they designed:**
 
@@ -291,7 +291,7 @@ this.eventEmitter.emit("validation:failed", { error });
 
 ---
 
-### 8. **Database Integration for History** ⭐ FUTURE
+### 8. **Database Integration for History** FUTURE
 
 **What they designed:**
 
@@ -315,7 +315,7 @@ const history = await this.database.getValidationHistory(spec.id);
 
 ---
 
-### 9. **Batch Waiver Operations** ⭐ LOW VALUE
+### 9. **Batch Waiver Operations** LOW VALUE
 
 **What they built:**
 
@@ -350,7 +350,7 @@ class WaiverManager {
 
 ---
 
-### 10. **Better Error Messages** ⭐ HIGH VALUE
+### 10. **Better Error Messages** HIGH VALUE
 
 **What they do better:**
 
@@ -383,56 +383,56 @@ throw new Error(
 
 ### Quick Wins (P2 - Next Sprint)
 
-1. **Policy Validation on Load** (2-3 hours) ⭐⭐⭐
+1. **Policy Validation on Load** (2-3 hours)
    - High value, low effort
    - Prevents runtime errors
    - Better UX
 
-2. **Waiver Structure Validation** (2-3 hours) ⭐⭐⭐
+2. **Waiver Structure Validation** (2-3 hours)
    - High value, low effort
    - Catch errors early
    - Better governance
 
-3. **Compliance Score** (1-2 hours) ⭐⭐
+3. **Compliance Score** (1-2 hours)
    - Nice metric for tracking
    - Easy to implement
    - Shows quality trend
 
-4. **Better Error Messages** (2-3 hours) ⭐⭐⭐
+4. **Better Error Messages** (2-3 hours)
    - High value, low effort
    - Immediate UX improvement
    - Reduces confusion
 
 ### Medium Term (P3 - Month 2)
 
-5. **Default Policy Fallback** (1-2 hours) ⭐⭐
+5. **Default Policy Fallback** (1-2 hours)
    - Nice for new projects
    - Graceful degradation
    - Low effort
 
-6. **Performance Tracking** (4-6 hours) ⭐⭐
+6. **Performance Tracking** (4-6 hours)
    - Valuable for optimization
    - Optional feature
    - Medium effort
 
-7. **Batch Waiver Operations** (1 hour) ⭐
+7. **Batch Waiver Operations** (1 hour)
    - Nice cleanup
    - Not critical
    - Low effort
 
 ### Long Term (P4 - Future)
 
-8. **Class-Based Architecture** (16-20 hours) ⭐
+8. **Class-Based Architecture** (16-20 hours)
    - Good long-term architecture
    - High effort
    - Can wait
 
-9. **Event-Driven Integration** (6-8 hours) ⭐⭐
+9. **Event-Driven Integration** (6-8 hours)
    - Extensibility
    - Requires event system
    - Medium effort
 
-10. **Database Integration** (20+ hours) ⭐
+10. **Database Integration** (20+ hours)
     - Advanced feature
     - High effort
     - Need to prove value first
@@ -443,8 +443,8 @@ throw new Error(
 
 ### Phase 2A: Quick Wins (Week 5)
 
-**Effort**: 8-10 hours  
-**Value**: High  
+**Effort**: 8-10 hours
+**Value**: High
 **Risk**: Low
 
 Tasks:
@@ -461,8 +461,8 @@ Tasks:
 
 ### Phase 2B: Polish (Week 6)
 
-**Effort**: 6-8 hours  
-**Value**: Medium  
+**Effort**: 6-8 hours
+**Value**: Medium
 **Risk**: Low
 
 Tasks:
@@ -479,8 +479,8 @@ Tasks:
 
 ### Phase 3: Architecture (Future)
 
-**Effort**: 20+ hours  
-**Value**: Long-term  
+**Effort**: 20+ hours
+**Value**: Long-term
 **Risk**: Medium
 
 Tasks:
@@ -494,19 +494,19 @@ Tasks:
 
 ### Phase 2A Success Criteria
 
-- ✅ Policy validation prevents invalid configs
-- ✅ Waiver validation catches malformed waivers
-- ✅ Error messages include actionable next steps
-- ✅ Compliance score shown in status output
-- ✅ All tests passing
-- ✅ Zero breaking changes
+- Policy validation prevents invalid configs
+- Waiver validation catches malformed waivers
+- Error messages include actionable next steps
+- Compliance score shown in status output
+- All tests passing
+- Zero breaking changes
 
 ### Phase 2B Success Criteria
 
-- ✅ New projects work without policy.yaml
-- ✅ Performance metrics collected (opt-in)
-- ✅ Waiver loading is cleaner
-- ✅ Test coverage maintained at 90%+
+- New projects work without policy.yaml
+- Performance metrics collected (opt-in)
+- Waiver loading is cleaner
+- Test coverage maintained at 90%+
 
 ---
 
@@ -523,16 +523,16 @@ Tasks:
 
 | Feature | CAWS | Agent-Agency | Priority |
 |---------|------|--------------|----------|
-| **Type Safety** | ✅ v3.5.0 | ✅ Native | Equal |
-| **Policy Validation** | ❌ Missing | ✅ On load | P2 |
-| **Waiver Validation** | ✅ Expiry only | ✅ Full | P2 |
-| **Error Messages** | ⚠️ Basic | ✅ Actionable | P2 |
-| **Compliance Score** | ❌ Missing | ✅ Calculated | P2 |
-| **Performance Tracking** | ❌ Missing | ✅ Optional | P3 |
-| **Default Policy** | ❌ Required | ✅ Fallback | P3 |
+| **Type Safety** | v3.5.0 | Native | Equal |
+| **Policy Validation** | Missing | On load | P2 |
+| **Waiver Validation** | Expiry only | Full | P2 |
+| **Error Messages** | Basic | Actionable | P2 |
+| **Compliance Score** | Missing | Calculated | P2 |
+| **Performance Tracking** | Missing | Optional | P3 |
+| **Default Policy** | Required | Fallback | P3 |
 | **Architecture** | Functions | Classes | P4 |
-| **Event System** | ❌ None | ✅ Full | P4 |
-| **Database** | ❌ None | ✅ Full | P4 |
+| **Event System** | None | Full | P4 |
+| **Database** | None | Full | P4 |
 
 ---
 
@@ -541,30 +541,30 @@ Tasks:
 Agent-agency's implementation reveals several polish opportunities that would enhance CAWS's production readiness:
 
 **High Priority** (P2 - Quick Wins):
-- Policy/waiver validation on load ⭐⭐⭐
-- Better error messages ⭐⭐⭐
-- Compliance score calculation ⭐⭐
+- Policy/waiver validation on load
+- Better error messages
+- Compliance score calculation
 
 **Medium Priority** (P3 - Polish):
-- Default policy fallback ⭐⭐
-- Performance tracking ⭐⭐
-- Batch operations ⭐
+- Default policy fallback
+- Performance tracking
+- Batch operations
 
 **Low Priority** (P4 - Future):
-- Class-based architecture ⭐
-- Event system ⭐⭐
-- Database integration ⭐
+- Class-based architecture
+- Event system
+- Database integration
 
 **Recommended Next Action**: Implement P2 Quick Wins (8-10 hours) in next sprint for immediate UX improvement.
 
 ---
 
-**Status**: Ready for review and prioritization  
-**Estimated Effort**: 8-10 hours (P2), 6-8 hours (P3), 20+ hours (P4)  
+**Status**: Ready for review and prioritization
+**Estimated Effort**: 8-10 hours (P2), 6-8 hours (P3), 20+ hours (P4)
 **Risk**: Low (all additive, backward compatible)
 
 ---
 
-*Analysis completed October 11, 2025*  
+*Analysis completed October 11, 2025*
 *Built on successful P0/P1 completion*
 

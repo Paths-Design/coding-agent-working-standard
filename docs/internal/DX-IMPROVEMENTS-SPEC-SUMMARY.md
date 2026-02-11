@@ -1,11 +1,11 @@
 # Developer Experience Improvements - Working Spec Summary
 
-**Spec ID**: DX-001  
-**Risk Tier**: 2 (Standard Feature)  
-**Mode**: Feature  
-**Status**: ✅ Validated & Ready for Implementation
+**Spec ID**: DX-001
+**Risk Tier**: 2 (Standard Feature)
+**Mode**: Feature
+**Status**: Validated & Ready for Implementation
 
-## 📋 Overview
+## Overview
 
 This working spec defines Phase 1 of the Developer Experience improvements based on comprehensive agent feedback. It focuses on **quick wins** that can be delivered within 2 weeks while maintaining backward compatibility.
 
@@ -17,7 +17,7 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 4. **Smart Diagnostics** - `caws diagnose` with auto-fix
 5. **Template Discovery** - `caws templates` command
 
-## 🎯 Success Metrics
+## Success Metrics
 
 | Metric                 | Current | Target  | Improvement    |
 | ---------------------- | ------- | ------- | -------------- |
@@ -27,7 +27,7 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 | Auto-fix success rate  | 0%      | 75%     | New capability |
 | Template adoption      | 10%     | 50%     | +400%          |
 
-## 📊 Change Budget
+## Change Budget
 
 - **Max Files**: 40
 - **Max LOC**: 2,500
@@ -44,23 +44,23 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 | T5: Templates List         | 4      | 200       | 8            |
 | **Total**                  | **40** | **2,500** | **88**       |
 
-## ✅ Acceptance Criteria
+## Acceptance Criteria
 
 ### A1: Enhanced Error Messages
 
-**Given**: User runs `caws validate` with invalid option  
-**When**: CLI encounters the error  
+**Given**: User runs `caws validate` with invalid option
+**When**: CLI encounters the error
 **Then**: Display helpful error with:
 
 - Clear error description
 - "Did you mean?" suggestions
 - Documentation link
-- Emoji indicators (❌ ⚠️ 💡)
+- Emoji indicators ()
 
 ### A2: TypeScript Auto-Configuration
 
-**Given**: TypeScript project without Jest config  
-**When**: User runs `caws init` or `caws scaffold`  
+**Given**: TypeScript project without Jest config
+**When**: User runs `caws init` or `caws scaffold`
 **Then**:
 
 - Detect `tsconfig.json`
@@ -70,8 +70,8 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 
 ### A3: Status Command
 
-**Given**: User runs `caws status` in CAWS project  
-**When**: Command executes  
+**Given**: User runs `caws status` in CAWS project
+**When**: Command executes
 **Then**: Display:
 
 - Working spec status
@@ -82,8 +82,8 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 
 ### A4: Diagnose Command
 
-**Given**: Project with configuration issues  
-**When**: User runs `caws diagnose`  
+**Given**: Project with configuration issues
+**When**: User runs `caws diagnose`
 **Then**:
 
 - Run comprehensive health checks
@@ -93,8 +93,8 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 
 ### A5: Templates List
 
-**Given**: User runs `caws templates list`  
-**When**: Command executes  
+**Given**: User runs `caws templates list`
+**When**: Command executes
 **Then**:
 
 - Show all built-in templates
@@ -104,15 +104,15 @@ This working spec defines Phase 1 of the Developer Experience improvements based
 
 ### A6: Contextual Help
 
-**Given**: User encounters common setup issue  
-**When**: Using any CAWS command  
+**Given**: User encounters common setup issue
+**When**: Using any CAWS command
 **Then**:
 
 - Receive relevant help
 - Link to documentation
 - Suggest fixes
 
-## 🏗️ Architecture
+## Architecture
 
 ### New Commands Structure
 
@@ -160,16 +160,16 @@ formatError(error, context) {
 }
 ```
 
-## 🔒 Quality Gates (Tier 2)
+## Quality Gates (Tier 2)
 
 ### Required
 
-- ✅ Branch coverage ≥ 80%
-- ✅ Mutation score ≥ 50%
-- ✅ Contracts tested
-- ✅ Code review (2 reviewers)
-- ✅ Architecture review
-- ✅ User acceptance testing (5 users)
+- Branch coverage ≥ 80%
+- Mutation score ≥ 50%
+- Contracts tested
+- Code review (2 reviewers)
+- Architecture review
+- User acceptance testing (5 users)
 
 ### Performance Budgets
 
@@ -185,22 +185,22 @@ formatError(error, context) {
 - Input validation
 - No arbitrary code execution
 
-## 🎨 Non-Functional Requirements
+## Non-Functional Requirements
 
 ### Accessibility
 
-- ✅ ANSI colors with fallbacks
-- ✅ Readable in all terminal themes
-- ✅ Optional emoji (can disable)
+- ANSI colors with fallbacks
+- Readable in all terminal themes
+- Optional emoji (can disable)
 
 ### Developer Experience
 
-- ✅ Backward compatible
-- ✅ Opt-in features
-- ✅ Clear documentation
-- ✅ Intuitive commands
+- Backward compatible
+- Opt-in features
+- Clear documentation
+- Intuitive commands
 
-## 📈 Observability
+## Observability
 
 ### Metrics to Track
 
@@ -221,7 +221,7 @@ formatError(error, context) {
 - Auto-fix application results
 - Template usage patterns
 
-## 🔄 Rollback Strategy
+## Rollback Strategy
 
 All changes are designed for safe rollback:
 
@@ -243,7 +243,7 @@ echo "dx_improvements_enabled: false" >> .caws/config.yaml
 npm i -g @paths.design/caws-cli@3.2.4
 ```
 
-## 📅 Timeline
+## Timeline
 
 ### Week 1 (Days 1-5)
 
@@ -259,7 +259,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 
 ### Estimated Total: 88 hours / 2 developers = 11 working days
 
-## 🚀 Release Plan
+## Release Plan
 
 ### Version: v3.3.0 (Minor)
 
@@ -294,7 +294,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 - 🐛 No breaking changes - all existing workflows preserved
 ```
 
-## 🧪 Testing Strategy
+## Testing Strategy
 
 ### Unit Tests (90%+ coverage)
 
@@ -328,7 +328,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 4. Apply auto-fixes successfully
 5. Discover and use templates
 
-## 📚 Documentation Updates
+## Documentation Updates
 
 ### Required Updates
 
@@ -346,14 +346,14 @@ npm i -g @paths.design/caws-cli@3.2.4
 - Troubleshooting guide
 - Auto-fix reference
 
-## 🎯 Dependencies
+## Dependencies
 
 ### Internal
 
-- ✅ v3.2.4+ (bundled templates working)
-- ✅ Existing provenance system
-- ✅ Existing validation system
-- ✅ Existing quality gates
+- v3.2.4+ (bundled templates working)
+- Existing provenance system
+- Existing validation system
+- Existing quality gates
 
 ### External
 
@@ -361,7 +361,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 - chalk@^5.0.0 (terminal colors)
 - fs-extra@^11.0.0 (file operations)
 
-## ⚠️ Risks & Mitigations
+## Risks & Mitigations
 
 | Risk                        | Impact | Probability | Mitigation                                        |
 | --------------------------- | ------ | ----------- | ------------------------------------------------- |
@@ -371,7 +371,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 | Template compatibility      | Low    | Medium      | Version templates, test on multiple Node versions |
 | Cross-platform issues       | Medium | Medium      | Test on Windows, macOS, Linux                     |
 
-## 📞 Support Plan
+## Support Plan
 
 ### During Rollout
 
@@ -387,7 +387,7 @@ npm i -g @paths.design/caws-cli@3.2.4
 - Iterate on feedback
 - Plan Phase 2 improvements
 
-## ✅ Definition of Done
+## Definition of Done
 
 This spec is considered complete when:
 
@@ -403,7 +403,7 @@ This spec is considered complete when:
 - [ ] Metrics show improvement
 - [ ] No critical bugs in first week
 
-## 🔗 Related Documents
+## Related Documents
 
 - [Agent Feedback Analysis](./AGENT_FEEDBACK_ANALYSIS.md)
 - [Quick Wins Implementation](./QUICK_WINS.md)
@@ -411,8 +411,8 @@ This spec is considered complete when:
 
 ---
 
-**Created**: October 8, 2025  
-**Author**: @darianrosebrook  
-**Spec Status**: ✅ Validated  
-**Implementation Status**: 🟡 Pending  
+**Created**: October 8, 2025
+**Author**: @darianrosebrook
+**Spec Status**: Validated
+**Implementation Status**: Pending
 **Target Release**: v3.3.0 (October 15, 2025)

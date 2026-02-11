@@ -1,12 +1,12 @@
 # P1 Reprioritized Roadmap - Based on Agent Feedback
 
-**Date**: October 9, 2025  
-**Source**: Real agent feedback from production use  
+**Date**: October 9, 2025
+**Source**: Real agent feedback from production use
 **Current Score**: 8.5/10 (Excellent foundation, critical fixes needed)
 
 ---
 
-## 🎯 Reprioritization Analysis
+## Reprioritization Analysis
 
 After reviewing comprehensive agent feedback, I'm **changing the P1 priority order** to address **critical trust and reliability issues** first.
 
@@ -18,16 +18,16 @@ After reviewing comprehensive agent feedback, I'm **changing the P1 priority ord
 
 ### New P1 Plan (After Feedback)
 
-1. **Sprint 2: Trust & Reliability Fixes** 🔴 CRITICAL
-2. **Sprint 3: Enhanced Error Context** 🟡 HIGH
-3. **Sprint 4: Progress Tracking & DX** 🟢 MEDIUM
+1. **Sprint 2: Trust & Reliability Fixes** CRITICAL
+2. **Sprint 3: Enhanced Error Context** HIGH
+3. **Sprint 4: Progress Tracking & DX** MEDIUM
 
 ---
 
-## 🔴 P1 Sprint 2: Trust & Reliability Fixes (CRITICAL)
+## P1 Sprint 2: Trust & Reliability Fixes (CRITICAL)
 
-**Priority**: HIGHEST  
-**Duration**: 2-3 days  
+**Priority**: HIGHEST
+**Duration**: 2-3 days
 **Why First**: "False positives kill trust" - Agent feedback
 
 ### Critical Issues from Feedback
@@ -44,9 +44,9 @@ After reviewing comprehensive agent feedback, I'm **changing the P1 priority ord
 
 **Impact**:
 
-- ⚠️ **Trust erosion** - Agents doubt all diagnostics
-- ⚠️ **Wasted time** - Manual verification needed
-- ⚠️ **Confusion** - Mixed signals
+- **Trust erosion** - Agents doubt all diagnostics
+- **Wasted time** - Manual verification needed
+- **Confusion** - Mixed signals
 
 **Root Cause**: Only checks root `package.json`, doesn't understand:
 
@@ -74,9 +74,9 @@ caws gates all 1
 
 **Impact**:
 
-- ⚠️ **Broken CI/CD** - Gates fail incorrectly from root
-- ⚠️ **Frustration** - Must remember correct directory
-- ⚠️ **False negatives** - Real coverage not detected
+- **Broken CI/CD** - Gates fail incorrectly from root
+- **Frustration** - Must remember correct directory
+- **False negatives** - Real coverage not detected
 
 **Root Cause**: No auto-detection of active workspace
 
@@ -135,11 +135,11 @@ class WorkspaceDetector {
 
 **Testing**:
 
-- ✅ npm workspaces
-- ✅ yarn workspaces
-- ✅ pnpm workspaces
-- ✅ lerna monorepos
-- ✅ standalone projects
+- npm workspaces
+- yarn workspaces
+- pnpm workspaces
+- lerna monorepos
+- standalone projects
 
 ---
 
@@ -280,10 +280,10 @@ if (!fs.existsSync(coverageFile)) {
 
 ---
 
-## 🟡 P1 Sprint 3: Enhanced Error Context (HIGH)
+## P1 Sprint 3: Enhanced Error Context (HIGH)
 
-**Priority**: HIGH  
-**Duration**: 2 days  
+**Priority**: HIGH
+**Duration**: 2 days
 **Why Second**: "Can't debug without context" - Agent feedback
 
 ### Issues from Feedback
@@ -408,10 +408,10 @@ const TROUBLESHOOTING_GUIDES = {
 
 ---
 
-## 🟢 P1 Sprint 4: Progress Tracking & DX (MEDIUM)
+## P1 Sprint 4: Progress Tracking & DX (MEDIUM)
 
-**Priority**: MEDIUM  
-**Duration**: 2-3 days  
+**Priority**: MEDIUM
+**Duration**: 2-3 days
 **Why Third**: Important for long-running projects, but doesn't break trust
 
 ### Issue from Feedback
@@ -483,7 +483,7 @@ caws progress update A1 --status in_progress --tests-written 5 --tests-passing 3
 
 #### Task 3: Waiver Management via MCP (3-4 hours)
 
-**Already implemented in P1 Sprint 1!** ✅
+**Already implemented in P1 Sprint 1!**
 
 Just need to:
 
@@ -493,7 +493,7 @@ Just need to:
 
 ---
 
-## 📊 Comparison: Original vs Reprioritized
+## Comparison: Original vs Reprioritized
 
 | Sprint   | Original Plan   | Reprioritized               | Reason                               |
 | -------- | --------------- | --------------------------- | ------------------------------------ |
@@ -504,7 +504,7 @@ Just need to:
 
 ---
 
-## 🎯 Recommended Next Action
+## Recommended Next Action
 
 **Start with P1 Sprint 2: Trust & Reliability Fixes**
 
@@ -517,18 +517,18 @@ Just need to:
 
 ### What We Get
 
-- ✅ No false positives in monorepos
-- ✅ Gates work from any directory
-- ✅ Agent trust restored (8.5 → 9.5/10)
-- ✅ Production-ready for real teams
+- No false positives in monorepos
+- Gates work from any directory
+- Agent trust restored (8.5 → 9.5/10)
+- Production-ready for real teams
 
 ---
 
-## 💬 Decision Point
+## Decision Point
 
 **Do you want to:**
 
-1. ✅ **Start P1 Sprint 2** (Trust & Reliability) - RECOMMENDED
+1. **Start P1 Sprint 2** (Trust & Reliability) - RECOMMENDED
 2. Continue with original plan (Error Handling first)
 3. Mix: Do some trust fixes + some error handling
 4. Different priority

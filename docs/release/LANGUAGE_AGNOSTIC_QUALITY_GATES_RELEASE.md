@@ -152,11 +152,11 @@ cat .git/hooks/pre-commit | grep "Available options"
 
 ## Benefits
 
-✅ **Works for all languages** - Python, Rust, Go, Java, C#, PHP, etc.  
-✅ **No npm bloat** - Uses npx when available (no installation needed)  
-✅ **Runtime-aware** - Adapts to what's available on the system  
-✅ **Future-proof** - No need to add language-specific logic for new languages  
-✅ **Simpler maintenance** - One code path for all languages
+- **Works for all languages** - Python, Rust, Go, Java, C#, PHP, etc.
+- **No npm bloat** - Uses npx when available (no installation needed)
+- **Runtime-aware** - Adapts to what's available on the system
+- **Future-proof** - No need to add language-specific logic for new languages
+- **Simpler maintenance** - One code path for all languages
 
 ## Rollback Plan
 
