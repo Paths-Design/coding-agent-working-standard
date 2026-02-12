@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-mcp-server",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "CAWS Model Context Protocol server for AI agent integration",
   "type": "module",
   "main": "index.js",
@@ -42,7 +42,9 @@
   },
   "jest": {
     "transform": {},
-    "testMatch": ["<rootDir>/tests/**/*.test.js"]
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js"
+    ]
   },
   "peerDependencies": {
     "@paths.design/caws-cli": "*",
