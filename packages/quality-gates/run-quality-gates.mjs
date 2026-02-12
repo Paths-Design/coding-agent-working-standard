@@ -773,11 +773,12 @@ class QualityGateRunner {
         }
         return 'commit';
       } else {
-        // Manual run (not in git hook), default to 'ci' (all files)
+        // Manual run - default to 'commit' (staged files) for fast feedback
+        // Use --all-files or --context=ci to scan the entire repo
         if (DEBUG_MODE) {
-          this.debugLog.push(`Context defaulted to: ci (manual run, not in git hook)`);
+          this.debugLog.push(`Context defaulted to: commit (manual run, staged files only)`);
         }
-        return 'ci';
+        return 'commit';
       }
     }
   }

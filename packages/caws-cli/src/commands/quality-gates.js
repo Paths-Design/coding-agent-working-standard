@@ -319,7 +319,7 @@ async function qualityGatesCommand(options = {}) {
       // Handle context options: --all-files takes precedence, then --context
       if (options.allFiles) {
         args.push('--context=ci');
-      } else if (options.context && options.context !== 'commit') {
+      } else if (options.context) {
         args.push(`--context=${options.context}`);
       }
 
