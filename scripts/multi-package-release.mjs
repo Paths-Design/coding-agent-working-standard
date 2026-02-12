@@ -2,8 +2,13 @@
 /**
  * Multi-Package Semantic Release Script
  *
- * Detects which packages have changes and runs semantic-release for each one.
- * This avoids conflicts from multiple npm plugins in a single config.
+ * Detects which packages have changes since their last release tag and runs
+ * semantic-release for each one independently. Each package gets its own
+ * tagFormat, release rules, and changelog.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for release configuration.
+ * No .releaserc.json files should exist in the repo — this script generates
+ * temporary .releaserc.cjs files for each package run.
  */
 
 import { execSync } from 'child_process';
@@ -15,11 +20,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
+const REPO_URL = 'https://github.com/Paths-Design/coding-agent-working-standard.git';
+
 const PACKAGES = [
   {
     name: '@paths.design/caws-cli',
     path: 'packages/caws-cli',
     scope: 'cli',
+    tagFormat: 'v${version}', // CLI uses plain v-tags (historical convention)
     config: {
       pkgRoot: 'packages/caws-cli',
       tarballDir: 'dist',
@@ -29,6 +37,7 @@ const PACKAGES = [
     name: '@paths.design/caws-mcp-server',
     path: 'packages/caws-mcp-server',
     scope: 'mcp-server',
+    tagFormat: 'caws-mcp-server-v${version}',
     config: {
       pkgRoot: 'packages/caws-mcp-server',
     },
@@ -37,6 +46,7 @@ const PACKAGES = [
     name: '@paths.design/caws-types',
     path: 'packages/caws-types',
     scope: 'caws-types',
+    tagFormat: 'caws-types-v${version}',
     config: {
       pkgRoot: 'packages/caws-types',
     },
@@ -45,6 +55,7 @@ const PACKAGES = [
     name: '@paths.design/quality-gates',
     path: 'packages/quality-gates',
     scope: 'quality-gates',
+    tagFormat: 'quality-gates-v${version}',
     config: {
       pkgRoot: 'packages/quality-gates',
     },
@@ -52,61 +63,57 @@ const PACKAGES = [
 ];
 
 /**
- * Check if package has changes in recent commits
+ * Get last release tag for a package based on its tagFormat.
  */
-function hasPackageChanges(packagePath, lastTag = null) {
+function getLastTag(pkg) {
   try {
-    const gitCommand = lastTag
-      ? `git diff --name-only ${lastTag}..HEAD -- ${packagePath}`
-      : `git diff --name-only HEAD~10..HEAD -- ${packagePath}`;
-
-    const output = execSync(gitCommand, {
-      cwd: rootDir,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    return output.trim().length > 0;
-  } catch (error) {
-    // If no commits or tag doesn't exist, check last 10 commits
-    return hasPackageChanges(packagePath);
-  }
-}
-
-/**
- * Get last tag for a package
- */
-function getLastTag(packageName) {
-  try {
-    const tags = execSync(
-      `git tag --sort=-version:refname | grep "^${packageName.replace('@', '').replace('/', '-')}-v" | head -1`,
-      {
-        cwd: rootDir,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }
+    const prefix = pkg.tagFormat.replace('${version}', '');
+    const output = execSync(
+      `git tag --sort=-version:refname | grep "^${prefix}" | head -1`,
+      { cwd: rootDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
     );
-    return tags.trim() || null;
+    return output.trim() || null;
   } catch {
     return null;
   }
 }
 
 /**
- * Create package-specific semantic-release config as JavaScript module
+ * Check if package has changes since its last release tag.
+ */
+function hasPackageChanges(pkg) {
+  const lastTag = getLastTag(pkg);
+  try {
+    const ref = lastTag || 'HEAD~20';
+    const output = execSync(
+      `git diff --name-only ${ref}..HEAD -- ${pkg.path}`,
+      { cwd: rootDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    return output.trim().length > 0;
+  } catch {
+    // If the ref doesn't exist (shallow clone, etc.), assume changes exist
+    return true;
+  }
+}
+
+/**
+ * Create package-specific semantic-release config as a CommonJS module.
+ *
+ * Only commits scoped to this package's scope (or its packages/* path)
+ * trigger a release. Unscoped commits are explicitly blocked.
  */
 function createPackageConfig(pkg) {
+  const dirName = pkg.path.split('/').pop();
+
   const config = {
     branches: ['main'],
-    repositoryUrl: 'https://github.com/Paths-Design/coding-agent-working-standard.git',
+    repositoryUrl: REPO_URL,
+    tagFormat: pkg.tagFormat,
     plugins: [
       [
         '@semantic-release/commit-analyzer',
         {
-          // Use Angular preset for proper commit parsing
-          // The preset provides headerPattern and default rules
           preset: 'angular',
-          // Custom release rules - these override preset defaults when matched
           releaseRules: [
             // Scoped commits for this package trigger releases
             { type: 'feat', scope: pkg.scope, release: 'minor' },
@@ -115,14 +122,24 @@ function createPackageConfig(pkg) {
             { type: 'revert', scope: pkg.scope, release: 'patch' },
             { breaking: true, scope: pkg.scope, release: 'major' },
             // Alternative scope format: packages/caws-cli
-            { type: 'feat', scope: `packages/${pkg.path.split('/').pop()}`, release: 'minor' },
-            { type: 'fix', scope: `packages/${pkg.path.split('/').pop()}`, release: 'patch' },
-            // Fallback: unscoped feat/fix also trigger releases
-            // This is needed because Angular preset defaults will be used for unmatched commits
-            { type: 'feat', release: 'minor' },
-            { type: 'fix', release: 'patch' },
-            { type: 'perf', release: 'patch' },
+            { type: 'feat', scope: `packages/${dirName}`, release: 'minor' },
+            { type: 'fix', scope: `packages/${dirName}`, release: 'patch' },
+            // Block everything else from triggering a release for this package
+            { type: 'feat', release: false },
+            { type: 'fix', release: false },
+            { type: 'perf', release: false },
+            { type: 'revert', release: false },
+            { type: 'docs', release: false },
+            { type: 'style', release: false },
+            { type: 'chore', release: false },
+            { type: 'refactor', release: false },
+            { type: 'test', release: false },
+            { type: 'build', release: false },
+            { type: 'ci', release: false },
           ],
+          parserOpts: {
+            noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
+          },
         },
       ],
       '@semantic-release/release-notes-generator',
@@ -143,65 +160,48 @@ function createPackageConfig(pkg) {
       [
         '@semantic-release/git',
         {
-          assets: [`${pkg.path}/CHANGELOG.md`, `${pkg.path}/package.json`],
-          message: `chore(release): ${pkg.name}@\${nextRelease.version} [skip ci]\n\n\${nextRelease.notes}`,
+          assets: [
+            `${pkg.path}/CHANGELOG.md`,
+            `${pkg.path}/package.json`,
+          ],
+          message: `chore(release): ${pkg.name}@\${nextRelease.version}\n\n\${nextRelease.notes}`,
         },
       ],
     ],
   };
 
-  // Return as CommonJS module for better compatibility with semantic-release
   return `module.exports = ${JSON.stringify(config, null, 2)};`;
 }
 
 /**
- * Run semantic-release for a specific package
+ * Run semantic-release for a specific package.
+ *
+ * Writes a temporary .releaserc.cjs in the repo root so that semantic-release
+ * auto-discovers it as the only config (no --extends merging issues).
  */
 function releasePackage(pkg) {
-  console.log(`\n📦 Releasing ${pkg.name}...`);
-  console.log(`   Package scope: ${pkg.scope}`);
-  console.log(`   Package path: ${pkg.path}`);
+  console.log(`\nReleasing ${pkg.name}...`);
+  console.log(`  Scope: ${pkg.scope}`);
+  console.log(`  Path: ${pkg.path}`);
+  console.log(`  Tag format: ${pkg.tagFormat}`);
 
-  // Use .cjs extension to explicitly mark as CommonJS (works with semantic-release)
-  const configPath = path.join(rootDir, `.releaserc.${pkg.scope}.cjs`);
+  const lastTag = getLastTag(pkg);
+  console.log(`  Last tag: ${lastTag || '(none)'}`);
+
+  // Write config to repo root so semantic-release auto-discovers it
+  const configPath = path.join(rootDir, '.releaserc.cjs');
   const config = createPackageConfig(pkg);
 
-  // Debug: Print the release rules being used
-  console.log(`   Release rules for ${pkg.scope}:`);
-  const configObj = JSON.parse(config.replace('module.exports = ', '').replace(/;$/, ''));
-  const commitAnalyzer = configObj.plugins.find(p => Array.isArray(p) && p[0] === '@semantic-release/commit-analyzer');
-  if (commitAnalyzer && commitAnalyzer[1]?.releaseRules) {
-    commitAnalyzer[1].releaseRules.forEach((rule, i) => {
-      console.log(`      ${i + 1}. ${JSON.stringify(rule)}`);
-    });
-  }
-
   try {
-    // Write temporary config as CommonJS module
     writeFileSync(configPath, config, { mode: 0o644 });
 
-    // Verify file was created and is readable
     if (!existsSync(configPath)) {
       throw new Error(`Failed to create config file: ${configPath}`);
     }
 
-    // Verify file is readable
-    try {
-      readFileSync(configPath, 'utf8');
-    } catch (readError) {
-      throw new Error(
-        `Config file exists but is not readable: ${configPath} - ${readError.message}`
-      );
-    }
+    console.log(`  Config written to: ${configPath}`);
 
-    // Use absolute path for better reliability with semantic-release's import resolution
-    // semantic-release uses import-from-esm which needs proper path resolution
-    const configPathAbsolute = path.resolve(configPath);
-
-    console.log(`  Using config: ${configPathAbsolute}`);
-
-    // Run semantic-release with absolute path
-    execSync(`npx semantic-release --extends ${configPathAbsolute}`, {
+    execSync('npx semantic-release', {
       cwd: rootDir,
       stdio: 'inherit',
       env: {
@@ -211,36 +211,16 @@ function releasePackage(pkg) {
       },
     });
 
-    console.log(`✅ Successfully released ${pkg.name}`);
-
-    // Clean up temp config
-    if (existsSync(configPath)) {
-      unlinkSync(configPath);
-    }
-
+    console.log(`Successfully released ${pkg.name}`);
     return true;
   } catch (error) {
-    console.error(`❌ Failed to release ${pkg.name}:`, error.message);
-
-    // Debug: Check if file exists before cleanup
-    if (existsSync(configPath)) {
-      console.error(`  Config file exists at: ${configPath}`);
-      try {
-        const content = readFileSync(configPath, 'utf8');
-        console.error(`  Config file size: ${content.length} bytes`);
-      } catch (readError) {
-        console.error(`  Could not read config file: ${readError.message}`);
-      }
-    } else {
-      console.error(`  Config file does not exist at: ${configPath}`);
-    }
-
-    // Clean up temp config
+    console.error(`Failed to release ${pkg.name}: ${error.message}`);
+    return false;
+  } finally {
+    // Always clean up the temporary config
     if (existsSync(configPath)) {
       unlinkSync(configPath);
     }
-
-    return false;
   }
 }
 
@@ -248,34 +228,39 @@ function releasePackage(pkg) {
  * Main execution
  */
 async function main() {
-  console.log('🚀 Multi-Package Semantic Release\n');
+  console.log('Multi-Package Semantic Release\n');
 
+  // Detect which packages have changes since their last release
   const changedPackages = PACKAGES.filter((pkg) => {
-    const hasChanges = hasPackageChanges(pkg.path);
-    if (hasChanges) {
-      console.log(`✓ ${pkg.name} has changes`);
-    }
-    return hasChanges;
+    const changed = hasPackageChanges(pkg);
+    const tag = getLastTag(pkg);
+    console.log(
+      `  ${changed ? '[changed]' : '[no changes]'} ${pkg.name} (last tag: ${tag || 'none'})`
+    );
+    return changed;
   });
 
   if (changedPackages.length === 0) {
-    console.log('ℹ️  No packages with changes detected');
+    console.log('\nNo packages with changes detected. Nothing to release.');
     process.exit(0);
   }
 
-  console.log(`\n📋 Releasing ${changedPackages.length} package(s)...\n`);
+  console.log(`\nReleasing ${changedPackages.length} package(s)...\n`);
 
-  const results = changedPackages.map((pkg) => ({
-    package: pkg.name,
-    success: releasePackage(pkg),
-  }));
+  const results = [];
+  for (const pkg of changedPackages) {
+    results.push({
+      package: pkg.name,
+      success: releasePackage(pkg),
+    });
+  }
 
   const successful = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
 
-  console.log(`\n📊 Release Summary:`);
-  console.log(`   ✅ Successful: ${successful}`);
-  console.log(`   ❌ Failed: ${failed}`);
+  console.log('\nRelease Summary:');
+  console.log(`  Successful: ${successful}`);
+  console.log(`  Failed: ${failed}`);
 
   if (failed > 0) {
     process.exit(1);
@@ -283,6 +268,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('❌ Release script failed:', error);
+  console.error('Release script failed:', error);
   process.exit(1);
 });

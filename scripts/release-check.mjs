@@ -39,14 +39,10 @@ function checkItemsExist(title, emoji, items) {
 
 const PACKAGES = [
   { name: 'caws', path: 'package.json', version: '3.2.0' },
-  { name: 'caws-cli', path: 'packages/caws-cli/package.json', version: '4.1.1' },
-  {
-    name: 'caws-vscode-extension',
-    path: 'packages/caws-vscode-extension/package.json',
-    version: '4.1.1',
-  },
-  { name: '@paths.design/caws-mcp-server', path: 'packages/caws-mcp-server/package.json', version: '1.1.2' },
-  // Quality gates are bundled with CAWS, not published separately
+  { name: '@paths.design/caws-cli', path: 'packages/caws-cli/package.json', version: '8.1.0' },
+{ name: '@paths.design/caws-mcp-server', path: 'packages/caws-mcp-server/package.json', version: '1.1.3' },
+  { name: '@paths.design/quality-gates', path: 'packages/quality-gates/package.json', version: '1.0.3' },
+  { name: '@paths.design/caws-types', path: 'packages/caws-types/package.json', version: '1.0.0' },
 ];
 
 function checkPackageVersions() {
@@ -85,12 +81,7 @@ function checkBuildOutputs() {
       path: 'packages/caws-cli/dist/index.js',
       description: 'CLI dist files',
     },
-    {
-      name: 'caws-vscode-extension',
-      path: 'packages/caws-vscode-extension/out/extension.js',
-      description: 'Extension compiled output',
-    },
-    {
+{
       name: '@paths.design/caws-mcp-server',
       path: 'packages/caws-mcp-server/index.js',
       description: 'MCP server entry point',
@@ -248,22 +239,21 @@ function checkCICDWorkflows() {
 }
 
 function checkSemanticRelease() {
-  console.log('🚀 Checking semantic-release configuration...\n');
+  console.log('Checking semantic-release configuration...\n');
 
+  // Release config is generated dynamically by scripts/multi-package-release.mjs
+  // No static .releaserc.json should exist (it would conflict with multi-package releases)
   const releasercPath = join(ROOT_DIR, '.releaserc.json');
-  if (existsSync(releasercPath)) {
-    try {
-      const content = readFileSync(releasercPath, 'utf8');
-      const config = JSON.parse(content);
+  const releaseScript = join(ROOT_DIR, 'scripts', 'multi-package-release.mjs');
 
-      console.log('✅ Semantic-release: Configuration found');
-      console.log(`   Branches: ${config.branches?.join(', ') || 'not configured'}`);
-      console.log(`   Plugins: ${config.plugins?.length || 0} configured`);
-    } catch (error) {
-      console.log(`❌ Semantic-release: Invalid configuration - ${error.message}`);
-    }
+  if (existsSync(releasercPath)) {
+    console.log('WARNING: Static .releaserc.json found - this conflicts with multi-package releases');
+    console.log('   The multi-package-release.mjs script generates configs dynamically.');
+    console.log('   Remove .releaserc.json to fix release pipeline.');
+  } else if (existsSync(releaseScript)) {
+    console.log('OK: Multi-package release script found (generates configs dynamically)');
   } else {
-    console.log('⚠️  Semantic-release: No configuration found');
+    console.log('ERROR: No release configuration found');
   }
   console.log('');
 }
@@ -296,7 +286,7 @@ function main() {
   console.log('Next steps:');
   console.log('1. Run: npm run release (semantic-release)');
   console.log('2. Or manually publish packages to npm/registry');
-  console.log('3. Update VS Code marketplace with new extension version');
+  console.log('3. Verify MCP server works with latest SDK');
   console.log('\n💡 For detailed checklist, see: docs/release/RELEASE_CHECKLIST.md');
 }
 
