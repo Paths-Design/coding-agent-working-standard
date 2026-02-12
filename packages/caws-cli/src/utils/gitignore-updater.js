@@ -57,6 +57,10 @@ caws-debug.log*
 # Local development overrides (developer-specific)
 caws.local.*
 .caws/local.*
+
+# CAWS Worktrees (local, should not be tracked)
+.caws/worktrees/
+.caws/worktrees.json
 `;
 
 /**

@@ -57,6 +57,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       quality: ['quality-check.sh', 'validate-spec.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
       audit: ['audit.sh'],
+      lite: ['block-dangerous.sh', 'scope-guard.sh', 'lite-sprawl-check.sh', 'simplification-guard.sh'],
     };
 
     // Determine which hooks to enable
@@ -80,6 +81,8 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'block-dangerous.sh',
       'scope-guard.sh',
       'naming-check.sh',
+      'lite-sprawl-check.sh',
+      'simplification-guard.sh',
     ];
 
     for (const script of allHookScripts) {
@@ -223,6 +226,31 @@ function generateClaudeSettings(levels, _enabledHooks) {
         {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/naming-check.sh',
+          timeout: 10,
+        },
+      ],
+    });
+  }
+
+  if (levels.includes('lite')) {
+    // Lite mode: sprawl check on Write, simplification guard on Edit
+    settings.hooks.PreToolUse = settings.hooks.PreToolUse || [];
+    settings.hooks.PreToolUse.push({
+      matcher: 'Write',
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/lite-sprawl-check.sh',
+          timeout: 10,
+        },
+      ],
+    });
+    settings.hooks.PreToolUse.push({
+      matcher: 'Edit',
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/simplification-guard.sh',
           timeout: 10,
         },
       ],

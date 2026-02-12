@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CAWS Lite Scope Configuration",
+  "description": "Scope configuration for CAWS lite mode — guardrails without YAML specs",
+  "type": "object",
+  "required": ["version", "allowedDirectories"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version"
+    },
+    "allowedDirectories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Directories the agent is allowed to modify (e.g., src/, tests/)"
+    },
+    "bannedPatterns": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns for banned file names (e.g., *-enhanced.*, *-final.*)"
+        },
+        "directories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns for banned directory names (e.g., *venv*, .venv)"
+        },
+        "docs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns for banned doc file names (e.g., *-summary.md)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "maxNewFilesPerCommit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum number of new files allowed per commit (prevents file sprawl)"
+    },
+    "designatedVenvPath": {
+      "type": "string",
+      "description": "The only allowed virtual environment path (e.g., .venv)"
+    }
+  },
+  "additionalProperties": false
+}

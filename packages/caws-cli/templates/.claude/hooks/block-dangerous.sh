@@ -65,11 +65,44 @@ DANGEROUS_PATTERNS=(
   'reboot'
   'init 0'
   'init 6'
+
+  # Git destructive operations
+  'git init'
+  'git reset --hard'
+  'git push --force'
+  'git push -f '
+  'git push --force-with-lease'
+  'git clean -f'
+  'git checkout \.'
+  'git restore \.'
+
+  # Virtual environment creation (prevents venv sprawl)
+  'python -m venv'
+  'python3 -m venv'
+  'virtualenv '
+  'conda create'
 )
 
 # Check command against dangerous patterns
 for pattern in "${DANGEROUS_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qiE "$pattern"; then
+    # Allow git init in worktree context
+    if [[ "$pattern" == "git init" ]] && [[ "${CAWS_WORKTREE_CONTEXT:-0}" == "1" ]]; then
+      continue
+    fi
+
+    # Allow venv commands if target matches designated venv path from scope.json
+    if echo "$pattern" | grep -qE '(python.*venv|virtualenv|conda create)'; then
+      PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+      SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
+      if [[ -f "$SCOPE_FILE" ]] && command -v node >/dev/null 2>&1; then
+        DESIGNATED_VENV=$(node -e "try { const s = JSON.parse(require('fs').readFileSync('$SCOPE_FILE','utf8')); console.log(s.designatedVenvPath || ''); } catch(e) { console.log(''); }" 2>/dev/null || echo "")
+        if [[ -n "$DESIGNATED_VENV" ]] && echo "$COMMAND" | grep -qF "$DESIGNATED_VENV"; then
+          continue
+        fi
+      fi
+    fi
+
     # Output to stderr for Claude to see
     echo "BLOCKED: Command matches dangerous pattern: $pattern" >&2
     echo "Command was: $COMMAND" >&2

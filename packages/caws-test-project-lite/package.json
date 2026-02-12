@@ -1,0 +1,9 @@
+{
+  "name": "@caws/test-project-lite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test project for CAWS lite mode",
+  "scripts": {
+    "test": "jest"
+  }
+}

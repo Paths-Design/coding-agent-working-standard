@@ -10,6 +10,32 @@ const chalk = require('chalk');
  * CAWS Complexity Tiers
  */
 const COMPLEXITY_TIERS = {
+  lite: {
+    name: 'Lite',
+    description: 'Guardrails-only mode — no YAML specs required',
+    color: chalk.magenta,
+    icon: '🛡️',
+    features: {
+      workingSpec: false,
+      destructiveCommandBlocking: true,
+      fileSprawlDetection: true,
+      scopeFence: true,
+      simplificationGuard: true,
+      worktreeIsolation: true,
+    },
+    qualityRequirements: {
+      testCoverage: 0,
+      mutationScore: 0,
+      contracts: 'none',
+    },
+    riskTiers: ['T3'],
+    commands: {
+      init: true,
+      status: true,
+      worktree: true,
+    },
+  },
+
   simple: {
     name: 'Simple',
     description: 'Minimal CAWS for small projects and quick prototyping',
