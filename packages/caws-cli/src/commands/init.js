@@ -18,6 +18,15 @@ const { finalizeProject } = require('../utils/finalization');
 const { scaffoldCursorHooks } = require('../scaffold/cursor-hooks');
 const { scaffoldIDEIntegrations } = require('../scaffold/index');
 const { updateGitignore } = require('../utils/gitignore-updater');
+const { getLiteScopeDefaults } = require('../config/lite-scope');
+const { scaffoldClaudeHooks } = require('../scaffold/claude-hooks');
+const { setCurrentMode } = require('../config/modes');
+const {
+  IDE_REGISTRY,
+  detectActiveIDEs,
+  getRecommendedIDEs,
+  parseIDESelection,
+} = require('../utils/ide-detection');
 
 /**
  * Initialize a new project with CAWS
@@ -115,8 +124,9 @@ async function initProject(projectName, options) {
     const cawsSetup = detectCAWSSetup(targetDir);
     const originalTemplateDir = cawsSetup?.hasTemplateDir ? cawsSetup.templateDir : null;
 
-    // Check for existing agents.md/caws.md in target directory
-    const existingAgentsMd = fs.existsSync(path.join(targetDir, 'agents.md'));
+    // Check for existing AGENTS.md/agents.md/caws.md in target directory
+    const existingAgentsMd = fs.existsSync(path.join(targetDir, 'AGENTS.md')) ||
+      fs.existsSync(path.join(targetDir, 'agents.md'));
     const existingCawsMd = fs.existsSync(path.join(targetDir, 'caws.md'));
 
     // Create project directory and change to it (unless already in current directory)
@@ -137,55 +147,45 @@ async function initProject(projectName, options) {
       await fs.ensureDir('.agent');
       console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
 
-      // Copy agents.md guide if templates are available
+      // Copy AGENTS.md guide if templates are available
       if (originalTemplateDir) {
         try {
-          const agentsMdSource = path.join(originalTemplateDir, 'agents.md');
-          let targetFile = 'agents.md';
+          const agentsMdSource = path.join(originalTemplateDir, 'AGENTS.md');
+          let targetFile = 'AGENTS.md';
 
           if (fs.existsSync(agentsMdSource)) {
-            // Use the pre-checked values for conflicts
             if (existingAgentsMd) {
-              // Conflict: user already has agents.md
               if (options.interactive && !options.nonInteractive) {
-                // Interactive mode: ask user
                 const overwriteAnswer = await inquirer.prompt([
                   {
                     type: 'confirm',
                     name: 'overwrite',
-                    message: '⚠️  agents.md already exists. Overwrite with CAWS guide?',
+                    message: 'AGENTS.md already exists. Overwrite with CAWS guide?',
                     default: false,
                   },
                 ]);
 
-                if (overwriteAnswer.overwrite) {
-                  targetFile = 'agents.md';
-                } else {
+                if (!overwriteAnswer.overwrite) {
                   targetFile = 'caws.md';
                 }
               } else {
-                // Non-interactive mode: use caws.md instead
                 targetFile = 'caws.md';
-                console.log(chalk.blue('ℹ️  agents.md exists, using caws.md for CAWS guide'));
+                console.log(chalk.blue('AGENTS.md exists, using caws.md for CAWS guide'));
               }
             }
 
-            // If caws.md also exists and that's our target, skip
             if (targetFile === 'caws.md' && existingCawsMd) {
               console.log(
-                chalk.yellow('⚠️  Both agents.md and caws.md exist, skipping guide copy')
+                chalk.yellow('Both AGENTS.md and caws.md exist, skipping guide copy')
               );
             } else {
               const agentsMdDest = path.join(process.cwd(), targetFile);
               await fs.copyFile(agentsMdSource, agentsMdDest);
-              console.log(chalk.green(`✅ Added ${targetFile} guide`));
+              console.log(chalk.green(`Added ${targetFile} guide`));
             }
           }
         } catch (templateError) {
-          console.warn(chalk.yellow('⚠️  Could not copy agents guide:'), templateError.message);
-          console.warn(
-            chalk.blue('💡 You can manually copy the guide from the caws-template package')
-          );
+          console.warn(chalk.yellow('Could not copy agents guide:'), templateError.message);
         }
       }
     } else {
@@ -193,11 +193,91 @@ async function initProject(projectName, options) {
       console.log(chalk.green('✅ CAWS project detected - skipping template copy'));
     }
 
+    // Handle lite mode init path
+    if (options.mode === 'lite') {
+      console.log(chalk.magenta('🛡️  CAWS Lite Mode — guardrails without YAML specs'));
+
+      // Detect allowed directories
+      const detectedDirs = [];
+      const commonDirs = ['src/', 'lib/', 'app/', 'tests/', 'test/', 'docs/'];
+      for (const dir of commonDirs) {
+        if (fs.existsSync(path.join(process.cwd(), dir.replace(/\/$/, '')))) {
+          detectedDirs.push(dir);
+        }
+      }
+
+      let allowedDirs = detectedDirs.length > 0 ? detectedDirs : ['src/', 'tests/', 'docs/'];
+
+      if (options.interactive && !options.nonInteractive) {
+        const liteAnswers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'projectName',
+            message: '📝 Project name:',
+            default: path.basename(process.cwd()),
+          },
+          {
+            type: 'input',
+            name: 'allowedDirs',
+            message: '📁 Allowed directories (comma-separated):',
+            default: allowedDirs.join(', '),
+          },
+        ]);
+        allowedDirs = liteAnswers.allowedDirs.split(',').map((d) => d.trim()).filter(Boolean);
+      }
+
+      // Generate .caws/scope.json
+      await fs.ensureDir('.caws');
+      const scopeConfig = getLiteScopeDefaults();
+      scopeConfig.allowedDirectories = allowedDirs;
+      await fs.writeFile(
+        path.join('.caws', 'scope.json'),
+        JSON.stringify(scopeConfig, null, 2)
+      );
+      console.log(chalk.green('✅ Created .caws/scope.json'));
+
+      // Set mode to lite
+      await setCurrentMode('lite');
+      console.log(chalk.green('✅ Set mode to lite in .caws/mode.json'));
+
+      // Scaffold hooks: block-dangerous + scope-guard + lite-sprawl-check + simplification-guard
+      const liteIDEs = options.ide ? parseIDESelection(options.ide) : ['claude'];
+      if (liteIDEs.includes('claude')) {
+        console.log(chalk.blue('🔧 Setting up lite-mode hooks...'));
+        await scaffoldClaudeHooks(process.cwd(), ['safety', 'scope', 'lite']);
+      }
+
+      // Update .gitignore
+      console.log(chalk.blue('📝 Updating .gitignore...'));
+      await updateGitignore(process.cwd());
+
+      // Success
+      console.log(chalk.green('\n🎉 CAWS Lite mode initialized!'));
+      console.log(chalk.blue('\nGuardrails active:'));
+      console.log('  - Destructive command blocking (git push --force, rm -rf, etc.)');
+      console.log('  - Scope fencing (edits outside allowed directories require confirmation)');
+      console.log('  - File sprawl detection (banned patterns like *-enhanced.*, *-final.*)');
+      console.log('  - Simplification guard (prevents stubbing out implementations)');
+      console.log(chalk.blue('\nNext steps:'));
+      console.log('  1. Review .caws/scope.json and customize for your project');
+      console.log('  2. Start coding — hooks will protect against common AI mistakes');
+      console.log('  3. Use `caws worktree create <name>` for isolated agent workspaces');
+      return;
+    }
+
     // Handle interactive wizard or template-based setup
     if (options.interactive && !options.nonInteractive) {
       console.log(chalk.cyan('🎯 CAWS Interactive Setup Wizard'));
       console.log(chalk.blue('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
       console.log(chalk.gray('This wizard will guide you through creating a CAWS working spec\n'));
+
+      // Detect active IDEs for pre-selecting the IDE prompt
+      const detectedIDEs = detectActiveIDEs();
+      const recommendedIDEs = getRecommendedIDEs();
+      if (detectedIDEs.length > 0) {
+        console.log(chalk.blue(`Detected IDE: ${detectedIDEs.map((id) => IDE_REGISTRY[id].name).join(', ')}`));
+        console.log(chalk.gray('   (Pre-selected based on your environment)\n'));
+      }
 
       // Detect project type
       const detectedType = detectProjectType(process.cwd());
@@ -337,10 +417,65 @@ async function initProject(projectName, options) {
           },
         },
         {
-          type: 'confirm',
-          name: 'useCursorHooks',
-          message: '🎯 Enable Cursor IDE hooks for real-time quality gates?',
-          default: true,
+          type: 'checkbox',
+          name: 'selectedIDEs',
+          message: 'Which IDE integrations do you want to install?',
+          choices: [
+            {
+              name: `Cursor (hooks, rules, audit) - AI-first IDE`,
+              value: 'cursor',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('cursor')
+                : recommendedIDEs.includes('cursor'),
+            },
+            {
+              name: `Claude Code (safety hooks, settings)`,
+              value: 'claude',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('claude')
+                : recommendedIDEs.includes('claude'),
+            },
+            {
+              name: `VS Code (settings, debug configs)`,
+              value: 'vscode',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('vscode')
+                : recommendedIDEs.includes('vscode'),
+            },
+            {
+              name: `IntelliJ IDEA (run configurations)`,
+              value: 'intellij',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('intellij')
+                : recommendedIDEs.includes('intellij'),
+            },
+            {
+              name: `Windsurf (CAWS workflow)`,
+              value: 'windsurf',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('windsurf')
+                : recommendedIDEs.includes('windsurf'),
+            },
+            {
+              name: `GitHub Copilot (instructions)`,
+              value: 'copilot',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('copilot')
+                : recommendedIDEs.includes('copilot'),
+            },
+            {
+              name: `JetBrains Junie (AI agent guidelines)`,
+              value: 'junie',
+              checked: options.ide
+                ? parseIDESelection(options.ide).includes('junie')
+                : recommendedIDEs.includes('junie'),
+            },
+            new inquirer.Separator(),
+            {
+              name: 'All IDEs (install everything)',
+              value: 'all',
+            },
+          ],
         },
         {
           type: 'confirm',
@@ -412,15 +547,20 @@ Happy coding! 🎯
         console.log(chalk.green('✅ Created test and docs directories'));
       }
 
-      // Setup Cursor hooks if requested
-      if (answers.useCursorHooks) {
-        console.log(chalk.blue('🎯 Setting up Cursor hooks...'));
+      // Setup selected IDE integrations
+      const selectedIDEs = parseIDESelection(answers.selectedIDEs || []);
+
+      if (selectedIDEs.includes('cursor')) {
+        console.log(chalk.blue('Setting up Cursor hooks...'));
         await scaffoldCursorHooks(process.cwd());
       }
 
-      // Setup IDE integrations for comprehensive development experience
-      console.log(chalk.blue('🎨 Setting up IDE integrations...'));
-      await scaffoldIDEIntegrations(process.cwd(), { force: false });
+      if (selectedIDEs.length > 0) {
+        console.log(chalk.blue('Setting up IDE integrations...'));
+        await scaffoldIDEIntegrations(process.cwd(), { force: false, ides: selectedIDEs });
+      } else {
+        console.log(chalk.gray('Skipping IDE setup (none selected, run `caws scaffold --ide <ides>` later)'));
+      }
 
       // Update .gitignore to exclude CAWS local runtime files
       console.log(chalk.blue('📝 Updating .gitignore...'));
@@ -500,13 +640,18 @@ Happy coding! 🎯
         console.log(chalk.green('✅ Created .caws/policy.yaml (optional - defaults work fine)'));
       }
 
-      // Setup Cursor hooks by default in non-interactive mode
-      console.log(chalk.blue('🎯 Setting up Cursor hooks...'));
-      await scaffoldCursorHooks(process.cwd());
+      // Setup IDE integrations based on --ide flag or auto-detection
+      const selectedIDEs = options.ide ? parseIDESelection(options.ide) : getRecommendedIDEs();
 
-      // Setup IDE integrations by default in non-interactive mode
-      console.log(chalk.blue('🎨 Setting up IDE integrations...'));
-      await scaffoldIDEIntegrations(process.cwd(), { force: false });
+      if (selectedIDEs.includes('cursor')) {
+        console.log(chalk.blue('Setting up Cursor hooks...'));
+        await scaffoldCursorHooks(process.cwd());
+      }
+
+      if (selectedIDEs.length > 0) {
+        console.log(chalk.blue(`Setting up IDE integrations: ${selectedIDEs.map((id) => IDE_REGISTRY[id].name).join(', ')}...`));
+        await scaffoldIDEIntegrations(process.cwd(), { force: false, ides: selectedIDEs });
+      }
 
       // Update .gitignore to exclude CAWS local runtime files
       console.log(chalk.blue('📝 Updating .gitignore...'));
@@ -549,8 +694,9 @@ Happy coding! 🎯
     console.log('   3. Run: caws validate (verify setup)');
     console.log('   4. Run: caws diagnose (check health)');
     console.log('   5. Optional: Create .caws/policy.yaml for custom budgets');
-    if (answers?.useCursorHooks || options.interactive === false) {
-      console.log('   6. Restart Cursor IDE to activate quality gates');
+    const finalIDEs = answers?.selectedIDEs || [];
+    if (finalIDEs.includes('cursor') || finalIDEs.includes('claude') || options.interactive === false) {
+      console.log('   6. Restart your IDE to activate quality gates');
     }
     console.log('\n💡 Quick start: caws scaffold && caws validate && caws diagnose');
   } catch (error) {

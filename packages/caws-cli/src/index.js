@@ -49,6 +49,7 @@ const { specsCommand } = require('./commands/specs');
 const { modeCommand } = require('./commands/mode');
 const { tutorialCommand } = require('./commands/tutorial');
 const { planCommand } = require('./commands/plan');
+const { worktreeCommand } = require('./commands/worktree');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -105,6 +106,8 @@ program
   .option('-i, --interactive', 'Run interactive setup wizard', true)
   .option('--non-interactive', 'Skip interactive prompts (use defaults)', false)
   .option('--template <template>', 'Use specific project template')
+  .option('--mode <mode>', 'CAWS mode (lite, simple, standard, enterprise)')
+  .option('--ide <ides>', 'IDE integrations to install (comma-separated: cursor,claude,vscode,intellij,windsurf,copilot,all,none)')
   .action(initProject);
 
 // Scaffold command
@@ -116,6 +119,7 @@ program
   .option('--with-codemods', 'Include codemod scripts', false)
   .option('--with-oidc', 'Include OIDC trusted publisher setup', false)
   .option('--with-quality-gates', 'Install quality gates package and scripts', false)
+  .option('--ide <ides>', 'IDE integrations to install (comma-separated: cursor,claude,vscode,intellij,windsurf,copilot,all,none)')
   .action(scaffoldProject);
 
 // Validate command
@@ -342,6 +346,37 @@ program
   .option('--spec <id>', 'Alias for --spec-id')
   .option('--output <path>', 'Output file path for the plan')
   .action((action, options) => planCommand(action, options));
+
+// Worktree command group
+const worktreeCmd = program
+  .command('worktree')
+  .description('Manage git worktrees for agent scope isolation');
+
+worktreeCmd
+  .command('create <name>')
+  .description('Create a new isolated worktree')
+  .option('--scope <patterns>', 'Sparse checkout patterns (comma-separated, e.g., "src/auth/**")')
+  .option('--base-branch <branch>', 'Base branch to create from')
+  .option('--spec-id <id>', 'Associated spec ID')
+  .action((name, options) => worktreeCommand('create', { name, ...options }));
+
+worktreeCmd
+  .command('list')
+  .description('List all managed worktrees')
+  .action(() => worktreeCommand('list'));
+
+worktreeCmd
+  .command('destroy <name>')
+  .description('Destroy a worktree')
+  .option('--delete-branch', 'Also delete the associated branch', false)
+  .option('--force', 'Force removal even if worktree is dirty', false)
+  .action((name, options) => worktreeCommand('destroy', { name, ...options }));
+
+worktreeCmd
+  .command('prune')
+  .description('Clean up stale worktree entries')
+  .option('--max-age <days>', 'Remove entries older than N days', '30')
+  .action((options) => worktreeCommand('prune', options));
 
 // Templates command
 program
@@ -611,6 +646,7 @@ program.exitOverride((err) => {
       'hooks',
       'burnup',
       'tool',
+      'worktree',
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 

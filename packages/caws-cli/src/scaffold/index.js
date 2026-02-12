@@ -19,6 +19,9 @@ const { updateGitignore } = require('../utils/gitignore-updater');
 // Import Claude Code hooks scaffolding
 const { scaffoldClaudeHooks } = require('./claude-hooks');
 
+// Import IDE detection utilities
+const { IDE_REGISTRY, parseIDESelection, getRecommendedIDEs } = require('../utils/ide-detection');
+
 // CLI version from package.json
 const CLI_VERSION = require('../../package.json').version;
 
@@ -55,12 +58,20 @@ function findTemplateDir() {
 async function scaffoldIDEIntegrations(targetDir, options) {
   const templateDir = findTemplateDir() || path.join(__dirname, '../../templates');
 
-  console.log(chalk.cyan('🎨 Setting up IDE integrations...'));
+  // Determine which IDEs to install
+  const selectedIDEs = options.ides || [];
+  if (selectedIDEs.length === 0) {
+    console.log(chalk.gray('Skipping IDE setup (none selected)'));
+    return { added: 0, skipped: 0 };
+  }
+
+  const ideNames = selectedIDEs.map((id) => IDE_REGISTRY[id]?.name || id).join(', ');
+  console.log(chalk.cyan(`Setting up IDE integrations: ${ideNames}`));
 
   let addedCount = 0;
   let skippedCount = 0;
 
-  // Setup git hooks with provenance integration
+  // Setup git hooks with provenance integration (always -- not IDE-specific)
   try {
     const gitHooksResult = await scaffoldGitHooks(targetDir, {
       provenance: true,
@@ -72,71 +83,63 @@ async function scaffoldIDEIntegrations(targetDir, options) {
     addedCount += gitHooksResult.added;
     skippedCount += gitHooksResult.skipped;
   } catch (error) {
-    console.log(chalk.yellow(`⚠️  Git hooks setup failed: ${error.message}`));
+    console.log(chalk.yellow(`Warning: Git hooks setup failed: ${error.message}`));
   }
 
-  // List of IDE integration templates to copy
-  const ideTemplates = [
-    // VS Code
-    {
-      src: '.vscode/settings.json',
-      dest: '.vscode/settings.json',
-      desc: 'VS Code workspace settings',
-    },
-    {
-      src: '.vscode/launch.json',
-      dest: '.vscode/launch.json',
-      desc: 'VS Code debug configurations',
-    },
+  // Build IDE templates list dynamically based on selection
+  const ideTemplates = [];
 
-    // IntelliJ IDEA
-    {
-      src: '.idea/runConfigurations/CAWS_Validate.xml',
-      dest: '.idea/runConfigurations/CAWS_Validate.xml',
-      desc: 'IntelliJ run configuration for CAWS validate',
-    },
-    {
-      src: '.idea/runConfigurations/CAWS_Evaluate.xml',
-      dest: '.idea/runConfigurations/CAWS_Evaluate.xml',
-      desc: 'IntelliJ run configuration for CAWS evaluate',
-    },
+  if (selectedIDEs.includes('vscode')) {
+    ideTemplates.push(
+      { src: '.vscode/settings.json', dest: '.vscode/settings.json', desc: 'VS Code workspace settings' },
+      { src: '.vscode/launch.json', dest: '.vscode/launch.json', desc: 'VS Code debug configurations' }
+    );
+  }
 
-    // Windsurf
-    {
-      src: '.windsurf/workflows/caws-guided-development.md',
-      dest: '.windsurf/workflows/caws-guided-development.md',
-      desc: 'Windsurf workflow for CAWS-guided development',
-    },
+  if (selectedIDEs.includes('intellij')) {
+    ideTemplates.push(
+      { src: '.idea/runConfigurations/CAWS_Validate.xml', dest: '.idea/runConfigurations/CAWS_Validate.xml', desc: 'IntelliJ run configuration for CAWS validate' },
+      { src: '.idea/runConfigurations/CAWS_Evaluate.xml', dest: '.idea/runConfigurations/CAWS_Evaluate.xml', desc: 'IntelliJ run configuration for CAWS evaluate' }
+    );
+  }
 
-    // GitHub Copilot
-    {
-      src: '.github/copilot/instructions.md',
-      dest: '.github/copilot/instructions.md',
-      desc: 'GitHub Copilot CAWS integration instructions',
-    },
+  if (selectedIDEs.includes('junie')) {
+    ideTemplates.push(
+      { src: '.junie/guidelines.md', dest: '.junie/guidelines.md', desc: 'JetBrains Junie AI agent guidelines' }
+    );
+  }
 
-    // Git hooks are handled separately by scaffoldGitHooks
+  if (selectedIDEs.includes('windsurf')) {
+    ideTemplates.push(
+      { src: '.windsurf/workflows/caws-guided-development.md', dest: '.windsurf/workflows/caws-guided-development.md', desc: 'Windsurf workflow for CAWS-guided development' },
+      { src: '.windsurf/rules/caws-quality-standards.md', dest: '.windsurf/rules/caws-quality-standards.md', desc: 'Windsurf CAWS quality rules' }
+    );
+  }
 
-    // Cursor hooks (already handled by scaffoldCursorHooks, but ensure README is copied)
-    {
-      src: '.cursor/README.md',
-      dest: '.cursor/README.md',
-      desc: 'Cursor integration documentation',
-    },
+  if (selectedIDEs.includes('copilot')) {
+    ideTemplates.push(
+      { src: '.github/copilot-instructions.md', dest: '.github/copilot-instructions.md', desc: 'GitHub Copilot CAWS integration instructions' }
+    );
+  }
 
-    // Claude Code hooks
-    {
-      src: '.claude/README.md',
-      dest: '.claude/README.md',
-      desc: 'Claude Code integration documentation',
-    },
-  ];
+  if (selectedIDEs.includes('cursor')) {
+    ideTemplates.push(
+      { src: '.cursor/README.md', dest: '.cursor/README.md', desc: 'Cursor integration documentation' }
+    );
+  }
 
-  // Setup Claude Code hooks
-  try {
-    await scaffoldClaudeHooks(targetDir, ['safety', 'quality', 'scope', 'audit']);
-  } catch (error) {
-    console.log(chalk.yellow(`⚠️  Claude Code hooks setup failed: ${error.message}`));
+  if (selectedIDEs.includes('claude')) {
+    ideTemplates.push(
+      { src: '.claude/README.md', dest: '.claude/README.md', desc: 'Claude Code integration documentation' },
+      { src: 'CLAUDE.md', dest: 'CLAUDE.md', desc: 'Claude Code project instructions' }
+    );
+
+    // Setup Claude Code hooks
+    try {
+      await scaffoldClaudeHooks(targetDir, ['safety', 'quality', 'scope', 'audit']);
+    } catch (error) {
+      console.log(chalk.yellow(`Warning: Claude Code hooks setup failed: ${error.message}`));
+    }
   }
 
   for (const template of ideTemplates) {
@@ -144,48 +147,43 @@ async function scaffoldIDEIntegrations(targetDir, options) {
     const destPath = path.join(targetDir, template.dest);
 
     try {
-      // Check if source exists
       if (!(await fs.pathExists(srcPath))) {
         if (!template.optional) {
-          console.log(chalk.yellow(`⚠️  Template not found: ${template.src}`));
+          console.log(chalk.yellow(`Warning: Template not found: ${template.src}`));
         }
         continue;
       }
 
-      // Check if destination already exists
       const destExists = await fs.pathExists(destPath);
 
       if (destExists && !options.force) {
-        console.log(chalk.gray(`⏭️  Skipped ${template.desc} (already exists)`));
+        console.log(chalk.gray(`Skipped ${template.desc} (already exists)`));
         skippedCount++;
         continue;
       }
 
-      // Ensure destination directory exists
       await fs.ensureDir(path.dirname(destPath));
-
-      // Copy the file
       await fs.copy(srcPath, destPath);
 
-      // Make scripts executable if they're in hooks or cursor directories
-      if (destPath.includes('.git/hooks/') || destPath.includes('.cursor/hooks/')) {
+      if (destPath.includes('.git/hooks/') || destPath.includes('.cursor/hooks/') || destPath.includes('.claude/hooks/')) {
         try {
           await fs.chmod(destPath, '755');
-        } catch (error) {
+        } catch (_) {
           // Ignore chmod errors on some systems
         }
       }
 
-      console.log(chalk.green(`✅ Added ${template.desc}`));
+      console.log(chalk.green(`Added ${template.desc}`));
       addedCount++;
     } catch (error) {
-      console.log(chalk.red(`❌ Failed to add ${template.desc}: ${error.message}`));
+      console.log(chalk.red(`Failed to add ${template.desc}: ${error.message}`));
     }
   }
 
   if (addedCount > 0) {
-    console.log(chalk.green(`\n🎨 IDE integrations: ${addedCount} added, ${skippedCount} skipped`));
-    console.log(chalk.blue('💡 Restart your IDE to activate the new integrations'));
+    console.log(chalk.green(`\nIDE integrations: ${addedCount} added, ${skippedCount} skipped`));
+    console.log(chalk.gray(`   Installed: ${ideNames}`));
+    console.log(chalk.blue('Restart your IDE to activate the new integrations'));
   }
 
   return { added: addedCount, skipped: skippedCount };
@@ -370,15 +368,19 @@ async function scaffoldProject(options) {
       });
     }
 
-    // Add IDE integrations for comprehensive development experience
-    enhancements.push({
-      name: 'ide-integrations',
-      description: 'IDE integrations (VS Code, IntelliJ, Windsurf, Git hooks)',
-      required: false,
-      customHandler: async (targetDir, options) => {
-        return await scaffoldIDEIntegrations(targetDir, options);
-      },
-    });
+    // Add IDE integrations for selected IDEs
+    const selectedIDEs = options.ide ? parseIDESelection(options.ide) : getRecommendedIDEs();
+    if (selectedIDEs.length > 0) {
+      const ideNames = selectedIDEs.map((id) => IDE_REGISTRY[id]?.name || id).join(', ');
+      enhancements.push({
+        name: 'ide-integrations',
+        description: `IDE integrations (${ideNames})`,
+        required: false,
+        customHandler: async (targetDir, opts) => {
+          return await scaffoldIDEIntegrations(targetDir, { ...opts, ides: selectedIDEs });
+        },
+      });
+    }
 
     // Add quality gates package and configuration if requested
     // Note: These are optional - git hooks fall back to CAWS CLI if package isn't installed
@@ -558,7 +560,7 @@ async function scaffoldProject(options) {
       !fs.existsSync(path.join(currentDir, 'caws.md'))
     ) {
       enhancements.push({
-        name: 'agents.md',
+        name: 'AGENTS.md',
         description: 'CAWS agent workflow guide',
         required: false,
       });
