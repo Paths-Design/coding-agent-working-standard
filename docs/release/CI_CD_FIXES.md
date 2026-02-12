@@ -14,7 +14,6 @@
 **Packages Affected**:
 - `@caws/quality-gates` - Missing typecheck script
 - `caws-mcp-server` - Missing typecheck script  
-- `caws-vscode-extension` - Missing typecheck script
 - `@paths.design/caws-types` - Missing typecheck script
 - `@caws/test-project` - Missing typecheck script
 
@@ -45,11 +44,6 @@
 **`packages/caws-mcp-server/package.json`**:
 ```json
 "typecheck": "echo 'MCP Server type checking not configured (ES modules)'"
-```
-
-**`packages/caws-vscode-extension/package.json`**:
-```json
-"typecheck": "tsc --noEmit -p ./"
 ```
 
 **`packages/caws-types/package.json`**:

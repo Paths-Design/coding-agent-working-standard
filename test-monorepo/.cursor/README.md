@@ -156,9 +156,6 @@ ls -la .cursor/hooks/
 # Install CAWS CLI
 npm install -g @caws/cli
 
-# Or use bundled version (VS Code extension)
-code --install-extension caws.caws-vscode-extension
-
 # Verify PATH
 which caws
 ```

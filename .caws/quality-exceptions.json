@@ -75,7 +75,9 @@
       "approved_by": "architecture",
       "approved_at": "2025-01-25T00:00:00Z",
       "expires_at": "2026-12-31T23:59:59Z",
-      "file_pattern": "docs/**/*.md"
+      "file_pattern": "docs/**/*.md",
+      "hits": 60,
+      "updated_at": "2026-02-11T22:39:03.605Z"
     },
     {
       "id": "ex_readme_files",

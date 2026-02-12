@@ -157,15 +157,14 @@ caws-cli/
         │                       │
         └───────────────────────┘
                 │
-        ┌─────────────────┐    ┌──────────────────┐
-        │ caws-mcp-server │────│ caws-vscode-ext  │
-        │ (Agent Bridge)  │    │   (IDE Integration)
-        └─────────────────┘    └──────────────────┘
+        ┌─────────────────┐
+        │ caws-mcp-server │
+        │ (Agent Bridge)  │
+        └─────────────────┘
 ```
 
 - **caws-template**: Provides the tools and configurations that CLI manages
 - **caws-mcp-server**: Exposes CLI functionality to AI agents via MCP protocol
-- **caws-vscode-extension**: Provides IDE integration using CLI capabilities
 
 ### Quality Gates Integration
 

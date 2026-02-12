@@ -221,7 +221,6 @@ npm run build
 # Verify builds
 ls -la packages/caws-cli/dist/
 ls -la packages/caws-mcp-server/
-ls -la packages/caws-vscode-extension/out/
 ```
 
 ### Step 4: Version Check
@@ -230,7 +229,6 @@ ls -la packages/caws-vscode-extension/out/
 # Verify versions are correct
 cat packages/caws-cli/package.json | grep version
 cat packages/caws-mcp-server/package.json | grep version
-cat packages/caws-vscode-extension/package.json | grep version
 ```
 
 ### Step 5: Git Preparation
@@ -268,11 +266,6 @@ npm publish
 # Publish MCP Server
 cd ../caws-mcp-server
 npm publish
-
-# Package Extension (for VS Code Marketplace)
-cd ../caws-vscode-extension
-npm run package
-# Then manually upload to VS Code Marketplace
 ```
 
 ### Step 7: Post-Release Verification

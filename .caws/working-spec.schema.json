@@ -5,7 +5,7 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^(PROJ|FEAT|FIX|ARCH)-\\d{4}$",
+      "pattern": "^[A-Z]{2,6}-\\d{3,4}$",
       "description": "Unique identifier for the change"
     },
     "title": {

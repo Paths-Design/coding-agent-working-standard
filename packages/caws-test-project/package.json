@@ -1,6 +1,7 @@
 {
   "name": "@caws/test-project",
   "version": "1.0.0",
+  "private": true,
   "description": "CAWS (Coding Agent Workflow System) test project",
   "scripts": {
     "build": "echo 'Test project does not need building'",

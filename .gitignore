@@ -447,6 +447,10 @@ public
 
 # CAWS Specific
 # =============
+# CAWS runtime caches
+.caws/cache/
+.caws/duplication-cache.json
+
 # Generated provenance and attestation files
 .agent/
 **/provenance.json

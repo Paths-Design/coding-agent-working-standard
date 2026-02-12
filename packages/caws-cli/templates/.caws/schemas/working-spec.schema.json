@@ -16,7 +16,7 @@
     "contracts"
   ],
   "properties": {
-    "id": { "type": "string", "pattern": "^(PROJ|FEAT|FIX|ARCH)-\\d{4}$" },
+    "id": { "type": "string", "pattern": "^[A-Z]{2,6}-\\d{3,4}$" },
     "title": { "type": "string", "minLength": 10, "maxLength": 200 },
     "risk_tier": { "type": ["integer", "string"], "enum": [1, 2, 3, "1", "2", "3"] },
     "mode": { "type": "string", "enum": ["feature", "refactor", "fix", "doc", "chore"] },
