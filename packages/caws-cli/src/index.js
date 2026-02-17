@@ -50,6 +50,7 @@ const { modeCommand } = require('./commands/mode');
 const { tutorialCommand } = require('./commands/tutorial');
 const { planCommand } = require('./commands/plan');
 const { worktreeCommand } = require('./commands/worktree');
+const { sessionCommand } = require('./commands/session');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -378,6 +379,56 @@ worktreeCmd
   .option('--max-age <days>', 'Remove entries older than N days', '30')
   .action((options) => worktreeCommand('prune', options));
 
+// Session command group
+const sessionCmd = program
+  .command('session')
+  .description('Manage session lifecycle and capsules for multi-agent coordination');
+
+sessionCmd
+  .command('start')
+  .description('Start a new tracked session with baseline checkpoint')
+  .option('--role <role>', 'Agent role (worker, integrator, qa)', 'worker')
+  .option('--spec-id <id>', 'Associated feature spec ID')
+  .option('--scope <patterns>', 'Allowed file patterns (comma-separated)')
+  .option('--intent <text>', 'What this session intends to accomplish')
+  .action((options) => sessionCommand('start', options));
+
+sessionCmd
+  .command('checkpoint')
+  .description('Record a checkpoint in the current session')
+  .option('--session-id <id>', 'Specific session ID (uses latest active if omitted)')
+  .option('--intent <text>', 'Updated intent description')
+  .option('--paths <paths>', 'Files changed (comma-separated)')
+  .option('--tests <json>', 'Test results as JSON array [{name, status, evidence}]')
+  .option('--issues <json>', 'Known issues as JSON array [{type, description}]')
+  .action((options) => sessionCommand('checkpoint', options));
+
+sessionCmd
+  .command('end')
+  .description('End the current session with handoff information')
+  .option('--session-id <id>', 'Specific session ID (uses latest active if omitted)')
+  .option('--next-actions <actions>', 'Handoff actions (pipe-separated)')
+  .option('--risk-notes <notes>', 'Risk notes (pipe-separated)')
+  .action((options) => sessionCommand('end', options));
+
+sessionCmd
+  .command('list')
+  .description('List all sessions')
+  .option('--status <status>', 'Filter by status (active, completed)')
+  .option('--limit <n>', 'Max entries to show')
+  .action((options) => sessionCommand('list', options));
+
+sessionCmd
+  .command('show [id]')
+  .description('Show session capsule details (default: latest)')
+  .option('--json', 'Output as raw JSON', false)
+  .action((id, options) => sessionCommand('show', { ...options, id: id || 'latest' }));
+
+sessionCmd
+  .command('briefing')
+  .description('Show session briefing for hooks/startup')
+  .action(() => sessionCommand('briefing'));
+
 // Templates command
 program
   .command('templates [subcommand]')
@@ -647,6 +698,7 @@ program.exitOverride((err) => {
       'burnup',
       'tool',
       'worktree',
+      'session',
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 
