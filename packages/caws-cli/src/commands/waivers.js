@@ -19,6 +19,24 @@ const { commandWrapper, Output } = require('../utils/command-wrapper');
 const WAIVER_DIR = '.caws/waivers';
 
 /**
+ * Valid gate identifiers recognized by the quality-gates package.
+ * These must match the gate names used in processViolations() calls
+ * within the check-*.mjs files.
+ */
+const VALID_GATES = [
+  'naming',
+  'code_freeze',
+  'duplication',
+  'duplication_gate',
+  'god_objects',
+  'placeholders',
+  'simplification',
+  'hidden-todo',
+  'documentation',
+  '*',
+];
+
+/**
  * Waivers command handler
  *
  * @param {string} subcommand - create, list, show, revoke
@@ -69,43 +87,60 @@ async function waiversCommand(subcommand = 'list', options = {}) {
  * Create a new waiver
  */
 async function createWaiver(options) {
-  // Validate required fields
+  // Validate all required fields upfront (report all missing at once)
   const required = [
-    'title',
-    'reason',
-    'description',
-    'gates',
-    'expiresAt',
-    'approvedBy',
-    'impactLevel',
-    'mitigationPlan',
+    { field: 'title', flag: '--title', example: '"Emergency hotfix waiver"' },
+    { field: 'reason', flag: '--reason', example: 'emergency_hotfix' },
+    { field: 'description', flag: '--description', example: '"Critical production bug requires immediate fix"' },
+    { field: 'gates', flag: '--gates', example: `placeholders,naming  (valid: ${VALID_GATES.join(', ')})` },
+    { field: 'expiresAt', flag: '--expires-at', example: '2025-12-31T23:59:59Z' },
+    { field: 'approvedBy', flag: '--approved-by', example: '"@manager"' },
+    { field: 'impactLevel', flag: '--impact-level', example: 'high' },
+    { field: 'mitigationPlan', flag: '--mitigation-plan', example: '"Will add tests in follow-up PR within 48h"' },
   ];
-  const missing = required.filter((field) => !options[field]);
+  const missing = required.filter((r) => !options[r.field]);
 
   if (missing.length > 0) {
-    console.error(chalk.red(`\n❌ Missing required fields: ${missing.join(', ')}`));
-    console.log(chalk.yellow('\n💡 Example:'));
+    console.error(chalk.red(`\nMissing ${missing.length} required option(s):\n`));
+    missing.forEach((r) => {
+      console.error(`  ${chalk.yellow(r.flag)}  e.g. ${r.example}`);
+    });
+    console.log(chalk.dim('\nFull example:'));
     console.log('   caws waivers create \\');
-    console.log('     --title="Emergency hotfix waiver" \\');
-    console.log('     --reason=emergency_hotfix \\');
-    console.log('     --description="Critical production bug requires immediate fix" \\');
-    console.log('     --gates=coverage,mutation \\');
-    console.log('     --expires-at=2025-12-31T23:59:59Z \\');
-    console.log('     --approved-by="@manager" \\');
-    console.log('     --impact-level=high \\');
-    console.log('     --mitigation-plan="Will add tests in follow-up PR within 48h"');
+    required.forEach((r, i) => {
+      const sep = i < required.length - 1 ? ' \\' : '';
+      console.log(`     ${r.flag}=${r.example}${sep}`);
+    });
     process.exit(1);
   }
-
-  // Generate waiver ID
-  const waiverId = `WV-${Date.now().toString().slice(-4)}`;
-  const timestamp = new Date().toISOString();
 
   // Parse gates
   const gates =
     typeof options.gates === 'string'
       ? options.gates.split(',').map((g) => g.trim())
       : options.gates;
+
+  // Validate gate names against known identifiers
+  const invalidGates = gates.filter((g) => !VALID_GATES.includes(g));
+  if (invalidGates.length > 0) {
+    console.error(chalk.red(`\nUnrecognized gate name(s): ${invalidGates.join(', ')}`));
+    console.log(`\nValid gate names: ${VALID_GATES.join(', ')}`);
+
+    // Suggest close matches
+    invalidGates.forEach((bad) => {
+      const suggestion = VALID_GATES.find(
+        (v) => v !== '*' && (v.includes(bad) || bad.includes(v))
+      );
+      if (suggestion) {
+        console.log(chalk.yellow(`  "${bad}" -> did you mean "${suggestion}"?`));
+      }
+    });
+    process.exit(1);
+  }
+
+  // Generate waiver ID
+  const waiverId = `WV-${Date.now().toString().slice(-4)}`;
+  const timestamp = new Date().toISOString();
 
   // Create waiver object
   const waiver = {
@@ -134,15 +169,15 @@ async function createWaiver(options) {
     console.error(error.stack);
   }
 
-  console.log(chalk.green(`\n✅ Waiver created: ${waiverId}`));
+  console.log(chalk.green(`\nWaiver created: ${waiverId}`));
   console.log(`   Title: ${waiver.title}`);
   console.log(`   Reason: ${waiver.reason}`);
   console.log(`   Gates: ${waiver.gates.join(', ')}`);
   console.log(`   Expires: ${waiver.expires_at}`);
   console.log(`   Approved by: ${waiver.approved_by}`);
   console.log(`   Impact: ${waiver.impact_level}`);
-  console.log(chalk.yellow(`\n⚠️  Remember: This waiver expires on ${waiver.expires_at}`));
-  console.log(chalk.yellow(`⚠️  Mitigation plan: ${waiver.mitigation_plan}\n`));
+  console.log(chalk.yellow(`\n   Note: This waiver expires on ${waiver.expires_at}`));
+  console.log(chalk.yellow(`   Mitigation plan: ${waiver.mitigation_plan}\n`));
 }
 
 /**
@@ -152,14 +187,14 @@ async function listWaivers(_options) {
   const waiversDir = path.join(process.cwd(), WAIVER_DIR);
 
   if (!fs.existsSync(waiversDir)) {
-    console.log(chalk.yellow('\nℹ️  No waivers found\n'));
+    console.log(chalk.yellow('\nNo waivers found.\n'));
     return;
   }
 
   const waiverFiles = fs.readdirSync(waiversDir).filter((f) => f.endsWith('.yaml'));
 
   if (waiverFiles.length === 0) {
-    console.log(chalk.yellow('\nℹ️  No waivers found\n'));
+    console.log(chalk.yellow('\nNo waivers found.\n'));
     return;
   }
 
@@ -177,16 +212,16 @@ async function listWaivers(_options) {
   );
   const revokedWaivers = waivers.filter((w) => w.status === 'revoked');
 
-  console.log(chalk.blue('\n🔖 CAWS Quality Gate Waivers\n'));
+  console.log(chalk.blue('\nCAWS Quality Gate Waivers\n'));
   console.log('─'.repeat(60));
 
   if (activeWaivers.length > 0) {
-    console.log(chalk.green('\n✅ Active Waivers:\n'));
+    console.log(chalk.green('\nActive Waivers:\n'));
     activeWaivers.forEach((waiver) => {
       const daysLeft = Math.ceil(
         (new Date(waiver.expires_at) - new Date()) / (1000 * 60 * 60 * 24)
       );
-      console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
+      console.log(`  ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Reason: ${waiver.reason}`);
       console.log(`   Gates: ${waiver.gates.join(', ')}`);
       console.log(`   Expires: ${waiver.expires_at} (${daysLeft} days)`);
@@ -196,24 +231,24 @@ async function listWaivers(_options) {
   }
 
   if (expiredWaivers.length > 0) {
-    console.log(chalk.yellow('\n⚠️  Expired Waivers:\n'));
+    console.log(chalk.yellow('\nExpired Waivers:\n'));
     expiredWaivers.forEach((waiver) => {
-      console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
+      console.log(`  ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Expired: ${waiver.expires_at}`);
       console.log();
     });
   }
 
   if (revokedWaivers.length > 0) {
-    console.log(chalk.red('\n❌ Revoked Waivers:\n'));
+    console.log(chalk.red('\nRevoked Waivers:\n'));
     revokedWaivers.forEach((waiver) => {
-      console.log(`🔖 ${chalk.bold(waiver.id)}: ${waiver.title}`);
+      console.log(`  ${chalk.bold(waiver.id)}: ${waiver.title}`);
       console.log(`   Revoked: ${waiver.revoked_at}`);
       console.log();
     });
   }
 
-  console.log(chalk.blue('📊 Summary:\n'));
+  console.log(chalk.blue('Summary:\n'));
   console.log(`   Active: ${activeWaivers.length}`);
   console.log(`   Expired: ${expiredWaivers.length}`);
   console.log(`   Revoked: ${revokedWaivers.length}`);
@@ -225,15 +260,15 @@ async function listWaivers(_options) {
  */
 async function showWaiver(waiverId, _options) {
   if (!waiverId) {
-    console.error(chalk.red('\n❌ Waiver ID required'));
-    console.log(chalk.yellow('💡 Usage: caws waivers show WV-1234\n'));
+    console.error(chalk.red('\nWaiver ID required'));
+    console.log(chalk.yellow('Usage: caws waivers show WV-1234\n'));
     process.exit(1);
   }
 
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
 
   if (!fs.existsSync(waiverPath)) {
-    console.error(chalk.red(`\n❌ Waiver not found: ${waiverId}\n`));
+    console.error(chalk.red(`\nWaiver not found: ${waiverId}\n`));
     process.exit(1);
   }
 
@@ -242,35 +277,33 @@ async function showWaiver(waiverId, _options) {
 
   const isExpired = new Date(waiver.expires_at) <= new Date();
   const isActive = waiver.status === 'active' && !isExpired;
-  const statusIcon = isActive ? '✅' : isExpired ? '⚠️' : '❌';
+  const statusLabel = isActive ? chalk.green('Active') : isExpired ? chalk.yellow('Expired') : chalk.red(waiver.status);
 
-  console.log(chalk.blue('\n🔖 Waiver Details\n'));
+  console.log(chalk.blue('\nWaiver Details\n'));
   console.log('─'.repeat(60));
-  console.log(
-    `\n${statusIcon} Status: ${chalk.bold(isActive ? 'Active' : isExpired ? 'Expired' : waiver.status)}`
-  );
-  console.log(`\n📋 ${chalk.bold(waiver.title)}`);
+  console.log(`\nStatus: ${statusLabel}`);
+  console.log(`\n${chalk.bold(waiver.title)}`);
   console.log(`   ID: ${waiver.id}`);
   console.log(`   Reason: ${waiver.reason}`);
   console.log(`   Impact Level: ${waiver.impact_level}`);
-  console.log(`\n📝 Description:`);
+  console.log(`\nDescription:`);
   console.log(`   ${waiver.description}`);
-  console.log(`\n🔒 Waived Quality Gates:`);
+  console.log(`\nWaived Quality Gates:`);
   waiver.gates.forEach((gate) => {
-    console.log(`   • ${gate}`);
+    console.log(`   - ${gate}`);
   });
-  console.log(`\n🛡️ Mitigation Plan:`);
+  console.log(`\nMitigation Plan:`);
   console.log(`   ${waiver.mitigation_plan}`);
-  console.log(`\n📅 Timeline:`);
+  console.log(`\nTimeline:`);
   console.log(`   Created: ${waiver.created_at}`);
   console.log(`   Expires: ${waiver.expires_at}`);
   if (waiver.revoked_at) {
     console.log(`   Revoked: ${waiver.revoked_at}`);
   }
-  console.log(`\n✍️  Approved by: ${waiver.approved_by}\n`);
+  console.log(`\nApproved by: ${waiver.approved_by}\n`);
 
   if (isExpired && waiver.status === 'active') {
-    console.log(chalk.yellow('⚠️  This waiver has expired. Consider revoking it.\n'));
+    console.log(chalk.yellow('Warning: This waiver has expired. Consider revoking it.\n'));
   }
 }
 
@@ -279,15 +312,15 @@ async function showWaiver(waiverId, _options) {
  */
 async function revokeWaiver(waiverId, options) {
   if (!waiverId) {
-    console.error(chalk.red('\n❌ Waiver ID required'));
-    console.log(chalk.yellow('💡 Usage: caws waivers revoke WV-1234\n'));
+    console.error(chalk.red('\nWaiver ID required'));
+    console.log(chalk.yellow('Usage: caws waivers revoke WV-1234\n'));
     process.exit(1);
   }
 
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
 
   if (!fs.existsSync(waiverPath)) {
-    console.error(chalk.red(`\n❌ Waiver not found: ${waiverId}\n`));
+    console.error(chalk.red(`\nWaiver not found: ${waiverId}\n`));
     process.exit(1);
   }
 
@@ -295,7 +328,7 @@ async function revokeWaiver(waiverId, options) {
   const waiver = yaml.load(content);
 
   if (waiver.status === 'revoked') {
-    console.log(chalk.yellow(`\nℹ️  Waiver ${waiverId} is already revoked\n`));
+    console.log(chalk.yellow(`\nWaiver ${waiverId} is already revoked\n`));
     return;
   }
 
@@ -308,7 +341,7 @@ async function revokeWaiver(waiverId, options) {
   // Save updated waiver
   fs.writeFileSync(waiverPath, yaml.dump(waiver, { lineWidth: -1 }));
 
-  console.log(chalk.green(`\n✅ Waiver revoked: ${waiverId}`));
+  console.log(chalk.green(`\nWaiver revoked: ${waiverId}`));
   console.log(`   Title: ${waiver.title}`);
   console.log(`   Revoked at: ${waiver.revoked_at}`);
   console.log(`   Revoked by: ${waiver.revoked_by}`);
