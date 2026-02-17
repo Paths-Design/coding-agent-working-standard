@@ -44,15 +44,15 @@ describe('CAWS CLI', () => {
     fs.writeFileSync(
       path.join(mockTemplateDir, 'apps/tools/caws/validate.js'),
       `#!/usr/bin/env node
-console.log("✅ Working specification is valid");
+console.log("Working specification is valid");
 console.log("ID: TEST-001");
 console.log("Title: Test Project for Tools");
 console.log("Risk Tier: 2");
 console.log("Mode: feature");
-console.log("📊 Scope Analysis:");
+console.log("Scope Analysis:");
 console.log("  IN: test files");
 console.log("  OUT: other files");
-console.log("📝 Quality Metrics:");
+console.log("Quality Metrics:");
 console.log("  Invariants: 1");
 console.log("  Acceptance criteria: 1");
 process.exit(0);`
@@ -64,7 +64,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 if (command === 'tier') {
-  console.log("📋 Tier 1 Policy Analysis:");
+  console.log("Tier 1 Policy Analysis:");
   console.log("Branch Coverage: ≥90%");
   console.log("Mutation Score: ≥70%");
   console.log("Max Files: 40");
@@ -72,10 +72,10 @@ if (command === 'tier') {
   const tier = args[1];
   const coverage = parseFloat(args[2]);
   if (coverage >= 0.85) {
-    console.log("✅ Branch coverage gate passed:");
+    console.log("Branch coverage gate passed:");
     console.log(\`  Coverage: \${coverage * 100}%\`);
   } else {
-    console.log("❌ Branch coverage gate failed:");
+    console.log("Branch coverage gate failed:");
     console.log(\`  Coverage: \${coverage * 100}% (required: ≥85%)\`);
     process.exit(1);
   }
@@ -83,7 +83,7 @@ if (command === 'tier') {
   const tier = args[1];
   const files = parseInt(args[2]);
   const loc = parseInt(args[3]);
-  console.log("✅ Budget gate passed:");
+  console.log("Budget gate passed:");
   console.log(\`  Files: \${files}, LOC: \${loc}\`);
 }
 process.exit(0);`
@@ -213,12 +213,12 @@ module.exports = {
 const tsMorph = require('ts-morph');
 
 function runCodemod(dryRun = true) {
-  console.log('🔧 Running test codemod...');
+  console.log('Running test codemod...');
 
   const project = new tsMorph.Project();
   const sourceFiles = project.addSourceFilesAtPaths('src/**/*.ts');
 
-  console.log(\`📁 Found \${sourceFiles.length} source files\`);
+  console.log(\`Found \${sourceFiles.length} source files\`);
 
   let changes = 0;
 
@@ -241,18 +241,18 @@ function runCodemod(dryRun = true) {
           ]
         });
         changes++;
-        console.log(\`  ✅ Added JSDoc to \${funcDecl.getName()}\`);
+        console.log(\`  Added JSDoc to \${funcDecl.getName()}\`);
       }
     }
   }
 
-  console.log(\`📊 Codemod complete: \${changes} transformations applied\`);
+  console.log(\`Codemod complete: \${changes} transformations applied\`);
 
   if (!dryRun) {
     project.saveSync();
-    console.log('💾 Changes saved to disk');
+    console.log('Changes saved to disk');
   } else {
-    console.log('🔍 Dry run - no files modified');
+    console.log('Dry run - no files modified');
   }
 
   return { filesProcessed: sourceFiles.length, changesApplied: changes };
@@ -265,10 +265,10 @@ if (require.main === module) {
 
   try {
     const result = runCodemod(dryRun);
-    console.log('✅ Codemod executed successfully');
+    console.log('Codemod executed successfully');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Codemod failed:', error.message);
+    console.error('Codemod failed:', error.message);
     process.exit(1);
   }
 }
@@ -289,7 +289,7 @@ module.exports = { runCodemod };`
 
     if (hasTemplateDependency) {
       // Use dependency for consistent testing across environments
-      console.log('ℹ️  Using template dependency for testing');
+      console.log('Using template dependency for testing');
       // Keep the mock files but they will be overridden by dependency resolution
     } else {
       // Fallback to local template if dependency not available
@@ -299,7 +299,7 @@ module.exports = { runCodemod };`
         fs.rmSync(mockTemplateDir, { recursive: true, force: true });
         fs.symlinkSync(templateDir, mockTemplateDir);
       } else {
-        console.log('ℹ️  Using mock template for testing (template not found locally)');
+        console.log('Using mock template for testing (template not found locally)');
         // Keep the mock files created above
       }
     }
@@ -600,7 +600,7 @@ module.exports = { runCodemod };`
       } catch (error) {
         // If git initialization fails in CI environment, skip the test
         // This is acceptable since git may not be available or configured in all CI environments
-        console.log('⚠️  Git initialization failed in CI environment - skipping git test');
+        console.log('Git initialization failed in CI environment - skipping git test');
         expect(true).toBe(true); // Pass the test
       }
     });

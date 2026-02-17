@@ -129,7 +129,7 @@ async function createSpec(id, options = {}) {
 
   if (specExists && !force) {
     if (interactive) {
-      console.log(chalk.yellow(`⚠️  Spec '${id}' already exists.`));
+      console.log(chalk.yellow(`Spec '${id}' already exists.`));
       console.log(chalk.gray(`   Path: ${existingSpecPath}`));
 
       // Load existing spec to show details
@@ -151,7 +151,7 @@ async function createSpec(id, options = {}) {
       answer = await askConflictResolution();
 
       if (answer === 'cancel') {
-        console.log(chalk.blue('ℹ️  Spec creation canceled.'));
+        console.log(chalk.blue('Spec creation canceled.'));
         return null;
       } else if (answer === 'rename') {
         // Generate new name with valid PREFIX-NUMBER format
@@ -161,19 +161,19 @@ async function createSpec(id, options = {}) {
         // Generate sequential number based on timestamp
         const number = Date.now().toString().slice(-6); // Last 6 digits of timestamp
         const newId = `${prefix}-${number}`;
-        console.log(chalk.blue(`📝 Creating spec with new name: ${newId}`));
+        console.log(chalk.blue(`Creating spec with new name: ${newId}`));
         return await createSpec(newId, { ...options, interactive: false });
       } else if (answer === 'merge') {
         // Merge new spec data with existing spec
-        console.log(chalk.blue('🔄 Merging with existing spec...'));
+        console.log(chalk.blue('Merging with existing spec...'));
         return await mergeSpec(id, options);
       } else if (answer === 'override') {
-        console.log(chalk.yellow('⚠️  Overriding existing spec...'));
+        console.log(chalk.yellow('Overriding existing spec...'));
       }
     } else {
-      console.error(chalk.red(`❌ Spec '${id}' already exists.`));
+      console.error(chalk.red(`Spec '${id}' already exists.`));
       console.error(
-        chalk.yellow('💡 Use --force to override, or --interactive for conflict resolution.')
+        chalk.yellow('Use --force to override, or --interactive for conflict resolution.')
       );
       throw new Error(`Spec '${id}' already exists. Use --force to override.`);
     }
@@ -181,7 +181,7 @@ async function createSpec(id, options = {}) {
 
   // If we got here via override choice, proceed with creation
   if (specExists && (force || answer === 'override')) {
-    console.log(chalk.yellow('⚠️  Overriding existing spec...'));
+    console.log(chalk.yellow('Overriding existing spec...'));
   }
 
   // Ensure specs directory exists
@@ -298,7 +298,7 @@ async function createSpec(id, options = {}) {
     if (error.message.includes('YAMLException') || error.message.includes('yaml')) {
       throw new Error(
         `Failed to create valid spec: YAML syntax error. ${error.message}\n` +
-          '💡 Consider using the interactive mode: caws specs create <id> --interactive'
+          'Consider using the interactive mode: caws specs create <id> --interactive'
       );
     }
     throw error;
@@ -398,8 +398,8 @@ async function mergeSpec(id, options = {}) {
     throw new Error(`Spec '${id}' not found`);
   }
 
-  console.log(chalk.blue(`\n📋 Merging into existing spec: ${id}`));
-  console.log(chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.blue(`\nMerging into existing spec: ${id}`));
+  console.log(chalk.gray('==============================================\n'));
 
   // Show existing spec summary
   console.log(chalk.gray(`Existing spec:`));
@@ -499,13 +499,13 @@ async function mergeSpec(id, options = {}) {
   await updateSpec(id, mergedSpec);
 
   // Display merge results
-  console.log(chalk.green('✅ Merge completed:'));
+  console.log(chalk.green('Merge completed:'));
   if (mergeLog.length > 0) {
     mergeLog.forEach((change) => {
-      console.log(chalk.gray(`   • ${change}`));
+      console.log(chalk.gray(`   - ${change}`));
     });
   } else {
-    console.log(chalk.gray('   • No changes needed (specs were identical)'));
+    console.log(chalk.gray('   - No changes needed (specs were identical)'));
   }
   console.log('');
 
@@ -541,8 +541,8 @@ async function deleteSpec(id) {
  * @param {Array} specs - Array of spec objects
  */
 function displaySpecsTable(specs) {
-  console.log(chalk.bold.cyan('\n📋 CAWS Specs'));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan('\nCAWS Specs'));
+  console.log(chalk.cyan('==============================================\n'));
 
   if (specs.length === 0) {
     console.log(chalk.gray('   No specs found. Create one with: caws specs create <id>'));
@@ -551,7 +551,7 @@ function displaySpecsTable(specs) {
 
   // Header
   console.log(chalk.bold('ID'.padEnd(15) + 'Type'.padEnd(10) + 'Status'.padEnd(12) + 'Title'));
-  console.log(chalk.gray('─'.repeat(80)));
+  console.log(chalk.gray('-'.repeat(80)));
 
   // Sort specs by type and status priority
   const statusPriority = { active: 0, draft: 1, completed: 2, archived: 3 };
@@ -593,8 +593,8 @@ function displaySpecDetails(spec) {
   const specType = SPEC_TYPES[spec.type] || SPEC_TYPES.feature;
   const typeColor = specType.color;
 
-  console.log(chalk.bold.cyan(`\n📋 Spec Details: ${spec.id}`));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan(`\nSpec Details: ${spec.id}`));
+  console.log(chalk.cyan('==============================================\n'));
 
   console.log(`${specType.icon} ${typeColor(spec.type.toUpperCase())} - ${spec.title}`);
   console.log(
@@ -610,7 +610,7 @@ function displaySpecDetails(spec) {
   if (spec.acceptance_criteria && spec.acceptance_criteria.length > 0) {
     console.log(chalk.gray(`\n   Acceptance Criteria (${spec.acceptance_criteria.length}):`));
     spec.acceptance_criteria.forEach((criterion, index) => {
-      const status = criterion.completed ? chalk.green('✓') : chalk.red('○');
+      const status = criterion.completed ? chalk.green('[done]') : chalk.red('[ ]');
       console.log(
         chalk.gray(`     ${status} ${criterion.description || criterion.title || `A${index + 1}`}`)
       );
@@ -620,7 +620,7 @@ function displaySpecDetails(spec) {
   if (spec.contracts && spec.contracts.length > 0) {
     console.log(chalk.gray(`\n   Contracts (${spec.contracts.length}):`));
     spec.contracts.forEach((contract) => {
-      console.log(chalk.gray(`     📄 ${contract.type}: ${contract.path}`));
+      console.log(chalk.gray(`     ${contract.type}: ${contract.path}`));
     });
   }
 
@@ -645,7 +645,7 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
     throw new Error('No legacy working-spec.yaml found to migrate');
   }
 
-  console.log(chalk.blue('🔄 Migrating from legacy single-spec to multi-spec...'));
+  console.log(chalk.blue('Migrating from legacy single-spec to multi-spec...'));
 
   const legacyContent = await fs.readFile(legacyPath, 'utf8');
   const legacySpec = yaml.load(legacyContent);
@@ -661,7 +661,7 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   // Suggest feature breakdown based on acceptance criteria
   const features = suggestFeatureBreakdown(legacySpec);
 
-  console.log(chalk.green(`\n✅ Found ${features.length} potential features to extract:`));
+  console.log(chalk.green(`\nFound ${features.length} potential features to extract:`));
   features.forEach((feature, index) => {
     console.log(chalk.yellow(`   ${index + 1}. ${feature.id} - ${feature.title}`));
     console.log(chalk.gray(`      Scope: ${feature.scope.in.join(', ')}`));
@@ -673,10 +673,10 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   if (options.interactive) {
     selectedFeatures = await selectFeaturesInteractively(features);
     if (selectedFeatures.length === 0) {
-      console.log(chalk.yellow('⚠️  No features selected. Migration cancelled.'));
+      console.log(chalk.yellow('No features selected. Migration cancelled.'));
       return { migrated: 0, total: features.length, createdSpecs: [], legacySpec: legacySpec.id };
     }
-    console.log(chalk.blue(`\n📋 Migrating ${selectedFeatures.length} selected features`));
+    console.log(chalk.blue(`\nMigrating ${selectedFeatures.length} selected features`));
   }
 
   if (options.features && options.features.length > 0) {
@@ -684,10 +684,10 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
     selectedFeatures = features.filter((f) => options.features.includes(f.id));
     if (selectedFeatures.length === 0) {
       const errorMsg = `No features found matching: ${options.features.join(', ')}. Available features: ${features.map((f) => f.id).join(', ')}`;
-      console.log(chalk.yellow(`⚠️  ${errorMsg}`));
+      console.log(chalk.yellow(`${errorMsg}`));
       throw new Error(errorMsg);
     } else {
-      console.log(chalk.blue(`\n📋 Migrating selected features: ${options.features.join(', ')}`));
+      console.log(chalk.blue(`\nMigrating selected features: ${options.features.join(', ')}`));
     }
   }
 
@@ -714,10 +714,10 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
       });
 
       createdSpecs.push(specId);
-      console.log(chalk.green(`   ✅ Created spec: ${specId}`));
+      console.log(chalk.green(`   Created spec: ${specId}`));
     } catch (error) {
       // Log full error details for debugging
-      console.log(chalk.red(`   ❌ Failed to create spec ${feature.id}: ${error.message}`));
+      console.log(chalk.red(`   Failed to create spec ${feature.id}: ${error.message}`));
       if (process.env.DEBUG_MIGRATION) {
         console.log(chalk.gray(`   Error details: ${error.stack}`));
       }
@@ -725,11 +725,11 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   }
 
   console.log(
-    chalk.green(`\n🎉 Migration completed! Created ${createdSpecs.length} feature specs.`)
+    chalk.green(`\nMigration completed! Created ${createdSpecs.length} feature specs.`)
   );
 
   if (createdSpecs.length > 0) {
-    console.log(chalk.blue('\n💡 Next steps:'));
+    console.log(chalk.blue('\nNext steps:'));
     console.log(chalk.gray('   1. Review and customize each feature spec'));
     console.log(chalk.gray('   2. Update agents to use --spec-id <feature-id>'));
     console.log(chalk.gray('   3. Consider archiving legacy working-spec.yaml when ready'));
@@ -756,7 +756,7 @@ async function selectFeaturesInteractively(features) {
     output: process.stdout,
   });
 
-  console.log(chalk.cyan('\n📋 Select features to migrate:\n'));
+  console.log(chalk.cyan('\nSelect features to migrate:\n'));
   features.forEach((f, i) => {
     const scope = f.scope?.in?.join(', ') || 'N/A';
     console.log(`  ${chalk.yellow(i + 1)}. ${chalk.bold(f.id || f.name)} - ${f.title || f.description}`);
@@ -799,7 +799,7 @@ async function selectFeaturesInteractively(features) {
 async function askConflictResolution() {
   const readline = require('readline');
 
-  console.log(chalk.blue('\n🔄 Conflict Resolution Options:'));
+  console.log(chalk.blue('\nConflict Resolution Options:'));
   console.log(chalk.gray("   1. Cancel - Don't create the spec"));
   console.log(chalk.gray('   2. Rename - Create with auto-generated name'));
   console.log(chalk.gray('   3. Merge - Merge with existing spec (not implemented)'));
@@ -825,7 +825,7 @@ async function askConflictResolution() {
     } else if (trimmed === '4' || trimmed === 'override') {
       return 'override';
     } else {
-      console.log(chalk.red('❌ Invalid choice. Defaulting to cancel.'));
+      console.log(chalk.red('Invalid choice. Defaulting to cancel.'));
       return 'cancel';
     }
   } finally {
@@ -859,7 +859,7 @@ async function specsCommand(action, options = {}) {
           const specIds = Object.keys(registry.specs ?? {});
 
           if (specIds.length < 2) {
-            console.log(chalk.blue('ℹ️  No scope conflicts possible with fewer than 2 specs'));
+            console.log(chalk.blue('No scope conflicts possible with fewer than 2 specs'));
             return outputResult({
               command: 'specs conflicts',
               conflictCount: 0,
@@ -867,15 +867,15 @@ async function specsCommand(action, options = {}) {
             });
           }
 
-          console.log(chalk.blue(`🔍 Checking scope conflicts between ${specIds.length} specs...`));
+          console.log(chalk.blue(`Checking scope conflicts between ${specIds.length} specs...`));
           const conflicts = await checkScopeConflicts(specIds);
 
           if (conflicts.length === 0) {
-            console.log(chalk.green('✅ No scope conflicts detected'));
+            console.log(chalk.green('No scope conflicts detected'));
           } else {
             console.log(
               chalk.yellow(
-                `⚠️  Found ${conflicts.length} scope conflict${conflicts.length > 1 ? 's' : ''}:`
+                `Found ${conflicts.length} scope conflict${conflicts.length > 1 ? 's' : ''}:`
               )
             );
             conflicts.forEach((conflict) => {
@@ -885,7 +885,7 @@ async function specsCommand(action, options = {}) {
               });
             });
             console.log(
-              chalk.blue('\n💡 Tip: Use non-overlapping scope.in paths to avoid conflicts')
+              chalk.blue('\nTip: Use non-overlapping scope.in paths to avoid conflicts')
             );
           }
 
@@ -932,7 +932,7 @@ async function specsCommand(action, options = {}) {
             });
           }
 
-          console.log(chalk.green(`✅ Created spec: ${newSpec.id}`));
+          console.log(chalk.green(`Created spec: ${newSpec.id}`));
           displaySpecDetails(newSpec);
 
           return outputResult({
@@ -974,7 +974,7 @@ async function specsCommand(action, options = {}) {
             throw new Error(`Spec '${options.id}' not found`);
           }
 
-          console.log(chalk.green(`✅ Updated spec: ${options.id}`));
+          console.log(chalk.green(`Updated spec: ${options.id}`));
 
           return outputResult({
             command: 'specs update',
@@ -993,7 +993,7 @@ async function specsCommand(action, options = {}) {
             throw new Error(`Spec '${options.id}' not found`);
           }
 
-          console.log(chalk.green(`✅ Deleted spec: ${options.id}`));
+          console.log(chalk.green(`Deleted spec: ${options.id}`));
 
           return outputResult({
             command: 'specs delete',
@@ -1002,8 +1002,8 @@ async function specsCommand(action, options = {}) {
         }
 
         case 'types': {
-          console.log(chalk.bold.cyan('\n📋 Available Spec Types'));
-          console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+          console.log(chalk.bold.cyan('\nAvailable Spec Types'));
+          console.log(chalk.cyan('==============================================\n'));
 
           Object.entries(SPEC_TYPES).forEach(([type, info]) => {
             console.log(`${info.icon} ${info.color(type.padEnd(10))} - ${info.description}`);

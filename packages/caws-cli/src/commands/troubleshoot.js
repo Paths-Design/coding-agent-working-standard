@@ -15,7 +15,7 @@ function displayGuide(guideKey) {
   const guide = getTroubleshootingGuide(guideKey);
 
   if (!guide) {
-    console.error(chalk.red(`❌ Troubleshooting guide '${guideKey}' not found.`));
+    console.error(chalk.red(`Troubleshooting guide '${guideKey}' not found.`));
     console.log(chalk.yellow('\nAvailable guides:'));
     const allGuides = getAllTroubleshootingGuides();
     Object.keys(allGuides).forEach((key) => {
@@ -25,46 +25,46 @@ function displayGuide(guideKey) {
     return;
   }
 
-  console.log(chalk.bold.blue(`🔍 ${guide.title}`));
+  console.log(chalk.bold.blue(`${guide.title}`));
   console.log(chalk.gray('═'.repeat(50)));
 
   if (guide.symptoms && guide.symptoms.length > 0) {
-    console.log(chalk.yellow('\n📋 Symptoms:'));
+    console.log(chalk.yellow('\nSymptoms:'));
     guide.symptoms.forEach((symptom) => {
-      console.log(chalk.gray(`   • ${symptom}`));
+      console.log(chalk.gray(`   - ${symptom}`));
     });
   }
 
   if (guide.rootCauses && guide.rootCauses.length > 0) {
-    console.log(chalk.red('\n🔍 Possible Root Causes:'));
+    console.log(chalk.red('\nPossible Root Causes:'));
     guide.rootCauses.forEach((cause) => {
-      console.log(chalk.gray(`   • ${cause}`));
+      console.log(chalk.gray(`   - ${cause}`));
     });
   }
 
   if (guide.solutions && guide.solutions.length > 0) {
-    console.log(chalk.green('\n✅ Solutions:'));
+    console.log(chalk.green('\nSolutions:'));
     guide.solutions.forEach((solution, index) => {
       console.log(chalk.gray(`   ${index + 1}. ${solution}`));
     });
   }
 
   if (guide.commands && guide.commands.length > 0) {
-    console.log(chalk.cyan('\n💻 Try These Commands:'));
+    console.log(chalk.cyan('\nTry These Commands:'));
     guide.commands.forEach((command) => {
       console.log(chalk.gray(`   $ ${command}`));
     });
   }
 
   console.log(chalk.gray('\n═'.repeat(50)));
-  console.log(chalk.blue('📚 For more help: caws --help or visit the documentation'));
+  console.log(chalk.blue('For more help: caws --help or visit the documentation'));
 }
 
 /**
  * List all available troubleshooting guides
  */
 function listGuides() {
-  console.log(chalk.bold.blue('🔧 Available Troubleshooting Guides'));
+  console.log(chalk.bold.blue('Available Troubleshooting Guides'));
   console.log(chalk.gray('═'.repeat(50)));
 
   const allGuides = getAllTroubleshootingGuides();
@@ -96,7 +96,7 @@ function troubleshootCommand(guide, options) {
       displayGuide(guide);
     }
   } catch (error) {
-    console.error(chalk.red(`❌ Error: ${error.message}`));
+    console.error(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }
 }

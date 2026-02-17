@@ -45,8 +45,8 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
     const cursorHooksTemplateDir = path.join(cursorTemplateDir, 'hooks');
 
     if (!fs.existsSync(cursorTemplateDir)) {
-      console.warn(chalk.yellow('⚠️  Cursor hooks templates not found'));
-      console.warn(chalk.blue('💡 Skipping Cursor hooks setup'));
+      console.warn(chalk.yellow('Cursor hooks templates not found'));
+      console.warn(chalk.blue('Skipping Cursor hooks setup'));
       return;
     }
 
@@ -154,22 +154,22 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
         await fs.ensureDir(rulesDestDir);
         await fs.copy(rulesTemplateDir, rulesDestDir);
         const ruleFiles = fs.readdirSync(rulesTemplateDir).filter((file) => file.endsWith('.mdc'));
-        console.log(chalk.green('✅ Cursor rules configured'));
+        console.log(chalk.green('Cursor rules configured'));
         console.log(chalk.gray(`   Rules: ${ruleFiles.length} rule files installed`));
       } catch (error) {
-        console.warn(chalk.yellow('⚠️  Failed to copy Cursor rules:'), error.message);
+        console.warn(chalk.yellow('Failed to copy Cursor rules:'), error.message);
       }
     }
 
-    console.log(chalk.green('✅ Cursor hooks configured'));
+    console.log(chalk.green('Cursor hooks configured'));
     console.log(chalk.gray(`   Enabled: ${levels.join(', ')}`));
     console.log(
       chalk.gray(`   Scripts: ${Array.from(enabledHooks).length} hook scripts installed`)
     );
-    console.log(chalk.blue('💡 Restart Cursor to activate hooks'));
+    console.log(chalk.blue('Restart Cursor to activate hooks'));
   } catch (error) {
-    console.error(chalk.yellow('⚠️  Failed to setup Cursor hooks:'), error.message);
-    console.log(chalk.blue('💡 You can manually copy .cursor/ directory later'));
+    console.error(chalk.yellow('Failed to setup Cursor hooks:'), error.message);
+    console.log(chalk.blue('You can manually copy .cursor/ directory later'));
   }
 }
 

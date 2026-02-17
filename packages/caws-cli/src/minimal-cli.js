@@ -29,24 +29,24 @@ function showVersion() {
  * Initialize a new project
  */
 async function initProject(projectName, _options) {
-  console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
+  console.log(chalk.cyan(`Initializing new CAWS project: ${projectName}`));
 
   try {
     if (!projectName || projectName.trim() === '') {
-      console.error(chalk.red('❌ Project name is required'));
-      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      console.error(chalk.red('Project name is required'));
+      console.error(chalk.blue('Usage: caws init <project-name>'));
       process.exit(1);
     }
 
-    console.log(chalk.green('✅ Project initialization started'));
-    console.log(chalk.bold('\n📋 Configuration Summary:'));
+    console.log(chalk.green('Project initialization started'));
+    console.log(chalk.bold('\nConfiguration Summary:'));
     console.log(`   ${chalk.cyan('Project')}: ${projectName}`);
     console.log(`   ${chalk.cyan('Status')}: Initialized`);
 
-    console.log(chalk.green('\n🎉 Project initialized successfully!'));
+    console.log(chalk.green('\nProject initialized successfully!'));
     console.log(chalk.blue('\nFor help: caws --help'));
   } catch (error) {
-    console.error(chalk.red('❌ Error during project initialization:'), error.message);
+    console.error(chalk.red('Error during project initialization:'), error.message);
     process.exit(1);
   }
 }
@@ -71,7 +71,7 @@ program.exitOverride((err) => {
   if (err.code === 'commander.help') {
     process.exit(0);
   }
-  console.error(chalk.red('❌ Error:'), err.message);
+  console.error(chalk.red('Error:'), err.message);
   process.exit(1);
 });
 
@@ -82,7 +82,7 @@ try {
   if (error.code === 'commander.help' || error.code === 'commander.version') {
     process.exit(0);
   } else {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('Error:'), error.message);
     process.exit(1);
   }
 }

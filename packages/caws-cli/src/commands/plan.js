@@ -116,7 +116,7 @@ async function generateAndDisplayPlan(spec, specId, options) {
   // Display plan summary
   displayGeneratedPlan(plan);
 
-  console.log(chalk.green(`✅ Plan generated: ${outputPath}`));
+  console.log(chalk.green(`Plan generated: ${outputPath}`));
 
   return outputResult({
     command: 'plan generate',
@@ -344,8 +344,8 @@ function generatePlanMarkdown(plan) {
  * @param {Object} plan - Plan data
  */
 function displayGeneratedPlan(plan) {
-  console.log(chalk.bold.cyan(`\n📋 Generated Implementation Plan`));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan(`\nGenerated Implementation Plan`));
+  console.log(chalk.cyan('===================================================\n'));
 
   console.log(chalk.bold(`Title: ${plan.title}`));
   console.log(chalk.gray(`Spec: ${plan.spec_id}`));
@@ -371,7 +371,7 @@ function displayGeneratedPlan(plan) {
   console.log('');
 
   // Next steps
-  console.log(chalk.bold.yellow('💡 Next Steps:'));
+  console.log(chalk.bold.yellow('Next Steps:'));
   console.log(chalk.yellow('   1. Review and customize the generated plan'));
   console.log(chalk.yellow('   2. Update task priorities and dependencies'));
   console.log(chalk.yellow('   3. Start implementation following the task order'));
@@ -400,7 +400,7 @@ async function planCommand(action, options = {}) {
               // Use the single spec automatically
               const registry = await require('../utils/spec-resolver').loadSpecsRegistry();
               const singleSpecId = Object.keys(registry.specs)[0];
-              console.log(chalk.blue(`📋 Auto-detected single spec: ${singleSpecId}`));
+              console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
 
               const spec = await loadSpecForPlanning(singleSpecId);
               if (!spec) {

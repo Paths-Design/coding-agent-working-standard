@@ -21,7 +21,7 @@ describe('CAWS Tools Integration', () => {
       }
       fs.mkdirSync(testTempDir, { recursive: true });
     } catch (error) {
-      console.log('⚠️  Tools integration test setup failed:', error.message);
+      console.log('Tools integration test setup failed:', error.message);
       testTempDir = null;
     }
   });
@@ -65,7 +65,7 @@ describe('CAWS Tools Integration', () => {
         try {
           if (fs.statSync(itemPath).isDirectory()) {
             fs.rmSync(itemPath, { recursive: true, force: true });
-            console.log(`🧹 Cleaned up: ${item} (temp dir)`);
+            console.log(`Cleaned up: ${item} (temp dir)`);
           }
         } catch (_err) {
           // Ignore errors during cleanup

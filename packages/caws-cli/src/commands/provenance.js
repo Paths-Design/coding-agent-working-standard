@@ -147,7 +147,7 @@ async function updateProvenance(options) {
   await saveProvenanceChain(provenanceChain, output);
 
   if (!quiet) {
-    console.log(`✅ Provenance updated for commit ${commit.substring(0, 8)}`);
+    console.log(`Provenance updated for commit ${commit.substring(0, 8)}`);
     console.log(`   Chain length: ${provenanceChain.length} entries`);
     console.log(`   Hash: ${newEntry.hash.substring(0, 16)}...`);
   }
@@ -164,14 +164,14 @@ async function showProvenance(options) {
 
   if (chain.length === 0) {
     if (format === 'dashboard') {
-      console.log('┌─ CAWS Provenance Dashboard ──────────────────────┐');
-      console.log('│ ℹ️  No provenance data found                     │');
+      console.log('┌- CAWS Provenance Dashboard ----------------------┐');
+      console.log('│ No provenance data found                     │');
       console.log('│                                                 │');
-      console.log('│ 💡 Run "caws provenance init" to get started   │');
-      console.log('└─────────────────────────────────────────────────┘');
+      console.log('│ Run "caws provenance init" to get started   │');
+      console.log('└-------------------------------------------------┘');
     } else {
-      console.log('ℹ️  No provenance data found');
-      console.log(`💡 Run "caws provenance init" to get started`);
+      console.log('No provenance data found');
+      console.log(`Run "caws provenance init" to get started`);
     }
     return;
   }
@@ -186,8 +186,8 @@ async function showProvenance(options) {
     return;
   }
 
-  console.log('📜 CAWS Provenance Chain');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('CAWS Provenance Chain');
+  console.log('==============================================');
   console.log(`Total entries: ${chain.length}`);
   console.log('');
 
@@ -212,16 +212,16 @@ async function showProvenance(options) {
     if (entry.cursor_tracking && entry.cursor_tracking.available) {
       const tracking = entry.cursor_tracking;
       console.log(
-        `   🤖 AI Code: ${tracking.ai_code_breakdown.composer_chat.percentage}% composer, ${tracking.ai_code_breakdown.tab_completions.percentage}% tab-complete, ${tracking.ai_code_breakdown.manual_human.percentage}% manual`
+        `   AI Code: ${tracking.ai_code_breakdown.composer_chat.percentage}% composer, ${tracking.ai_code_breakdown.tab_completions.percentage}% tab-complete, ${tracking.ai_code_breakdown.manual_human.percentage}% manual`
       );
       console.log(
-        `   📊 Quality: ${Math.round(tracking.quality_metrics.ai_code_quality_score * 100)}% AI score, ${Math.round(tracking.quality_metrics.acceptance_rate * 100)}% acceptance`
+        `   Quality: ${Math.round(tracking.quality_metrics.ai_code_quality_score * 100)}% AI score, ${Math.round(tracking.quality_metrics.acceptance_rate * 100)}% acceptance`
       );
     }
 
     // Display checkpoint info if available
     if (entry.checkpoints && entry.checkpoints.available && entry.checkpoints.checkpoints) {
-      console.log(`   🔄 Checkpoints: ${entry.checkpoints.checkpoints.length} created`);
+      console.log(`   Checkpoints: ${entry.checkpoints.checkpoints.length} created`);
     }
 
     console.log('');
@@ -242,11 +242,11 @@ async function verifyProvenance(options) {
   const chain = await loadProvenanceChain(output);
 
   if (chain.length === 0) {
-    console.log('ℹ️  No provenance data to verify');
+    console.log('No provenance data to verify');
     return;
   }
 
-  console.log('🔍 Verifying provenance chain integrity...');
+  console.log('Verifying provenance chain integrity...');
 
   let valid = true;
   for (let i = 0; i < chain.length; i++) {
@@ -255,7 +255,7 @@ async function verifyProvenance(options) {
     // Verify hash integrity
     const expectedPreviousHash = i === 0 ? '' : chain[i - 1].hash;
     if (entry.previous_hash !== expectedPreviousHash) {
-      console.error(`❌ Chain break at entry ${i + 1}: previous hash mismatch`);
+      console.error(`Chain break at entry ${i + 1}: previous hash mismatch`);
       valid = false;
     }
 
@@ -268,7 +268,7 @@ async function verifyProvenance(options) {
     const calculatedHash = crypto.createHash('sha256').update(hashContent).digest('hex');
 
     if (calculatedHash !== entry.hash) {
-      console.error(`❌ Hash verification failed at entry ${i + 1}`);
+      console.error(`Hash verification failed at entry ${i + 1}`);
       console.error(`   Expected: ${entry.hash}`);
       console.error(`   Calculated: ${calculatedHash}`);
       valid = false;
@@ -276,10 +276,10 @@ async function verifyProvenance(options) {
   }
 
   if (valid) {
-    console.log('✅ Provenance chain integrity verified');
+    console.log('Provenance chain integrity verified');
     console.log(`   ${chain.length} entries, all hashes valid`);
   } else {
-    console.error('❌ Provenance chain integrity compromised');
+    console.error('Provenance chain integrity compromised');
     process.exit(1);
   }
 }
@@ -325,12 +325,12 @@ async function analyzeAIProvenance(options) {
   const chain = await loadProvenanceChain(output);
 
   if (chain.length === 0) {
-    console.log('ℹ️  No provenance data to analyze');
+    console.log('No provenance data to analyze');
     return;
   }
 
-  console.log('🤖 AI Code Effectiveness Analysis');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('AI Code Effectiveness Analysis');
+  console.log('==============================================');
 
   // Filter entries with AI tracking data
   const aiEntries = chain.filter(
@@ -342,8 +342,8 @@ async function analyzeAIProvenance(options) {
   );
 
   if (aiEntries.length === 0) {
-    console.log('ℹ️  No AI tracking data found in provenance');
-    console.log('💡 Configure CURSOR_TRACKING_API and CURSOR_CHECKPOINT_API environment variables');
+    console.log('No AI tracking data found in provenance');
+    console.log('Configure CURSOR_TRACKING_API and CURSOR_CHECKPOINT_API environment variables');
     return;
   }
 
@@ -355,7 +355,7 @@ async function analyzeAIProvenance(options) {
   const qualityMetrics = analyzeQualityMetrics(aiEntries);
   const checkpointAnalysis = analyzeCheckpointUsage(aiEntries);
 
-  console.log('📊 AI Contribution Patterns:');
+  console.log('AI Contribution Patterns:');
   console.log(`   Average Composer/Chat contribution: ${contributionPatterns.avgComposerPercent}%`);
   console.log(
     `   Average Tab completion contribution: ${contributionPatterns.avgTabCompletePercent}%`
@@ -363,7 +363,7 @@ async function analyzeAIProvenance(options) {
   console.log(`   Average Manual override rate: ${contributionPatterns.avgManualPercent}%`);
   console.log('');
 
-  console.log('🎯 Quality Metrics:');
+  console.log('Quality Metrics:');
   console.log(
     `   Average AI code quality score: ${Math.round(qualityMetrics.avgQualityScore * 100)}%`
   );
@@ -373,7 +373,7 @@ async function analyzeAIProvenance(options) {
   );
   console.log('');
 
-  console.log('🔄 Checkpoint Analysis:');
+  console.log('Checkpoint Analysis:');
   console.log(
     `   Commits with checkpoints: ${checkpointAnalysis.entriesWithCheckpoints}/${aiEntries.length}`
   );
@@ -521,29 +521,29 @@ function analyzeCheckpointUsage(aiEntries) {
 async function installHooks(options) {
   const { output = '.caws/provenance', skipPreCommit = false, skipPostCommit = false } = options;
 
-  console.log('🔗 Installing CAWS Provenance Git Hooks');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('Installing CAWS Provenance Git Hooks');
+  console.log('==================================================');
 
   // Check if we're in a git repository
   if (!(await fs.pathExists('.git'))) {
-    console.log('❌ Not in a git repository');
-    console.log('💡 Initialize git first: git init');
+    console.log('Not in a git repository');
+    console.log('Initialize git first: git init');
     process.exit(1);
   }
 
   // Check if provenance is initialized
   if (!(await fs.pathExists(path.join(output, 'chain.json')))) {
-    console.log('❌ Provenance not initialized');
-    console.log('💡 Run "caws provenance init" first');
+    console.log('Provenance not initialized');
+    console.log('Run "caws provenance init" first');
     process.exit(1);
   }
 
-  console.log('✅ Found git repository and provenance setup');
+  console.log('Found git repository and provenance setup');
 
   // Ensure hooks directory exists
   const hooksDir = '.git/hooks';
   await fs.ensureDir(hooksDir);
-  console.log('✅ Ensured hooks directory exists');
+  console.log('Ensured hooks directory exists');
 
   let hooksInstalled = 0;
 
@@ -555,10 +555,10 @@ async function installHooks(options) {
 
       await fs.writeFile(preCommitPath, preCommitHook);
       await fs.chmod(preCommitPath, '755');
-      console.log('✅ Installed pre-commit hook for provenance validation');
+      console.log('Installed pre-commit hook for provenance validation');
       hooksInstalled++;
     } catch (error) {
-      console.warn('⚠️  Failed to install pre-commit hook:', error.message);
+      console.warn('Failed to install pre-commit hook:', error.message);
     }
   }
 
@@ -570,25 +570,25 @@ async function installHooks(options) {
 
       await fs.writeFile(postCommitPath, postCommitHook);
       await fs.chmod(postCommitPath, '755');
-      console.log('✅ Installed post-commit hook for provenance updates');
+      console.log('Installed post-commit hook for provenance updates');
       hooksInstalled++;
     } catch (error) {
-      console.warn('⚠️  Failed to install post-commit hook:', error.message);
+      console.warn('Failed to install post-commit hook:', error.message);
     }
   }
 
   console.log('');
-  console.log('🎉 Git hooks installation complete!');
+  console.log('Git hooks installation complete!');
   console.log('');
   console.log(`Installed ${hooksInstalled} hook(s):`);
   if (!skipPreCommit) {
-    console.log('  • pre-commit: Validates provenance before commits');
+    console.log('  - pre-commit: Validates provenance before commits');
   }
   if (!skipPostCommit) {
-    console.log('  • post-commit: Updates provenance after commits');
+    console.log('  - post-commit: Updates provenance after commits');
   }
   console.log('');
-  console.log('💡 Your commits will now automatically maintain provenance!');
+  console.log('Your commits will now automatically maintain provenance!');
   console.log('   Run "caws provenance show" to view the updated chain');
 }
 
@@ -605,7 +605,7 @@ async function createPreCommitHook(outputDir) {
 # CAWS Provenance Pre-commit Hook
 # Validates provenance integrity before allowing commits
 
-echo "🔍 Validating CAWS provenance..."
+echo "Validating CAWS provenance..."
 
 # Find caws CLI
 if command -v caws >/dev/null 2>&1; then
@@ -615,17 +615,17 @@ elif [ -x "${scriptPath}" ]; then
 elif [ -x "${fallbackPath}" ]; then
     CAWS_CMD="node ${fallbackPath}"
 else
-    echo "⚠️  CAWS CLI not found, skipping provenance validation"
+    echo "CAWS CLI not found, skipping provenance validation"
     exit 0
 fi
 
 # Run provenance verification
 if $CAWS_CMD provenance verify --output "${outputDir}" >/dev/null 2>&1; then
-    echo "✅ Provenance validation passed"
+    echo "Provenance validation passed"
     exit 0
 else
-    echo "❌ Provenance validation failed"
-    echo "💡 Run 'caws provenance show' to investigate"
+    echo "Provenance validation failed"
+    echo "Run 'caws provenance show' to investigate"
     exit 1
 fi
 `;
@@ -644,7 +644,7 @@ async function createPostCommitHook(outputDir) {
 # CAWS Provenance Post-commit Hook
 # Updates provenance chain after successful commits
 
-echo "📝 Updating CAWS provenance..."
+echo "Updating CAWS provenance..."
 
 # Get the current commit hash
 COMMIT_HASH=$(git rev-parse HEAD)
@@ -659,15 +659,15 @@ elif [ -x "${scriptPath}" ]; then
 elif [ -x "${fallbackPath}" ]; then
     CAWS_CMD="node ${fallbackPath}"
 else
-    echo "⚠️  CAWS CLI not found, skipping provenance update"
+    echo "CAWS CLI not found, skipping provenance update"
     exit 0
 fi
 
 # Update provenance
 if $CAWS_CMD provenance update --commit "$COMMIT_HASH" --message "$COMMIT_MSG" --author "$AUTHOR" --output "${outputDir}" --quiet; then
-    echo "✅ Provenance updated for commit \${COMMIT_HASH:0:8}"
+    echo "Provenance updated for commit \${COMMIT_HASH:0:8}"
 else
-    echo "⚠️  Failed to update provenance (non-fatal)"
+    echo "Failed to update provenance (non-fatal)"
 fi
 
 exit 0
@@ -707,7 +707,7 @@ async function showDashboardFormat(chain, outputDir) {
       : 0;
 
   // Check config
-  let configStatus = '❌ Not configured';
+  let configStatus = 'Not configured';
   try {
     const configPath = path.join(outputDir, 'config.json');
     if (await fs.pathExists(configPath)) {
@@ -717,24 +717,24 @@ async function showDashboardFormat(chain, outputDir) {
         config.cursor_checkpoint_api !== 'not_configured',
         config.cursor_project_id !== 'not_configured',
       ].filter(Boolean).length;
-      configStatus = configured === 3 ? '✅ Fully configured' : `⚠️  ${configured}/3 configured`;
+      configStatus = configured === 3 ? 'Fully configured' : `${configured}/3 configured`;
     }
   } catch (error) {
     // Ignore config read errors
   }
 
   // Display dashboard
-  console.log('┌─ CAWS Provenance Dashboard ──────────────────────┐');
-  console.log(`│ 📊 Total Entries: ${totalEntries.toString().padEnd(33)} │`);
-  console.log(`│ 🤖 AI-Assisted: ${aiEntries.toString().padEnd(35)} │`);
+  console.log('┌- CAWS Provenance Dashboard ----------------------┐');
+  console.log(`│ Total Entries: ${totalEntries.toString().padEnd(33)} │`);
+  console.log(`│ AI-Assisted: ${aiEntries.toString().padEnd(35)} │`);
   console.log(
-    `│ 🎯 Avg Quality: ${(avgQualityScore * 100).toFixed(0).padEnd(2)}%${' '.repeat(33)} │`
+    `│ Avg Quality: ${(avgQualityScore * 100).toFixed(0).padEnd(2)}%${' '.repeat(33)} │`
   );
   console.log(
-    `│ ✅ Avg Acceptance: ${(avgAcceptanceRate * 100).toFixed(0).padEnd(2)}%${' '.repeat(30)} │`
+    `│ Avg Acceptance: ${(avgAcceptanceRate * 100).toFixed(0).padEnd(2)}%${' '.repeat(30)} │`
   );
-  console.log(`│ ⚙️  Config Status: ${configStatus.padEnd(31)} │`);
-  console.log('├─────────────────────────────────────────────────┤');
+  console.log(`│ Config Status: ${configStatus.padEnd(31)} │`);
+  console.log('├-------------------------------------------------┤');
 
   if (totalEntries > 0) {
     console.log('│ Recent Activity:                                  │');
@@ -748,7 +748,7 @@ async function showDashboardFormat(chain, outputDir) {
     });
 
     if (aiEntries > 0) {
-      console.log('├─────────────────────────────────────────────────┤');
+      console.log('├-------------------------------------------------┤');
       console.log('│ AI Contribution Breakdown:                       │');
 
       const contributions = chain
@@ -783,20 +783,20 @@ async function showDashboardFormat(chain, outputDir) {
     }
   }
 
-  console.log('└─────────────────────────────────────────────────┘');
+  console.log('└-------------------------------------------------┘');
 
   // Add insights
   if (aiEntries > 0) {
     console.log('');
-    console.log('💡 Insights:');
+    console.log('Insights:');
     if (avgAcceptanceRate > 0.9) {
-      console.log('   ✅ High AI acceptance rate indicates effective collaboration');
+      console.log('   High AI acceptance rate indicates effective collaboration');
     } else if (avgAcceptanceRate < 0.7) {
-      console.log('   ⚠️  Lower acceptance rate may indicate AI refinement needed');
+      console.log('   Lower acceptance rate may indicate AI refinement needed');
     }
 
     if (avgQualityScore > 0.8) {
-      console.log('   🎯 Excellent AI code quality - great results!');
+      console.log('   Excellent AI code quality - great results!');
     }
   }
 }
@@ -805,37 +805,37 @@ async function showDashboardFormat(chain, outputDir) {
  * Provide insights and recommendations based on AI analysis
  */
 function provideAIInsights(contributionPatterns, qualityMetrics, checkpointAnalysis) {
-  console.log('💡 AI Effectiveness Insights:');
+  console.log('AI Effectiveness Insights:');
 
   if (contributionPatterns.avgComposerPercent > 60) {
-    console.log('   📝 High Composer usage suggests complex feature development');
+    console.log('   High Composer usage suggests complex feature development');
     console.log('      → Consider breaking large features into smaller, focused sessions');
   }
 
   if (qualityMetrics.avgOverrideRate > 0.2) {
-    console.log('   ✏️ High human override rate indicates AI suggestions need refinement');
+    console.log('   High human override rate indicates AI suggestions need refinement');
     console.log('      → Review AI confidence thresholds or provide clearer requirements');
   }
 
   if (checkpointAnalysis.avgCheckpointsPerEntry < 2) {
-    console.log('   🔄 Low checkpoint usage may limit ability to recover from bad AI directions');
+    console.log('   Low checkpoint usage may limit ability to recover from bad AI directions');
     console.log('      → Encourage more frequent checkpointing in Composer sessions');
   }
 
   if (qualityMetrics.avgAcceptanceRate > 0.9) {
-    console.log('   ✅ High acceptance rate indicates effective AI assistance');
+    console.log('   High acceptance rate indicates effective AI assistance');
     console.log('      → Current AI integration is working well');
   }
 
   console.log('');
-  console.log('📈 Recommendations:');
+  console.log('Recommendations:');
   console.log(
-    `   • Target Composer contribution: ${Math.max(40, contributionPatterns.avgComposerPercent - 10)}-${Math.min(80, contributionPatterns.avgComposerPercent + 10)}%`
+    `   - Target Composer contribution: ${Math.max(40, contributionPatterns.avgComposerPercent - 10)}-${Math.min(80, contributionPatterns.avgComposerPercent + 10)}%`
   );
   console.log(
-    `   • Acceptable override rate: <${Math.round((qualityMetrics.avgOverrideRate + 0.1) * 100)}%`
+    `   - Acceptable override rate: <${Math.round((qualityMetrics.avgOverrideRate + 0.1) * 100)}%`
   );
-  console.log('   • Checkpoint frequency: Every 10-15 minutes in active sessions');
+  console.log('   - Checkpoint frequency: Every 10-15 minutes in active sessions');
 }
 
 /**
@@ -913,37 +913,37 @@ async function getCursorTrackingData(commitHash) {
 async function initProvenance(options) {
   const { output = '.caws/provenance', cursorApi } = options;
 
-  console.log('🚀 Initializing CAWS Provenance Tracking');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('Initializing CAWS Provenance Tracking');
+  console.log('===================================================');
 
   // Check if already initialized
   if (await fs.pathExists(path.join(output, 'chain.json'))) {
-    console.log('⚠️  Provenance already initialized');
+    console.log('Provenance already initialized');
     console.log(`   Chain exists at: ${output}/chain.json`);
     console.log('');
-    console.log('💡 To reset, delete the provenance directory and run again');
+    console.log('To reset, delete the provenance directory and run again');
     return;
   }
 
   // Ensure output directory exists
   await fs.ensureDir(output);
-  console.log(`✅ Created provenance directory: ${output}`);
+  console.log(`Created provenance directory: ${output}`);
 
   // Load working spec to validate CAWS project
   const specPath = '.caws/working-spec.yaml';
   if (!(await fs.pathExists(specPath))) {
     console.log('');
-    console.log('❌ Not in a CAWS project - missing working spec');
-    console.log('💡 Run "caws init" first to create a CAWS project');
+    console.log('Not in a CAWS project - missing working spec');
+    console.log('Run "caws init" first to create a CAWS project');
     process.exit(1);
   }
 
-  console.log('✅ Found CAWS working spec');
+  console.log('Found CAWS working spec');
 
   // Initialize empty chain
   const initialChain = [];
   await saveProvenanceChain(initialChain, output);
-  console.log('✅ Initialized empty provenance chain');
+  console.log('Initialized empty provenance chain');
 
   // Create environment configuration hints
   const envConfig = {
@@ -958,10 +958,10 @@ async function initProvenance(options) {
   };
 
   await fs.writeFile(path.join(output, 'config.json'), JSON.stringify(envConfig, null, 2));
-  console.log('✅ Created configuration template');
+  console.log('Created configuration template');
 
   console.log('');
-  console.log('🎉 Provenance tracking initialized!');
+  console.log('Provenance tracking initialized!');
   console.log('');
   console.log('Next steps:');
   console.log('1. Install git hooks for automatic provenance (recommended):');

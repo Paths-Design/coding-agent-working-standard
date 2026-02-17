@@ -84,7 +84,7 @@ function formatGitLockError(lockStatus) {
     return null;
   }
 
-  let message = '⚠️  Git lock detected\n';
+  let message = 'Git lock detected\n';
   message += `   ${lockStatus.message}\n`;
 
   if (lockStatus.lockFiles.length > 0) {
@@ -99,12 +99,12 @@ function formatGitLockError(lockStatus) {
   }
 
   if (lockStatus.suggestion) {
-    message += `\n   💡 ${lockStatus.suggestion}\n`;
+    message += `\n   ${lockStatus.suggestion}\n`;
   }
 
   if (lockStatus.stale) {
     message +=
-      '\n   ⚠️  Warning: Removing stale locks may cause data loss if another process is actually running.\n';
+      '\n   Warning: Removing stale locks may cause data loss if another process is actually running.\n';
     message += '   Check for running git/editor processes before removing locks.\n';
   }
 

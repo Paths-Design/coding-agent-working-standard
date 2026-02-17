@@ -617,15 +617,15 @@ hooksCmd
     try {
       const result = await scaffoldGitHooks(process.cwd(), hookOptions);
       if (result.added > 0) {
-        console.log(`✅ Successfully installed ${result.added} git hooks`);
+        console.log(`Successfully installed ${result.added} git hooks`);
         if (result.skipped > 0) {
-          console.log(`⏭️  Skipped ${result.skipped} existing hooks`);
+          console.log(`Skipped ${result.skipped} existing hooks`);
         }
       } else {
-        console.log('ℹ️  All hooks already configured');
+        console.log('All hooks already configured');
       }
     } catch (error) {
-      console.error(`❌ Failed to install git hooks: ${error.message}`);
+      console.error(`Failed to install git hooks: ${error.message}`);
       process.exit(1);
     }
   });
@@ -637,7 +637,7 @@ hooksCmd
     try {
       await removeGitHooks(process.cwd());
     } catch (error) {
-      console.error(`❌ Failed to remove git hooks: ${error.message}`);
+      console.error(`Failed to remove git hooks: ${error.message}`);
       process.exit(1);
     }
   });
@@ -649,7 +649,7 @@ hooksCmd
     try {
       await checkGitHooksStatus(process.cwd());
     } catch (error) {
-      console.error(`❌ Failed to check git hooks status: ${error.message}`);
+      console.error(`Failed to check git hooks status: ${error.message}`);
       process.exit(1);
     }
   });
@@ -702,19 +702,19 @@ program.exitOverride((err) => {
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 
-    console.error(chalk.red(`\n❌ Unknown command: ${commandName}`));
+    console.error(chalk.red(`\nUnknown command: ${commandName}`));
 
     if (similar) {
-      console.error(chalk.yellow(`\n💡 Did you mean: caws ${similar}?`));
+      console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
     }
 
     console.error(
-      chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks')
+      chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks')
     );
-    console.error(chalk.yellow('💡 Try: caws --help for full command list'));
+    console.error(chalk.yellow('Try: caws --help for full command list'));
     console.error(
       chalk.blue(
-        '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+        '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
       )
     );
 
@@ -726,18 +726,18 @@ program.exitOverride((err) => {
     const optionMatch = err.message.match(/unknown option ['"]([^'"]+)['"]/i);
     const option = optionMatch ? optionMatch[1] : '';
 
-    console.error(chalk.red(`\n❌ Unknown option: ${option}`));
-    console.error(chalk.yellow(`\n💡 Try: caws ${commandName || ''} --help for available options`));
+    console.error(chalk.red(`\nUnknown option: ${option}`));
+    console.error(chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`));
 
     // Provide specific suggestions for common mistakes
     if (option === '--suggestions' || option === '--suggest') {
-      console.error(chalk.yellow('💡 Note: Validation includes suggestions by default'));
+      console.error(chalk.yellow('Note: Validation includes suggestions by default'));
       console.error(chalk.yellow('   Just run: caws validate'));
     }
 
     console.error(
       chalk.blue(
-        '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+        '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
       )
     );
 
@@ -745,11 +745,11 @@ program.exitOverride((err) => {
   }
 
   // Generic Commander error
-  console.error(chalk.red('\n❌ Error:'), err.message);
-  console.error(chalk.yellow('\n💡 Try: caws --help for usage information'));
+  console.error(chalk.red('\nError:'), err.message);
+  console.error(chalk.yellow('\nTry: caws --help for usage information'));
   console.error(
     chalk.blue(
-      '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/agents/full-guide.md'
+      '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/agents/full-guide.md'
     )
   );
   process.exit(1);
@@ -795,19 +795,19 @@ if (require.main === module) {
       ];
       const similar = findSimilarCommand(commandName, validCommands);
 
-      console.error(chalk.red(`\n❌ Unknown command: ${commandName}`));
+      console.error(chalk.red(`\nUnknown command: ${commandName}`));
 
       if (similar) {
-        console.error(chalk.yellow(`\n💡 Did you mean: caws ${similar}?`));
+        console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
       }
 
       console.error(
-        chalk.yellow('💡 Available commands: init, validate, scaffold, provenance, hooks')
+        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks')
       );
-      console.error(chalk.yellow('💡 Try: caws --help for full command list'));
+      console.error(chalk.yellow('Try: caws --help for full command list'));
       console.error(
         chalk.blue(
-          '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+          '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
         )
       );
 
@@ -819,20 +819,20 @@ if (require.main === module) {
       const optionMatch = error.message.match(/unknown option ['"]([^'"]+)['"]/i);
       const option = optionMatch ? optionMatch[1] : '';
 
-      console.error(chalk.red(`\n❌ Unknown option: ${option}`));
+      console.error(chalk.red(`\nUnknown option: ${option}`));
       console.error(
-        chalk.yellow(`\n💡 Try: caws ${commandName || ''} --help for available options`)
+        chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`)
       );
 
       // Provide specific suggestions for common mistakes
       if (option === '--suggestions' || option === '--suggest') {
-        console.error(chalk.yellow('💡 Note: Validation includes suggestions by default'));
+        console.error(chalk.yellow('Note: Validation includes suggestions by default'));
         console.error(chalk.yellow('   Just run: caws validate'));
       }
 
       console.error(
         chalk.blue(
-          '\n📚 Documentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+          '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
         )
       );
 

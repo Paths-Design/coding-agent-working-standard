@@ -288,9 +288,9 @@ async function qualityGatesCommand(options = {}) {
         throw new Error(
           'Quality gates runner not found.\n\n' +
             'Expected locations:\n' +
-            `  • Monorepo: ${monorepoRunner}\n` +
-            `  • npm package: ${path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs')}\n` +
-            `  • Python script: ${path.join(projectRoot, 'scripts', 'simple_gates.py')}\n\n` +
+            `  - Monorepo: ${monorepoRunner}\n` +
+            `  - npm package: ${path.join(projectRoot, 'node_modules', '@paths.design', 'quality-gates', 'run-quality-gates.mjs')}\n` +
+            `  - Python script: ${path.join(projectRoot, 'scripts', 'simple_gates.py')}\n\n` +
             'Available options:\n' +
             suggestions.map((s, i) => `  ${i + 1}. ${s}`).join('\n')
         );

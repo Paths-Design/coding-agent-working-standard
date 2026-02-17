@@ -127,7 +127,7 @@ function validateAllCawsYamlFiles(projectRoot) {
  */
 function formatYamlError(error, filePath) {
   const relativePath = path.relative(process.cwd(), filePath);
-  let message = `❌ Invalid YAML in ${relativePath}\n`;
+  let message = `Invalid YAML in ${relativePath}\n`;
   message += `   Error: ${error.error}\n`;
 
   if (error.line !== null) {

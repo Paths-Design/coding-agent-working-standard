@@ -12,12 +12,12 @@ module.exports = async () => {
   
   // If working directory doesn't exist (CI issue), create it
   if (!fs.existsSync(cwd)) {
-    console.log('⚠️  Working directory does not exist, creating...');
+    console.log('Working directory does not exist, creating...');
     fs.mkdirSync(cwd, { recursive: true });
   }
   
   // Ensure we're in the right directory
   process.chdir(cwd);
   
-  console.log(`✅ Jest global setup complete - working directory: ${cwd}`);
+  console.log(`Jest global setup complete - working directory: ${cwd}`);
 };

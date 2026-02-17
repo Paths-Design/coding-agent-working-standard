@@ -295,7 +295,7 @@ async function runDiagnosis() {
     { name: 'CAWS tools', fn: checkCAWSTools },
   ];
 
-  console.log(chalk.cyan('\n🔍 Diagnosing CAWS Project...\n'));
+  console.log(chalk.cyan('\nDiagnosing CAWS Project...\n'));
   console.log(chalk.gray('Running checks:'));
 
   const results = [];
@@ -309,9 +309,9 @@ async function runDiagnosis() {
       if (result.skipped) {
         console.log(chalk.gray('skipped'));
       } else if (result.passed) {
-        console.log(chalk.green('✅'));
+        console.log(chalk.green(''));
       } else {
-        const icon = result.severity === 'high' ? chalk.red('❌') : chalk.yellow('⚠️');
+        const icon = result.severity === 'high' ? chalk.red('') : chalk.yellow('');
         console.log(icon);
       }
 
@@ -320,7 +320,7 @@ async function runDiagnosis() {
         ...result,
       });
     } catch (error) {
-      console.log(chalk.red('❌'));
+      console.log(chalk.red(''));
       results.push({
         name: check.name,
         passed: false,
@@ -343,16 +343,16 @@ function displayResults(results) {
   const issues = results.filter((r) => !r.passed && !r.skipped);
 
   if (issues.length === 0) {
-    console.log(chalk.green('\n✅ No issues found! Your CAWS project is healthy.\n'));
+    console.log(chalk.green('\nNo issues found! Your CAWS project is healthy.\n'));
     return;
   }
 
   console.log(
-    chalk.bold.yellow(`\n⚠️  Found ${issues.length} issue${issues.length > 1 ? 's' : ''}:\n`)
+    chalk.bold.yellow(`\nFound ${issues.length} issue${issues.length > 1 ? 's' : ''}:\n`)
   );
 
   issues.forEach((issue, index) => {
-    const icon = issue.severity === 'high' ? chalk.red('❌') : chalk.yellow('⚠️');
+    const icon = issue.severity === 'high' ? chalk.red('') : chalk.yellow('');
     const severity = chalk.gray(`[${issue.severity.toUpperCase()}]`);
 
     console.log(`${index + 1}. ${icon} ${issue.name} ${severity}`);
@@ -360,7 +360,7 @@ function displayResults(results) {
     console.log(chalk.cyan(`   Fix: ${issue.fix}`));
 
     if (issue.autoFixable) {
-      console.log(chalk.green('   ✨ Auto-fix available'));
+      console.log(chalk.green('   Auto-fix available'));
     }
 
     // Show additional details if available
@@ -392,7 +392,7 @@ async function applyAutoFixes(results) {
   const fixableIssues = results.filter((r) => !r.passed && r.autoFixable && r.autoFix);
 
   if (fixableIssues.length === 0) {
-    console.log(chalk.yellow('\n⚠️  No auto-fixable issues found\n'));
+    console.log(chalk.yellow('\nNo auto-fixable issues found\n'));
     return {
       applied: 0,
       skipped: 0,
@@ -400,7 +400,7 @@ async function applyAutoFixes(results) {
     };
   }
 
-  console.log(chalk.cyan(`\n🔧 Applying ${fixableIssues.length} automatic fixes...\n`));
+  console.log(chalk.cyan(`\nApplying ${fixableIssues.length} automatic fixes...\n`));
 
   let applied = 0;
   let failed = 0;
@@ -412,7 +412,7 @@ async function applyAutoFixes(results) {
       const result = await issue.autoFix();
 
       if (result.success) {
-        console.log(chalk.green('✅'));
+        console.log(chalk.green(''));
         applied++;
 
         if (result.nextSteps && result.nextSteps.length > 0) {
@@ -422,16 +422,16 @@ async function applyAutoFixes(results) {
           });
         }
       } else {
-        console.log(chalk.red('❌'));
+        console.log(chalk.red(''));
         failed++;
       }
     } catch (error) {
-      console.log(chalk.red(`❌ ${error.message}`));
+      console.log(chalk.red(`${error.message}`));
       failed++;
     }
   }
 
-  console.log(chalk.bold.green(`\n📊 Results: ${applied} fixed, ${failed} failed\n`));
+  console.log(chalk.bold.green(`\nResults: ${applied} fixed, ${failed} failed\n`));
 
   return {
     applied,
@@ -458,7 +458,7 @@ async function diagnoseCommand(options = {}) {
     if (fixableCount > 0 && !options.fix) {
       console.log(
         chalk.yellow(
-          `💡 ${fixableCount} issue${fixableCount > 1 ? 's' : ''} can be fixed automatically`
+          `${fixableCount} issue${fixableCount > 1 ? 's' : ''} can be fixed automatically`
         )
       );
       console.log(chalk.yellow('   Run: caws diagnose --fix to apply fixes\n'));
@@ -466,14 +466,14 @@ async function diagnoseCommand(options = {}) {
       const fixResults = await applyAutoFixes(results);
 
       if (fixResults.applied > 0) {
-        console.log(chalk.green('✅ Auto-fixes applied successfully'));
-        console.log(chalk.blue('💡 Run: caws validate to verify fixes\n'));
+        console.log(chalk.green('Auto-fixes applied successfully'));
+        console.log(chalk.blue('Run: caws validate to verify fixes\n'));
       }
 
       if (fixResults.skipped > 0) {
         console.log(
           chalk.yellow(
-            `⚠️  ${fixResults.skipped} issue${fixResults.skipped > 1 ? 's' : ''} require manual intervention\n`
+            `${fixResults.skipped} issue${fixResults.skipped > 1 ? 's' : ''} require manual intervention\n`
           )
         );
       }
@@ -483,17 +483,17 @@ async function diagnoseCommand(options = {}) {
     const issueCount = results.filter((r) => !r.passed && !r.skipped).length;
 
     if (issueCount === 0) {
-      console.log(chalk.blue('📚 Next steps:'));
-      console.log(chalk.blue('   • Run: caws status --visual to view project health'));
-      console.log(chalk.blue('   • Run: caws validate to check working spec'));
-      console.log(chalk.blue('   • Optional: Create .caws/policy.yaml for custom budgets'));
+      console.log(chalk.blue('Next steps:'));
+      console.log(chalk.blue('   - Run: caws status --visual to view project health'));
+      console.log(chalk.blue('   - Run: caws validate to check working spec'));
+      console.log(chalk.blue('   - Optional: Create .caws/policy.yaml for custom budgets'));
       console.log(
-        chalk.blue('   • Start implementing: caws iterate --current-state "Ready to begin"')
+        chalk.blue('   - Start implementing: caws iterate --current-state "Ready to begin"')
       );
     }
   } catch (error) {
-    console.error(chalk.red('\n❌ Error running diagnosis:'), error.message);
-    console.error(chalk.yellow('\n💡 Try: caws status for basic health check'));
+    console.error(chalk.red('\nError running diagnosis:'), error.message);
+    console.error(chalk.yellow('\nTry: caws status for basic health check'));
     process.exit(1);
   }
 }

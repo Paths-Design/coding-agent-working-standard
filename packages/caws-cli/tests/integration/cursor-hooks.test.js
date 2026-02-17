@@ -26,7 +26,7 @@ describe('Cursor Hooks Integration', () => {
         execSync('npm run build', { cwd: path.join(__dirname, '../..'), stdio: 'pipe' });
       }
     } catch (error) {
-      console.log('⚠️  Cursor hooks test setup failed:', error.message);
+      console.log('Cursor hooks test setup failed:', error.message);
       testTempDir = null;
     }
   });
@@ -61,7 +61,7 @@ describe('Cursor Hooks Integration', () => {
   describe('Cursor Hooks Scaffolding', () => {
     test('should create .cursor directory structure on init', () => {
       if (!testTempDir) {
-        console.log('⏭️  Skipping cursor hooks test - setup failed');
+        console.log('Skipping cursor hooks test - setup failed');
         return;
       }
 
@@ -277,7 +277,7 @@ describe('Cursor Hooks Integration', () => {
 
       // Check if file exists, skip test if not available in CI environment
       if (!fs.existsSync(strategyPath)) {
-        console.log('⚠️  HOOK_STRATEGY.md not found - skipping content validation');
+        console.log('HOOK_STRATEGY.md not found - skipping content validation');
         return;
       }
 

@@ -44,7 +44,7 @@ async function validateCommand(specFile, options = {}) {
 
     if (options.format !== 'json') {
       console.log(
-        chalk.cyan(`🔍 Validating ${specType === 'feature' ? 'feature' : 'working'} spec...`)
+        chalk.cyan(`Validating ${specType === 'feature' ? 'feature' : 'working'} spec...`)
       );
       console.log(chalk.gray(`   Spec: ${path.relative(process.cwd(), specPath)}`));
     }
@@ -166,7 +166,7 @@ async function validateCommand(specFile, options = {}) {
     } else {
       // Human-readable text output
       if (finalResult.valid) {
-        console.log(chalk.green('✅ Working spec validation passed'));
+        console.log(chalk.green('Working spec validation passed'));
         if (!options.quiet) {
           console.log(chalk.gray(`   Risk tier: ${spec.risk_tier}`));
           console.log(chalk.gray(`   Mode: ${spec.mode}`));
@@ -186,13 +186,13 @@ async function validateCommand(specFile, options = {}) {
           }
         }
       } else {
-        console.log(chalk.red('❌ Working spec validation failed'));
+        console.log(chalk.red('Working spec validation failed'));
 
         // Show errors
         finalResult.errors.forEach((error, index) => {
           console.log(`   ${index + 1}. ${chalk.red(error.message)}`);
           if (error.suggestion) {
-            console.log(`      ${chalk.blue('💡 ' + error.suggestion)}`);
+            console.log(`      ${chalk.blue('' + error.suggestion)}`);
           }
           if (error.example) {
             console.log(`      ${chalk.gray('Example:')}`);
@@ -210,7 +210,7 @@ async function validateCommand(specFile, options = {}) {
 
         // Show warnings
         if (finalResult.warnings && finalResult.warnings.length > 0) {
-          console.log(chalk.yellow('\n⚠️  Warnings:'));
+          console.log(chalk.yellow('\nWarnings:'));
           finalResult.warnings.forEach((warning, index) => {
             console.log(`   ${index + 1}. ${chalk.yellow(warning.message)}`);
           });
@@ -238,7 +238,7 @@ async function validateCommand(specFile, options = {}) {
         )
       );
     } else {
-      console.error(chalk.red('❌ Error during validation:'), error.message);
+      console.error(chalk.red('Error during validation:'), error.message);
     }
     // Don't call process.exit in test environment
     if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {

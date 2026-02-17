@@ -333,27 +333,27 @@ function getTodoAnalyzerSuggestion(cwd = process.cwd()) {
   if (hasNpx) {
     // npx available - works for any language, no installation needed
     suggestions.push(
-      '   • Use npx (no installation required): npx --yes @paths.design/quality-gates'
+      '   - Use npx (no installation required): npx --yes @paths.design/quality-gates'
     );
-    suggestions.push('   • Install package: npm install --save-dev @paths.design/quality-gates');
+    suggestions.push('   - Install package: npm install --save-dev @paths.design/quality-gates');
   } else if (hasNodeJs) {
     // Node.js available but npx not found (unusual)
-    suggestions.push('   • Install package: npm install --save-dev @paths.design/quality-gates');
+    suggestions.push('   - Install package: npm install --save-dev @paths.design/quality-gates');
     suggestions.push(
-      '   • Install npx: npm install -g npx (then use: npx --yes @paths.design/quality-gates)'
+      '   - Install npx: npm install -g npx (then use: npx --yes @paths.design/quality-gates)'
     );
   } else {
     // Node.js not available - suggest installation
     suggestions.push(
-      '   • Install Node.js: https://nodejs.org/ (then use: npx --yes @paths.design/quality-gates)'
+      '   - Install Node.js: https://nodejs.org/ (then use: npx --yes @paths.design/quality-gates)'
     );
-    suggestions.push('   • Use CAWS MCP server: caws quality-gates (via MCP)');
+    suggestions.push('   - Use CAWS MCP server: caws quality-gates (via MCP)');
   }
 
   // Check for project-specific scripts (language-agnostic - if they exist, suggest them)
   const pythonScript = path.join(cwd, 'scripts', 'v3', 'analysis', 'todo_analyzer.py');
   if (fs.existsSync(pythonScript)) {
-    suggestions.push(`   • Use project script: python3 ${pythonScript}`);
+    suggestions.push(`   - Use project script: python3 ${pythonScript}`);
   }
 
   return suggestions.join('\n');

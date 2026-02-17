@@ -5,5 +5,5 @@
 
 module.exports = async () => {
   // Clean up any global resources if needed
-  console.log('✅ Jest global teardown complete');
+  console.log('Jest global teardown complete');
 };

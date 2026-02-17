@@ -337,17 +337,17 @@ function displayTypeScriptDetection(detection) {
     return;
   }
 
-  console.log(chalk.cyan('\n📦 TypeScript Project Detected'));
-  console.log(chalk.gray(`   tsconfig.json: ${detection.hasTsConfig ? '✅' : '❌'}`));
-  console.log(chalk.gray(`   typescript dependency: ${detection.hasTypeScriptDep ? '✅' : '❌'}`));
+  console.log(chalk.cyan('\nTypeScript Project Detected'));
+  console.log(chalk.gray(`   tsconfig.json: ${detection.hasTsConfig ? '' : ''}`));
+  console.log(chalk.gray(`   typescript dependency: ${detection.hasTypeScriptDep ? '' : ''}`));
 
   if (detection.testFramework.framework !== 'none') {
     console.log(chalk.gray(`   Test framework: ${detection.testFramework.framework}`));
-    console.log(chalk.gray(`   Configured: ${detection.testFramework.isConfigured ? '✅' : '❌'}`));
+    console.log(chalk.gray(`   Configured: ${detection.testFramework.isConfigured ? '' : ''}`));
   }
 
   if (detection.recommendations.length > 0) {
-    console.log(chalk.yellow('\n💡 Recommendations:'));
+    console.log(chalk.yellow('\nRecommendations:'));
     detection.recommendations.forEach((rec) => {
       console.log(chalk.yellow(`   ${rec}`));
     });

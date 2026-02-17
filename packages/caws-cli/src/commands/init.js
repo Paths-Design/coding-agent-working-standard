@@ -36,11 +36,11 @@ async function initProject(projectName, options) {
   const isCurrentDirInit = shouldInitInCurrentDirectory(projectName, currentDir);
 
   if (!isCurrentDirInit && projectName !== '.') {
-    console.log(chalk.cyan(`🚀 Initializing new CAWS project: ${projectName}`));
+    console.log(chalk.cyan(`Initializing new CAWS project: ${projectName}`));
     console.log(chalk.gray(`   (Creating subdirectory: ${projectName}/)`));
   } else {
     console.log(
-      chalk.cyan(`🚀 Initializing CAWS in current project: ${path.basename(currentDir)}`)
+      chalk.cyan(`Initializing CAWS in current project: ${path.basename(currentDir)}`)
     );
     console.log(chalk.gray(`   (Adding CAWS files to existing project)`));
   }
@@ -50,8 +50,8 @@ async function initProject(projectName, options) {
   try {
     // Validate project name
     if (!projectName || projectName.trim() === '') {
-      console.error(chalk.red('❌ Project name is required'));
-      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      console.error(chalk.red('Project name is required'));
+      console.error(chalk.blue('Usage: caws init <project-name>'));
       process.exit(1);
     }
 
@@ -60,30 +60,30 @@ async function initProject(projectName, options) {
       // Sanitize project name
       const sanitizedName = projectName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
       if (sanitizedName !== projectName) {
-        console.warn(chalk.yellow(`⚠️  Project name sanitized to: ${sanitizedName}`));
+        console.warn(chalk.yellow(`Project name sanitized to: ${sanitizedName}`));
         projectName = sanitizedName;
       }
     }
 
     // Validate project name length
     if (projectName.length > 50) {
-      console.error(chalk.red('❌ Project name is too long (max 50 characters)'));
-      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      console.error(chalk.red('Project name is too long (max 50 characters)'));
+      console.error(chalk.blue('Usage: caws init <project-name>'));
       process.exit(1);
     }
 
     // Validate project name format
     if (projectName.length === 0) {
-      console.error(chalk.red('❌ Project name cannot be empty'));
-      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
+      console.error(chalk.red('Project name cannot be empty'));
+      console.error(chalk.blue('Usage: caws init <project-name>'));
       process.exit(1);
     }
 
     // Check for invalid characters that should cause immediate failure
     if (projectName.includes('/') || projectName.includes('\\') || projectName.includes('..')) {
-      console.error(chalk.red('❌ Project name contains invalid characters'));
-      console.error(chalk.blue('💡 Usage: caws init <project-name>'));
-      console.error(chalk.blue('💡 Project name should not contain: / \\ ..'));
+      console.error(chalk.red('Project name contains invalid characters'));
+      console.error(chalk.blue('Usage: caws init <project-name>'));
+      console.error(chalk.blue('Project name should not contain: / \\ ..'));
       process.exit(1);
     }
 
@@ -95,10 +95,10 @@ async function initProject(projectName, options) {
     if (!initInCurrentDir && fs.existsSync(projectName)) {
       const existingFiles = fs.readdirSync(projectName);
       if (existingFiles.length > 0) {
-        console.error(chalk.red(`❌ Directory '${projectName}' already exists and contains files`));
-        console.error(chalk.blue('💡 To initialize CAWS in current directory instead:'));
+        console.error(chalk.red(`Directory '${projectName}' already exists and contains files`));
+        console.error(chalk.blue('To initialize CAWS in current directory instead:'));
         console.error(`   ${chalk.cyan('caws init .')}`);
-        console.error(chalk.blue('💡 Or choose a different name/remove existing directory'));
+        console.error(chalk.blue('Or choose a different name/remove existing directory'));
         process.exit(1);
       }
     }
@@ -111,9 +111,9 @@ async function initProject(projectName, options) {
       );
 
       if (hasProjectFiles && !options.nonInteractive) {
-        console.warn(chalk.yellow('⚠️  Current directory contains project files'));
+        console.warn(chalk.yellow('Current directory contains project files'));
         console.warn(
-          chalk.blue('💡 You might want to initialize CAWS in current directory instead:')
+          chalk.blue('You might want to initialize CAWS in current directory instead:')
         );
         console.warn(`   ${chalk.cyan('caws init .')}`);
         console.warn(chalk.blue('   Or continue to create subdirectory (Ctrl+C to cancel)'));
@@ -133,9 +133,9 @@ async function initProject(projectName, options) {
     if (!initInCurrentDir) {
       await fs.ensureDir(projectName);
       process.chdir(projectName);
-      console.log(chalk.green(`📁 Created project directory: ${projectName}`));
+      console.log(chalk.green(`Created project directory: ${projectName}`));
     } else {
-      console.log(chalk.green(`📁 Initializing in current directory`));
+      console.log(chalk.green(`Initializing in current directory`));
     }
 
     // Detect and adapt to existing setup
@@ -145,7 +145,7 @@ async function initProject(projectName, options) {
       // Create minimal CAWS structure
       await fs.ensureDir('.caws');
       await fs.ensureDir('.agent');
-      console.log(chalk.blue('ℹ️  Created basic CAWS structure'));
+      console.log(chalk.blue('Created basic CAWS structure'));
 
       // Copy AGENTS.md guide if templates are available
       if (originalTemplateDir) {
@@ -190,12 +190,12 @@ async function initProject(projectName, options) {
       }
     } else {
       // Already has CAWS setup
-      console.log(chalk.green('✅ CAWS project detected - skipping template copy'));
+      console.log(chalk.green('CAWS project detected - skipping template copy'));
     }
 
     // Handle lite mode init path
     if (options.mode === 'lite') {
-      console.log(chalk.magenta('🛡️  CAWS Lite Mode — guardrails without YAML specs'));
+      console.log(chalk.magenta('CAWS Lite Mode — guardrails without YAML specs'));
 
       // Detect allowed directories
       const detectedDirs = [];
@@ -213,13 +213,13 @@ async function initProject(projectName, options) {
           {
             type: 'input',
             name: 'projectName',
-            message: '📝 Project name:',
+            message: 'Project name:',
             default: path.basename(process.cwd()),
           },
           {
             type: 'input',
             name: 'allowedDirs',
-            message: '📁 Allowed directories (comma-separated):',
+            message: 'Allowed directories (comma-separated):',
             default: allowedDirs.join(', '),
           },
         ]);
@@ -234,25 +234,25 @@ async function initProject(projectName, options) {
         path.join('.caws', 'scope.json'),
         JSON.stringify(scopeConfig, null, 2)
       );
-      console.log(chalk.green('✅ Created .caws/scope.json'));
+      console.log(chalk.green('Created .caws/scope.json'));
 
       // Set mode to lite
       await setCurrentMode('lite');
-      console.log(chalk.green('✅ Set mode to lite in .caws/mode.json'));
+      console.log(chalk.green('Set mode to lite in .caws/mode.json'));
 
       // Scaffold hooks: block-dangerous + scope-guard + lite-sprawl-check + simplification-guard
       const liteIDEs = options.ide ? parseIDESelection(options.ide) : ['claude'];
       if (liteIDEs.includes('claude')) {
-        console.log(chalk.blue('🔧 Setting up lite-mode hooks...'));
+        console.log(chalk.blue('Setting up lite-mode hooks...'));
         await scaffoldClaudeHooks(process.cwd(), ['safety', 'scope', 'lite']);
       }
 
       // Update .gitignore
-      console.log(chalk.blue('📝 Updating .gitignore...'));
+      console.log(chalk.blue('Updating .gitignore...'));
       await updateGitignore(process.cwd());
 
       // Success
-      console.log(chalk.green('\n🎉 CAWS Lite mode initialized!'));
+      console.log(chalk.green('\nCAWS Lite mode initialized!'));
       console.log(chalk.blue('\nGuardrails active:'));
       console.log('  - Destructive command blocking (git push --force, rm -rf, etc.)');
       console.log('  - Scope fencing (edits outside allowed directories require confirmation)');
@@ -267,8 +267,8 @@ async function initProject(projectName, options) {
 
     // Handle interactive wizard or template-based setup
     if (options.interactive && !options.nonInteractive) {
-      console.log(chalk.cyan('🎯 CAWS Interactive Setup Wizard'));
-      console.log(chalk.blue('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+      console.log(chalk.cyan('CAWS Interactive Setup Wizard'));
+      console.log(chalk.blue('========================================'));
       console.log(chalk.gray('This wizard will guide you through creating a CAWS working spec\n'));
 
       // Detect active IDEs for pre-selecting the IDE prompt
@@ -281,7 +281,7 @@ async function initProject(projectName, options) {
 
       // Detect project type
       const detectedType = detectProjectType(process.cwd());
-      console.log(chalk.blue(`📦 Detected project type: ${chalk.cyan(detectedType)}`));
+      console.log(chalk.blue(`Detected project type: ${chalk.cyan(detectedType)}`));
 
       // Get package.json info if available
       let packageJson = {};
@@ -295,50 +295,50 @@ async function initProject(projectName, options) {
         {
           type: 'list',
           name: 'projectType',
-          message: '❓ What type of project is this?',
+          message: 'What type of project is this?',
           choices: [
             {
-              name: '🔌 VS Code Extension (webview, commands, integrations)',
+              name: 'VS Code Extension (webview, commands, integrations)',
               value: 'extension',
               short: 'VS Code Extension',
             },
             {
-              name: '📚 Library/Package (reusable components, utilities)',
+              name: 'Library/Package (reusable components, utilities)',
               value: 'library',
               short: 'Library',
             },
             {
-              name: '🌐 Web Application (frontend/backend, full-stack)',
+              name: 'Web Application (frontend/backend, full-stack)',
               value: 'application',
               short: 'Web Application',
             },
             {
-              name: '🖥️  CLI Tool (command-line interface, scripts)',
+              name: 'CLI Tool (command-line interface, scripts)',
               value: 'cli',
               short: 'CLI Tool',
             },
             {
-              name: '📱 Mobile App (iOS/Android, React Native, etc.)',
+              name: 'Mobile App (iOS/Android, React Native, etc.)',
               value: 'mobile',
               short: 'Mobile App',
             },
             {
-              name: '🛠️  Infrastructure (DevOps, deployment, cloud)',
+              name: 'Infrastructure (DevOps, deployment, cloud)',
               value: 'infrastructure',
               short: 'Infrastructure',
             },
             {
-              name: '📊 Data/Analytics (ETL, ML, dashboards)',
+              name: 'Data/Analytics (ETL, ML, dashboards)',
               value: 'data',
               short: 'Data/Analytics',
             },
             {
-              name: '🎮 Game Development (Unity, Godot, custom engine)',
+              name: 'Game Development (Unity, Godot, custom engine)',
               value: 'game',
               short: 'Game',
             },
             {
-              name: '🔧 Other/Custom (please specify)',
+              name: 'Other/Custom (please specify)',
               value: 'other',
               short: 'Other',
             },
@@ -348,7 +348,7 @@ async function initProject(projectName, options) {
         {
           type: 'input',
           name: 'projectTitle',
-          message: '📝 What is the project title?',
+          message: 'What is the project title?',
           default: packageJson.name || path.basename(process.cwd()),
           validate: (input) => {
             if (input.trim().length < 3) {
@@ -363,7 +363,7 @@ async function initProject(projectName, options) {
         {
           type: 'input',
           name: 'projectDescription',
-          message: '📖 Provide a brief project description (1-2 sentences):',
+          message: 'Provide a brief project description (1-2 sentences):',
           default: packageJson.description || '',
           validate: (input) => {
             if (input.trim().length < 10) {
@@ -378,20 +378,20 @@ async function initProject(projectName, options) {
         {
           type: 'list',
           name: 'riskTier',
-          message: '⚠️  What risk tier does this project fall into?',
+          message: 'What risk tier does this project fall into?',
           choices: [
             {
-              name: '🔴 Tier 1 - High Risk (auth, billing, migrations, critical infrastructure)',
+              name: 'Tier 1 - High Risk (auth, billing, migrations, critical infrastructure)',
               value: 1,
               short: 'High Risk (T1)',
             },
             {
-              name: '🟡 Tier 2 - Medium Risk (features, APIs, data writes)',
+              name: 'Tier 2 - Medium Risk (features, APIs, data writes)',
               value: 2,
               short: 'Medium Risk (T2)',
             },
             {
-              name: '🟢 Tier 3 - Low Risk (UI, internal tools, docs)',
+              name: 'Tier 3 - Low Risk (UI, internal tools, docs)',
               value: 3,
               short: 'Low Risk (T3)',
             },
@@ -401,7 +401,7 @@ async function initProject(projectName, options) {
         {
           type: 'input',
           name: 'projectId',
-          message: '🆔 Project ID (e.g., PROJ-001, FEAT-123):',
+          message: 'Project ID (e.g., PROJ-001, FEAT-123):',
           default: () => {
             const randomNum = Math.floor(Math.random() * 1000) + 1;
             return `PROJ-${randomNum.toString().padStart(3, '0')}`;
@@ -480,7 +480,7 @@ async function initProject(projectName, options) {
         {
           type: 'confirm',
           name: 'generateExamples',
-          message: '📋 Generate example code and documentation?',
+          message: 'Generate example code and documentation?',
           default: true,
         },
       ];
@@ -489,13 +489,13 @@ async function initProject(projectName, options) {
       answers = await inquirer.prompt(wizardQuestions);
 
       // Generate working spec
-      console.log(chalk.blue('\n📄 Generating CAWS working spec...'));
+      console.log(chalk.blue('\nGenerating CAWS working spec...'));
       const specContent = generateWorkingSpec(answers);
 
       // Write working spec
       await fs.ensureDir('.caws');
       await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
-      console.log(chalk.green('✅ Created .caws/working-spec.yaml'));
+      console.log(chalk.green('Created .caws/working-spec.yaml'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
       const policyPath = path.join('.caws', 'policy.yaml');
@@ -506,12 +506,12 @@ async function initProject(projectName, options) {
         const yaml = require('js-yaml');
         const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
         await fs.writeFile(policyPath, policyContent);
-        console.log(chalk.green('✅ Created .caws/policy.yaml (optional - defaults work fine)'));
+        console.log(chalk.green('Created .caws/policy.yaml (optional - defaults work fine)'));
       }
 
       // Generate additional files if requested
       if (answers.generateExamples) {
-        console.log(chalk.blue('📝 Generating example files...'));
+        console.log(chalk.blue('Generating example files...'));
 
         // Generate .caws/getting-started.md
         const gettingStartedGuide = `# ${answers.projectTitle} - Getting Started
@@ -532,11 +532,10 @@ ${answers.projectDescription}
 - **Mutation Score**: ${answers.riskTier === 1 ? '70%+' : answers.riskTier === 2 ? '50%+' : '30%+'}
 - **Review**: ${answers.riskTier === 1 ? 'Manual' : 'Optional'}
 
-Happy coding! 🎯
-`;
+Happy coding! `;
 
         await fs.writeFile(path.join('.caws', 'getting-started.md'), gettingStartedGuide);
-        console.log(chalk.green('✅ Created .caws/getting-started.md'));
+        console.log(chalk.green('Created .caws/getting-started.md'));
 
         // Generate basic directory structure
         await fs.ensureDir('tests');
@@ -544,7 +543,7 @@ Happy coding! 🎯
         await fs.ensureDir('tests/integration');
         await fs.ensureDir('tests/e2e');
         await fs.ensureDir('docs');
-        console.log(chalk.green('✅ Created test and docs directories'));
+        console.log(chalk.green('Created test and docs directories'));
       }
 
       // Setup selected IDE integrations
@@ -563,10 +562,10 @@ Happy coding! 🎯
       }
 
       // Update .gitignore to exclude CAWS local runtime files
-      console.log(chalk.blue('📝 Updating .gitignore...'));
+      console.log(chalk.blue('Updating .gitignore...'));
       const gitignoreUpdated = await updateGitignore(process.cwd());
       if (gitignoreUpdated) {
-        console.log(chalk.green('✅ Updated .gitignore to exclude CAWS local runtime files'));
+        console.log(chalk.green('Updated .gitignore to exclude CAWS local runtime files'));
         console.log(
           chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
         );
@@ -577,7 +576,7 @@ Happy coding! 🎯
       await finalizeProject(projectName, options, answers);
     } else {
       // Non-interactive mode - generate basic spec with defaults
-      console.log(chalk.blue('📄 Generating basic CAWS working spec...'));
+      console.log(chalk.blue('Generating basic CAWS working spec...'));
 
       const detectedType = detectProjectType(process.cwd());
       const defaultAnswers = {
@@ -626,7 +625,7 @@ Happy coding! 🎯
       const specContent = generateWorkingSpec(defaultAnswers);
       await fs.ensureDir('.caws');
       await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
-      console.log(chalk.green('✅ Created .caws/working-spec.yaml'));
+      console.log(chalk.green('Created .caws/working-spec.yaml'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
       const policyPath = path.join('.caws', 'policy.yaml');
@@ -637,7 +636,7 @@ Happy coding! 🎯
         const yaml = require('js-yaml');
         const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
         await fs.writeFile(policyPath, policyContent);
-        console.log(chalk.green('✅ Created .caws/policy.yaml (optional - defaults work fine)'));
+        console.log(chalk.green('Created .caws/policy.yaml (optional - defaults work fine)'));
       }
 
       // Setup IDE integrations based on --ide flag or auto-detection
@@ -654,10 +653,10 @@ Happy coding! 🎯
       }
 
       // Update .gitignore to exclude CAWS local runtime files
-      console.log(chalk.blue('📝 Updating .gitignore...'));
+      console.log(chalk.blue('Updating .gitignore...'));
       const gitignoreUpdated = await updateGitignore(process.cwd());
       if (gitignoreUpdated) {
-        console.log(chalk.green('✅ Updated .gitignore to exclude CAWS local runtime files'));
+        console.log(chalk.green('Updated .gitignore to exclude CAWS local runtime files'));
         console.log(
           chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
         );
@@ -669,7 +668,7 @@ Happy coding! 🎯
     }
 
     // Success message
-    console.log(chalk.green('\n🎉 CAWS project initialized successfully!'));
+    console.log(chalk.green('\nCAWS project initialized successfully!'));
     console.log(chalk.blue('\nNext steps:'));
     console.log('1. Review .caws/working-spec.yaml');
     console.log('2. Customize the specification for your needs');
@@ -678,7 +677,7 @@ Happy coding! 🎯
     // Use answers if available (interactive mode), otherwise default to 2
     const riskTier = answers?.riskTier || 2;
     if (riskTier === 1 || riskTier === 2) {
-      console.log(chalk.yellow('\n⚠️  Important: Contract Requirements'));
+      console.log(chalk.yellow('\nImportant: Contract Requirements'));
       console.log(`   Tier ${riskTier} changes require at least one contract.`);
       console.log('   For infrastructure/setup work, add a minimal contract:');
       console.log(chalk.gray('   contracts:'));
@@ -688,7 +687,7 @@ Happy coding! 🎯
       console.log('   Or use "chore" mode for maintenance work (mode: chore)');
     }
 
-    console.log('\n📋 Recommended Setup Workflow:');
+    console.log('\nRecommended Setup Workflow:');
     console.log('   1. Review .caws/working-spec.yaml');
     console.log('   2. Run: caws scaffold (adds tools and templates)');
     console.log('   3. Run: caws validate (verify setup)');
@@ -698,9 +697,9 @@ Happy coding! 🎯
     if (finalIDEs.includes('cursor') || finalIDEs.includes('claude') || options.interactive === false) {
       console.log('   6. Restart your IDE to activate quality gates');
     }
-    console.log('\n💡 Quick start: caws scaffold && caws validate && caws diagnose');
+    console.log('\nQuick start: caws scaffold && caws validate && caws diagnose');
   } catch (error) {
-    console.error(chalk.red('❌ Error during initialization:'), error.message);
+    console.error(chalk.red('Error during initialization:'), error.message);
     if (error.stack) {
       console.error(chalk.gray(error.stack));
     }
@@ -709,10 +708,10 @@ Happy coding! 🎯
     if (projectName && projectName !== '.' && fs.existsSync(projectName)) {
       try {
         await fs.remove(projectName);
-        console.log(chalk.green('✅ Cleanup completed'));
+        console.log(chalk.green('Cleanup completed'));
       } catch (cleanupError) {
         console.warn(
-          chalk.yellow('⚠️  Could not clean up:'),
+          chalk.yellow('Could not clean up:'),
           cleanupError?.message || cleanupError
         );
       }

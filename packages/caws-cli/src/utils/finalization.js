@@ -37,11 +37,11 @@ async function finalizeProject(projectName, options, answers) {
   try {
     // Detect and configure language support
     if (languageSupport) {
-      console.log(chalk.cyan('🔍 Detecting project language...'));
+      console.log(chalk.cyan('Detecting project language...'));
       const detectedLanguage = languageSupport.detectProjectLanguage();
 
       if (detectedLanguage !== 'unknown') {
-        console.log(chalk.green(`✅ Detected language: ${detectedLanguage}`));
+        console.log(chalk.green(`Detected language: ${detectedLanguage}`));
 
         // Generate language-specific configuration
         try {
@@ -50,25 +50,25 @@ async function finalizeProject(projectName, options, answers) {
             '.caws/language-config.json'
           );
 
-          console.log(chalk.green('✅ Generated language-specific configuration'));
+          console.log(chalk.green('Generated language-specific configuration'));
           console.log(`   Language: ${langConfig.name}`);
           console.log(`   Tier: ${langConfig.tier}`);
           console.log(
             `   Thresholds: Branch ≥${langConfig.thresholds.min_branch * 100}%, Mutation ≥${langConfig.thresholds.min_mutation * 100}%`
           );
         } catch (langError) {
-          console.warn(chalk.yellow('⚠️  Could not generate language config:'), langError.message);
+          console.warn(chalk.yellow('Could not generate language config:'), langError.message);
         }
       } else {
         console.log(
-          chalk.blue('ℹ️  Could not detect project language - using default configuration')
+          chalk.blue('Could not detect project language - using default configuration')
         );
       }
     }
 
     // Setup Cursor hooks if enabled
     if (answers && answers.enableCursorHooks) {
-      console.log(chalk.cyan('📌 Setting up Cursor hooks...'));
+      console.log(chalk.cyan('Setting up Cursor hooks...'));
       await scaffoldCursorHooks(
         process.cwd(),
         answers.cursorHookLevels || ['safety', 'quality', 'scope', 'audit']
@@ -76,7 +76,7 @@ async function finalizeProject(projectName, options, answers) {
     }
 
     // Generate provenance manifest
-    console.log(chalk.cyan('📦 Generating provenance manifest...'));
+    console.log(chalk.cyan('Generating provenance manifest...'));
 
     const provenanceData = {
       agent: 'caws-cli',
@@ -118,24 +118,24 @@ async function finalizeProject(projectName, options, answers) {
     ) {
       const provenance = tools.generateProvenance(provenanceData);
       await tools.saveProvenance(provenance, '.agent/provenance.json');
-      console.log(chalk.green('✅ Provenance manifest generated'));
+      console.log(chalk.green('Provenance manifest generated'));
     } else {
       console.log(
-        chalk.yellow('⚠️  Provenance tools not available - skipping manifest generation')
+        chalk.yellow('Provenance tools not available - skipping manifest generation')
       );
     }
 
     // Initialize git repository
     if (options.git) {
       try {
-        console.log(chalk.cyan('🔧 Initializing git repository...'));
+        console.log(chalk.cyan('Initializing git repository...'));
 
         // Check if git is available
         try {
           require('child_process').execSync('git --version', { stdio: 'ignore' });
         } catch (error) {
-          console.warn(chalk.yellow('⚠️  Git not found. Skipping git initialization.'));
-          console.warn(chalk.blue('💡 Install git to enable automatic repository setup.'));
+          console.warn(chalk.yellow('Git not found. Skipping git initialization.'));
+          console.warn(chalk.blue('Install git to enable automatic repository setup.'));
           return;
         }
 
@@ -151,7 +151,7 @@ async function finalizeProject(projectName, options, answers) {
           require('child_process').execSync(`git config user.email "${authorEmail}"`, {
             stdio: 'inherit',
           });
-          console.log(chalk.green(`✅ Git configured: ${authorName} <${authorEmail}>`));
+          console.log(chalk.green(`Git configured: ${authorName} <${authorEmail}>`));
         }
 
         require('child_process').execSync('git init', { stdio: 'inherit' });
@@ -159,7 +159,7 @@ async function finalizeProject(projectName, options, answers) {
         require('child_process').execSync('git commit -m "Initial CAWS project setup"', {
           stdio: 'inherit',
         });
-        console.log(chalk.green('✅ Git repository initialized'));
+        console.log(chalk.green('Git repository initialized'));
 
         // Update provenance with commit hash
         const commitHash = require('child_process')
@@ -173,19 +173,19 @@ async function finalizeProject(projectName, options, answers) {
           .digest('hex');
         await fs.writeFile('.agent/provenance.json', JSON.stringify(currentProvenance, null, 2));
 
-        console.log(chalk.green('✅ Provenance updated with commit hash'));
+        console.log(chalk.green('Provenance updated with commit hash'));
       } catch (error) {
         console.warn(
-          chalk.yellow('⚠️  Failed to initialize git repository:'),
+          chalk.yellow('Failed to initialize git repository:'),
           error?.message || String(error)
         );
-        console.warn(chalk.blue('💡 You can initialize git manually later with:'));
+        console.warn(chalk.blue('You can initialize git manually later with:'));
         console.warn("   git init && git add . && git commit -m 'Initial CAWS project setup'");
       }
     }
   } catch (error) {
     console.error(
-      chalk.red('❌ Error during project finalization:'),
+      chalk.red('Error during project finalization:'),
       error?.message || String(error)
     );
   }
@@ -199,15 +199,15 @@ function continueToSuccess() {
     process.cwd() ===
     path.resolve(process.argv[3] === '.' ? process.cwd() : process.argv[3] || 'caws-project');
 
-  console.log(chalk.green('\n🎉 CAWS project initialized successfully!'));
+  console.log(chalk.green('\nCAWS project initialized successfully!'));
 
   if (isCurrentDir) {
     console.log(
-      `📁 ${chalk.cyan('Initialized in current directory')}: ${path.resolve(process.cwd())}`
+      `${chalk.cyan('Initialized in current directory')}: ${path.resolve(process.cwd())}`
     );
     console.log(chalk.gray('   (CAWS files added to your existing project)'));
   } else {
-    console.log(`📁 ${chalk.cyan('Project location')}: ${path.resolve(process.cwd())}`);
+    console.log(`${chalk.cyan('Project location')}: ${path.resolve(process.cwd())}`);
     console.log(chalk.gray('   (New subdirectory created with CAWS structure)'));
   }
 

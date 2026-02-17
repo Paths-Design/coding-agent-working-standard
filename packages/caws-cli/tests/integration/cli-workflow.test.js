@@ -31,7 +31,7 @@ describe('CLI Workflow Integration', () => {
         execSync('npm run build', { cwd: path.join(__dirname, '../..'), stdio: 'pipe' });
       }
     } catch (error) {
-      console.log('⚠️  Integration test setup failed:', error.message);
+      console.log('Integration test setup failed:', error.message);
       // Skip tests if setup fails
       testTempDir = null;
     }
@@ -52,7 +52,7 @@ describe('CLI Workflow Integration', () => {
     // Clean up any existing test project
     if (fs.existsSync(testProjectPath)) {
       fs.rmSync(testProjectPath, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up: ${testProjectName}`);
+      console.log(`Cleaned up: ${testProjectName}`);
     }
   });
 
@@ -73,7 +73,7 @@ describe('CLI Workflow Integration', () => {
   describe('Complete Project Workflow', () => {
     test('should complete full project initialization and scaffolding workflow', () => {
       if (!testTempDir) {
-        console.log('⏭️  Skipping integration test - setup failed');
+        console.log('Skipping integration test - setup failed');
         return;
       }
       
@@ -210,7 +210,7 @@ describe('CLI Workflow Integration', () => {
   describe('Tool Integration', () => {
     test('should integrate validation and provenance tools', () => {
       if (!testTempDir) {
-        console.log('⏭️  Skipping integration test - setup failed');
+        console.log('Skipping integration test - setup failed');
         return;
       }
       
@@ -298,7 +298,7 @@ describe('CLI Workflow Integration', () => {
   describe('Error Handling Integration', () => {
     test('should handle workflow interruptions gracefully', () => {
       if (!testTempDir) {
-        console.log('⏭️  Skipping integration test - setup failed');
+        console.log('Skipping integration test - setup failed');
         return;
       }
       

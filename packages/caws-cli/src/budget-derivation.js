@@ -181,7 +181,7 @@ async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
 
       if (policyExists) {
         console.error(
-          '⚠️  Policy file exists but not loaded: ' +
+          'Policy file exists but not loaded: ' +
             expectedPath +
             '\n' +
             '   Current working directory: ' +
@@ -230,7 +230,7 @@ async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
           // Validate waiver covers budget_limit gate
           if (!waiver.gates || !waiver.gates.includes('budget_limit')) {
             console.warn(
-              `\n⚠️  Waiver ${waiverId} does not cover 'budget_limit' gate\n` +
+              `\nWaiver ${waiverId} does not cover 'budget_limit' gate\n` +
                 `   Current gates: [${waiver.gates ? waiver.gates.join(', ') : 'none'}]\n` +
                 `   Add 'budget_limit' to gates array to apply to budget violations\n`
             );
@@ -363,7 +363,7 @@ function loadWaiver(waiverId, projectRoot) {
     // Validate ID format before attempting to load
     if (!/^WV-\d{4}$/.test(waiverId)) {
       console.error(
-        `\n❌ Invalid waiver ID format: ${waiverId}\n` +
+        `\nInvalid waiver ID format: ${waiverId}\n` +
           `   Waiver IDs must be exactly 4 digits: WV-0001 through WV-9999\n` +
           `   Fix waiver_ids in .caws/working-spec.yaml\n`
       );
@@ -373,7 +373,7 @@ function loadWaiver(waiverId, projectRoot) {
     const waiverPath = path.join(projectRoot, '.caws', 'waivers', `${waiverId}.yaml`);
     if (!fs.existsSync(waiverPath)) {
       console.error(
-        `\n❌ Waiver file not found: ${waiverId}\n` +
+        `\nWaiver file not found: ${waiverId}\n` +
           `   Expected location: ${waiverPath}\n` +
           `   Create waiver with: caws waiver create\n`
       );
@@ -386,13 +386,13 @@ function loadWaiver(waiverId, projectRoot) {
     try {
       validateWaiverStructure(waiver);
     } catch (error) {
-      console.error(`\n❌ Invalid waiver ${waiverId}: ${error.message}\n`);
+      console.error(`\nInvalid waiver ${waiverId}: ${error.message}\n`);
       return null;
     }
 
     return waiver;
   } catch (error) {
-    console.error(`\n❌ Failed to load waiver ${waiverId}: ${error.message}\n`);
+    console.error(`\nFailed to load waiver ${waiverId}: ${error.message}\n`);
     return null;
   }
 }
@@ -534,7 +534,7 @@ function isApproachingBudgetLimit(budgetCompliance, threshold = 80) {
  */
 function generateBurnupReport(derivedBudget, currentStats) {
   const report = [
-    '📊 CAWS Budget Burn-up Report',
+    'CAWS Budget Burn-up Report',
     '===============================',
     '',
     `Risk Tier: ${currentStats.risk_tier}`,
@@ -568,11 +568,11 @@ function generateBurnupReport(derivedBudget, currentStats) {
   // Add warnings at different thresholds
   const overall = Math.max(filePercent, locPercent);
   if (overall >= 95) {
-    report.push('', '🚫 CRITICAL: Budget nearly exhausted!');
+    report.push('', 'CRITICAL: Budget nearly exhausted!');
   } else if (overall >= 90) {
-    report.push('', '⚠️  WARNING: Approaching budget limits');
+    report.push('', 'WARNING: Approaching budget limits');
   } else if (overall >= 80) {
-    report.push('', '⚠️  Notice: 80% of budget used');
+    report.push('', 'Notice: 80% of budget used');
   }
 
   return report.join('\n');

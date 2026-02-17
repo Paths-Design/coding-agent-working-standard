@@ -37,7 +37,7 @@ async function initializeToolSystem() {
     toolLoader.on('tool:loaded', ({ id, metadata }) => {
       // Only log in verbose mode or when not using JSON output
       if (!process.env.CAWS_OUTPUT_FORMAT || process.env.CAWS_OUTPUT_FORMAT !== 'json') {
-        console.log(`  ✓ Loaded tool: ${metadata.name} (${id})`);
+        console.log(`  [ok] Loaded tool: ${metadata.name} (${id})`);
       }
     });
 

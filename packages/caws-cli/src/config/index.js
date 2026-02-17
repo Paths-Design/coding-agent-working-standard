@@ -28,7 +28,7 @@ function initializeGlobalSetup() {
   try {
     cawsSetup = detectCAWSSetup();
   } catch (error) {
-    console.warn(chalk.yellow('⚠️  Failed to detect CAWS setup:'), error.message);
+    console.warn(chalk.yellow('Failed to detect CAWS setup:'), error.message);
     cawsSetup = {
       type: 'unknown',
       hasCAWSDir: false,
@@ -119,7 +119,7 @@ function initializeLanguageSupport() {
         languageSupport = require(testPath);
         // Only log if not running version command
         if (!process.argv.includes('--version') && !process.argv.includes('-V')) {
-          console.log(`✅ Loaded language support from: ${testPath}`);
+          console.log(`Loaded language support from: ${testPath}`);
         }
         break;
       } catch (pathError) {
@@ -127,10 +127,10 @@ function initializeLanguageSupport() {
       }
     }
   } catch (error) {
-    console.warn(chalk.yellow('⚠️  Language support tools not available'));
-    console.warn(chalk.blue('💡 This may limit language-specific configuration features'));
+    console.warn(chalk.yellow('Language support tools not available'));
+    console.warn(chalk.blue('This may limit language-specific configuration features'));
     console.warn(
-      chalk.blue('💡 For full functionality, ensure caws-template package is available')
+      chalk.blue('For full functionality, ensure caws-template package is available')
     );
   }
 

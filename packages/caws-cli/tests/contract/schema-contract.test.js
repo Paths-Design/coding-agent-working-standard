@@ -234,13 +234,13 @@ describe('Schema Validation Contracts', () => {
           } catch (error) {
             // Demo files use modern JS syntax that Jest/Babel can't parse
             // This is expected in test environment - skip interface validation
-            console.log(`⚠️  Skipping interface validation for demo tool: ${error.message}`);
+            console.log(`Skipping interface validation for demo tool: ${error.message}`);
           }
         } else {
-          console.log(`⚠️  Validation tool not found at: ${validatePath}`);
+          console.log(`Validation tool not found at: ${validatePath}`);
         }
       } else {
-        console.log('⚠️  Demo project not found - skipping validation tool interface test');
+        console.log('Demo project not found - skipping validation tool interface test');
       }
     });
 
@@ -276,10 +276,10 @@ describe('Schema Validation Contracts', () => {
             });
           }
         } else {
-          console.log(`⚠️  Tool allowlist not found at: ${allowlistPath}`);
+          console.log(`Tool allowlist not found at: ${allowlistPath}`);
         }
       } else {
-        console.log('⚠️  Demo project not found - skipping allowlist structure test');
+        console.log('Demo project not found - skipping allowlist structure test');
       }
     });
   });

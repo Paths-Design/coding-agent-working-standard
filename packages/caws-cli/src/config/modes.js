@@ -14,7 +14,7 @@ const COMPLEXITY_TIERS = {
     name: 'Lite',
     description: 'Guardrails-only mode — no YAML specs required',
     color: chalk.magenta,
-    icon: '🛡️',
+    icon: '',
     features: {
       workingSpec: false,
       destructiveCommandBlocking: true,
@@ -40,7 +40,7 @@ const COMPLEXITY_TIERS = {
     name: 'Simple',
     description: 'Minimal CAWS for small projects and quick prototyping',
     color: chalk.green,
-    icon: '🟢',
+    icon: '',
     features: {
       workingSpec: true,
       basicValidation: true,
@@ -70,7 +70,7 @@ const COMPLEXITY_TIERS = {
     name: 'Standard',
     description: 'Balanced CAWS with change management and quality gates',
     color: chalk.yellow,
-    icon: '🟡',
+    icon: '',
     features: {
       workingSpec: true,
       fullValidation: true,
@@ -107,7 +107,7 @@ const COMPLEXITY_TIERS = {
     name: 'Enterprise',
     description: 'Full CAWS with comprehensive audit trails and compliance',
     color: chalk.red,
-    icon: '🔴',
+    icon: '',
     features: {
       workingSpec: true,
       fullValidation: true,
@@ -221,8 +221,8 @@ function isRiskTierSupported(riskTier, complexityTier = 'standard') {
  * Display tier comparison
  */
 function displayTierComparison() {
-  console.log(chalk.bold.cyan('\n📊 CAWS Complexity Tiers'));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan('\nCAWS Complexity Tiers'));
+  console.log(chalk.cyan('=========================================================\n'));
 
   // Header
   console.log(
@@ -234,7 +234,7 @@ function displayTierComparison() {
         'Use Case'
     )
   );
-  console.log(chalk.gray('─'.repeat(90)));
+  console.log(chalk.gray('-'.repeat(90)));
 
   Object.entries(COMPLEXITY_TIERS).forEach(([tierName, tier]) => {
     const tierColor = tier.color;

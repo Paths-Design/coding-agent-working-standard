@@ -32,11 +32,11 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
 
     const { spec } = resolved;
 
-    console.log('🔍 Detecting CAWS setup...');
+    console.log('Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
 
     if (setup.hasWorkingSpec) {
-      console.log(`✅ Detected ${setup.setupType} CAWS setup`);
+      console.log(`Detected ${setup.setupType} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
     }
 
@@ -44,8 +44,8 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     const currentState = options.currentState ? JSON.parse(options.currentState) : {};
     const stateDescription = currentState.description || 'Starting implementation';
 
-    console.log(chalk.blue('\n🔄 Iterative Development Guidance\n'));
-    console.log('─'.repeat(60));
+    console.log(chalk.blue('\nIterative Development Guidance\n'));
+    console.log('-'.repeat(60));
     console.log(chalk.bold(`\nProject: ${spec.title}`));
     console.log(`ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`);
     console.log(`Current State: ${stateDescription}\n`);
@@ -54,34 +54,34 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     const guidance = generateGuidance(spec, currentState, options);
 
     // Display guidance
-    console.log(chalk.blue('📋 Current Phase:\n'));
+    console.log(chalk.blue('Current Phase:\n'));
     console.log(`   ${guidance.phase}\n`);
 
-    console.log(chalk.blue('✅ Completed Steps:\n'));
+    console.log(chalk.blue('Completed Steps:\n'));
     guidance.completed.forEach((step) => {
-      console.log(chalk.green(`   ✓ ${step}`));
+      console.log(chalk.green(`   [done] ${step}`));
     });
 
-    console.log(chalk.blue('\n🎯 Next Actions:\n'));
+    console.log(chalk.blue('\nNext Actions:\n'));
     guidance.nextActions.forEach((action, index) => {
       console.log(chalk.yellow(`   ${index + 1}. ${action}`));
     });
 
     if (guidance.blockers.length > 0) {
-      console.log(chalk.red('\n⚠️  Blockers:\n'));
+      console.log(chalk.red('\nBlockers:\n'));
       guidance.blockers.forEach((blocker) => {
-        console.log(chalk.red(`   ⚠️  ${blocker}`));
+        console.log(chalk.red(`   ${blocker}`));
       });
     }
 
-    console.log(chalk.blue('\n💡 Recommendations:\n'));
+    console.log(chalk.blue('\nRecommendations:\n'));
     guidance.recommendations.forEach((rec) => {
-      console.log(chalk.blue(`   • ${rec}`));
+      console.log(chalk.blue(`   - ${rec}`));
     });
 
     // Acceptance criteria checklist with detailed progress
     if (spec.acceptance && spec.acceptance.length > 0) {
-      console.log(chalk.blue('\n📊 Acceptance Criteria Progress:\n'));
+      console.log(chalk.blue('\nAcceptance Criteria Progress:\n'));
 
       let totalTestsWritten = 0;
       let totalTestsPassing = 0;
@@ -90,21 +90,21 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
 
       spec.acceptance.forEach((criterion, _index) => {
         // Support both old format (boolean completed) and new format (detailed progress)
-        let status = '⬜';
+        let status = '';
         let progressInfo = '';
 
         if (criterion.status) {
           // New detailed format
           switch (criterion.status) {
             case 'completed':
-              status = '✅';
+              status = '';
               break;
             case 'in_progress':
-              status = '🔄';
+              status = '';
               break;
             case 'pending':
             default:
-              status = '⬜';
+              status = '';
               break;
           }
 
@@ -133,7 +133,7 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
           }
         } else if (criterion.completed) {
           // Backward compatibility with old boolean format
-          status = '✅';
+          status = '';
         }
 
         console.log(`   ${status} ${criterion.id}: ${criterion.then}`);
@@ -175,13 +175,13 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     }
 
     // Quality gates reminder
-    console.log(chalk.blue('\n🔒 Quality Gates (Risk Tier ' + spec.risk_tier + '):\n'));
+    console.log(chalk.blue('\nQuality Gates (Risk Tier ' + spec.risk_tier + '):\n'));
     const gates = getQualityGates(spec.risk_tier);
     gates.forEach((gate) => {
       console.log(`   □ ${gate}`);
     });
 
-    console.log(chalk.blue('\n📚 Useful Commands:\n'));
+    console.log(chalk.blue('\nUseful Commands:\n'));
     console.log('   caws evaluate       - Check quality score');
     console.log('   caws validate       - Validate working spec');
     console.log('   caws status         - View project health');
@@ -189,7 +189,7 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     console.log('   npm test            - Run test suite');
     console.log('   npm run coverage    - Check test coverage\n');
   } catch (error) {
-    console.error(chalk.red(`\n❌ Iteration guidance failed: ${error.message}`));
+    console.error(chalk.red(`\nIteration guidance failed: ${error.message}`));
     if (options.verbose) {
       console.error(error.stack);
     }

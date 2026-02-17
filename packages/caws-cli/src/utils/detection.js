@@ -40,7 +40,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
     process.argv.includes('--help');
 
   if (!isQuietCommand) {
-    console.log(chalk.blue('🔍 Detecting CAWS setup...'));
+    console.log(chalk.blue('Detecting CAWS setup...'));
   }
 
   // Check for existing CAWS setup
@@ -49,7 +49,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
 
   if (!hasCAWSDir) {
     if (!isQuietCommand) {
-      console.log(chalk.gray('ℹ️  No .caws directory found - new project setup'));
+      console.log(chalk.gray('No .caws directory found - new project setup'));
     }
     return {
       type: 'new',
@@ -107,7 +107,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
   }
 
   if (!isQuietCommand) {
-    console.log(chalk.green(`✅ Detected ${setupType} CAWS setup`));
+    console.log(chalk.green(`Detected ${setupType} CAWS setup`));
     console.log(chalk.gray(`   Capabilities: ${capabilities.join(', ')}`));
   }
 
@@ -160,7 +160,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
     if (fs.existsSync(testPath)) {
       templateDir = testPath;
       if (!isQuietCommand) {
-        console.log(`✅ Found CAWS templates in ${source}:`);
+        console.log(`Found CAWS templates in ${source}:`);
         console.log(`   ${chalk.gray(testPath)}`);
       }
       break;
@@ -168,10 +168,10 @@ function detectCAWSSetup(cwd = process.cwd()) {
   }
 
   if (!templateDir && !isQuietCommand) {
-    console.warn(chalk.yellow('⚠️  CAWS templates not found in standard locations'));
-    console.warn(chalk.blue('💡 This may limit available scaffolding features'));
+    console.warn(chalk.yellow('CAWS templates not found in standard locations'));
+    console.warn(chalk.blue('This may limit available scaffolding features'));
     console.warn(
-      chalk.blue('💡 For full functionality, ensure caws-template package is available')
+      chalk.blue('For full functionality, ensure caws-template package is available')
     );
   }
 

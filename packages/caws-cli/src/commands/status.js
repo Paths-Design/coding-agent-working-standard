@@ -319,52 +319,52 @@ function getTimeSince(timestamp) {
 function displayStatus(data) {
   const { spec, hooks, provenance, waivers, gates } = data;
 
-  console.log(chalk.bold.cyan('\n📊 CAWS Project Status'));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan('\nCAWS Project Status'));
+  console.log(chalk.cyan('==============================================\n'));
 
   // Working Spec Status
   if (spec) {
-    console.log(chalk.green('✅ Working Spec'));
+    console.log(chalk.green('Working Spec'));
     console.log(chalk.gray(`   ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`));
     console.log(chalk.gray(`   Title: ${spec.title}`));
   } else {
-    console.log(chalk.red('❌ Working Spec'));
+    console.log(chalk.red('Working Spec'));
     console.log(chalk.gray('   No working spec found'));
-    console.log(chalk.yellow('   💡 Run: caws init . to create one'));
+    console.log(chalk.yellow('   Run: caws init . to create one'));
   }
 
   console.log('');
 
   // Git Hooks Status
   if (hooks.installed) {
-    console.log(chalk.green(`✅ Git Hooks`));
+    console.log(chalk.green(`Git Hooks`));
     console.log(chalk.gray(`   ${hooks.count}/${hooks.total} active: ${hooks.active.join(', ')}`));
   } else {
-    console.log(chalk.yellow('⚠️  Git Hooks'));
+    console.log(chalk.yellow('Git Hooks'));
     console.log(chalk.gray('   No CAWS git hooks installed'));
-    console.log(chalk.yellow('   💡 Run: caws hooks install'));
+    console.log(chalk.yellow('   Run: caws hooks install'));
   }
 
   console.log('');
 
   // Provenance Status
   if (provenance.exists) {
-    console.log(chalk.green('✅ Provenance'));
+    console.log(chalk.green('Provenance'));
     console.log(chalk.gray(`   Chain: ${provenance.count} entries`));
     if (provenance.lastUpdate) {
       console.log(chalk.gray(`   Last update: ${getTimeSince(provenance.lastUpdate)}`));
     }
   } else {
-    console.log(chalk.yellow('⚠️  Provenance'));
+    console.log(chalk.yellow('Provenance'));
     console.log(chalk.gray('   Provenance tracking not initialized'));
-    console.log(chalk.yellow('   💡 Run: caws provenance init'));
+    console.log(chalk.yellow('   Run: caws provenance init'));
   }
 
   console.log('');
 
   // Waivers Status
   if (waivers.exists && waivers.total > 0) {
-    console.log(chalk.green('✅ Quality Gate Waivers'));
+    console.log(chalk.green('Quality Gate Waivers'));
     console.log(
       chalk.gray(
         `   ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
@@ -372,31 +372,31 @@ function displayStatus(data) {
     );
     console.log(chalk.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? 's' : ''}`));
   } else if (waivers.exists) {
-    console.log(chalk.blue('ℹ️  Quality Gate Waivers'));
+    console.log(chalk.blue('Quality Gate Waivers'));
     console.log(chalk.gray('   No waivers configured'));
   } else {
-    console.log(chalk.yellow('⚠️  Quality Gate Waivers'));
+    console.log(chalk.yellow('Quality Gate Waivers'));
     console.log(chalk.gray('   Waiver system not initialized'));
-    console.log(chalk.yellow('   💡 Run: caws waivers create (when needed)'));
+    console.log(chalk.yellow('   Run: caws waivers create (when needed)'));
   }
 
   console.log('');
 
   // Quality Gates Status
-  console.log(chalk.blue('ℹ️  Quality Gates'));
+  console.log(chalk.blue('Quality Gates'));
   console.log(chalk.gray(`   ${gates.message}`));
 
   // Suggestions
   const suggestions = generateSuggestions(data);
   if (suggestions.length > 0) {
-    console.log(chalk.bold.yellow('\n💡 Suggestions:'));
+    console.log(chalk.bold.yellow('\nSuggestions:'));
     suggestions.forEach((suggestion) => {
       console.log(chalk.yellow(`   ${suggestion}`));
     });
   }
 
   // Quick Links
-  console.log(chalk.bold.blue('\n📚 Quick Links:'));
+  console.log(chalk.bold.blue('\nQuick Links:'));
   if (spec) {
     console.log(chalk.blue('   View spec: .caws/working-spec.yaml'));
   }
@@ -496,18 +496,18 @@ async function displayVisualStatus(data, currentMode) {
 
   console.log(
     chalk.bold.cyan(
-      `\n📊 CAWS Project Status (${tierConfig.icon} ${tierConfig.color(currentMode)})`
+      `\nCAWS Project Status (${tierConfig.icon} ${tierConfig.color(currentMode)})`
     )
   );
   console.log(
     chalk.cyan(
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+      '=================================================================================\n'
     )
   );
 
   // Multi-spec system status
   if (specs && specs.length > 0) {
-    console.log(chalk.green(`✅ Specs System (${specs.length} specs)`));
+    console.log(chalk.green(`Specs System (${specs.length} specs)`));
 
     // Show active specs first
     const activeSpecs = specs.filter((s) => s.status === 'active');
@@ -526,7 +526,7 @@ async function displayVisualStatus(data, currentMode) {
       // Show details for draft specs if not too many
       if (draftSpecs.length <= 3) {
         draftSpecs.forEach((s) => {
-          console.log(chalk.gray(`     • ${s.id}: ${s.title}`));
+          console.log(chalk.gray(`     - ${s.id}: ${s.title}`));
         });
       }
     }
@@ -539,7 +539,7 @@ async function displayVisualStatus(data, currentMode) {
       // Show details for completed specs if not too many
       if (completedSpecs.length <= 3) {
         completedSpecs.forEach((s) => {
-          console.log(chalk.gray(`     • ${s.id}: ${s.title}`));
+          console.log(chalk.gray(`     - ${s.id}: ${s.title}`));
         });
       }
     }
@@ -578,7 +578,7 @@ async function displayVisualStatus(data, currentMode) {
     }
   } else if (spec) {
     // Legacy single spec system
-    console.log(chalk.green('✅ Working Spec'));
+    console.log(chalk.green('Working Spec'));
     console.log(chalk.gray(`   ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`));
     console.log(chalk.gray(`   Title: ${spec.title}`));
 
@@ -637,10 +637,10 @@ async function displayVisualStatus(data, currentMode) {
       )
     );
   } else {
-    console.log(chalk.red('❌ No Specs Found'));
+    console.log(chalk.red('No Specs Found'));
     console.log(chalk.gray('   No working spec or specs directory found'));
-    console.log(chalk.yellow('   💡 Run: caws specs create <id> to create specs'));
-    console.log(chalk.yellow('   💡 Or run: caws init . for legacy single spec'));
+    console.log(chalk.yellow('   Run: caws specs create <id> to create specs'));
+    console.log(chalk.yellow('   Or run: caws init . for legacy single spec'));
   }
 
   console.log('');
@@ -649,14 +649,14 @@ async function displayVisualStatus(data, currentMode) {
   if (modes.isFeatureEnabled('gitHooks', currentMode)) {
     if (hooks.installed) {
       const hookBar = createProgressBar(hooks.count, hooks.total);
-      console.log(chalk.green(`✅ Git Hooks`));
+      console.log(chalk.green(`Git Hooks`));
       console.log(
         chalk.gray(`   ${hookBar} ${hooks.count}/${hooks.total} active: ${hooks.active.join(', ')}`)
       );
     } else {
-      console.log(chalk.yellow('⚠️  Git Hooks'));
+      console.log(chalk.yellow('Git Hooks'));
       console.log(chalk.gray('   No CAWS git hooks installed'));
-      console.log(chalk.yellow('   💡 Run: caws hooks install'));
+      console.log(chalk.yellow('   Run: caws hooks install'));
     }
   }
 
@@ -666,15 +666,15 @@ async function displayVisualStatus(data, currentMode) {
   if (modes.isFeatureEnabled('provenance', currentMode)) {
     if (provenance.exists) {
       const provenanceBar = createProgressBar(provenance.count, Math.max(provenance.count, 10));
-      console.log(chalk.green('✅ Provenance'));
+      console.log(chalk.green('Provenance'));
       console.log(chalk.gray(`   ${provenanceBar} ${provenance.count} entries`));
       if (provenance.lastUpdate) {
         console.log(chalk.gray(`   Last update: ${getTimeSince(provenance.lastUpdate)}`));
       }
     } else {
-      console.log(chalk.yellow('⚠️  Provenance'));
+      console.log(chalk.yellow('Provenance'));
       console.log(chalk.gray('   Provenance tracking not initialized'));
-      console.log(chalk.yellow('   💡 Run: caws provenance init'));
+      console.log(chalk.yellow('   Run: caws provenance init'));
     }
   }
 
@@ -684,7 +684,7 @@ async function displayVisualStatus(data, currentMode) {
   if (modes.isFeatureEnabled('waivers', currentMode)) {
     if (waivers.exists && waivers.total > 0) {
       const waiverBar = createProgressBar(waivers.active, waivers.total);
-      console.log(chalk.green('✅ Quality Gate Waivers'));
+      console.log(chalk.green('Quality Gate Waivers'));
       console.log(
         chalk.gray(
           `   ${waiverBar} ${waivers.active} active, ${waivers.expired} expired, ${waivers.revoked} revoked`
@@ -692,12 +692,12 @@ async function displayVisualStatus(data, currentMode) {
       );
       console.log(chalk.gray(`   Total: ${waivers.total} waiver${waivers.total > 1 ? 's' : ''}`));
     } else if (waivers.exists) {
-      console.log(chalk.blue('ℹ️  Quality Gate Waivers'));
+      console.log(chalk.blue('Quality Gate Waivers'));
       console.log(chalk.gray('   No waivers configured'));
     } else {
-      console.log(chalk.yellow('⚠️  Quality Gate Waivers'));
+      console.log(chalk.yellow('Quality Gate Waivers'));
       console.log(chalk.gray('   Waiver system not initialized'));
-      console.log(chalk.yellow('   💡 Run: caws waivers create (when needed)'));
+      console.log(chalk.yellow('   Run: caws waivers create (when needed)'));
     }
   }
 
@@ -705,12 +705,12 @@ async function displayVisualStatus(data, currentMode) {
 
   // Quality Gates Status (only show in modes that support it)
   if (modes.isFeatureEnabled('qualityGates', currentMode)) {
-    console.log(chalk.blue('🛡️  Quality Gates'));
+    console.log(chalk.blue('Quality Gates'));
     if (gates.checked) {
       if (gates.passed) {
         console.log(chalk.green(`   ${createProgressBar(1, 1)} All gates passed`));
         gates.results?.forEach((gate) => {
-          const gateStatus = gate.status === 'passed' ? chalk.green('✓') : chalk.red('✗');
+          const gateStatus = gate.status === 'passed' ? chalk.green('[pass]') : chalk.red('[fail]');
           console.log(chalk.gray(`     ${gateStatus} ${gate.name}: ${gate.message || 'OK'}`));
         });
       } else {
@@ -720,7 +720,7 @@ async function displayVisualStatus(data, currentMode) {
           )
         );
         gates.results?.forEach((gate) => {
-          const gateStatus = gate.status === 'passed' ? chalk.green('✓') : chalk.red('✗');
+          const gateStatus = gate.status === 'passed' ? chalk.green('[pass]') : chalk.red('[fail]');
           console.log(chalk.gray(`     ${gateStatus} ${gate.name}: ${gate.message || 'Failed'}`));
         });
       }
@@ -735,20 +735,20 @@ async function displayVisualStatus(data, currentMode) {
   const progressBar = createProgressBar(overallProgress, 100);
 
   console.log('');
-  console.log(chalk.bold.blue('📈 Overall Progress'));
+  console.log(chalk.bold.blue('Overall Progress'));
   console.log(chalk.gray(`   ${progressBar} ${progressColor(`${overallProgress}%`)} complete`));
 
   // Suggestions (mode-aware)
   const suggestions = generateSuggestions(data, currentMode);
   if (suggestions.length > 0) {
-    console.log(chalk.bold.yellow('\n💡 Next Steps:'));
+    console.log(chalk.bold.yellow('\nNext Steps:'));
     suggestions.forEach((suggestion, index) => {
       console.log(chalk.yellow(`   ${index + 1}. ${suggestion}`));
     });
   }
 
   // Quick Links (mode-aware)
-  console.log(chalk.bold.blue('\n📚 Quick Actions:'));
+  console.log(chalk.bold.blue('\nQuick Actions:'));
   if (spec || (specs && specs.length > 0)) {
     if (modes.isFeatureEnabled('validate', currentMode)) {
       console.log(chalk.blue('   View specs: caws specs list'));

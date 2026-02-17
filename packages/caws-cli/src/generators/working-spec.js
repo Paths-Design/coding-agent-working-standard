@@ -209,13 +209,13 @@ function validateGeneratedSpec(specContent, _answers) {
     const isValid = validateWorkingSpec(spec);
 
     if (!isValid) {
-      console.error(chalk.red('❌ Generated working spec failed validation:'));
+      console.error(chalk.red('Generated working spec failed validation:'));
       validateWorkingSpec.errors.forEach((error) => {
         console.error(`   - ${error.instancePath || 'root'}: ${error.message}`);
       });
 
       // Provide helpful guidance
-      console.log(chalk.blue('\n💡 Validation Tips:'));
+      console.log(chalk.blue('\nValidation Tips:'));
       console.log('   - Ensure risk_tier is 1, 2, or 3');
       console.log('   - Check that scope.in is not empty');
       console.log('   - Verify invariants and acceptance criteria are provided');
@@ -224,9 +224,9 @@ function validateGeneratedSpec(specContent, _answers) {
       process.exit(1);
     }
 
-    console.log(chalk.green('✅ Generated working spec passed validation'));
+    console.log(chalk.green('Generated working spec passed validation'));
   } catch (error) {
-    console.error(chalk.red('❌ Error validating working spec:'), error.message);
+    console.error(chalk.red('Error validating working spec:'), error.message);
     process.exit(1);
   }
 }

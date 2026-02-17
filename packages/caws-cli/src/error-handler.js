@@ -450,10 +450,10 @@ function handleCliError(error, context = {}, exit = true) {
     console.log(formatJsonOutput(jsonError));
   } else {
     // Human-readable output
-    console.error(chalk.red(`\n❌ ${error.message}`));
+    console.error(chalk.red(`\n${error.message}`));
 
     if (suggestions && suggestions.length > 0) {
-      console.error(chalk.yellow('\n💡 Suggestions:'));
+      console.error(chalk.yellow('\nSuggestions:'));
       suggestions.forEach((suggestion) => {
         console.error(chalk.yellow(`   ${suggestion}`));
       });
@@ -462,13 +462,13 @@ function handleCliError(error, context = {}, exit = true) {
     // Add troubleshooting guide suggestion if available
     if (troubleshootingGuide) {
       const guide = getTroubleshootingGuide(troubleshootingGuide);
-      console.error(chalk.cyan(`\n🔍 Troubleshooting Guide: ${guide.title}`));
+      console.error(chalk.cyan(`\nTroubleshooting Guide: ${guide.title}`));
       console.error(
         chalk.cyan(`   Run: caws troubleshoot ${troubleshootingGuide} for detailed guide`)
       );
     }
 
-    console.error(chalk.blue(`\n📚 Documentation: ${docLink}`));
+    console.error(chalk.blue(`\nDocumentation: ${docLink}`));
   }
 
   if (exit) {

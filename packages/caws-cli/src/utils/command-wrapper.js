@@ -81,7 +81,7 @@ const Output = {
         true
       );
     } else {
-      console.log(chalk.green(`✅ ${message}`));
+      console.log(chalk.green(`${message}`));
       if (Object.keys(data).length > 0 && !isJsonOutput()) {
         console.log(chalk.gray(JSON.stringify(data, null, 2)));
       }
@@ -106,9 +106,9 @@ const Output = {
         false
       );
     } else {
-      console.error(chalk.red(`❌ ${message}`));
+      console.error(chalk.red(`${message}`));
       if (suggestions.length > 0) {
-        console.error(chalk.yellow('\n💡 Suggestions:'));
+        console.error(chalk.yellow('\nSuggestions:'));
         suggestions.forEach((suggestion) => {
           console.error(chalk.yellow(`   ${suggestion}`));
         });
@@ -132,9 +132,9 @@ const Output = {
         true
       );
     } else {
-      console.warn(chalk.yellow(`⚠️  ${message}`));
+      console.warn(chalk.yellow(`${message}`));
       if (suggestion) {
-        console.warn(chalk.blue(`   💡 ${suggestion}`));
+        console.warn(chalk.blue(`   ${suggestion}`));
       }
     }
   },
@@ -155,7 +155,7 @@ const Output = {
         true
       );
     } else {
-      console.log(chalk.blue(`ℹ️  ${message}`));
+      console.log(chalk.blue(`${message}`));
       if (Object.keys(data).length > 0) {
         console.log(chalk.gray(JSON.stringify(data, null, 2)));
       }
@@ -177,7 +177,7 @@ const Output = {
    */
   progress(message) {
     if (!isJsonOutput()) {
-      console.log(chalk.blue(`🔄 ${message}`));
+      console.log(chalk.blue(`${message}`));
     }
   },
 
@@ -188,7 +188,7 @@ const Output = {
   section(title) {
     if (!isJsonOutput()) {
       console.log(chalk.bold(`\n${title}`));
-      console.log('─'.repeat(Math.min(title.length, 60)));
+      console.log('-'.repeat(Math.min(title.length, 60)));
     }
   },
 };

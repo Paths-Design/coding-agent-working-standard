@@ -48,14 +48,14 @@ describe('Mutation Testing - Test Quality Validation', () => {
           // Mutation Contract: Test suite should achieve minimum quality threshold
           expect(mutationScore).toBeGreaterThanOrEqual(minimumScore);
 
-          console.log(`✅ Mutation score: ${mutationScore}% (threshold: ${minimumScore}%)`);
+          console.log(`Mutation score: ${mutationScore}% (threshold: ${minimumScore}%)`);
         } else {
-          console.warn('⚠️  Mutation report not found - skipping mutation score validation');
+          console.warn('Mutation report not found - skipping mutation score validation');
         }
       } catch (error) {
         // Stryker might not be installed or configured properly
         console.warn(
-          '⚠️  Mutation testing not available - install Stryker for full test quality validation'
+          'Mutation testing not available - install Stryker for full test quality validation'
         );
         console.warn('Run: npm install --save-dev stryker-cli @stryker-mutator/jest-runner');
       }
@@ -78,7 +78,7 @@ describe('Mutation Testing - Test Quality Validation', () => {
 
           // Mutation Contract: Should identify specific areas for test improvement
           if (survivingMutations.length > 0) {
-            console.log(`📋 Found ${survivingMutations.length} surviving mutations:`);
+            console.log(`Found ${survivingMutations.length} surviving mutations:`);
             survivingMutations.slice(0, 5).forEach((mutation, index) => {
               console.log(
                 `   ${index + 1}. ${mutation.file}:${mutation.line} - ${mutation.mutator}`
@@ -94,7 +94,7 @@ describe('Mutation Testing - Test Quality Validation', () => {
           expect(true).toBe(true);
         }
       } catch (error) {
-        console.warn('⚠️  Mutation analysis not available - skipping surviving mutation detection');
+        console.warn('Mutation analysis not available - skipping surviving mutation detection');
       }
     });
   });
@@ -125,13 +125,13 @@ describe('Mutation Testing - Test Quality Validation', () => {
           criticalPaths.forEach((criticalPath) => {
             const coverage = criticalPathCoverage[criticalPath];
             if (coverage !== undefined) {
-              console.log(`📊 ${criticalPath}: ${coverage}% mutation coverage`);
+              console.log(`${criticalPath}: ${coverage}% mutation coverage`);
               expect(coverage).toBeGreaterThan(60); // At least 60% for critical paths
             }
           });
         }
       } catch (error) {
-        console.warn('⚠️  Critical path analysis not available - skipping coverage validation');
+        console.warn('Critical path analysis not available - skipping coverage validation');
       }
     });
   });

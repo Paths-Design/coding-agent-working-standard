@@ -47,7 +47,7 @@ describe('CLI Interface Contracts', () => {
         try {
           if (fs.statSync(itemPath).isDirectory()) {
             fs.rmSync(itemPath, { recursive: true, force: true });
-            console.log(`🧹 Cleaned up: ${item} (temp dir)`);
+            console.log(`Cleaned up: ${item} (temp dir)`);
           }
         } catch (_err) {
           // Ignore errors during cleanup
@@ -270,8 +270,8 @@ describe('CLI Interface Contracts', () => {
 
         if (!templateDir) {
           // Skip this test if template directory not found (CI environment issue)
-          console.log('⚠️  Template directory not found - skipping tool interface test');
-          console.log('🔍 Searched paths:', possibleTemplatePaths);
+          console.log('Template directory not found - skipping tool interface test');
+          console.log('Searched paths:', possibleTemplatePaths);
           return;
         }
 
@@ -292,8 +292,8 @@ describe('CLI Interface Contracts', () => {
           expect(typeof provenanceTool.generateProvenance).toBe('function');
         } catch (error) {
           // Demo files may use modern syntax that Jest can't parse
-          console.log('⚠️  Demo files use modern syntax - skipping interface validation');
-          console.log('💡 This is expected for demo/template files');
+          console.log('Demo files use modern syntax - skipping interface validation');
+          console.log('This is expected for demo/template files');
           return;
         }
       } finally {

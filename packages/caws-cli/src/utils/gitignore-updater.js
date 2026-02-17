@@ -124,7 +124,7 @@ async function updateGitignore(projectRoot, options = {}) {
 
     return true;
   } catch (error) {
-    console.warn(chalk.yellow(`⚠️  Could not update .gitignore: ${error.message}`));
+    console.warn(chalk.yellow(`Could not update .gitignore: ${error.message}`));
     return false;
   }
 }

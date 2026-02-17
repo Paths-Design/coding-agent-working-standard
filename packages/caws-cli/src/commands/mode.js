@@ -23,8 +23,8 @@ const {
 function displayCurrentMode(currentMode) {
   const tier = getTier(currentMode);
 
-  console.log(chalk.bold.cyan('\n🔧 CAWS Current Mode'));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan('\nCAWS Current Mode'));
+  console.log(chalk.cyan('==============================================\n'));
 
   console.log(chalk.bold(`Active Mode: ${tier.icon} ${tier.color(currentMode)}`));
   console.log(chalk.gray(`Description: ${tier.description}`));
@@ -56,8 +56,8 @@ function displayModeDetails(mode) {
   const tierColor = tier.color;
   const icon = tier.icon;
 
-  console.log(chalk.bold.cyan(`\n📋 ${icon} ${tierColor(tier.name)} Mode Details`));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan(`\n${icon} ${tierColor(tier.name)} Mode Details`));
+  console.log(chalk.cyan('=================================================================\n'));
 
   console.log(`${tierColor(tier.name)} - ${tier.description}\n`);
 
@@ -81,7 +81,7 @@ function displayModeDetails(mode) {
   Object.entries(tier.commands)
     .filter(([, available]) => available)
     .forEach(([command]) => {
-      console.log(chalk.gray(`   ✅ caws ${command}`));
+      console.log(chalk.gray(`   caws ${command}`));
     });
 
   const disabledCommands = Object.entries(tier.commands)
@@ -91,7 +91,7 @@ function displayModeDetails(mode) {
   if (disabledCommands.length > 0) {
     console.log(chalk.bold('\nDisabled Commands:'));
     disabledCommands.forEach((command) => {
-      console.log(chalk.gray(`   ❌ caws ${command}`));
+      console.log(chalk.gray(`   caws ${command}`));
     });
   }
 
@@ -111,8 +111,8 @@ async function interactiveModeSelection() {
   });
 
   return new Promise((resolve) => {
-    console.log(chalk.bold.cyan('\n🔧 Select CAWS Complexity Tier'));
-    console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+    console.log(chalk.bold.cyan('\nSelect CAWS Complexity Tier'));
+    console.log(chalk.cyan('==============================================\n'));
 
     const tiers = getAvailableTiers();
     tiers.forEach((tier, index) => {
@@ -180,7 +180,7 @@ async function modeCommand(action, options = {}) {
 
           console.log(
             chalk.green(
-              `✅ Successfully switched to ${getTier(targetMode).icon} ${getTier(targetMode).color(targetMode)} mode`
+              `Successfully switched to ${getTier(targetMode).icon} ${getTier(targetMode).color(targetMode)} mode`
             )
           );
 
@@ -210,8 +210,8 @@ async function modeCommand(action, options = {}) {
           const recommendation = getTierRecommendation(projectInfo);
           const recommendedTier = getTier(recommendation);
 
-          console.log(chalk.bold.cyan('\n🎯 Recommended CAWS Tier'));
-          console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+          console.log(chalk.bold.cyan('\nRecommended CAWS Tier'));
+          console.log(chalk.cyan('==============================================\n'));
 
           console.log(
             `${recommendedTier.icon} ${recommendedTier.color(recommendedTier.name)} - ${recommendedTier.description}`

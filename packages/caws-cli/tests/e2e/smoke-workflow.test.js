@@ -46,7 +46,7 @@ describe('E2E Smoke Tests - Critical User Workflows', () => {
       const projectPath = path.join(testTempDir, testProjectName);
       if (fs.existsSync(projectPath)) {
         fs.rmSync(projectPath, { recursive: true, force: true });
-        console.log(`🧹 Cleaned up: ${testProjectName}`);
+        console.log(`Cleaned up: ${testProjectName}`);
       }
     });
 

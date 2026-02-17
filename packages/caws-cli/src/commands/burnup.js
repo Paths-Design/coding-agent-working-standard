@@ -93,14 +93,14 @@ async function burnupCommand(specFile) {
     let specPath = specFile || path.join('.caws', 'working-spec.yaml');
 
     if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`❌ Spec file not found: ${specPath}`));
+      console.error(chalk.red(`Spec file not found: ${specPath}`));
       process.exit(1);
     }
 
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
-    console.log(chalk.cyan('📊 Generating CAWS budget burn-up report...'));
+    console.log(chalk.cyan('Generating CAWS budget burn-up report...'));
 
     // Derive budget
     const derivedBudget = deriveBudget(spec, path.dirname(specPath));
@@ -121,7 +121,7 @@ async function burnupCommand(specFile) {
       console.log(chalk.gray(`   Analyzing changes since: ${gitStats.base_ref}`));
     } else {
       // Fallback if git analysis fails (not in a repo or no commits)
-      console.log(chalk.yellow('   ⚠️  Could not analyze git history, using zero values'));
+      console.log(chalk.yellow('   Could not analyze git history, using zero values'));
       currentStats = {
         files_changed: 0,
         lines_changed: 0,
@@ -137,7 +137,7 @@ async function burnupCommand(specFile) {
     console.log(report);
 
     // Show detailed breakdown
-    console.log(chalk.gray('\n📈 Detailed Budget Analysis:'));
+    console.log(chalk.gray('\nDetailed Budget Analysis:'));
     console.log(
       chalk.gray(
         `   Baseline (Tier ${spec.risk_tier}): ${derivedBudget.baseline.max_files} files, ${derivedBudget.baseline.max_loc} LOC`
@@ -174,12 +174,12 @@ async function burnupCommand(specFile) {
     );
 
     if (filePercent > 90 || locPercent > 90) {
-      console.log(chalk.yellow('\n⚠️  WARNING: Approaching budget limits'));
+      console.log(chalk.yellow('\nWARNING: Approaching budget limits'));
     } else {
-      console.log(chalk.green('\n✅ Within budget limits'));
+      console.log(chalk.green('\nWithin budget limits'));
     }
   } catch (error) {
-    console.error(chalk.red('❌ Error generating burn-up report:'), error.message);
+    console.error(chalk.red('Error generating burn-up report:'), error.message);
     process.exit(1);
   }
 }

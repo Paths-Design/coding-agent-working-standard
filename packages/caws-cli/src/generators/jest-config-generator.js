@@ -134,7 +134,7 @@ async function configureJestForTypeScript(projectDir = process.cwd(), options = 
   await fs.writeFile(jestConfigPath, jestConfig);
 
   if (!quiet) {
-    console.log(chalk.green('✅ Created jest.config.js'));
+    console.log(chalk.green('Created jest.config.js'));
   }
 
   // Generate test setup file
@@ -143,7 +143,7 @@ async function configureJestForTypeScript(projectDir = process.cwd(), options = 
   await fs.writeFile(setupPath, generateTestSetup());
 
   if (!quiet) {
-    console.log(chalk.green('✅ Created tests/setup.ts'));
+    console.log(chalk.green('Created tests/setup.ts'));
   }
 
   // Update package.json with test script if needed
@@ -163,7 +163,7 @@ async function configureJestForTypeScript(projectDir = process.cwd(), options = 
       await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
 
       if (!quiet) {
-        console.log(chalk.green('✅ Added test scripts to package.json'));
+        console.log(chalk.green('Added test scripts to package.json'));
       }
     }
   }

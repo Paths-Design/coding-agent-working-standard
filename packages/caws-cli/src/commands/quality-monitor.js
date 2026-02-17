@@ -154,17 +154,17 @@ async function qualityMonitorCommand(action, options = {}) {
         context =
           typeof options.context === 'string' ? JSON.parse(options.context) : options.context;
       } catch (e) {
-        console.warn(chalk.yellow('⚠️  Invalid context JSON, ignoring'));
+        console.warn(chalk.yellow('Invalid context JSON, ignoring'));
       }
     }
 
     // Validate action
     const validActions = ['file_saved', 'code_edited', 'test_run'];
     if (!validActions.includes(action)) {
-      console.error(chalk.red(`\n❌ Invalid action: ${action}`));
-      console.log(chalk.blue('\n💡 Valid actions:'));
+      console.error(chalk.red(`\nInvalid action: ${action}`));
+      console.log(chalk.blue('\nValid actions:'));
       validActions.forEach((a) => {
-        console.log(chalk.blue(`   • ${a}`));
+        console.log(chalk.blue(`   - ${a}`));
       });
       process.exit(1);
     }
@@ -173,8 +173,8 @@ async function qualityMonitorCommand(action, options = {}) {
     const analysis = analyzeQualityImpact(action, files, context);
 
     // Display results
-    console.log(chalk.bold('\n🔍 CAWS Quality Monitor\n'));
-    console.log('─'.repeat(60));
+    console.log(chalk.bold('\nCAWS Quality Monitor\n'));
+    console.log('-'.repeat(60));
 
     // Action info
     console.log(chalk.bold(`\nAction: ${action}`));
@@ -184,11 +184,11 @@ async function qualityMonitorCommand(action, options = {}) {
       console.log(chalk.bold(`\nFiles Affected: ${analysis.files_affected}`));
       if (files.length > 0 && files.length <= 10) {
         files.forEach((file) => {
-          console.log(chalk.gray(`   • ${file}`));
+          console.log(chalk.gray(`   - ${file}`));
         });
       } else if (files.length > 10) {
         files.slice(0, 10).forEach((file) => {
-          console.log(chalk.gray(`   • ${file}`));
+          console.log(chalk.gray(`   - ${file}`));
         });
         console.log(chalk.gray(`   ... and ${files.length - 10} more`));
       }
@@ -202,7 +202,7 @@ async function qualityMonitorCommand(action, options = {}) {
           ? chalk.yellow
           : chalk.blue;
 
-    console.log(chalk.bold('\n📊 Quality Impact:'));
+    console.log(chalk.bold('\nQuality Impact:'));
     console.log(impactColor(`   ${analysis.quality_impact}`));
 
     // Risk level
@@ -213,31 +213,31 @@ async function qualityMonitorCommand(action, options = {}) {
           ? chalk.yellow
           : chalk.green;
 
-    console.log(chalk.bold('\n⚠️  Risk Level:'));
+    console.log(chalk.bold('\nRisk Level:'));
     console.log(riskColor(`   ${analysis.risk_level.toUpperCase()}`));
 
     // Project tier
     if (analysis.project_tier) {
-      console.log(chalk.bold(`\n🎯 Project Tier: ${analysis.project_tier}`));
+      console.log(chalk.bold(`\nProject Tier: ${analysis.project_tier}`));
     }
 
     // Quality gates
     if (analysis.quality_gates && analysis.quality_gates.length > 0) {
-      console.log(chalk.bold('\n🚪 Quality Gates to Check:\n'));
+      console.log(chalk.bold('\nQuality Gates to Check:\n'));
       analysis.quality_gates.forEach((gate) => {
         console.log(chalk.gray(`   □ ${gate}`));
       });
     }
 
     // Recommendations
-    console.log(chalk.bold('\n💡 Recommendations:\n'));
+    console.log(chalk.bold('\nRecommendations:\n'));
     analysis.recommendations.forEach((rec, idx) => {
-      const icon = idx === 0 ? '⚡' : '  •';
+      const icon = idx === 0 ? '' : '  -';
       console.log(chalk.blue(`   ${icon} ${rec}`));
     });
 
     // Suggested commands
-    console.log(chalk.bold('\n📚 Suggested Commands:\n'));
+    console.log(chalk.bold('\nSuggested Commands:\n'));
     switch (action) {
       case 'file_saved':
       case 'code_edited':
@@ -251,9 +251,9 @@ async function qualityMonitorCommand(action, options = {}) {
         break;
     }
 
-    console.log('\n' + '─'.repeat(60) + '\n');
+    console.log('\n' + '-'.repeat(60) + '\n');
   } catch (error) {
-    console.error(chalk.red(`\n❌ Quality monitoring failed: ${error.message}`));
+    console.error(chalk.red(`\nQuality monitoring failed: ${error.message}`));
     console.error(chalk.gray(error.stack));
     process.exit(1);
   }

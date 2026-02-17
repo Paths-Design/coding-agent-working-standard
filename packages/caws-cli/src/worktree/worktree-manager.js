@@ -132,8 +132,8 @@ function createWorktree(name, options = {}) {
         stdio: 'pipe',
       });
     } catch (error) {
-      console.warn(chalk.yellow(`⚠️  Sparse checkout setup failed: ${error.message}`));
-      console.warn(chalk.blue('💡 Worktree created but without sparse checkout'));
+      console.warn(chalk.yellow(`Sparse checkout setup failed: ${error.message}`));
+      console.warn(chalk.blue('Worktree created but without sparse checkout'));
     }
   }
 

@@ -133,7 +133,7 @@ async function validateQualityGates(_changeId) {
           }
         } catch {
           // JSON parsing failed, check for error indicators in output
-          if (result.includes('❌') || result.includes('FAIL')) {
+          if (result.includes('') || result.includes('FAIL')) {
             violations.push({ message: 'Quality gates reported failures', output: result });
           }
         }
@@ -141,7 +141,7 @@ async function validateQualityGates(_changeId) {
         // Command failed - check exit code and output
         if (execError.status !== 0) {
           const output = execError.stdout || execError.message;
-          if (output.includes('violations') || output.includes('❌')) {
+          if (output.includes('violations') || output.includes('')) {
             violations.push({ message: 'Quality gates failed', output: output.substring(0, 500) });
           }
         }
@@ -259,7 +259,7 @@ async function archiveChange(change) {
   // Move change folder to archive
   await fs.move(change.path, archivePath);
 
-  console.log(chalk.green(`   ✅ Moved to: ${archivePath}`));
+  console.log(chalk.green(`   Moved to: ${archivePath}`));
 }
 
 /**
@@ -297,9 +297,9 @@ async function updateProvenance(change) {
     await fs.ensureDir(provenanceDir);
     await fs.writeFile(chainPath, JSON.stringify(chain, null, 2));
 
-    console.log(chalk.green(`   ✅ Provenance updated: ${chain.length} total entries`));
+    console.log(chalk.green(`   Provenance updated: ${chain.length} total entries`));
   } catch (error) {
-    console.log(chalk.yellow(`   ⚠️  Could not update provenance: ${error.message}`));
+    console.log(chalk.yellow(`   Could not update provenance: ${error.message}`));
   }
 }
 
@@ -310,15 +310,15 @@ async function updateProvenance(change) {
  * @param {Object} qualityGates - Quality gates result
  */
 function displayArchiveResults(change, validation, qualityGates) {
-  console.log(chalk.bold.cyan(`\n📦 Archiving Change: ${change.id}`));
-  console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  console.log(chalk.bold.cyan(`\nArchiving Change: ${change.id}`));
+  console.log(chalk.cyan('==============================================\n'));
 
   // Validation status
   if (validation.valid) {
-    console.log(chalk.green('✅ Acceptance Criteria'));
+    console.log(chalk.green('Acceptance Criteria'));
     console.log(chalk.gray(`   ${validation.message}`));
   } else {
-    console.log(chalk.red('❌ Acceptance Criteria'));
+    console.log(chalk.red('Acceptance Criteria'));
     console.log(chalk.gray(`   ${validation.message}`));
   }
 
@@ -326,20 +326,20 @@ function displayArchiveResults(change, validation, qualityGates) {
 
   // Quality gates status
   if (qualityGates.valid) {
-    console.log(chalk.green('✅ Quality Gates'));
+    console.log(chalk.green('Quality Gates'));
     console.log(chalk.gray(`   ${qualityGates.message}`));
   } else {
-    console.log(chalk.red('❌ Quality Gates'));
+    console.log(chalk.red('Quality Gates'));
     console.log(chalk.gray(`   ${qualityGates.message}`));
   }
 
   console.log('');
 
   // Archive action
-  console.log(chalk.blue('📂 Archive Actions:'));
-  console.log(chalk.gray('   • Moving change folder to archive'));
-  console.log(chalk.gray('   • Updating provenance chain'));
-  console.log(chalk.gray('   • Generating change summary'));
+  console.log(chalk.blue('Archive Actions:'));
+  console.log(chalk.gray('   - Moving change folder to archive'));
+  console.log(chalk.gray('   - Updating provenance chain'));
+  console.log(chalk.gray('   - Generating change summary'));
 
   console.log('');
 }
@@ -374,7 +374,7 @@ async function archiveCommand(changeId, options = {}) {
           workingSpec = resolved.spec;
         } catch (error) {
           console.log(
-            chalk.yellow(`⚠️  Could not load spec '${options.specId}': ${error.message}`)
+            chalk.yellow(`Could not load spec '${options.specId}': ${error.message}`)
           );
         }
       }
@@ -390,9 +390,9 @@ async function archiveCommand(changeId, options = {}) {
 
       // Check if we should proceed with archival
       if (!validation.valid) {
-        console.log(chalk.yellow('⚠️  Cannot archive: Incomplete acceptance criteria'));
+        console.log(chalk.yellow('Cannot archive: Incomplete acceptance criteria'));
         if (!options.force) {
-          console.log(chalk.yellow('💡 Use --force to archive anyway'));
+          console.log(chalk.yellow('Use --force to archive anyway'));
           return outputResult({
             command: 'archive',
             change: changeId,
@@ -403,9 +403,9 @@ async function archiveCommand(changeId, options = {}) {
       }
 
       if (!qualityGates.valid) {
-        console.log(chalk.yellow('⚠️  Cannot archive: Quality gates not met'));
+        console.log(chalk.yellow('Cannot archive: Quality gates not met'));
         if (!options.force) {
-          console.log(chalk.yellow('💡 Use --force to archive anyway'));
+          console.log(chalk.yellow('Use --force to archive anyway'));
           return outputResult({
             command: 'archive',
             change: changeId,
@@ -416,7 +416,7 @@ async function archiveCommand(changeId, options = {}) {
       }
 
       // Perform archival
-      console.log(chalk.blue('🔄 Performing archival...'));
+      console.log(chalk.blue('Performing archival...'));
 
       // Update metadata with completion timestamp
       change.metadata.completed_at = new Date().toISOString();
@@ -433,7 +433,7 @@ async function archiveCommand(changeId, options = {}) {
       // Update provenance
       await updateProvenance(change);
 
-      console.log(chalk.green(`\n🎉 Successfully archived change: ${changeId}`));
+      console.log(chalk.green(`\nSuccessfully archived change: ${changeId}`));
 
       return outputResult({
         command: 'archive',

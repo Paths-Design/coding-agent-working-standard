@@ -608,7 +608,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
 
     if (autoFix && fixes.length > 0) {
       if (dryRun) {
-        console.log('🔍 Auto-fix preview (dry-run mode):');
+        console.log('Auto-fix preview (dry-run mode):');
         for (const fix of fixes) {
           console.log(`   [WOULD FIX] ${fix.field}`);
           console.log(`      Description: ${fix.description}`);
@@ -619,7 +619,7 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
           console.log('');
         }
       } else {
-        console.log('🔧 Applying auto-fixes...');
+        console.log('Applying auto-fixes...');
         for (const fix of fixes) {
           try {
             const pathParts = fix.field.split('.');
@@ -630,10 +630,10 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
             }
             current[pathParts[pathParts.length - 1]] = fix.value;
             appliedFixes.push(fix);
-            console.log(`   ✅ Fixed ${fix.field}`);
+            console.log(`   Fixed ${fix.field}`);
             console.log(`      ${fix.description}`);
           } catch (error) {
-            console.warn(`   ⚠️  Failed to apply fix for ${fix.field}: ${error.message}`);
+            console.warn(`   Failed to apply fix for ${fix.field}: ${error.message}`);
           }
         }
       }

@@ -21,11 +21,11 @@ const { initializeGlobalSetup } = require('../config');
  */
 async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {}) {
   try {
-    console.log('🔍 Detecting CAWS setup...');
+    console.log('Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
 
     if (setup.hasWorkingSpec) {
-      console.log(`✅ Detected ${setup.setupType} CAWS setup`);
+      console.log(`Detected ${setup.setupType} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
     }
 
@@ -33,16 +33,16 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     const specPath = path.isAbsolute(specFile) ? specFile : path.join(process.cwd(), specFile);
 
     if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`\n❌ Working spec not found: ${specFile}`));
-      console.error(chalk.yellow('💡 Run: caws init to create a working spec'));
+      console.error(chalk.red(`\nWorking spec not found: ${specFile}`));
+      console.error(chalk.yellow('Run: caws init to create a working spec'));
       process.exit(1);
     }
 
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
-    console.log(chalk.blue('\n📊 Evaluating CAWS Quality Standards\n'));
-    console.log('─'.repeat(60));
+    console.log(chalk.blue('\nEvaluating CAWS Quality Standards\n'));
+    console.log('-'.repeat(60));
 
     // Evaluation results
     const results = {
@@ -181,9 +181,9 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     }
 
     // Display results
-    console.log('\n📋 Quality Checks:\n');
+    console.log('\nQuality Checks:\n');
     results.checks.forEach((check) => {
-      const icon = check.status === 'pass' ? '✅' : check.status === 'partial' ? '⚠️' : '❌';
+      const icon = check.status === 'pass' ? '' : check.status === 'partial' ? '' : '';
       const detail = check.detail ? ` (${check.detail})` : '';
       console.log(
         `${icon} ${check.name}: ${check.points}/${results.maxScore / results.checks.length}${detail}`
@@ -203,33 +203,33 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
               ? 'D'
               : 'F';
 
-    console.log('\n' + '─'.repeat(60));
+    console.log('\n' + '-'.repeat(60));
     console.log(
       chalk.bold(
-        `\n📊 Overall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}\n`
+        `\nOverall Score: ${results.score}/${results.maxScore} (${percentage}%) - Grade: ${grade}\n`
       )
     );
 
     // Display warnings
     if (results.warnings.length > 0) {
-      console.log(chalk.yellow('⚠️  Warnings:\n'));
+      console.log(chalk.yellow('Warnings:\n'));
       results.warnings.forEach((warning) => {
-        console.log(chalk.yellow(`   • ${warning}`));
+        console.log(chalk.yellow(`   - ${warning}`));
       });
       console.log();
     }
 
     // Display recommendations
     if (results.recommendations.length > 0) {
-      console.log(chalk.blue('💡 Recommendations:\n'));
+      console.log(chalk.blue('Recommendations:\n'));
       results.recommendations.forEach((rec) => {
-        console.log(chalk.blue(`   • ${rec}`));
+        console.log(chalk.blue(`   - ${rec}`));
       });
       console.log();
     }
 
     // Risk tier specific guidance
-    console.log(chalk.bold(`\n🎯 Risk Tier ${spec.risk_tier} Requirements:\n`));
+    console.log(chalk.bold(`\nRisk Tier ${spec.risk_tier} Requirements:\n`));
 
     const tierRequirements = {
       1: {
@@ -258,7 +258,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     console.log(`   Contract Tests: ${req.contracts}`);
     console.log(`   Code Review: ${req.review}`);
 
-    console.log(chalk.blue('\n📚 Next Steps:\n'));
+    console.log(chalk.blue('\nNext Steps:\n'));
     console.log('   1. Address warnings and recommendations above');
     console.log('   2. Implement acceptance criteria with tests');
     console.log('   3. Run: caws validate to check spec validity');
@@ -268,16 +268,16 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
     // Exit with appropriate code
     if (percentage < 70) {
       console.log(
-        chalk.red('\n⚠️  Quality score below 70% - improvements needed before proceeding\n')
+        chalk.red('\nQuality score below 70% - improvements needed before proceeding\n')
       );
       process.exit(1);
     } else if (percentage < 90) {
-      console.log(chalk.yellow('\n⚠️  Quality score acceptable but improvements recommended\n'));
+      console.log(chalk.yellow('\nQuality score acceptable but improvements recommended\n'));
     } else {
-      console.log(chalk.green('\n✅ Excellent quality score - ready to proceed!\n'));
+      console.log(chalk.green('\nExcellent quality score - ready to proceed!\n'));
     }
   } catch (error) {
-    console.error(chalk.red(`\n❌ Evaluation failed: ${error.message}`));
+    console.error(chalk.red(`\nEvaluation failed: ${error.message}`));
     if (options.verbose) {
       console.error(error.stack);
     }

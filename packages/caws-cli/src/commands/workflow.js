@@ -156,7 +156,7 @@ async function workflowCommand(workflowType, options = {}) {
             ? JSON.parse(options.currentState)
             : options.currentState;
       } catch (e) {
-        console.warn(chalk.yellow('⚠️  Invalid context JSON, ignoring'));
+        console.warn(chalk.yellow('Invalid context JSON, ignoring'));
       }
     }
 
@@ -165,22 +165,22 @@ async function workflowCommand(workflowType, options = {}) {
 
     // Handle errors
     if (guidance.error) {
-      console.error(chalk.red(`\n❌ ${guidance.error}`));
+      console.error(chalk.red(`\n${guidance.error}`));
       if (guidance.available_types) {
-        console.log(chalk.blue('\n💡 Available workflow types:'));
+        console.log(chalk.blue('\nAvailable workflow types:'));
         guidance.available_types.forEach((type) => {
-          console.log(chalk.blue(`   • ${type}`));
+          console.log(chalk.blue(`   - ${type}`));
         });
       }
       if (guidance.total_steps) {
-        console.log(chalk.blue(`\n💡 Valid steps: 1-${guidance.total_steps}`));
+        console.log(chalk.blue(`\nValid steps: 1-${guidance.total_steps}`));
       }
       process.exit(1);
     }
 
     // Display guidance
-    console.log(chalk.bold('\n🔄 CAWS Workflow Guidance\n'));
-    console.log('─'.repeat(60));
+    console.log(chalk.bold('\nCAWS Workflow Guidance\n'));
+    console.log('-'.repeat(60));
     console.log(chalk.bold(`\nWorkflow: ${guidance.workflow_name} (${guidance.workflow_type})`));
     console.log(
       chalk.bold(
@@ -192,33 +192,33 @@ async function workflowCommand(workflowType, options = {}) {
       console.log(chalk.gray(`\nContext: ${guidance.context}`));
     }
 
-    console.log(chalk.bold('\n📋 Guidance:\n'));
+    console.log(chalk.bold('\nGuidance:\n'));
     console.log(`   ${guidance.guidance}`);
 
-    console.log(chalk.bold('\n✅ CAWS Recommendations:\n'));
+    console.log(chalk.bold('\nCAWS Recommendations:\n'));
     guidance.caws_recommendations.forEach((rec) => {
-      console.log(chalk.blue(`   • ${rec}`));
+      console.log(chalk.blue(`   - ${rec}`));
     });
 
     // Show next step if available
     if (guidance.next_step) {
-      console.log(chalk.bold('\n⏭️  Next Step:\n'));
+      console.log(chalk.bold('\nNext Step:\n'));
       console.log(chalk.gray(`   Step ${guidance.next_step}: ${guidance.next_step_description}`));
       console.log(
         chalk.gray(`\n   Run: caws workflow ${workflowType} --step ${guidance.next_step}`)
       );
     } else {
-      console.log(chalk.bold('\n🎉 Workflow Complete!\n'));
+      console.log(chalk.bold('\nWorkflow Complete!\n'));
       console.log(chalk.green('   All steps in this workflow have been completed.'));
-      console.log(chalk.blue('\n   💡 Run: caws evaluate to check final quality'));
+      console.log(chalk.blue('\n   Run: caws evaluate to check final quality'));
     }
 
     // Show all steps for reference
-    console.log(chalk.bold('\n📊 All Steps:\n'));
+    console.log(chalk.bold('\nAll Steps:\n'));
     guidance.all_steps.forEach((stepDesc, idx) => {
       const stepNum = idx + 1;
       const icon =
-        stepNum === guidance.current_step ? '▶️ ' : stepNum < guidance.current_step ? '✅ ' : '⬜ ';
+        stepNum === guidance.current_step ? '' : stepNum < guidance.current_step ? '' : '';
       const color =
         stepNum === guidance.current_step
           ? chalk.bold
@@ -228,9 +228,9 @@ async function workflowCommand(workflowType, options = {}) {
       console.log(color(`   ${icon}${stepNum}. ${stepDesc}`));
     });
 
-    console.log('\n' + '─'.repeat(60) + '\n');
+    console.log('\n' + '-'.repeat(60) + '\n');
   } catch (error) {
-    console.error(chalk.red(`\n❌ Workflow guidance failed: ${error.message}`));
+    console.error(chalk.red(`\nWorkflow guidance failed: ${error.message}`));
     console.error(chalk.gray(error.stack));
     process.exit(1);
   }

@@ -12,27 +12,27 @@ const chalk = require('chalk');
 const SPEC_TYPES = {
   feature: {
     color: chalk.green,
-    icon: '🚀',
+    icon: '',
     description: 'New feature development',
   },
   fix: {
     color: chalk.red,
-    icon: '🔧',
+    icon: '',
     description: 'Bug fixes and patches',
   },
   refactor: {
     color: chalk.blue,
-    icon: '♻️',
+    icon: '',
     description: 'Code refactoring and improvements',
   },
   chore: {
     color: chalk.gray,
-    icon: '🧹',
+    icon: '',
     description: 'Maintenance and cleanup',
   },
   docs: {
     color: chalk.cyan,
-    icon: '📚',
+    icon: '',
     description: 'Documentation updates',
   },
 };

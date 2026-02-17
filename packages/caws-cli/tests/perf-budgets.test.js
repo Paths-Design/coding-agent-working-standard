@@ -70,7 +70,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: CLI should start within budget
       expect(startupTime).toBeLessThan(maxStartupTime);
 
-      console.log(`🚀 CLI startup time: ${startupTime.toFixed(2)}ms (budget: ${maxStartupTime}ms)`);
+      console.log(`CLI startup time: ${startupTime.toFixed(2)}ms (budget: ${maxStartupTime}ms)`);
     });
 
     test('should load help within performance budget', () => {
@@ -91,7 +91,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: Help should load quickly
       expect(helpTime).toBeLessThan(maxHelpTime);
 
-      console.log(`📖 Help load time: ${helpTime.toFixed(2)}ms (budget: ${maxHelpTime}ms)`);
+      console.log(`Help load time: ${helpTime.toFixed(2)}ms (budget: ${maxHelpTime}ms)`);
     });
   });
 
@@ -130,7 +130,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: Project init should complete within budget
       expect(initTime).toBeLessThan(maxInitTime);
 
-      console.log(`⚡ Project init time: ${initTime.toFixed(2)}ms (budget: ${maxInitTime}ms)`);
+      console.log(`Project init time: ${initTime.toFixed(2)}ms (budget: ${maxInitTime}ms)`);
     });
 
     test('should scaffold project within performance budget', () => {
@@ -174,7 +174,7 @@ describe('Performance Budget Tests', () => {
         expect(scaffoldTime).toBeLessThan(maxScaffoldTime);
 
         console.log(
-          `🏗️  Project scaffold time: ${scaffoldTime.toFixed(2)}ms (budget: ${maxScaffoldTime}ms)`
+          `Project scaffold time: ${scaffoldTime.toFixed(2)}ms (budget: ${maxScaffoldTime}ms)`
         );
       } finally {
         process.chdir(__dirname);
@@ -231,9 +231,9 @@ describe('Performance Budget Tests', () => {
         // Performance Contract: Bundle size should stay within budget
         expect(bundleSizeKB).toBeLessThan(maxBundleSizeKB);
 
-        console.log(`📦 Bundle size: ${bundleSizeKB.toFixed(2)}KB (budget: ${maxBundleSizeKB}KB)`);
+        console.log(`Bundle size: ${bundleSizeKB.toFixed(2)}KB (budget: ${maxBundleSizeKB}KB)`);
       } else {
-        console.warn('⚠️  Bundle not found - skipping bundle size check');
+        console.warn('Bundle not found - skipping bundle size check');
       }
     });
 
@@ -253,7 +253,7 @@ describe('Performance Budget Tests', () => {
         // Performance Contract: Critical dependencies should exist
         expect(criticalDependencies.length).toBeGreaterThan(0);
 
-        console.log(`📋 Critical dependencies: ${criticalDependencies.length} found`);
+        console.log(`Critical dependencies: ${criticalDependencies.length} found`);
       }
     });
   });
@@ -263,7 +263,7 @@ describe('Performance Budget Tests', () => {
       // Performance Contract: Core operations should not regress significantly
       // Skip in CI until baseline performance is established
       if (process.env.CI || process.env.GITHUB_ACTIONS) {
-        console.log('⏭️  Skipping performance regression test in CI environment');
+        console.log('Skipping performance regression test in CI environment');
         return;
       }
 

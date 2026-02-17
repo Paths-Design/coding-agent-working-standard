@@ -130,14 +130,14 @@ function listTemplates() {
     categories[template.category].push({ id, ...template });
   }
 
-  console.log(chalk.bold.cyan('\n📦 Available CAWS Templates\n'));
+  console.log(chalk.bold.cyan('\nAvailable CAWS Templates\n'));
 
   // Display by category
   for (const [category, categoryTemplates] of Object.entries(categories)) {
     console.log(chalk.bold.white(`${category}:`));
 
     for (const template of categoryTemplates) {
-      const status = template.available ? chalk.green('✅') : chalk.gray('⏳');
+      const status = template.available ? chalk.green('') : chalk.gray('');
       console.log(`${status} ${chalk.bold(template.id.padEnd(25))} - ${template.description}`);
       console.log(chalk.gray(`   Usage: caws init --template=${template.id} my-project`));
       console.log(chalk.gray(`   Features: ${template.features.join(', ')}`));
@@ -149,10 +149,10 @@ function listTemplates() {
   const totalTemplates = Object.keys(templates).length;
 
   if (totalAvailable < totalTemplates) {
-    console.log(chalk.yellow(`\n⏳ ${totalTemplates - totalAvailable} additional templates in development`));
+    console.log(chalk.yellow(`\n${totalTemplates - totalAvailable} additional templates in development`));
   }
 
-  console.log(chalk.blue('\n📚 Learn more:'));
+  console.log(chalk.blue('\nLearn more:'));
   console.log(chalk.blue('   caws templates --help'));
   console.log(chalk.blue('   docs/guides/template-usage.md'));
 
@@ -168,14 +168,14 @@ function showTemplateInfo(templateId) {
   const template = templates[templateId];
 
   if (!template) {
-    console.error(chalk.red(`\n❌ Template not found: ${templateId}`));
-    console.error(chalk.yellow('\n💡 Available templates:'));
+    console.error(chalk.red(`\nTemplate not found: ${templateId}`));
+    console.error(chalk.yellow('\nAvailable templates:'));
     console.error(chalk.yellow(`   ${Object.keys(templates).join(', ')}`));
-    console.error(chalk.yellow('\n💡 Try: caws templates list'));
+    console.error(chalk.yellow('\nTry: caws templates list'));
     process.exit(1);
   }
 
-  console.log(chalk.bold.cyan(`\n📦 Template: ${template.name}\n`));
+  console.log(chalk.bold.cyan(`\nTemplate: ${template.name}\n`));
   console.log(chalk.white(`Description: ${template.description}`));
   console.log(chalk.white(`Category: ${template.category}`));
   console.log(chalk.white(`Risk Tier: ${template.tier}`));
@@ -187,7 +187,7 @@ function showTemplateInfo(templateId) {
 
   console.log(chalk.bold.white('\nFeatures:'));
   template.features.forEach((feature) => {
-    console.log(chalk.gray(`   • ${feature}`));
+    console.log(chalk.gray(`   - ${feature}`));
   });
 
   console.log(chalk.bold.white('\nUsage:'));
@@ -218,9 +218,9 @@ async function templatesCommand(subcommand = 'list', options = {}) {
 
       case 'info':
         if (!options.name) {
-          console.error(chalk.red('\n❌ Template name required'));
-          console.error(chalk.yellow('💡 Usage: caws templates info <template-name>'));
-          console.error(chalk.yellow('💡 Try: caws templates list to see available templates'));
+          console.error(chalk.red('\nTemplate name required'));
+          console.error(chalk.yellow('Usage: caws templates info <template-name>'));
+          console.error(chalk.yellow('Try: caws templates list to see available templates'));
           process.exit(1);
         }
         showTemplateInfo(options.name);
@@ -230,8 +230,8 @@ async function templatesCommand(subcommand = 'list', options = {}) {
         listTemplates();
     }
   } catch (error) {
-    console.error(chalk.red('\n❌ Error:'), error.message);
-    console.error(chalk.yellow('\n💡 Try: caws templates list'));
+    console.error(chalk.red('\nError:'), error.message);
+    console.error(chalk.yellow('\nTry: caws templates list'));
     process.exit(1);
   }
 }

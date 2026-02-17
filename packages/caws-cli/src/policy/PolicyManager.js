@@ -101,7 +101,7 @@ class PolicyManager {
         // Warn if using legacy location
         if (policyPath.endsWith('.json')) {
           console.warn(
-            '⚠️  Using legacy policy file location: .caws/policy/tier-policy.json\n' +
+            'Using legacy policy file location: .caws/policy/tier-policy.json\n' +
               '   Migrate to .caws/policy.yaml for better compatibility\n' +
               '   Run: caws init --migrate-policy'
           );

@@ -40,7 +40,7 @@ async function sessionCommand(subcommand, options = {}) {
         process.exit(1);
     }
   } catch (error) {
-    console.error(chalk.red(`\u274c ${error.message}`));
+    console.error(chalk.red(error.message));
     process.exit(1);
   }
 }
@@ -54,7 +54,7 @@ function handleStart(options) {
     allowedGlobs = scope.split(',').map((s) => s.trim());
   }
 
-  console.log(chalk.cyan('\ud83d\udccb Starting CAWS session...'));
+  console.log(chalk.cyan('Starting CAWS session...'));
 
   const capsule = startSession({
     role,
@@ -64,7 +64,7 @@ function handleStart(options) {
     intent,
   });
 
-  console.log(chalk.green('\u2705 Session started'));
+  console.log(chalk.green('Session started'));
   console.log(chalk.gray(`   ID:       ${capsule.session_id}`));
   console.log(chalk.gray(`   Role:     ${capsule.role}`));
   console.log(chalk.gray(`   Baseline: ${capsule.base_state.branch} @ ${capsule.base_state.head_rev}`));
@@ -72,7 +72,7 @@ function handleStart(options) {
   if (capsule.base_state.workspace_fingerprint.dirty) {
     console.log(
       chalk.yellow(
-        `   \u26a0\ufe0f  Dirty tree: ${capsule.base_state.workspace_fingerprint.paths_touched.length} file(s) uncommitted`
+        `   Warning: Dirty tree: ${capsule.base_state.workspace_fingerprint.paths_touched.length} file(s) uncommitted`
       )
     );
   }
@@ -119,7 +119,7 @@ function handleCheckpoint(options) {
     knownIssues: knownIssues.length > 0 ? knownIssues : undefined,
   });
 
-  console.log(chalk.green('\u2705 Checkpoint recorded'));
+  console.log(chalk.green('Checkpoint recorded'));
   console.log(chalk.gray(`   Session:  ${capsule.session_id}`));
   console.log(chalk.gray(`   Commits:  ${capsule.work_summary.commits.length}`));
   console.log(chalk.gray(`   Files:    ${capsule.work_summary.paths_touched.length}`));
@@ -145,7 +145,7 @@ function handleEnd(options) {
     riskNotes: riskNotes.length > 0 ? riskNotes : undefined,
   });
 
-  console.log(chalk.green('\u2705 Session ended'));
+  console.log(chalk.green('Session ended'));
   console.log(chalk.gray(`   ID:       ${capsule.session_id}`));
   console.log(chalk.gray(`   Duration: ${formatDuration(capsule.started_at, capsule.ended_at)}`));
   console.log(chalk.gray(`   Commits:  ${capsule.work_summary.commits.length}`));
@@ -154,7 +154,7 @@ function handleEnd(options) {
   if (capsule.handoff.next_actions.length > 0) {
     console.log(chalk.cyan('\n   Handoff:'));
     for (const action of capsule.handoff.next_actions) {
-      console.log(chalk.gray(`     \u2022 ${action}`));
+      console.log(chalk.gray(`     - ${action}`));
     }
   }
 
@@ -178,8 +178,8 @@ function handleList(options) {
     return;
   }
 
-  console.log(chalk.bold.cyan('\ud83d\udccb CAWS Sessions'));
-  console.log(chalk.cyan('\u2501'.repeat(90)));
+  console.log(chalk.bold.cyan('CAWS Sessions'));
+  console.log(chalk.cyan('='.repeat(90)));
   console.log(
     chalk.bold(
       'Status'.padEnd(12) +
@@ -190,7 +190,7 @@ function handleList(options) {
         'Started'
     )
   );
-  console.log(chalk.gray('\u2500'.repeat(90)));
+  console.log(chalk.gray('-'.repeat(90)));
 
   for (const entry of entries) {
     const statusColor =
@@ -219,8 +219,8 @@ function handleShow(options) {
     return;
   }
 
-  console.log(chalk.bold.cyan(`\ud83d\udccb Session: ${capsule.session_id}`));
-  console.log(chalk.cyan('\u2501'.repeat(70)));
+  console.log(chalk.bold.cyan(`Session: ${capsule.session_id}`));
+  console.log(chalk.cyan('='.repeat(70)));
 
   // Identity
   console.log(chalk.bold('\nIdentity'));
@@ -256,7 +256,7 @@ function handleShow(options) {
   if (capsule.verification.tests_run.length > 0) {
     console.log(chalk.bold('\nVerification'));
     for (const t of capsule.verification.tests_run) {
-      const icon = t.status === 'pass' ? '\u2705' : '\u274c';
+      const icon = t.status === 'pass' ? '[PASS]' : '[FAIL]';
       console.log(chalk.gray(`  ${icon} ${t.name}: ${t.status}`));
     }
   }
@@ -273,10 +273,10 @@ function handleShow(options) {
   if (capsule.handoff.next_actions.length > 0 || capsule.handoff.risk_notes.length > 0) {
     console.log(chalk.bold('\nHandoff'));
     for (const action of capsule.handoff.next_actions) {
-      console.log(chalk.cyan(`  \u2022 ${action}`));
+      console.log(chalk.cyan(`  - ${action}`));
     }
     for (const note of capsule.handoff.risk_notes) {
-      console.log(chalk.yellow(`  \u26a0\ufe0f ${note}`));
+      console.log(chalk.yellow(`  Warning: ${note}`));
     }
   }
 

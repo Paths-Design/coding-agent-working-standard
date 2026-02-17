@@ -216,16 +216,16 @@ async function scaffoldProject(options) {
 
     // Check for CAWS setup immediately and exit with helpful message if not found
     if (!setup.hasCAWSDir) {
-      console.log(chalk.red('❌ CAWS not initialized in this project'));
-      console.log(chalk.blue('\n💡 To get started:'));
+      console.log(chalk.red('CAWS not initialized in this project'));
+      console.log(chalk.blue('\nTo get started:'));
       console.log(`   1. Initialize CAWS: ${chalk.cyan('caws init <project-name>')}`);
       console.log(`   2. Or initialize in current directory: ${chalk.cyan('caws init .')}`);
-      console.log(chalk.blue('\n📚 For more help:'));
+      console.log(chalk.blue('\nFor more help:'));
       console.log(`   ${chalk.cyan('caws --help')}`);
       process.exit(1);
     }
 
-    console.log(chalk.cyan(`🔧 Enhancing existing CAWS project: ${projectName}`));
+    console.log(chalk.cyan(`Enhancing existing CAWS project: ${projectName}`));
 
     // Preserve the original template directory from global cawsSetup
     // (needed because detectCAWSSetup from within a new project won't find the template)
@@ -261,12 +261,12 @@ async function scaffoldProject(options) {
       }
 
       if (!setup.templateDir) {
-        console.log(chalk.red(`❌ No template directory available!`));
-        console.log(chalk.blue('💡 To fix this issue:'));
+        console.log(chalk.red(`No template directory available!`));
+        console.log(chalk.blue('To fix this issue:'));
         console.log(`   1. Ensure caws-template package is installed`);
         console.log(`   2. Run from the monorepo root directory`);
         console.log(`   3. Check that CAWS CLI was installed correctly`);
-        console.log(chalk.blue('\n📚 For installation help:'));
+        console.log(chalk.blue('\nFor installation help:'));
         console.log(`   ${chalk.cyan('npm install -g @paths.design/caws-cli')}`);
       }
     }
@@ -275,18 +275,18 @@ async function scaffoldProject(options) {
     cawsSetup = setup;
 
     if (!setup.hasCAWSDir) {
-      console.error(chalk.red('❌ No .caws directory found'));
-      console.error(chalk.blue('💡 Run "caws init <project-name>" first to create a CAWS project'));
+      console.error(chalk.red('No .caws directory found'));
+      console.error(chalk.blue('Run "caws init <project-name>" first to create a CAWS project'));
       process.exit(1);
     }
 
     // Adapt behavior based on setup type
     if (setup.isEnhanced) {
-      console.log(chalk.green('🎯 Enhanced CAWS detected - adding automated publishing'));
+      console.log(chalk.green('Enhanced CAWS detected - adding automated publishing'));
     } else if (setup.isAdvanced) {
-      console.log(chalk.blue('🔧 Advanced CAWS detected - adding missing capabilities'));
+      console.log(chalk.blue('Advanced CAWS detected - adding missing capabilities'));
     } else {
-      console.log(chalk.blue('📋 Basic CAWS detected - enhancing with additional tools'));
+      console.log(chalk.blue('Basic CAWS detected - enhancing with additional tools'));
     }
 
     // Generate provenance for scaffolding operation
@@ -429,7 +429,7 @@ async function scaffoldProject(options) {
       });
 
       // Install quality gates package
-      console.log(chalk.blue('\n📦 Setting up quality gates package...'));
+      console.log(chalk.blue('\nSetting up quality gates package...'));
       try {
         const { execSync } = require('child_process');
 
@@ -473,7 +473,7 @@ async function scaffoldProject(options) {
             stdio: 'inherit',
           });
 
-          console.log(chalk.green('✅ Quality gates files copied and dependencies installed'));
+          console.log(chalk.green('Quality gates files copied and dependencies installed'));
         } else if (fs.existsSync(path.join(currentDir, 'package.json'))) {
           // Regular project - try to install from npm (when published)
           console.log(chalk.gray('   Installing @paths.design/quality-gates package...'));
@@ -484,10 +484,10 @@ async function scaffoldProject(options) {
               cwd: currentDir,
               stdio: 'inherit',
             });
-            console.log(chalk.green('✅ Quality gates package installed from npm'));
+            console.log(chalk.green('Quality gates package installed from npm'));
           } catch (npmError) {
             console.log(
-              chalk.yellow('⚠️  Package not found on npm - quality gates will use local files')
+              chalk.yellow('Package not found on npm - quality gates will use local files')
             );
             console.log(
               chalk.gray(
@@ -507,33 +507,33 @@ async function scaffoldProject(options) {
               const todoAnalyzerDest = path.join(scriptsDir, 'todo-analyzer.mjs');
               await fs.copy(todoAnalyzerSource, todoAnalyzerDest);
               console.log(
-                chalk.green('✅ Copied todo-analyzer.mjs to scripts/ directory (local fallback)')
+                chalk.green('Copied todo-analyzer.mjs to scripts/ directory (local fallback)')
               );
             }
           }
         } else {
           // No package.json - suggest global install or manual setup
-          console.log(chalk.yellow('⚠️  No package.json found - skipping package installation'));
+          console.log(chalk.yellow('No package.json found - skipping package installation'));
           console.log(chalk.gray('   Options:'));
           console.log(
-            chalk.gray('   • Install globally: npm install -g @paths.design/quality-gates')
+            chalk.gray('   - Install globally: npm install -g @paths.design/quality-gates')
           );
           console.log(
             chalk.gray(
-              '   • Create package.json and run: npm install --save-dev @paths.design/quality-gates'
+              '   - Create package.json and run: npm install --save-dev @paths.design/quality-gates'
             )
           );
-          console.log(chalk.gray('   • Use CAWS CLI: caws quality-gates'));
+          console.log(chalk.gray('   - Use CAWS CLI: caws quality-gates'));
         }
 
         console.log(
           chalk.blue(
-            '💡 You can now use: node node_modules/@paths.design/quality-gates/run-quality-gates.mjs'
+            'You can now use: node node_modules/@paths.design/quality-gates/run-quality-gates.mjs'
           )
         );
         console.log(chalk.blue('   Or: caws quality-gates'));
       } catch (error) {
-        console.log(chalk.yellow(`⚠️  Failed to set up quality gates package: ${error.message}`));
+        console.log(chalk.yellow(`Failed to set up quality gates package: ${error.message}`));
         console.log(
           chalk.gray(
             '   You can install manually: npm install --save-dev @paths.design/quality-gates'
@@ -579,18 +579,18 @@ async function scaffoldProject(options) {
         required: false,
       });
     } else if (needsOidc && oidcExists) {
-      console.log(chalk.gray('⏭️  Skipped OIDC_SETUP.md (already exists)'));
+      console.log(chalk.gray('Skipped OIDC_SETUP.md (already exists)'));
     } else if (!needsOidc && !options.minimal) {
       // Inform user that OIDC is available but not needed
       console.log(
-        chalk.blue('ℹ️  OIDC setup skipped (project does not appear to publish packages)')
+        chalk.blue('OIDC setup skipped (project does not appear to publish packages)')
       );
       console.log(chalk.gray('   Add --with-oidc flag if you plan to publish packages later'));
     }
 
     // For enhanced setups, preserve existing tools
     if (setup.isEnhanced) {
-      console.log(chalk.blue('ℹ️  Preserving existing sophisticated CAWS tools'));
+      console.log(chalk.blue('Preserving existing sophisticated CAWS tools'));
     }
 
     let addedCount = 0;
@@ -610,13 +610,13 @@ async function scaffoldProject(options) {
               addedFiles.push(enhancement.name);
             }
           } else {
-            console.log(chalk.green(`✅ Added ${enhancement.description}`));
+            console.log(chalk.green(`Added ${enhancement.description}`));
             addedCount++;
             addedFiles.push(enhancement.name);
           }
         } catch (error) {
           console.warn(
-            chalk.yellow(`⚠️  Custom handler failed for ${enhancement.name}:`),
+            chalk.yellow(`Custom handler failed for ${enhancement.name}:`),
             error.message
           );
         }
@@ -632,7 +632,7 @@ async function scaffoldProject(options) {
 
       if (!sourcePath && !enhancement.sourcePath) {
         console.warn(
-          chalk.yellow(`⚠️  Template directory not available for enhancement: ${enhancement.name}`)
+          chalk.yellow(`Template directory not available for enhancement: ${enhancement.name}`)
         );
         continue;
       }
@@ -643,11 +643,11 @@ async function scaffoldProject(options) {
         if (fs.existsSync(sourcePath)) {
           try {
             await fs.copy(sourcePath, destPath);
-            console.log(chalk.green(`✅ Added ${enhancement.description}`));
+            console.log(chalk.green(`Added ${enhancement.description}`));
             addedCount++;
             addedFiles.push(enhancement.name);
           } catch (copyError) {
-            console.warn(chalk.yellow(`⚠️  Failed to add ${enhancement.name}:`), copyError.message);
+            console.warn(chalk.yellow(`Failed to add ${enhancement.name}:`), copyError.message);
           }
         } else {
           // If source doesn't exist in template, check if it should be a file or directory
@@ -660,19 +660,19 @@ async function scaffoldProject(options) {
               await fs.ensureDir(path.dirname(destPath));
               await fs.writeFile(destPath, '');
               console.log(
-                chalk.yellow(`⚠️  Created empty ${enhancement.description} (template not found)`)
+                chalk.yellow(`Created empty ${enhancement.description} (template not found)`)
               );
               console.log(chalk.gray(`   Template expected at: ${sourcePath}`));
             } else {
               // Create directory for directory-like enhancements
               await fs.ensureDir(destPath);
-              console.log(chalk.green(`✅ Created ${enhancement.description}`));
+              console.log(chalk.green(`Created ${enhancement.description}`));
             }
             addedCount++;
             addedFiles.push(enhancement.name);
           } catch (createError) {
             console.warn(
-              chalk.yellow(`⚠️  Failed to create ${enhancement.name}:`),
+              chalk.yellow(`Failed to create ${enhancement.name}:`),
               createError.message
             );
           }
@@ -686,17 +686,17 @@ async function scaffoldProject(options) {
             } else {
               await fs.ensureDir(destPath);
             }
-            console.log(chalk.blue(`🔄 Updated ${enhancement.description}`));
+            console.log(chalk.blue(`Updated ${enhancement.description}`));
             addedCount++;
             addedFiles.push(enhancement.name);
           } catch (overwriteError) {
             console.warn(
-              chalk.yellow(`⚠️  Failed to update ${enhancement.name}:`),
+              chalk.yellow(`Failed to update ${enhancement.name}:`),
               overwriteError.message
             );
           }
         } else {
-          console.log(`⏭️  Skipped ${enhancement.name} (already exists)`);
+          console.log(`Skipped ${enhancement.name} (already exists)`);
           skippedCount++;
         }
       }
@@ -708,11 +708,11 @@ async function scaffoldProject(options) {
     scaffoldProvenance.results.files_skipped = skippedCount;
 
     // Show summary
-    console.log(chalk.green(`\n🎉 Enhancement completed!`));
-    console.log(chalk.bold(`📊 Summary: ${addedCount} added, ${skippedCount} skipped`));
+    console.log(chalk.green(`\nEnhancement completed!`));
+    console.log(chalk.bold(`Summary: ${addedCount} added, ${skippedCount} skipped`));
 
     if (addedCount > 0) {
-      console.log(chalk.bold('\n📝 Next steps:'));
+      console.log(chalk.bold('\nNext steps:'));
       console.log('1. Review the added files');
 
       // Check if OIDC was added
@@ -745,18 +745,18 @@ async function scaffoldProject(options) {
 
     if (setup.isEnhanced) {
       console.log(
-        chalk.blue('\n🎯 Your enhanced CAWS setup has been improved with automated publishing!')
+        chalk.blue('\nYour enhanced CAWS setup has been improved with automated publishing!')
       );
     }
 
     if (options.force) {
-      console.log(chalk.yellow('\n⚠️  Force mode was used - review changes carefully'));
+      console.log(chalk.yellow('\nForce mode was used - review changes carefully'));
     }
 
     // Update .gitignore to exclude CAWS local runtime files
     const gitignoreUpdated = await updateGitignore(currentDir);
     if (gitignoreUpdated) {
-      console.log(chalk.green('\n✅ Updated .gitignore to exclude CAWS local runtime files'));
+      console.log(chalk.green('\nUpdated .gitignore to exclude CAWS local runtime files'));
       console.log(
         chalk.gray('   Tracked: Specs, policy, waivers, provenance, plans (shared with team)')
       );
@@ -767,19 +767,19 @@ async function scaffoldProject(options) {
     const tools = loadProvenanceTools && loadProvenanceTools();
     if (tools && typeof tools.saveProvenance === 'function') {
       await tools.saveProvenance(scaffoldProvenance, '.agent/scaffold-provenance.json');
-      console.log(chalk.green('✅ Scaffolding provenance saved'));
+      console.log(chalk.green('Scaffolding provenance saved'));
     } else {
-      console.log(chalk.yellow('⚠️  Provenance tools not available - skipping manifest save'));
+      console.log(chalk.yellow('Provenance tools not available - skipping manifest save'));
     }
   } catch (error) {
     // Handle circular reference errors from Commander.js
     if (error.message && error.message.includes('Converting circular structure to JSON')) {
       console.log(
-        chalk.yellow('⚠️  Scaffolding completed with minor issues (circular reference handled)')
+        chalk.yellow('Scaffolding completed with minor issues (circular reference handled)')
       );
-      console.log(chalk.green('✅ CAWS components scaffolded successfully'));
+      console.log(chalk.green('CAWS components scaffolded successfully'));
     } else {
-      console.error(chalk.red('❌ Error during scaffolding:'), error.message);
+      console.error(chalk.red('Error during scaffolding:'), error.message);
       process.exit(1);
     }
   }

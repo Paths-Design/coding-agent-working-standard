@@ -117,7 +117,7 @@ function getStagedFiles() {
 
     return stagedFiles;
   } catch (error) {
-    console.warn(`⚠️  Could not get staged files: ${error.message}`);
+    console.warn(`Could not get staged files: ${error.message}`);
     return [];
   }
 }
@@ -144,7 +144,7 @@ function checkGodObjects(stagedFiles, language = 'rust') {
     return { violations: [], warnings: [], total: 0 };
   }
 
-  console.log(`📁 Found ${files.length} staged ${language} files to check`);
+  console.log(`Found ${files.length} staged ${language} files to check`);
 
   const violations = [];
   const warnings = [];
@@ -173,7 +173,7 @@ function checkGodObjects(stagedFiles, language = 'rust') {
         });
       }
     } catch (error) {
-      console.warn(`⚠️  Could not analyze ${file}: ${error.message}`);
+      console.warn(`Could not analyze ${file}: ${error.message}`);
     }
   }
 
@@ -194,7 +194,7 @@ function checkHiddenTodos(stagedFiles) {
     return { todos: [], blocking: 0, total: 0 };
   }
 
-  console.log(`📁 Found ${supportedFiles.length} staged files to analyze for TODOs`);
+  console.log(`Found ${supportedFiles.length} staged files to analyze for TODOs`);
 
   try {
     // Find TODO analyzer .mjs file (preferred - no Python dependency)
@@ -229,17 +229,17 @@ function checkHiddenTodos(stagedFiles) {
     }
 
     if (!analyzerPath) {
-      console.warn('⚠️  TODO analyzer not found - skipping TODO analysis');
+      console.warn('TODO analyzer not found - skipping TODO analysis');
       const suggestion = getTodoAnalyzerSuggestion(process.cwd());
-      console.warn('💡 Available options for TODO analysis:');
+      console.warn('Available options for TODO analysis:');
       console.warn(suggestion);
       return { todos: [], blocking: 0, total: 0 };
     }
 
     if (usePython) {
-      console.warn('⚠️  Using legacy Python TODO analyzer (deprecated)');
+      console.warn('Using legacy Python TODO analyzer (deprecated)');
       const suggestion = getTodoAnalyzerSuggestion(process.cwd());
-      console.warn('💡 Consider upgrading to Node.js version:');
+      console.warn('Consider upgrading to Node.js version:');
       console.warn(suggestion);
     }
 
@@ -262,7 +262,7 @@ function checkHiddenTodos(stagedFiles) {
       details: result,
     };
   } catch (error) {
-    console.warn(`⚠️  Could not run TODO analysis: ${error.message}`);
+    console.warn(`Could not run TODO analysis: ${error.message}`);
     return { todos: [], blocking: 0, total: 0 };
   }
 }
@@ -275,18 +275,18 @@ function checkHiddenTodos(stagedFiles) {
 function runQualityGates(options = {}) {
   const { languages = ['rust'], checkTodos = true, checkGodObjects = true, ci = false } = options;
 
-  console.log(`🚦 Running Quality Gates${ci ? ' (CI Mode)' : ' - Crisis Response Mode'}`);
+  console.log(`Running Quality Gates${ci ? ' (CI Mode)' : ' - Crisis Response Mode'}`);
   console.log('==================================================');
 
   // Get staged files
   const stagedFiles = getStagedFiles();
 
   if (stagedFiles.length === 0) {
-    console.log('✅ No staged files to analyze');
+    console.log('No staged files to analyze');
     return { passed: true, violations: [], warnings: [] };
   }
 
-  console.log(`📁 Analyzing ${stagedFiles.length} staged files`);
+  console.log(`Analyzing ${stagedFiles.length} staged files`);
 
   const results = {
     passed: true,
@@ -296,37 +296,37 @@ function runQualityGates(options = {}) {
   };
 
   // Check naming conventions
-  console.log('\n🔤 Checking naming conventions...');
-  console.log('   ✅ Naming conventions check passed');
+  console.log('\nChecking naming conventions...');
+  console.log('   Naming conventions check passed');
 
   // Check code freeze compliance
-  console.log('\n🚫 Checking code freeze compliance...');
-  console.log('   ✅ Code freeze compliance check passed');
+  console.log('\nChecking code freeze compliance...');
+  console.log('   Code freeze compliance check passed');
 
   // Check duplication
-  console.log('\n📋 Checking duplication...');
-  console.log('   ✅ No duplication regression detected');
+  console.log('\nChecking duplication...');
+  console.log('   No duplication regression detected');
 
   // Check god objects for each language
   if (checkGodObjects) {
     for (const language of languages) {
-      console.log(`\n🏗️  Checking god objects (${language})...`);
+      console.log(`\nChecking god objects (${language})...`);
       const godObjectResults = checkGodObjects(stagedFiles, language);
 
       results.violations.push(...godObjectResults.violations);
       results.warnings.push(...godObjectResults.warnings);
 
       if (godObjectResults.violations.length > 0) {
-        console.log('   ❌ God object violations detected:');
+        console.log('   God object violations detected:');
         godObjectResults.violations.forEach((violation) => {
           console.log(`      ${violation.file}: ${violation.message}`);
         });
       } else {
-        console.log('   ✅ No blocking god object violations');
+        console.log('   No blocking god object violations');
       }
 
       if (godObjectResults.warnings.length > 0) {
-        console.log('   ⚠️  God object warnings:');
+        console.log('   God object warnings:');
         godObjectResults.warnings.forEach((warning) => {
           console.log(`      ${warning.file}: ${warning.message}`);
         });
@@ -336,22 +336,22 @@ function runQualityGates(options = {}) {
 
   // Check hidden TODOs
   if (checkTodos) {
-    console.log('\n🔍 Checking hidden TODOs...');
+    console.log('\nChecking hidden TODOs...');
     const todoResults = checkHiddenTodos(stagedFiles);
     results.todos = todoResults.total;
 
     if (todoResults.total > 0) {
-      console.log(`   ❌ Found ${todoResults.total} hidden TODOs in staged files`);
-      console.log('   💡 Fix stub implementations and placeholder code before committing');
-      console.log('   📖 See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification');
+      console.log(`   Found ${todoResults.total} hidden TODOs in staged files`);
+      console.log('   Fix stub implementations and placeholder code before committing');
+      console.log('   See docs/PLACEHOLDER-DETECTION-GUIDE.md for classification');
     } else {
-      console.log('   ✅ No critical hidden TODOs found in staged files');
+      console.log('   No critical hidden TODOs found in staged files');
     }
   }
 
   // Summary
   console.log('\n==================================================');
-  console.log('📊 QUALITY GATES RESULTS');
+  console.log('QUALITY GATES RESULTS');
   console.log('==================================================');
 
   const totalViolations = results.violations.length;
@@ -359,7 +359,7 @@ function runQualityGates(options = {}) {
   const totalTodos = results.todos;
 
   if (totalViolations > 0) {
-    console.log(`\n❌ CRITICAL VIOLATIONS (${totalViolations}):`);
+    console.log(`\nCRITICAL VIOLATIONS (${totalViolations}):`);
     results.violations.forEach((violation) => {
       console.log(`   ${violation.file}: ${violation.message}`);
     });
@@ -367,25 +367,25 @@ function runQualityGates(options = {}) {
   }
 
   if (totalWarnings > 0) {
-    console.log(`\n⚠️  WARNINGS (${totalWarnings}):`);
+    console.log(`\nWARNINGS (${totalWarnings}):`);
     results.warnings.forEach((warning) => {
       console.log(`   ${warning.file}: ${warning.message}`);
     });
   }
 
   if (totalTodos > 0) {
-    console.log(`\n🔍 HIDDEN TODOS (${totalTodos}):`);
+    console.log(`\nHIDDEN TODOS (${totalTodos}):`);
     console.log(`   Found ${totalTodos} hidden TODOs in staged files`);
     results.passed = false;
   }
 
   // Final result
   if (results.passed) {
-    console.log('\n✅ ALL QUALITY GATES PASSED');
-    console.log('🎉 Commit allowed - quality maintained!');
+    console.log('\nALL QUALITY GATES PASSED');
+    console.log('Commit allowed - quality maintained!');
   } else {
-    console.log('\n❌ QUALITY GATES FAILED');
-    console.log('🚫 Commit blocked - fix violations above');
+    console.log('\nQUALITY GATES FAILED');
+    console.log('Commit blocked - fix violations above');
   }
 
   return results;

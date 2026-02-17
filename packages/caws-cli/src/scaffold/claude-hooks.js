@@ -46,8 +46,8 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
     const claudeHooksTemplateDir = path.join(claudeTemplateDir, 'hooks');
 
     if (!fs.existsSync(claudeTemplateDir)) {
-      console.warn(chalk.yellow('⚠️  Claude Code hooks templates not found'));
-      console.warn(chalk.blue('💡 Skipping Claude Code hooks setup'));
+      console.warn(chalk.yellow('Claude Code hooks templates not found'));
+      console.warn(chalk.blue('Skipping Claude Code hooks setup'));
       return;
     }
 
@@ -118,7 +118,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
           }
         });
       } catch (error) {
-        console.warn(chalk.yellow('⚠️  Could not merge existing settings:'), error.message);
+        console.warn(chalk.yellow('Could not merge existing settings:'), error.message);
       }
     }
 
@@ -131,15 +131,15 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       await fs.copy(readmePath, path.join(claudeDir, 'README.md'));
     }
 
-    console.log(chalk.green('✅ Claude Code hooks configured'));
+    console.log(chalk.green('Claude Code hooks configured'));
     console.log(chalk.gray(`   Enabled: ${levels.join(', ')}`));
     console.log(
       chalk.gray(`   Scripts: ${Array.from(enabledHooks).length} hook scripts installed`)
     );
-    console.log(chalk.blue('💡 Hooks will activate on next Claude Code session'));
+    console.log(chalk.blue('Hooks will activate on next Claude Code session'));
   } catch (error) {
-    console.error(chalk.yellow('⚠️  Failed to setup Claude Code hooks:'), error.message);
-    console.log(chalk.blue('💡 You can manually copy .claude/ directory later'));
+    console.error(chalk.yellow('Failed to setup Claude Code hooks:'), error.message);
+    console.log(chalk.blue('You can manually copy .claude/ directory later'));
   }
 }
 

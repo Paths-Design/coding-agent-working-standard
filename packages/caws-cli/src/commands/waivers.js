@@ -213,7 +213,7 @@ async function listWaivers(_options) {
   const revokedWaivers = waivers.filter((w) => w.status === 'revoked');
 
   console.log(chalk.blue('\nCAWS Quality Gate Waivers\n'));
-  console.log('─'.repeat(60));
+  console.log('-'.repeat(60));
 
   if (activeWaivers.length > 0) {
     console.log(chalk.green('\nActive Waivers:\n'));
@@ -280,7 +280,7 @@ async function showWaiver(waiverId, _options) {
   const statusLabel = isActive ? chalk.green('Active') : isExpired ? chalk.yellow('Expired') : chalk.red(waiver.status);
 
   console.log(chalk.blue('\nWaiver Details\n'));
-  console.log('─'.repeat(60));
+  console.log('-'.repeat(60));
   console.log(`\nStatus: ${statusLabel}`);
   console.log(`\n${chalk.bold(waiver.title)}`);
   console.log(`   ID: ${waiver.id}`);

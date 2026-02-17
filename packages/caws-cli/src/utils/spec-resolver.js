@@ -62,7 +62,7 @@ async function resolveSpec(options = {}) {
       const content = await fs.readFile(featurePath, 'utf8');
       const spec = yaml.load(content);
 
-      console.log(chalk.green(`✅ Using feature-specific spec: ${specId}`));
+      console.log(chalk.green(`Using feature-specific spec: ${specId}`));
 
       return {
         path: featurePath,
@@ -90,7 +90,7 @@ async function resolveSpec(options = {}) {
       const content = await fs.readFile(singleSpecPath, 'utf8');
       const spec = yaml.load(content);
 
-      console.log(chalk.blue(`📋 Auto-detected single spec: ${singleSpecId}`));
+      console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
 
       return {
         path: singleSpecPath,
@@ -100,7 +100,7 @@ async function resolveSpec(options = {}) {
     }
   } else if (specIds.length > 1) {
     // Multiple specs - require explicit selection with enhanced guidance
-    console.error(chalk.red('❌ Multiple specs detected. Please specify which one:'));
+    console.error(chalk.red('Multiple specs detected. Please specify which one:'));
 
     // Show specs with details
     const specsInfo = [];
@@ -169,7 +169,7 @@ async function resolveSpec(options = {}) {
       return aTypePriority - bTypePriority;
     });
 
-    console.log(chalk.green('\n💡 Quick suggestion:'));
+    console.log(chalk.green('\nQuick suggestion:'));
     console.log(chalk.gray(`   Try: caws <command> --spec-id ${sortedSpecs[0]}`));
 
     // Interactive mode suggestion
@@ -187,7 +187,7 @@ async function resolveSpec(options = {}) {
     const spec = yaml.load(content);
 
     if (warnLegacy) {
-      console.log(chalk.yellow('⚠️  Using legacy working-spec.yaml'));
+      console.log(chalk.yellow('Using legacy working-spec.yaml'));
       console.log(chalk.gray('   For multi-agent workflows, use feature-specific specs:'));
       console.log(chalk.blue('   caws specs create <feature-id>'));
       console.log('');
@@ -298,7 +298,7 @@ async function interactiveSpecSelection(specIds) {
   return new Promise((resolve, reject) => {
     const readline = require('readline');
 
-    console.log(chalk.blue('\n📋 Interactive Spec Selection'));
+    console.log(chalk.blue('\nInteractive Spec Selection'));
     console.log(chalk.gray('Select which spec to use:\n'));
 
     specIds.forEach((id, index) => {
@@ -381,7 +381,7 @@ async function checkScopeConflicts(specIds) {
               ? `   Line ${yamlError.mark.line + 1}, Column ${yamlError.mark.column + 1}\n`
               : '') +
             (yamlError.mark?.snippet ? `   ${yamlError.mark.snippet}\n` : '') +
-            `💡 Fix YAML syntax errors or use 'caws specs create <id>' for proper structure`
+            `Fix YAML syntax errors or use 'caws specs create <id>' for proper structure`
         );
       }
 
@@ -498,7 +498,7 @@ async function suggestMigration() {
   const status = await checkMultiSpecStatus();
 
   if (status.needsMigration) {
-    console.log(chalk.yellow('\n⚠️  Migration Recommended: Single-Spec → Multi-Spec'));
+    console.log(chalk.yellow('\nMigration Recommended: Single-Spec → Multi-Spec'));
     console.log(chalk.gray('   Your project uses the legacy working-spec.yaml'));
     console.log(chalk.gray('   For multi-agent workflows, migrate to feature-specific specs:\n'));
     console.log(chalk.blue('   1. caws specs create <feature-id>'));

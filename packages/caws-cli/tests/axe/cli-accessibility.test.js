@@ -29,7 +29,7 @@ describe('CLI Accessibility Tests', () => {
       }
       fs.mkdirSync(testTempDir, { recursive: true });
     } catch (error) {
-      console.log('⚠️  Accessibility test setup failed:', error.message);
+      console.log('Accessibility test setup failed:', error.message);
       testTempDir = null;
     }
   });
@@ -49,7 +49,7 @@ describe('CLI Accessibility Tests', () => {
   describe('CLI Help Accessibility', () => {
     test('should provide accessible help text structure', () => {
       if (!testTempDir) {
-        console.log('⏭️  Skipping accessibility test - setup failed');
+        console.log('Skipping accessibility test - setup failed');
         return;
       }
 
@@ -151,7 +151,7 @@ describe('CLI Accessibility Tests', () => {
 
           // If it succeeds, it should have sanitized the name with a warning
           if (invalidName === 'test/project' || invalidName === 'test project') {
-            expect(output).toMatch(/sanitized|⚠️/i);
+            expect(output).toMatch(/sanitized|warning/i);
           }
         } catch (error) {
           const errorOutput = (error.stdout || '') + (error.stderr || '');
@@ -159,7 +159,7 @@ describe('CLI Accessibility Tests', () => {
           if (errorOutput) {
             // Accessibility Contract: Each error should provide clear guidance
             expect(errorOutput.length).toBeGreaterThan(10); // Should have meaningful content
-            expect(errorOutput).toMatch(/error|Error|❌|⚠️/i); // Should indicate it's an error or warning
+            expect(errorOutput).toMatch(/error|required|invalid|too long|cannot|exists|sanitized/i); // Should indicate an error or warning
           }
         }
       });

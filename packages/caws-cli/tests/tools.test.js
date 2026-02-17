@@ -17,7 +17,7 @@ function getTemplateToolPath(toolName) {
 
   // Check if we need to create the mock template tools
   if (!fs.existsSync(testToolsDir)) {
-    console.log('🔧 Setting up template tools for testing...');
+    console.log('Setting up template tools for testing...');
     fs.mkdirSync(testToolsDir, { recursive: true });
 
     // Create mock validate.js tool
@@ -30,20 +30,20 @@ const yaml = require('js-yaml');
 
 const specPath = process.argv[2];
 if (!specPath || !fs.existsSync(specPath)) {
-  console.error('❌ Spec file not found:', specPath);
+  console.error('Spec file not found:', specPath);
   process.exit(1);
 }
 
 const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-console.log('✅ Working specification is valid');
+console.log('Working specification is valid');
 console.log('ID:', spec.id || 'N/A');
 console.log('Title:', spec.title || 'N/A');
 console.log('Risk Tier:', spec.risk_tier || 'N/A');
 console.log('Mode:', spec.mode || 'N/A');
-console.log('📊 Scope Analysis:');
+console.log('Scope Analysis:');
 console.log('  IN:', (spec.scope?.in || []).join(', ') || 'none');
 console.log('  OUT:', (spec.scope?.out || []).join(', ') || 'none');
-console.log('📝 Quality Metrics:');
+console.log('Quality Metrics:');
 console.log('  Invariants:', (spec.invariants || []).length);
 console.log('  Acceptance criteria:', (spec.acceptance || []).length);
 process.exit(0);
@@ -59,7 +59,7 @@ const command = args[0];
 
 if (command === 'tier') {
   const tier = parseInt(args[1]) || 1;
-  console.log('📋 Tier ' + tier + ' Policy Analysis:');
+  console.log('Tier ' + tier + ' Policy Analysis:');
   if (tier === 1) {
     console.log('Branch Coverage: ≥90%');
     console.log('Mutation Score: ≥70%');
@@ -86,27 +86,27 @@ if (command === 'tier') {
   const coverage = parseFloat(args[1]);
   const threshold = 0.8;
   if (coverage >= threshold) {
-    console.log('✅ Branch coverage gate passed: ' + coverage + ' >= ' + threshold);
+    console.log('Branch coverage gate passed: ' + coverage + ' >= ' + threshold);
   } else {
-    console.log('❌ Branch coverage gate failed: ' + coverage + ' < ' + threshold);
+    console.log('Branch coverage gate failed: ' + coverage + ' < ' + threshold);
     process.exit(1);
   }
 } else if (command === 'mutation') {
   const score = parseFloat(args[1]);
   const threshold = 0.5;
   if (score >= threshold) {
-    console.log('✅ Mutation gate passed: ' + score + ' >= ' + threshold);
+    console.log('Mutation gate passed: ' + score + ' >= ' + threshold);
   } else {
-    console.log('❌ Mutation gate failed: ' + score + ' < ' + threshold);
+    console.log('Mutation gate failed: ' + score + ' < ' + threshold);
     process.exit(1);
   }
 } else if (command === 'trust') {
   const score = parseInt(args[1]);
   const threshold = 82;
   if (score >= threshold) {
-    console.log('✅ Trust score gate passed: ' + score + ' >= ' + threshold);
+    console.log('Trust score gate passed: ' + score + ' >= ' + threshold);
   } else {
-    console.log('❌ Trust score gate failed: ' + score + ' < ' + threshold);
+    console.log('Trust score gate failed: ' + score + ' < ' + threshold);
     process.exit(1);
   }
 } else if (command === 'budget') {
@@ -115,13 +115,13 @@ if (command === 'tier') {
   const maxFiles = 25;
   const maxLoc = 1000;
   if (files <= maxFiles && loc <= maxLoc) {
-    console.log('✅ Budget gate passed: ' + files + ' files, ' + loc + ' LOC');
+    console.log('Budget gate passed: ' + files + ' files, ' + loc + ' LOC');
   } else {
     if (files > maxFiles) {
-      console.log('❌ Budget gate failed: ' + files + ' files > ' + maxFiles);
+      console.log('Budget gate failed: ' + files + ' files > ' + maxFiles);
     }
     if (loc > maxLoc) {
-      console.log('❌ Budget gate failed: ' + loc + ' LOC > ' + maxLoc);
+      console.log('Budget gate failed: ' + loc + ' LOC > ' + maxLoc);
     }
     process.exit(1);
   }
@@ -164,14 +164,14 @@ if (command === 'bundle') {
     }
   };
   
-  console.log('✅ Attestation saved to .agent/attestation.json');
+  console.log('Attestation saved to .agent/attestation.json');
   console.log(JSON.stringify(bundle, null, 2));
 }
 process.exit(0);
 `
     );
 
-    console.log(`✅ Created mock template tools in ${testToolsDir}`);
+    console.log(`Created mock template tools in ${testToolsDir}`);
   }
 
   if (fs.existsSync(toolPath)) {
@@ -179,7 +179,7 @@ process.exit(0);
   }
 
   const errorMsg = `Cannot find template tool ${toolName}. Expected at ${toolPath}`;
-  console.error(`❌ ${errorMsg}`);
+  console.error(`${errorMsg}`);
   throw new Error(errorMsg);
 }
 
@@ -270,7 +270,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Working specification is valid');
+      expect(output).toContain('Working specification is valid');
     });
 
     test('should show summary for valid spec', () => {
@@ -279,7 +279,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Working specification is valid');
+      expect(output).toContain('Working specification is valid');
     });
 
     test('should fail with missing spec file', () => {
@@ -299,7 +299,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('📋 Tier 1 Policy Analysis:');
+      expect(output).toContain('Tier 1 Policy Analysis:');
       expect(output).toContain('Branch Coverage: ≥90%');
       expect(output).toContain('Mutation Score: ≥70%');
       expect(output).toContain('Max Files: 40');
@@ -313,7 +313,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Branch coverage gate passed: 0.85 >= 0.8');
+      expect(output).toContain('Branch coverage gate passed: 0.85 >= 0.8');
     });
 
     test('should fail coverage gate when below threshold', () => {
@@ -336,7 +336,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Mutation gate passed: 0.6 >= 0.5');
+      expect(output).toContain('Mutation gate passed: 0.6 >= 0.5');
     });
 
     test('should fail mutation gate when below threshold', () => {
@@ -359,7 +359,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Trust score gate passed: 85 >= 82');
+      expect(output).toContain('Trust score gate passed: 85 >= 82');
     });
 
     test('should fail trust score gate when below threshold', () => {
@@ -382,7 +382,7 @@ describe('CAWS Tools', () => {
         encoding: 'utf8',
         cwd: testDir,
       });
-      expect(output).toContain('✅ Budget gate passed: 20 files, 800 LOC');
+      expect(output).toContain('Budget gate passed: 20 files, 800 LOC');
     });
 
     test('should fail budget gate when files exceed limit', () => {
@@ -424,7 +424,7 @@ describe('CAWS Tools', () => {
       });
 
       // Extract JSON from output (it contains status messages before JSON)
-      // The JSON starts after the "✅ Attestation saved..." messages
+      // The JSON starts after the "Attestation saved..." messages
       const jsonMatch = output.match(/(\{[\s\S]*\})/);
       expect(jsonMatch).toBeTruthy();
 

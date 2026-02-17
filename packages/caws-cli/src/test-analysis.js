@@ -607,7 +607,7 @@ async function testAnalysisCommand(subcommand, options = []) {
       case 'find-similar':
         return await handleFindSimilar(options);
       default:
-        console.log(chalk.red('❌ Unknown test-analysis subcommand'));
+        console.log(chalk.red('Unknown test-analysis subcommand'));
         console.log('Available commands:');
         console.log('  assess-budget    - Analyze budget needs for current spec');
         console.log('  analyze-patterns - Show waiver pattern analysis');
@@ -615,7 +615,7 @@ async function testAnalysisCommand(subcommand, options = []) {
         return;
     }
   } catch (error) {
-    console.error(chalk.red('❌ Test analysis failed:'), error.message);
+    console.error(chalk.red('Test analysis failed:'), error.message);
   }
 }
 
@@ -639,8 +639,8 @@ async function handleAssessBudget(options) {
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
-    console.log(chalk.cyan(`📊 Budget Assessment for ${spec.id}`));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(chalk.cyan(`Budget Assessment for ${spec.id}`));
+    console.log('==============================================');
 
     const result = predictor.assessBudget(spec);
 
@@ -650,14 +650,14 @@ async function handleAssessBudget(options) {
         `Historical Analysis: ${assessment.similar_projects_analyzed} similar projects analyzed`
       );
       console.log(
-        `🎯 Recommended Budget: ${assessment.recommended_budget.files} files, ${assessment.recommended_budget.loc} LOC (+${assessment.buffer_applied.files_percent}% buffer)`
+        `Recommended Budget: ${assessment.recommended_budget.files} files, ${assessment.recommended_budget.loc} LOC (+${assessment.buffer_applied.files_percent}% buffer)`
       );
-      console.log(`💡 Rationale: ${assessment.rationale.join('; ')}`);
+      console.log(`Rationale: ${assessment.rationale.join('; ')}`);
 
       if (assessment.risk_factors.length > 0) {
         console.log(
           chalk.yellow(
-            `⚠️ Risk Factors: ${assessment.risk_factors.map((f) => f.description).join('; ')}`
+            `Risk Factors: ${assessment.risk_factors.map((f) => f.description).join('; ')}`
           )
         );
       }
@@ -666,15 +666,15 @@ async function handleAssessBudget(options) {
         assessment.confidence > 0.8 ? 'High' : assessment.confidence > 0.6 ? 'Medium' : 'Low';
       console.log(
         chalk.green(
-          `✅ Confidence: ${confidenceLevel} (${Math.round(assessment.confidence * 100)}%)`
+          `Confidence: ${confidenceLevel} (${Math.round(assessment.confidence * 100)}%)`
         )
       );
     } else {
-      console.log(chalk.yellow(`⚠️ ${result.message}`));
-      console.log('💡 Consider using default tier-based budgeting for now');
+      console.log(chalk.yellow(`${result.message}`));
+      console.log('Consider using default tier-based budgeting for now');
     }
   } catch (error) {
-    console.error(chalk.red('❌ Failed to load spec:'), error.message);
+    console.error(chalk.red('Failed to load spec:'), error.message);
   }
 }
 
@@ -685,8 +685,8 @@ async function handleAnalyzePatterns(options) {
   const chalk = (await import('chalk')).default;
   const learner = new WaiverPatternLearner();
 
-  console.log(chalk.cyan('🔍 Analyzing Waiver Patterns'));
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(chalk.cyan('Analyzing Waiver Patterns'));
+  console.log('==============================================');
 
   const result = learner.analyzePatterns();
 
@@ -696,7 +696,7 @@ async function handleAnalyzePatterns(options) {
     console.log(`Total waivers analyzed: ${patterns.total_waivers}`);
 
     if (patterns.budget_overruns) {
-      console.log('\n💰 Budget Overrun Patterns:');
+      console.log('\nBudget Overrun Patterns:');
       console.log(
         `  Average overrun: ${patterns.budget_overruns.average_overrun_files} files, ${patterns.budget_overruns.average_overrun_loc} LOC`
       );
@@ -712,7 +712,7 @@ async function handleAnalyzePatterns(options) {
     }
 
     if (patterns.common_reasons.length > 0) {
-      console.log('\n📋 Most Common Waiver Reasons:');
+      console.log('\nMost Common Waiver Reasons:');
       patterns.common_reasons.slice(0, 5).forEach((reason) => {
         console.log(
           `  ${reason.reason}: ${reason.count} times (${Math.round(reason.frequency * 100)}%)`
@@ -720,7 +720,7 @@ async function handleAnalyzePatterns(options) {
       });
     }
   } else {
-    console.log(chalk.yellow(`⚠️ ${result.message}`));
+    console.log(chalk.yellow(`${result.message}`));
   }
 }
 
@@ -744,8 +744,8 @@ async function handleFindSimilar(options) {
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
-    console.log(chalk.cyan(`🔍 Finding projects similar to ${spec.id}`));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(chalk.cyan(`Finding projects similar to ${spec.id}`));
+    console.log('==============================================');
 
     const similar = matcher.findSimilarProjects(spec);
 
@@ -758,10 +758,10 @@ async function handleFindSimilar(options) {
         );
       });
     } else {
-      console.log(chalk.yellow('⚠️ No similar projects found'));
+      console.log(chalk.yellow('No similar projects found'));
     }
   } catch (error) {
-    console.error(chalk.red('❌ Failed to load spec:'), error.message);
+    console.error(chalk.red('Failed to load spec:'), error.message);
   }
 }
 
