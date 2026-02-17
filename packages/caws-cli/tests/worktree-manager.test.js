@@ -82,6 +82,36 @@ describe('worktree-manager', () => {
       expect(entry.scope).toBe('src/');
     });
 
+    test('creates worktree with glob scope using --no-cone sparse checkout', () => {
+      // Glob patterns (containing *?[]) require --no-cone mode.
+      // --cone mode rejects them with "specify directories rather than patterns".
+      const entry = createWorktree('glob-scoped', { scope: 'src/**' });
+      expect(entry.scope).toBe('src/**');
+      expect(fs.existsSync(entry.path)).toBe(true);
+
+      // Verify sparse checkout is active and in no-cone mode
+      const sparseConfig = execFileSync(
+        'git',
+        ['config', '--worktree', 'core.sparseCheckoutCone'],
+        { cwd: entry.path, stdio: 'pipe', encoding: 'utf8' }
+      ).trim();
+      expect(sparseConfig).toBe('false');
+    });
+
+    test('creates worktree with directory scope using --cone sparse checkout', () => {
+      const entry = createWorktree('dir-scoped', { scope: 'src/' });
+      expect(entry.scope).toBe('src/');
+      expect(fs.existsSync(entry.path)).toBe(true);
+
+      // Verify sparse checkout is in cone mode
+      const sparseConfig = execFileSync(
+        'git',
+        ['config', '--worktree', 'core.sparseCheckoutCone'],
+        { cwd: entry.path, stdio: 'pipe', encoding: 'utf8' }
+      ).trim();
+      expect(sparseConfig).toBe('true');
+    });
+
     test('creates worktree with specId', () => {
       const entry = createWorktree('with-spec', { specId: 'FEAT-001' });
       expect(entry.specId).toBe('FEAT-001');

@@ -114,13 +114,19 @@ function createWorktree(name, options = {}) {
   // Set up sparse checkout if scope is provided
   if (scope) {
     try {
-      execFileSync('git', ['sparse-checkout', 'init', '--cone'], {
+      // Parse scope patterns (comma-separated)
+      const patterns = scope.split(',').map((p) => p.trim());
+
+      // Detect glob characters — cone mode only accepts directory paths,
+      // not glob patterns like "core/reasoning/**" or "*.py".
+      const hasGlobs = patterns.some((p) => /[*?[\]]/.test(p));
+      const coneFlag = hasGlobs ? '--no-cone' : '--cone';
+
+      execFileSync('git', ['sparse-checkout', 'init', coneFlag], {
         cwd: worktreePath,
         stdio: 'pipe',
       });
 
-      // Parse scope patterns (comma-separated)
-      const patterns = scope.split(',').map((p) => p.trim());
       execFileSync('git', ['sparse-checkout', 'set', ...patterns], {
         cwd: worktreePath,
         stdio: 'pipe',
