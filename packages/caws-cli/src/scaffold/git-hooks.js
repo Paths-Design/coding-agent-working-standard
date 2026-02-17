@@ -249,7 +249,7 @@ QUALITY_GATES_RAN=false
 if [ -f "node_modules/@paths.design/quality-gates/run-quality-gates.mjs" ]; then
   if command -v node >/dev/null 2>&1; then
     echo "📁 Running quality gates package..."
-    if node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --ci; then
+    if CI= node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --context=commit; then
       echo "✅ Quality gates passed"
       QUALITY_GATES_RAN=true
     else
@@ -262,7 +262,7 @@ if [ -f "node_modules/@paths.design/quality-gates/run-quality-gates.mjs" ]; then
 elif [ -f "node_modules/@caws/quality-gates/run-quality-gates.mjs" ]; then
   if command -v node >/dev/null 2>&1; then
     echo "📁 Running quality gates package (local)..."
-    if node node_modules/@caws/quality-gates/run-quality-gates.mjs --ci; then
+    if CI= node node_modules/@caws/quality-gates/run-quality-gates.mjs --context=commit; then
       echo "✅ Quality gates passed"
       QUALITY_GATES_RAN=true
     else

@@ -161,6 +161,39 @@ describe('Git Hooks Bash Syntax Validation', () => {
     });
   });
 
+  describe('Pre-commit Hook Context Scoping', () => {
+    test('should use --context=commit for staged-only quality gates, not --ci', () => {
+      const hookContent = gitHooksModule.generatePreCommitHook({
+        qualityGates: true,
+        stagedOnly: true,
+        projectDir: tempDir,
+      });
+
+      // Pre-commit hooks must scope to staged files only.
+      // --ci forces full-repo scan via listRepoFiles(), which is wrong for pre-commit.
+      expect(hookContent).toContain('--context=commit');
+      expect(hookContent).not.toMatch(/run-quality-gates\.mjs\s+--ci\b/);
+    });
+
+    test('should prefix quality-gates invocation with CI= to prevent env leakage', () => {
+      const hookContent = gitHooksModule.generatePreCommitHook({
+        qualityGates: true,
+        stagedOnly: true,
+        projectDir: tempDir,
+      });
+
+      // CI= prefix prevents CI=1 in a developer's shell from overriding
+      // the explicit --context=commit and triggering full-repo scan.
+      const qgInvocationLines = hookContent.split('\n').filter(
+        (line) => line.includes('run-quality-gates.mjs') && line.includes('node ')
+      );
+      expect(qgInvocationLines.length).toBeGreaterThan(0);
+      qgInvocationLines.forEach((line) => {
+        expect(line).toMatch(/\bCI=\s+node\b/);
+      });
+    });
+  });
+
   describe('Post-commit Hook Syntax', () => {
     test('should generate valid bash syntax', () => {
       const hookContent = gitHooksModule.generatePostCommitHook();
