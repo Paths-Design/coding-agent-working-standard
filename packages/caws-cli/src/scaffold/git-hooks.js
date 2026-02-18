@@ -236,6 +236,82 @@ if [ "$YAML_VALIDATION_FAILED" = true ]; then
   exit 1
 fi
 
+# ===== CAWS Multi-Agent Safety Guard =====
+# Prevents unsafe concurrent operations on shared branches
+
+if [ -d ".caws" ]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+  # Guard 1: Block commits on base branch when parallel worktrees are active
+  if [ -f ".caws/parallel.json" ] && command -v node >/dev/null 2>&1; then
+    PARALLEL_BASE=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('.caws/parallel.json', 'utf8'));
+        console.log(reg.baseBranch || '');
+      } catch(e) { console.log(''); }
+    " 2>/dev/null)
+
+    if [ -n "$PARALLEL_BASE" ] && [ "$CURRENT_BRANCH" = "$PARALLEL_BASE" ]; then
+      AGENT_COUNT=$(node -e "
+        try {
+          var reg = JSON.parse(require('fs').readFileSync('.caws/parallel.json', 'utf8'));
+          console.log((reg.agents || []).length);
+        } catch(e) { console.log('0'); }
+      " 2>/dev/null)
+
+      if [ "$AGENT_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "BLOCKED: Committing to '$CURRENT_BRANCH' while $AGENT_COUNT parallel agent worktree(s) are active."
+        echo "  Active agents are working in isolated worktrees."
+        echo "  Committing to the base branch risks interleaved history and merge conflicts."
+        echo ""
+        echo "  To see parallel status: caws parallel status"
+        echo "  To merge agent work:    caws parallel merge"
+        echo "  To override (unsafe):   git commit --no-verify"
+        exit 1
+      fi
+    fi
+  fi
+
+  # Guard 2: Warn if multiple active sessions exist on same branch
+  if [ -f ".caws/sessions.json" ] && command -v node >/dev/null 2>&1; then
+    ACTIVE_ON_BRANCH=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('.caws/sessions.json', 'utf8'));
+        var count = Object.values(reg.sessions || {}).filter(
+          function(s) { return s.status === 'active' && s.branch === '$CURRENT_BRANCH'; }
+        ).length;
+        console.log(count);
+      } catch(e) { console.log('0'); }
+    " 2>/dev/null)
+
+    if [ "$ACTIVE_ON_BRANCH" -gt 1 ] 2>/dev/null; then
+      echo "WARNING: $ACTIVE_ON_BRANCH active sessions detected on branch '$CURRENT_BRANCH'."
+      echo "  Multiple agents committing to the same branch risks interleaved history."
+      echo "  Consider using worktrees: caws parallel setup <plan-file>"
+      echo ""
+    fi
+  fi
+
+  # Guard 3: Block --amend when HEAD commit may not belong to current session
+  # Detect --amend by inspecting the parent git process arguments
+  AMEND_FLAG=false
+  if command -v ps >/dev/null 2>&1; then
+    PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null || echo "")
+    case "$PARENT_ARGS" in
+      *--amend*) AMEND_FLAG=true ;;
+    esac
+  fi
+
+  if [ "$AMEND_FLAG" = true ] && [ -f ".caws/parallel.json" ]; then
+    echo "BLOCKED: --amend is not allowed during a parallel run."
+    echo "  Amending commits risks rewriting another agent's work."
+    echo "  Create a new commit instead."
+    echo "  To override (dangerous): git commit --amend --no-verify"
+    exit 1
+  fi
+fi
+# ===== End Multi-Agent Safety Guard =====
+
 # Fallback chain for quality gates:
 # 1. Try Node.js script (if exists)
 # 2. Try CAWS CLI

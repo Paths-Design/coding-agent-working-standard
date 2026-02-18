@@ -533,6 +533,19 @@ function findActiveSession(registry) {
   return active.length > 0 ? active[0][0] : null;
 }
 
+/**
+ * Find all active sessions on a specific branch
+ * @param {string} branch - Branch name to search
+ * @returns {Object[]} Active sessions on that branch with id and metadata
+ */
+function findActiveSessionsOnBranch(branch) {
+  const root = getRepoRoot();
+  const registry = loadRegistry(root);
+  return Object.entries(registry.sessions)
+    .filter(([, meta]) => meta.status === 'active' && meta.branch === branch)
+    .map(([id, meta]) => ({ id, ...meta }));
+}
+
 module.exports = {
   startSession,
   checkpointSession,
@@ -545,4 +558,5 @@ module.exports = {
   SESSIONS_DIR,
   REGISTRY_FILE,
   CAPSULE_SCHEMA_VERSION,
+  findActiveSessionsOnBranch,
 };

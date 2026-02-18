@@ -139,6 +139,45 @@ caws worktree prune --max-age 7
 
 See [Worktree Isolation Guide](docs/guides/worktree-isolation.md) for detailed patterns.
 
+### Parallel Orchestration (Required for Multi-Agent Work)
+
+**NEVER have multiple agents commit to the same branch.** When running multiple agents in parallel, you MUST use `caws parallel` to set up isolated workspaces:
+
+```bash
+# 1. Create a plan file defining each agent's workspace
+cat > parallel-plan.yaml <<EOF
+version: 1
+base_branch: main
+agents:
+  - name: agent-auth
+    scope: "src/auth/**,tests/auth/**"
+    spec_id: auth-feature
+    intent: "Implement authentication"
+  - name: agent-payments
+    scope: "src/payments/**"
+    spec_id: payments-feature
+    intent: "Add payment processing"
+EOF
+
+# 2. Set up all worktrees at once
+caws parallel setup parallel-plan.yaml
+
+# 3. Direct each agent to its worktree
+# Agent 1: cd .caws/worktrees/agent-auth/
+# Agent 2: cd .caws/worktrees/agent-payments/
+
+# 4. Monitor progress
+caws parallel status
+
+# 5. Merge when all agents complete
+caws parallel merge --strategy rebase
+
+# 6. Clean up
+caws parallel teardown --delete-branches
+```
+
+The pre-commit hook will block commits to the base branch while parallel worktrees are active, and will block `--amend` during parallel runs to prevent agents from rewriting each other's commits.
+
 ### Mode Management
 
 ```bash

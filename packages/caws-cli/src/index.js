@@ -51,6 +51,7 @@ const { tutorialCommand } = require('./commands/tutorial');
 const { planCommand } = require('./commands/plan');
 const { worktreeCommand } = require('./commands/worktree');
 const { sessionCommand } = require('./commands/session');
+const { parallelCommand } = require('./commands/parallel');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -429,6 +430,37 @@ sessionCmd
   .description('Show session briefing for hooks/startup')
   .action(() => sessionCommand('briefing'));
 
+// Parallel command group
+const parallelCmd = program
+  .command('parallel')
+  .description('Orchestrate parallel multi-agent workspaces');
+
+parallelCmd
+  .command('setup <plan-file>')
+  .description('Create worktrees and sessions from a plan file')
+  .option('--base-branch <branch>', 'Base branch for all worktrees')
+  .action((planFile, options) => parallelCommand('setup', { planFile, ...options }));
+
+parallelCmd
+  .command('status')
+  .description('Show all active parallel worktrees and sessions')
+  .action(() => parallelCommand('status'));
+
+parallelCmd
+  .command('merge')
+  .description('Merge all parallel branches back to base')
+  .option('--strategy <strategy>', 'Merge strategy: rebase, merge, or squash', 'merge')
+  .option('--dry-run', 'Preview merge without executing', false)
+  .option('--force', 'Force merge even with detected conflicts', false)
+  .action((options) => parallelCommand('merge', options));
+
+parallelCmd
+  .command('teardown')
+  .description('Destroy all parallel worktrees')
+  .option('--delete-branches', 'Also delete associated branches', false)
+  .option('--force', 'Force removal even if worktrees are dirty', false)
+  .action((options) => parallelCommand('teardown', options));
+
 // Templates command
 program
   .command('templates [subcommand]')
@@ -699,6 +731,7 @@ program.exitOverride((err) => {
       'tool',
       'worktree',
       'session',
+      'parallel',
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 
@@ -792,6 +825,9 @@ if (require.main === module) {
         'hooks',
         'burnup',
         'tool',
+        'worktree',
+        'session',
+        'parallel',
       ];
       const similar = findSimilarCommand(commandName, validCommands);
 
@@ -802,7 +838,7 @@ if (require.main === module) {
       }
 
       console.error(
-        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks')
+        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, parallel')
       );
       console.error(chalk.yellow('Try: caws --help for full command list'));
       console.error(

@@ -120,9 +120,63 @@ caws worktree destroy experiment-new-orm --delete-branch --force
 | Standard   | Auto-generates a working spec with `--spec-id` |
 | Enterprise | Full spec + audit trail per worktree |
 
-## Merging Work Back
+## Parallel Orchestration
 
-After agents complete their work in worktrees:
+For running multiple agents, `caws parallel` automates the full worktree lifecycle:
+
+### Plan File
+
+Define your agents in a YAML plan file:
+
+```yaml
+# parallel-plan.yaml
+version: 1
+base_branch: main
+merge_strategy: merge    # or: rebase, squash
+agents:
+  - name: agent-auth
+    scope: "src/auth/**,tests/auth/**"
+    spec_id: auth-feature
+    intent: "Implement OAuth2 login flow"
+  - name: agent-payments
+    scope: "src/payments/**,tests/payments/**"
+    spec_id: payments-feature
+    intent: "Add Stripe integration"
+  - name: agent-api
+    scope: "src/api/**,tests/api/**"
+    spec_id: api-refactor
+```
+
+### Workflow
+
+```bash
+# Set up all worktrees at once
+caws parallel setup parallel-plan.yaml
+
+# Monitor progress (shows commits, dirty state, conflicts)
+caws parallel status
+
+# Preview merge before executing
+caws parallel merge --dry-run
+
+# Merge all branches back to base
+caws parallel merge --strategy rebase
+
+# Clean up everything
+caws parallel teardown --delete-branches
+```
+
+### Safety Guards
+
+The pre-commit hook enforces these rules during a parallel run:
+
+- **Base branch protection**: Commits to the base branch are blocked while agent worktrees are active
+- **Amend protection**: `git commit --amend` is blocked during parallel runs to prevent rewriting another agent's commit
+- **Session overlap warning**: A warning is shown when multiple active sessions exist on the same branch
+
+## Merging Work Back (Manual)
+
+If not using `caws parallel`, you can merge manually:
 
 ```bash
 # From the main working directory
