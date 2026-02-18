@@ -242,7 +242,7 @@ fi
 if [ -d ".caws" ]; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
-  # Guard 1: Block commits on base branch when parallel worktrees are active
+  # Guard 1a: Block commits on base branch when parallel worktrees are active (caws parallel)
   if [ -f ".caws/parallel.json" ] && command -v node >/dev/null 2>&1; then
     PARALLEL_BASE=$(node -e "
       try {
@@ -269,6 +269,34 @@ if [ -d ".caws" ]; then
         echo "  To override (unsafe):   git commit --no-verify"
         exit 1
       fi
+    fi
+  fi
+
+  # Guard 1b: Block commits on base branch when ANY active worktrees exist (caws worktree create)
+  if [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+    ACTIVE_WORKTREES=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
+        var wts = Object.values(reg.worktrees || {});
+        var active = wts.filter(function(w) {
+          return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+        });
+        console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(','));
+      } catch(e) { console.log('0:'); }
+    " 2>/dev/null)
+
+    WT_COUNT=$(echo "$ACTIVE_WORKTREES" | cut -d: -f1)
+    WT_NAMES=$(echo "$ACTIVE_WORKTREES" | cut -d: -f2)
+
+    if [ "$WT_COUNT" -gt 0 ] 2>/dev/null; then
+      echo "BLOCKED: Committing to '$CURRENT_BRANCH' while $WT_COUNT active worktree(s) exist: $WT_NAMES"
+      echo "  You should be working in your worktree, not on the base branch."
+      echo "  Committing here risks interleaved history with agents in worktrees."
+      echo ""
+      echo "  To work in your worktree: cd .caws/worktrees/<name>/"
+      echo "  To see worktrees:         caws worktree list"
+      echo "  To override (unsafe):     git commit --no-verify"
+      exit 1
     fi
   fi
 
@@ -302,12 +330,30 @@ if [ -d ".caws" ]; then
     esac
   fi
 
-  if [ "$AMEND_FLAG" = true ] && [ -f ".caws/parallel.json" ]; then
-    echo "BLOCKED: --amend is not allowed during a parallel run."
-    echo "  Amending commits risks rewriting another agent's work."
-    echo "  Create a new commit instead."
-    echo "  To override (dangerous): git commit --amend --no-verify"
-    exit 1
+  if [ "$AMEND_FLAG" = true ]; then
+    BLOCK_AMEND=false
+    if [ -f ".caws/parallel.json" ]; then
+      BLOCK_AMEND=true
+    elif [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+      HAS_ACTIVE_WT=$(node -e "
+        try {
+          var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
+          var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+          console.log(active.length > 0 ? 'yes' : 'no');
+        } catch(e) { console.log('no'); }
+      " 2>/dev/null)
+      if [ "$HAS_ACTIVE_WT" = "yes" ]; then
+        BLOCK_AMEND=true
+      fi
+    fi
+
+    if [ "$BLOCK_AMEND" = true ]; then
+      echo "BLOCKED: --amend is not allowed while worktrees are active."
+      echo "  Amending commits risks rewriting another agent's work."
+      echo "  Create a new commit instead."
+      echo "  To override (dangerous): git commit --amend --no-verify"
+      exit 1
+    fi
   fi
 fi
 # ===== End Multi-Agent Safety Guard =====
