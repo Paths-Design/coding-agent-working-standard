@@ -129,6 +129,32 @@ caws waivers list                 # List active waivers
 caws workflow guidance            # Get workflow-specific guidance
 ```
 
+### Parallel Orchestration
+
+```bash
+caws parallel setup <plan-file> [--base-branch <branch>]
+                                  # Create parallel git worktrees for multiple agents from a plan file
+caws parallel status              # Show status of all active parallel worktrees, agents, and file-level conflicts
+caws parallel merge [--strategy <strategy>] [--dry-run] [--force]
+                                  # Merge all agent branches back to the base branch
+caws parallel teardown [--delete-branches] [--force]
+                                  # Remove parallel worktrees and optionally delete their branches
+```
+
+The `parallel` command coordinates multi-agent development using git worktrees. Each agent works in an isolated worktree on its own branch. A plan file (YAML or JSON) declares the agents, their scope, and the merge strategy.
+
+Example plan file:
+
+```yaml
+baseBranch: main
+mergeStrategy: sequential
+agents:
+  - name: agent-auth
+    scope: src/auth/**
+  - name: agent-api
+    scope: src/api/**
+```
+
 ## Documentation & Examples
 
 ### Comprehensive Guides
