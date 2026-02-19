@@ -175,21 +175,24 @@ if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
     exit 2
   fi
 
-  # Gap 3: Block git merge into base branch while worktrees are active
+  # Allow git merge into base branch (merging completed worktree branches back)
+  # The commit-msg hook enforces the merge(worktree): message format
   if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
-    echo "BLOCKED: Merging into the base branch ($BASE_BRANCH) while worktrees are active." >&2
-    echo "All agents must finish and tear down worktrees before merging." >&2
-    echo "  To see worktrees: caws worktree list" >&2
-    echo "  To tear down:     caws parallel teardown --delete-branches" >&2
-    exit 2
+    echo '{
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "additionalContext": "Merging into base branch ('"$BASE_BRANCH"') while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
+      }
+    }'
+    exit 0
   fi
 
-  # Warn (but don't block) commits on base branch — the pre-commit hook handles blocking
+  # Warn (but don't block) commits on base branch — the pre-commit + commit-msg hooks handle blocking
   if echo "$COMMAND" | grep -qE 'git\s+commit\b' && ! echo "$COMMAND" | grep -qE '--amend'; then
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
-        "additionalContext": "WARNING: You are committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. The pre-commit hook should block this. If you need to commit, work in your worktree instead: cd .caws/worktrees/<name>/"
+        "additionalContext": "WARNING: You are committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. Only merge commits with the format merge(worktree): <description> are allowed. The pre-commit hook will block direct commits."
       }
     }'
     exit 0

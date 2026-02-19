@@ -19,9 +19,18 @@ When multiple agents are working on this project, each agent MUST work in its ow
 - `git stash` / `git stash pop` -- stash is shared across all worktrees; using it can destroy another agent's uncommitted work
 - `git reset --hard` -- discards work that other agents may depend on
 - `git push --force` -- rewrites remote history
-- `git merge <branch>` on the base branch -- wait until all worktrees are torn down
-- Committing to the base branch -- the pre-commit hook will block this, but do not attempt it
+- Direct commits to the base branch -- the pre-commit hook will block this
 - Copying files between your worktree and the main repo directory -- defeats isolation
+
+## Merging worktree branches back to base
+
+Merge commits ARE allowed on the base branch while other worktrees are active. This lets you incrementally merge completed work without waiting for all agents to finish.
+
+1. Destroy the worktree first: `caws worktree destroy <name>`
+2. Switch to the base branch: `git checkout main`
+3. Merge with: `git merge --no-ff <worktree-branch>`
+4. The commit-msg hook enforces the `merge(worktree): <description>` format for non-FF merges
+5. For manual merge commits: `git commit -m "merge(worktree): integrate scenarios work"`
 
 ## Virtual environment in worktrees
 
@@ -37,5 +46,7 @@ If your project uses `.caws/scope.json`, the `designatedVenvPath` field specifie
 
 1. Commit all changes to your worktree branch
 2. Run tests in your worktree to verify
-3. Destroy your worktree with `caws worktree destroy <name> --delete-branch`
+3. Destroy your worktree with `caws worktree destroy <name>`
+4. Merge your branch to base: `git merge --no-ff <branch>` (uses `merge(worktree):` format)
+5. Delete the branch if no longer needed: `git branch -d <branch>`
 4. Only merge back to the base branch after ALL other worktrees are also destroyed

@@ -787,37 +787,85 @@ echo "All quality gates passed - ready to push"
 function generateCommitMsgHook() {
   return `#!/bin/bash
 # CAWS Commit Message Hook
-# Validates commit message format
+# Validates commit message format and enforces merge(worktree): convention
 
 COMMIT_MSG_FILE=$1
 
 # Read the commit message
 COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
 
+# Resolve CAWS root (works from worktrees too)
+CAWS_ROOT="."
+if command -v git >/dev/null 2>&1; then
+  _GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")
+  if [ "$_GIT_COMMON" != ".git" ]; then
+    _CANDIDATE=$(cd "$_GIT_COMMON/.." 2>/dev/null && pwd || echo "")
+    if [ -n "$_CANDIDATE" ] && [ -d "$_CANDIDATE/.caws" ]; then
+      CAWS_ROOT="$_CANDIDATE"
+    fi
+  fi
+fi
+
 # Check if CAWS is initialized
-if [ ! -d ".caws" ]; then
+if [ ! -d "$CAWS_ROOT/.caws" ]; then
   exit 0
 fi
 
+# ===== Worktree merge message guard =====
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo ".git")
+HAS_ACTIVE_WORKTREES=false
+
+if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+  WT_COUNT=$(node -e "
+    try {
+      var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
+      var active = Object.values(reg.worktrees || {}).filter(function(w) {
+        return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+      });
+      console.log(active.length);
+    } catch(e) { console.log('0'); }
+  " 2>/dev/null)
+  if [ "$WT_COUNT" -gt 0 ] 2>/dev/null; then
+    HAS_ACTIVE_WORKTREES=true
+  fi
+fi
+
+if [ "$HAS_ACTIVE_WORKTREES" = true ]; then
+  IS_GIT_MERGE=false
+  if [ -f "$GIT_DIR/MERGE_HEAD" ]; then
+    IS_GIT_MERGE=true
+  fi
+
+  if [[ "$COMMIT_MSG" =~ ^merge\\(worktree\\): ]] || [ "$IS_GIT_MERGE" = true ]; then
+    echo "Merge commit to base branch allowed (worktrees active)"
+  else
+    echo "BLOCKED: Non-merge commit to '$CURRENT_BRANCH' while worktrees are active."
+    echo "  Only merge commits are allowed on the base branch during parallel work."
+    echo ""
+    echo "  For merge commits, use: merge(worktree): <description>"
+    echo "  For git merges:         git merge --no-ff <branch>"
+    echo "  To override (unsafe):   git commit --no-verify"
+    exit 1
+  fi
+fi
+# ===== End worktree merge message guard =====
+
 # Basic commit message validation
 if [ \${#COMMIT_MSG} -lt 10 ]; then
-  echo "Commit message too short \\(minimum 10 characters\\)"
-  echo "Write descriptive commit messages"
+  echo "Commit message too short (minimum 10 characters)"
+  echo "  Write descriptive commit messages"
   exit 1
 fi
 
 # Check for conventional commit format (optional but encouraged)
-if [[ $COMMIT_MSG =~ ^(feat|fix|docs|style|refactor|test|chore)(.+)? ]]; then
-  echo "Conventional commit format detected"
+if [[ $COMMIT_MSG =~ ^(feat|fix|docs|style|refactor|test|chore|merge|perf|wip)(\\(.*\\))?: ]]; then
+  : # valid format
 else
-  echo "Consider using conventional commit format:"
-  echo "   feat: add new feature"
-  echo "   fix: bug fix"
-  echo "   docs: documentation"
-  echo "   style: formatting"
-  echo "   refactor: code restructuring"
-  echo "   test: testing"
-  echo "   chore: maintenance"
+  if [[ ! $COMMIT_MSG =~ ^Merge\\ (branch|remote) ]]; then
+    echo "Consider using conventional commit format:"
+    echo "   feat: / fix: / docs: / refactor: / chore: / merge(worktree):"
+  fi
 fi
 
 echo "Commit message validation passed"
