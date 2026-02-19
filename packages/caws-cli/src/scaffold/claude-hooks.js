@@ -53,7 +53,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
 
     // Map levels to hook scripts
     const hookMapping = {
-      safety: ['block-dangerous.sh', 'scan-secrets.sh'],
+      safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh'],
       quality: ['quality-check.sh', 'validate-spec.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
       audit: ['audit.sh'],
@@ -83,6 +83,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'naming-check.sh',
       'lite-sprawl-check.sh',
       'simplification-guard.sh',
+      'worktree-guard.sh',
     ];
 
     for (const script of allHookScripts) {
@@ -131,6 +132,14 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       await fs.copy(readmePath, path.join(claudeDir, 'README.md'));
     }
 
+    // Copy rules directory if it exists
+    const rulesTemplateDir = path.join(claudeTemplateDir, 'rules');
+    if (fs.existsSync(rulesTemplateDir)) {
+      const rulesDir = path.join(claudeDir, 'rules');
+      await fs.ensureDir(rulesDir);
+      await fs.copy(rulesTemplateDir, rulesDir, { overwrite: false });
+    }
+
     console.log(chalk.green('Claude Code hooks configured'));
     console.log(chalk.gray(`   Enabled: ${levels.join(', ')}`));
     console.log(
@@ -166,6 +175,11 @@ function generateClaudeSettings(levels, _enabledHooks) {
         {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/block-dangerous.sh',
+          timeout: 10,
+        },
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/worktree-guard.sh',
           timeout: 10,
         },
       ],
