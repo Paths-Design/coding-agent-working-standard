@@ -1,6 +1,6 @@
 #!/bin/bash
 # CAWS Worktree Safety Guard for Claude Code
-# Blocks dangerous git operations when parallel worktrees are active
+# Blocks dangerous operations when parallel worktrees are active
 # @author @darianrosebrook
 
 set -euo pipefail
@@ -12,19 +12,71 @@ INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 
-# Only check Bash tool with git commands
+# Only check Bash tool
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Only check git commands
-if ! echo "$COMMAND" | grep -qE '^\s*git\s'; then
+# --- Resolve main repo root ---
+# When running inside a worktree, CLAUDE_PROJECT_DIR points to the
+# worktree directory, but .caws/worktrees.json only exists in the main
+# repo. Use git's common dir to find the true repo root.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+
+if command -v git >/dev/null 2>&1; then
+  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
+  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
+    # Inside a worktree: --git-common-dir returns the main repo's .git path
+    # (e.g., /path/to/repo/.git or /path/to/repo/.git/worktrees/<name>/..)
+    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
+    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
+      PROJECT_DIR="$CANDIDATE"
+    fi
+  fi
+fi
+
+# --- Gap 2: Block sparse checkout before the git-only filter ---
+# This must run before the "only check git commands" early-exit
+if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
+  echo "BLOCKED: --scope (sparse checkout) is not allowed." >&2
+  echo "Sparse checkout breaks cross-module imports in most projects." >&2
+  echo "Use full worktrees without --scope. Scope enforcement comes from" >&2
+  echo "CAWS feature specs and lane discipline, not from hiding files." >&2
+  exit 2
+fi
+
+# --- Gap 5: Block cross-boundary file copies ---
+WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
+if [[ -d "$WORKTREE_BASE" ]]; then
+  if echo "$COMMAND" | grep -qE '\b(cp|mv)\b'; then
+    if echo "$COMMAND" | grep -qF ".caws/worktrees/" || echo "$COMMAND" | grep -qF "$WORKTREE_BASE"; then
+      # Check if the command references both a worktree path and the main repo
+      HAS_WT_PATH=false
+      HAS_MAIN_PATH=false
+      if echo "$COMMAND" | grep -qE '\.caws/worktrees/|'"$(echo "$WORKTREE_BASE" | sed 's/[\/&]/\\&/g')"''; then
+        HAS_WT_PATH=true
+      fi
+      # Check if destination/source is outside the worktree
+      if echo "$COMMAND" | grep -qE "(^|\s)$PROJECT_DIR/[^.]|core/|src/|tests/|packages/" && [[ "$HAS_WT_PATH" == "true" ]]; then
+        HAS_MAIN_PATH=true
+      fi
+      if [[ "$HAS_WT_PATH" == "true" ]] && [[ "$HAS_MAIN_PATH" == "true" ]]; then
+        echo "BLOCKED: Copying files between a worktree and the main repo is forbidden." >&2
+        echo "This bypasses worktree isolation. Work entirely within your worktree." >&2
+        echo "If tests need the main repo's venv, activate it with:" >&2
+        echo "  source $PROJECT_DIR/.venv/bin/activate" >&2
+        exit 2
+      fi
+    fi
+  fi
+fi
+
+# Only check git commands from here on
+if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|)git\s'; then
   exit 0
 fi
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-
-# Determine if worktrees are active
+# --- Determine if worktrees are active ---
 WORKTREES_ACTIVE=false
 PARALLEL_BASE=""
 
@@ -66,7 +118,9 @@ if [[ "$WORKTREES_ACTIVE" != "true" ]]; then
   exit 0
 fi
 
-# Block git commit --amend when worktrees are active
+# --- Block dangerous git operations when worktrees are active ---
+
+# Block git commit --amend
 if echo "$COMMAND" | grep -qE 'git\s+commit\s+.*--amend'; then
   echo "BLOCKED: git commit --amend is not allowed while worktrees are active." >&2
   echo "Amending commits risks rewriting another agent's work." >&2
@@ -74,29 +128,29 @@ if echo "$COMMAND" | grep -qE 'git\s+commit\s+.*--amend'; then
   exit 2
 fi
 
-# Block git stash when worktrees are active (stash is shared across worktrees)
-if echo "$COMMAND" | grep -qE 'git\s+stash'; then
+# Block git stash (shared across worktrees)
+if echo "$COMMAND" | grep -qE 'git\s+stash' && ! echo "$COMMAND" | grep -qE 'git\s+stash\s+list'; then
   echo "BLOCKED: git stash is not allowed while worktrees are active." >&2
   echo "Stash is shared across all worktrees and can capture or destroy another agent's work." >&2
   echo "Commit your changes to your branch instead." >&2
   exit 2
 fi
 
-# Block git reset --hard when worktrees are active
+# Block git reset --hard
 if echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
   echo "BLOCKED: git reset --hard is not allowed while worktrees are active." >&2
   echo "This could discard work that other agents depend on." >&2
   exit 2
 fi
 
-# Block git push --force when worktrees are active
+# Block git push --force
 if echo "$COMMAND" | grep -qE 'git\s+push\s+.*(--force|-f\s)'; then
   echo "BLOCKED: Force push is not allowed while worktrees are active." >&2
   echo "This could rewrite history that other agents have based work on." >&2
   exit 2
 fi
 
-# Get current branch to check base-branch operations
+# --- Base branch protections ---
 CURRENT_BRANCH=$(cd "$PROJECT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Determine the base branch to protect
@@ -112,12 +166,21 @@ if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && co
   " 2>/dev/null || echo "")
 fi
 
-# If we're on the base branch, block push (should be working in a worktree instead)
 if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
+  # Block push from base branch
   if echo "$COMMAND" | grep -qE 'git\s+push'; then
     echo "BLOCKED: Pushing from the base branch ($BASE_BRANCH) while worktrees are active." >&2
     echo "You should be working in a worktree, not on the base branch." >&2
     echo "Use: cd .caws/worktrees/<name>/" >&2
+    exit 2
+  fi
+
+  # Gap 3: Block git merge into base branch while worktrees are active
+  if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
+    echo "BLOCKED: Merging into the base branch ($BASE_BRANCH) while worktrees are active." >&2
+    echo "All agents must finish and tear down worktrees before merging." >&2
+    echo "  To see worktrees: caws worktree list" >&2
+    echo "  To tear down:     caws parallel teardown --delete-branches" >&2
     exit 2
   fi
 

@@ -53,7 +53,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
 
     // Map levels to hook scripts
     const hookMapping = {
-      safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh'],
+      safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh', 'stop-worktree-check.sh'],
       quality: ['quality-check.sh', 'validate-spec.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
       audit: ['audit.sh'],
@@ -84,6 +84,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'lite-sprawl-check.sh',
       'simplification-guard.sh',
       'worktree-guard.sh',
+      'stop-worktree-check.sh',
     ];
 
     for (const script of allHookScripts) {
@@ -192,6 +193,18 @@ function generateClaudeSettings(levels, _enabledHooks) {
         {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/scan-secrets.sh',
+          timeout: 10,
+        },
+      ],
+    });
+
+    // Worktree cleanup reminder on session end
+    settings.hooks.Stop = settings.hooks.Stop || [];
+    settings.hooks.Stop.push({
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/stop-worktree-check.sh',
           timeout: 10,
         },
       ],
