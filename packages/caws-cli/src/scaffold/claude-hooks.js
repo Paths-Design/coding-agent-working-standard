@@ -53,7 +53,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
 
     // Map levels to hook scripts
     const hookMapping = {
-      safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh', 'stop-worktree-check.sh'],
+      safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh', 'worktree-write-guard.sh', 'stop-worktree-check.sh', 'session-caws-status.sh'],
       quality: ['quality-check.sh', 'validate-spec.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
       audit: ['audit.sh'],
@@ -84,7 +84,9 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'lite-sprawl-check.sh',
       'simplification-guard.sh',
       'worktree-guard.sh',
+      'worktree-write-guard.sh',
       'stop-worktree-check.sh',
+      'session-caws-status.sh',
     ];
 
     for (const script of allHookScripts) {
@@ -193,6 +195,30 @@ function generateClaudeSettings(levels, _enabledHooks) {
         {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/scan-secrets.sh',
+          timeout: 10,
+        },
+      ],
+    });
+
+    // Block Write/Edit on base branch while worktrees are active
+    settings.hooks.PreToolUse.push({
+      matcher: 'Write|Edit',
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/worktree-write-guard.sh',
+          timeout: 10,
+        },
+      ],
+    });
+
+    // Worktree status warning on session start
+    settings.hooks.SessionStart = settings.hooks.SessionStart || [];
+    settings.hooks.SessionStart.push({
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/session-caws-status.sh session-start',
           timeout: 10,
         },
       ],
