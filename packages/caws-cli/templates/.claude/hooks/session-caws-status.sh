@@ -71,6 +71,8 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
     echo "  The only operations allowed on $CURRENT_BRANCH are:"
     echo "    - git merge --no-ff <branch> (merge completed worktree work)"
     echo "    - Commits with message: merge(worktree): <description>"
+    echo "    - Commits with message: wip(checkpoint): <description>"
+    echo "      (for committing prior-session dirty files)"
     echo ""
     echo "  Writing or editing files on $CURRENT_BRANCH will be BLOCKED"
     echo "  by the PreToolUse hook while worktrees are active."

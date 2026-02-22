@@ -839,12 +839,16 @@ if [ "$HAS_ACTIVE_WORKTREES" = true ]; then
 
   if [[ "$COMMIT_MSG" =~ ^merge\\(worktree\\): ]] || [ "$IS_GIT_MERGE" = true ]; then
     echo "Merge commit to base branch allowed (worktrees active)"
+  elif [[ "$COMMIT_MSG" =~ ^wip\\(checkpoint\\): ]]; then
+    echo "Checkpoint commit allowed (prior-session cleanup)"
   else
-    echo "BLOCKED: Non-merge commit to '$CURRENT_BRANCH' while worktrees are active."
-    echo "  Only merge commits are allowed on the base branch during parallel work."
+    echo "BLOCKED: Direct commit to '$CURRENT_BRANCH' while worktrees are active."
+    echo "  Only these commit types are allowed on the base branch during parallel work:"
     echo ""
-    echo "  For merge commits, use: merge(worktree): <description>"
-    echo "  For git merges:         git merge --no-ff <branch>"
+    echo "  merge(worktree): <description>     — merge a completed worktree branch"
+    echo "  wip(checkpoint): <description>     — commit prior-session dirty files"
+    echo "  git merge --no-ff <branch>         — git merge commit"
+    echo ""
     echo "  To override (unsafe):   git commit --no-verify"
     exit 1
   fi

@@ -19,7 +19,7 @@ When multiple agents are working on this project, each agent MUST work in its ow
 - `git stash` / `git stash pop` -- stash is shared across all worktrees; using it can destroy another agent's uncommitted work
 - `git reset --hard` -- discards work that other agents may depend on
 - `git push --force` -- rewrites remote history
-- Direct commits to the base branch -- the pre-commit hook will block this
+- Direct commits to the base branch -- only `merge(worktree):` and `wip(checkpoint):` formats are allowed
 - Copying files between your worktree and the main repo directory -- defeats isolation
 
 ## Merging worktree branches back to base
