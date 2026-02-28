@@ -206,6 +206,7 @@ function createWorktree(name, options = {}) {
     baseBranch: base,
     scope: scope || null,
     specId: specId || null,
+    owner: options.owner || process.env.CLAUDE_SESSION_ID || null,
     createdAt: new Date().toISOString(),
     status: 'active',
   };
@@ -276,27 +277,32 @@ function destroyWorktree(name, options = {}) {
     throw new Error(`Worktree '${name}' not found in registry`);
   }
 
-  // Remove git worktree
-  try {
-    const args = ['worktree', 'remove'];
-    if (force) args.push('--force');
-    args.push(entry.path);
-    execFileSync('git', args, { cwd: root, stdio: 'pipe' });
-  } catch (error) {
-    if (force) {
-      // Force cleanup: remove directory manually
-      if (fs.existsSync(entry.path)) {
+  // Remove git worktree — handle already-deleted directories gracefully
+  const dirExists = fs.existsSync(entry.path);
+  if (dirExists) {
+    try {
+      const args = ['worktree', 'remove'];
+      if (force) args.push('--force');
+      args.push(entry.path);
+      execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+    } catch (error) {
+      if (force) {
+        // Force cleanup: remove directory manually
         fs.removeSync(entry.path);
+      } else {
+        throw new Error(`Failed to remove worktree: ${error.message}. Use --force to override.`);
       }
-      // Prune git worktree list
-      try {
-        execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'pipe' });
-      } catch {
-        // Non-fatal
-      }
-    } else {
-      throw new Error(`Failed to remove worktree: ${error.message}. Use --force to override.`);
     }
+  } else {
+    // Directory already gone — just clean up git's tracking
+    console.log(`   Worktree directory already removed, cleaning up registry`);
+  }
+
+  // Always prune git's worktree list to stay in sync
+  try {
+    execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'pipe' });
+  } catch {
+    // Non-fatal
   }
 
   // Optionally delete branch
@@ -337,15 +343,19 @@ function pruneWorktrees(options = {}) {
   for (const [name, entry] of Object.entries(registry.worktrees)) {
     const created = new Date(entry.createdAt);
     const ageDays = (now - created) / (1000 * 60 * 60 * 24);
+    const dirExists = fs.existsSync(entry.path);
 
     const shouldPrune =
+      // Always prune destroyed entries
       entry.status === 'destroyed' ||
-      (!fs.existsSync(entry.path) && ageDays > maxAgeDays) ||
-      (maxAgeDays === 0 && entry.status === 'destroyed');
+      // Prune active entries whose directory is gone (filesystem-registry desync)
+      (entry.status === 'active' && !dirExists) ||
+      // Prune old missing entries
+      (!dirExists && ageDays > maxAgeDays);
 
     if (shouldPrune) {
       // Clean up filesystem if still exists
-      if (fs.existsSync(entry.path)) {
+      if (dirExists) {
         try {
           execFileSync('git', ['worktree', 'remove', '--force', entry.path], {
             cwd: root,
