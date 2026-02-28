@@ -1,6 +1,7 @@
 #!/bin/bash
 # CAWS Scope Guard Hook for Claude Code
-# Validates file edits against the working spec's scope boundaries
+# Validates file edits against scope boundaries from working-spec + feature specs
+# Specs with terminal status (completed, closed, archived) are skipped
 # @author @darianrosebrook
 
 set -euo pipefail
@@ -25,8 +26,8 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 SPEC_FILE="$PROJECT_DIR/.caws/working-spec.yaml"
 SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
 
-# Check if spec file or scope.json exists
-if [[ ! -f "$SPEC_FILE" ]] && [[ ! -f "$SCOPE_FILE" ]]; then
+# Check if any spec infrastructure exists
+if [[ ! -f "$SPEC_FILE" ]] && [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$PROJECT_DIR/.caws/specs" ]]; then
   exit 0
 fi
 
@@ -119,7 +120,9 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
   fi
 fi
 
-# Use Node.js to parse YAML and check scope
+# Use Node.js to parse YAML and check scope across working spec + active feature specs
+SPECS_DIR="$PROJECT_DIR/.caws/specs"
+
 if command -v node >/dev/null 2>&1; then
   SCOPE_CHECK=$(node -e "
     const yaml = require('js-yaml');
@@ -127,26 +130,67 @@ if command -v node >/dev/null 2>&1; then
     const path = require('path');
 
     try {
-      const spec = yaml.load(fs.readFileSync('$SPEC_FILE', 'utf8'));
       const filePath = '$REL_PATH';
 
-      // Check if file is explicitly out of scope
-      const outOfScope = spec.scope?.out || [];
-      for (const pattern of outOfScope) {
-        // Simple glob-like matching
-        const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
-        if (regex.test(filePath)) {
-          console.log('out_of_scope:' + pattern);
-          process.exit(0);
+      // Terminal statuses: specs that are done — scope no longer enforced
+      const TERMINAL = new Set(['completed', 'closed', 'archived']);
+
+      // Smart allowlist: root-level files, .caws/, .claude/ always pass
+      if (!filePath.includes('/') || filePath.startsWith('.caws/') || filePath.startsWith('.claude/')) {
+        console.log('in_scope');
+        process.exit(0);
+      }
+
+      // Collect all active specs (working-spec + feature specs)
+      const specs = [];
+
+      // Load working-spec.yaml if present
+      const mainSpec = '$SPEC_FILE';
+      if (fs.existsSync(mainSpec)) {
+        try {
+          const s = yaml.load(fs.readFileSync(mainSpec, 'utf8'));
+          if (s && !TERMINAL.has(s.status)) {
+            specs.push({ source: 'working-spec', spec: s });
+          }
+        } catch (_) {}
+      }
+
+      // Load feature specs from .caws/specs/
+      const specsDir = '$SPECS_DIR';
+      if (fs.existsSync(specsDir)) {
+        for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+          try {
+            const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
+            if (s && !TERMINAL.has(s.status)) {
+              specs.push({ source: f, spec: s });
+            }
+          } catch (_) {}
         }
       }
 
-      // Check if file is in scope (if scope is explicitly defined)
-      const inScope = spec.scope?.in || [];
-      if (inScope.length > 0) {
+      // No active specs — allow everything
+      if (specs.length === 0) {
+        console.log('in_scope');
+        process.exit(0);
+      }
+
+      // Check scope.out across ALL active specs — any match blocks
+      for (const { source, spec } of specs) {
+        for (const pattern of (spec.scope?.out || [])) {
+          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          if (regex.test(filePath)) {
+            console.log('out_of_scope:' + source + ':' + pattern);
+            process.exit(0);
+          }
+        }
+      }
+
+      // Union all scope.in patterns — file must match at least one
+      const allInScope = specs.flatMap(({ spec }) => spec.scope?.in || []);
+      if (allInScope.length > 0) {
         let found = false;
-        for (const pattern of inScope) {
-          const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
+        for (const pattern of allInScope) {
+          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
           if (regex.test(filePath)) {
             found = true;
             break;
@@ -165,12 +209,14 @@ if command -v node >/dev/null 2>&1; then
   " 2>&1)
 
   if [[ "$SCOPE_CHECK" == out_of_scope:* ]]; then
-    PATTERN="${SCOPE_CHECK#out_of_scope:}"
+    DETAIL="${SCOPE_CHECK#out_of_scope:}"
+    SOURCE="${DETAIL%%:*}"
+    PATTERN="${DETAIL#*:}"
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is marked as out-of-scope in the working spec (pattern: '"$PATTERN"'). Editing it may cause scope creep. Please confirm this edit is intentional."
+        "permissionDecisionReason": "This file ('"$REL_PATH"') is marked as out-of-scope in '"$SOURCE"' (pattern: '"$PATTERN"'). Editing it may cause scope creep. Please confirm this edit is intentional."
       }
     }'
     exit 0
@@ -181,7 +227,7 @@ if command -v node >/dev/null 2>&1; then
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is not in the defined scope of the working spec. Editing it may cause scope creep. Please confirm this edit is intentional."
+        "permissionDecisionReason": "This file ('"$REL_PATH"') is not in the defined scope of any active spec. Editing it may cause scope creep. Please confirm this edit is intentional."
       }
     }'
     exit 0

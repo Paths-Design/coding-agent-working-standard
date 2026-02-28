@@ -510,9 +510,10 @@ async function displayVisualStatus(data, currentMode) {
     console.log(chalk.green(`Specs System (${specs.length} specs)`));
 
     // Show active specs first
-    const activeSpecs = specs.filter((s) => s.status === 'active');
+    const activeSpecs = specs.filter((s) => s.status === 'active' || s.status === 'in_progress');
     const draftSpecs = specs.filter((s) => s.status === 'draft');
     const completedSpecs = specs.filter((s) => s.status === 'completed');
+    const closedSpecs = specs.filter((s) => s.status === 'closed' || s.status === 'archived');
 
     if (activeSpecs.length > 0) {
       console.log(
@@ -543,10 +544,19 @@ async function displayVisualStatus(data, currentMode) {
         });
       }
     }
+    if (closedSpecs.length > 0) {
+      console.log(
+        chalk.gray(
+          `   Closed: ${closedSpecs.length} spec${closedSpecs.length > 1 ? 's' : ''}`
+        )
+      );
+    }
 
-    // Overall specs progress
+    // Overall specs progress (completed + closed both count as done)
     const totalSpecs = specs.length;
-    const completedSpecsCount = specs.filter((s) => s.status === 'completed').length;
+    const completedSpecsCount = specs.filter((s) =>
+      s.status === 'completed' || s.status === 'closed' || s.status === 'archived'
+    ).length;
     const activeSpecsCount = specs.filter((s) => s.status === 'active').length;
     const progressPercentage =
       totalSpecs > 0 ? Math.round((completedSpecsCount / totalSpecs) * 100) : 0;

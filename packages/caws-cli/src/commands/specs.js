@@ -363,6 +363,16 @@ async function updateSpec(id, updates = {}) {
     return false;
   }
 
+  // Validate status if being updated
+  if (updates.status) {
+    const { SPEC_STATUSES } = require('../constants/spec-types');
+    if (!SPEC_STATUSES[updates.status]) {
+      throw new Error(
+        `Invalid status '${updates.status}'. Valid values: ${Object.keys(SPEC_STATUSES).join(', ')}`
+      );
+    }
+  }
+
   // Apply updates
   const updatedSpec = {
     ...spec,
@@ -537,6 +547,30 @@ async function deleteSpec(id) {
 }
 
 /**
+ * Close a spec (sets status to 'closed', removing scope enforcement).
+ * @param {string} id - Spec identifier
+ * @returns {Promise<boolean>} Success status
+ */
+async function closeSpec(id) {
+  const spec = await loadSpec(id);
+  if (!spec) {
+    return false;
+  }
+
+  const currentStatus = spec.status || 'draft';
+  if (currentStatus === 'closed') {
+    console.log(chalk.yellow(`Spec '${id}' is already closed.`));
+    return true;
+  }
+  if (currentStatus === 'archived') {
+    console.log(chalk.yellow(`Spec '${id}' is archived and cannot be closed.`));
+    return false;
+  }
+
+  return await updateSpec(id, { status: 'closed' });
+}
+
+/**
  * Display specs in a formatted table
  * @param {Array} specs - Array of spec objects
  */
@@ -554,7 +588,7 @@ function displaySpecsTable(specs) {
   console.log(chalk.gray('-'.repeat(80)));
 
   // Sort specs by type and status priority
-  const statusPriority = { active: 0, draft: 1, completed: 2, archived: 3 };
+  const statusPriority = { active: 0, draft: 1, completed: 2, closed: 3, archived: 4 };
   const sortedSpecs = specs.sort((a, b) => {
     const typeDiff = a.type.localeCompare(b.type);
     if (typeDiff !== 0) return typeDiff;
@@ -1001,6 +1035,24 @@ async function specsCommand(action, options = {}) {
           });
         }
 
+        case 'close': {
+          if (!options.id) {
+            throw new Error('Spec ID is required. Usage: caws specs close <id>');
+          }
+
+          const closed = await closeSpec(options.id);
+          if (!closed) {
+            throw new Error(`Could not close spec '${options.id}'`);
+          }
+
+          console.log(chalk.green(`Closed spec: ${options.id} -- scope restrictions removed`));
+
+          return outputResult({
+            command: 'specs close',
+            spec: options.id,
+          });
+        }
+
         case 'types': {
           console.log(chalk.bold.cyan('\nAvailable Spec Types'));
           console.log(chalk.cyan('==============================================\n'));
@@ -1019,7 +1071,7 @@ async function specsCommand(action, options = {}) {
 
         default:
           throw new Error(
-            `Unknown specs action: ${action}. Use: list, create, show, update, delete, conflicts, migrate, types`
+            `Unknown specs action: ${action}. Use: list, create, show, update, delete, close, conflicts, migrate, types`
           );
       }
     },
@@ -1037,6 +1089,7 @@ module.exports = {
   loadSpec,
   updateSpec,
   deleteSpec,
+  closeSpec,
   displaySpecsTable,
   displaySpecDetails,
   askConflictResolution,

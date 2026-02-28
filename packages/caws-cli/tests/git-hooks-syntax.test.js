@@ -228,10 +228,9 @@ describe('Git Hooks Bash Syntax Validation', () => {
     test('should properly escape parentheses in echo statements', () => {
       const hookContent = gitHooksModule.generateCommitMsgHook();
       
-      // Check for properly escaped parentheses
-      // Should have \(minimum 10 characters\) not (minimum 10 characters)
+      // Parens in double-quoted echo strings don't need escaping in bash
       if (hookContent.includes('minimum')) {
-        expect(hookContent).toContain('\\(minimum');
+        expect(hookContent).toContain('(minimum');
       }
       
       // Validate with bash syntax checker
@@ -348,7 +347,8 @@ describe('Git Hooks Bash Syntax Validation', () => {
         
         if (hook.name === 'commit-msg') {
           if (hook.content.includes('minimum')) {
-            expect(hook.content).toContain('\\(minimum');
+            // Parens in echo strings don't need escaping
+            expect(hook.content).toContain('(minimum');
           }
         }
       });

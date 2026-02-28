@@ -264,7 +264,7 @@ specsCmd
 specsCmd
   .command('update <id>')
   .description('Update spec properties')
-  .option('-s, --status <status>', 'Spec status (draft, active, completed)')
+  .option('-s, --status <status>', 'Spec status (draft, active, in_progress, completed, closed, archived)')
   .option('--title <title>', 'Spec title')
   .option('--description <desc>', 'Spec description')
   .action((id, options) => specsCommand('update', { id, ...options }));
@@ -273,6 +273,11 @@ specsCmd
   .command('delete <id>')
   .description('Delete a spec')
   .action((id) => specsCommand('delete', { id }));
+
+specsCmd
+  .command('close <id>')
+  .description('Close a completed spec (removes scope enforcement)')
+  .action((id) => specsCommand('close', { id }));
 
 specsCmd
   .command('conflicts')

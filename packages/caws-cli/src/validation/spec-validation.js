@@ -112,6 +112,22 @@ const validateWorkingSpec = (spec, _options = {}) => {
       };
     }
 
+    // Validate status field if present
+    if (spec.status) {
+      const { SPEC_STATUSES } = require('../constants/spec-types');
+      if (!SPEC_STATUSES[spec.status]) {
+        return {
+          valid: false,
+          errors: [
+            {
+              instancePath: '/status',
+              message: `Invalid status '${spec.status}'. Valid values: ${Object.keys(SPEC_STATUSES).join(', ')}`,
+            },
+          ],
+        };
+      }
+    }
+
     // Validate experimental mode
     if (spec.experimental_mode) {
       if (typeof spec.experimental_mode !== 'object') {
