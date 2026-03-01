@@ -151,7 +151,11 @@ if echo "$COMMAND" | grep -qE 'git\s+push\s+.*(--force|-f\s)'; then
 fi
 
 # --- Base branch protections ---
-CURRENT_BRANCH=$(cd "$PROJECT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+# Use the agent's actual working directory (CLAUDE_PROJECT_DIR), not the resolved
+# main repo root (PROJECT_DIR). In a worktree, PROJECT_DIR points to the main repo
+# (to find .caws/worktrees.json), but the agent's branch is in CLAUDE_PROJECT_DIR.
+AGENT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Determine the base branch to protect
 BASE_BRANCH="$PARALLEL_BASE"
