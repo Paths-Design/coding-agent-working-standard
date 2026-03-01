@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "worktrees": {
+    "agent-docs": {
+      "name": "agent-docs",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/agent-docs",
+      "branch": "caws/agent-docs",
+      "baseBranch": "main",
+      "scope": null,
+      "specId": null,
+      "createdAt": "2026-02-18T23:31:53.931Z",
+      "status": "destroyed",
+      "destroyedAt": "2026-02-18T23:40:04.099Z"
+    },
+    "agent-tests": {
+      "name": "agent-tests",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/agent-tests",
+      "branch": "caws/agent-tests",
+      "baseBranch": "main",
+      "scope": null,
+      "specId": null,
+      "createdAt": "2026-02-18T23:31:54.074Z",
+      "status": "destroyed",
+      "destroyedAt": "2026-02-18T23:40:04.194Z"
+    }
+  }
+}

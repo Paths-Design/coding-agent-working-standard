@@ -1024,5 +1024,309 @@
     },
     "previous_hash": "5f92a85c24060543cab3453822ba35c76069fcd60d87a766d1f5456eefffb641",
     "hash": "e52ecc73b69d552504404bce8afaf665e50f2424c0865af1e7d8c09cc836ab2c"
+  },
+  {
+    "id": "prov-1771459278713",
+    "timestamp": "2026-02-19T00:01:18.713Z",
+    "commit": {
+      "hash": "a2aabbe5807b4ff23df153c2a6cf7b5bf6cfe2a2",
+      "message": "feat(cli): add Claude Code hooks and rules for multi-agent safety",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "e52ecc73b69d552504404bce8afaf665e50f2424c0865af1e7d8c09cc836ab2c",
+    "hash": "7eb62a65b46afb8da332805f818c47f854e7ac97be23eb2a6e51c0c646f58ec3"
+  },
+  {
+    "id": "prov-1771460538504",
+    "timestamp": "2026-02-19T00:22:18.504Z",
+    "commit": {
+      "hash": "437945a91217efc8e41ad94efd551b892a4c6f83",
+      "message": "fix(hooks): close multi-agent safety gaps in worktree guards",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "7eb62a65b46afb8da332805f818c47f854e7ac97be23eb2a6e51c0c646f58ec3",
+    "hash": "19542b0514548e3efa5e203d796894377d1b10f70feac7eb1fe1422926c79bc6"
+  },
+  {
+    "id": "prov-1771464572348",
+    "timestamp": "2026-02-19T01:29:32.348Z",
+    "commit": {
+      "hash": "5d0a9249c4ac09b478b6ffdffa46545641da5322",
+      "message": "feat(hooks): allow merge commits to base branch with merge(worktree): format",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "19542b0514548e3efa5e203d796894377d1b10f70feac7eb1fe1422926c79bc6",
+    "hash": "5e3f6cd167b5923ee01653bc2457f71e70780db5ca4a8a9d4b70ec486bd59537"
+  },
+  {
+    "id": "prov-1771800895310",
+    "timestamp": "2026-02-22T22:54:55.310Z",
+    "commit": {
+      "hash": "ea61f756e68bb6b6111fab4d3345917e03cc236d",
+      "message": "feat(hooks): add worktree-write-guard and session-start worktree warning",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "5e3f6cd167b5923ee01653bc2457f71e70780db5ca4a8a9d4b70ec486bd59537",
+    "hash": "64c8fc6f8d165b24dd95709f1697fd3d7bd951b61ccb9b9a12089fa6c65d6376"
+  },
+  {
+    "id": "prov-1771801276208",
+    "timestamp": "2026-02-22T23:01:16.208Z",
+    "commit": {
+      "hash": "28c1ccf013d34e8f04c2fa3885816ec15e2b0cb2",
+      "message": "fix(hooks): resolve conflicting worktree merge instructions and add wip(checkpoint)",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "64c8fc6f8d165b24dd95709f1697fd3d7bd951b61ccb9b9a12089fa6c65d6376",
+    "hash": "19a4d89a925ae39a98d542b0bb78ac3a88a691f294c8692e166c2abecaa53746"
+  },
+  {
+    "id": "prov-1772241119470",
+    "timestamp": "2026-02-28T01:11:59.470Z",
+    "commit": {
+      "hash": "9130bc7ea360e0083e1a141aa61b27e148530ae2",
+      "message": "feat(specs): add multi-spec scope guard, formal status lifecycle, and specs close command",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "19a4d89a925ae39a98d542b0bb78ac3a88a691f294c8692e166c2abecaa53746",
+    "hash": "a084f5c988eb69eefcd58ab7bc4debe42a43a8ab56b44f5602498f844a4072e9"
+  },
+  {
+    "id": "prov-1772241127156",
+    "timestamp": "2026-02-28T01:12:07.156Z",
+    "commit": {
+      "hash": "5957a3352833efff00d6070f79b0f4eb5e83c3de",
+      "message": "fix(worktree): handle already-deleted directories in destroyWorktree and pruneWorktrees",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "a084f5c988eb69eefcd58ab7bc4debe42a43a8ab56b44f5602498f844a4072e9",
+    "hash": "879e6a5c6c0a51c6a2e2ffac68af124f884da956e9ad2db8ee728885cfbf323d"
+  },
+  {
+    "id": "prov-1772402276219",
+    "timestamp": "2026-03-01T21:57:56.219Z",
+    "commit": {
+      "hash": "43858f0644360674137ad26b0e2d3a0507674745",
+      "message": "fix(hooks): check agent's branch from CLAUDE_PROJECT_DIR, not resolved main repo root",
+      "author": "darianrosebrook <hello@darianrosebrook.com>"
+    },
+    "working_spec": {
+      "id": "PROV-0001",
+      "title": "Major UX improvements for CAWS provenance tracking system",
+      "risk_tier": 1,
+      "mode": "feature",
+      "waiver_ids": [
+        "WV-0002"
+      ]
+    },
+    "quality_gates": {
+      "status": "not_validated",
+      "last_validated": null,
+      "violations": null
+    },
+    "agent": {
+      "type": "human",
+      "confidence_level": null
+    },
+    "cursor_tracking": {
+      "available": false,
+      "reason": "Cursor API not configured. Set CURSOR_TRACKING_API and CURSOR_API_KEY environment variables.",
+      "documentation": "https://cursor.com/docs/account/teams/ai-code-tracking-api"
+    },
+    "checkpoints": {
+      "available": false,
+      "reason": "No checkpoints found in current session. Checkpoints are created during Cursor Composer/Agent sessions."
+    },
+    "previous_hash": "879e6a5c6c0a51c6a2e2ffac68af124f884da956e9ad2db8ee728885cfbf323d",
+    "hash": "fc649f072ea16767a9b299eecf0554cef90b327f16b7614fe0c8166aa4df3082"
   }
 ]

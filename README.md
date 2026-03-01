@@ -350,4 +350,4 @@ This project uses CAWS for its own development. All contributions must:
 
 ---
 
-**CAWS v3.1.0** - Making AI-human collaboration reliable, explainable, and high-quality.
+**CAWS v9.0.0** - Making AI-human collaboration reliable, explainable, and high-quality.
