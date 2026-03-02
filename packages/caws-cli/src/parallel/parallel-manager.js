@@ -17,10 +17,7 @@ const {
   BRANCH_PREFIX,
 } = require('../worktree/worktree-manager');
 
-const {
-  listSessions,
-  endSession,
-} = require('../session/session-manager');
+// session-manager available if needed: require('../session/session-manager')
 
 const PARALLEL_REGISTRY = '.caws/parallel.json';
 const VALID_STRATEGIES = ['merge', 'rebase', 'squash'];

@@ -361,8 +361,6 @@ function displayTutorialStep(step, stepNumber, totalSteps) {
       line.startsWith('')
     ) {
       console.log(chalk.gray(line));
-    } else if (line.startsWith('') || line.startsWith('') || line.startsWith('')) {
-      console.log(line);
     } else if (line.includes('`')) {
       console.log(chalk.cyan(line));
     } else {
