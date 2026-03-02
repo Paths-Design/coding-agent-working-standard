@@ -599,73 +599,63 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
-# Run full validation suite
+# Run CAWS validation (supports multi-spec projects)
+CAWS_VALIDATION_FAILED=false
 if command -v caws >/dev/null 2>&1; then
-  echo "Running comprehensive CAWS validation..."
-  
-  # Run validation and capture output
-  VALIDATION_OUTPUT=$(caws validate 2>&1)
-  VALIDATION_EXIT=$?
-  
-  if [ $VALIDATION_EXIT -eq 0 ]; then
-    echo "CAWS validation passed"
-  else
-    echo "CAWS validation failed"
-    echo ""
-    echo "==================================================="
-    echo "Validation Errors:"
-    echo "==================================================="
-    echo "$VALIDATION_OUTPUT" | grep -E "(|error|Error|Missing|required)" || echo "$VALIDATION_OUTPUT"
-    echo ""
-    
-    # Check for contract-related errors
-    if echo "$VALIDATION_OUTPUT" | grep -qi "contract"; then
-      echo "Contract Requirements:"
-      echo "   - Tier 1 & 2 changes require at least one contract"
-      echo "   - For infrastructure/setup work, use 'chore' mode or add a minimal contract:"
-      echo ""
-      echo "   Example minimal contract (.caws/working-spec.yaml):"
-      echo "   contracts:"
-      echo "     - type: 'project_setup'"
-      echo "       path: '.caws/working-spec.yaml'"
-      echo "       description: 'Project-level CAWS configuration'"
-      echo ""
-      echo "   Or change mode to 'chore' for maintenance work:"
-      echo "   mode: chore"
-      echo ""
-    fi
-    
-    # Check for active waivers
-    echo "Checking for active waivers..."
-    if command -v caws >/dev/null 2>&1 && caws waivers list --status=active --format=count 2>/dev/null | grep -q "[1-9]"; then
-      ACTIVE_WAIVERS=$(caws waivers list --status=active 2>/dev/null)
-      echo "Active waivers found:"
-      echo "$ACTIVE_WAIVERS" | head -5
-      echo ""
-      echo "Note: Waivers may not cover all validation failures"
-      echo "   Review waiver coverage: caws waivers list --status=active"
+  echo "Running CAWS validation..."
+
+  # Multi-spec project: validate each open spec individually
+  if [ -d ".caws/specs" ] && command -v node >/dev/null 2>&1; then
+    OPEN_SPECS=$(node -e "
+      var fs = require('fs'), path = require('path'), dir = '.caws/specs';
+      try {
+        fs.readdirSync(dir).filter(function(f) { return f.endsWith('.yaml'); }).forEach(function(f) {
+          var content = fs.readFileSync(path.join(dir, f), 'utf8');
+          if (content.indexOf('status: closed') === -1) {
+            var match = content.match(/^id:\\s*(.+)$/m);
+            if (match) console.log(match[1].trim());
+          }
+        });
+      } catch(e) {}
+    " 2>/dev/null || echo "")
+
+    if [ -n "$OPEN_SPECS" ]; then
+      echo "  Multi-spec project detected, validating open specs..."
+      while IFS= read -r spec_id; do
+        [ -z "$spec_id" ] && continue
+        echo "  Validating spec: $spec_id"
+        if ! caws validate --spec-id "$spec_id" --quiet 2>&1; then
+          echo "  Validation failed for spec: $spec_id"
+          CAWS_VALIDATION_FAILED=true
+        fi
+      done <<< "$OPEN_SPECS"
+      if [ "$CAWS_VALIDATION_FAILED" = false ]; then
+        echo "CAWS validation passed (all open specs)"
+      fi
     else
-      echo "   No active waivers found"
-      echo ""
-      echo "If this is infrastructure/setup work, you can create a waiver:"
-      echo "   caws waivers create \\\\"
-      echo "     --title='Initial CAWS setup' \\\\"
-      echo "     --reason=infrastructure_limitation \\\\"
-      echo "     --gates=contracts \\\\"
-      echo "     --expires-at='2024-12-31T23:59:59Z' \\\\"
-      echo "     --approved-by='@your-team' \\\\"
-      echo "     --impact-level=low \\\\"
-      echo "     --mitigation-plan='Contracts will be added as features are developed'"
+      echo "  No open specs found, skipping CAWS validation"
     fi
-    
+  else
+    # Single-spec project: validate working-spec directly
+    VALIDATION_OUTPUT=$(caws validate --quiet 2>&1)
+    if [ $? -ne 0 ]; then
+      echo "$VALIDATION_OUTPUT"
+      CAWS_VALIDATION_FAILED=true
+    else
+      echo "CAWS validation passed"
+    fi
+  fi
+
+  if [ "$CAWS_VALIDATION_FAILED" = true ]; then
     echo ""
+    echo "==================================================="
+    echo "CAWS validation failed"
     echo "==================================================="
     echo "Next Steps:"
     echo "   1. Review errors above"
-    echo "   2. Fix issues in .caws/working-spec.yaml"
-    echo "   3. Run: caws validate \\(to verify fixes\\)"
-    echo "   4. Commit fixes: git commit --no-verify \\(allowed\\)"
-    echo "   5. Push again: git push"
+    echo "   2. Fix issues in .caws/working-spec.yaml or .caws/specs/"
+    echo "   3. Run: caws validate (to verify fixes)"
+    echo "   4. Push again: git push"
     echo "==================================================="
     exit 1
   fi

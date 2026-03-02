@@ -56,7 +56,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh', 'worktree-write-guard.sh', 'stop-worktree-check.sh', 'session-caws-status.sh'],
       quality: ['quality-check.sh', 'validate-spec.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
-      audit: ['audit.sh'],
+      audit: ['audit.sh', 'session-log.sh'],
       lite: ['block-dangerous.sh', 'scope-guard.sh', 'lite-sprawl-check.sh', 'simplification-guard.sh'],
     };
 
@@ -87,6 +87,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'worktree-write-guard.sh',
       'stop-worktree-check.sh',
       'session-caws-status.sh',
+      'session-log.sh',
     ];
 
     for (const script of allHookScripts) {
@@ -320,6 +321,11 @@ function generateClaudeSettings(levels, _enabledHooks) {
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/audit.sh session-start',
           timeout: 5,
         },
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/session-log.sh',
+          timeout: 10,
+        },
       ],
     });
 
@@ -330,6 +336,23 @@ function generateClaudeSettings(levels, _enabledHooks) {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/audit.sh stop',
           timeout: 5,
+        },
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/session-log.sh',
+          timeout: 15,
+        },
+      ],
+    });
+
+    // Session transcript generation on context compaction
+    settings.hooks.PreCompact = settings.hooks.PreCompact || [];
+    settings.hooks.PreCompact.push({
+      hooks: [
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/session-log.sh',
+          timeout: 15,
         },
       ],
     });

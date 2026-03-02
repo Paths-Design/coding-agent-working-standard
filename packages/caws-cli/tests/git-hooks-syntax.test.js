@@ -66,13 +66,11 @@ describe('Git Hooks Bash Syntax Validation', () => {
 
     test('should properly escape parentheses in echo statements', () => {
       const hookContent = gitHooksModule.generatePrePushHook();
-      
-      // Check for properly escaped parentheses
-      // Should have \(allowed\) not (allowed)
-      expect(hookContent).toContain('\\(allowed\\)');
-      expect(hookContent).toContain('\\(to verify fixes\\)');
-      expect(hookContent).toContain('\\(no --no-verify\\)');
-      
+
+      // Verify multi-spec validation logic is present
+      expect(hookContent).toContain('caws validate');
+      expect(hookContent).toContain('.caws/specs');
+
       // Should NOT have unescaped parentheses in echo statements
       // This regex matches echo statements with unescaped parentheses
       const unescapedPattern = /echo\s+"[^"]*\([^)]*\)[^"]*"/;
@@ -337,12 +335,10 @@ describe('Git Hooks Bash Syntax Validation', () => {
           );
         }
         
-        // Also check that known problematic patterns are escaped
-        // Check for the specific patterns we fixed
+        // Check that pre-push hook has key validation logic
         if (hook.name === 'pre-push') {
-          expect(hook.content).toContain('\\(allowed\\)');
-          expect(hook.content).toContain('\\(to verify fixes\\)');
-          expect(hook.content).toContain('\\(no --no-verify\\)');
+          expect(hook.content).toContain('caws validate');
+          expect(hook.content).toContain('.caws/specs');
         }
         
         if (hook.name === 'commit-msg') {

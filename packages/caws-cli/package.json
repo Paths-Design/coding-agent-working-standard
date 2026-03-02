@@ -18,7 +18,7 @@
     "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
     "test": "npm run build && jest && npm run test:cleanup",
-    "test:unit": "npm run build && jest && npm run test:cleanup",
+    "test:unit": "npm run build && jest --testPathIgnorePatterns='perf-budgets|integration|e2e|mutation|axe|contract' && npm run test:cleanup",
     "test:contract": "npm run build && jest --testPathPatterns=contract && npm run test:cleanup",
     "test:integration": "npm run build && jest --testPathPatterns=integration && npm run test:cleanup",
     "test:e2e:smoke": "npm run build && jest --testPathPatterns=e2e && npm run test:cleanup",
