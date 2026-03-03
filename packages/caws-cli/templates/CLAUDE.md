@@ -38,14 +38,26 @@ caws agent evaluate
 
 ### Working Spec
 
-The project spec lives at `.caws/working-spec.yaml`. It defines:
+The project spec lives at `.caws/working-spec.yaml`. Feature specs live at `.caws/specs/<ID>.yaml`. It defines:
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
 - **Scope**: Which files you can edit (`scope.in`) and which are off-limits (`scope.out`)
-- **Change budget**: Max files and lines of code per change
-- **Acceptance criteria**: What "done" means
+- **Change budget**: Max files and lines of code per change (see note below)
+- **Acceptance criteria**: What "done" means — IDs must match `^A\d+$` (e.g. `A1`, `A12`)
 
 Always stay within scope boundaries and change budgets.
+
+> **Budget note**: `change_budget:` in a spec is informational documentation only. CAWS
+> derives the enforced budget from `policy.yaml` keyed on `risk_tier`. The field in the
+> spec is never read by `caws validate` — it will always emit a warning that it is
+> "informational only". This is expected behavior.
+
+> **Grade B floor**: `caws validate --spec-id <ID>` for feature specs consistently reports
+> Grade B (80%) due to a path resolution quirk: the CLI resolves `projectRoot` from the
+> spec file's directory (`.caws/specs/`) instead of the repo root, so it cannot find
+> `policy.yaml` and falls back to the bundled default policy. This is a CLI-side bug,
+> not a spec content problem. Grade A requires no errors and no warnings; Grade B (one
+> warning) is the practical ceiling for feature specs validated with `--spec-id`.
 
 ### Quality Gates
 
