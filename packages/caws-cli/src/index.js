@@ -127,6 +127,7 @@ program
 // Validate command
 program
   .command('validate')
+  .alias('verify')
   .description('Validate CAWS spec with suggestions')
   .argument('[spec-file]', 'Path to spec file (optional, uses spec resolution)')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth, FEAT-001)')

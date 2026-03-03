@@ -49,15 +49,7 @@ Always stay within scope boundaries and change budgets.
 
 > **Budget note**: `change_budget:` in a spec is informational documentation only. CAWS
 > derives the enforced budget from `policy.yaml` keyed on `risk_tier`. The field in the
-> spec is never read by `caws validate` — it will always emit a warning that it is
-> "informational only". This is expected behavior.
-
-> **Grade B floor**: `caws validate --spec-id <ID>` for feature specs consistently reports
-> Grade B (80%) due to a path resolution quirk: the CLI resolves `projectRoot` from the
-> spec file's directory (`.caws/specs/`) instead of the repo root, so it cannot find
-> `policy.yaml` and falls back to the bundled default policy. This is a CLI-side bug,
-> not a spec content problem. Grade A requires no errors and no warnings; Grade B (one
-> warning) is the practical ceiling for feature specs validated with `--spec-id`.
+> spec is not used by `caws validate` for enforcement.
 
 ### Quality Gates
 

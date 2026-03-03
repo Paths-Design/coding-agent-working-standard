@@ -563,16 +563,9 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       }
     }
 
-    // Warn if change_budget is present (deprecated/informational only)
-    if (spec.change_budget) {
-      warnings.push({
-        instancePath: '/change_budget',
-        message:
-          'change_budget field in working spec is informational only and not used for validation',
-        suggestion:
-          'Budget is derived from policy.yaml risk_tier + waivers. This field is auto-calculated.',
-      });
-    }
+    // Note: change_budget in specs is informational documentation only.
+    // Budget enforcement is derived from policy.yaml risk_tier + waivers.
+    // No warning emitted — the field is valid and expected.
 
     // Derive and check budget if requested
     let budgetCheck = null;

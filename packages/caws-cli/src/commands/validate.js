@@ -49,12 +49,19 @@ async function validateCommand(specFile, options = {}) {
       console.log(chalk.gray(`   Spec: ${path.relative(process.cwd(), specPath)}`));
     }
 
+    // For feature specs (.caws/specs/<id>.yaml), path.dirname(specPath) resolves
+    // to .caws/specs/ — not the project root. Use process.cwd() which is always
+    // the project root when the CLI is invoked.
+    const projectRoot = specType === 'feature'
+      ? process.cwd()
+      : path.dirname(specPath);
+
     const result = validateWorkingSpecWithSuggestions(spec, {
       autoFix: options.autoFix,
       dryRun: options.dryRun,
       suggestions: !options.quiet,
       checkBudget: true,
-      projectRoot: path.dirname(specPath),
+      projectRoot,
       specType,
     });
 
@@ -225,6 +232,40 @@ async function validateCommand(specFile, options = {}) {
       }
     }
   } catch (error) {
+    // Multi-spec project without --spec-id: auto-validate all open specs
+    if (error.message === 'Spec ID required when multiple specs exist' && !options.specId) {
+      const { checkMultiSpecStatus } = require('../utils/spec-resolver');
+      const status = await checkMultiSpecStatus();
+      const specIds = Object.keys(status.registry?.specs || {});
+
+      if (specIds.length === 0) {
+        console.error(chalk.red('No specs found in registry'));
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          process.exit(1);
+        }
+        return;
+      }
+
+      console.log(chalk.cyan(`Validating all ${specIds.length} specs...\n`));
+      let allPassed = true;
+
+      for (const sid of specIds) {
+        try {
+          await validateCommand(specFile, { ...options, specId: sid });
+        } catch {
+          allPassed = false;
+        }
+        console.log(''); // blank line between specs
+      }
+
+      if (!allPassed) {
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          process.exit(1);
+        }
+      }
+      return;
+    }
+
     if (options.format === 'json') {
       console.log(
         JSON.stringify(
