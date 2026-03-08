@@ -408,8 +408,25 @@ elif [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
   fi
 # Option 3: CAWS CLI validation
 elif command -v caws >/dev/null 2>&1; then
+  # In a worktree, validate only the associated spec to avoid false positives
+  CAWS_VALIDATE_ARGS="--quiet"
+  WORKTREE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  if [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+    SPEC_ID=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
+        var wt = Object.values(reg.worktrees || {}).find(function(w) {
+          return w.branch === '$WORKTREE_BRANCH';
+        });
+        if (wt && wt.specId) console.log(wt.specId);
+      } catch(e) {}
+    " 2>/dev/null || echo "")
+    if [ -n "$SPEC_ID" ]; then
+      CAWS_VALIDATE_ARGS="--quiet --spec-id $SPEC_ID"
+    fi
+  fi
   echo "Running CAWS CLI validation..."
-  if caws validate --quiet 2>/dev/null; then
+  if caws validate $CAWS_VALIDATE_ARGS 2>/dev/null; then
     echo "CAWS validation passed"
     QUALITY_GATES_RAN=true
   else
