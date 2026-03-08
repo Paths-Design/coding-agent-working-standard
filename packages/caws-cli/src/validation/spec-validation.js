@@ -85,6 +85,14 @@ const validateWorkingSpec = (spec, _options = {}) => {
     // For new policy-based specs, change_budget is not required
     // It's derived from policy.yaml + waivers
 
+    // Normalize risk_tier: accept "T1"/"T2"/"T3" strings and convert to numeric
+    if (spec.risk_tier !== undefined && typeof spec.risk_tier === 'string') {
+      const match = spec.risk_tier.match(/^T?(\d)$/i);
+      if (match) {
+        spec.risk_tier = parseInt(match[1], 10);
+      }
+    }
+
     for (const field of requiredFields) {
       if (!spec[field]) {
         return {

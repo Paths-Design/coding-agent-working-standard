@@ -65,11 +65,20 @@ if [[ "$WT_COUNT" -le 0 ]] 2>/dev/null; then
   exit 0
 fi
 
-# Allow edits to .claude/ configuration (hooks, settings, rules)
+# Allow edits to configuration and documentation (benign, no merge conflict risk)
 if [[ -n "$FILE_PATH" ]]; then
   case "$FILE_PATH" in
     */.claude/*|*/.caws/*) exit 0 ;;
+    */docs/*) exit 0 ;;
   esac
+fi
+
+# Allow edits during an active merge (conflict resolution).
+# The worktree-isolation rules explicitly permit merge commits on the base branch.
+# Conflict resolution requires Write/Edit on the conflicted files.
+MERGE_HEAD_PATH=$(cd "$AGENT_DIR" && git rev-parse --git-dir 2>/dev/null || echo ".git")
+if [[ -f "$MERGE_HEAD_PATH/MERGE_HEAD" ]]; then
+  exit 0
 fi
 
 # Block: we're on the base branch with active worktrees
@@ -81,4 +90,7 @@ echo "  To create a new worktree:    caws worktree create <name>" >&2
 echo "" >&2
 echo "Do NOT make changes on main and create a worktree retroactively." >&2
 echo "The worktree must exist BEFORE you start making changes." >&2
+echo "" >&2
+echo "If you are merging a worktree branch, use: caws worktree merge <name>" >&2
+echo "Or start the merge first (git merge --no-ff <branch>), then resolve conflicts." >&2
 exit 2

@@ -381,6 +381,14 @@ worktreeCmd
   .action((name, options) => worktreeCommand('destroy', { name, ...options }));
 
 worktreeCmd
+  .command('merge <name>')
+  .description('Merge a worktree branch back to base (destroy + merge + cleanup)')
+  .option('--dry-run', 'Preview conflicts without merging', false)
+  .option('--message <msg>', 'Custom merge commit message')
+  .option('--no-delete-branch', 'Keep the branch after merging')
+  .action((name, options) => worktreeCommand('merge', { name, ...options }));
+
+worktreeCmd
   .command('prune')
   .description('Clean up stale worktree entries')
   .option('--max-age <days>', 'Remove entries older than N days', '30')

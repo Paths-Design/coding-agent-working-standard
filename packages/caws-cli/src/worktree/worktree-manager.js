@@ -14,6 +14,46 @@ const REGISTRY_FILE = '.caws/worktrees.json';
 const BRANCH_PREFIX = 'caws/';
 
 /**
+ * Get the last commit info for a branch
+ * @param {string} branch - Branch name
+ * @param {string} root - Repository root
+ * @returns {{ age: string, timestamp: Date, sha: string } | null}
+ */
+function getLastCommitInfo(branch, root) {
+  try {
+    const output = execFileSync(
+      'git',
+      ['log', branch, '-1', '--format=%H%n%aI%n%ar'],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    const [sha, iso, age] = output.split('\n');
+    return { sha, timestamp: new Date(iso), age };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a branch has been merged into another branch
+ * @param {string} branch - Branch to check
+ * @param {string} target - Target branch (e.g., "main")
+ * @param {string} root - Repository root
+ * @returns {boolean}
+ */
+function isBranchMerged(branch, target, root) {
+  try {
+    const merged = execFileSync(
+      'git',
+      ['branch', '--merged', target, '--list', branch],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    return merged.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the git repository root
  * @returns {string} Absolute path to repo root
  */
@@ -250,10 +290,21 @@ function listWorktrees() {
     const inGit = gitWorktrees.some(
       (wt) => path.resolve(wt) === path.resolve(entry.path)
     );
+    const status = exists && inGit ? 'active' : exists ? 'orphaned' : 'missing';
+
+    // Enrich with commit recency
+    const lastCommit = entry.branch ? getLastCommitInfo(entry.branch, root) : null;
+
+    // Check if branch is already merged to base
+    const merged = entry.branch && entry.baseBranch
+      ? isBranchMerged(entry.branch, entry.baseBranch, root)
+      : false;
 
     return {
       ...entry,
-      status: exists && inGit ? 'active' : exists ? 'orphaned' : 'missing',
+      status,
+      lastCommit,
+      merged,
     };
   });
 
@@ -277,16 +328,45 @@ function destroyWorktree(name, options = {}) {
     throw new Error(`Worktree '${name}' not found in registry`);
   }
 
+  // Ownership check: refuse to destroy another agent's active worktree without --force
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  if (
+    !force &&
+    entry.status === 'active' &&
+    entry.owner &&
+    currentSession &&
+    entry.owner !== currentSession
+  ) {
+    const lastCommit = entry.branch ? getLastCommitInfo(entry.branch, root) : null;
+    const recency = lastCommit ? ` (last commit: ${lastCommit.age})` : '';
+    throw new Error(
+      `Worktree '${name}' belongs to another session${recency}.\n` +
+        `   Owner: ${entry.owner}\n` +
+        `   You:   ${currentSession}\n` +
+        `Another agent may be actively working here. Use --force to override.`
+    );
+  }
+
+  // Auto-force when the branch is already merged to its base branch.
+  // Dirty files in a merged worktree are definitionally stale.
+  const merged = entry.branch && entry.baseBranch
+    ? isBranchMerged(entry.branch, entry.baseBranch, root)
+    : false;
+  const effectiveForce = force || merged;
+  if (merged && !force) {
+    console.log(chalk.gray(`   Branch ${entry.branch} already merged to ${entry.baseBranch}, auto-forcing cleanup`));
+  }
+
   // Remove git worktree — handle already-deleted directories gracefully
   const dirExists = fs.existsSync(entry.path);
   if (dirExists) {
     try {
       const args = ['worktree', 'remove'];
-      if (force) args.push('--force');
+      if (effectiveForce) args.push('--force');
       args.push(entry.path);
       execFileSync('git', args, { cwd: root, stdio: 'pipe' });
     } catch (error) {
-      if (force) {
+      if (effectiveForce) {
         // Force cleanup: remove directory manually
         fs.removeSync(entry.path);
       } else {
@@ -310,7 +390,7 @@ function destroyWorktree(name, options = {}) {
     try {
       execFileSync('git', ['branch', '-d', entry.branch], { cwd: root, stdio: 'pipe' });
     } catch {
-      if (force) {
+      if (effectiveForce) {
         try {
           execFileSync('git', ['branch', '-D', entry.branch], { cwd: root, stdio: 'pipe' });
         } catch {
@@ -327,18 +407,142 @@ function destroyWorktree(name, options = {}) {
 }
 
 /**
+ * Merge a worktree branch back to base in one operation.
+ * Sequence: dry-run conflict check → destroy worktree → merge → cleanup.
+ * @param {string} name - Worktree name
+ * @param {Object} options - Merge options
+ * @param {boolean} [options.dryRun] - Preview conflicts without merging
+ * @param {boolean} [options.deleteBranch] - Delete branch after merge
+ * @param {string} [options.message] - Custom merge commit message
+ * @returns {Object} Merge result
+ */
+function mergeWorktree(name, options = {}) {
+  const root = getRepoRoot();
+  const registry = loadRegistry(root);
+  const { dryRun = false, deleteBranch = true, message } = options;
+
+  const entry = registry.worktrees[name];
+  if (!entry) {
+    throw new Error(`Worktree '${name}' not found in registry`);
+  }
+
+  const baseBranch = entry.baseBranch || 'main';
+
+  // Check for uncommitted work in the worktree
+  if (fs.existsSync(entry.path)) {
+    try {
+      const status = execFileSync(
+        'git',
+        ['status', '--porcelain'],
+        { cwd: entry.path, encoding: 'utf8', stdio: 'pipe' }
+      ).trim();
+      if (status) {
+        throw new Error(
+          `Worktree '${name}' has uncommitted changes:\n${status}\n` +
+            `Commit or discard changes before merging.`
+        );
+      }
+    } catch (error) {
+      if (error.message.includes('uncommitted changes')) throw error;
+      // Non-fatal: status check failed, proceed cautiously
+    }
+  }
+
+  // Dry-run: check for conflicts using git merge-tree (new-style, git 2.38+)
+  let conflicts = [];
+  try {
+    // New-style merge-tree: takes two branches, computes merge-base automatically
+    const mergeTreeResult = execFileSync(
+      'git',
+      ['merge-tree', '--write-tree', baseBranch, entry.branch],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    );
+    // Exit 0 = clean merge, no conflicts
+  } catch (mergeTreeError) {
+    // Exit 1 = conflicts detected; parse them from output
+    const output = (mergeTreeError.stdout || '') + (mergeTreeError.stderr || '');
+    const conflictLines = output.split('\n').filter(
+      (l) => l.includes('CONFLICT') || l.includes('conflict')
+    );
+    if (mergeTreeError.status === 1 && conflictLines.length > 0) {
+      conflicts = conflictLines;
+    } else if (mergeTreeError.status === 1) {
+      conflicts = ['Merge conflicts detected (run merge manually to inspect)'];
+    }
+    // Other exit codes (e.g., merge-tree not supported) = can't detect, proceed
+  }
+
+  if (dryRun) {
+    return {
+      name,
+      branch: entry.branch,
+      baseBranch,
+      conflicts,
+      wouldMerge: conflicts.length === 0,
+    };
+  }
+
+  // Destroy the worktree (auto-forces since we're about to merge)
+  destroyWorktree(name, { deleteBranch: false, force: true });
+
+  // Switch to base branch
+  const currentBranch = getCurrentBranch();
+  if (currentBranch !== baseBranch) {
+    execFileSync('git', ['checkout', baseBranch], { cwd: root, stdio: 'pipe' });
+  }
+
+  // Merge
+  const mergeMessage = message || `merge(worktree): ${name}`;
+  try {
+    execFileSync(
+      'git',
+      ['merge', '--no-ff', entry.branch, '-m', mergeMessage],
+      { cwd: root, stdio: 'pipe' }
+    );
+  } catch (error) {
+    return {
+      name,
+      branch: entry.branch,
+      baseBranch,
+      merged: false,
+      conflicts: [`Merge failed: ${error.message}`],
+      message: 'Merge conflicts detected. Resolve with git and commit.',
+    };
+  }
+
+  // Delete branch after successful merge
+  if (deleteBranch) {
+    try {
+      execFileSync('git', ['branch', '-d', entry.branch], { cwd: root, stdio: 'pipe' });
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return {
+    name,
+    branch: entry.branch,
+    baseBranch,
+    merged: true,
+    conflicts: [],
+  };
+}
+
+/**
  * Prune stale worktree entries
  * @param {Object} options - Prune options
  * @param {number} [options.maxAgeDays] - Remove entries older than this many days
+ * @param {number} [options.recentCommitMinutes] - Protect branches with commits newer than this (default: 60)
  * @returns {Array} Pruned entries
  */
 function pruneWorktrees(options = {}) {
   const root = getRepoRoot();
   const registry = loadRegistry(root);
-  const { maxAgeDays = 30 } = options;
+  const { maxAgeDays = 30, recentCommitMinutes = 60 } = options;
 
   const now = new Date();
   const pruned = [];
+  const skipped = [];
 
   for (const [name, entry] of Object.entries(registry.worktrees)) {
     const created = new Date(entry.createdAt);
@@ -354,6 +558,18 @@ function pruneWorktrees(options = {}) {
       (!dirExists && ageDays > maxAgeDays);
 
     if (shouldPrune) {
+      // Before pruning a non-destroyed entry, check for recent commits
+      if (entry.status !== 'destroyed' && entry.branch) {
+        const lastCommit = getLastCommitInfo(entry.branch, root);
+        if (lastCommit) {
+          const commitAgeMinutes = (now - lastCommit.timestamp) / (1000 * 60);
+          if (commitAgeMinutes < recentCommitMinutes) {
+            skipped.push({ name, reason: `recent commit (${lastCommit.age})`, entry });
+            continue;
+          }
+        }
+      }
+
       // Clean up filesystem if still exists
       if (dirExists) {
         try {
@@ -378,16 +594,19 @@ function pruneWorktrees(options = {}) {
   }
 
   saveRegistry(root, registry);
-  return pruned;
+  return { pruned, skipped };
 }
 
 module.exports = {
   createWorktree,
   listWorktrees,
   destroyWorktree,
+  mergeWorktree,
   pruneWorktrees,
   loadRegistry,
   getRepoRoot,
+  getLastCommitInfo,
+  isBranchMerged,
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,

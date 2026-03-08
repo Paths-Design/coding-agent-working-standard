@@ -204,16 +204,28 @@ async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
       }
     }
 
+    // Normalize risk_tier: accept "T1"/"T2"/"T3" strings and convert to numeric
+    let riskTier = spec.risk_tier;
+    if (typeof riskTier === 'string') {
+      const match = riskTier.match(/^T?(\d)$/i);
+      if (match) {
+        riskTier = parseInt(match[1], 10);
+      }
+    }
+
     // Check if risk tier exists in policy
-    if (!policy.risk_tiers[spec.risk_tier]) {
+    if (!policy.risk_tiers[riskTier]) {
       throw new Error(
         `Risk tier ${spec.risk_tier} not defined in policy.yaml\n` +
           `Policy only defines tiers: ${Object.keys(policy.risk_tiers).join(', ')}\n` +
-          `Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)`
+          `Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)` +
+          (typeof spec.risk_tier === 'string'
+            ? `\nHint: use numeric risk_tier (e.g., 2) instead of "${spec.risk_tier}"`
+            : '')
       );
     }
 
-    const tierBudget = policy.risk_tiers[spec.risk_tier];
+    const tierBudget = policy.risk_tiers[riskTier];
     const baseline = {
       max_files: tierBudget.max_files,
       max_loc: tierBudget.max_loc,

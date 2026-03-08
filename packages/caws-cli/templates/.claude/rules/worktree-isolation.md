@@ -9,7 +9,7 @@ When multiple agents are working on this project, each agent MUST work in its ow
 
 ## Before starting work
 
-1. Check if worktrees exist: look for `.caws/worktrees.json` or `.caws/parallel.json`
+1. Check if worktrees exist: `caws worktree list` shows all active worktrees with last commit time and owner
 2. If worktrees are active and you are on the base branch, switch to your assigned worktree
 3. If no worktree exists for you, create one with `caws worktree create <name>` or `caws parallel setup <plan-file>`
 
@@ -21,16 +21,46 @@ When multiple agents are working on this project, each agent MUST work in its ow
 - `git push --force` -- rewrites remote history
 - Direct commits to the base branch -- only `merge(worktree):` and `wip(checkpoint):` formats are allowed
 - Copying files between your worktree and the main repo directory -- defeats isolation
+- Destroying another agent's active worktree -- `caws worktree destroy` will block this unless you use `--force`
 
 ## Merging worktree branches back to base
 
 Merge commits ARE allowed on the base branch while other worktrees are active. This lets you incrementally merge completed work without waiting for all agents to finish.
+
+### Recommended: use `caws worktree merge`
+
+The `merge` command handles the full sequence (conflict check, destroy, merge, cleanup):
+
+```bash
+# Preview conflicts before merging
+caws worktree merge <name> --dry-run
+
+# Merge (destroys worktree, merges branch, deletes branch)
+caws worktree merge <name>
+
+# Merge with custom commit message
+caws worktree merge <name> --message "merge(worktree): description of changes"
+```
+
+### Manual merge (if you need more control)
 
 1. Destroy the worktree first: `caws worktree destroy <name>`
 2. Switch to the base branch: `git checkout main`
 3. Merge with: `git merge --no-ff <worktree-branch>`
 4. The commit-msg hook enforces the `merge(worktree): <description>` format for non-FF merges
 5. For manual merge commits: `git commit -m "merge(worktree): integrate scenarios work"`
+
+### Conflict resolution during merge
+
+The write guard allows edits on the base branch while a merge is in progress (MERGE_HEAD exists). This lets you resolve merge conflicts without needing to abort and retry. After resolving, commit with the `merge(worktree):` format.
+
+## What the write guard allows on the base branch
+
+Even when worktrees are active, the following edits are allowed on the base branch:
+
+- `.claude/` and `.caws/` configuration files
+- `docs/` directory (documentation changes are benign)
+- Any file while a merge is in progress (conflict resolution)
 
 ## Virtual environment in worktrees
 
@@ -46,6 +76,5 @@ If your project uses `.caws/scope.json`, the `designatedVenvPath` field specifie
 
 1. Commit all changes to your worktree branch
 2. Run tests in your worktree to verify
-3. Destroy your worktree with `caws worktree destroy <name>`
-4. Merge your branch to base: `git merge --no-ff <branch>` (uses `merge(worktree):` format)
-5. Delete the branch if no longer needed: `git branch -d <branch>`
+3. Merge: `caws worktree merge <name>` (handles destroy + merge + branch cleanup)
+4. Or manually: destroy worktree, then `git merge --no-ff <branch>`, then delete branch

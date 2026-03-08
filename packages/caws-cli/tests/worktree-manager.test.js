@@ -12,8 +12,11 @@ const {
   createWorktree,
   listWorktrees,
   destroyWorktree,
+  mergeWorktree,
   pruneWorktrees,
   loadRegistry,
+  getLastCommitInfo,
+  isBranchMerged,
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,
@@ -22,9 +25,11 @@ const {
 describe('worktree-manager', () => {
   let testDir;
   let originalCwd;
+  let originalSessionId;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
+    originalSessionId = process.env.CLAUDE_SESSION_ID;
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-worktree-test-'));
 
     // Initialize a git repo
@@ -44,6 +49,12 @@ describe('worktree-manager', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
+    // Restore session ID
+    if (originalSessionId !== undefined) {
+      process.env.CLAUDE_SESSION_ID = originalSessionId;
+    } else {
+      delete process.env.CLAUDE_SESSION_ID;
+    }
     // Clean up worktrees first (required before deleting dir)
     try {
       execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
@@ -142,6 +153,41 @@ describe('worktree-manager', () => {
       const entries = listWorktrees();
       expect(entries[0].status).toBe('missing');
     });
+
+    test('includes lastCommit info for active worktrees', () => {
+      const entry = createWorktree('with-commits');
+      // Make a commit in the worktree
+      fs.writeFileSync(path.join(entry.path, 'new-file.txt'), 'content');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'worktree commit'], {
+        cwd: entry.path,
+        stdio: 'pipe',
+      });
+
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'with-commits');
+      expect(wt.lastCommit).toBeDefined();
+      expect(wt.lastCommit.sha).toBeDefined();
+      expect(wt.lastCommit.age).toBeDefined();
+    });
+
+    test('includes merged status for worktrees', () => {
+      createWorktree('not-merged');
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'not-merged');
+      // No divergent commits, so branch is technically merged
+      expect(wt.merged).toBe(true);
+    });
+
+    test('preserves owner from creation', () => {
+      process.env.CLAUDE_SESSION_ID = 'test-session-abc123';
+      const entry = createWorktree('owned-wt');
+      expect(entry.owner).toBe('test-session-abc123');
+
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'owned-wt');
+      expect(wt.owner).toBe('test-session-abc123');
+    });
   });
 
   describe('destroyWorktree', () => {
@@ -168,6 +214,121 @@ describe('worktree-manager', () => {
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['dirty-wt'].status).toBe('destroyed');
     });
+
+    test('blocks destroying another session worktree without force', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner';
+      createWorktree('owned-by-other');
+
+      process.env.CLAUDE_SESSION_ID = 'session-destroyer';
+      expect(() => destroyWorktree('owned-by-other')).toThrow('belongs to another session');
+    });
+
+    test('allows destroying another session worktree with force', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner';
+      createWorktree('force-destroy-other');
+
+      process.env.CLAUDE_SESSION_ID = 'session-destroyer';
+      destroyWorktree('force-destroy-other', { force: true });
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['force-destroy-other'].status).toBe('destroyed');
+    });
+
+    test('allows destroying own worktree without force', () => {
+      process.env.CLAUDE_SESSION_ID = 'same-session';
+      createWorktree('own-wt');
+      destroyWorktree('own-wt');
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['own-wt'].status).toBe('destroyed');
+    });
+
+    test('auto-forces destroy when branch is already merged', () => {
+      const entry = createWorktree('merged-dirty');
+      // Add dirty file but branch has no divergent commits (so it's "merged")
+      fs.writeFileSync(path.join(entry.path, 'dirty.txt'), 'dirty');
+
+      // Should succeed without --force because branch is merged to base
+      destroyWorktree('merged-dirty');
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['merged-dirty'].status).toBe('destroyed');
+    });
+  });
+
+  describe('mergeWorktree', () => {
+    test('merges a clean worktree branch to base', () => {
+      const entry = createWorktree('to-merge');
+
+      // Make a commit in the worktree
+      fs.writeFileSync(path.join(entry.path, 'feature.js'), 'const x = 1;');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add feature'], {
+        cwd: entry.path,
+        stdio: 'pipe',
+      });
+
+      const result = mergeWorktree('to-merge');
+
+      expect(result.merged).toBe(true);
+      expect(result.conflicts).toHaveLength(0);
+
+      // Verify file exists on base branch
+      expect(fs.existsSync(path.join(testDir, 'feature.js'))).toBe(true);
+
+      // Verify worktree is destroyed
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['to-merge'].status).toBe('destroyed');
+    });
+
+    test('dry-run detects no conflicts for clean merge', () => {
+      const entry = createWorktree('dry-run-clean');
+
+      fs.writeFileSync(path.join(entry.path, 'new-file.js'), 'clean');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'clean change'], {
+        cwd: entry.path,
+        stdio: 'pipe',
+      });
+
+      const result = mergeWorktree('dry-run-clean', { dryRun: true });
+
+      expect(result.wouldMerge).toBe(true);
+      expect(result.conflicts).toHaveLength(0);
+
+      // Worktree should NOT be destroyed in dry-run
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['dry-run-clean'].status).toBe('active');
+    });
+
+    test('refuses to merge worktree with uncommitted changes', () => {
+      const entry = createWorktree('dirty-merge');
+      fs.writeFileSync(path.join(entry.path, 'uncommitted.js'), 'dirty');
+
+      expect(() => mergeWorktree('dirty-merge')).toThrow('uncommitted changes');
+    });
+
+    test('uses custom merge message', () => {
+      const entry = createWorktree('custom-msg');
+      fs.writeFileSync(path.join(entry.path, 'custom.js'), 'custom');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'custom work'], {
+        cwd: entry.path,
+        stdio: 'pipe',
+      });
+
+      mergeWorktree('custom-msg', { message: 'merge(worktree): custom merge message' });
+
+      const log = execFileSync('git', ['log', '-1', '--format=%s'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      expect(log).toBe('merge(worktree): custom merge message');
+    });
+
+    test('throws for unknown worktree', () => {
+      expect(() => mergeWorktree('nonexistent')).toThrow('not found');
+    });
   });
 
   describe('pruneWorktrees', () => {
@@ -175,9 +336,9 @@ describe('worktree-manager', () => {
       createWorktree('prune-me');
       destroyWorktree('prune-me', { force: true });
 
-      const pruned = pruneWorktrees({ maxAgeDays: 0 });
-      expect(pruned).toHaveLength(1);
-      expect(pruned[0].name).toBe('prune-me');
+      const result = pruneWorktrees({ maxAgeDays: 0 });
+      expect(result.pruned).toHaveLength(1);
+      expect(result.pruned[0].name).toBe('prune-me');
 
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['prune-me']).toBeUndefined();
@@ -186,11 +347,48 @@ describe('worktree-manager', () => {
     test('preserves active entries', () => {
       createWorktree('keep-me');
 
-      const pruned = pruneWorktrees({ maxAgeDays: 0 });
-      expect(pruned).toHaveLength(0);
+      const result = pruneWorktrees({ maxAgeDays: 0 });
+      expect(result.pruned).toHaveLength(0);
 
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['keep-me']).toBeDefined();
+    });
+  });
+
+  describe('getLastCommitInfo', () => {
+    test('returns commit info for existing branch', () => {
+      createWorktree('commit-info');
+      const info = getLastCommitInfo(`${BRANCH_PREFIX}commit-info`, testDir);
+      expect(info).not.toBeNull();
+      expect(info.sha).toMatch(/^[0-9a-f]+$/);
+      expect(info.age).toBeDefined();
+      expect(info.timestamp).toBeInstanceOf(Date);
+    });
+
+    test('returns null for nonexistent branch', () => {
+      const info = getLastCommitInfo('nonexistent-branch', testDir);
+      expect(info).toBeNull();
+    });
+  });
+
+  describe('isBranchMerged', () => {
+    test('returns true for branch with no divergent commits', () => {
+      createWorktree('no-diverge');
+      const merged = isBranchMerged(`${BRANCH_PREFIX}no-diverge`, 'main', testDir);
+      expect(merged).toBe(true);
+    });
+
+    test('returns false for branch with divergent commits', () => {
+      const entry = createWorktree('diverged');
+      fs.writeFileSync(path.join(entry.path, 'diverge.js'), 'diverged');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'diverge'], {
+        cwd: entry.path,
+        stdio: 'pipe',
+      });
+
+      const merged = isBranchMerged(`${BRANCH_PREFIX}diverged`, 'main', testDir);
+      expect(merged).toBe(false);
     });
   });
 });
