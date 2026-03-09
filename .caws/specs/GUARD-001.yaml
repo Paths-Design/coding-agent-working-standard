@@ -1,0 +1,32 @@
+id: GUARD-001
+type: feature
+title: 'Rebase guard: block git rebase while worktrees are active'
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-03-09T06:27:46.918Z'
+updated_at: '2026-03-09T06:27:46.918Z'
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/templates/.claude/hooks/
+    - packages/caws-cli/templates/.claude/rules/
+    - packages/caws-cli/templates/.cursor/hooks/
+    - packages/caws-cli/tests/
+  out:
+    - node_modules/
+    - dist/
+    - build/
+    - packages/caws-cli/src/
+invariants:
+  - System maintains data consistency
+acceptance: []
+acceptance_criteria: []
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []

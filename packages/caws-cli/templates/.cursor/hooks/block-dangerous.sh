@@ -29,6 +29,7 @@ HARD_BLOCKS=(
   "git commit --amend --no-edit" # Can rewrite commit history destructively
   "git reset --hard"            # Can lose uncommitted work and stashed changes
   "git push --force"             # Can overwrite remote repository history
+  "git rebase"                   # Rewrites branch history; blocked while worktrees are active
   "dd if="
   "mkfs"
   "format c:"

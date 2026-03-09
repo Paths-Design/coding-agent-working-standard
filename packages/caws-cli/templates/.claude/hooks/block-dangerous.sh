@@ -75,6 +75,7 @@ DANGEROUS_PATTERNS=(
   'git clean -f'
   'git checkout \.'
   'git restore \.'
+  'git rebase'
 
   # Virtual environment creation (prevents venv sprawl)
   'python -m venv'
@@ -88,6 +89,39 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qiE "$pattern"; then
     # Allow git init in worktree context
     if [[ "$pattern" == "git init" ]] && [[ "${CAWS_WORKTREE_CONTEXT:-0}" == "1" ]]; then
+      continue
+    fi
+
+    # Allow git rebase only when no worktrees are active
+    if [[ "$pattern" == "git rebase" ]]; then
+      PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+      # Resolve to main repo root if we're in a worktree
+      if command -v git >/dev/null 2>&1; then
+        GIT_COMMON=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
+        if [[ -n "$GIT_COMMON" ]] && [[ "$GIT_COMMON" != ".git" ]]; then
+          CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON/.." 2>/dev/null && pwd || echo "")
+          if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
+            PROJECT_DIR="$CANDIDATE"
+          fi
+        fi
+      fi
+      WT_FILE="$PROJECT_DIR/.caws/worktrees.json"
+      if [[ -f "$WT_FILE" ]] && command -v node >/dev/null 2>&1; then
+        ACTIVE_COUNT=$(node -e "
+          try {
+            var r = JSON.parse(require('fs').readFileSync('$WT_FILE','utf8'));
+            var c = Object.values(r.worktrees||{}).filter(function(w){return w.status==='active';}).length;
+            console.log(c);
+          } catch(e) { console.log(0); }
+        " 2>/dev/null || echo "0")
+        if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
+          echo "BLOCKED: git rebase is forbidden while $ACTIVE_COUNT worktree(s) are active." >&2
+          echo "Rebasing rewrites branch history that other agents depend on." >&2
+          echo "Command was: $COMMAND" >&2
+          exit 2
+        fi
+      fi
+      # No active worktrees — allow rebase
       continue
     fi
 

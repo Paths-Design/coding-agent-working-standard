@@ -16,6 +16,7 @@ When multiple agents are working on this project, each agent MUST work in its ow
 ## Forbidden operations when worktrees are active
 
 - `git commit --amend` -- rewrites history that other agents depend on
+- `git rebase` -- rewrites branch history; the hook blocks this automatically while worktrees are active. If you need code from main, create a new worktree from current main instead
 - `git stash` / `git stash pop` -- stash is shared across all worktrees; using it can destroy another agent's uncommitted work
 - `git reset --hard` -- discards work that other agents may depend on
 - `git push --force` -- rewrites remote history
