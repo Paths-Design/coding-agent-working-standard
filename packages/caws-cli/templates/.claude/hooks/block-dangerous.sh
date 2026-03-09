@@ -75,7 +75,7 @@ DANGEROUS_PATTERNS=(
   'git clean -f'
   'git checkout \.'
   'git restore \.'
-  'git rebase'
+  '(^|&&|\|\||;|\|)\s*git rebase'
 
   # Virtual environment creation (prevents venv sprawl)
   'python -m venv'
@@ -93,7 +93,7 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
     fi
 
     # Allow git rebase only when no worktrees are active
-    if [[ "$pattern" == "git rebase" ]]; then
+    if [[ "$pattern" == *"git rebase"* ]]; then
       PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
       # Resolve to main repo root if we're in a worktree
       if command -v git >/dev/null 2>&1; then
