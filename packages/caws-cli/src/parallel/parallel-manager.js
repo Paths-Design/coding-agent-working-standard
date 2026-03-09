@@ -20,7 +20,9 @@ const {
 // session-manager available if needed: require('../session/session-manager')
 
 const PARALLEL_REGISTRY = '.caws/parallel.json';
-const VALID_STRATEGIES = ['merge', 'rebase', 'squash'];
+// 'rebase' removed: it rewrites branch history, which is unsafe when
+// worktrees are still active and other agents may depend on those commits.
+const VALID_STRATEGIES = ['merge', 'squash'];
 const NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 /**
@@ -353,12 +355,7 @@ function mergeParallel(options = {}) {
 
   for (const agent of activeAgents) {
     try {
-      if (strategy === 'rebase') {
-        execFileSync('git', ['rebase', agent.branch], {
-          cwd: root,
-          stdio: 'pipe',
-        });
-      } else if (strategy === 'squash') {
+      if (strategy === 'squash') {
         execFileSync('git', ['merge', '--squash', agent.branch], {
           cwd: root,
           stdio: 'pipe',
@@ -380,11 +377,7 @@ function mergeParallel(options = {}) {
       try {
         execFileSync('git', ['merge', '--abort'], { cwd: root, stdio: 'pipe' });
       } catch {
-        try {
-          execFileSync('git', ['rebase', '--abort'], { cwd: root, stdio: 'pipe' });
-        } catch {
-          // Already clean
-        }
+        // Already clean
       }
       failed.push({ name: agent.name, error: err.message });
     }

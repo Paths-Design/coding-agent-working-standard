@@ -463,7 +463,7 @@ parallelCmd
 parallelCmd
   .command('merge')
   .description('Merge all parallel branches back to base')
-  .option('--strategy <strategy>', 'Merge strategy: rebase, merge, or squash', 'merge')
+  .option('--strategy <strategy>', 'Merge strategy: merge or squash', 'merge')
   .option('--dry-run', 'Preview merge without executing', false)
   .option('--force', 'Force merge even with detected conflicts', false)
   .action((options) => parallelCommand('merge', options));

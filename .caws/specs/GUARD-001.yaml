@@ -15,12 +15,13 @@ scope:
     - packages/caws-cli/templates/.claude/hooks/
     - packages/caws-cli/templates/.claude/rules/
     - packages/caws-cli/templates/.cursor/hooks/
+    - packages/caws-cli/src/parallel/
+    - packages/caws-cli/src/index.js
     - packages/caws-cli/tests/
   out:
     - node_modules/
     - dist/
     - build/
-    - packages/caws-cli/src/
 invariants:
   - System maintains data consistency
 acceptance: []
