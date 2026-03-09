@@ -76,6 +76,7 @@ DANGEROUS_PATTERNS=(
   'git checkout \.'
   'git restore \.'
   '(^|&&|\|\||;|\|)\s*git rebase'
+  '(^|&&|\|\||;|\|)\s*git cherry-pick'
 
   # Virtual environment creation (prevents venv sprawl)
   'python -m venv'
@@ -92,8 +93,8 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
       continue
     fi
 
-    # Allow git rebase only when no worktrees are active
-    if [[ "$pattern" == *"git rebase"* ]]; then
+    # Allow git rebase/cherry-pick only when no worktrees are active
+    if [[ "$pattern" == *"git rebase"* ]] || [[ "$pattern" == *"git cherry-pick"* ]]; then
       PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
       # Resolve to main repo root if we're in a worktree
       if command -v git >/dev/null 2>&1; then
@@ -115,13 +116,17 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
           } catch(e) { console.log(0); }
         " 2>/dev/null || echo "0")
         if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
-          echo "BLOCKED: git rebase is forbidden while $ACTIVE_COUNT worktree(s) are active." >&2
-          echo "Rebasing rewrites branch history that other agents depend on." >&2
+          # Extract the specific git subcommand for the message
+          GIT_SUBCMD="git operation"
+          [[ "$pattern" == *"git rebase"* ]] && GIT_SUBCMD="git rebase"
+          [[ "$pattern" == *"git cherry-pick"* ]] && GIT_SUBCMD="git cherry-pick"
+          echo "BLOCKED: $GIT_SUBCMD is forbidden while $ACTIVE_COUNT worktree(s) are active." >&2
+          echo "This can replay or rewrite commits across worktree boundaries." >&2
           echo "Command was: $COMMAND" >&2
           exit 2
         fi
       fi
-      # No active worktrees — allow rebase
+      # No active worktrees — allow
       continue
     fi
 

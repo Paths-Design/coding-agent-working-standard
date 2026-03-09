@@ -157,6 +157,33 @@ def rel(path):
         return path[len(cwd) + 1:]
     return path or ""
 
+def decode_structured_text_payload(raw):
+    """Decode JSON-escaped text payloads (e.g., Agent/Task tool outputs)."""
+    if not isinstance(raw, str):
+        return raw
+    payload = raw.strip()
+    if not payload or payload[0] not in "[{":
+        return raw
+    try:
+        parsed = json.loads(payload)
+    except Exception:
+        return raw
+
+    text_blocks = []
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str) and text.strip():
+                text_blocks.append(text)
+
+    if text_blocks:
+        return "\n\n".join(text_blocks)
+    return raw
+
 # ---- Accumulate turns as chronological event timelines ----
 turns = []
 # Each turn: {user, timeline: [{kind, ...}, ...], edits, reads, searches, commands}
@@ -242,18 +269,24 @@ for line in sys.stdin:
         tool_info = pending_tools.get(tid, {})
         name = tool_info.get("name", "unknown")
 
-        # Decide if this result is notable enough to show inline
-        # Task results are always notable (subagent did substantive work)
-        notable = is_error or name == "Task"
+        # Always capture tool results for Bash, Task, Agent.
+        # For Read/Write/Edit, only capture if notable (errors, test output, etc.)
+        # to avoid dumping entire file contents into turn logs.
+        always_capture = name in ("Bash", "Task", "Agent")
+        notable = is_error
         if not notable and content:
             content_lower = content.lower()
             notable = any(kw.lower() in content_lower for kw in NOTABLE_KW)
 
-        if notable and content:
+        if (always_capture or notable) and content:
             # Cap file-content tools (full file reads/writes blow out turn files)
             display = content
             if name in ("Read", "Write", "Edit") and len(content) > 2000:
                 display = content[:2000] + "\n...(file content truncated)"
+            elif name in ("Task", "Agent"):
+                display = decode_structured_text_payload(content)
+            elif name == "Bash" and len(content) > 5000:
+                display = content[:5000] + "\n...(output truncated at 5000 chars)"
             # Graft result onto the original tool_call entry (not a separate timeline item)
             if tool_info:
                 tool_info["output"] = display
@@ -281,7 +314,7 @@ for i, turn in enumerate(turns):
     md_lines = [f"# Turn {num}", ""]
 
     if turn["user"]:
-        md_lines.extend([f"> ---user---\n{turn['user']}\n---/user---", ""])
+        md_lines.extend([f"> ---user---\n{turn['user']}\n---\/user---", ""])
 
     for event in turn["timeline"]:
         kind = event["kind"]

@@ -51,9 +51,12 @@ BANNED_MODIFIERS=(
 # Convert filename to lowercase for checking
 FILENAME_LOWER=$(echo "$FILENAME" | tr '[:upper:]' '[:lower:]')
 
-# Check for banned modifiers
+# Check for banned modifiers (word-boundary aware)
 for modifier in "${BANNED_MODIFIERS[@]}"; do
-  if [[ "$FILENAME_LOWER" == *"$modifier"* ]]; then
+  # Match modifier preceded by start-of-string, hyphen, underscore, or dot
+  # and followed by end-of-string, hyphen, underscore, or dot
+  # Prevents false positives like "old" in "gold_oracle" or "new" in "renewable"
+  if [[ "$FILENAME_LOWER" =~ (^|[-_.])"$modifier"([-_.]|$) ]]; then
     # Special case: allow test files that follow conventions
     if [[ "$modifier" == "test-" ]] || [[ "$modifier" == "-test" ]] || [[ "$modifier" == "_test" ]]; then
       if [[ "$FILENAME_LOWER" =~ \.(test|spec)\.(js|ts|jsx|tsx|py|go|rs)$ ]]; then
