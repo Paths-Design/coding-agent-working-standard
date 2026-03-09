@@ -44,6 +44,37 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
     LITE_CHECK=$(node -e "
       const fs = require('fs');
       const path = require('path');
+
+      function globToRegex(pattern) {
+        let i = 0, re = '';
+        while (i < pattern.length) {
+          const c = pattern[i];
+          if (c === '*' && pattern[i+1] === '*') {
+            re += '.*'; i += 2;
+            if (pattern[i] === '/') i++;
+          } else if (c === '*') {
+            re += '[^/]*'; i++;
+          } else if (c === '?') {
+            re += '[^/]'; i++;
+          } else if (c === '[') {
+            const end = pattern.indexOf(']', i);
+            if (end > i) { re += pattern.slice(i, end + 1); i = end + 1; }
+            else { re += '\\\\['; i++; }
+          } else if (c === '{') {
+            const end = pattern.indexOf('}', i);
+            if (end > i) {
+              const alts = pattern.slice(i + 1, end).split(',').map(a => a.trim());
+              re += '(?:' + alts.join('|') + ')'; i = end + 1;
+            } else { re += '\\\\{'; i++; }
+          } else if ('.+^$|()'.includes(c)) {
+            re += '\\\\' + c; i++;
+          } else {
+            re += c; i++;
+          }
+        }
+        return new RegExp(re);
+      }
+
       try {
         const scope = JSON.parse(fs.readFileSync('$SCOPE_FILE', 'utf8'));
         const filePath = '$REL_PATH';
@@ -54,7 +85,7 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
         const basename = path.basename(filePath);
         const bannedFiles = banned.files || [];
         for (const pattern of bannedFiles) {
-          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          const regex = globToRegex(pattern);
           if (regex.test(basename)) {
             console.log('banned:' + pattern);
             process.exit(0);
@@ -64,7 +95,7 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
         // Check banned doc patterns
         const bannedDocs = banned.docs || [];
         for (const pattern of bannedDocs) {
-          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          const regex = globToRegex(pattern);
           if (regex.test(basename)) {
             console.log('banned:' + pattern);
             process.exit(0);
@@ -129,6 +160,37 @@ if command -v node >/dev/null 2>&1; then
     const fs = require('fs');
     const path = require('path');
 
+    // Convert glob pattern to regex, handling **, *, ?, [abc], {a,b}
+    function globToRegex(pattern) {
+      let i = 0, re = '';
+      while (i < pattern.length) {
+        const c = pattern[i];
+        if (c === '*' && pattern[i+1] === '*') {
+          re += '.*'; i += 2;
+          if (pattern[i] === '/') i++; // skip trailing slash after **
+        } else if (c === '*') {
+          re += '[^/]*'; i++;
+        } else if (c === '?') {
+          re += '[^/]'; i++;
+        } else if (c === '[') {
+          const end = pattern.indexOf(']', i);
+          if (end > i) { re += pattern.slice(i, end + 1); i = end + 1; }
+          else { re += '\\\\['; i++; }
+        } else if (c === '{') {
+          const end = pattern.indexOf('}', i);
+          if (end > i) {
+            const alts = pattern.slice(i + 1, end).split(',').map(a => a.trim());
+            re += '(?:' + alts.join('|') + ')'; i = end + 1;
+          } else { re += '\\\\{'; i++; }
+        } else if ('.+^$|()'.includes(c)) {
+          re += '\\\\' + c; i++;
+        } else {
+          re += c; i++;
+        }
+      }
+      return new RegExp(re);
+    }
+
     try {
       const filePath = '$REL_PATH';
 
@@ -177,7 +239,7 @@ if command -v node >/dev/null 2>&1; then
       // Check scope.out across ALL active specs — any match blocks
       for (const { source, spec } of specs) {
         for (const pattern of (spec.scope?.out || [])) {
-          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          const regex = globToRegex(pattern);
           if (regex.test(filePath)) {
             console.log('out_of_scope:' + source + ':' + pattern);
             process.exit(0);
@@ -190,7 +252,7 @@ if command -v node >/dev/null 2>&1; then
       if (allInScope.length > 0) {
         let found = false;
         for (const pattern of allInScope) {
-          const regex = new RegExp(pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          const regex = globToRegex(pattern);
           if (regex.test(filePath)) {
             found = true;
             break;

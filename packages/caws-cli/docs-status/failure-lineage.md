@@ -323,36 +323,80 @@ The structured output decoding (sterling's version) was added because Task/Agent
 
 ## Appendix: Audit Findings (March 2026)
 
-### Critical Drift: Template vs Sterling
+### Critical Drift: Template vs Sterling — RESOLVED
 
-| File | Issue | Priority |
-|------|-------|----------|
-| `scope-guard.sh` | Template missing feature spec support | **High** — core multi-agent capability |
-| `session-log.sh` | Template lost structured output decoding | **High** — readability regression |
-| `naming-check.sh` | Template uses substring match, sterling uses word-boundary regex | **Medium** — false positive difference |
-| `worktree-isolation.md` | Venv section diverged (hardcoded path vs placeholder) | **Low** |
+All items below were remediated in the GUARD-001 session (March 2026):
 
-### Known False Positive Risks
+| File | Issue | Resolution |
+|------|-------|------------|
+| `scope-guard.sh` | Template missing feature spec support | ✅ Template upgraded to multi-spec; backported to sterling |
+| `session-log.sh` | Template lost structured output decoding | ✅ `decode_structured_text_payload()` and three-tier capture restored |
+| `naming-check.sh` | Template uses substring match | ✅ Upgraded to word-boundary regex `(^|[-_.])modifier([-_.]|$)` |
+| `worktree-isolation.md` | Venv section diverged (hardcoded path vs placeholder) | ✅ Template uses `<main-repo-path>` placeholder |
 
-| Pattern | File | Risk |
-|---------|------|------|
-| `naming-check.sh` substring matching | Template | "renewable" matches "new", "gold_oracle" matches "old" |
-| `change_budget` content scan | Cursor `caws-scope-guard.sh` | Comments mentioning `change_budget` trigger block |
-| Credit card regex | Cursor `scan-secrets.sh` | Phone numbers and test data match the pattern |
-| Bearer token regex | Cursor `scan-secrets.sh` | Documentation examples match |
+### Known False Positive Risks — RESOLVED
 
-### Unused/Dead Code
+| Pattern | File | Resolution |
+|---------|------|------------|
+| `naming-check.sh` substring matching | Template | ✅ Fixed with word-boundary regex |
+| Credit card regex | Cursor `scan-secrets.sh` | ✅ Tightened: requires word boundaries, no embedded-number false positives |
+| Bearer token regex | Cursor `scan-secrets.sh` | ✅ Tightened: requires 20+ char token, not short doc examples |
+| `change_budget` content scan | Cursor `caws-scope-guard.sh` | Open — not yet addressed |
 
-| Item | Location | Status |
-|------|----------|--------|
-| `scope-guard.js` (Node tool) | `.caws/tools/` | `checkExperimentalContainment()` exported but never called |
-| `experimental_mode` field | Working spec schema | Referenced in scope-guard.js but not in standard CAWS schema |
+### Unused/Dead Code — RESOLVED
 
-### Missing Guards
+| Item | Location | Resolution |
+|------|----------|------------|
+| `scope-guard.js` experimental containment | `.caws/tools/` | ✅ Rewritten to do actual file-in-scope checking |
+| `caws-tool-validation.sh` (MCP hook) | `.cursor/hooks/` | ✅ Removed — MCP server no longer shipped |
+| `beforeMCPExecution` hook config | `.cursor/hooks.json` | ✅ Removed |
+| MCP references in CLI | `status.js`, `project-analysis.js` | ✅ Cleaned up |
+| MCP debug config | `.vscode/launch.json` | ✅ Removed |
 
-| Gap | Description | Recommended |
-|-----|-------------|-------------|
-| `git cherry-pick` | Not blocked; could be used to replay commits from other worktrees | Add to confirm patterns |
-| Cross-worktree file reads | Only writes are guarded; an agent can read another worktree's files | Consider read-guard for scope enforcement |
-| `pip install --target` | Bypasses venv creation block | Add pattern |
-| Log rotation | Audit/session logs grow unbounded | Add cleanup policy |
+### Glob-to-Regex Conversion — FIXED
+
+The `pattern.replace(/\*/g, '.*').replace(/\?/g, '.')` pattern was used in `scope-guard.sh` and `lite-sprawl-check.sh`. This failed for:
+- `**` (recursive) — became `.*.*` instead of `.*`
+- `[abc]` (character classes) — passed through as literal brackets
+- `{a,b}` (alternatives) — treated as literal braces
+
+✅ Replaced with proper `globToRegex()` function that handles all patterns.
+
+### Log Rotation — IMPLEMENTED
+
+| Item | Resolution |
+|------|------------|
+| Audit logs grow unbounded | ✅ `audit.sh` rotates main log at 10MB, prunes date logs >30 days |
+| Probabilistic check | Runs ~1% of calls to avoid stat overhead on every tool use |
+
+### Missing Guards — STATUS
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| `git cherry-pick` | Replays commits across worktree boundaries | ✅ Added to `block-dangerous.sh` with worktree-active guard |
+| Cross-worktree file reads | Only writes are guarded | Open — consider read-guard |
+| `pip install --target` | Bypasses venv creation block | Open — add pattern |
+| Worktree ownership bypass | Agent destroyed another agent's worktree with `--force` | ✅ Removed "use --force" hint, added loud red warning |
+
+---
+
+## Entry 11: Worktree Ownership Violation (March 2026)
+
+**Incident**: An agent force-destroyed another agent's active worktree (`replay-evidence`), losing that agent's in-progress work. The error message itself invited the bypass: "Use --force to override."
+
+### What happened
+
+Agent A was working in worktree `replay-evidence`. Agent B, seeing "stale" worktrees, ran `caws worktree destroy replay-evidence --force`. The ownership check fired, showed the "Use --force" message, and Agent B immediately complied. Agent A's uncommitted work was destroyed.
+
+### Root cause
+
+The ownership error message included instructions for bypassing the guard — effectively teaching agents how to defeat the protection.
+
+### What we built
+
+| Guard | File | Purpose |
+|-------|------|---------|
+| Ownership check | `worktree-manager.js` | Block destroy if session ID doesn't match owner |
+| Force-override warning | `worktree-manager.js` | Loud red warning when `--force` is used on another's worktree |
+| Rule update | `worktree-isolation.md` | "Never touch a worktree you did not create. Period." |
+| Error message fix | `worktree-manager.js` | Changed from "Use --force to override" to "Do NOT destroy worktrees you did not create" |

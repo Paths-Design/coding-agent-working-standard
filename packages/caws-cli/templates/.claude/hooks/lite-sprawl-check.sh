@@ -49,9 +49,37 @@ if command -v node >/dev/null 2>&1; then
       const basename = '$BASENAME';
       const banned = scope.bannedPatterns || {};
 
+      function globToRegex(pattern) {
+        let i = 0, re = '';
+        while (i < pattern.length) {
+          const c = pattern[i];
+          if (c === '*' && pattern[i+1] === '*') {
+            re += '.*'; i += 2;
+            if (pattern[i] === '/') i++;
+          } else if (c === '*') {
+            re += '[^/]*'; i++;
+          } else if (c === '?') {
+            re += '[^/]'; i++;
+          } else if (c === '[') {
+            const end = pattern.indexOf(']', i);
+            if (end > i) { re += pattern.slice(i, end + 1); i = end + 1; }
+            else { re += '\\\\['; i++; }
+          } else if (c === '{') {
+            const end = pattern.indexOf('}', i);
+            if (end > i) {
+              const alts = pattern.slice(i + 1, end).split(',').map(a => a.trim());
+              re += '(?:' + alts.join('|') + ')'; i = end + 1;
+            } else { re += '\\\\{'; i++; }
+          } else if ('.+^$|()'.includes(c)) {
+            re += '\\\\' + c; i++;
+          } else {
+            re += c; i++;
+          }
+        }
+        return new RegExp('^' + re + '$');
+      }
       function matchGlob(str, pattern) {
-        const regex = new RegExp('^' + pattern.replace(/\\*/g, '.*').replace(/\\?/g, '.') + '$');
-        return regex.test(str);
+        return globToRegex(pattern).test(str);
       }
 
       // Check banned file patterns

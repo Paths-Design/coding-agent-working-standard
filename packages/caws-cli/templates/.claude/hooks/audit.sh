@@ -88,6 +88,31 @@ case "$EVENT_TYPE" in
     ;;
 esac
 
+# --- Log rotation ---
+# Keep main audit.log under 10MB; keep date-logs for 30 days
+rotate_logs() {
+  # Rotate main audit.log at 10MB
+  if [[ -f "$LOG_FILE" ]]; then
+    local size
+    size=$(wc -c < "$LOG_FILE" 2>/dev/null | tr -d ' ')
+    if [[ "$size" -gt 10485760 ]]; then
+      # Keep last rotated copy, discard older
+      [[ -f "${LOG_FILE}.1" ]] && rm -f "${LOG_FILE}.1"
+      mv "$LOG_FILE" "${LOG_FILE}.1"
+    fi
+  fi
+
+  # Prune date-based logs older than 30 days
+  if [[ -d "$LOG_DIR" ]]; then
+    find "$LOG_DIR" -name 'audit-*.log' -type f -mtime +30 -delete 2>/dev/null || true
+  fi
+}
+
+# Run rotation check ~1% of the time (avoid stat overhead on every tool call)
+if [[ $(( RANDOM % 100 )) -eq 0 ]]; then
+  rotate_logs
+fi
+
 # Append to log files
 echo "$LOG_ENTRY" >> "$LOG_FILE"
 echo "$LOG_ENTRY" >> "$DATE_LOG_FILE"
