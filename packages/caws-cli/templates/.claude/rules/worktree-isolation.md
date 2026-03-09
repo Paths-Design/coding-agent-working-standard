@@ -12,6 +12,7 @@ When multiple agents are working on this project, each agent MUST work in its ow
 1. Check if worktrees exist: `caws worktree list` shows all active worktrees with last commit time and owner
 2. If worktrees are active and you are on the base branch, switch to your assigned worktree
 3. If no worktree exists for you, create one with `caws worktree create <name>` or `caws parallel setup <plan-file>`
+4. **Never touch a worktree you did not create.** Do not destroy, prune, stash, or "clean up" another agent's worktree — even if it looks stale. Another agent may be actively working in it. If you think a worktree is abandoned, leave it alone and let the user decide.
 
 ## Forbidden operations when worktrees are active
 
@@ -23,7 +24,7 @@ When multiple agents are working on this project, each agent MUST work in its ow
 - `git push --force` -- rewrites remote history
 - Direct commits to the base branch -- only `merge(worktree):` and `wip(checkpoint):` formats are allowed
 - Copying files between your worktree and the main repo directory -- defeats isolation
-- Destroying another agent's active worktree -- `caws worktree destroy` will block this unless you use `--force`
+- Destroying another agent's worktree -- even with `--force`. If you did not create it, do not destroy it. Period.
 
 ## Merging worktree branches back to base
 

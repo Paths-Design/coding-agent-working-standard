@@ -1,6 +1,6 @@
 id: GUARD-001
 type: feature
-title: 'Rebase guard: block git rebase while worktrees are active'
+title: 'Hook audit remediation: rebase guard, naming, session-log, ownership hardening'
 status: draft
 risk_tier: 3
 mode: development
@@ -16,6 +16,7 @@ scope:
     - packages/caws-cli/templates/.claude/rules/
     - packages/caws-cli/templates/.cursor/hooks/
     - packages/caws-cli/src/parallel/
+    - packages/caws-cli/src/worktree/
     - packages/caws-cli/src/index.js
     - packages/caws-cli/tests/
   out:

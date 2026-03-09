@@ -343,8 +343,25 @@ function destroyWorktree(name, options = {}) {
       `Worktree '${name}' belongs to another session${recency}.\n` +
         `   Owner: ${entry.owner}\n` +
         `   You:   ${currentSession}\n` +
-        `Another agent may be actively working here. Use --force to override.`
+        `Another agent may be actively working here.\n` +
+        `Do NOT destroy worktrees you did not create. Ask the user if cleanup is needed.`
     );
+  }
+
+  // Even with --force, warn loudly when destroying another session's worktree
+  if (
+    force &&
+    entry.status === 'active' &&
+    entry.owner &&
+    currentSession &&
+    entry.owner !== currentSession
+  ) {
+    const lastCommit = entry.branch ? getLastCommitInfo(entry.branch, root) : null;
+    const recency = lastCommit ? ` (last commit: ${lastCommit.age})` : '';
+    console.log(chalk.red(`\n   ⚠ WARNING: Force-destroying worktree '${name}' owned by another session${recency}`));
+    console.log(chalk.red(`   Owner: ${entry.owner}`));
+    console.log(chalk.red(`   You:   ${currentSession}`));
+    console.log(chalk.red(`   If the other agent is still running, this WILL break their work.\n`));
   }
 
   // Auto-force when the branch is already merged to its base branch.
