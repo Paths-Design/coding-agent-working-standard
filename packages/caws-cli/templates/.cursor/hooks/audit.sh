@@ -2,7 +2,7 @@
 # Cursor Hook: Audit Trail
 # 
 # Purpose: Log all Cursor AI events for provenance tracking
-# Event: All (beforeShellExecution, beforeMCPExecution, beforeReadFile, 
+# Event: All (beforeShellExecution, beforeReadFile,
 #        afterFileEdit, beforeSubmitPrompt, stop)
 # 
 # @author @darianrosebrook

@@ -9,14 +9,6 @@
         "command": "./.cursor/hooks/audit.sh"
       }
     ],
-    "beforeMCPExecution": [
-      {
-        "command": "./.cursor/hooks/audit.sh"
-      },
-      {
-        "command": "./.cursor/hooks/caws-tool-validation.sh"
-      }
-    ],
     "beforeReadFile": [
       {
         "command": "./.cursor/hooks/scan-secrets.sh"

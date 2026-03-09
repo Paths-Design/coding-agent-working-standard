@@ -106,7 +106,6 @@ async function scaffoldCursorHooks(projectDir, levels = ['safety', 'quality', 's
         { command: './.cursor/hooks/block-dangerous.sh' },
         { command: './.cursor/hooks/audit.sh' },
       ];
-      hooksConfig.hooks.beforeMCPExecution = [{ command: './.cursor/hooks/audit.sh' }];
       hooksConfig.hooks.beforeReadFile = [{ command: './.cursor/hooks/scan-secrets.sh' }];
     }
 

@@ -9,7 +9,6 @@ Cursor hooks enable seamless integration between CAWS and the Cursor IDE, provid
 - **Real-time quality validation** as you code
 - **Automatic spec validation** when editing working specs
 - **Scope enforcement** preventing out-of-scope file access
-- **Tool validation** for safe MCP execution
 - **Quality monitoring** after file edits
 
 ## Hook Configuration
@@ -19,7 +18,6 @@ The `hooks.json` file defines when each hook runs:
 ```json
 {
   "beforeShellExecution": ["block-dangerous.sh", "audit.sh"],
-  "beforeMCPExecution": ["audit.sh", "caws-tool-validation.sh"],
   "beforeReadFile": ["scan-secrets.sh", "caws-scope-guard.sh"],
   "afterFileEdit": ["format.sh", "naming-check.sh", "validate-spec.sh", "caws-quality-check.sh", "audit.sh"],
   "beforeSubmitPrompt": ["caws-scope-guard.sh", "audit.sh"],
@@ -42,12 +40,6 @@ The `hooks.json` file defines when each hook runs:
 - **Purpose**: Prevents access to files outside CAWS-defined scope
 - **Blocks**: Yes (for out-of-scope file access)
 - **Requires**: `.caws/working-spec.yaml`
-
-#### `caws-tool-validation.sh`
-- **Trigger**: `beforeMCPExecution`
-- **Purpose**: Validates CAWS MCP tool calls for security
-- **Blocks**: Yes (for dangerous operations or invalid waivers)
-- **Validates**: Waiver creation, tool permissions, command safety
 
 ### General Security Hooks
 
@@ -242,7 +234,6 @@ Cursor Hooks ←→ CAWS CLI ←→ VS Code Extension
 
 - **Git Hooks**: `.git/hooks/` for commit/push validation
 - **VS Code Extension**: Rich UI for CAWS operations
-- **MCP Server**: Agent tool integration
 - **CAWS CLI**: Core functionality
 
 ### Data Flow

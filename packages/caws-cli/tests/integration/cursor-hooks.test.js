@@ -217,7 +217,6 @@ describe('Cursor Hooks Integration', () => {
 
       // Check for all required hook events
       expect(config.hooks).toHaveProperty('beforeShellExecution');
-      expect(config.hooks).toHaveProperty('beforeMCPExecution');
       expect(config.hooks).toHaveProperty('beforeReadFile');
       expect(config.hooks).toHaveProperty('afterFileEdit');
       expect(config.hooks).toHaveProperty('beforeSubmitPrompt');

@@ -347,7 +347,6 @@ function getTodoAnalyzerSuggestion(cwd = process.cwd()) {
     suggestions.push(
       '   - Install Node.js: https://nodejs.org/ (then use: npx --yes @paths.design/quality-gates)'
     );
-    suggestions.push('   - Use CAWS MCP server: caws quality-gates (via MCP)');
   }
 
   // Check for project-specific scripts (language-agnostic - if they exist, suggest them)

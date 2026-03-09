@@ -2,18 +2,6 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug MCP Server",
-      "type": "node",
-      "request": "launch",
-      "program": "${workspaceFolder}/packages/caws-mcp-server/index.js",
-      "args": [],
-      "env": {
-        "NODE_ENV": "development",
-        "CAWS_DEBUG": "true"
-      },
-      "console": "integratedTerminal"
-    },
-    {
       "name": "Debug CAWS CLI",
       "type": "node",
       "request": "launch",

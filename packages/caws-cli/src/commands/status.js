@@ -184,7 +184,7 @@ async function loadWaiverStatus() {
 async function checkQualityGates() {
   return {
     checked: false,
-    message: 'Run: caws quality-gates or use MCP tool caws_quality_gates_run for full gate status',
+    message: 'Run: caws quality-gates for full gate status',
   };
 }
 
