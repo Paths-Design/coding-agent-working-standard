@@ -1,0 +1,29 @@
+id: ACVERIFY-001
+type: feature
+title: Language-agnostic acceptance criteria verification
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-03-09T18:00:40.409Z'
+updated_at: '2026-03-09T18:00:40.412Z'
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - src/
+    - tests/
+  out:
+    - node_modules/
+    - dist/
+    - build/
+invariants:
+  - System maintains data consistency
+acceptance: []
+acceptance_criteria: []
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []

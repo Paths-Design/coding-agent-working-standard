@@ -10,6 +10,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { execFileSync } = require('child_process');
+const { findProjectRoot } = require('../utils/detection');
 
 const SPECS_DIR = '.caws/specs';
 const TERMINAL_STATUSES = new Set(['completed', 'closed', 'archived']);
@@ -370,7 +371,7 @@ function loadSpecs(projectRoot, targetSpecId) {
  * Main command handler
  */
 async function verifyAcsCommand(options = {}) {
-  const projectRoot = process.cwd();
+  const projectRoot = findProjectRoot();
 
   // Check for CAWS project
   if (!fs.existsSync(path.join(projectRoot, '.caws'))) {

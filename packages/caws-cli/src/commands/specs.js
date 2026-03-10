@@ -686,7 +686,7 @@ async function migrateFromLegacy(options = {}, createSpecFn = createSpec) {
   const yaml = require('js-yaml');
   const chalk = require('chalk');
 
-  const legacyPath = path.join(process.cwd(), '.caws', 'working-spec.yaml');
+  const legacyPath = path.join(findProjectRoot(), '.caws', 'working-spec.yaml');
 
   if (!(await fs.pathExists(legacyPath))) {
     throw new Error('No legacy working-spec.yaml found to migrate');
