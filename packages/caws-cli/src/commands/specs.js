@@ -14,10 +14,19 @@ const { SPEC_TYPES } = require('../constants/spec-types');
 
 // Import suggestFeatureBreakdown from spec-resolver
 const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
+const { findProjectRoot } = require('../utils/detection');
 
 /**
- * Specs directory structure
+ * Specs directory structure — anchored to the CAWS project root,
+ * not process.cwd(), so the CLI works from subdirectories and monorepos.
  */
+function getSpecsDir() {
+  return path.join(findProjectRoot(), '.caws', 'specs');
+}
+function getSpecsRegistry() {
+  return path.join(findProjectRoot(), '.caws', 'specs', 'registry.json');
+}
+// Legacy constants kept for backward compatibility in tests
 const SPECS_DIR = '.caws/specs';
 const SPECS_REGISTRY = '.caws/specs/registry.json';
 
@@ -27,7 +36,8 @@ const SPECS_REGISTRY = '.caws/specs/registry.json';
  */
 async function loadSpecsRegistry() {
   try {
-    if (!(await fs.pathExists(SPECS_REGISTRY))) {
+    const registryPath = getSpecsRegistry();
+    if (!(await fs.pathExists(registryPath))) {
       return {
         version: '1.0.0',
         specs: {},
@@ -35,7 +45,7 @@ async function loadSpecsRegistry() {
       };
     }
 
-    const registry = JSON.parse(await fs.readFile(SPECS_REGISTRY, 'utf8'));
+    const registry = JSON.parse(await fs.readFile(registryPath, 'utf8'));
     return registry;
   } catch (error) {
     return {
@@ -52,9 +62,10 @@ async function loadSpecsRegistry() {
  * @returns {Promise<void>}
  */
 async function saveSpecsRegistry(registry) {
-  await fs.ensureDir(path.dirname(SPECS_REGISTRY));
+  const registryPath = getSpecsRegistry();
+  await fs.ensureDir(path.dirname(registryPath));
   registry.lastUpdated = new Date().toISOString();
-  await fs.writeFile(SPECS_REGISTRY, JSON.stringify(registry, null, 2));
+  await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
 }
 
 /**
@@ -62,16 +73,17 @@ async function saveSpecsRegistry(registry) {
  * @returns {Promise<Array>} Array of spec file info
  */
 async function listSpecFiles() {
-  if (!(await fs.pathExists(SPECS_DIR))) {
+  const specsDir = getSpecsDir();
+  if (!(await fs.pathExists(specsDir))) {
     return [];
   }
 
-  const files = await fs.readdir(SPECS_DIR, { recursive: true });
+  const files = await fs.readdir(specsDir, { recursive: true });
   const yamlFiles = files.filter((file) => file.endsWith('.yaml') || file.endsWith('.yml'));
 
   const specs = [];
   for (const file of yamlFiles) {
-    const filePath = path.join(SPECS_DIR, file);
+    const filePath = path.join(specsDir, file);
     try {
       const content = await fs.readFile(filePath, 'utf8');
       const spec = yaml.load(content);
@@ -121,7 +133,8 @@ async function createSpec(id, options = {}) {
   }
 
   // Check for existing spec
-  const existingSpecPath = path.join(SPECS_DIR, `${id}.yaml`);
+  const specsDir = getSpecsDir();
+  const existingSpecPath = path.join(specsDir, `${id}.yaml`);
   const specExists = await fs.pathExists(existingSpecPath);
 
   // Handle conflict resolution
@@ -185,7 +198,7 @@ async function createSpec(id, options = {}) {
   }
 
   // Ensure specs directory exists
-  await fs.ensureDir(SPECS_DIR);
+  await fs.ensureDir(specsDir);
 
   // Generate spec content with all required fields
   // Merge template carefully to preserve required fields and structure
@@ -260,7 +273,7 @@ async function createSpec(id, options = {}) {
 
   // Create file path
   const fileName = `${id}.yaml`;
-  const filePath = path.join(SPECS_DIR, fileName);
+  const filePath = path.join(specsDir, fileName);
 
   // Write spec file
   const yamlContent = yaml.dump(specContent, { indent: 2 });
@@ -340,7 +353,7 @@ async function loadSpec(id) {
     return null;
   }
 
-  const specPath = path.join(SPECS_DIR, registry.specs[id].path);
+  const specPath = path.join(getSpecsDir(), registry.specs[id].path);
 
   try {
     const content = await fs.readFile(specPath, 'utf8');
@@ -389,7 +402,7 @@ async function updateSpec(id, updates = {}) {
   await saveSpecsRegistry(registry);
 
   // Write back to file
-  const specPath = path.join(SPECS_DIR, registry.specs[id].path);
+  const specPath = path.join(getSpecsDir(), registry.specs[id].path);
   await fs.writeFile(specPath, yaml.dump(updatedSpec, { indent: 2 }));
 
   return true;
@@ -534,7 +547,7 @@ async function deleteSpec(id) {
     return false;
   }
 
-  const specPath = path.join(SPECS_DIR, registry.specs[id].path);
+  const specPath = path.join(getSpecsDir(), registry.specs[id].path);
 
   // Remove file
   await fs.remove(specPath);

@@ -12,6 +12,7 @@ const chalk = require('chalk');
 
 // Import SPEC_TYPES from constants for consistent display
 const { SPEC_TYPES } = require('../constants/spec-types');
+const { findProjectRoot } = require('./detection');
 
 /**
  * Spec resolution priority:
@@ -21,6 +22,18 @@ const { SPEC_TYPES } = require('../constants/spec-types');
 const SPECS_DIR = '.caws/specs';
 const LEGACY_SPEC = '.caws/working-spec.yaml';
 const SPECS_REGISTRY = '.caws/specs/registry.json';
+
+/**
+ * Get the project root for spec resolution.
+ * Caches per process to avoid repeated filesystem walks.
+ */
+let _cachedProjectRoot = null;
+function getProjectRoot() {
+  if (!_cachedProjectRoot) {
+    _cachedProjectRoot = findProjectRoot();
+  }
+  return _cachedProjectRoot;
+}
 
 /**
  * Resolve spec file path based on priority
@@ -36,7 +49,7 @@ async function resolveSpec(options = {}) {
 
   // 1. Explicit file path takes highest priority
   if (specFile) {
-    const explicitPath = path.isAbsolute(specFile) ? specFile : path.join(process.cwd(), specFile);
+    const explicitPath = path.isAbsolute(specFile) ? specFile : path.join(getProjectRoot(), specFile);
 
     if (await fs.pathExists(explicitPath)) {
       const yaml = require('js-yaml');
@@ -55,7 +68,7 @@ async function resolveSpec(options = {}) {
 
   // 2. Feature-specific spec (preferred for multi-agent)
   if (specId) {
-    const featurePath = path.join(process.cwd(), SPECS_DIR, `${specId}.yaml`);
+    const featurePath = path.join(getProjectRoot(), SPECS_DIR, `${specId}.yaml`);
 
     if (await fs.pathExists(featurePath)) {
       const yaml = require('js-yaml');
@@ -83,7 +96,7 @@ async function resolveSpec(options = {}) {
   if (specIds.length === 1) {
     // Single spec - use it automatically
     const singleSpecId = specIds[0];
-    const singleSpecPath = path.join(process.cwd(), SPECS_DIR, registry.specs[singleSpecId].path);
+    const singleSpecPath = path.join(getProjectRoot(), SPECS_DIR, registry.specs[singleSpecId].path);
 
     if (await fs.pathExists(singleSpecPath)) {
       const yaml = require('js-yaml');
@@ -179,7 +192,7 @@ async function resolveSpec(options = {}) {
   }
 
   // 4. Fall back to legacy working-spec.yaml (with warning)
-  const legacyPath = path.join(process.cwd(), LEGACY_SPEC);
+  const legacyPath = path.join(getProjectRoot(), LEGACY_SPEC);
 
   if (await fs.pathExists(legacyPath)) {
     const yaml = require('js-yaml');
@@ -211,7 +224,7 @@ async function resolveSpec(options = {}) {
  * @returns {Promise<Object>} Registry data
  */
 async function loadSpecsRegistry() {
-  const registryPath = path.join(process.cwd(), SPECS_REGISTRY);
+  const registryPath = path.join(getProjectRoot(), SPECS_REGISTRY);
 
   if (!(await fs.pathExists(registryPath))) {
     return {
@@ -241,7 +254,7 @@ async function listAvailableSpecs() {
   const specs = [];
 
   // Check feature-specific specs
-  const specsDir = path.join(process.cwd(), SPECS_DIR);
+  const specsDir = path.join(getProjectRoot(), SPECS_DIR);
   if (await fs.pathExists(specsDir)) {
     const files = await fs.readdir(specsDir);
     const yamlFiles = files.filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
@@ -257,7 +270,7 @@ async function listAvailableSpecs() {
 
         specs.push({
           id: spec.id || path.basename(file, path.extname(file)),
-          path: path.relative(process.cwd(), specPath),
+          path: path.relative(getProjectRoot(), specPath),
           type: 'feature',
           title: spec.title || 'Untitled',
         });
@@ -268,7 +281,7 @@ async function listAvailableSpecs() {
   }
 
   // Check legacy working-spec.yaml
-  const legacyPath = path.join(process.cwd(), LEGACY_SPEC);
+  const legacyPath = path.join(getProjectRoot(), LEGACY_SPEC);
   if (await fs.pathExists(legacyPath)) {
     try {
       const yaml = require('js-yaml');
@@ -342,7 +355,7 @@ async function interactiveSpecSelection(specIds) {
 async function checkMultiSpecStatus() {
   const registry = await loadSpecsRegistry();
   const hasFeatureSpecs = Object.keys(registry.specs ?? {}).length > 0;
-  const legacyPath = path.join(process.cwd(), LEGACY_SPEC);
+  const legacyPath = path.join(getProjectRoot(), LEGACY_SPEC);
   const hasLegacySpec = await fs.pathExists(legacyPath);
 
   return {
@@ -374,7 +387,7 @@ async function checkScopeConflicts(specIds) {
       try {
         spec = yaml.load(content);
       } catch (yamlError) {
-        const relativePath = path.relative(process.cwd(), specPath);
+        const relativePath = path.relative(getProjectRoot(), specPath);
         throw new Error(
           `Invalid YAML syntax in ${relativePath}: ${yamlError.message}\n` +
             (yamlError.mark

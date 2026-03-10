@@ -196,7 +196,44 @@ function detectCAWSSetup(cwd = process.cwd()) {
   };
 }
 
+/**
+ * Find the CAWS project root by walking up from startDir looking for .caws/
+ * Falls back to git root, then to process.cwd()
+ * @param {string} [startDir] - Directory to start searching from
+ * @returns {string} Project root directory path
+ */
+function findProjectRoot(startDir = process.cwd()) {
+  // Walk up looking for .caws/ directory
+  let dir = path.resolve(startDir);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    if (fs.existsSync(path.join(dir, '.caws'))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+
+  // Fallback: try git root
+  try {
+    const { execFileSync } = require('child_process');
+    const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      cwd: startDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (gitRoot && fs.existsSync(path.join(gitRoot, '.caws'))) {
+      return gitRoot;
+    }
+  } catch {
+    // Not a git repo or git not available
+  }
+
+  // Final fallback: cwd
+  return process.cwd();
+}
+
 module.exports = {
   detectCAWSSetup,
   findPackageRoot,
+  findProjectRoot,
 };

@@ -118,7 +118,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         updated_at: expect.any(String),
       });
 
-      expect(fs.ensureDir).toHaveBeenCalledWith(SPECS_DIR);
+      expect(fs.ensureDir).toHaveBeenCalledWith(expect.stringContaining('.caws/specs'));
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
