@@ -52,6 +52,7 @@ const { planCommand } = require('./commands/plan');
 const { worktreeCommand } = require('./commands/worktree');
 const { sessionCommand } = require('./commands/session');
 const { parallelCommand } = require('./commands/parallel');
+const { verifyAcsCommand } = require('./commands/verify-acs');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -490,6 +491,16 @@ program
   .option('--fix', 'Apply automatic fixes', false)
   .action(diagnoseCommand);
 
+// Verify Acceptance Criteria command
+program
+  .command('verify-acs')
+  .description('Verify acceptance criteria in specs are backed by test evidence')
+  .option('--spec-id <id>', 'Verify only this spec')
+  .option('--run', 'Actually run tests (default: collect-only)', false)
+  .option('--runner <runner>', 'Force test runner (pytest, jest, vitest, cargo, go)')
+  .option('--format <format>', 'Output format (text, json)', 'text')
+  .action(verifyAcsCommand);
+
 // Evaluate command
 program
   .command('evaluate [spec-file]')
@@ -746,6 +757,7 @@ program.exitOverride((err) => {
       'worktree',
       'session',
       'parallel',
+      'verify-acs',
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 

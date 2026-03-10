@@ -1,0 +1,55 @@
+id: ACVERIFY-001
+type: feature
+title: 'Language-agnostic acceptance criteria verification'
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-03-09T08:00:00.000Z'
+updated_at: '2026-03-09T08:00:00.000Z'
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/commands/
+    - packages/caws-cli/src/validation/
+    - packages/caws-cli/tests/
+  out:
+    - node_modules/
+    - dist/
+    - build/
+invariants:
+  - System maintains data consistency
+  - Existing validate command behavior unchanged
+acceptance_criteria:
+  - id: AC-1
+    description: caws verify-acs subcommand loads specs and extracts ACs from both acceptance and acceptance_criteria fields
+    test_nodeids:
+      - packages/caws-cli/tests/verify-acs.test.js::extractACs
+  - id: AC-2
+    description: test_command ACs verified by running the command and checking exit code
+    test_nodeids:
+      - packages/caws-cli/tests/verify-acs.test.js::verifySpec
+  - id: AC-3
+    description: test_nodeids ACs verified by detecting test runner and collecting tests
+    test_nodeids:
+      - packages/caws-cli/tests/verify-acs.test.js::detectTestRunner
+  - id: AC-4
+    description: evidence ACs verified by checking artifact file existence
+    test_nodeids:
+      - packages/caws-cli/tests/verify-acs.test.js::checkEvidence
+  - id: AC-5
+    description: narrative-only ACs reported as unchecked
+    test_nodeids:
+      - packages/caws-cli/tests/verify-acs.test.js::verifySpec
+  - id: AC-6
+    description: JSON and table output formats supported
+    test_command: 'node packages/caws-cli/src/index.js verify-acs --help 2>&1 | grep -q "format"'
+  - id: AC-7
+    description: --run flag executes tests instead of just collecting
+contracts: []
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
