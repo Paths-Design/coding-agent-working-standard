@@ -469,7 +469,7 @@ function mergeWorktree(name, options = {}) {
   let conflicts = [];
   try {
     // New-style merge-tree: takes two branches, computes merge-base automatically
-    const mergeTreeResult = execFileSync(
+    execFileSync(
       'git',
       ['merge-tree', '--write-tree', baseBranch, entry.branch],
       { cwd: root, encoding: 'utf8', stdio: 'pipe' }

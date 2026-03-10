@@ -39,7 +39,7 @@ function detectTestRunner(projectRoot) {
       if (fs.existsSync(fp)) {
         try {
           if (fs.readFileSync(fp, 'utf8').includes(needle)) return check.runner;
-        } catch (_) {}
+        } catch (_) { /* ignore unreadable config */ }
       }
     }
   }
@@ -123,7 +123,7 @@ function runNodeid(nodeid, runner, projectRoot) {
   try {
     switch (runner) {
       case 'pytest': {
-        const out = execFileSync('python3', ['-m', 'pytest', '-x', '--tb=short', nodeid], {
+        execFileSync('python3', ['-m', 'pytest', '-x', '--tb=short', nodeid], {
           cwd: projectRoot, encoding: 'utf8', timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'],
         });
         return { passed: true, detail: 'tests passed' };
@@ -215,7 +215,7 @@ function checkEvidence(evidence, projectRoot) {
         if (files) {
           return { found: true, detail: `found: ${files.split('\n')[0]}` };
         }
-      } catch (_) {}
+      } catch (_) { /* ignore unreadable config */ }
     }
   }
 
@@ -350,7 +350,7 @@ function loadSpecs(projectRoot, targetSpecId) {
       if (s && !TERMINAL_STATUSES.has(s.status)) {
         specs.push({ path: workingSpec, spec: s });
       }
-    } catch (_) {}
+    } catch (_) { /* ignore unreadable config */ }
   }
 
   if (fs.existsSync(specsDir)) {
@@ -360,7 +360,7 @@ function loadSpecs(projectRoot, targetSpecId) {
         if (s && !TERMINAL_STATUSES.has(s.status)) {
           specs.push({ path: path.join(specsDir, f), spec: s });
         }
-      } catch (_) {}
+      } catch (_) { /* ignore unreadable config */ }
     }
   }
 
