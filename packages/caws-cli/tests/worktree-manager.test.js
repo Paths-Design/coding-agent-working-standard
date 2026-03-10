@@ -33,7 +33,7 @@ describe('worktree-manager', () => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-worktree-test-'));
 
     // Initialize a git repo
-    execFileSync('git', ['init'], { cwd: testDir, stdio: 'pipe' });
+    execFileSync('git', ['init', '-b', 'main'], { cwd: testDir, stdio: 'pipe' });
     execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: testDir, stdio: 'pipe' });
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: testDir, stdio: 'pipe' });
 
