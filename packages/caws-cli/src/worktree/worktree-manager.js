@@ -102,6 +102,106 @@ function saveRegistry(root, registry) {
 }
 
 /**
+ * Discover git worktrees under .caws/worktrees/ that are not in the registry.
+ * @param {string} root - Repository root
+ * @param {Object} registry - Current registry object
+ * @returns {Array<{ name: string, path: string, branch: string }>}
+ */
+function discoverUnregisteredWorktrees(root, registry) {
+  const unregistered = [];
+  try {
+    const output = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    let worktreesDir;
+    try {
+      worktreesDir = fs.realpathSync(path.resolve(root, WORKTREES_DIR));
+    } catch {
+      // Directory might not exist yet
+      worktreesDir = path.resolve(root, WORKTREES_DIR);
+    }
+
+    const blocks = output.split('\n\n').filter(Boolean);
+    for (const block of blocks) {
+      const lines = block.split('\n');
+      const wtLine = lines.find((l) => l.startsWith('worktree '));
+      const branchLine = lines.find((l) => l.startsWith('branch '));
+      if (!wtLine) continue;
+
+      const wtPath = wtLine.replace('worktree ', '');
+      let resolvedPath;
+      try {
+        resolvedPath = fs.realpathSync(wtPath);
+      } catch {
+        resolvedPath = path.resolve(wtPath);
+      }
+
+      // Only consider worktrees under .caws/worktrees/
+      if (!resolvedPath.startsWith(worktreesDir + path.sep)) continue;
+
+      const name = path.basename(resolvedPath);
+      if (registry.worktrees[name]) continue;
+
+      const branch = branchLine
+        ? branchLine.replace('branch refs/heads/', '')
+        : `${BRANCH_PREFIX}${name}`;
+      unregistered.push({ name, path: resolvedPath, branch });
+    }
+  } catch {
+    // git worktree list failed
+  }
+  return unregistered;
+}
+
+/**
+ * Auto-register an unregistered worktree. Infers baseBranch via merge-base.
+ * @param {string} root - Repository root
+ * @param {Object} registry - Registry object (mutated in place)
+ * @param {{ name: string, path: string, branch: string }} discovered
+ * @returns {Object} The registered entry
+ */
+function autoRegisterWorktree(root, registry, discovered) {
+  let baseBranch = 'main';
+  try {
+    execFileSync(
+      'git',
+      ['merge-base', discovered.branch, 'main'],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    );
+  } catch {
+    try {
+      execFileSync(
+        'git',
+        ['merge-base', discovered.branch, 'master'],
+        { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+      );
+      baseBranch = 'master';
+    } catch {
+      // Keep 'main' as default
+    }
+  }
+
+  const entry = {
+    name: discovered.name,
+    path: discovered.path,
+    branch: discovered.branch,
+    baseBranch,
+    scope: null,
+    specId: null,
+    owner: null,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+    autoRegistered: true,
+  };
+
+  registry.worktrees[discovered.name] = entry;
+  saveRegistry(root, registry);
+  return entry;
+}
+
+/**
  * Create a new git worktree with scope isolation
  * @param {string} name - Worktree name
  * @param {Object} options - Creation options
@@ -308,6 +408,25 @@ function listWorktrees() {
     };
   });
 
+  // Append unregistered worktrees discovered from git
+  const unregistered = discoverUnregisteredWorktrees(root, registry);
+  for (const discovered of unregistered) {
+    const lastCommit = getLastCommitInfo(discovered.branch, root);
+    entries.push({
+      name: discovered.name,
+      path: discovered.path,
+      branch: discovered.branch,
+      baseBranch: null,
+      scope: null,
+      specId: null,
+      owner: null,
+      createdAt: null,
+      status: 'unregistered',
+      lastCommit,
+      merged: false,
+    });
+  }
+
   return entries;
 }
 
@@ -323,9 +442,17 @@ function destroyWorktree(name, options = {}) {
   const registry = loadRegistry(root);
   const { deleteBranch = false, force = false } = options;
 
-  const entry = registry.worktrees[name];
+  let entry = registry.worktrees[name];
   if (!entry) {
-    throw new Error(`Worktree '${name}' not found in registry`);
+    // Fallback: scan git for unregistered worktree and auto-register
+    const unregistered = discoverUnregisteredWorktrees(root, registry);
+    const discovered = unregistered.find((u) => u.name === name);
+    if (discovered) {
+      console.log(chalk.yellow(`Worktree '${name}' not in registry but found in git. Auto-registering.`));
+      entry = autoRegisterWorktree(root, registry, discovered);
+    } else {
+      throw new Error(`Worktree '${name}' not found in registry or git worktree list`);
+    }
   }
 
   // Ownership check: refuse to destroy another agent's active worktree without --force
@@ -438,9 +565,17 @@ function mergeWorktree(name, options = {}) {
   const registry = loadRegistry(root);
   const { dryRun = false, deleteBranch = true, message } = options;
 
-  const entry = registry.worktrees[name];
+  let entry = registry.worktrees[name];
   if (!entry) {
-    throw new Error(`Worktree '${name}' not found in registry`);
+    // Fallback: scan git for unregistered worktree and auto-register
+    const unregistered = discoverUnregisteredWorktrees(root, registry);
+    const discovered = unregistered.find((u) => u.name === name);
+    if (discovered) {
+      console.log(chalk.yellow(`Worktree '${name}' not in registry but found in git. Auto-registering.`));
+      entry = autoRegisterWorktree(root, registry, discovered);
+    } else {
+      throw new Error(`Worktree '${name}' not found in registry or git worktree list`);
+    }
   }
 
   const baseBranch = entry.baseBranch || 'main';
@@ -624,6 +759,8 @@ module.exports = {
   getRepoRoot,
   getLastCommitInfo,
   isBranchMerged,
+  discoverUnregisteredWorktrees,
+  autoRegisterWorktree,
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,

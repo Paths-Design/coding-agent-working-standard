@@ -17,6 +17,8 @@ const {
   loadRegistry,
   getLastCommitInfo,
   isBranchMerged,
+  discoverUnregisteredWorktrees,
+  autoRegisterWorktree,
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,
@@ -391,4 +393,116 @@ describe('worktree-manager', () => {
       expect(merged).toBe(false);
     });
   });
+
+  describe('discoverUnregisteredWorktrees', () => {
+    test('returns empty when all worktrees are registered', () => {
+      createWorktree('registered-wt');
+      const registry = loadRegistry(testDir);
+      const unregistered = discoverUnregisteredWorktrees(testDir, registry);
+      expect(unregistered).toHaveLength(0);
+    });
+
+    test('discovers worktree created via git directly', () => {
+      // Create worktree bypassing CAWS registry
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'manual-wt');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/manual-wt', wtPath, 'main'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      const registry = loadRegistry(testDir);
+      const unregistered = discoverUnregisteredWorktrees(testDir, registry);
+      expect(unregistered).toHaveLength(1);
+      expect(unregistered[0].name).toBe('manual-wt');
+      expect(unregistered[0].branch).toBe('caws/manual-wt');
+    });
+
+    test('ignores worktrees outside .caws/worktrees/', () => {
+      // Create worktree in a different location
+      const wtPath = path.join(testDir, 'other-location', 'outside-wt');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'other-branch', wtPath, 'main'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      const registry = loadRegistry(testDir);
+      const unregistered = discoverUnregisteredWorktrees(testDir, registry);
+      expect(unregistered).toHaveLength(0);
+
+      // Cleanup
+      execFileSync('git', ['worktree', 'remove', wtPath], { cwd: testDir, stdio: 'pipe' });
+    });
+  });
+
+  describe('unregistered worktree recovery', () => {
+    test('mergeWorktree auto-registers and merges unregistered worktree', () => {
+      // Create worktree bypassing CAWS registry
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'unreg-merge');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/unreg-merge', wtPath, 'main'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      // Make a commit in the unregistered worktree
+      fs.writeFileSync(path.join(wtPath, 'unreg-feature.js'), 'const y = 2;');
+      execFileSync('git', ['add', '.'], { cwd: wtPath, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'unreg feature'], { cwd: wtPath, stdio: 'pipe' });
+
+      // Merge should auto-register and succeed
+      const result = mergeWorktree('unreg-merge');
+      expect(result.merged).toBe(true);
+      expect(result.conflicts).toHaveLength(0);
+
+      // File should exist on base branch
+      expect(fs.existsSync(path.join(testDir, 'unreg-feature.js'))).toBe(true);
+    });
+
+    test('destroyWorktree auto-registers and destroys unregistered worktree', () => {
+      // Create worktree bypassing CAWS registry
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'unreg-destroy');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/unreg-destroy', wtPath, 'main'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      // Destroy should auto-register and succeed
+      destroyWorktree('unreg-destroy', { force: true });
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['unreg-destroy'].status).toBe('destroyed');
+      expect(registry.worktrees['unreg-destroy'].autoRegistered).toBe(true);
+    });
+
+    test('listWorktrees shows unregistered worktrees with status', () => {
+      // Create worktree bypassing CAWS registry
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'unreg-list');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/unreg-list', wtPath, 'main'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      const entries = listWorktrees();
+      const unreg = entries.find((e) => e.name === 'unreg-list');
+      expect(unreg).toBeDefined();
+      expect(unreg.status).toBe('unregistered');
+      expect(unreg.branch).toBe('caws/unreg-list');
+
+      // Cleanup
+      execFileSync('git', ['worktree', 'remove', '--force', wtPath], { cwd: testDir, stdio: 'pipe' });
+    });
+
+    test('merge still throws for completely nonexistent worktree', () => {
+      expect(() => mergeWorktree('totally-fake')).toThrow('not found in registry or git');
+    });
+
+    test('destroy still throws for completely nonexistent worktree', () => {
+      expect(() => destroyWorktree('totally-fake')).toThrow('not found in registry or git');
+    });
+  });
+
 });
