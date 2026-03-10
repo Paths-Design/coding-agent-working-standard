@@ -203,17 +203,8 @@ function detectCAWSSetup(cwd = process.cwd()) {
  * @returns {string} Project root directory path
  */
 function findProjectRoot(startDir = process.cwd()) {
-  // Walk up looking for .caws/ directory
-  let dir = path.resolve(startDir);
-  const root = path.parse(dir).root;
-  while (dir !== root) {
-    if (fs.existsSync(path.join(dir, '.caws'))) {
-      return dir;
-    }
-    dir = path.dirname(dir);
-  }
-
-  // Fallback: try git root
+  // In a monorepo, nested packages may have their own .caws/ (scaffold debris).
+  // The git root's .caws/ is authoritative — check it first.
   try {
     const { execFileSync } = require('child_process');
     const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -225,7 +216,17 @@ function findProjectRoot(startDir = process.cwd()) {
       return gitRoot;
     }
   } catch {
-    // Not a git repo or git not available
+    // Not a git repo or git not available — fall through
+  }
+
+  // Walk up looking for .caws/ directory (non-git projects)
+  let dir = path.resolve(startDir);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    if (fs.existsSync(path.join(dir, '.caws'))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
   }
 
   // Final fallback: cwd
