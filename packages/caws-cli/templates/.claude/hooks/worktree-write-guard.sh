@@ -13,6 +13,7 @@ INPUT=$(cat)
 # Extract tool info
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
+HOOK_CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
 
 # Only check Write and Edit tools
 case "$TOOL_NAME" in
@@ -42,10 +43,10 @@ if ! command -v node >/dev/null 2>&1; then
   exit 0
 fi
 
-# Use the agent's actual working directory, not the resolved main repo root.
-# In a worktree, PROJECT_DIR points to the main repo (to find .caws/worktrees.json),
-# but the agent's branch is in CLAUDE_PROJECT_DIR.
-AGENT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+# Use the hook input's cwd (where the agent is actually working), not
+# CLAUDE_PROJECT_DIR (which always points to the main repo root, even when the
+# agent has cd'd into a worktree at .caws/worktrees/<name>/).
+AGENT_DIR="${HOOK_CWD:-${CLAUDE_PROJECT_DIR:-.}}"
 CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 WT_INFO=$(node -e "

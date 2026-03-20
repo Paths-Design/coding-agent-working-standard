@@ -11,6 +11,7 @@ INPUT=$(cat)
 # Extract tool info
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+HOOK_CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
 
 # Only check Bash tool
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
@@ -46,26 +47,38 @@ if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--sc
 fi
 
 # --- Gap 5: Block cross-boundary file copies ---
+# Only block copies FROM a worktree back to the main repo (defeats isolation).
+# Copies INTO a worktree are fine — the agent is working there and the files
+# live on the worktree branch, disappearing on merge.
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 if [[ -d "$WORKTREE_BASE" ]]; then
   if echo "$COMMAND" | grep -qE '\b(cp|mv)\b'; then
-    if echo "$COMMAND" | grep -qF ".caws/worktrees/" || echo "$COMMAND" | grep -qF "$WORKTREE_BASE"; then
-      # Check if the command references both a worktree path and the main repo
-      HAS_WT_PATH=false
-      HAS_MAIN_PATH=false
-      if echo "$COMMAND" | grep -qE '\.caws/worktrees/|'"$(echo "$WORKTREE_BASE" | sed 's/[\/&]/\\&/g')"''; then
-        HAS_WT_PATH=true
-      fi
-      # Check if destination/source is outside the worktree
-      if echo "$COMMAND" | grep -qE "(^|\s)$PROJECT_DIR/[^.]|core/|src/|tests/|packages/" && [[ "$HAS_WT_PATH" == "true" ]]; then
-        HAS_MAIN_PATH=true
-      fi
-      if [[ "$HAS_WT_PATH" == "true" ]] && [[ "$HAS_MAIN_PATH" == "true" ]]; then
-        echo "BLOCKED: Copying files between a worktree and the main repo is forbidden." >&2
-        echo "This bypasses worktree isolation. Work entirely within your worktree." >&2
-        echo "If tests need the main repo's venv, activate it with:" >&2
-        echo "  source $PROJECT_DIR/.venv/bin/activate" >&2
-        exit 2
+    # If the agent is working inside a worktree, allow all copies — they're
+    # in their own workspace
+    AGENT_IN_WORKTREE=false
+    if [[ -n "$HOOK_CWD" ]] && [[ "$HOOK_CWD" == "$WORKTREE_BASE"/* ]]; then
+      AGENT_IN_WORKTREE=true
+    fi
+
+    if [[ "$AGENT_IN_WORKTREE" != "true" ]]; then
+      if echo "$COMMAND" | grep -qF ".caws/worktrees/" || echo "$COMMAND" | grep -qF "$WORKTREE_BASE"; then
+        # Check if the command references both a worktree path and the main repo
+        HAS_WT_PATH=false
+        HAS_MAIN_PATH=false
+        if echo "$COMMAND" | grep -qE '\.caws/worktrees/|'"$(echo "$WORKTREE_BASE" | sed 's/[\/&]/\\&/g')"''; then
+          HAS_WT_PATH=true
+        fi
+        # Check if destination/source is outside the worktree
+        if echo "$COMMAND" | grep -qE "(^|\s)$PROJECT_DIR/[^.]|core/|src/|tests/|packages/" && [[ "$HAS_WT_PATH" == "true" ]]; then
+          HAS_MAIN_PATH=true
+        fi
+        if [[ "$HAS_WT_PATH" == "true" ]] && [[ "$HAS_MAIN_PATH" == "true" ]]; then
+          echo "BLOCKED: Copying files from a worktree to the main repo is forbidden." >&2
+          echo "This bypasses worktree isolation. Work entirely within your worktree." >&2
+          echo "If tests need the main repo's venv, activate it with:" >&2
+          echo "  source $PROJECT_DIR/.venv/bin/activate" >&2
+          exit 2
+        fi
       fi
     fi
   fi
@@ -151,10 +164,10 @@ if echo "$COMMAND" | grep -qE 'git\s+push\s+.*(--force|-f\s)'; then
 fi
 
 # --- Base branch protections ---
-# Use the agent's actual working directory (CLAUDE_PROJECT_DIR), not the resolved
-# main repo root (PROJECT_DIR). In a worktree, PROJECT_DIR points to the main repo
-# (to find .caws/worktrees.json), but the agent's branch is in CLAUDE_PROJECT_DIR.
-AGENT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+# Use the hook input's cwd (where the git command will actually execute), not
+# CLAUDE_PROJECT_DIR (which always points to the main repo root, even when the
+# agent has cd'd into a worktree at .caws/worktrees/<name>/).
+AGENT_DIR="${HOOK_CWD:-${CLAUDE_PROJECT_DIR:-.}}"
 CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Determine the base branch to protect
