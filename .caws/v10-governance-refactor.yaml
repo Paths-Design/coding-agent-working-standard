@@ -1,0 +1,377 @@
+# CAWS v10 Governance Refactor Tracker
+# Created: 2026-03-21
+# Purpose: Ground-up rework of quality gates before v10.0
+#
+# Every capability is assessed with skepticism:
+#   does it actually govern what it claims to govern?
+#
+# Status values: broken | ceremonial | weak | functional | strong
+#   broken     — doesn't work at all, errors or skipped
+#   ceremonial — runs but enforces nothing
+#   weak       — enforces partially, easy to bypass
+#   functional — works but has known gaps
+#   strong     — enforces reliably with minimal bypass risk
+
+meta:
+  version: "0.1"
+  last_audit: "2026-03-21"
+  audited_by: "manual code review + test unskip analysis"
+  blocking_release: "v10.0.0"
+
+# ============================================================
+# ROUND 1: Test Infrastructure
+# Fix the foundation so we can trust test results
+# ============================================================
+round_1:
+  title: "Test infrastructure — make skipped tests real"
+  priority: critical
+  rationale: >
+    34 tests across 3 suites are skipped. They were written aspirationally
+    by early agents using a broken mocking pattern (reassigning require()
+    exports after import). Until these work, we have blind spots in
+    spec resolution, scope conflicts, and multi-spec command integration.
+
+  capabilities:
+    error_handling_tests:
+      files:
+        - tests/error-handling.test.js
+      status: broken
+      skipped_tests: 8
+      failure_mode: >
+        Tests mock resolveSpec by reassigning on the require() return value
+        after the command module has already captured the real reference.
+        Mocks never take effect. Tests were test.skip'd to hide the failures.
+      what_it_should_test: >
+        Command error handling: spec resolution errors, validation errors,
+        missing specs, invalid spec IDs, YAML parse errors, JSON parse errors.
+        These are real runtime failure paths that users hit.
+      fix: >
+        Use jest.mock() at module level with factory functions, or restructure
+        commands to accept injected dependencies. Decide which tests describe
+        real behavior vs. aspirational APIs that never landed.
+
+    scope_conflict_tests:
+      files:
+        - tests/scope-conflicts.test.js
+      status: broken
+      skipped_tests: 14
+      failure_mode: >
+        describe.skip on entire suite. Tests mock fs-extra globally which
+        breaks spec-resolver's internal fs-extra usage. pathsOverlap and
+        checkScopeConflicts DO exist in spec-resolver.js (lines 451, 373)
+        but the test can't load them through the mock layer.
+      what_it_should_test: >
+        Scope overlap detection between concurrent specs. This is critical
+        for multi-agent safety — two agents editing the same files.
+      fix: >
+        Replace global fs-extra mock with targeted mocks. The functions
+        exist and are exported; tests just can't reach them.
+
+    multi_spec_integration_tests:
+      files:
+        - tests/multi-spec-integration.test.js
+      status: broken
+      skipped_tests: 12
+      failure_mode: >
+        describe.skip on entire suite. Same mock wiring issue as error-handling.
+        Additionally, some commands call process.exit() directly instead of
+        throwing, crashing the Jest worker.
+      what_it_should_test: >
+        End-to-end integration of validate, status, iterate, plan, and archive
+        commands with the multi-spec architecture. These are the primary
+        user-facing commands.
+      fix: >
+        Fix mock wiring. Audit commands that call process.exit() — they should
+        throw errors that the CLI runner catches, not exit directly.
+
+# ============================================================
+# ROUND 2: Schema & Contract Integrity
+# Make schemas the source of truth, not documentation that drifts
+# ============================================================
+round_2:
+  title: "Schema as source of truth"
+  priority: high
+  rationale: >
+    Schemas are supposed to define valid data structures, but they drift
+    from the code. worktrees.schema.json was missing 'owner', 'autoRegistered',
+    and several status values the code has used for months. Contract tests
+    check file existence, not correctness.
+
+  capabilities:
+    worktrees_schema:
+      files:
+        - templates/.caws/schemas/worktrees.schema.json
+      status: functional  # fixed in this session
+      failure_mode: >
+        Was missing owner, autoRegistered fields and fresh/merged/stale-merged
+        status values. Fixed 2026-03-21 but the pattern likely exists elsewhere.
+      what_it_should_do: >
+        Be the single source of truth for worktree registry structure.
+        Code should validate against it. Tests should generate data from it.
+      remaining_gaps:
+        - No runtime validation of worktrees.json against the schema
+        - Schema is in templates/ but not enforced in loadRegistry()
+
+    working_spec_schema:
+      files:
+        - .caws/working-spec.schema.json
+      status: weak
+      failure_mode: >
+        Schema exists but is not automatically validated against in all paths.
+        Validation only happens when caws validate is explicitly run.
+      what_it_should_do: >
+        Every spec load should validate against schema. Malformed specs
+        should fail loudly at load time, not pass through silently.
+
+    contract_tests:
+      files:
+        - tests/contract/cli-contract.test.js
+        - tests/contract/schema-contract.test.js
+      status: ceremonial
+      failure_mode: >
+        CLI contract tests check "directory exists" and "file exists" after
+        commands run. They don't validate file contents or command behavior.
+        Tool interface tests catch-and-ignore parse errors for modern JS syntax.
+        Schema contract tests use locally-defined schemas that may not match
+        the actual enforcement schemas.
+      what_it_should_do: >
+        Contract tests should verify behavioral contracts: "init creates a
+        valid spec that passes validation", "scaffold generates hooks that
+        match template checksums", "tool interfaces accept documented params".
+      fix: >
+        Rewrite contract tests to assert behavior, not existence. Use the
+        actual schema files as test fixtures. Add snapshot tests for
+        generated file content.
+
+# ============================================================
+# ROUND 3: Enforcement — Make Gates Actually Block
+# ============================================================
+round_3:
+  title: "Enforcement — gates that block, not report"
+  priority: high
+  rationale: >
+    Almost every quality gate reports findings without blocking.
+    The only real blocker is the worktree write guard. Everything else
+    is advisory. This defeats the purpose of gates.
+
+  capabilities:
+    budget_enforcement:
+      files:
+        - src/budget-derivation.js
+        - src/commands/validate.js
+      status: weak
+      failure_mode: >
+        Budget checking is behind checkBudget flag, which is true in
+        validate but may not be in other callers. Policy.yaml has a silent
+        fallback to defaults if missing — projects can run with default
+        budgets without knowing it (showPolicyInfo defaults to false).
+        Git stats count all lines equally (test, impl, docs).
+      what_it_should_do: >
+        Budget should be enforced by default in all validation paths.
+        Missing policy.yaml should be a warning, not silent.
+        Stats should distinguish implementation from test code.
+      fix: >
+        Make checkBudget default to true. Warn loudly on missing policy.yaml.
+        Consider separating test LOC from implementation LOC in budget calc.
+
+    scope_guard:
+      files:
+        - templates/.claude/hooks/scope-guard.sh
+      status: weak
+      failure_mode: >
+        Returns permissionDecision "ask" for out-of-scope files instead of
+        blocking. Agent confirms and proceeds. Terminal-status specs skip
+        enforcement entirely. Root-level files and .caws/.claude always pass.
+      what_it_should_do: >
+        Out-of-scope writes should be blocked, not asked. If the agent
+        needs to write outside scope, the spec should be amended first.
+      fix: >
+        Change default from "ask" to "deny" for scope violations.
+        Add explicit allowlist for files that are always writable.
+        Don't skip enforcement for terminal-status specs — they should
+        be read-only.
+
+    quality_gates_utils:
+      files:
+        - src/utils/quality-gates-utils.js
+      status: ceremonial
+      failure_mode: >
+        runQualityGates() collects violations and returns {passed, violations}.
+        Nothing acts on passed=false. God object detection counts lines, not
+        complexity. TODO checker silently skips if analyzer not installed.
+      what_it_should_do: >
+        Quality gate failures should block commits via pre-commit hook.
+        God object detection should use cyclomatic complexity or function
+        count, not just SLOC. Missing analyzer should be an error, not skip.
+      fix: >
+        Wire quality gate results into pre-commit hook exit codes.
+        Replace SLOC-based god object detection with structure analysis.
+        Make TODO analyzer a required dependency or remove the gate.
+
+    mutation_testing:
+      files:
+        - tests/mutation/mutation-quality.test.js
+      status: ceremonial
+      failure_mode: >
+        Test passes if Stryker isn't installed (graceful degradation).
+        Test passes if 100% of mutations survive (only checks "can analyze").
+        Report parsing returns null if file missing — test skips validation.
+      what_it_should_do: >
+        Mutation testing should fail if mutation score is below threshold.
+        Missing Stryker should be a setup error, not silent pass.
+      fix: >
+        Either make Stryker a required dev dependency with enforced thresholds,
+        or remove mutation testing as a gate and document it as optional.
+        Don't let it pass silently.
+
+# ============================================================
+# ROUND 4: Trust Boundaries — Waivers, Provenance, Audit
+# ============================================================
+round_4:
+  title: "Trust boundaries — agents should not self-approve"
+  priority: medium
+  rationale: >
+    Waivers are self-service. Agents create waivers, approve themselves,
+    and reference them in their own specs. Provenance is an empty local
+    file. Neither is tamper-evident. This means an agent can bypass every
+    gate and leave no reliable audit trail.
+
+  capabilities:
+    waivers:
+      files:
+        - src/commands/waivers.js
+        - src/waivers-manager.js
+      status: weak
+      failure_mode: >
+        --approved-by accepts any string without authentication.
+        Agents can create and self-reference waivers. Audit log is
+        a local JSON-lines file, trivially editable. No expiry enforcement
+        at commit time — expired waivers are only flagged during
+        caws waivers list.
+      what_it_should_do: >
+        Waivers should require a different session ID or human approval.
+        At minimum: the creating session should not be able to approve
+        its own waiver. Expired waivers should be enforced at validation
+        time, not just displayed.
+      fix: >
+        Add session ID check: creator !== approver. Enforce expiry in
+        budget derivation (reject expired waivers, don't just warn).
+        Consider signing waiver files with a hash of content + approver.
+
+    provenance:
+      files:
+        - src/commands/provenance.js
+        - .caws/provenance/chain.json
+      status: ceremonial
+      failure_mode: >
+        Chain is initialized as empty array. Not automatically populated.
+        Local storage — no sync, no signature, no immutability.
+        Contract test only checks "empty chain shows graceful message".
+      what_it_should_do: >
+        Provenance should be automatically populated on every commit
+        (via post-commit hook). Chain entries should include spec ID,
+        files changed, gate results, session ID. Consider content-hash
+        chaining (each entry includes hash of previous entry).
+      fix: >
+        Auto-populate via post-commit hook. Add content-hash chaining
+        for tamper evidence. Don't require external infrastructure —
+        local hash chains are better than nothing.
+
+# ============================================================
+# ROUND 5: Consumer Contract Testing
+# ============================================================
+round_5:
+  title: "Template-consumer drift detection"
+  priority: medium
+  rationale: >
+    Sterling (primary consumer) constantly drifts from templates.
+    Hooks get fixed in sterling first, template lags. There's no
+    automated way to detect or prevent this drift.
+
+  capabilities:
+    template_drift:
+      files:
+        - templates/.claude/hooks/
+        - templates/.caws/schemas/
+      status: weak
+      failure_mode: >
+        Templates are the source of truth but no mechanism verifies
+        consumer projects match. Sterling has diverged on scope-guard,
+        session-log, and naming-check hooks. Fixes flow sterling->template
+        instead of template->consumer.
+      what_it_should_do: >
+        caws init --check or caws hooks check should compare installed
+        hooks against template checksums and report drift. Consumer
+        projects should be able to verify they're up to date.
+      fix: >
+        Add hook versioning (checksum or version comment in each hook).
+        Add caws hooks check command that compares installed vs template.
+        Consider a caws hooks update that patches consumer hooks from
+        template without losing local customizations.
+
+# ============================================================
+# ROUND 6: Agent Guidance Overhaul
+# ============================================================
+round_6:
+  title: "Agent guidance — from ceremonial to actionable"
+  priority: low
+  rationale: >
+    caws iterate and caws agent evaluate are coaching tools that
+    display hardcoded guidance. They don't know actual project state.
+
+  capabilities:
+    iterate_command:
+      files:
+        - src/commands/iterate.js
+      status: ceremonial
+      failure_mode: >
+        Displays acceptance criteria structure and TDD guidance but
+        doesn't check actual test state. Quality gates reminder shows
+        generic thresholds without checking if they pass. Next actions
+        are hardcoded by spec mode, not derived from actual gaps.
+      what_it_should_do: >
+        Iterate should run quality gates and show actual results.
+        It should identify which acceptance criteria have passing tests
+        and which don't. Next actions should be derived from gaps.
+      fix: >
+        Wire iterate into the actual quality gates runner.
+        Parse test output to map passing tests to acceptance criteria IDs.
+        Generate next actions from the delta between spec and reality.
+
+    evaluate_command:
+      files: []  # may not exist
+      status: broken
+      failure_mode: >
+        Referenced in iterate output ("run caws evaluate") but the
+        evaluate command may not exist as a standalone command.
+        Need to verify if it's implemented or aspirational.
+      what_it_should_do: >
+        Evaluate should produce a machine-readable quality report
+        that can be used in CI/CD or by other agents.
+      fix: >
+        Determine if evaluate exists. If not, decide whether to
+        implement it or remove references to it.
+
+# ============================================================
+# Summary: Honest Assessment
+# ============================================================
+summary:
+  total_capabilities: 16
+  status_breakdown:
+    broken: 4      # error-handling tests, scope-conflict tests, multi-spec tests, evaluate command
+    ceremonial: 5  # quality gates utils, mutation testing, contract tests, provenance, iterate
+    weak: 5        # budget enforcement, scope guard, waivers, working-spec schema, template drift
+    functional: 1  # worktrees schema (fixed this session)
+    strong: 1      # worktree write guard
+
+  key_insight: >
+    Of 16 governance capabilities, only 1 (worktree write guard) actually
+    blocks bad behavior. 4 are broken (don't run). 5 are ceremonial (run
+    but enforce nothing). 5 are weak (enforce partially, easily bypassed).
+    The system is a reporting framework mistaken for a governance framework.
+
+  v10_north_star: >
+    Gates should default to blocking, not reporting. Agents should not
+    self-approve waivers. Schemas should be validated at load time, not
+    just when caws validate is run. Test infrastructure must work before
+    we can trust test results. Consumer drift should be automatically detected.
