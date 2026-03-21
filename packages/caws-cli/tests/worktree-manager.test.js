@@ -19,6 +19,9 @@ const {
   isBranchMerged,
   discoverUnregisteredWorktrees,
   autoRegisterWorktree,
+  repairWorktrees,
+  reconcileRegistry,
+  getRepoRoot,
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,
@@ -146,14 +149,31 @@ describe('worktree-manager', () => {
       expect(entries.map((e) => e.name).sort()).toEqual(['wt-one', 'wt-two']);
     });
 
-    test('detects missing worktrees', () => {
+    test('detects stale-merged worktrees when branch has no divergent commits', () => {
       const entry = createWorktree('to-vanish');
-      // Manually remove the directory
+      // Manually remove the directory — branch has no divergent commits
       fs.removeSync(entry.path);
       execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
 
       const entries = listWorktrees();
-      expect(entries[0].status).toBe('missing');
+      // No divergent commits means branch is merged, so status is stale-merged
+      expect(entries[0].status).toBe('stale-merged');
+    });
+
+    test('detects missing worktrees when branch has divergent commits', () => {
+      const entry = createWorktree('to-vanish-diverged');
+      // Make a divergent commit
+      fs.writeFileSync(path.join(entry.path, 'diverge.txt'), 'diverged');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'diverge'], { cwd: entry.path, stdio: 'pipe' });
+
+      // Remove the directory but keep the branch
+      fs.removeSync(entry.path);
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'to-vanish-diverged');
+      expect(wt.status).toBe('missing');
     });
 
     test('includes lastCommit info for active worktrees', () => {
@@ -502,6 +522,103 @@ describe('worktree-manager', () => {
 
     test('destroy still throws for completely nonexistent worktree', () => {
       expect(() => destroyWorktree('totally-fake')).toThrow('not found in registry or git');
+    });
+  });
+
+
+  describe('getRepoRoot from linked worktree', () => {
+    test('resolves to main repo root when CWD is inside a linked worktree', () => {
+      const entry = createWorktree('cwd-test');
+      const mainRoot = process.cwd(); // We're in testDir (main repo)
+
+      // Change into the linked worktree
+      process.chdir(entry.path);
+
+      // getRepoRoot should still return the main repo, not the worktree
+      const resolved = getRepoRoot();
+      expect(path.resolve(resolved)).toBe(path.resolve(mainRoot));
+
+      // Restore CWD
+      process.chdir(mainRoot);
+    });
+  });
+
+  describe('reconcileRegistry', () => {
+    test('classifies active, missing, and unregistered entries', () => {
+      const entry = createWorktree('recon-active');
+      createWorktree('recon-vanish');
+
+      // Remove one worktree's directory to make it missing/stale-merged
+      fs.removeSync(path.join(testDir, WORKTREES_DIR, 'recon-vanish'));
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      const { entries } = reconcileRegistry(testDir);
+      const active = entries.find((e) => e.name === 'recon-active');
+      const vanished = entries.find((e) => e.name === 'recon-vanish');
+
+      expect(active.status).toBe('active');
+      // No divergent commits, so stale-merged
+      expect(vanished.status).toBe('stale-merged');
+    });
+
+    test('does not mutate registry', () => {
+      createWorktree('recon-readonly');
+      fs.removeSync(path.join(testDir, WORKTREES_DIR, 'recon-readonly'));
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      const registryBefore = JSON.stringify(loadRegistry(testDir));
+      reconcileRegistry(testDir);
+      const registryAfter = JSON.stringify(loadRegistry(testDir));
+
+      expect(registryAfter).toBe(registryBefore);
+    });
+  });
+
+  describe('repairWorktrees', () => {
+    test('auto-registers unregistered worktrees', () => {
+      // Create worktree via git directly
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'repair-unreg');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/repair-unreg', wtPath, 'main'], {
+        cwd: testDir, stdio: 'pipe',
+      });
+
+      const result = repairWorktrees({ dryRun: false });
+      expect(result.repaired.length).toBeGreaterThanOrEqual(1);
+      const registered = result.repaired.find((r) => r.name === 'repair-unreg');
+      expect(registered).toBeDefined();
+      expect(registered.action).toBe('registered');
+
+      // Cleanup
+      execFileSync('git', ['worktree', 'remove', '--force', wtPath], { cwd: testDir, stdio: 'pipe' });
+    });
+
+    test('dry-run does not persist changes', () => {
+      const wtPath = path.join(testDir, WORKTREES_DIR, 'repair-dry');
+      fs.ensureDirSync(path.dirname(wtPath));
+      execFileSync('git', ['worktree', 'add', '-b', 'caws/repair-dry', wtPath, 'main'], {
+        cwd: testDir, stdio: 'pipe',
+      });
+
+      const registryBefore = JSON.stringify(loadRegistry(testDir));
+      repairWorktrees({ dryRun: true });
+      const registryAfter = JSON.stringify(loadRegistry(testDir));
+
+      expect(registryAfter).toBe(registryBefore);
+
+      // Cleanup
+      execFileSync('git', ['worktree', 'remove', '--force', wtPath], { cwd: testDir, stdio: 'pipe' });
+    });
+
+    test('prune flag removes destroyed entries', () => {
+      createWorktree('repair-prune');
+      destroyWorktree('repair-prune', { force: true });
+
+      const result = repairWorktrees({ prune: true });
+      expect(result.pruned.some((p) => p.name === 'repair-prune')).toBe(true);
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['repair-prune']).toBeUndefined();
     });
   });
 

@@ -54,13 +54,25 @@ function isBranchMerged(branch, target, root) {
 }
 
 /**
- * Get the git repository root
- * @returns {string} Absolute path to repo root
+ * Get the canonical git repository root (main worktree, not a linked worktree).
+ *
+ * `git rev-parse --show-toplevel` returns the root of whichever worktree
+ * the CWD is inside. In a linked worktree that is NOT the main repo root,
+ * so CAWS would read the wrong (or missing) .caws/worktrees.json.
+ *
+ * `--git-common-dir` always resolves to the main repo's .git directory,
+ * even from inside a linked worktree. Its parent is the canonical repo root.
+ *
+ * @returns {string} Absolute path to the main repo root
  */
 function getRepoRoot() {
-  return execFileSync('git', ['rev-parse', '--show-toplevel'], {
-    encoding: 'utf8',
-  }).trim();
+  const gitCommonDir = execFileSync(
+    'git',
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8' }
+  ).trim();
+  // gitCommonDir is /path/to/main-repo/.git — parent is the repo root
+  return path.dirname(gitCommonDir);
 }
 
 /**
@@ -358,19 +370,31 @@ function createWorktree(name, options = {}) {
 }
 
 /**
- * List all registered worktrees with filesystem validation
- * @returns {Array} Worktree entries with status
+ * Reconcile registry state against git worktree list and filesystem.
+ *
+ * Non-destructive read that classifies every known worktree entry
+ * (from registry + git discovery) into one of:
+ *   active       — directory exists AND in git worktree list
+ *   orphaned     — directory exists but NOT in git worktree list
+ *   missing      — directory gone, branch may or may not exist
+ *   destroyed    — explicitly destroyed via CAWS
+ *   unregistered — in git worktree list but not in registry
+ *   stale-merged — missing + branch already merged to base
+ *
+ * Does NOT mutate the registry. Callers decide what to persist.
+ *
+ * @param {string} root - Repository root
+ * @returns {{ entries: Array, gitWorktrees: string[] }}
  */
-function listWorktrees() {
-  const root = getRepoRoot();
+function reconcileRegistry(root) {
   const registry = loadRegistry(root);
 
-  // Get actual git worktrees for validation
   let gitWorktrees = [];
   try {
     const output = execFileSync('git', ['worktree', 'list', '--porcelain'], {
       cwd: root,
       encoding: 'utf8',
+      stdio: 'pipe',
     });
     gitWorktrees = output
       .split('\n\n')
@@ -390,22 +414,27 @@ function listWorktrees() {
     const inGit = gitWorktrees.some(
       (wt) => path.resolve(wt) === path.resolve(entry.path)
     );
-    const status = exists && inGit ? 'active' : exists ? 'orphaned' : 'missing';
 
-    // Enrich with commit recency
+    let status;
+    if (entry.status === 'destroyed') {
+      status = 'destroyed';
+    } else if (exists && inGit) {
+      status = 'active';
+    } else if (exists) {
+      status = 'orphaned';
+    } else {
+      const merged = entry.branch && entry.baseBranch
+        ? isBranchMerged(entry.branch, entry.baseBranch, root)
+        : false;
+      status = merged ? 'stale-merged' : 'missing';
+    }
+
     const lastCommit = entry.branch ? getLastCommitInfo(entry.branch, root) : null;
-
-    // Check if branch is already merged to base
     const merged = entry.branch && entry.baseBranch
       ? isBranchMerged(entry.branch, entry.baseBranch, root)
       : false;
 
-    return {
-      ...entry,
-      status,
-      lastCommit,
-      merged,
-    };
+    return { ...entry, status, lastCommit, merged };
   });
 
   // Append unregistered worktrees discovered from git
@@ -427,6 +456,79 @@ function listWorktrees() {
     });
   }
 
+  return { entries, gitWorktrees };
+}
+
+/**
+ * Repair registry drift caused by manual git operations outside CAWS.
+ *
+ * Scans registry vs git vs filesystem, classifies each entry, and optionally
+ * prunes stale entries. Reports the delta before persisting.
+ *
+ * @param {Object} options
+ * @param {boolean} [options.prune=false] - Remove destroyed and stale-merged entries
+ * @param {boolean} [options.dryRun=false] - Report only, do not persist
+ * @returns {{ repaired: Array, pruned: Array, skipped: Array }}
+ */
+function repairWorktrees(options = {}) {
+  const { prune: shouldPrune = false, dryRun = false } = options;
+  const root = getRepoRoot();
+  const registry = loadRegistry(root);
+  const { entries } = reconcileRegistry(root);
+
+  const repaired = [];
+  const pruned = [];
+  const skipped = [];
+
+  for (const entry of entries) {
+    const regEntry = registry.worktrees[entry.name];
+
+    if (entry.status === 'unregistered') {
+      if (!dryRun) {
+        autoRegisterWorktree(root, registry, entry);
+      }
+      repaired.push({ name: entry.name, action: 'registered', status: entry.status });
+      continue;
+    }
+
+    if (!regEntry) continue;
+
+    // Update registry status to match filesystem reality
+    if (regEntry.status === 'active' && (entry.status === 'missing' || entry.status === 'stale-merged')) {
+      repaired.push({ name: entry.name, action: 'status-updated', from: 'active', to: entry.status });
+    }
+
+    // Prune if requested and entry is dead
+    if (shouldPrune && (entry.status === 'destroyed' || entry.status === 'stale-merged')) {
+      if (!dryRun) {
+        delete registry.worktrees[entry.name];
+      }
+      pruned.push({ name: entry.name, status: entry.status });
+    } else if (!shouldPrune && (entry.status === 'destroyed' || entry.status === 'stale-merged')) {
+      skipped.push({ name: entry.name, reason: entry.status + ' (use --prune to remove)' });
+    }
+  }
+
+  if (!dryRun) {
+    saveRegistry(root, registry);
+    try {
+      execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'pipe' });
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return { repaired, pruned, skipped };
+}
+
+/**
+ * List all registered worktrees with filesystem validation.
+ * Delegates to reconcileRegistry() for state classification.
+ * @returns {Array} Worktree entries with status
+ */
+function listWorktrees() {
+  const root = getRepoRoot();
+  const { entries } = reconcileRegistry(root);
   return entries;
 }
 
@@ -755,6 +857,8 @@ module.exports = {
   destroyWorktree,
   mergeWorktree,
   pruneWorktrees,
+  repairWorktrees,
+  reconcileRegistry,
   loadRegistry,
   getRepoRoot,
   getLastCommitInfo,
