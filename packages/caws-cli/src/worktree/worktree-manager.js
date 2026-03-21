@@ -54,6 +54,44 @@ function isBranchMerged(branch, target, root) {
 }
 
 /**
+ * Check if a branch has divergent commits from target (commits on branch not on target).
+ * @param {string} branch - Branch to check
+ * @param {string} target - Target branch (e.g., "main")
+ * @param {string} root - Repository root
+ * @returns {boolean}
+ */
+function hasDivergentCommits(branch, target, root) {
+  try {
+    const count = execFileSync(
+      'git',
+      ['rev-list', '--count', `${target}..${branch}`],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    return parseInt(count, 10) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a worktree directory has dirty (uncommitted) files.
+ * @param {string} worktreePath - Path to the worktree
+ * @returns {boolean}
+ */
+function hasDirtyFiles(worktreePath) {
+  try {
+    const status = execFileSync(
+      'git',
+      ['status', '--porcelain'],
+      { cwd: worktreePath, encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    return status.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the canonical git repository root (main worktree, not a linked worktree).
  *
  * `git rev-parse --show-toplevel` returns the root of whichever worktree
@@ -360,7 +398,7 @@ function createWorktree(name, options = {}) {
     specId: specId || null,
     owner: options.owner || process.env.CLAUDE_SESSION_ID || null,
     createdAt: new Date().toISOString(),
-    status: 'active',
+    status: 'fresh',
   };
 
   registry.worktrees[name] = entry;
@@ -415,26 +453,44 @@ function reconcileRegistry(root) {
       (wt) => path.resolve(wt) === path.resolve(entry.path)
     );
 
+    const merged = entry.branch && entry.baseBranch
+      ? isBranchMerged(entry.branch, entry.baseBranch, root)
+      : false;
+    const divergent = entry.branch && entry.baseBranch
+      ? hasDivergentCommits(entry.branch, entry.baseBranch, root)
+      : false;
+    const dirty = exists ? hasDirtyFiles(entry.path) : false;
+
     let status;
     if (entry.status === 'destroyed') {
       status = 'destroyed';
     } else if (exists && inGit) {
-      status = 'active';
+      // Worktree directory exists and is tracked by git
+      if (divergent || dirty) {
+        // Has commits beyond base or uncommitted work → active
+        status = 'active';
+      } else if (merged) {
+        // No divergent commits, branch aligned with base.
+        // Use stored status as history to distinguish fresh vs merged:
+        //   - stored 'fresh' → never had divergent commits → still fresh
+        //   - stored 'active' → had work that's now merged → merged
+        if (entry.status === 'active') {
+          status = 'merged';
+        } else {
+          status = 'fresh';
+        }
+      } else {
+        status = 'fresh';
+      }
     } else if (exists) {
       status = 'orphaned';
     } else {
-      const merged = entry.branch && entry.baseBranch
-        ? isBranchMerged(entry.branch, entry.baseBranch, root)
-        : false;
       status = merged ? 'stale-merged' : 'missing';
     }
 
     const lastCommit = entry.branch ? getLastCommitInfo(entry.branch, root) : null;
-    const merged = entry.branch && entry.baseBranch
-      ? isBranchMerged(entry.branch, entry.baseBranch, root)
-      : false;
 
-    return { ...entry, status, lastCommit, merged };
+    return { ...entry, status, lastCommit, merged, divergent, dirty };
   });
 
   // Append unregistered worktrees discovered from git
@@ -466,15 +522,17 @@ function reconcileRegistry(root) {
  * prunes stale entries. Reports the delta before persisting.
  *
  * @param {Object} options
- * @param {boolean} [options.prune=false] - Remove destroyed and stale-merged entries
+ * @param {boolean} [options.prune=false] - Remove destroyed, stale-merged, and missing entries
  * @param {boolean} [options.dryRun=false] - Report only, do not persist
+ * @param {boolean} [options.force=false] - Allow pruning entries owned by other sessions
  * @returns {{ repaired: Array, pruned: Array, skipped: Array }}
  */
 function repairWorktrees(options = {}) {
-  const { prune: shouldPrune = false, dryRun = false } = options;
+  const { prune: shouldPrune = false, dryRun = false, force = false } = options;
   const root = getRepoRoot();
   const registry = loadRegistry(root);
   const { entries } = reconcileRegistry(root);
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
 
   const repaired = [];
   const pruned = [];
@@ -494,18 +552,47 @@ function repairWorktrees(options = {}) {
     if (!regEntry) continue;
 
     // Update registry status to match filesystem reality
-    if (regEntry.status === 'active' && (entry.status === 'missing' || entry.status === 'stale-merged')) {
-      repaired.push({ name: entry.name, action: 'status-updated', from: 'active', to: entry.status });
+    const wasAlive = regEntry.status === 'active' || regEntry.status === 'fresh';
+    const nowDead = entry.status === 'missing' || entry.status === 'stale-merged';
+    if (wasAlive && nowDead) {
+      repaired.push({
+        name: entry.name,
+        action: 'status-updated',
+        from: regEntry.status,
+        to: entry.status,
+        owner: entry.owner || null,
+      });
     }
 
-    // Prune if requested and entry is dead
-    if (shouldPrune && (entry.status === 'destroyed' || entry.status === 'stale-merged')) {
-      if (!dryRun) {
-        delete registry.worktrees[entry.name];
+    // Determine if entry is prunable (destroyed, stale-merged, or missing)
+    const isPrunable = entry.status === 'destroyed' ||
+      entry.status === 'stale-merged' ||
+      entry.status === 'missing';
+
+    if (!isPrunable) continue;
+
+    // Ownership check: refuse to prune another session's entries without --force
+    const isOwnedByOther = entry.owner && currentSession && entry.owner !== currentSession;
+
+    if (shouldPrune && isPrunable) {
+      if (isOwnedByOther && !force) {
+        skipped.push({
+          name: entry.name,
+          reason: `owned by another session (${entry.owner}). Use --force to override`,
+          owner: entry.owner,
+        });
+      } else {
+        if (!dryRun) {
+          delete registry.worktrees[entry.name];
+        }
+        pruned.push({ name: entry.name, status: entry.status, owner: entry.owner || null });
       }
-      pruned.push({ name: entry.name, status: entry.status });
-    } else if (!shouldPrune && (entry.status === 'destroyed' || entry.status === 'stale-merged')) {
-      skipped.push({ name: entry.name, reason: entry.status + ' (use --prune to remove)' });
+    } else if (!shouldPrune && isPrunable) {
+      skipped.push({
+        name: entry.name,
+        reason: entry.status + ' (use --prune to remove)',
+        owner: entry.owner || null,
+      });
     }
   }
 
@@ -524,11 +611,29 @@ function repairWorktrees(options = {}) {
 /**
  * List all registered worktrees with filesystem validation.
  * Delegates to reconcileRegistry() for state classification.
+ * Persists status transitions (fresh → active, active → merged) so
+ * future calls can distinguish "never had work" from "work was merged back".
  * @returns {Array} Worktree entries with status
  */
 function listWorktrees() {
   const root = getRepoRoot();
+  const registry = loadRegistry(root);
   const { entries } = reconcileRegistry(root);
+
+  // Persist status transitions so future reconcile can use stored status as history
+  let dirty = false;
+  for (const entry of entries) {
+    const regEntry = registry.worktrees[entry.name];
+    if (regEntry && regEntry.status !== entry.status &&
+        entry.status !== 'unregistered') {
+      regEntry.status = entry.status;
+      dirty = true;
+    }
+  }
+  if (dirty) {
+    saveRegistry(root, registry);
+  }
+
   return entries;
 }
 
@@ -557,11 +662,12 @@ function destroyWorktree(name, options = {}) {
     }
   }
 
-  // Ownership check: refuse to destroy another agent's active worktree without --force
+  // Ownership check: refuse to destroy another agent's worktree without --force
   const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const isLiveStatus = entry.status === 'active' || entry.status === 'fresh' || entry.status === 'merged';
   if (
     !force &&
-    entry.status === 'active' &&
+    isLiveStatus &&
     entry.owner &&
     currentSession &&
     entry.owner !== currentSession
@@ -580,7 +686,7 @@ function destroyWorktree(name, options = {}) {
   // Even with --force, warn loudly when destroying another session's worktree
   if (
     force &&
-    entry.status === 'active' &&
+    isLiveStatus &&
     entry.owner &&
     currentSession &&
     entry.owner !== currentSession
@@ -787,12 +893,14 @@ function mergeWorktree(name, options = {}) {
  * @param {Object} options - Prune options
  * @param {number} [options.maxAgeDays] - Remove entries older than this many days
  * @param {number} [options.recentCommitMinutes] - Protect branches with commits newer than this (default: 60)
- * @returns {Array} Pruned entries
+ * @param {boolean} [options.force] - Allow pruning entries owned by other sessions
+ * @returns {{ pruned: Array, skipped: Array }} Pruned and skipped entries
  */
 function pruneWorktrees(options = {}) {
   const root = getRepoRoot();
   const registry = loadRegistry(root);
-  const { maxAgeDays = 30, recentCommitMinutes = 60 } = options;
+  const { maxAgeDays = 30, recentCommitMinutes = 60, force = false } = options;
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
 
   const now = new Date();
   const pruned = [];
@@ -806,14 +914,25 @@ function pruneWorktrees(options = {}) {
     const shouldPrune =
       // Always prune destroyed entries
       entry.status === 'destroyed' ||
-      // Prune active entries whose directory is gone (filesystem-registry desync)
-      (entry.status === 'active' && !dirExists) ||
+      // Prune active/fresh entries whose directory is gone (filesystem-registry desync)
+      ((entry.status === 'active' || entry.status === 'fresh') && !dirExists) ||
       // Prune old missing entries
       (!dirExists && ageDays > maxAgeDays);
 
     if (shouldPrune) {
-      // Before pruning a non-destroyed entry, check for recent commits
-      if (entry.status !== 'destroyed' && entry.branch) {
+      // Ownership check: skip entries owned by other sessions unless --force
+      const isOwnedByOther = entry.owner && currentSession && entry.owner !== currentSession;
+      if (isOwnedByOther && entry.status !== 'destroyed' && !force) {
+        skipped.push({
+          name,
+          reason: `owned by another session (${entry.owner})`,
+          entry,
+        });
+        continue;
+      }
+
+      // Before pruning a non-destroyed entry, check for recent commits (skip if --force)
+      if (!force && entry.status !== 'destroyed' && entry.branch) {
         const lastCommit = getLastCommitInfo(entry.branch, root);
         if (lastCommit) {
           const commitAgeMinutes = (now - lastCommit.timestamp) / (1000 * 60);
@@ -863,6 +982,8 @@ module.exports = {
   getRepoRoot,
   getLastCommitInfo,
   isBranchMerged,
+  hasDivergentCommits,
+  hasDirtyFiles,
   discoverUnregisteredWorktrees,
   autoRegisterWorktree,
   WORKTREES_DIR,

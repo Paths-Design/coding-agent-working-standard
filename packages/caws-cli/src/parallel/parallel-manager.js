@@ -192,7 +192,7 @@ function getParallelStatus() {
     let commitCount = 0;
     let dirty = false;
 
-    if (wt && wt.status === 'active') {
+    if (wt && (wt.status === 'active' || wt.status === 'fresh' || wt.status === 'merged')) {
       try {
         const log = execFileSync(
           'git',
@@ -250,7 +250,7 @@ function detectFileConflicts(baseBranch, agentStatuses) {
   const filesByAgent = {};
 
   for (const agent of agentStatuses) {
-    if (agent.status !== 'active') continue;
+    if (agent.status !== 'active' && agent.status !== 'fresh' && agent.status !== 'merged') continue;
     try {
       const diff = execFileSync(
         'git',
@@ -302,7 +302,7 @@ function mergeParallel(options = {}) {
       const wt = worktrees.find((w) => w.name === a.name);
       return wt ? { ...a, ...wt } : null;
     })
-    .filter((a) => a && a.status === 'active');
+    .filter((a) => a && (a.status === 'active' || a.status === 'fresh' || a.status === 'merged'));
 
   // Check for dirty worktrees
   for (const agent of activeAgents) {

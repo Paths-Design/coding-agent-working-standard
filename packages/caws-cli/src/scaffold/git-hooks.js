@@ -279,7 +279,7 @@ if [ -d ".caws" ]; then
         var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
         var wts = Object.values(reg.worktrees || {});
         var active = wts.filter(function(w) {
-          return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+          return (w.status === 'active' || w.status === 'fresh' || w.status === 'merged') && w.baseBranch === '$CURRENT_BRANCH';
         });
         console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(','));
       } catch(e) { console.log('0:'); }
@@ -338,7 +338,7 @@ if [ -d ".caws" ]; then
       HAS_ACTIVE_WT=$(node -e "
         try {
           var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
-          var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+          var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
           console.log(active.length > 0 ? 'yes' : 'no');
         } catch(e) { console.log('no'); }
       " 2>/dev/null)
@@ -828,7 +828,7 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
     try {
       var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
       var active = Object.values(reg.worktrees || {}).filter(function(w) {
-        return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+        return (w.status === 'active' || w.status === 'fresh' || w.status === 'merged') && w.baseBranch === '$CURRENT_BRANCH';
       });
       console.log(active.length);
     } catch(e) { console.log('0'); }

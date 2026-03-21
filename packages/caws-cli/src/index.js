@@ -393,13 +393,15 @@ worktreeCmd
   .command('prune')
   .description('Clean up stale worktree entries')
   .option('--max-age <days>', 'Remove entries older than N days', '30')
+  .option('--force', 'Allow pruning entries owned by other sessions', false)
   .action((options) => worktreeCommand('prune', options));
 
 worktreeCmd
   .command('repair')
   .description('Reconcile registry with git and filesystem state')
   .option('--dry-run', 'Report only, do not persist changes', false)
-  .option('--prune', 'Remove destroyed and stale-merged entries', false)
+  .option('--prune', 'Remove destroyed, stale-merged, and missing entries', false)
+  .option('--force', 'Allow pruning entries owned by other sessions', false)
   .action((options) => worktreeCommand('repair', options));
 
 // Session command group

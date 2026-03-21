@@ -213,7 +213,8 @@ describe('parallel-manager', () => {
       expect(status).not.toBeNull();
       expect(status.agents).toHaveLength(1);
       expect(status.agents[0].name).toBe('status-agent');
-      expect(status.agents[0].status).toBe('active');
+      // No commits yet → 'fresh' (transitions to 'active' once divergent commits exist)
+      expect(status.agents[0].status).toBe('fresh');
       expect(status.agents[0].commitCount).toBe(0);
       expect(status.agents[0].dirty).toBe(false);
     });

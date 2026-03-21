@@ -76,27 +76,47 @@ function handleList() {
   }
 
   const maxNameLen = Math.max(18, ...entries.map((e) => e.name.length + 2));
-  const totalWidth = maxNameLen + 12 + 20 + 16 + 10;
+  const maxBranchLen = Math.max(20, ...entries.map((e) => (e.branch || '').length + 2));
+  const totalWidth = maxNameLen + 14 + maxBranchLen + 16 + 16;
   console.log(chalk.bold.cyan('CAWS Worktrees'));
   console.log(chalk.cyan('='.repeat(totalWidth)));
   console.log(
     chalk.bold(
       'Name'.padEnd(maxNameLen) +
-        'Status'.padEnd(12) +
-        'Branch'.padEnd(20) +
+        'Status'.padEnd(14) +
+        'Branch'.padEnd(maxBranchLen) +
         'Last Commit'.padEnd(16) +
-        'Owner'
+        'Session'
     )
   );
   console.log(chalk.gray('-'.repeat(totalWidth)));
 
+  // Show current session for comparison
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  if (currentSession) {
+    const shortCurrent = currentSession.length > 8 ? '...' + currentSession.slice(-8) : currentSession;
+    console.log(chalk.gray(`You: ${shortCurrent}`));
+    console.log(chalk.gray('-'.repeat(totalWidth)));
+  }
+
   for (const entry of entries) {
-    const statusColor =
-      entry.status === 'active'
-        ? chalk.green
-        : entry.status === 'destroyed'
-          ? chalk.gray
-          : chalk.yellow;
+    const statusColors = {
+      active: chalk.green,
+      fresh: chalk.cyan,
+      merged: chalk.blue,
+      destroyed: chalk.gray,
+      missing: chalk.red,
+      'stale-merged': chalk.yellow,
+      orphaned: chalk.yellow,
+      unregistered: chalk.yellow,
+    };
+    const statusColor = statusColors[entry.status] || chalk.white;
+
+    // Build status string with dirty indicator
+    let statusStr = entry.status;
+    if (entry.dirty && (entry.status === 'active' || entry.status === 'fresh')) {
+      statusStr += '*';
+    }
 
     // Format last commit age
     let commitAge = chalk.gray('-');
@@ -104,29 +124,29 @@ function handleList() {
       commitAge = chalk.white(entry.lastCommit.age);
     }
 
-    // Format owner — show truncated session ID or '-'
+    // Format owner — show truncated session ID, highlight if it's the current session
     let ownerStr = chalk.gray('-');
     if (entry.owner) {
-      // Show last 8 chars of session ID for readability
       const short = entry.owner.length > 8 ? '...' + entry.owner.slice(-8) : entry.owner;
-      ownerStr = chalk.gray(short);
-    }
-
-    // Status suffix for merged branches
-    let statusStr = entry.status;
-    if (entry.merged && entry.status === 'active') {
-      statusStr = 'merged';
+      if (currentSession && entry.owner === currentSession) {
+        ownerStr = chalk.green(short + ' (you)');
+      } else {
+        ownerStr = chalk.yellow(short);
+      }
     }
 
     console.log(
       entry.name.padEnd(maxNameLen) +
-        statusColor(statusStr.padEnd(12)) +
-        (entry.branch || '').padEnd(20) +
+        statusColor(statusStr.padEnd(14)) +
+        (entry.branch || '').padEnd(maxBranchLen) +
         commitAge.padEnd(16 + 10) + // +10 for chalk color codes
         ownerStr
     );
   }
 
+  // Legend
+  console.log('');
+  console.log(chalk.gray('Status: fresh = no commits yet, active = has commits/changes, active* = dirty files'));
   console.log('');
 }
 
@@ -204,9 +224,10 @@ function handleMerge(options) {
 
 function handlePrune(options) {
   const maxAge = options.maxAge !== undefined ? parseInt(options.maxAge, 10) : 30;
+  const force = options.force || false;
 
   console.log(chalk.cyan(`Pruning worktrees (max age: ${maxAge} days)`));
-  const result = pruneWorktrees({ maxAgeDays: maxAge });
+  const result = pruneWorktrees({ maxAgeDays: maxAge, force });
 
   // Handle both old return format (array) and new format (object with pruned/skipped)
   const pruned = Array.isArray(result) ? result : result.pruned;
@@ -234,6 +255,7 @@ function handlePrune(options) {
 function handleRepair(options) {
   const dryRun = options.dryRun || false;
   const shouldPrune = options.prune || false;
+  const force = options.force || false;
 
   if (dryRun) {
     console.log(chalk.cyan('Repair dry-run (no changes will be persisted)'));
@@ -241,7 +263,7 @@ function handleRepair(options) {
     console.log(chalk.cyan('Repairing worktree registry'));
   }
 
-  const result = repairWorktrees({ prune: shouldPrune, dryRun });
+  const result = repairWorktrees({ prune: shouldPrune, dryRun, force });
 
   if (result.repaired.length === 0 && result.pruned.length === 0 && result.skipped.length === 0) {
     console.log(chalk.green('Registry is consistent. Nothing to repair.'));
@@ -251,10 +273,11 @@ function handleRepair(options) {
   if (result.repaired.length > 0) {
     console.log(chalk.green('\nRepaired ' + result.repaired.length + ' entry/entries:'));
     for (const r of result.repaired) {
+      const ownerTag = r.owner ? chalk.yellow(` [owner: ${r.owner}]`) : '';
       if (r.action === 'registered') {
         console.log(chalk.gray('   + ' + r.name + ' (auto-registered from git)'));
       } else {
-        console.log(chalk.gray('   ~ ' + r.name + ' (' + r.from + ' -> ' + r.to + ')'));
+        console.log(chalk.gray('   ~ ' + r.name + ' (' + r.from + ' -> ' + r.to + ')') + ownerTag);
       }
     }
   }
@@ -262,7 +285,8 @@ function handleRepair(options) {
   if (result.pruned.length > 0) {
     console.log(chalk.green('\nPruned ' + result.pruned.length + ' stale entry/entries:'));
     for (const p of result.pruned) {
-      console.log(chalk.gray('   - ' + p.name + ' (' + p.status + ')'));
+      const ownerTag = p.owner ? chalk.yellow(` [owner: ${p.owner}]`) : '';
+      console.log(chalk.gray('   - ' + p.name + ' (' + p.status + ')') + ownerTag);
     }
   }
 

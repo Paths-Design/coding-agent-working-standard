@@ -25,7 +25,7 @@ if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>
   ACTIVE_INFO=$(node -e "
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
       if (active.length > 0) {
         console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(', '));
       } else {

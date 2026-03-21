@@ -128,6 +128,10 @@ function handleStatus() {
     const statusColor =
       agent.status === 'active'
         ? chalk.green
+        : agent.status === 'fresh'
+        ? chalk.cyan
+        : agent.status === 'merged'
+        ? chalk.blue
         : agent.status === 'missing'
         ? chalk.red
         : chalk.yellow;

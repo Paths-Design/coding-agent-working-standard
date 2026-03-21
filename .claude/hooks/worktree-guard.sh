@@ -116,7 +116,7 @@ if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.js
   ACTIVE_COUNT=$(node -e "
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
       console.log(active.length);
     } catch(e) { console.log('0'); }
   " 2>/dev/null || echo "0")
@@ -176,7 +176,7 @@ if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && co
   BASE_BRANCH=$(node -e "
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
       if (active.length > 0) console.log(active[0].baseBranch || '');
       else console.log('');
     } catch(e) { console.log(''); }

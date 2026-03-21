@@ -17,6 +17,8 @@ const {
   loadRegistry,
   getLastCommitInfo,
   isBranchMerged,
+  hasDivergentCommits,
+  hasDirtyFiles,
   discoverUnregisteredWorktrees,
   autoRegisterWorktree,
   repairWorktrees,
@@ -75,7 +77,7 @@ describe('worktree-manager', () => {
 
       expect(entry.name).toBe('test-feature');
       expect(entry.branch).toBe(`${BRANCH_PREFIX}test-feature`);
-      expect(entry.status).toBe('active');
+      expect(entry.status).toBe('fresh');
       expect(fs.existsSync(entry.path)).toBe(true);
 
       // Check registry
@@ -319,7 +321,7 @@ describe('worktree-manager', () => {
 
       // Worktree should NOT be destroyed in dry-run
       const registry = loadRegistry(testDir);
-      expect(registry.worktrees['dry-run-clean'].status).toBe('active');
+      expect(registry.worktrees['dry-run-clean'].status).toBe('fresh');
     });
 
     test('refuses to merge worktree with uncommitted changes', () => {
@@ -544,20 +546,30 @@ describe('worktree-manager', () => {
   });
 
   describe('reconcileRegistry', () => {
-    test('classifies active, missing, and unregistered entries', () => {
-      const entry = createWorktree('recon-active');
+    test('classifies fresh, active, missing, and unregistered entries', () => {
+      const entry = createWorktree('recon-fresh');
+      const activeEntry = createWorktree('recon-active');
       createWorktree('recon-vanish');
+
+      // Make a commit in recon-active to make it truly active
+      fs.writeFileSync(path.join(activeEntry.path, 'work.txt'), 'work');
+      execFileSync('git', ['add', '.'], { cwd: activeEntry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'real work'], { cwd: activeEntry.path, stdio: 'pipe' });
 
       // Remove one worktree's directory to make it missing/stale-merged
       fs.removeSync(path.join(testDir, WORKTREES_DIR, 'recon-vanish'));
       execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
 
       const { entries } = reconcileRegistry(testDir);
+      const fresh = entries.find((e) => e.name === 'recon-fresh');
       const active = entries.find((e) => e.name === 'recon-active');
       const vanished = entries.find((e) => e.name === 'recon-vanish');
 
+      // No commits yet → fresh
+      expect(fresh.status).toBe('fresh');
+      // Has divergent commits → active
       expect(active.status).toBe('active');
-      // No divergent commits, so stale-merged
+      // No divergent commits, directory gone → stale-merged
       expect(vanished.status).toBe('stale-merged');
     });
 
@@ -619,6 +631,188 @@ describe('worktree-manager', () => {
 
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['repair-prune']).toBeUndefined();
+    });
+
+    test('prune flag removes missing entries (branch gone, directory gone)', () => {
+      const entry = createWorktree('repair-missing');
+      // Make a divergent commit so it's not stale-merged
+      fs.writeFileSync(path.join(entry.path, 'work.txt'), 'work');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'diverge'], { cwd: entry.path, stdio: 'pipe' });
+
+      // Remove directory and delete branch — simulates ghost entry
+      fs.removeSync(entry.path);
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['branch', '-D', `${BRANCH_PREFIX}repair-missing`], { cwd: testDir, stdio: 'pipe' });
+
+      const result = repairWorktrees({ prune: true });
+      expect(result.pruned.some((p) => p.name === 'repair-missing')).toBe(true);
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['repair-missing']).toBeUndefined();
+    });
+
+    test('skips pruning entries owned by another session', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-creator';
+      createWorktree('repair-owned');
+      destroyWorktree('repair-owned', { force: true });
+
+      process.env.CLAUDE_SESSION_ID = 'session-cleaner';
+      const result = repairWorktrees({ prune: true });
+      expect(result.skipped.some((s) => s.name === 'repair-owned')).toBe(true);
+      expect(result.pruned.some((p) => p.name === 'repair-owned')).toBe(false);
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['repair-owned']).toBeDefined();
+    });
+
+    test('force flag overrides ownership check for prune', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-creator';
+      createWorktree('repair-force-owned');
+      destroyWorktree('repair-force-owned', { force: true });
+
+      process.env.CLAUDE_SESSION_ID = 'session-cleaner';
+      const result = repairWorktrees({ prune: true, force: true });
+      expect(result.pruned.some((p) => p.name === 'repair-force-owned')).toBe(true);
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['repair-force-owned']).toBeUndefined();
+    });
+
+    test('repair output includes owner info for status-updated entries', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner-abc';
+      const entry = createWorktree('repair-owner-info');
+      // Remove directory to trigger status update
+      fs.removeSync(entry.path);
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      const result = repairWorktrees({ dryRun: true });
+      const repaired = result.repaired.find((r) => r.name === 'repair-owner-info');
+      expect(repaired).toBeDefined();
+      expect(repaired.owner).toBe('session-owner-abc');
+    });
+  });
+
+  describe('pruneWorktrees ownership', () => {
+    test('skips pruning entries owned by another session', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner';
+      const entry = createWorktree('prune-owned');
+      // Remove directory so it becomes prunable
+      fs.removeSync(entry.path);
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      process.env.CLAUDE_SESSION_ID = 'session-other';
+      const result = pruneWorktrees({ maxAgeDays: 0 });
+      expect(result.skipped.some((s) => s.name === 'prune-owned')).toBe(true);
+      expect(result.pruned).toHaveLength(0);
+    });
+
+    test('force flag allows pruning other session entries', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner';
+      const entry = createWorktree('prune-force-owned');
+      // Remove directory
+      fs.removeSync(entry.path);
+      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
+
+      process.env.CLAUDE_SESSION_ID = 'session-other';
+      const result = pruneWorktrees({ maxAgeDays: 0, force: true });
+      expect(result.pruned.some((e) => e.name === 'prune-force-owned')).toBe(true);
+    });
+
+    test('always prunes destroyed entries regardless of owner', () => {
+      process.env.CLAUDE_SESSION_ID = 'session-owner';
+      createWorktree('prune-destroyed-owned');
+      destroyWorktree('prune-destroyed-owned', { force: true });
+
+      process.env.CLAUDE_SESSION_ID = 'session-other';
+      const result = pruneWorktrees({ maxAgeDays: 0 });
+      expect(result.pruned.some((e) => e.name === 'prune-destroyed-owned')).toBe(true);
+    });
+  });
+
+  describe('status lifecycle', () => {
+    test('fresh worktree has no divergent commits and no dirty files', () => {
+      const entry = createWorktree('lifecycle-fresh');
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'lifecycle-fresh');
+      expect(wt.status).toBe('fresh');
+      expect(wt.divergent).toBe(false);
+      expect(wt.dirty).toBe(false);
+    });
+
+    test('worktree with dirty files shows as active', () => {
+      const entry = createWorktree('lifecycle-dirty');
+      // Create untracked file — makes it dirty
+      fs.writeFileSync(path.join(entry.path, 'dirty.txt'), 'dirty');
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'lifecycle-dirty');
+      expect(wt.status).toBe('active');
+      expect(wt.dirty).toBe(true);
+    });
+
+    test('worktree with divergent commits shows as active', () => {
+      const entry = createWorktree('lifecycle-diverged');
+      fs.writeFileSync(path.join(entry.path, 'feature.js'), 'const x = 1;');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'feature work'], { cwd: entry.path, stdio: 'pipe' });
+
+      const entries = listWorktrees();
+      const wt = entries.find((e) => e.name === 'lifecycle-diverged');
+      expect(wt.status).toBe('active');
+      expect(wt.divergent).toBe(true);
+    });
+
+    test('hasDivergentCommits returns false for branch at same point as base', () => {
+      createWorktree('no-diverge-check');
+      expect(hasDivergentCommits(`${BRANCH_PREFIX}no-diverge-check`, 'main', testDir)).toBe(false);
+    });
+
+    test('hasDivergentCommits returns true for branch ahead of base', () => {
+      const entry = createWorktree('diverge-check');
+      fs.writeFileSync(path.join(entry.path, 'ahead.txt'), 'ahead');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'ahead'], { cwd: entry.path, stdio: 'pipe' });
+      expect(hasDivergentCommits(`${BRANCH_PREFIX}diverge-check`, 'main', testDir)).toBe(true);
+    });
+
+    test('hasDirtyFiles detects untracked and modified files', () => {
+      const entry = createWorktree('dirty-check');
+      expect(hasDirtyFiles(entry.path)).toBe(false);
+      fs.writeFileSync(path.join(entry.path, 'new.txt'), 'new');
+      expect(hasDirtyFiles(entry.path)).toBe(true);
+    });
+
+    test('full lifecycle: fresh → active → merged', () => {
+      const entry = createWorktree('lifecycle-full');
+
+      // Step 1: Just created → fresh
+      let entries = listWorktrees();
+      let wt = entries.find((e) => e.name === 'lifecycle-full');
+      expect(wt.status).toBe('fresh');
+
+      // Step 2: Make a commit → active (listWorktrees persists this)
+      fs.writeFileSync(path.join(entry.path, 'feature.js'), 'const x = 1;');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'feature work'], { cwd: entry.path, stdio: 'pipe' });
+
+      entries = listWorktrees();
+      wt = entries.find((e) => e.name === 'lifecycle-full');
+      expect(wt.status).toBe('active');
+
+      // Verify registry persisted the active status
+      const registryAfterActive = loadRegistry(testDir);
+      expect(registryAfterActive.worktrees['lifecycle-full'].status).toBe('active');
+
+      // Step 3: Merge the branch to main (simulating the work being merged)
+      execFileSync('git', ['merge', '--no-ff', entry.branch, '-m', 'merge feature'], {
+        cwd: testDir,
+        stdio: 'pipe',
+      });
+
+      // Now branch is merged to base, no divergent commits → merged (not fresh)
+      entries = listWorktrees();
+      wt = entries.find((e) => e.name === 'lifecycle-full');
+      expect(wt.status).toBe('merged');
     });
   });
 

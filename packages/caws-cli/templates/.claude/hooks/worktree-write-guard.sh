@@ -53,7 +53,7 @@ WT_INFO=$(node -e "
   try {
     var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
     var active = Object.values(reg.worktrees || {}).filter(function(w) {
-      return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+      return (w.status === 'active' || w.status === 'fresh' || w.status === 'merged') && w.baseBranch === '$CURRENT_BRANCH';
     });
     console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(', '));
   } catch(e) { console.log('0:'); }

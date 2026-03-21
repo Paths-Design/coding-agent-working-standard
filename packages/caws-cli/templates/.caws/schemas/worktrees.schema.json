@@ -21,11 +21,13 @@
           "baseBranch": { "type": "string" },
           "scope": { "type": ["string", "null"] },
           "specId": { "type": ["string", "null"] },
+          "owner": { "type": ["string", "null"], "description": "CLAUDE_SESSION_ID of the creating agent" },
           "createdAt": { "type": "string", "format": "date-time" },
           "destroyedAt": { "type": "string", "format": "date-time" },
+          "autoRegistered": { "type": "boolean" },
           "status": {
             "type": "string",
-            "enum": ["active", "orphaned", "missing", "destroyed"]
+            "enum": ["fresh", "active", "merged", "orphaned", "missing", "stale-merged", "destroyed"]
           }
         },
         "additionalProperties": false

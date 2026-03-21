@@ -40,7 +40,7 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
   WT_INFO=$(node -e "
     try {
       var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
-      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+      var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
       if (active.length > 0) {
         var names = active.map(function(w) { return w.name + ' (' + w.branch + ')'; });
         console.log(active.length + ':' + names.join(', '));
@@ -58,7 +58,7 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
     BASE_BRANCH=$(node -e "
       try {
         var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
-        var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+        var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active' || w.status === 'fresh' || w.status === 'merged'; });
         if (active.length > 0) console.log(active[0].baseBranch || '');
         else console.log('');
       } catch(e) { console.log(''); }
