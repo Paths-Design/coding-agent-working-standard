@@ -11,6 +11,7 @@ const {
   destroyWorktree,
   mergeWorktree,
   pruneWorktrees,
+  repairWorktrees,
 } = require('../worktree/worktree-manager');
 
 /**
@@ -31,9 +32,11 @@ async function worktreeCommand(subcommand, options = {}) {
         return handleMerge(options);
       case 'prune':
         return handlePrune(options);
+      case 'repair':
+        return handleRepair(options);
       default:
         console.error(chalk.red(`Unknown worktree subcommand: ${subcommand}`));
-        console.log(chalk.blue('Available: create, list, destroy, merge, prune'));
+        console.log(chalk.blue('Available: create, list, destroy, merge, prune, repair'));
         process.exit(1);
     }
   } catch (error) {
@@ -72,18 +75,20 @@ function handleList() {
     return;
   }
 
+  const maxNameLen = Math.max(18, ...entries.map((e) => e.name.length + 2));
+  const totalWidth = maxNameLen + 12 + 20 + 16 + 10;
   console.log(chalk.bold.cyan('CAWS Worktrees'));
-  console.log(chalk.cyan('='.repeat(85)));
+  console.log(chalk.cyan('='.repeat(totalWidth)));
   console.log(
     chalk.bold(
-      'Name'.padEnd(18) +
+      'Name'.padEnd(maxNameLen) +
         'Status'.padEnd(12) +
         'Branch'.padEnd(20) +
         'Last Commit'.padEnd(16) +
         'Owner'
     )
   );
-  console.log(chalk.gray('-'.repeat(85)));
+  console.log(chalk.gray('-'.repeat(totalWidth)));
 
   for (const entry of entries) {
     const statusColor =
@@ -114,7 +119,7 @@ function handleList() {
     }
 
     console.log(
-      entry.name.padEnd(18) +
+      entry.name.padEnd(maxNameLen) +
         statusColor(statusStr.padEnd(12)) +
         (entry.branch || '').padEnd(20) +
         commitAge.padEnd(16 + 10) + // +10 for chalk color codes
@@ -222,6 +227,54 @@ function handlePrune(options) {
         console.log(chalk.yellow(`   - ${skName}: ${reason}`));
       }
     }
+  }
+}
+
+
+function handleRepair(options) {
+  const dryRun = options.dryRun || false;
+  const shouldPrune = options.prune || false;
+
+  if (dryRun) {
+    console.log(chalk.cyan('Repair dry-run (no changes will be persisted)'));
+  } else {
+    console.log(chalk.cyan('Repairing worktree registry'));
+  }
+
+  const result = repairWorktrees({ prune: shouldPrune, dryRun });
+
+  if (result.repaired.length === 0 && result.pruned.length === 0 && result.skipped.length === 0) {
+    console.log(chalk.green('Registry is consistent. Nothing to repair.'));
+    return;
+  }
+
+  if (result.repaired.length > 0) {
+    console.log(chalk.green('\nRepaired ' + result.repaired.length + ' entry/entries:'));
+    for (const r of result.repaired) {
+      if (r.action === 'registered') {
+        console.log(chalk.gray('   + ' + r.name + ' (auto-registered from git)'));
+      } else {
+        console.log(chalk.gray('   ~ ' + r.name + ' (' + r.from + ' -> ' + r.to + ')'));
+      }
+    }
+  }
+
+  if (result.pruned.length > 0) {
+    console.log(chalk.green('\nPruned ' + result.pruned.length + ' stale entry/entries:'));
+    for (const p of result.pruned) {
+      console.log(chalk.gray('   - ' + p.name + ' (' + p.status + ')'));
+    }
+  }
+
+  if (result.skipped.length > 0) {
+    console.log(chalk.yellow('\nSkipped ' + result.skipped.length + ' entry/entries:'));
+    for (const s of result.skipped) {
+      console.log(chalk.yellow('   ? ' + s.name + ': ' + s.reason));
+    }
+  }
+
+  if (dryRun) {
+    console.log(chalk.blue('\nDry-run complete. Run without --dry-run to persist changes.'));
   }
 }
 
