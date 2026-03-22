@@ -29,25 +29,39 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 # Check if we're in a CAWS project
-if [[ ! -f "$PROJECT_DIR/.caws/working-spec.yaml" ]]; then
+if [[ ! -f "$PROJECT_DIR/.caws/working-spec.yaml" ]] && [[ ! -d "$PROJECT_DIR/.caws/specs" ]]; then
   exit 0
 fi
 
 # Check if CAWS CLI is available
 if ! command -v caws &> /dev/null; then
-  # Suggest installing CAWS
   echo '{
     "hookSpecificOutput": {
       "hookEventName": "PostToolUse",
-      "additionalContext": "CAWS CLI not available. Consider installing with: npm install -g @caws/cli"
+      "additionalContext": "CAWS CLI not available. Consider installing with: npm install -g @paths.design/caws-cli"
     }
   }'
   exit 0
 fi
 
-# Run CAWS quality gates in quiet mode for quick feedback
-if caws quality-gates --context=commit --quiet 2>/dev/null; then
-  # Quality check passed - provide positive feedback
+# Run quality gates via the unified pipeline
+RESULT=$(caws gates run --context=edit --file "$FILE_PATH" --json --quiet 2>/dev/null) || true
+
+if [ -z "$RESULT" ]; then
+  # No output — gates command not available or errored silently
+  echo '{
+    "hookSpecificOutput": {
+      "hookEventName": "PostToolUse",
+      "additionalContext": "Quality gates did not produce output. Run '\''caws gates run'\'' for details."
+    }
+  }'
+  exit 0
+fi
+
+# Check if gates passed
+PASSED=$(echo "$RESULT" | jq -r '.passed // true' 2>/dev/null)
+
+if [ "$PASSED" = "true" ]; then
   echo '{
     "hookSpecificOutput": {
       "hookEventName": "PostToolUse",
@@ -55,13 +69,12 @@ if caws quality-gates --context=commit --quiet 2>/dev/null; then
     }
   }'
 else
-  # Quality check failed - provide feedback to Claude
-  # Run again to get violations summary
-  VIOLATIONS=$(caws quality-gates --context=commit --json 2>/dev/null | jq -r '.violations[:3] | .[] | "- \(.gate): \(.message)"' 2>/dev/null || echo "Run 'caws quality-gates' for details")
+  # Extract top 3 gate failure messages
+  VIOLATIONS=$(echo "$RESULT" | jq -r '[.gates[] | select(.status == "fail") | "- \(.name): \(.messages[0] // "failed")"] | .[0:3] | .[]' 2>/dev/null || echo "Run 'caws gates run' for details")
 
   echo '{
     "decision": "block",
-    "reason": "Quality gate violations detected. Please address the following issues before continuing:\n'"$VIOLATIONS"'\n\nRun '\''caws quality-gates'\'' for full details."
+    "reason": "Quality gate violations detected. Please address the following issues before continuing:\n'"$VIOLATIONS"'\n\nRun '\''caws gates run'\'' for full details."
   }'
 fi
 

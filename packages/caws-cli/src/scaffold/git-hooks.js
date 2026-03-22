@@ -358,118 +358,48 @@ if [ -d ".caws" ]; then
 fi
 # ===== End Multi-Agent Safety Guard =====
 
-# Fallback chain for quality gates:
-# 1. Try Node.js script (if exists)
-# 2. Try CAWS CLI
-# 3. Try Makefile target
-# 4. Try Python scripts
-# 5. Skip gracefully (warn only)
-
+# Run CAWS quality gates
 QUALITY_GATES_RAN=false
 QUALITY_GATES_WARNED=false
 
-# Option 1: Quality gates package (installed via npm)
-if [ -f "node_modules/@paths.design/quality-gates/run-quality-gates.mjs" ]; then
-  if command -v node >/dev/null 2>&1; then
-    echo "Running quality gates package..."
-    if CI= node node_modules/@paths.design/quality-gates/run-quality-gates.mjs --context=commit; then
-      echo "Quality gates passed"
-      QUALITY_GATES_RAN=true
-    else
-      echo "Quality gates failed - commit blocked"
-      echo "Fix the violations above before committing"
-      exit 1
-    fi
-  fi
-# Option 1b: Quality gates package (monorepo/local copy)
-elif [ -f "node_modules/@caws/quality-gates/run-quality-gates.mjs" ]; then
-  if command -v node >/dev/null 2>&1; then
-    echo "Running quality gates package (local)..."
-    if CI= node node_modules/@caws/quality-gates/run-quality-gates.mjs --context=commit; then
-      echo "Quality gates passed"
-      QUALITY_GATES_RAN=true
-    else
-      echo "Quality gates failed - commit blocked"
-      echo "Fix the violations above before committing"
-      exit 1
-    fi
-  fi
-# Option 2: Legacy Node.js quality gates script (deprecated)
-elif [ -f "scripts/quality-gates/run-quality-gates.js" ]; then
-  if command -v node >/dev/null 2>&1; then
-    echo "Running legacy Node.js quality gates script..."
-    if node scripts/quality-gates/run-quality-gates.js; then
-      echo "Quality gates passed"
-      QUALITY_GATES_RAN=true
-    else
-      echo "Quality gates failed - commit blocked"
-      echo "Fix the violations above before committing"
-      exit 1
-    fi
-  fi
-# Option 3: CAWS CLI validation
-elif command -v caws >/dev/null 2>&1; then
-  # In a worktree, validate only the associated spec to avoid false positives
-  CAWS_VALIDATE_ARGS="--quiet"
-  WORKTREE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-  if [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
-    SPEC_ID=$(node -e "
-      try {
-        var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
-        var wt = Object.values(reg.worktrees || {}).find(function(w) {
-          return w.branch === '$WORKTREE_BRANCH';
-        });
-        if (wt && wt.specId) console.log(wt.specId);
-      } catch(e) {}
-    " 2>/dev/null || echo "")
-    if [ -n "$SPEC_ID" ]; then
-      CAWS_VALIDATE_ARGS="--quiet --spec-id $SPEC_ID"
-    fi
-  fi
-  # If no spec-id found (not in a worktree), validate the project-level spec
-  if [ -z "$CAWS_VALIDATE_ARGS" ] && [ -f ".caws/working-spec.yaml" ]; then
-    CAWS_VALIDATE_ARGS="--quiet .caws/working-spec.yaml"
-  fi
-  echo "Running CAWS CLI validation..."
-  if caws validate $CAWS_VALIDATE_ARGS 2>/dev/null; then
-    echo "CAWS validation passed"
+# Resolve spec ID from worktree context if available
+SPEC_ID=""
+WORKTREE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+  SPEC_ID=$(node -e "
+    try {
+      var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
+      var wt = Object.values(reg.worktrees || {}).find(function(w) {
+        return w.branch === '$WORKTREE_BRANCH';
+      });
+      if (wt && wt.specId) console.log(wt.specId);
+    } catch(e) {}
+  " 2>/dev/null || echo "")
+fi
+
+GATES_ARGS="--context=commit --quiet"
+if [ -n "$SPEC_ID" ]; then
+  GATES_ARGS="$GATES_ARGS --spec-id $SPEC_ID"
+fi
+
+if command -v caws >/dev/null 2>&1; then
+  if caws gates run $GATES_ARGS 2>/dev/null; then
+    echo "Quality gates passed"
     QUALITY_GATES_RAN=true
   else
-    echo "CAWS validation failed, but allowing commit (non-blocking)"
-    echo "Run 'caws validate' for details"
-    QUALITY_GATES_RAN=true
-    QUALITY_GATES_WARNED=true
+    GATE_EXIT=$?
+    if [ $GATE_EXIT -eq 1 ]; then
+      echo "Quality gates BLOCKED the commit"
+      exit 1
+    else
+      echo "Quality gates had warnings"
+      QUALITY_GATES_RAN=true
+      QUALITY_GATES_WARNED=true
+    fi
   fi
-# Option 3: Makefile target
-elif [ -f "Makefile" ] && grep -q "caws-validate\\|caws-gates" Makefile; then
-  echo "Running Makefile quality gates..."
-  if make caws-validate >/dev/null 2>&1 || make caws-gates >/dev/null 2>&1; then
-    echo "Makefile quality gates passed"
-    QUALITY_GATES_RAN=true
-  else
-    echo "Makefile quality gates failed, but allowing commit (non-blocking)"
-    QUALITY_GATES_RAN=true
-    QUALITY_GATES_WARNED=true
-  fi
-# Option 4: Python scripts
-elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; then
-  echo "Running Python quality gates script..."
-  if python3 scripts/simple_gates.py all --tier 2 --profile backend-api >/dev/null 2>&1; then
-    echo "Python quality gates passed"
-    QUALITY_GATES_RAN=true
-  else
-    echo "Python quality gates failed, but allowing commit (non-blocking)"
-    QUALITY_GATES_RAN=true
-    QUALITY_GATES_WARNED=true
-  fi
-# Option 5: Skip gracefully
 else
-  echo "Quality gates not available - skipping"
-  echo "Available options:"
-  echo "   - Install quality gates: npm install --save-dev @paths.design/quality-gates"
-  echo "   - Install CAWS CLI: npm install -g @paths.design/caws-cli"
-  echo "   - Use Python: python3 scripts/simple_gates.py"
-  echo "   - Use Makefile: make caws-gates"
+  echo "CAWS CLI not available — skipping quality gates"
+  echo "Install with: npm install -g @paths.design/caws-cli"
   QUALITY_GATES_RAN=true
 fi
 
