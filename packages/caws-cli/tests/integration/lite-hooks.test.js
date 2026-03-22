@@ -160,14 +160,14 @@ describe('lite-hooks integration', () => {
       expect(result.exitCode).toBe(0);
     });
 
-    test('warns on out-of-scope edits', () => {
+    test('blocks out-of-scope edits', () => {
       fs.ensureDirSync(path.join(testDir, 'vendor'));
       fs.writeFileSync(path.join(testDir, 'vendor', 'package.js'), '');
       const result = runHook('scope-guard.sh', 'Write', {
         file_path: path.join(testDir, 'vendor', 'package.js'),
       });
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('ask');
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('BLOCKED');
     });
 
     test('ignores non-Write/Edit tools', () => {
