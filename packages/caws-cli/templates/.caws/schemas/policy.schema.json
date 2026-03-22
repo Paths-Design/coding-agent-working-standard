@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CAWS Policy",
+  "type": "object",
+  "required": ["version", "risk_tiers"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "risk_tiers": {
+      "type": "object",
+      "properties": {
+        "1": { "$ref": "#/$defs/tier" },
+        "2": { "$ref": "#/$defs/tier" },
+        "3": { "$ref": "#/$defs/tier" }
+      },
+      "required": ["1", "2", "3"]
+    },
+    "edit_rules": {
+      "type": "object",
+      "properties": {
+        "policy_and_code_same_pr": { "type": "boolean" },
+        "min_approvers_for_budget_raise": { "type": "integer", "minimum": 1 },
+        "require_signed_commits": { "type": "boolean" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "description": { "type": "string" }
+        },
+        "required": ["enabled"]
+      }
+    }
+  },
+  "$defs": {
+    "tier": {
+      "type": "object",
+      "required": ["max_files", "max_loc"],
+      "properties": {
+        "max_files": { "type": "integer", "minimum": 1 },
+        "max_loc": { "type": "integer", "minimum": 1 },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}
