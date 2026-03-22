@@ -426,6 +426,10 @@ elif command -v caws >/dev/null 2>&1; then
       CAWS_VALIDATE_ARGS="--quiet --spec-id $SPEC_ID"
     fi
   fi
+  # If no spec-id found (not in a worktree), validate the project-level spec
+  if [ -z "$CAWS_VALIDATE_ARGS" ] && [ -f ".caws/working-spec.yaml" ]; then
+    CAWS_VALIDATE_ARGS="--quiet .caws/working-spec.yaml"
+  fi
   echo "Running CAWS CLI validation..."
   if caws validate $CAWS_VALIDATE_ARGS 2>/dev/null; then
     echo "CAWS validation passed"

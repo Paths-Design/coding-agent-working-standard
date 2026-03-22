@@ -2,7 +2,7 @@ const Ajv = require('ajv');
 const fs = require('fs-extra');
 const path = require('path');
 
-const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false });
+const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false, validateFormats: false });
 const cache = new Map();
 
 function createValidator(schemaPath) {
