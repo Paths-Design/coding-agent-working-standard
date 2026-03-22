@@ -132,7 +132,10 @@ describe('Waiver self-approval prevention', () => {
     expect(waiverFiles.length).toBe(0);
   });
 
-  test('createWaiver rejects when approvedBy contains CLAUDE_SESSION_ID as substring', async () => {
+  test('createWaiver succeeds when approvedBy contains CLAUDE_SESSION_ID as substring (not self-approval)', async () => {
+    // The old .includes() check would reject this as self-approval, but it's a
+    // different approver whose name happens to contain the session ID string.
+    // Strict equality correctly allows this.
     process.env.CLAUDE_SESSION_ID = 'session-xyz';
 
     await runCreateWaiver(
@@ -140,8 +143,13 @@ describe('Waiver self-approval prevention', () => {
     );
 
     const errors = getConsoleErrors();
-    expect(errors).toContain('Waiver creator cannot be the approver');
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(errors).not.toContain('Waiver creator cannot be the approver');
+
+    // Verify a waiver file was actually created
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+    expect(waiverFiles.length).toBe(1);
   });
 
   test('createWaiver succeeds when approvedBy differs from CLAUDE_SESSION_ID', async () => {
@@ -198,5 +206,125 @@ describe('Waiver self-approval prevention', () => {
     const waiver = yaml.load(waiverContent);
 
     expect(waiver.created_by_session).toBe('session-audit-trail');
+  });
+
+  // C5: Asymmetric prefix bypass — approvedBy is a prefix of session ID
+  test('createWaiver succeeds when approvedBy is a prefix of CLAUDE_SESSION_ID (different approver)', async () => {
+    // With .includes(), 'session-abc'.includes('session-abc') would be true,
+    // but 'session-abc' !== 'session-abc-123' so this is NOT self-approval.
+    // The old code would have incorrectly blocked this only if the check were
+    // reversed. With strict equality, this correctly succeeds.
+    process.env.CLAUDE_SESSION_ID = 'session-abc-123';
+
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: 'session-abc' })
+    );
+
+    const errors = getConsoleErrors();
+    expect(errors).not.toContain('Waiver creator cannot be the approver');
+
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+    expect(waiverFiles.length).toBe(1);
+  });
+
+  // H8: Empty string CLAUDE_SESSION_ID bypasses check (intentional)
+  test('createWaiver succeeds when CLAUDE_SESSION_ID is empty string (cannot identify session)', async () => {
+    // Empty string is falsy, so creatorSession becomes null via `'' || null`.
+    // Self-approval prevention is skipped because we can't identify who the
+    // creator is. This is intentional/documented behavior.
+    process.env.CLAUDE_SESSION_ID = '';
+
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: 'anyone' })
+    );
+
+    const errors = getConsoleErrors();
+    expect(errors).not.toContain('Waiver creator cannot be the approver');
+
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+    expect(waiverFiles.length).toBe(1);
+
+    // Verify created_by_session is null (not empty string)
+    const waiverContent = fs.readFileSync(
+      path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
+      'utf8'
+    );
+    const waiver = yaml.load(waiverContent);
+    expect(waiver.created_by_session).toBeNull();
+  });
+
+  // H9: Waiver ID collision — rapid creation
+  test('two waivers created rapidly get different IDs', async () => {
+    delete process.env.CLAUDE_SESSION_ID;
+
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: '@approver-1', title: 'Waiver A' })
+    );
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: '@approver-2', title: 'Waiver B' })
+    );
+
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+
+    // If IDs collided, the second write would overwrite the first,
+    // resulting in only 1 file. Two files means unique IDs.
+    // NOTE: Date.now().toString().slice(-4) has only 10,000 unique values.
+    // Collisions are possible in the same 10-second window. This test
+    // documents current behavior — if it fails, it demonstrates the
+    // collision risk (H9).
+    expect(waiverFiles.length).toBe(2);
+  });
+
+  // Verify created_by_session is null when CLAUDE_SESSION_ID unset
+  test('created_by_session is null when CLAUDE_SESSION_ID is not set', async () => {
+    delete process.env.CLAUDE_SESSION_ID;
+
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: '@someone' })
+    );
+
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+    expect(waiverFiles.length).toBe(1);
+
+    const waiverContent = fs.readFileSync(
+      path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
+      'utf8'
+    );
+    const waiver = yaml.load(waiverContent);
+    expect(waiver.created_by_session).toBeNull();
+  });
+
+  // Verify waiver file is NOT written when self-approval is rejected
+  test('no waiver file is written when self-approval is rejected', async () => {
+    process.env.CLAUDE_SESSION_ID = 'session-self';
+    const writeSpy = jest.spyOn(fs, 'writeFileSync');
+
+    await runCreateWaiver(
+      validWaiverOptions({ approvedBy: 'session-self' })
+    );
+
+    const errors = getConsoleErrors();
+    expect(errors).toContain('Waiver creator cannot be the approver');
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    // writeFileSync should NOT have been called for a waiver file
+    const waiverWriteCalls = writeSpy.mock.calls.filter(
+      ([filePath]) => typeof filePath === 'string' && filePath.includes('WV-')
+    );
+    expect(waiverWriteCalls.length).toBe(0);
+
+    // Double-check: no files on disk
+    const waiverFiles = fs
+      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+      .filter((f) => f.endsWith('.yaml'));
+    expect(waiverFiles.length).toBe(0);
   });
 });

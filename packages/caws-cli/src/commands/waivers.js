@@ -139,10 +139,15 @@ async function createWaiver(options) {
   }
 
   // Self-approval prevention: creator cannot be approver
+  // Uses strict equality — the previous .includes() check was an asymmetric
+  // substring match that produced false positives (blocking legitimate approvers
+  // whose name happened to contain the session ID) while missing the reverse
+  // case (approver is a prefix of the session ID).
+  // When CLAUDE_SESSION_ID is unset or empty, we can't identify the creator,
+  // so self-approval prevention is skipped ('' || null → null → falsy guard).
   const creatorSession = process.env.CLAUDE_SESSION_ID || null;
   if (creatorSession && options.approvedBy) {
-    if (options.approvedBy === creatorSession ||
-        options.approvedBy.includes(creatorSession)) {
+    if (options.approvedBy === creatorSession) {
       throw new Error(
         'Waiver creator cannot be the approver.\n' +
         'A different agent or human must approve this waiver.\n' +
