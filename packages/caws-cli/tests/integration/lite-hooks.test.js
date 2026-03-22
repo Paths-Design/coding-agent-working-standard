@@ -98,6 +98,7 @@ describe('lite-hooks integration', () => {
         env: {
           ...process.env,
           CLAUDE_PROJECT_DIR: testDir,
+          NODE_PATH: path.resolve(__dirname, '../../../../node_modules'),
         },
       });
       return { exitCode: 0, stdout: output, stderr: '' };
@@ -173,6 +174,155 @@ describe('lite-hooks integration', () => {
     test('ignores non-Write/Edit tools', () => {
       const result = runHook('scope-guard.sh', 'Bash', { command: 'ls' });
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe('scope-guard.sh (full mode)', () => {
+    // Full-mode tests: working-spec.yaml present, scope.json removed
+    // The hook uses js-yaml to parse YAML specs and enforce scope
+
+    function writeYaml(relPath, content) {
+      const fullPath = path.join(testDir, relPath);
+      fs.ensureDirSync(path.dirname(fullPath));
+      fs.writeFileSync(fullPath, content);
+    }
+
+    const WORKING_SPEC = [
+      'id: TEST-001',
+      'title: Test spec for scope guard',
+      'risk_tier: 2',
+      'mode: feature',
+      'scope:',
+      '  in:',
+      '    - src/',
+      '  out:',
+      '    - vendor/',
+    ].join('\n');
+
+    beforeEach(() => {
+      // Remove scope.json so we enter full-mode path (not lite mode)
+      const scopeJson = path.join(testDir, '.caws', 'scope.json');
+      if (fs.existsSync(scopeJson)) {
+        fs.removeSync(scopeJson);
+      }
+    });
+
+    test('allows edits within scope.in', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      fs.ensureDirSync(path.join(testDir, 'src'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'src', 'app.js'),
+      });
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('blocks edits in scope.out', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      fs.ensureDirSync(path.join(testDir, 'vendor'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'vendor', 'package.js'),
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('BLOCKED');
+    });
+
+    test('blocks edits outside scope.in', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      fs.ensureDirSync(path.join(testDir, 'lib'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'lib', 'utils.js'),
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('BLOCKED');
+    });
+
+    test('allows root-level files', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'package.json'),
+      });
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('allows .caws/ files', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, '.caws', 'working-spec.yaml'),
+      });
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('allows .claude/ files', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, '.claude', 'settings.json'),
+      });
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('skips terminal-status specs', () => {
+      writeYaml('.caws/working-spec.yaml', WORKING_SPEC);
+      writeYaml('.caws/specs/FEAT-001.yaml', [
+        'id: FEAT-001',
+        'title: Completed feature',
+        'status: completed',
+        'scope:',
+        '  in:',
+        '    - tiny/',
+        '  out: []',
+      ].join('\n'));
+      fs.ensureDirSync(path.join(testDir, 'tiny'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'tiny', 'file.js'),
+      });
+      // tiny/ is only in the completed spec's scope.in, not in working-spec's scope.in
+      // completed spec is skipped, so tiny/ is not in any active scope
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('BLOCKED');
+    });
+
+    test('feature spec adds to scope union', () => {
+      writeYaml('.caws/working-spec.yaml', [
+        'id: TEST-001',
+        'title: Test spec',
+        'risk_tier: 2',
+        'scope:',
+        '  in:',
+        '    - src/',
+        '  out: []',
+      ].join('\n'));
+      writeYaml('.caws/specs/FEAT-002.yaml', [
+        'id: FEAT-002',
+        'title: Active feature',
+        'status: active',
+        'scope:',
+        '  in:',
+        '    - lib/',
+        '  out: []',
+      ].join('\n'));
+      fs.ensureDirSync(path.join(testDir, 'lib'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'lib', 'utils.js'),
+      });
+      // lib/ is in the active feature spec's scope.in, so it should be allowed
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('invalid YAML in working-spec allows all edits (security bypass)', () => {
+      // This documents a known security issue: if working-spec.yaml has invalid YAML,
+      // the js-yaml parser throws, the catch block outputs "error:...", and the bash
+      // script falls through to exit 0 — allowing ALL edits regardless of scope.
+      writeYaml('.caws/working-spec.yaml', '{{{bad yaml content!!!');
+      fs.ensureDirSync(path.join(testDir, 'anywhere'));
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'anywhere', 'should-be-blocked.js'),
+      });
+      // SECURITY BYPASS: invalid YAML causes scope-guard to allow all edits.
+      // The Node.js catch block outputs "error:..." which doesn't match
+      // "out_of_scope:" or "not_in_scope", so bash falls through to exit 0.
+      expect(result.exitCode).toBe(0);
+      // Flag: this SHOULD exit 2 in a secure implementation.
+      // The hook should fail-closed (block) on parse errors, not fail-open (allow).
     });
   });
 
