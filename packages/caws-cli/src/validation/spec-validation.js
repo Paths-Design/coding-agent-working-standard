@@ -4,6 +4,8 @@
  * @author @darianrosebrook
  */
 
+const fs = require('fs');
+const path = require('path');
 const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
 const { execSync } = require('child_process');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
@@ -614,6 +616,30 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
     // Note: change_budget in specs is informational documentation only.
     // Budget enforcement is derived from policy.yaml risk_tier + waivers.
     // No warning emitted — the field is valid and expected.
+
+    // Validate scope.json against scope.schema.json if it exists
+    if (projectRoot) {
+      const scopeJsonPath = path.join(projectRoot, '.caws', 'scope.json');
+      if (fs.existsSync(scopeJsonPath)) {
+        try {
+          const schemaPath = getSchemaPath('scope.schema.json', projectRoot);
+          const validate = createValidator(schemaPath);
+          const scopeData = JSON.parse(fs.readFileSync(scopeJsonPath, 'utf8'));
+          const scopeResult = validate(scopeData);
+          if (!scopeResult.valid) {
+            for (const err of scopeResult.errors) {
+              warnings.push({
+                instancePath: `/scope.json${err.path}`,
+                message: `scope.json schema violation: ${err.message}`,
+                suggestion: 'Fix .caws/scope.json to match scope.schema.json',
+              });
+            }
+          }
+        } catch (schemaErr) {
+          // Non-fatal — don't block validation on schema issues
+        }
+      }
+    }
 
     // Derive and check budget if requested
     let budgetCheck = null;

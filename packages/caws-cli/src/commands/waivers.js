@@ -176,6 +176,24 @@ async function createWaiver(options) {
     created_by_session: creatorSession,
   };
 
+  // Validate waiver against schema before persisting
+  try {
+    const { createValidator, getSchemaPath } = require('../utils/schema-validator');
+    const schemaPath = getSchemaPath('waivers.schema.json', process.cwd());
+    const validate = createValidator(schemaPath);
+    // waivers.schema.json uses patternProperties keyed by waiver ID
+    const waiverDoc = { [waiverId]: waiver };
+    const result = validate(waiverDoc);
+    if (!result.valid) {
+      console.warn(chalk.yellow('Waiver has schema violations:'));
+      result.errors.forEach((err) => {
+        console.warn(chalk.yellow(`  ${err.instancePath}: ${err.message}`));
+      });
+    }
+  } catch (schemaErr) {
+    // Non-fatal — don't block waiver creation on schema issues
+  }
+
   // Save individual waiver file
   const waiverPath = path.join(process.cwd(), WAIVER_DIR, `${waiverId}.yaml`);
   fs.writeFileSync(waiverPath, yaml.dump(waiver, { lineWidth: -1 }));
@@ -217,9 +235,32 @@ async function listWaivers(_options) {
     return;
   }
 
+  // Load a schema validator once for all waiver files (if available)
+  let waiverValidate = null;
+  try {
+    const { createValidator, getSchemaPath } = require('../utils/schema-validator');
+    const schemaPath = getSchemaPath('waivers.schema.json', process.cwd());
+    waiverValidate = createValidator(schemaPath);
+  } catch {
+    // Schema not available — skip validation
+  }
+
   const waivers = waiverFiles.map((file) => {
     const content = fs.readFileSync(path.join(waiversDir, file), 'utf8');
-    return yaml.load(content);
+    const waiver = yaml.load(content);
+
+    // Validate each loaded waiver against schema
+    if (waiverValidate && waiver && waiver.id) {
+      const result = waiverValidate({ [waiver.id]: waiver });
+      if (!result.valid) {
+        console.warn(chalk.yellow(`Schema warning for ${file}:`));
+        result.errors.forEach((err) => {
+          console.warn(chalk.yellow(`  ${err.instancePath}: ${err.message}`));
+        });
+      }
+    }
+
+    return waiver;
   });
 
   // Filter by status
