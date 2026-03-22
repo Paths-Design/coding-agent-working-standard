@@ -138,6 +138,19 @@ async function createWaiver(options) {
     process.exit(1);
   }
 
+  // Self-approval prevention: creator cannot be approver
+  const creatorSession = process.env.CLAUDE_SESSION_ID || null;
+  if (creatorSession && options.approvedBy) {
+    if (options.approvedBy === creatorSession ||
+        options.approvedBy.includes(creatorSession)) {
+      throw new Error(
+        'Waiver creator cannot be the approver.\n' +
+        'A different agent or human must approve this waiver.\n' +
+        `Creator session: ${creatorSession}`
+      );
+    }
+  }
+
   // Generate waiver ID
   const waiverId = `WV-${Date.now().toString().slice(-4)}`;
   const timestamp = new Date().toISOString();
@@ -155,6 +168,7 @@ async function createWaiver(options) {
     impact_level: options.impactLevel,
     mitigation_plan: options.mitigationPlan,
     status: 'active',
+    created_by_session: creatorSession,
   };
 
   // Save individual waiver file

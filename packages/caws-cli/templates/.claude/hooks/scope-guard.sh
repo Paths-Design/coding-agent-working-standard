@@ -125,25 +125,18 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
 
     if [[ "$LITE_CHECK" == banned:* ]]; then
       PATTERN="${LITE_CHECK#banned:}"
-      echo '{
-        "hookSpecificOutput": {
-          "hookEventName": "PreToolUse",
-          "permissionDecision": "ask",
-          "permissionDecisionReason": "This file ('"$REL_PATH"') matches a banned pattern ('"$PATTERN"') in .caws/scope.json. Creating files with this pattern is blocked to prevent file sprawl."
-        }
-      }'
-      exit 0
+      echo "BLOCKED: $REL_PATH matches banned pattern ($PATTERN) in .caws/scope.json"
+      echo "  Scope allows: files not matching banned patterns"
+      echo "  To modify scope, update bannedPatterns in .caws/scope.json"
+      exit 2
     fi
 
     if [[ "$LITE_CHECK" == "not_allowed" ]]; then
-      echo '{
-        "hookSpecificOutput": {
-          "hookEventName": "PreToolUse",
-          "permissionDecision": "ask",
-          "permissionDecisionReason": "This file ('"$REL_PATH"') is outside the allowed directories in .caws/scope.json. Please confirm this edit is intentional."
-        }
-      }'
-      exit 0
+      ALLOWED_DIRS=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SCOPE_FILE','utf8')); console.log((s.allowedDirectories||[]).join(', '))" 2>/dev/null || echo "unknown")
+      echo "BLOCKED: $REL_PATH is outside allowed directories"
+      echo "  Scope allows: $ALLOWED_DIRS"
+      echo "  To modify scope, update allowedDirectories in .caws/scope.json"
+      exit 2
     fi
 
     # File is allowed - exit normally
@@ -274,25 +267,17 @@ if command -v node >/dev/null 2>&1; then
     DETAIL="${SCOPE_CHECK#out_of_scope:}"
     SOURCE="${DETAIL%%:*}"
     PATTERN="${DETAIL#*:}"
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is marked as out-of-scope in '"$SOURCE"' (pattern: '"$PATTERN"'). Editing it may cause scope creep. Please confirm this edit is intentional."
-      }
-    }'
-    exit 0
+    echo "BLOCKED: $REL_PATH is excluded by scope.out in $SOURCE (pattern: $PATTERN)"
+    echo "  Scope allows: files not matching scope.out patterns"
+    echo "  To modify scope, update the spec's scope.out field"
+    exit 2
   fi
 
   if [[ "$SCOPE_CHECK" == "not_in_scope" ]]; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is not in the defined scope of any active spec. Editing it may cause scope creep. Please confirm this edit is intentional."
-      }
-    }'
-    exit 0
+    echo "BLOCKED: $REL_PATH is not in the defined scope.in of any active spec"
+    echo "  Scope allows: files matching scope.in patterns in active specs"
+    echo "  To modify scope, update the spec's scope.in field"
+    exit 2
   fi
 fi
 
