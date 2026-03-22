@@ -1,23 +1,70 @@
 #!/bin/bash
-# CAWS Dangerous Command Blocker for Claude Code
-# Blocks potentially destructive shell commands
+# CAWS Command Safety Gate for Claude Code
+# Delegates to classify_command.py for robust command parsing and classification.
+# Falls back to bash pattern matching if Python is unavailable.
+#
+# The Python classifier handles:
+#   - Heredoc-aware parsing (won't false-positive on quoted dangerous commands)
+#   - Quoted-region stripping (echo "git reset --hard" is safe)
+#   - Pipeline-aware dangers (curl | sh)
+#   - Context-aware rm classification (safe prefixes vs dangerous targets)
+#   - Proper shell segmentation (&&, ||, ;, |)
+#
 # @author @darianrosebrook
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Read JSON input from Claude Code
 INPUT=$(cat)
 
 # Extract tool info
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
 
 # Only check Bash tool
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Dangerous command patterns
+# --- Try Python classifier first (preferred) ---
+CLASSIFIER="$SCRIPT_DIR/classify_command.py"
+if [[ -f "$CLASSIFIER" ]] && command -v python3 >/dev/null 2>&1; then
+  REPO_ROOT="${CLAUDE_PROJECT_DIR:-.}"
+  CLASSIFIER_STDERR=$(mktemp)
+  RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
+    --repo-root "$REPO_ROOT" \
+    --home "$HOME" \
+    --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
+    DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
+    rm -f "$CLASSIFIER_STDERR"
+    RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\"}"
+  }
+  rm -f "$CLASSIFIER_STDERR"
+
+  DECISION=$(printf '%s' "$RESULT" | jq -r '.decision // "ask"')
+  REASON=$(printf '%s' "$RESULT" | jq -r '.reason // "unknown"')
+
+  case "$DECISION" in
+    allow)
+      exit 0
+      ;;
+    deny)
+      echo "BLOCKED: $REASON" >&2
+      echo "Command was: $COMMAND" >&2
+      exit 2
+      ;;
+    ask)
+      echo "WARNING: $REASON" >&2
+      echo "Command was: $COMMAND" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# --- Fallback: bash pattern matching (less precise, no heredoc/quote awareness) ---
+
 DANGEROUS_PATTERNS=(
   # Destructive file operations
   'rm -rf /'
@@ -96,7 +143,6 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
     # Allow git rebase/cherry-pick only when no worktrees are active
     if [[ "$pattern" == *"git rebase"* ]] || [[ "$pattern" == *"git cherry-pick"* ]]; then
       PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-      # Resolve to main repo root if we're in a worktree
       if command -v git >/dev/null 2>&1; then
         GIT_COMMON=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
         if [[ -n "$GIT_COMMON" ]] && [[ "$GIT_COMMON" != ".git" ]]; then
@@ -116,7 +162,6 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
           } catch(e) { console.log(0); }
         " 2>/dev/null || echo "0")
         if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
-          # Extract the specific git subcommand for the message
           GIT_SUBCMD="git operation"
           [[ "$pattern" == *"git rebase"* ]] && GIT_SUBCMD="git rebase"
           [[ "$pattern" == *"git cherry-pick"* ]] && GIT_SUBCMD="git cherry-pick"
@@ -126,7 +171,6 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
           exit 2
         fi
       fi
-      # No active worktrees — allow
       continue
     fi
 
@@ -142,11 +186,8 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
       fi
     fi
 
-    # Output to stderr for Claude to see
     echo "BLOCKED: Command matches dangerous pattern: $pattern" >&2
     echo "Command was: $COMMAND" >&2
-
-    # Exit code 2 blocks the tool and shows stderr to Claude
     exit 2
   fi
 done
