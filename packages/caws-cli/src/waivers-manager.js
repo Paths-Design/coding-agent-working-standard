@@ -196,6 +196,29 @@ class WaiversManager {
   }
 
   /**
+   * Find an active, non-expired waiver that covers a specific gate.
+   * Used by the gate evaluation pipeline to skip gates with active waivers.
+   * @param {string} gateName - Gate identifier (e.g. 'budget_limit', 'god_object')
+   * @returns {Promise<{waiverId: string, reason: string}|null>}
+   */
+  async getActiveWaiverForGate(gateName) {
+    const activeWaivers = await this.loadActiveWaivers();
+    const now = new Date();
+
+    for (const waiver of activeWaivers) {
+      const gates = Array.isArray(waiver.gates) ? waiver.gates : [waiver.gate];
+      const expiresAt = new Date(waiver.expires_at || waiver.expiry);
+
+      if (gates.includes(gateName) || gates.includes('*')) {
+        if ((!waiver.status || waiver.status === 'active') && expiresAt > now) {
+          return { waiverId: waiver.id, reason: waiver.reason };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Check if waiver applies to specific gates
    */
   async checkWaiverCoverage(gatesToCheck, context = {}) {

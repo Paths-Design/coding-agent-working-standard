@@ -2,7 +2,7 @@
  * CAWS Quality Gates Command
  *
  * Integrates the hardened quality gates system into the CAWS CLI.
- * Provides access to enterprise-grade quality enforcement with:
+ * Provides quality enforcement with:
  * - Timeout protection and concurrent execution
  * - Comprehensive gate coverage (naming, duplication, god objects, documentation)
  * - JSON output and CI/CD integration
