@@ -95,6 +95,38 @@ describe('worktree-manager', () => {
       expect(() => createWorktree('dupe-test')).toThrow('already exists');
     });
 
+    test('rejects creating worktree when branch exists and is owned by another session', () => {
+      // Simulate: Agent A creates worktree, destroys it, branch still exists
+      const original = process.env.CLAUDE_SESSION_ID;
+      process.env.CLAUDE_SESSION_ID = 'session-agent-A';
+      const entry = createWorktree('owned-branch');
+      destroyWorktree('owned-branch');
+
+      // Agent B tries to create same name
+      process.env.CLAUDE_SESSION_ID = 'session-agent-B';
+      expect(() => createWorktree('owned-branch')).toThrow('owned by session');
+
+      // Restore
+      if (original) process.env.CLAUDE_SESSION_ID = original;
+      else delete process.env.CLAUDE_SESSION_ID;
+    });
+
+    test('allows reusing name when branch is gone and entry is destroyed', () => {
+      const entry = createWorktree('reusable');
+      const branchName = entry.branch;
+      destroyWorktree('reusable');
+
+      // Manually delete the branch to simulate full cleanup
+      try {
+        execFileSync('git', ['branch', '-D', branchName], { cwd: testDir, stdio: 'pipe' });
+      } catch (_) {}
+
+      // Should succeed — both registry entry destroyed and branch gone
+      const reused = createWorktree('reusable');
+      expect(reused.name).toBe('reusable');
+      expect(reused.status).toBe('fresh');
+    });
+
     test('creates worktree with scope', () => {
       const entry = createWorktree('scoped', { scope: 'src/' });
       expect(entry.scope).toBe('src/');

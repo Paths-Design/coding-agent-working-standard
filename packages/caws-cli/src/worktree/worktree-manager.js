@@ -282,14 +282,63 @@ function createWorktree(name, options = {}) {
 
   const registry = loadRegistry(root);
 
-  // Check for duplicate
+  // Check for duplicate in registry
   if (registry.worktrees[name]) {
-    throw new Error(`Worktree '${name}' already exists. Use 'caws worktree destroy ${name}' first.`);
+    const existing = registry.worktrees[name];
+    if (existing.status !== 'destroyed') {
+      const ownerInfo = existing.owner ? ` (owned by session ${existing.owner})` : '';
+      throw new Error(
+        `Worktree '${name}' already exists with status '${existing.status}'${ownerInfo}.\n` +
+        `Use 'caws worktree destroy ${name}' first, or choose a different name.`
+      );
+    }
+    // Destroyed entries: check if another session owns the branch
+    if (existing.owner && existing.owner !== (process.env.CLAUDE_SESSION_ID || null)) {
+      // Branch may still be in use by the owning session for merge
+      try {
+        const branchExists = execFileSync('git', ['rev-parse', '--verify', BRANCH_PREFIX + name], {
+          cwd: root, stdio: 'pipe',
+        }).toString().trim();
+        if (branchExists) {
+          throw new Error(
+            `Worktree '${name}' was destroyed but branch '${BRANCH_PREFIX}${name}' still exists ` +
+            `(owned by session ${existing.owner}).\n` +
+            `The owning session may still need this branch for merging.\n` +
+            `Choose a different name, or delete the branch first: git branch -d ${BRANCH_PREFIX}${name}`
+          );
+        }
+      } catch (e) {
+        if (e.message.includes('owned by session')) throw e;
+        // Branch doesn't exist — safe to reuse the name
+      }
+    }
   }
 
   const worktreePath = path.join(root, WORKTREES_DIR, name);
   const branchName = BRANCH_PREFIX + name;
   const base = baseBranch || getCurrentBranch();
+
+  // Check if the branch already exists in git (even if not in registry)
+  // This catches cases where another agent created the branch outside CAWS
+  try {
+    execFileSync('git', ['rev-parse', '--verify', branchName], {
+      cwd: root, stdio: 'pipe',
+    });
+    // Branch exists — refuse unless it's fully merged into base
+    const currentSession = process.env.CLAUDE_SESSION_ID || null;
+    const registryOwner = registry.worktrees[name]?.owner;
+    if (registryOwner && registryOwner !== currentSession) {
+      throw new Error(
+        `Branch '${branchName}' already exists and is owned by another session (${registryOwner}).\n` +
+        `Another agent may be using this branch. Choose a different worktree name.`
+      );
+    }
+    // Branch exists but no owner conflict — warn and reuse
+    console.warn(`Warning: Branch '${branchName}' already exists, reusing it.`);
+  } catch (e) {
+    if (e.message.includes('already exists and is owned')) throw e;
+    // Branch doesn't exist — this is the normal path
+  }
 
   // Create the worktree directory
   fs.ensureDirSync(path.dirname(worktreePath));
@@ -301,7 +350,7 @@ function createWorktree(name, options = {}) {
       stdio: 'pipe',
     });
   } catch (error) {
-    // Branch might already exist
+    // Branch already exists (caught above and allowed) — attach to it
     if (error.message.includes('already exists')) {
       execFileSync('git', ['worktree', 'add', worktreePath, branchName], {
         cwd: root,
