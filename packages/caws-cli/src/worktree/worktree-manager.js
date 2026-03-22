@@ -727,6 +727,9 @@ function listWorktrees() {
  */
 function destroyWorktree(name, options = {}) {
   const root = getRepoRoot();
+  // Ensure CWD is not inside the worktree we're about to destroy.
+  // If CWD is the worktree directory, removing it crashes subsequent commands.
+  try { process.chdir(root); } catch { /* non-fatal */ }
   const registry = loadRegistry(root);
   const { deleteBranch = false, force = false } = options;
 
@@ -923,11 +926,19 @@ function mergeWorktree(name, options = {}) {
     };
   }
 
+  // Ensure CWD is the repo root BEFORE destroying the worktree.
+  // If the caller's CWD is inside the worktree directory, destroying it
+  // removes the CWD out from under the process, causing all subsequent
+  // git commands to fail with "Unable to read current working directory".
+  try { process.chdir(root); } catch { /* non-fatal */ }
+
   // Destroy the worktree (auto-forces since we're about to merge)
   destroyWorktree(name, { deleteBranch: false, force: true });
 
-  // Switch to base branch
-  const currentBranch = getCurrentBranch();
+  // Switch to base branch (use cwd: root since getCurrentBranch has no cwd param)
+  const currentBranch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: root, encoding: 'utf8', stdio: 'pipe',
+  }).trim();
   if (currentBranch !== baseBranch) {
     execFileSync('git', ['checkout', baseBranch], { cwd: root, stdio: 'pipe' });
   }
