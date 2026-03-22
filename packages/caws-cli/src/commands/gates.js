@@ -41,11 +41,11 @@ async function gatesCommand(options = {}) {
         // No spec available — gates that need it will handle gracefully
       }
 
-      // Get staged files for commit context
+      // Get file list based on context
       let stagedFiles = [];
+      const { execSync } = require('child_process');
       if (context === 'commit') {
         try {
-          const { execSync } = require('child_process');
           stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf8' })
             .trim()
             .split('\n')
@@ -55,6 +55,16 @@ async function gatesCommand(options = {}) {
         }
       } else if (options.file) {
         stagedFiles = [options.file];
+      } else if (context === 'cli') {
+        // For CLI context, use all tracked files so gates can provide meaningful analysis
+        try {
+          stagedFiles = execSync('git ls-files', { cwd: projectRoot, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
+            .trim()
+            .split('\n')
+            .filter(Boolean);
+        } catch {
+          /* not a git repo or git unavailable */
+        }
       }
 
       const report = await evaluateGates({ projectRoot, stagedFiles, spec, context });

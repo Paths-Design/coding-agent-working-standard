@@ -473,6 +473,20 @@ describe('budget-limit gate', () => {
     expect(result.messages[0]).toMatch(/Cannot count staged line changes/i);
     await fs.remove(nonGitDir);
   });
+
+  test('skips budget check in cli context (budget applies to changes, not full repo)', async () => {
+    const result = await budgetLimit.run({
+      stagedFiles: Array.from({ length: 500 }, (_, i) => `f${i}.js`),
+      spec: { risk_tier: 2 },
+      policy: {},
+      projectRoot: repoDir,
+      riskTier: 2,
+      context: 'cli',
+    });
+
+    expect(result.status).toBe('pass');
+    expect(result.messages[0]).toMatch(/skipped in CLI context/i);
+  });
 });
 
 // ============================================================
@@ -563,6 +577,35 @@ describe('god-object gate', () => {
     // but if a file existed and was unreadable, the message would surface
     expect(result.status).toBe('pass');
   });
+
+  test('excludes dist/, build/, and node_modules/ by default', async () => {
+    // Create a huge file in dist/ — should be excluded
+    fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
+    const content = Array.from({ length: 5000 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    fs.writeFileSync(path.join(tempDir, 'dist', 'bundle.js'), content);
+
+    const result = await godObject.run({
+      stagedFiles: ['dist/bundle.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    expect(result.status).toBe('pass');
+    expect(result.messages).toHaveLength(0);
+  });
+
+  test('excludes .min. files by default', async () => {
+    const content = Array.from({ length: 5000 }, (_, i) => `var x${i}=${i};`).join('\n');
+    fs.writeFileSync(path.join(tempDir, 'app.min.js'), content);
+
+    const result = await godObject.run({
+      stagedFiles: ['app.min.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    expect(result.status).toBe('pass');
+  });
 });
 
 // ============================================================
@@ -586,6 +629,7 @@ describe('todo-detection gate', () => {
     const result = await todoDetection.run({
       stagedFiles: ['clean.js'],
       projectRoot: repoDir,
+      context: 'commit',
     });
 
     expect(result.status).toBe('pass');
@@ -599,6 +643,7 @@ describe('todo-detection gate', () => {
     const result = await todoDetection.run({
       stagedFiles: ['dirty.js'],
       projectRoot: repoDir,
+      context: 'commit',
     });
 
     expect(result.status).toBe('warn');
@@ -620,6 +665,7 @@ describe('todo-detection gate', () => {
     const result = await todoDetection.run({
       stagedFiles: ['multi.js'],
       projectRoot: repoDir,
+      context: 'commit',
     });
 
     expect(result.status).toBe('warn');
@@ -639,24 +685,61 @@ describe('todo-detection gate', () => {
     const result = await todoDetection.run({
       stagedFiles: ['evolve.js'],
       projectRoot: repoDir,
+      context: 'commit',
     });
 
     // Removing a TODO should not trigger a warning
     expect(result.status).toBe('pass');
   });
 
-  test('warns when git is unavailable (fail-closed, not silent pass)', async () => {
-    // Run TODO detection against a non-git directory
+  test('warns when git is unavailable in commit context (fail-closed)', async () => {
     const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-nongit-todo-'));
 
     const result = await todoDetection.run({
       stagedFiles: ['file.js'],
       projectRoot: nonGitDir,
+      context: 'commit',
     });
 
     expect(result.status).toBe('warn');
-    expect(result.messages[0]).toMatch(/Cannot scan staged changes/i);
+    expect(result.messages[0]).toMatch(/Cannot scan.*TODO markers/i);
     await fs.remove(nonGitDir);
+  });
+
+  test('scans file contents directly in cli context', async () => {
+    // Create a file with a TODO in a temp dir (no git needed)
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-todo-cli-'));
+    fs.writeFileSync(path.join(tmpDir, 'app.js'), '// TODO: fix this\nconst x = 1;\n// FIXME: broken\n');
+
+    const result = await todoDetection.run({
+      stagedFiles: ['app.js'],
+      projectRoot: tmpDir,
+      context: 'cli',
+    });
+
+    expect(result.status).toBe('warn');
+    expect(result.messages[0]).toMatch(/Found 2 TODO\/FIXME\/HACK\/XXX/);
+    expect(result.messages[1]).toContain('app.js:1');
+    expect(result.messages[1]).toContain('TODO');
+    expect(result.messages[2]).toContain('app.js:3');
+    expect(result.messages[2]).toContain('FIXME');
+    await fs.remove(tmpDir);
+  });
+
+  test('excludes dist and node_modules in cli context', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-todo-excl-'));
+    fs.mkdirSync(path.join(tmpDir, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'dist', 'bundle.js'), '// TODO: this is generated\n');
+    fs.writeFileSync(path.join(tmpDir, 'real.js'), 'const x = 1;\n');
+
+    const result = await todoDetection.run({
+      stagedFiles: ['dist/bundle.js', 'real.js'],
+      projectRoot: tmpDir,
+      context: 'cli',
+    });
+
+    expect(result.status).toBe('pass');
+    await fs.remove(tmpDir);
   });
 });
 
@@ -740,6 +823,53 @@ describe('scope-boundary gate', () => {
 
     expect(result.status).toBe('fail');
     expect(result.messages.some(m => /excluded/i.test(m))).toBe(true);
+  });
+
+  test('src/**/*.js matches src/app.js (** matches zero segments)', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['src/app.js'],
+      spec: { scope: { in: ['src/**/*.js'] } },
+    });
+
+    expect(result.status).toBe('pass');
+  });
+
+  test('src/**/*.js matches src/deep/nested/app.js', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['src/deep/nested/app.js'],
+      spec: { scope: { in: ['src/**/*.js'] } },
+    });
+
+    expect(result.status).toBe('pass');
+  });
+
+  test('src/**/*.js does not match src/app.ts', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['src/app.ts'],
+      spec: { scope: { in: ['src/**/*.js'] } },
+    });
+
+    expect(result.status).toBe('fail');
+  });
+
+  test('root-level .env is blocked by scope.out', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['.env'],
+      spec: { scope: { in: ['src/**'], out: ['.env', '*.secret'] } },
+    });
+
+    expect(result.status).toBe('fail');
+    expect(result.messages.some(m => /excluded/i.test(m) && m.includes('.env'))).toBe(true);
+  });
+
+  test('root-level package.json passes when not in scope.out', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['package.json'],
+      spec: { scope: { in: ['src/**'] } },
+    });
+
+    // Root-level files skip scope.in checks
+    expect(result.status).toBe('pass');
   });
 });
 

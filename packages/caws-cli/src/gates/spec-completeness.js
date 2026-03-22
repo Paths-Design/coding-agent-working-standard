@@ -68,9 +68,16 @@ async function run({ projectRoot }) {
     return { status: 'pass', messages: ['Basic structure valid (no schema file found for full validation)'] };
   }
 
-  // Validate with AJV
+  // Validate with AJV — use 2020-12 draft if schema requires it
   try {
-    const ajv = new Ajv({ allErrors: true, strict: false });
+    const isDraft2020 = schema.$schema && schema.$schema.includes('2020-12');
+    let ajv;
+    if (isDraft2020) {
+      const Ajv2020 = require('ajv/dist/2020');
+      ajv = new Ajv2020({ allErrors: true, strict: false });
+    } else {
+      ajv = new Ajv({ allErrors: true, strict: false });
+    }
     const validate = ajv.compile(schema);
     const valid = validate(spec);
 

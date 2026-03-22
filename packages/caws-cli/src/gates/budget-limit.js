@@ -1,7 +1,7 @@
 /**
  * @fileoverview Budget enforcement gate
- * Checks staged changes against tier budget limits from policy.
- * Reuses deriveBudget/checkBudgetCompliance from budget-derivation.js.
+ * Checks changes against tier budget limits from policy.
+ * Context-aware: commit context counts staged changes, cli context skips (budget is per-change, not per-repo).
  * @author @darianrosebrook
  */
 
@@ -51,10 +51,17 @@ function getStagedStats(stagedFiles, projectRoot) {
  * @param {Object} params.policy - Policy configuration
  * @param {string} params.projectRoot - Project root
  * @param {number} params.riskTier - Risk tier number
+ * @param {string} [params.context] - Execution context (commit, cli, edit)
  * @returns {Promise<Object>} Gate result with status and messages
  */
-async function run({ stagedFiles, spec, policy, projectRoot, riskTier }) {
+async function run({ stagedFiles, spec, policy, projectRoot, riskTier, context }) {
   const messages = [];
+
+  // Budget limits apply to changes, not to the entire repo.
+  // In cli context with all tracked files, budget check is meaningless.
+  if (context === 'cli') {
+    return { status: 'pass', messages: ['Budget check skipped in CLI context (budget applies to changes, not full repo)'] };
+  }
 
   // Build a minimal spec for deriveBudget
   const specForBudget = {

@@ -92,7 +92,7 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
 
     const start = Date.now();
     try {
-      const result = await gate.run({ stagedFiles, spec, policy, projectRoot, riskTier, thresholds: config.thresholds });
+      const result = await gate.run({ stagedFiles, spec, policy, projectRoot, riskTier, thresholds: config.thresholds, context });
       results.push({
         name: gateName,
         mode,
