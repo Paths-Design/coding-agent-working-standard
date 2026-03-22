@@ -390,15 +390,46 @@ class WaiversManager {
   // Private helper methods
 
   async generateWaiverId() {
-    const existingWaivers = await this.loadActiveWaivers();
-    const usedIds = new Set(existingWaivers.map((w) => parseInt(w.id.split('-')[1])));
+    // Scan all waiver files in the directory (not just active-waivers.yaml)
+    // to avoid recycling IDs from expired/revoked waivers
+    const usedIds = new Set();
 
-    let counter = 1;
-    while (usedIds.has(counter)) {
-      counter++;
+    // Collect IDs from active-waivers.yaml
+    const activeWaivers = await this.loadActiveWaivers();
+    for (const w of activeWaivers) {
+      if (w.id) usedIds.add(w.id);
     }
 
-    return `WV-${counter.toString().padStart(4, '0')}`;
+    // Collect IDs from individual waiver files (WV-XXXX.yaml)
+    try {
+      const files = fs.readdirSync(this.waiversDir);
+      for (const file of files) {
+        const match = file.match(/^(WV-\d{4})\.yaml$/);
+        if (match) usedIds.add(match[1]);
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+
+    // Generate a random 4-digit ID that doesn't collide
+    const maxAttempts = 100;
+    for (let i = 0; i < maxAttempts; i++) {
+      const num = Math.floor(Math.random() * 10000);
+      const candidate = `WV-${num.toString().padStart(4, '0')}`;
+      if (!usedIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    // Fallback: sequential scan if random keeps colliding (>100 attempts)
+    for (let n = 1; n <= 9999; n++) {
+      const candidate = `WV-${n.toString().padStart(4, '0')}`;
+      if (!usedIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new Error('No available waiver IDs (all 9999 slots used)');
   }
 
   validateWaiver(waiver) {

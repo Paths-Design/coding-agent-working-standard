@@ -148,6 +148,91 @@ describe('lite-hooks integration', () => {
       const result = runHook('block-dangerous.sh', 'Write', { file_path: 'test.js' });
       expect(result.exitCode).toBe(0);
     });
+
+    describe('classify_command.py edge cases (heredoc/quote awareness)', () => {
+      const hasPython3 = (() => {
+        try {
+          execFileSync('python3', ['--version'], { stdio: 'pipe' });
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+
+      const skipOrTest = hasPython3 ? test : test.skip;
+
+      beforeEach(() => {
+        // Copy classify_command.py so the Python classifier is used
+        // instead of the bash fallback (which lacks quote/heredoc awareness)
+        const src = path.join(templateDir, '.claude', 'hooks', 'classify_command.py');
+        const dest = path.join(testDir, '.claude', 'hooks', 'classify_command.py');
+        if (fs.existsSync(src)) {
+          fs.copySync(src, dest);
+          fs.chmodSync(dest, 0o755);
+        }
+      });
+
+      /**
+       * Run hook with file-based input instead of echo.
+       * The default runHook uses echo which on macOS (zsh as /bin/sh)
+       * interprets backslash-n inside single quotes, breaking JSON
+       * that contains newline escapes.
+       */
+      function runHookWithFile(hookName, toolName, toolInput) {
+        const hookPath = path.join(testDir, '.claude', 'hooks', hookName);
+        if (!fs.existsSync(hookPath)) {
+          throw new Error(`Hook not found: ${hookPath}`);
+        }
+
+        const input = JSON.stringify({ tool_name: toolName, tool_input: toolInput });
+        const inputFile = path.join(testDir, '.hook-input.json');
+        fs.writeFileSync(inputFile, input);
+
+        try {
+          const output = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+            cwd: testDir,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: {
+              ...process.env,
+              CLAUDE_PROJECT_DIR: testDir,
+              NODE_PATH: path.resolve(__dirname, '../../../../node_modules'),
+            },
+          });
+          return { exitCode: 0, stdout: output, stderr: '' };
+        } catch (error) {
+          return {
+            exitCode: error.status || 1,
+            stdout: error.stdout || '',
+            stderr: error.stderr || '',
+          };
+        } finally {
+          fs.removeSync(inputFile);
+        }
+      }
+
+      skipOrTest('allows echo of a quoted dangerous command (not real execution)', () => {
+        const result = runHookWithFile('block-dangerous.sh', 'Bash', {
+          command: 'echo "git reset --hard"',
+        });
+        expect(result.exitCode).toBe(0);
+      });
+
+      skipOrTest('allows heredoc containing a dangerous command (not real execution)', () => {
+        const result = runHookWithFile('block-dangerous.sh', 'Bash', {
+          command: 'cat <<EOF\ngit push --force\nEOF',
+        });
+        expect(result.exitCode).toBe(0);
+      });
+
+      skipOrTest('blocks dangerous command chained after safe quoted echo', () => {
+        const result = runHookWithFile('block-dangerous.sh', 'Bash', {
+          command: 'echo "safe command" && git push --force',
+        });
+        // Python classifier returns "ask" for git force push (exit 1)
+        expect(result.exitCode).not.toBe(0);
+      });
+    });
   });
 
   describe('scope-guard.sh (lite mode)', () => {

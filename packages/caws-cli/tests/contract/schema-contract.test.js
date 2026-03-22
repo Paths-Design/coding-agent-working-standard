@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const Ajv = require('ajv');
+const yaml = require('js-yaml');
 
 const { createValidator, getSchemaPath } = require('../../src/utils/schema-validator');
 
@@ -221,6 +222,61 @@ describe('Schema Validation Contracts', () => {
       expect(missingFields).toContain('operational_rollback_slo');
       expect(missingFields).toContain('non_functional');
       expect(missingFields).toContain('contracts');
+    });
+
+    test('working-spec template satisfies schema after variable substitution', () => {
+      const templatePath = path.join(
+        __dirname, '../../templates/.caws/templates/working-spec.template.yml'
+      );
+      let templateContent = fs.readFileSync(templatePath, 'utf8');
+
+      // Substitute ALL template variables with valid values
+      const substitutions = {
+        '{{FEATURE_ID}}': 'TMPL-001',
+        '{{FEATURE_TITLE}}': 'Template Validation Test Feature',
+        '{{TIER}}': '2',
+        '{{SCOPE_ITEM_1}}': 'src/',
+        '{{SCOPE_ITEM_2}}': 'tests/',
+        '{{OUT_OF_SCOPE_ITEM_1}}': 'node_modules/',
+        '{{BUSINESS_RULE_1}}': 'System maintains data integrity',
+        '{{BUSINESS_RULE_2}}': 'API contracts remain stable',
+        '{{GIVEN_CONDITION}}': 'User initiates the feature',
+        '{{WHEN_ACTION}}': 'Feature completes successfully',
+        '{{THEN_OUTCOME}}': 'Expected outcome is achieved',
+        '{{GIVEN_CONDITION_2}}': 'User provides invalid input',
+        '{{WHEN_ACTION_2}}': 'Validation runs',
+        '{{THEN_OUTCOME_2}}': 'Error message is returned',
+        '{{ACCESSIBILITY_REQUIREMENT}}': 'WCAG 2.1 AA compliance',
+        '{{PERF_BUDGET}}': '200',
+        '{{LCP_BUDGET}}': '2500',
+        '{{SECURITY_REQUIREMENT}}': 'Input sanitization on all endpoints',
+        '{{CONTRACT_TYPE}}': 'openapi',
+        '{{CONTRACT_PATH}}': 'api/spec.yaml',
+        '{{LOG_STATEMENT}}': 'feature.executed',
+        '{{METRIC_NAME}}': 'feature_execution_count',
+        '{{TRACE_SPAN}}': 'feature.process',
+        '{{MIGRATION_DESCRIPTION}}': 'Add new column to features table',
+        '{{ROLLBACK_STRATEGY}}': 'Revert migration and redeploy previous version',
+      };
+
+      for (const [placeholder, value] of Object.entries(substitutions)) {
+        templateContent = templateContent.split(placeholder).join(value);
+      }
+
+      // Verify no unsubstituted template variables remain
+      const remaining = templateContent.match(/\{\{[A-Z_]+\}\}/g);
+      expect(remaining).toBeNull();
+
+      const spec = yaml.load(templateContent);
+      const isValid = validate(spec);
+      if (!isValid) {
+        // Surface schema errors for debugging
+        throw new Error(
+          `Template failed schema validation:\n${JSON.stringify(validate.errors, null, 2)}`
+        );
+      }
+      expect(isValid).toBe(true);
+      expect(validate.errors).toBeNull();
     });
   });
 
