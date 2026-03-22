@@ -280,26 +280,65 @@ describe('Enhanced Error Handling', () => {
   });
 
   describe('Command Error Handling', () => {
-    test.skip('should handle spec resolution errors in validate command', async () => {
-      const { validateCommand } = require('../src/commands/validate');
+    // NOTE: The original tests expected validateCommand to reject (re-throw errors).
+    // In practice, validateCommand catches all errors in its try/catch and handles
+    // them gracefully: it logs the error via console.error and returns (no process.exit
+    // in test env). Tests are rewritten to verify the error-handling output instead.
+    //
+    // We use a shared configurable mock for spec-resolver and spec-validation,
+    // loaded once via jest.isolateModules to avoid the import-time capture problem.
+    // Each test configures the mock's behavior before calling validateCommand.
 
-      require('../src/utils/spec-resolver').resolveSpec = jest
-        .fn()
-        .mockRejectedValue(new Error('Spec not found'));
+    let validateCommand;
+    let mockResolveSpec;
+    let mockSuggestMigration;
+    let mockCheckMultiSpecStatus;
+    let mockValidateWithSuggestions;
 
-      await expect(validateCommand(null, {})).rejects.toThrow('Spec not found');
+    afterAll(() => {
+      // Remove doMock registrations so subsequent describe blocks get the real modules
+      jest.unmock('../src/utils/spec-resolver');
+      jest.unmock('../src/validation/spec-validation');
     });
 
-    test.skip('should handle validation errors with context', async () => {
-      const { validateCommand } = require('../src/commands/validate');
+    beforeAll(() => {
+      jest.isolateModules(() => {
+        mockResolveSpec = jest.fn();
+        mockSuggestMigration = jest.fn();
+        mockCheckMultiSpecStatus = jest.fn();
+        mockValidateWithSuggestions = jest.fn();
 
+        jest.doMock('../src/utils/spec-resolver', () => ({
+          resolveSpec: mockResolveSpec,
+          suggestMigration: mockSuggestMigration,
+          checkMultiSpecStatus: mockCheckMultiSpecStatus,
+          checkScopeConflicts: jest.fn().mockResolvedValue([]),
+        }));
+        jest.doMock('../src/validation/spec-validation', () => ({
+          validateWorkingSpecWithSuggestions: mockValidateWithSuggestions,
+          getComplianceGrade: jest.fn().mockReturnValue('A'),
+        }));
+        ({ validateCommand } = require('../src/commands/validate'));
+      });
+    });
+
+    test('should handle spec resolution errors in validate command', async () => {
+      mockResolveSpec.mockRejectedValue(new Error('Spec not found'));
+
+      await validateCommand(null, {});
+
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error during validation'),
+        'Spec not found'
+      );
+    });
+
+    test('should handle validation errors with context', async () => {
       const mockResolved = {
         path: '.caws/specs/test-spec.yaml',
         type: 'feature',
         spec: { id: 'test-spec' },
       };
-
-      require('../src/utils/spec-resolver').resolveSpec = jest.fn().mockResolvedValue(mockResolved);
 
       const mockValidation = {
         valid: false,
@@ -311,56 +350,50 @@ describe('Enhanced Error Handling', () => {
         ],
       };
 
-      require('../src/validation/spec-validation').validateWorkingSpecWithSuggestions = jest
-        .fn()
-        .mockReturnValue(mockValidation);
+      mockResolveSpec.mockResolvedValue(mockResolved);
+      mockCheckMultiSpecStatus.mockResolvedValue({ specCount: 0, registry: { specs: {} } });
+      mockValidateWithSuggestions.mockReturnValue(mockValidation);
 
-      await expect(validateCommand(null, { specId: 'test-spec' })).rejects.toThrow();
+      // validateCommand catches the internal 'Validation failed' throw and logs it
+      await validateCommand(null, { specId: 'test-spec' });
 
-      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Validating feature spec'));
+      // Verify it logged the "Validating feature spec..." message before the failure
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Validating'));
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('feature'));
     });
 
-    test.skip('should handle missing spec gracefully', async () => {
-      const { validateCommand } = require('../src/commands/validate');
+    test('should handle missing spec gracefully', async () => {
+      mockResolveSpec.mockRejectedValue(new Error('No CAWS spec found'));
 
-      require('../src/utils/spec-resolver').resolveSpec = jest
-        .fn()
-        .mockRejectedValue(new Error('No CAWS spec found'));
+      await validateCommand(null, {});
 
-      await expect(validateCommand(null, {})).rejects.toThrow('No CAWS spec found');
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error during validation'),
+        'No CAWS spec found'
+      );
     });
   });
 
   describe('Spec ID Validation', () => {
-    test.skip('should handle invalid spec ID format', async () => {
+    test('should handle invalid spec ID format', async () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
-      const mockRegistry = {
-        specs: {
-          'invalid spec': { path: 'invalid spec.yaml' }, // Invalid ID with spaces
-        },
-      };
+      // When specId is provided, resolveSpec goes straight to the specId branch
+      // (line 70) and checks fs.pathExists for the feature path. It never touches
+      // the registry. Mock pathExists to return false so the "not found" error fires.
+      fs.pathExists.mockResolvedValue(false);
 
-      fs.pathExists.mockResolvedValue(true);
-      require('fs-extra').readJson = jest.fn().mockResolvedValue(mockRegistry);
-
-      // Should not throw on invalid ID, just not find the spec
       await expect(resolveSpec({ specId: 'invalid spec' })).rejects.toThrow(
         "Feature spec 'invalid spec' not found"
       );
     });
 
-    test.skip('should handle non-existent spec ID', async () => {
+    test('should handle non-existent spec ID', async () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
-      const mockRegistry = {
-        specs: {
-          'existing-spec': { path: 'existing-spec.yaml' },
-        },
-      };
-
-      fs.pathExists.mockResolvedValue(true);
-      require('fs-extra').readJson = jest.fn().mockResolvedValue(mockRegistry);
+      // Same as above: specId branch checks pathExists for the feature file.
+      // Return false so the "not found" error fires.
+      fs.pathExists.mockResolvedValue(false);
 
       await expect(resolveSpec({ specId: 'non-existent-spec' })).rejects.toThrow(
         "Feature spec 'non-existent-spec' not found"
@@ -369,7 +402,7 @@ describe('Enhanced Error Handling', () => {
   });
 
   describe('File System Error Handling', () => {
-    test.skip('should handle file system errors gracefully', async () => {
+    test('should handle file system errors gracefully', async () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
       fs.pathExists.mockRejectedValue(new Error('File system error'));
@@ -377,24 +410,34 @@ describe('Enhanced Error Handling', () => {
       await expect(resolveSpec({})).rejects.toThrow('File system error');
     });
 
-    test.skip('should handle YAML parsing errors', async () => {
+    test('should handle YAML parsing errors', async () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
       fs.pathExists.mockResolvedValue(true);
-      require('js-yaml').load = jest.fn().mockImplementation(() => {
+      fs.readFile.mockResolvedValue('invalid: yaml: content');
+      require('js-yaml').load.mockImplementation(() => {
         throw new Error('Invalid YAML');
       });
 
       await expect(resolveSpec({ specFile: '/path/to/spec.yaml' })).rejects.toThrow('Invalid YAML');
     });
 
-    test.skip('should handle registry JSON parsing errors', async () => {
+    test('should handle registry JSON parsing errors gracefully', async () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
-      fs.pathExists.mockResolvedValue(true);
-      require('fs-extra').readJson = jest.fn().mockRejectedValue(new Error('Invalid JSON'));
+      // loadSpecsRegistry catches readJson errors and returns an empty registry.
+      // With an empty registry and no legacy spec, resolveSpec throws "No CAWS spec found".
+      // NOTE: Original test expected the JSON error to propagate, but the implementation
+      // intentionally swallows registry parse errors and falls back to empty registry.
+      fs.pathExists.mockImplementation(async (p) => {
+        // Registry path exists (so loadSpecsRegistry tries readJson)
+        if (p.includes('registry.json')) return true;
+        // Legacy spec does not exist (so resolveSpec can't fall back)
+        return false;
+      });
+      fs.readJson.mockRejectedValue(new Error('Invalid JSON'));
 
-      await expect(resolveSpec({})).rejects.toThrow('Invalid JSON');
+      await expect(resolveSpec({})).rejects.toThrow('No CAWS spec found');
     });
   });
 });
