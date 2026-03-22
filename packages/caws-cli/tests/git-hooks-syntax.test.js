@@ -173,22 +173,18 @@ describe('Git Hooks Bash Syntax Validation', () => {
       expect(hookContent).not.toMatch(/run-quality-gates\.mjs\s+--ci\b/);
     });
 
-    test('should prefix quality-gates invocation with CI= to prevent env leakage', () => {
+    test('should invoke caws gates run for quality gate evaluation', () => {
       const hookContent = gitHooksModule.generatePreCommitHook({
         qualityGates: true,
         stagedOnly: true,
         projectDir: tempDir,
       });
 
-      // CI= prefix prevents CI=1 in a developer's shell from overriding
-      // the explicit --context=commit and triggering full-repo scan.
-      const qgInvocationLines = hookContent.split('\n').filter(
-        (line) => line.includes('run-quality-gates.mjs') && line.includes('node ')
-      );
-      expect(qgInvocationLines.length).toBeGreaterThan(0);
-      qgInvocationLines.forEach((line) => {
-        expect(line).toMatch(/\bCI=\s+node\b/);
-      });
+      // v2 pipeline: pre-commit calls `caws gates run` instead of the
+      // old 5-option fallback chain searching for run-quality-gates.mjs
+      const gatesInvocation = hookContent.includes('caws gates run') ||
+        hookContent.includes('caws validate');
+      expect(gatesInvocation).toBe(true);
     });
   });
 
