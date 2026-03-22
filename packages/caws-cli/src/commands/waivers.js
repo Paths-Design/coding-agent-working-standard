@@ -24,16 +24,12 @@ const WAIVER_DIR = '.caws/waivers';
  * within the check-*.mjs files.
  */
 const VALID_GATES = [
-  'naming',
-  'code_freeze',
-  'duplication',
-  'duplication_gate',
-  'god_objects',
-  'placeholders',
-  'simplification',
-  'hidden-todo',
-  'documentation',
-  '*',
+  'budget_limit',
+  'spec_completeness',
+  'scope_boundary',
+  'god_object',
+  'todo_detection',
+  '*',  // wildcard — waiver applies to all gates
 ];
 
 /**

@@ -7,6 +7,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const { PolicyManager } = require('../policy/PolicyManager');
+const WaiversManager = require('../waivers-manager');
 
 /**
  * Auto-discover gate modules from the gates directory
@@ -45,6 +46,7 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
   const availableGates = loadGates();
   const gateConfigs = policy?.gates || {};
   const results = [];
+  const waiversManager = new WaiversManager({ projectRoot });
 
   for (const [gateName, config] of Object.entries(gateConfigs)) {
     if (!config.enabled) continue;
@@ -58,7 +60,15 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
     // Check waivers
     let waived = false;
     let waiverId = null;
-    // TODO: integrate WaiversManager.getActiveWaiverForGate() in Phase 3
+    try {
+      const waiverResult = await waiversManager.getActiveWaiverForGate(gateName);
+      if (waiverResult) {
+        waived = true;
+        waiverId = waiverResult.waiverId;
+        results.push({ name: gateName, mode, status: 'pass', waived: true, waiverId, messages: [`Waived: ${waiverResult.reason}`], duration: 0 });
+        continue;
+      }
+    } catch { /* waiver check failed — proceed without waiver */ }
 
     const gate = availableGates[gateName];
     if (!gate) {

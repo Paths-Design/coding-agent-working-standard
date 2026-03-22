@@ -30,43 +30,6 @@ const CONFIG = {
 };
 
 /**
- * Check if a waiver applies to the given gate
- * @param {string} gate - Gate name to check
- * @returns {Object} Waiver check result
- */
-function checkWaiver(gate) {
-  try {
-    const waiversPath = path.join(process.cwd(), '.caws/waivers.yml');
-    if (!fs.existsSync(waiversPath)) {
-      return { waived: false, reason: 'No waivers file found' };
-    }
-
-    const waiversConfig = yaml.load(fs.readFileSync(waiversPath, 'utf8'));
-    const now = new Date();
-
-    // Find active waivers for this gate
-    const activeWaivers =
-      waiversConfig.waivers?.filter((waiver) => {
-        const expiresAt = new Date(waiver.expires_at);
-        return waiver.gates.includes(gate) && expiresAt > now && waiver.status === 'active';
-      }) || [];
-
-    if (activeWaivers.length > 0) {
-      const waiver = activeWaivers[0];
-      return {
-        waived: true,
-        waiver,
-        reason: `Active waiver: ${waiver.title} (expires: ${waiver.expires_at})`,
-      };
-    }
-
-    return { waived: false, reason: 'No active waivers found' };
-  } catch (error) {
-    return { waived: false, reason: `Waiver check failed: ${error.message}` };
-  }
-}
-
-/**
  * Detect if project is in crisis response mode
  * @returns {boolean} True if in crisis mode
  */
@@ -395,7 +358,6 @@ module.exports = {
   getStagedFiles,
   checkGodObjects,
   checkHiddenTodos,
-  checkWaiver,
   detectCrisisMode,
   runQualityGates,
   CONFIG,
