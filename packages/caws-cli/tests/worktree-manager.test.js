@@ -255,6 +255,8 @@ describe('worktree-manager', () => {
 
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['to-destroy'].status).toBe('destroyed');
+      // C1: Verify directory is actually removed from disk
+      expect(fs.existsSync(entry.path)).toBe(false);
     });
 
     test('throws for unknown worktree', () => {
@@ -269,6 +271,8 @@ describe('worktree-manager', () => {
       destroyWorktree('dirty-wt', { force: true });
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['dirty-wt'].status).toBe('destroyed');
+      // C1: Verify directory is actually removed from disk
+      expect(fs.existsSync(entry.path)).toBe(false);
     });
 
     test('blocks destroying another session worktree without force', () => {
@@ -308,6 +312,8 @@ describe('worktree-manager', () => {
       destroyWorktree('merged-dirty');
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['merged-dirty'].status).toBe('destroyed');
+      // C1: Verify directory is actually removed from disk
+      expect(fs.existsSync(entry.path)).toBe(false);
     });
   });
 
@@ -814,7 +820,7 @@ describe('worktree-manager', () => {
       expect(hasDirtyFiles(entry.path)).toBe(true);
     });
 
-    test('full lifecycle: fresh → active → merged', () => {
+    test('full lifecycle: fresh -> active -> merged', () => {
       const entry = createWorktree('lifecycle-full');
 
       // Step 1: Just created → fresh
@@ -845,6 +851,146 @@ describe('worktree-manager', () => {
       entries = listWorktrees();
       wt = entries.find((e) => e.name === 'lifecycle-full');
       expect(wt.status).toBe('merged');
+    });
+  });
+
+  describe('C2/H3: mergeWorktree conflict path', () => {
+    test('returns merged:false on real merge conflict and preserves branch for recovery', () => {
+      const entry = createWorktree('conflict-wt');
+
+      // On main, modify a file at a specific line
+      fs.writeFileSync(path.join(testDir, 'src', 'index.js'), 'module.exports = { main: true };');
+      execFileSync('git', ['add', '.'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'main changes index.js'], { cwd: testDir, stdio: 'pipe' });
+
+      // In the worktree, modify the SAME file at the SAME line with different content
+      fs.writeFileSync(path.join(entry.path, 'src', 'index.js'), 'module.exports = { worktree: true };');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'worktree changes index.js'], { cwd: entry.path, stdio: 'pipe' });
+
+      const branchName = entry.branch;
+
+      // Attempt merge — should detect conflict
+      const result = mergeWorktree('conflict-wt');
+
+      expect(result.merged).toBe(false);
+      expect(result.conflicts.length).toBeGreaterThan(0);
+
+      // H3: Verify the worktree directory is gone (destroyed before merge attempt)
+      expect(fs.existsSync(entry.path)).toBe(false);
+
+      // H3: Verify the branch still exists for recovery
+      const branchCheck = execFileSync(
+        'git',
+        ['rev-parse', '--verify', branchName],
+        { cwd: testDir, encoding: 'utf8', stdio: 'pipe' }
+      ).trim();
+      expect(branchCheck).toMatch(/^[0-9a-f]+$/);
+
+      // Clean up merge state if present
+      try {
+        execFileSync('git', ['merge', '--abort'], { cwd: testDir, stdio: 'pipe' });
+      } catch {
+        // No merge in progress — that's fine (merge-tree based detection may not leave state)
+      }
+
+      // H3: Verify a new worktree can be created from the surviving branch
+      // The branch exists and the old entry is destroyed, but same-session owns it
+      // so re-creation should work (it reuses the existing branch)
+      const recovered = createWorktree('conflict-wt');
+      expect(recovered.name).toBe('conflict-wt');
+      expect(fs.existsSync(recovered.path)).toBe(true);
+
+      // Cleanup
+      destroyWorktree('conflict-wt', { force: true, deleteBranch: true });
+    });
+  });
+
+  describe('C3: destroyWorktree without force on dirty+divergent worktree', () => {
+    test('throws when worktree is dirty and has divergent commits (no auto-force)', () => {
+      const entry = createWorktree('dirty-divergent');
+
+      // Make a divergent commit so branch is NOT merged (prevents auto-force)
+      fs.writeFileSync(path.join(entry.path, 'feature.js'), 'const x = 1;');
+      execFileSync('git', ['add', 'feature.js'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'divergent commit'], { cwd: entry.path, stdio: 'pipe' });
+
+      // Add a dirty (untracked) file so git worktree remove refuses without --force
+      fs.writeFileSync(path.join(entry.path, 'uncommitted.txt'), 'dirty');
+
+      // Without force, and branch is divergent (not merged), auto-force won't kick in
+      // git worktree remove should fail on the dirty worktree
+      expect(() => destroyWorktree('dirty-divergent')).toThrow();
+
+      // Verify directory still exists (removal failed)
+      expect(fs.existsSync(entry.path)).toBe(true);
+
+      // Cleanup
+      destroyWorktree('dirty-divergent', { force: true });
+    });
+  });
+
+  describe('H4: deleteBranch option', () => {
+    test('deleteBranch removes the git branch after destroy', () => {
+      const entry = createWorktree('delete-branch-test');
+      const branchName = entry.branch;
+
+      // Make a commit so the branch has content
+      fs.writeFileSync(path.join(entry.path, 'work.js'), 'const y = 2;');
+      execFileSync('git', ['add', '.'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'branch work'], { cwd: entry.path, stdio: 'pipe' });
+
+      destroyWorktree('delete-branch-test', { deleteBranch: true, force: true });
+
+      // Verify the branch no longer exists in git
+      expect(() => {
+        execFileSync('git', ['rev-parse', '--verify', branchName], {
+          cwd: testDir,
+          stdio: 'pipe',
+        });
+      }).toThrow();
+    });
+  });
+
+  describe('H5: collision with null CLAUDE_SESSION_ID', () => {
+    test('worktree lifecycle works when CLAUDE_SESSION_ID is undefined', () => {
+      // Delete CLAUDE_SESSION_ID entirely — owner will be null
+      delete process.env.CLAUDE_SESSION_ID;
+
+      const entry = createWorktree('null-owner');
+      expect(entry.owner).toBeNull();
+
+      destroyWorktree('null-owner');
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['null-owner'].status).toBe('destroyed');
+
+      // Branch still exists after destroy (no deleteBranch option)
+      const branchName = entry.branch;
+      const branchExists = (() => {
+        try {
+          execFileSync('git', ['rev-parse', '--verify', branchName], {
+            cwd: testDir,
+            stdio: 'pipe',
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      expect(branchExists).toBe(true);
+
+      // Re-creating with same name while branch exists and owner is null:
+      // The registry entry has owner=null, and current session has CLAUDE_SESSION_ID=undefined (null).
+      // Since null === null is false in the ownership check (both are null, not strings),
+      // the code path `existing.owner && existing.owner !== currentSession` is falsy
+      // because existing.owner is null (falsy). So it should succeed.
+      const recreated = createWorktree('null-owner');
+      expect(recreated.name).toBe('null-owner');
+      expect(recreated.owner).toBeNull();
+      expect(fs.existsSync(recreated.path)).toBe(true);
+
+      // Cleanup
+      destroyWorktree('null-owner', { force: true, deleteBranch: true });
     });
   });
 

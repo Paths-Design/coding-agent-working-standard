@@ -157,6 +157,27 @@ function loadRegistry(root) {
  * @param {Object} registry - Registry object
  */
 function saveRegistry(root, registry) {
+  // Auto-prune destroyed entries whose branch and directory are both gone.
+  // This prevents the registry from accumulating ghost entries over time.
+  for (const [name, entry] of Object.entries(registry.worktrees || {})) {
+    if (entry.status !== 'destroyed') continue;
+    const dirGone = !fs.existsSync(entry.path);
+    let branchGone = true;
+    if (entry.branch) {
+      try {
+        execFileSync('git', ['rev-parse', '--verify', entry.branch], {
+          cwd: root, stdio: 'pipe',
+        });
+        branchGone = false;
+      } catch {
+        branchGone = true;
+      }
+    }
+    if (dirGone && branchGone) {
+      delete registry.worktrees[name];
+    }
+  }
+
   const registryPath = path.join(root, REGISTRY_FILE);
   fs.ensureDirSync(path.dirname(registryPath));
   fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
