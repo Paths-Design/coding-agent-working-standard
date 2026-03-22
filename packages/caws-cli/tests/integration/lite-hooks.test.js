@@ -174,6 +174,18 @@ describe('lite-hooks integration', () => {
       const result = runHook('scope-guard.sh', 'Bash', { command: 'ls' });
       expect(result.exitCode).toBe(0);
     });
+
+    test('fails closed on invalid scope.json (exit 2, not exit 0)', () => {
+      // Write invalid JSON to scope.json to trigger parse error
+      fs.writeFileSync(path.join(testDir, '.caws', 'scope.json'), '{ invalid json [');
+      fs.ensureDirSync(path.join(testDir, 'src'));
+      fs.writeFileSync(path.join(testDir, 'src', 'index.js'), '');
+      const result = runHook('scope-guard.sh', 'Write', {
+        file_path: path.join(testDir, 'src', 'index.js'),
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('BLOCKED');
+    });
   });
 
   describe('lite-sprawl-check.sh', () => {
