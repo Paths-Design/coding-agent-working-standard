@@ -366,6 +366,7 @@ fi
 # 5. Skip gracefully (warn only)
 
 QUALITY_GATES_RAN=false
+QUALITY_GATES_WARNED=false
 
 # Option 1: Quality gates package (installed via npm)
 if [ -f "node_modules/@paths.design/quality-gates/run-quality-gates.mjs" ]; then
@@ -433,6 +434,7 @@ elif command -v caws >/dev/null 2>&1; then
     echo "CAWS validation failed, but allowing commit (non-blocking)"
     echo "Run 'caws validate' for details"
     QUALITY_GATES_RAN=true
+    QUALITY_GATES_WARNED=true
   fi
 # Option 3: Makefile target
 elif [ -f "Makefile" ] && grep -q "caws-validate\\|caws-gates" Makefile; then
@@ -443,6 +445,7 @@ elif [ -f "Makefile" ] && grep -q "caws-validate\\|caws-gates" Makefile; then
   else
     echo "Makefile quality gates failed, but allowing commit (non-blocking)"
     QUALITY_GATES_RAN=true
+    QUALITY_GATES_WARNED=true
   fi
 # Option 4: Python scripts
 elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; then
@@ -453,6 +456,7 @@ elif [ -f "scripts/simple_gates.py" ] && command -v python3 >/dev/null 2>&1; the
   else
     echo "Python quality gates failed, but allowing commit (non-blocking)"
     QUALITY_GATES_RAN=true
+    QUALITY_GATES_WARNED=true
   fi
 # Option 5: Skip gracefully
 else
@@ -534,7 +538,11 @@ ${todoSuggestion
   fi
 fi
 
-echo "All quality checks passed - proceeding with commit"
+if [ "$QUALITY_GATES_WARNED" = true ]; then
+  echo "Proceeding with commit (some quality checks had warnings)"
+else
+  echo "All quality checks passed - proceeding with commit"
+fi
 exit 0
 `;
 }
