@@ -1,6 +1,8 @@
 /**
  * @fileoverview TODO/FIXME scanning gate
- * Scans for TODO, FIXME, HACK, XXX patterns.
+ * Detects actionable TODO, FIXME, HACK, XXX markers in comments.
+ * Filters out false positives: string literals, regex definitions, test assertions,
+ * and documentation about the TODO system itself.
  * Context-aware: commit context scans staged diff, cli/edit context scans file content.
  * @author @darianrosebrook
  */
@@ -11,13 +13,36 @@ const path = require('path');
 
 const name = 'todo_detection';
 
-const TODO_PATTERN = /\b(TODO|FIXME|HACK|XXX)\b/g;
+const TODO_MARKERS = /\b(TODO|FIXME|HACK|XXX)\b/g;
+
+/**
+ * Comment patterns for languages we scan.
+ * A line is a "comment TODO" if the TODO marker appears after a comment introducer.
+ */
+const COMMENT_TODO = /(?:\/\/|#|\/?\*|\{\/\*)\s*\b(TODO|FIXME|HACK|XXX)\b/;
+
+/**
+ * Patterns that indicate the line is ABOUT the TODO system, not an actual TODO.
+ * These are lines where TODO appears as data, not as intent.
+ */
+const FALSE_POSITIVE_PATTERNS = [
+  /TODO_PATTERN/,                       // regex variable name
+  /TODO\/FIXME/,                        // describing the pattern itself
+  /\btoMatch\b|\btoContain\b|\bexpect\(/,  // test assertions
+  /writeFileSync.*TODO/,                // test fixture data
+  /\bdescribe\(.*TODO|\btest\(.*TODO|\bit\(.*TODO/,  // test names
+  /Pattern.*TODO|regex.*TODO/i,         // documentation about patterns
+  /["'`].*\bTODO\b.*["'`]/,            // string literals containing TODO
+];
 
 /** Directories to skip when scanning files directly */
 const EXCLUDE_DIRS = ['node_modules/', 'dist/', 'dist-bundle/', 'build/', '.next/', 'coverage/', 'vendor/', '__pycache__/'];
 
+/** Files that are part of the TODO detection system itself — skip to avoid self-analysis */
+const SELF_FILES = ['todo-detection.js', 'todo_detection.js', 'todo_analyzer.py', 'todo-analyzer'];
+
 /** Extensions to scan */
-const SOURCE_EXTENSIONS = ['.js', '.ts', '.tsx', '.jsx', '.py', '.rs', '.go', '.java', '.rb', '.cs', '.sh', '.yaml', '.yml'];
+const SOURCE_EXTENSIONS = ['.js', '.ts', '.tsx', '.jsx', '.py', '.rs', '.go', '.java', '.rb', '.cs', '.sh'];
 
 /**
  * Check if a file should be excluded from scanning.
@@ -28,7 +53,39 @@ function isExcluded(filePath) {
   for (const dir of EXCLUDE_DIRS) {
     if (filePath.startsWith(dir) || filePath.includes('/' + dir)) return true;
   }
+  // Skip the gate's own implementation files
+  const basename = path.basename(filePath);
+  for (const self of SELF_FILES) {
+    if (basename === self || basename.includes(self)) return true;
+  }
   return false;
+}
+
+/**
+ * Check if a line contains a real TODO comment (not a false positive).
+ * Returns the marker name if real, null if false positive.
+ * @param {string} line - Source line
+ * @returns {string|null} The marker found, or null
+ */
+function findRealTodo(line) {
+  const trimmed = line.trim();
+
+  // Must contain a marker at all
+  TODO_MARKERS.lastIndex = 0;
+  if (!TODO_MARKERS.test(trimmed)) return null;
+
+  // Filter out false positives
+  for (const fp of FALSE_POSITIVE_PATTERNS) {
+    if (fp.test(trimmed)) return null;
+  }
+
+  // Must look like a comment containing the marker — not just any line with TODO in it
+  if (!COMMENT_TODO.test(trimmed)) return null;
+
+  // Extract which marker
+  TODO_MARKERS.lastIndex = 0;
+  const match = TODO_MARKERS.exec(trimmed);
+  return match ? match[1] : null;
 }
 
 /**
@@ -61,12 +118,11 @@ function scanStagedDiff(projectRoot) {
     }
     if (line.startsWith('+') && !line.startsWith('+++')) {
       lineNum++;
-      const matches = line.match(TODO_PATTERN);
-      if (matches) {
-        for (const m of matches) {
-          totalCount++;
-          messages.push(`${currentFile}:${lineNum}: ${m} found`);
-        }
+      const content = line.slice(1); // remove the leading +
+      const marker = findRealTodo(content);
+      if (marker) {
+        totalCount++;
+        messages.push(`${currentFile}:${lineNum}: ${marker} found`);
       }
     } else if (!line.startsWith('-')) {
       lineNum++;
@@ -97,12 +153,10 @@ function scanFiles(stagedFiles, projectRoot) {
       const lines = content.split('\n');
 
       for (let i = 0; i < lines.length; i++) {
-        const matches = lines[i].match(TODO_PATTERN);
-        if (matches) {
-          for (const m of matches) {
-            totalCount++;
-            messages.push(`${file}:${i + 1}: ${m} found`);
-          }
+        const marker = findRealTodo(lines[i]);
+        if (marker) {
+          totalCount++;
+          messages.push(`${file}:${i + 1}: ${marker} found`);
         }
       }
     } catch {

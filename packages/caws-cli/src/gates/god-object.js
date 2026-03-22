@@ -1,6 +1,7 @@
 /**
  * @fileoverview God object detection gate
  * Flags large files that exceed line-count thresholds.
+ * Test files use a higher threshold since large integration tests are normal.
  * @author @darianrosebrook
  */
 
@@ -21,6 +22,16 @@ const DEFAULT_EXCLUDE_DIRS = [
 /** File patterns that are always excluded */
 const DEFAULT_EXCLUDE_PATTERNS = ['.min.', '.bundle.', '.generated.'];
 
+/** Patterns that identify test files (get higher thresholds) */
+const TEST_PATTERNS = [
+  '.test.', '.spec.', '_test.', '_spec.',
+  'tests/', 'test/', '__tests__/', '__test__/',
+  'proving-grounds/', 'fixtures/',
+];
+
+/** Default multiplier for test file thresholds (2x = test files get double the threshold) */
+const TEST_THRESHOLD_MULTIPLIER = 2;
+
 /**
  * Check if a file should be excluded from god-object analysis.
  * @param {string} filePath - Relative file path
@@ -37,6 +48,16 @@ function isExcluded(filePath) {
 }
 
 /**
+ * Check if a file is a test file.
+ * @param {string} filePath - Relative file path
+ * @returns {boolean}
+ */
+function isTestFile(filePath) {
+  const lower = filePath.toLowerCase();
+  return TEST_PATTERNS.some(pat => lower.includes(pat));
+}
+
+/**
  * Run the god object detection gate
  * @param {Object} params - Gate parameters
  * @param {string[]} params.stagedFiles - Staged file paths
@@ -44,12 +65,11 @@ function isExcluded(filePath) {
  * @param {Object} [params.thresholds] - Override thresholds
  * @param {number} [params.thresholds.warning=1750] - Warning line threshold
  * @param {number} [params.thresholds.critical=2000] - Critical/fail line threshold
- * @param {string[]} [params.thresholds.exclude] - Additional exclude patterns
  * @returns {Promise<Object>} Gate result with status and messages
  */
 async function run({ stagedFiles, projectRoot, thresholds }) {
-  const warningThreshold = thresholds?.warning || 1750;
-  const criticalThreshold = thresholds?.critical || 2000;
+  const baseWarning = thresholds?.warning || 1750;
+  const baseCritical = thresholds?.critical || 2000;
   const messages = [];
   let hasCritical = false;
   let hasWarning = false;
@@ -66,12 +86,19 @@ async function run({ stagedFiles, projectRoot, thresholds }) {
       const content = fs.readFileSync(fullPath, 'utf8');
       const lineCount = content.split('\n').length;
 
+      // Test files get a higher threshold — large integration tests are normal
+      const mult = isTestFile(file) ? TEST_THRESHOLD_MULTIPLIER : 1;
+      const warningThreshold = baseWarning * mult;
+      const criticalThreshold = baseCritical * mult;
+
       if (lineCount >= criticalThreshold) {
         hasCritical = true;
-        messages.push(`CRITICAL: ${file} has ${lineCount} lines (threshold: ${criticalThreshold})`);
+        const label = mult > 1 ? 'CRITICAL (test file)' : 'CRITICAL';
+        messages.push(`${label}: ${file} has ${lineCount} lines (threshold: ${criticalThreshold})`);
       } else if (lineCount >= warningThreshold) {
         hasWarning = true;
-        messages.push(`WARNING: ${file} has ${lineCount} lines (threshold: ${warningThreshold})`);
+        const label = mult > 1 ? 'WARNING (test file)' : 'WARNING';
+        messages.push(`${label}: ${file} has ${lineCount} lines (threshold: ${warningThreshold})`);
       }
     } catch (err) {
       messages.push(`WARNING: Could not read ${file}: ${err.message}`);

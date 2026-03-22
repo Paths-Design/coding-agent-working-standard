@@ -606,6 +606,53 @@ describe('god-object gate', () => {
 
     expect(result.status).toBe('pass');
   });
+
+  test('test files get 2x threshold (large integration tests are normal)', async () => {
+    // 2500 lines — above source critical (2000) but below test critical (4000)
+    const content = Array.from({ length: 2500 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    fs.writeFileSync(path.join(tempDir, 'app.test.js'), content);
+
+    const result = await godObject.run({
+      stagedFiles: ['app.test.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    // 2500 lines is between test warning (3500) and test critical (4000) — should pass
+    expect(result.status).toBe('pass');
+  });
+
+  test('test files above 2x critical threshold still fail', async () => {
+    // 4500 lines — above test critical (4000)
+    const content = Array.from({ length: 4500 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    fs.mkdirSync(path.join(tempDir, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, 'tests', 'huge.test.js'), content);
+
+    const result = await godObject.run({
+      stagedFiles: ['tests/huge.test.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    expect(result.status).toBe('fail');
+    expect(result.messages[0]).toMatch(/test file/i);
+    expect(result.messages[0]).toContain('4500');
+  });
+
+  test('source file at 2100 lines still triggers CRITICAL (not affected by test multiplier)', async () => {
+    const content = Array.from({ length: 2100 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    fs.writeFileSync(path.join(tempDir, 'src-file.js'), content);
+
+    const result = await godObject.run({
+      stagedFiles: ['src-file.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    expect(result.status).toBe('fail');
+    expect(result.messages[0]).toMatch(/CRITICAL/);
+    expect(result.messages[0]).not.toMatch(/test file/);
+  });
 });
 
 // ============================================================
@@ -739,6 +786,49 @@ describe('todo-detection gate', () => {
     });
 
     expect(result.status).toBe('pass');
+    await fs.remove(tmpDir);
+  });
+
+  test('filters out false positives: string literals, regex defs, test assertions', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-todo-fp-'));
+    // This file has TODO in many non-actionable contexts
+    fs.writeFileSync(path.join(tmpDir, 'noisy.js'), [
+      'const TODO_PATTERN = /\\bTODO\\b/g;',              // regex def
+      'const msg = "Found 2 TODO markers";',              // string literal
+      "expect(result).toMatch(/TODO/);",                  // test assertion
+      'console.log(`Cannot scan for TODO markers`);',     // template literal
+      '// TODO: this is the only real one',               // real TODO
+      '// Documents the TODO detection system',           // doc about feature (no colon after TODO)
+    ].join('\n'));
+
+    const result = await todoDetection.run({
+      stagedFiles: ['noisy.js'],
+      projectRoot: tmpDir,
+      context: 'cli',
+    });
+
+    expect(result.status).toBe('warn');
+    // Should find exactly 1 real TODO, not the noise
+    expect(result.messages[0]).toMatch(/Found 1 TODO/);
+    expect(result.messages[1]).toContain('noisy.js:5');
+    await fs.remove(tmpDir);
+  });
+
+  test('skips its own implementation files (self-analysis exclusion)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-todo-self-'));
+    // A file named todo-detection.js should be skipped
+    fs.writeFileSync(path.join(tmpDir, 'todo-detection.js'), '// TODO: this should not be scanned\n');
+    fs.writeFileSync(path.join(tmpDir, 'real-code.js'), '// TODO: real issue here\n');
+
+    const result = await todoDetection.run({
+      stagedFiles: ['todo-detection.js', 'real-code.js'],
+      projectRoot: tmpDir,
+      context: 'cli',
+    });
+
+    expect(result.status).toBe('warn');
+    expect(result.messages[0]).toMatch(/Found 1 TODO/);
+    expect(result.messages[1]).toContain('real-code.js');
     await fs.remove(tmpDir);
   });
 });
