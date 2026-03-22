@@ -12,8 +12,8 @@ The CAWS CLI serves as the central control point for:
 - **Quality Validation**: Run comprehensive validation against working specifications
 - **Agent Integration**: Programmatic APIs for AI agents to evaluate and guide development
 - **Waiver Management**: Fast-lane escape hatches with full audit trails
-- **CI/CD Optimization**: Pipeline generation and optimization tools
-- **Experimental Features**: Dry-run capabilities for experimental functionality
+- **Quality Gates**: v2 pipeline with configurable gate modules
+- **Session Management**: Track and manage agent work sessions
 
 ## Installation
 
@@ -86,40 +86,69 @@ caws waivers list
 caws waivers revoke WV-0001
 ```
 
-### CI/CD Optimization
+### Quality Gates
 
 ```bash
-# Analyze project for CI/CD optimizations
-caws cicd analyze
+# Run quality gates v2 pipeline
+caws gates run
 
-# Generate optimized GitHub Actions workflow
-caws cicd generate github --output .github/workflows/caws-gates.yml
-
-# Smart test selection based on changes
-caws cicd test-selection --from-commit HEAD~1
+# Run legacy quality gates
+caws quality-gates
 ```
 
-### Experimental Features
+### Worktree Management
 
 ```bash
-# Dry-run validation without side effects
-caws experimental --dry-run validate .caws/working-spec.yaml
+# Create an isolated worktree for parallel agent work
+caws worktree create <name>
 
-# Experimental quality gates
-caws experimental quality-gates .caws/working-spec.yaml --parallel-execution
+# List active worktrees
+caws worktree list
+
+# Merge a completed worktree back to base
+caws worktree merge <name>
+
+# Destroy a worktree
+caws worktree destroy <name>
+```
+
+### Session Management
+
+```bash
+# Start a tracked session
+caws session start
+
+# Create a session checkpoint
+caws session checkpoint
+
+# End a session
+caws session end
+
+# List past sessions
+caws session list
+```
+
+### Spec Management
+
+```bash
+# List all specs (project + feature)
+caws specs list
+
+# Create a feature spec
+caws specs create FEAT-001 --type feature --title "description"
+
+# Show a spec
+caws specs show FEAT-001
+
+# Check for scope conflicts between specs
+caws specs conflicts
 ```
 
 ### Tool Management
 
 ```bash
-# List available CAWS tools
-caws tools list
-
-# Execute specific tool
-caws tools run validate
-
-# Manage tool configurations
-caws tools --help
+# Run the CAWS tool interface
+caws tool
 ```
 
 ## Architecture
@@ -131,7 +160,7 @@ caws-cli/
 ├── src/
 │   ├── index.js           # Main CLI entry point
 │   ├── waivers-manager.js # Waiver system implementation
-│   ├── cicd-optimizer.js  # CI/CD optimization logic
+│   ├── quality-gates/     # v2 gate modules
 │   └── tool-loader.js     # Dynamic tool loading system
 ├── templates/             # Project templates
 └── dist/                  # Compiled output
@@ -142,7 +171,7 @@ caws-cli/
 - **Command Parser**: Commander.js-based CLI with subcommands
 - **Tool System**: Dynamic loading of quality gate tools
 - **Waiver Manager**: Fast-lane escape hatch management
-- **CI/CD Optimizer**: Pipeline analysis and generation
+- **Quality Gates v2**: Modular gate pipeline with configurable modules
 - **Agent Interface**: JSON APIs for programmatic agent integration
 
 ## Integration with CAWS Ecosystem
@@ -168,13 +197,15 @@ caws-cli/
 
 ### Quality Gates Integration
 
-The CLI automatically executes quality gates defined in the template:
+The v2 quality gates pipeline (`caws gates run`) executes modular gate checks:
 
-1. **Spec Validation**: Validates working specifications against schema
+1. **Spec Validation**: Validates working specifications against schema (mode, blast_radius, rollback SLO)
 2. **Security Scanning**: Runs security checks and secret detection
-3. **Code Quality**: Executes linting, type checking, and formatting
-4. **Test Execution**: Runs unit, integration, and contract tests
+3. **Scope Enforcement**: Verifies changes stay within spec-defined boundaries
+4. **Test & Coverage**: Runs tests and validates coverage thresholds per risk tier
 5. **Performance Checks**: Validates performance budgets and metrics
+
+Gates can be configured per-spec with `mode` (block/warn/skip) and custom `thresholds` in policy.yaml.
 
 ### Agent Workflow Integration
 

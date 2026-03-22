@@ -54,7 +54,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
     // Map levels to hook scripts
     const hookMapping = {
       safety: ['block-dangerous.sh', 'scan-secrets.sh', 'worktree-guard.sh', 'worktree-write-guard.sh', 'stop-worktree-check.sh', 'session-caws-status.sh'],
-      quality: ['quality-check.sh', 'validate-spec.sh'],
+      quality: ['quality-check.sh', 'validate-spec.sh', 'doc-frontmatter-check.sh'],
       scope: ['scope-guard.sh', 'naming-check.sh'],
       audit: ['audit.sh', 'session-log.sh'],
       lite: ['block-dangerous.sh', 'scope-guard.sh', 'lite-sprawl-check.sh', 'simplification-guard.sh'],
@@ -81,6 +81,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'block-dangerous.sh',
       'scope-guard.sh',
       'naming-check.sh',
+      'doc-frontmatter-check.sh',
       'lite-sprawl-check.sh',
       'simplification-guard.sh',
       'worktree-guard.sh',
@@ -89,6 +90,23 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
       'session-caws-status.sh',
       'session-log.sh',
     ];
+
+    // Copy supporting scripts (not hooks themselves, but used by hooks)
+    const supportingScripts = [
+      'classify_command.py',
+      'test_classify_command.py',
+      'test_wrapper_smoke.sh',
+    ];
+
+    for (const script of supportingScripts) {
+      const sourcePath = path.join(claudeHooksTemplateDir, script);
+      const destPath = path.join(claudeHooksDir, script);
+
+      if (fs.existsSync(sourcePath)) {
+        await fs.copy(sourcePath, destPath);
+        await fs.chmod(destPath, 0o755);
+      }
+    }
 
     for (const script of allHookScripts) {
       if (enabledHooks.has(script)) {
@@ -253,6 +271,11 @@ function generateClaudeSettings(levels, _enabledHooks) {
           type: 'command',
           command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/validate-spec.sh',
           timeout: 15,
+        },
+        {
+          type: 'command',
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/doc-frontmatter-check.sh',
+          timeout: 10,
         },
       ],
     });

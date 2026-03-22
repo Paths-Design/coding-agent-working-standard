@@ -29,21 +29,30 @@ Before writing code, check the working spec:
 # Validate the working spec
 caws validate
 
+# Run quality gates v2 pipeline
+caws gates run
+
 # Get iteration guidance
 caws agent iterate --current-state "describe what you're about to do"
 
 # After implementation, evaluate quality
 caws agent evaluate
+
+# Create a feature spec for isolated work
+caws specs create FEAT-001 --type feature --title "description"
 ```
 
 ### Working Spec
 
-The project spec lives at `.caws/working-spec.yaml`. Feature specs live at `.caws/specs/<ID>.yaml`. It defines:
+The project spec lives at `.caws/working-spec.yaml`. Feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs create <id> --type feature --title "description"`). It defines:
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
+- **Mode**: The type of change (`feature`, `refactor`, `fix`, `doc`, `chore`) -- required
+- **Blast radius**: Which modules are affected (`blast_radius.modules`) -- required
+- **Operational rollback SLO**: Time target for rollback (e.g. `"30m"`) -- required
 - **Scope**: Which files you can edit (`scope.in`) and which are off-limits (`scope.out`)
 - **Change budget**: Max files and lines of code per change (see note below)
-- **Acceptance criteria**: What "done" means — IDs must match `^A\d+$` (e.g. `A1`, `A12`)
+- **Acceptance criteria**: What "done" means -- IDs must match `^A\d+$` (e.g. `A1`, `A12`)
 
 Always stay within scope boundaries and change budgets.
 

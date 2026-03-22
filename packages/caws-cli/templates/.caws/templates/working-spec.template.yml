@@ -1,6 +1,10 @@
 id: '{{FEATURE_ID}}'
 title: '{{FEATURE_TITLE}}'
-risk_tier: { { TIER } }
+risk_tier: {{TIER}}
+mode: feature
+blast_radius:
+  modules: []
+operational_rollback_slo: "30m"
 scope:
   in:
     - '{{SCOPE_ITEM_1}}'
@@ -37,8 +41,8 @@ non_functional:
   a11y:
     - '{{ACCESSIBILITY_REQUIREMENT}}'
   perf:
-    api_p95_ms: { { PERF_BUDGET } }
-    lcp_ms: { { LCP_BUDGET } }
+    api_p95_ms: {{PERF_BUDGET}}
+    lcp_ms: {{LCP_BUDGET}}
   security:
     - '{{SECURITY_REQUIREMENT}}'
 contracts:

@@ -28,7 +28,9 @@
         "type": "object",
         "properties": {
           "enabled": { "type": "boolean" },
-          "description": { "type": "string" }
+          "description": { "type": "string" },
+          "mode": { "type": "string", "enum": ["block", "warn", "skip"] },
+          "thresholds": { "type": "object" }
         },
         "required": ["enabled"]
       }
