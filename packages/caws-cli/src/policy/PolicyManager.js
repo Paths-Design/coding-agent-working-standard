@@ -299,27 +299,30 @@ class PolicyManager {
       gates: {
         budget_limit: {
           enabled: true,
+          mode: 'block',
           description: 'Enforce change budget limits',
         },
         spec_completeness: {
           enabled: true,
+          mode: 'block',
           description: 'Require complete working specifications',
         },
-        contract_compliance: {
+        scope_boundary: {
           enabled: true,
-          description: 'Validate API contracts',
+          mode: 'block',
+          description: 'Enforce spec scope boundaries',
         },
-        coverage_threshold: {
+        god_object: {
           enabled: true,
-          description: 'Maintain test coverage requirements',
+          mode: 'warn',
+          thresholds: { warning: 1750, critical: 2000 },
+          description: 'Detect oversized source files',
         },
-        mutation_threshold: {
+        todo_detection: {
           enabled: true,
-          description: 'Require mutation testing for T1/T2 changes',
-        },
-        security_scan: {
-          enabled: true,
-          description: 'Run security vulnerability scans',
+          mode: 'warn',
+          thresholds: { min_confidence: 0.8 },
+          description: 'Scan for TODO/FIXME/HACK/XXX markers',
         },
       },
     };
