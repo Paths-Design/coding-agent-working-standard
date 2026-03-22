@@ -8,6 +8,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
+const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 
 /**
  * Policy Manager - Handles policy loading with intelligent caching
@@ -86,6 +87,34 @@ class PolicyManager {
       }
 
       if (policyPath && policyContent) {
+        // Schema validation (warn and fall back to defaults on failure)
+        try {
+          const schemaFilePath = getSchemaPath('policy.schema.json', projectRoot);
+          const validate = createValidator(schemaFilePath);
+          const schemaResult = validate(policyContent);
+          if (!schemaResult.valid) {
+            console.warn('Policy has schema violations:', schemaResult.errors);
+            console.warn('Falling back to default policy');
+            const defaultPolicy = this.getDefaultPolicy();
+            if (this.enableCaching) {
+              this.policyCache.set(projectRoot, {
+                policy: defaultPolicy,
+                cachedAt: Date.now(),
+                ttl: cacheTTL,
+              });
+            }
+            return {
+              ...defaultPolicy,
+              _isDefault: true,
+              _schemaErrors: schemaResult.errors,
+              _cacheHit: false,
+              _loadDuration: Date.now() - startTime,
+            };
+          }
+        } catch (schemaErr) {
+          console.warn('Could not validate policy schema:', schemaErr.message);
+        }
+
         // Validate policy structure
         this.validatePolicy(policyContent);
 

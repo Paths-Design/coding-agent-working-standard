@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
+const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 
 const WORKTREES_DIR = '.caws/worktrees';
 const REGISTRY_FILE = '.caws/worktrees.json';
@@ -82,7 +83,17 @@ function loadRegistry(root) {
   const registryPath = path.join(root, REGISTRY_FILE);
   try {
     if (fs.existsSync(registryPath)) {
-      return JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      try {
+        const validate = createValidator(getSchemaPath('worktrees.schema.json', root));
+        const result = validate(data);
+        if (!result.valid) {
+          console.warn('Worktree registry has schema violations:', result.errors);
+        }
+      } catch (schemaErr) {
+        console.warn('Could not validate worktree registry schema:', schemaErr.message);
+      }
+      return data;
     }
   } catch {
     // Corrupted registry, start fresh
