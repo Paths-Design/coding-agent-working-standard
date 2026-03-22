@@ -43,6 +43,7 @@ const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
 const { qualityGatesCommand } = require('./commands/quality-gates');
+const { gatesCommand } = require('./commands/gates');
 const { troubleshootCommand } = require('./commands/troubleshoot');
 const { archiveCommand } = require('./commands/archive');
 const { specsCommand } = require('./commands/specs');
@@ -139,84 +140,40 @@ program
   .option('--format <format>', 'Output format (text, json)', 'text')
   .action(validateCommand);
 
-// Quality Gates command
+// Gates command group (v2 pipeline)
+const gatesCmd = program
+  .command('gates')
+  .description('Quality gate evaluation via the v2 pipeline');
+
+gatesCmd
+  .command('run')
+  .description('Run quality gates against staged files or a specific file')
+  .option('--context <context>', 'Execution context (cli, commit, edit)', 'cli')
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--file <path>', 'Single file to check (for edit context)')
+  .option('--json', 'Output as JSON', false)
+  .option('--quiet', 'Minimal output', false)
+  .action((options) => gatesCommand(options));
+
+// Quality Gates command (legacy alias — delegates to gates command)
 program
   .command('quality-gates')
-  .description('Run comprehensive quality gates (naming, duplication, god objects, documentation)')
+  .description('Run quality gates (alias for "caws gates run")')
   .option('--ci', 'CI mode - exit with error code if violations found', false)
   .option('--json', 'Output machine-readable JSON to stdout', false)
-  .option(
-    '--gates <gates>',
-    'Run only specific gates (comma-separated: naming,code_freeze,duplication,god_objects,hidden-todo,documentation,placeholders)',
-    ''
-  )
-  .option('--fix', 'Attempt automatic fixes (experimental)', false)
-  .option('--context <context>', 'Execution context: commit (staged files), push (all tracked files), or ci (all tracked files)', 'commit')
+  .option('--context <context>', 'Execution context: commit, push, ci', 'commit')
   .option('--all-files', 'Check all tracked files (equivalent to --context=ci)', false)
-  .option('--help', 'Show detailed help and usage examples', false)
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--quiet', 'Minimal output', false)
   .action(async (options) => {
-    // Handle --help flag
-    if (options.help) {
-      console.log(`
-CAWS Quality Gates - Enterprise Code Quality Enforcement
-
-USAGE:
-  caws quality-gates [options]
-
-DESCRIPTION:
-  Runs comprehensive quality gates to maintain code quality standards.
-  Supports selective gate execution, JSON output, and CI/CD integration.
-
-OPTIONS:
-  --ci              CI mode - exit with error code if violations found
-  --json            Output machine-readable JSON to stdout
-  --gates=<gates>   Run only specific gates (comma-separated)
-  --fix             Attempt automatic fixes (experimental)
-  --context=<ctx>   Execution context: commit (staged files), push (all tracked), ci (all tracked)
-  --all-files       Check all tracked files (shortcut for --context=ci)
-  --help            Show this help message
-
-VALID GATES:
-  naming           Check naming conventions and banned modifiers
-  code_freeze      Enforce code freeze compliance
-  duplication      Detect functional duplication
-  god_objects      Prevent oversized files
-  hidden-todo      Detect hidden incomplete implementations
-  documentation    Check documentation quality
-  placeholders     Placeholder governance (explicit degradations)
-
-EXAMPLES:
-  # Run all gates in development mode
-  caws quality-gates
-
-  # Run only specific gates
-  caws quality-gates --gates=naming,duplication
-
-  # CI mode with JSON output
-  caws quality-gates --ci --json
-
-  # Check all files in repository (not just staged)
-  caws quality-gates --all-files
-
-  # Use specific context
-  caws quality-gates --context=ci
-
-  # Show detailed help
-  caws quality-gates --help
-
-OUTPUT:
-  - Console: Human-readable results with enforcement levels
-  - JSON: Machine-readable structured data (--json flag)
-  - Artifacts: docs-status/quality-gates-report.json
-  - GitHub Actions: Automatic step summaries when GITHUB_STEP_SUMMARY is set
-
-For more information, see: packages/quality-gates/README.md
-`);
-      process.exit(0);
-    }
-
-    // Call the actual quality gates runner
-    await qualityGatesCommand(options);
+    // Map legacy options to new gates command options
+    const gateOpts = {
+      context: options.allFiles ? 'ci' : (options.context || 'cli'),
+      specId: options.specId,
+      json: options.json,
+      quiet: options.quiet,
+    };
+    await gatesCommand(gateOpts);
   });
 
 // Status command
@@ -758,6 +715,8 @@ program.exitOverride((err) => {
       'waivers',
       'workflow',
       'quality-monitor',
+      'quality-gates',
+      'gates',
       'troubleshoot',
       'provenance',
       'hooks',
@@ -777,7 +736,7 @@ program.exitOverride((err) => {
     }
 
     console.error(
-      chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks')
+      chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, gates')
     );
     console.error(chalk.yellow('Try: caws --help for full command list'));
     console.error(
@@ -863,6 +822,8 @@ if (require.main === module) {
         'worktree',
         'session',
         'parallel',
+        'gates',
+        'quality-gates',
       ];
       const similar = findSimilarCommand(commandName, validCommands);
 
@@ -873,7 +834,7 @@ if (require.main === module) {
       }
 
       console.error(
-        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, parallel')
+        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, gates')
       );
       console.error(chalk.yellow('Try: caws --help for full command list'));
       console.error(
