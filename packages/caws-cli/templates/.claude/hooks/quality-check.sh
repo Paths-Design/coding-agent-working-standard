@@ -45,14 +45,14 @@ if ! command -v caws &> /dev/null; then
 fi
 
 # Run quality gates via the unified pipeline
-RESULT=$(caws gates run --context=edit --file "$FILE_PATH" --json --quiet 2>/dev/null) || true
+RESULT=$(caws gates run --context=edit --file "$FILE_PATH" --json --quiet 2>&1) || GATE_EXIT=$?
 
 if [ -z "$RESULT" ]; then
-  # No output — gates command not available or errored silently
+  # No output — gates command not available or errored
   echo '{
     "hookSpecificOutput": {
       "hookEventName": "PostToolUse",
-      "additionalContext": "Quality gates did not produce output. Run '\''caws gates run'\'' for details."
+      "additionalContext": "Quality gates did not produce output (exit '"${GATE_EXIT:-0}"'). Run '\''caws gates run'\'' for details."
     }
   }'
   exit 0

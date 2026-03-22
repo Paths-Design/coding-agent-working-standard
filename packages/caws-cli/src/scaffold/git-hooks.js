@@ -383,19 +383,13 @@ if [ -n "$SPEC_ID" ]; then
 fi
 
 if command -v caws >/dev/null 2>&1; then
-  if caws gates run $GATES_ARGS 2>/dev/null; then
+  if caws gates run $GATES_ARGS; then
     echo "Quality gates passed"
     QUALITY_GATES_RAN=true
   else
     GATE_EXIT=$?
-    if [ $GATE_EXIT -eq 1 ]; then
-      echo "Quality gates BLOCKED the commit"
-      exit 1
-    else
-      echo "Quality gates had warnings"
-      QUALITY_GATES_RAN=true
-      QUALITY_GATES_WARNED=true
-    fi
+    echo "Quality gates BLOCKED the commit (exit code $GATE_EXIT)"
+    exit 1
   fi
 else
   echo "CAWS CLI not available — skipping quality gates"

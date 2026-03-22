@@ -47,8 +47,8 @@ async function run({ stagedFiles, projectRoot, thresholds }) {
         hasWarning = true;
         messages.push(`WARNING: ${file} has ${lineCount} lines (threshold: ${warningThreshold})`);
       }
-    } catch {
-      // Skip files that can't be read
+    } catch (err) {
+      messages.push(`WARNING: Could not read ${file}: ${err.message}`);
     }
   }
 

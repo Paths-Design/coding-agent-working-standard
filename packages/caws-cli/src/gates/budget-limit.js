@@ -31,9 +31,13 @@ function getStagedStats(stagedFiles, projectRoot) {
       const removedNum = removed === '-' ? 0 : parseInt(removed, 10) || 0;
       linesChanged += addedNum + removedNum;
     }
-  } catch {
-    // If git fails, estimate from file count
-    linesChanged = 0;
+  } catch (err) {
+    // Fail-closed: if git fails, we cannot verify budget compliance
+    return {
+      files_changed: filesChanged,
+      lines_changed: -1,
+      error: `Cannot count staged line changes: ${err.message}`,
+    };
   }
 
   return { files_changed: filesChanged, lines_changed: linesChanged };
@@ -61,6 +65,13 @@ async function run({ stagedFiles, spec, policy, projectRoot, riskTier }) {
   try {
     const budget = await deriveBudget(specForBudget, projectRoot, { useCache: true });
     const stats = getStagedStats(stagedFiles, projectRoot);
+
+    // Fail-closed: if git stats errored, report it
+    if (stats.error) {
+      messages.push(stats.error);
+      return { status: 'fail', messages };
+    }
+
     const compliance = checkBudgetCompliance(budget, stats);
 
     if (!compliance.compliant) {

@@ -50,6 +50,12 @@ function formatText(report) {
 
   lines.push(`Summary: ${parts.join(', ')}`);
 
+  if (report.warnings && report.warnings.length > 0) {
+    for (const w of report.warnings) {
+      lines.push(`WARNING: ${w}`);
+    }
+  }
+
   if (report.passed) {
     // Only say "all passed" if every enabled gate actually ran and passed
     const enabledGates = report.gates.filter(g => g.status !== 'skipped');
@@ -84,6 +90,7 @@ function formatJson(report) {
       messages: g.messages,
       duration: g.duration,
     })),
+    warnings: report.warnings || [],
     timestamp: new Date().toISOString(),
   }, null, 2);
 }

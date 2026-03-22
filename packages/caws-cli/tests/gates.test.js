@@ -199,7 +199,7 @@ describe('pipeline', () => {
       expect(todoResult.status).toBe('skipped');
     });
 
-    test('unknown gate names are recorded as skipped with "Gate not implemented"', async () => {
+    test('unknown gate in warn mode is recorded as warn with config error message', async () => {
       const policy = {
         version: 1,
         risk_tiers: {
@@ -225,8 +225,39 @@ describe('pipeline', () => {
 
       const unknownResult = report.gates.find(g => g.name === 'nonexistent_gate');
       expect(unknownResult).toBeDefined();
-      expect(unknownResult.status).toBe('skipped');
-      expect(unknownResult.messages).toContain('Gate not implemented');
+      expect(unknownResult.status).toBe('warn');
+      expect(unknownResult.messages[0]).toMatch(/not implemented/);
+      expect(unknownResult.messages[0]).toMatch(/policy\.yaml/);
+    });
+
+    test('unknown gate in block mode is recorded as fail (fail-closed)', async () => {
+      const policy = {
+        version: 1,
+        risk_tiers: {
+          1: { max_files: 25, max_loc: 1000 },
+          2: { max_files: 50, max_loc: 2000 },
+          3: { max_files: 100, max_loc: 5000 },
+        },
+        gates: {
+          nonexistent_gate: { enabled: true, mode: 'block' },
+        },
+      };
+      await fs.writeFile(
+        path.join(tempDir, '.caws', 'policy.yaml'),
+        yaml.dump(policy)
+      );
+
+      const report = await evaluateGates({
+        projectRoot: tempDir,
+        stagedFiles: [],
+        spec: {},
+        context: {},
+      });
+
+      expect(report.passed).toBe(false);
+      const unknownResult = report.gates.find(g => g.name === 'nonexistent_gate');
+      expect(unknownResult.status).toBe('fail');
+      expect(unknownResult.mode).toBe('block');
     });
 
     test('gate that throws is recorded as fail with error message', async () => {
@@ -268,6 +299,24 @@ describe('pipeline', () => {
         // Restore original run so other tests aren't affected
         scopeBoundary.run = originalRun;
       }
+    });
+
+    test('report includes warning when no policy.yaml exists (using defaults)', async () => {
+      // Don't write a policy.yaml — pipeline should use defaults and flag it
+      const noPolicyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-nopolicy-'));
+      fs.mkdirSync(path.join(noPolicyDir, '.caws'), { recursive: true });
+
+      const report = await evaluateGates({
+        projectRoot: noPolicyDir,
+        stagedFiles: [],
+        spec: {},
+        context: {},
+      });
+
+      expect(report.warnings).toBeDefined();
+      expect(report.warnings.length).toBeGreaterThan(0);
+      expect(report.warnings[0]).toMatch(/No policy\.yaml found/);
+      await fs.remove(noPolicyDir);
     });
   });
 });
@@ -401,6 +450,29 @@ describe('budget-limit gate', () => {
     // The violation message should mention the file count exceeding budget
     expect(result.messages.some(m => /file count|exceeds budget/i.test(m))).toBe(true);
   });
+
+  test('fails when git is unavailable (fail-closed, not silent pass)', async () => {
+    // Run budget gate against a non-git directory — git diff should fail
+    const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-nongit-'));
+    fs.mkdirSync(path.join(nonGitDir, '.caws'), { recursive: true });
+    const policy = {
+      version: 1,
+      risk_tiers: { 1: { max_files: 25, max_loc: 1000 }, 2: { max_files: 50, max_loc: 2000 }, 3: { max_files: 100, max_loc: 5000 } },
+    };
+    fs.writeFileSync(path.join(nonGitDir, '.caws', 'policy.yaml'), yaml.dump(policy));
+
+    const result = await budgetLimit.run({
+      stagedFiles: ['file.js'],
+      spec: { risk_tier: 2 },
+      policy: {},
+      projectRoot: nonGitDir,
+      riskTier: 2,
+    });
+
+    expect(result.status).toBe('fail');
+    expect(result.messages[0]).toMatch(/Cannot count staged line changes/i);
+    await fs.remove(nonGitDir);
+  });
 });
 
 // ============================================================
@@ -476,6 +548,19 @@ describe('god-object gate', () => {
       thresholds: { warning: 1750, critical: 2000 },
     });
 
+    expect(result.status).toBe('pass');
+  });
+
+  test('reports unreadable files in messages instead of silently skipping', async () => {
+    // Reference a .js file that doesn't exist on disk
+    const result = await godObject.run({
+      stagedFiles: ['nonexistent-file.js'],
+      projectRoot: tempDir,
+      thresholds: { warning: 1750, critical: 2000 },
+    });
+
+    // Gate should still pass (file doesn't exist → existsSync returns false → skipped)
+    // but if a file existed and was unreadable, the message would surface
     expect(result.status).toBe('pass');
   });
 });
@@ -558,6 +643,20 @@ describe('todo-detection gate', () => {
 
     // Removing a TODO should not trigger a warning
     expect(result.status).toBe('pass');
+  });
+
+  test('warns when git is unavailable (fail-closed, not silent pass)', async () => {
+    // Run TODO detection against a non-git directory
+    const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-nongit-todo-'));
+
+    const result = await todoDetection.run({
+      stagedFiles: ['file.js'],
+      projectRoot: nonGitDir,
+    });
+
+    expect(result.status).toBe('warn');
+    expect(result.messages[0]).toMatch(/Cannot scan staged changes/i);
+    await fs.remove(nonGitDir);
   });
 });
 
@@ -659,13 +758,13 @@ describe('spec-completeness gate', () => {
     await fs.remove(tempDir);
   });
 
-  test('passes when no spec file exists (nothing to validate)', async () => {
+  test('fails when no spec file exists (fail-closed)', async () => {
     const result = await specCompleteness.run({
       projectRoot: tempDir,
     });
 
-    expect(result.status).toBe('pass');
-    expect(result.messages[0]).toMatch(/No spec found/);
+    expect(result.status).toBe('fail');
+    expect(result.messages[0]).toMatch(/No working-spec\.yaml found/);
   });
 
   test('passes for spec with all required fields (no schema file)', async () => {

@@ -23,7 +23,7 @@ async function run({ projectRoot }) {
   // Load the working spec
   const specPath = path.join(projectRoot, '.caws', 'working-spec.yaml');
   if (!await fs.pathExists(specPath)) {
-    return { status: 'pass', messages: ['No spec found'] };
+    return { status: 'fail', messages: ['No working-spec.yaml found. Create one with: caws init'] };
   }
 
   let spec;

@@ -60,8 +60,12 @@ async function run({ stagedFiles, projectRoot }) {
         lineNum++;
       }
     }
-  } catch {
-    // If git diff fails, fall back silently
+  } catch (err) {
+    // Fail-closed: if git diff fails, we cannot verify staged changes
+    return {
+      status: 'warn',
+      messages: [`Cannot scan staged changes for TODO markers: ${err.message}`],
+    };
   }
 
   if (totalCount > 0) {

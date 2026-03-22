@@ -42,6 +42,7 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
   const policyManager = new PolicyManager();
   const policy = await policyManager.loadPolicy(projectRoot);
   const riskTier = spec?.risk_tier || policy?.risk_tiers?.default || 2;
+  const usingDefaults = !!policy?._isDefault;
 
   const availableGates = loadGates();
   const gateConfigs = policy?.gates || {};
@@ -68,11 +69,24 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
         results.push({ name: gateName, mode, status: 'pass', waived: true, waiverId, messages: [`Waived: ${waiverResult.reason}`], duration: 0 });
         continue;
       }
-    } catch { /* waiver check failed — proceed without waiver */ }
+    } catch (err) {
+      // Waiver check failed — log it so the failure is visible, then proceed without waiver
+      results.push({
+        name: gateName, mode, status: 'fail', waived: false,
+        messages: [`Waiver check error (fail-closed): ${err.message}`], duration: 0,
+      });
+      continue;
+    }
 
     const gate = availableGates[gateName];
     if (!gate) {
-      results.push({ name: gateName, mode, status: 'skipped', waived: false, messages: ['Gate not implemented'], duration: 0 });
+      // Fail-closed for block/warn mode: a gate referenced in policy but not found is a config error
+      const status = mode === 'block' ? 'fail' : 'warn';
+      results.push({
+        name: gateName, mode, status, waived: false,
+        messages: [`Gate "${gateName}" is configured in policy but not implemented. Check for typos in policy.yaml.`],
+        duration: 0,
+      });
       continue;
     }
 
@@ -106,7 +120,7 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
   const skipped = results.filter(r => r.status === 'skipped');
   const waivedGates = results.filter(r => r.waived);
 
-  return {
+  const report = {
     passed: blocked.length === 0,
     gates: results,
     summary: {
@@ -117,6 +131,13 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
       waived: waivedGates.length,
     },
   };
+
+  if (usingDefaults) {
+    report.warnings = report.warnings || [];
+    report.warnings.push('No policy.yaml found — using built-in defaults. Create .caws/policy.yaml for project-specific gate configuration.');
+  }
+
+  return report;
 }
 
 module.exports = { evaluateGates, loadGates };
