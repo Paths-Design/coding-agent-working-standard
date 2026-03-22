@@ -125,7 +125,7 @@ describe('PolicyManager', () => {
       expect(result._isDefault).toBe(true);
     });
 
-    test('should throw on invalid policy', async () => {
+    test('should fall back to defaults on invalid policy with schema errors', async () => {
       const invalidPolicy = {
         version: 1,
         // Missing risk_tiers
@@ -134,9 +134,14 @@ describe('PolicyManager', () => {
       const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
       await fs.writeFile(policyPath, yaml.dump(invalidPolicy));
 
-      await expect(policyManager.loadPolicy(tempDir)).rejects.toThrow(
-        'Policy missing risk_tiers configuration'
-      );
+      const result = await policyManager.loadPolicy(tempDir);
+
+      // Schema validation catches the error and falls back to defaults
+      expect(result._isDefault).toBe(true);
+      expect(result._schemaErrors).toBeDefined();
+      expect(result._schemaErrors.length).toBeGreaterThan(0);
+      expect(result.version).toBe(1);
+      expect(result.risk_tiers).toBeDefined();
     });
   });
 
@@ -342,13 +347,13 @@ describe('PolicyManager', () => {
       // Load and cache
       await policyManager.loadPolicy(tempDir);
 
-      // Modify file
-      testPolicy.version = 2;
+      // Modify file — change a budget value (version must stay 1 per schema)
+      testPolicy.risk_tiers[1].max_files = 99;
       await fs.writeFile(policyPath, yaml.dump(testPolicy));
 
       // Reload (bypasses cache)
       const result = await policyManager.reloadPolicy(tempDir);
-      expect(result.version).toBe(2);
+      expect(result.risk_tiers[1].max_files).toBe(99);
     });
 
     test('should get cache stats', async () => {

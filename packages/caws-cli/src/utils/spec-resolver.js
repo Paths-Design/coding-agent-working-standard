@@ -13,6 +13,36 @@ const chalk = require('chalk');
 // Import SPEC_TYPES from constants for consistent display
 const { SPEC_TYPES } = require('../constants/spec-types');
 const { findProjectRoot } = require('./detection');
+const { createValidator, getSchemaPath } = require('./schema-validator');
+
+/**
+ * Validate a spec object against the working-spec schema.
+ * Throws with schema errors included in the message.
+ * @param {Object} spec - Parsed spec object
+ * @param {string} specPath - Path to the spec file (for error context)
+ */
+function validateSpecSchema(spec, specPath) {
+  try {
+    const schemaPath = getSchemaPath('working-spec.schema.json', getProjectRoot());
+    const validate = createValidator(schemaPath);
+    const result = validate(spec);
+    if (!result.valid) {
+      const errorDetails = result.errors
+        .map(e => `  ${e.path}: ${e.message}`)
+        .join('\n');
+      throw new Error(
+        `Spec file has schema violations (${specPath}):\n${errorDetails}`
+      );
+    }
+  } catch (schemaErr) {
+    // If the error is from our own validation, re-throw it
+    if (schemaErr.message.includes('schema violations')) {
+      throw schemaErr;
+    }
+    // Schema loading/compilation errors are non-fatal — warn and continue
+    console.warn('Could not validate spec schema:', schemaErr.message);
+  }
+}
 
 /**
  * Spec resolution priority:
@@ -55,6 +85,7 @@ async function resolveSpec(options = {}) {
       const yaml = require('js-yaml');
       const content = await fs.readFile(explicitPath, 'utf8');
       const spec = yaml.load(content);
+      validateSpecSchema(spec, explicitPath);
 
       return {
         path: explicitPath,
@@ -74,6 +105,7 @@ async function resolveSpec(options = {}) {
       const yaml = require('js-yaml');
       const content = await fs.readFile(featurePath, 'utf8');
       const spec = yaml.load(content);
+      validateSpecSchema(spec, featurePath);
 
       console.log(chalk.green(`Using feature-specific spec: ${specId}`));
 
@@ -102,6 +134,7 @@ async function resolveSpec(options = {}) {
       const yaml = require('js-yaml');
       const content = await fs.readFile(singleSpecPath, 'utf8');
       const spec = yaml.load(content);
+      validateSpecSchema(spec, singleSpecPath);
 
       console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
 
@@ -198,6 +231,7 @@ async function resolveSpec(options = {}) {
     const yaml = require('js-yaml');
     const content = await fs.readFile(legacyPath, 'utf8');
     const spec = yaml.load(content);
+    validateSpecSchema(spec, legacyPath);
 
     if (warnLegacy) {
       console.log(chalk.yellow('Using legacy working-spec.yaml'));

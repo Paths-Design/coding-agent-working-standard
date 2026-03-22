@@ -6,6 +6,7 @@
 
 const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
 const { execSync } = require('child_process');
+const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 
 /**
  * Get actual budget statistics from git history
@@ -67,7 +68,25 @@ function getActualBudgetStats(specDir) {
  */
 const validateWorkingSpec = (spec, _options = {}) => {
   try {
-    // Basic structural validation for essential fields
+    // First pass: AJV schema validation (non-blocking — results collected as warnings)
+    let schemaWarnings = [];
+    try {
+      const schemaPath = getSchemaPath('working-spec.schema.json', process.cwd());
+      const validate = createValidator(schemaPath);
+      const schemaResult = validate(spec);
+      if (!schemaResult.valid) {
+        schemaWarnings = schemaResult.errors.map(e => ({
+          instancePath: e.path,
+          message: e.message,
+        }));
+      }
+    } catch (schemaErr) {
+      // Schema not available — fall through to semantic validation
+    }
+
+    // Second pass: semantic checks (authoritative — always runs as fallback)
+
+    // Check required fields (schema may not be available)
     const requiredFields = [
       'id',
       'title',
@@ -81,17 +100,6 @@ const validateWorkingSpec = (spec, _options = {}) => {
       'non_functional',
       'contracts',
     ];
-
-    // For new policy-based specs, change_budget is not required
-    // It's derived from policy.yaml + waivers
-
-    // Normalize risk_tier: accept "T1"/"T2"/"T3" strings and convert to numeric
-    if (spec.risk_tier !== undefined && typeof spec.risk_tier === 'string') {
-      const match = spec.risk_tier.match(/^T?(\d)$/i);
-      if (match) {
-        spec.risk_tier = parseInt(match[1], 10);
-      }
-    }
 
     for (const field of requiredFields) {
       if (!spec[field]) {
@@ -118,6 +126,14 @@ const validateWorkingSpec = (spec, _options = {}) => {
           },
         ],
       };
+    }
+
+    // Normalize risk_tier: accept "T1"/"T2"/"T3" strings and convert to numeric
+    if (spec.risk_tier !== undefined && typeof spec.risk_tier === 'string') {
+      const match = spec.risk_tier.match(/^T?(\d)$/i);
+      if (match) {
+        spec.risk_tier = parseInt(match[1], 10);
+      }
     }
 
     // Validate status field if present
@@ -203,7 +219,10 @@ const validateWorkingSpec = (spec, _options = {}) => {
       };
     }
 
-    return { valid: true };
+    return {
+      valid: true,
+      schemaWarnings: schemaWarnings.length > 0 ? schemaWarnings : undefined,
+    };
   } catch (error) {
     return {
       valid: false,
@@ -227,7 +246,30 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
   const { autoFix = false, checkBudget = false, projectRoot } = options;
 
   try {
-    // Basic structural validation for essential fields
+    let errors = [];
+    let warnings = [];
+    let fixes = [];
+
+    // First pass: AJV schema validation (non-blocking — results collected as warnings)
+    try {
+      const schemaPath = getSchemaPath('working-spec.schema.json', projectRoot || process.cwd());
+      const validate = createValidator(schemaPath);
+      const schemaResult = validate(spec);
+      if (!schemaResult.valid) {
+        for (const e of schemaResult.errors) {
+          const fieldName = e.path ? e.path.replace(/^\//, '').split('/')[0] : '';
+          warnings.push({
+            instancePath: e.path,
+            message: `Schema: ${e.message}`,
+            suggestion: fieldName ? getFieldSuggestion(fieldName, spec) : undefined,
+          });
+        }
+      }
+    } catch (schemaErr) {
+      // Schema not available — non-fatal
+    }
+
+    // Required fields check (authoritative — always runs regardless of schema)
     const requiredFields = [
       'id',
       'title',
@@ -242,10 +284,6 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
       'contracts',
     ];
 
-    let errors = [];
-    let warnings = [];
-    let fixes = [];
-
     for (const field of requiredFields) {
       if (!spec[field]) {
         errors.push({
@@ -256,6 +294,8 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
         });
       }
     }
+
+    // Semantic checks that AJV can't express
 
     // Validate specific field formats
     if (spec.id && !/^[A-Z]+-\d+$/.test(spec.id)) {
