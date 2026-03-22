@@ -123,6 +123,14 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
       }
     " 2>&1)
 
+
+    if [[ "$LITE_CHECK" == error:* ]]; then
+      ERROR_MSG="${LITE_CHECK#error:}"
+      echo "BLOCKED: Scope check failed — cannot verify file is in scope" >&2
+      echo "  Error: $ERROR_MSG" >&2
+      exit 2
+    fi
+
     if [[ "$LITE_CHECK" == banned:* ]]; then
       PATTERN="${LITE_CHECK#banned:}"
       echo "BLOCKED: $REL_PATH matches banned pattern ($PATTERN) in .caws/scope.json"
@@ -262,6 +270,15 @@ if command -v node >/dev/null 2>&1; then
       console.log('error:' + error.message);
     }
   " 2>&1)
+
+
+  if [[ "$SCOPE_CHECK" == error:* ]]; then
+    ERROR_MSG="${SCOPE_CHECK#error:}"
+    echo "BLOCKED: Scope check failed — cannot verify file is in scope" >&2
+    echo "  Error: $ERROR_MSG" >&2
+    echo "  Fix the spec file or scope configuration before editing files" >&2
+    exit 2
+  fi
 
   if [[ "$SCOPE_CHECK" == out_of_scope:* ]]; then
     DETAIL="${SCOPE_CHECK#out_of_scope:}"
