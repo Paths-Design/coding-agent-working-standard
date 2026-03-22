@@ -75,7 +75,6 @@
     },
     "contracts": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["type", "path"],
@@ -95,9 +94,15 @@
     },
     "migrations": { "type": "array", "items": { "type": "string" } },
     "rollback": { "type": "array", "items": { "type": "string" } },
-    "experiment_mode": {
-      "type": "boolean",
-      "description": "Enables experimental mode with reduced requirements"
+    "experimental_mode": {
+      "type": "object",
+      "description": "Enables experimental mode with reduced requirements",
+      "required": ["enabled", "rationale", "expires_at"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "rationale": { "type": "string" },
+        "expires_at": { "type": "string" }
+      }
     },
     "timeboxed_hours": {
       "type": "integer",

@@ -298,44 +298,48 @@ describe('Schema Validation Contracts', () => {
   describe('Waivers Schema Contract', () => {
     const validate = compileSchema(waiversSchema);
 
-    test('valid waivers config passes validation', () => {
-      const validWaivers = {
-        'WV-0001': {
-          gate: 'coverage',
-          reason: 'Legacy integration requires time to add coverage',
-          owner: '@darianrosebrook',
-          expiry: '2026-06-01T00:00:00Z',
-          status: 'active',
-        },
+    test('valid waiver passes validation', () => {
+      const validWaiver = {
+        id: 'WV-0001',
+        title: 'Coverage waiver for legacy module',
+        reason: 'Legacy integration requires time to add coverage',
+        gates: ['coverage'],
+        created_at: '2026-03-21T00:00:00Z',
+        expires_at: '2026-06-01T00:00:00Z',
+        approved_by: '@darianrosebrook',
+        status: 'active',
       };
 
-      const isValid = validate(validWaivers);
+      const isValid = validate(validWaiver);
       expect(isValid).toBe(true);
     });
 
-    test('invalid waivers fail validation', () => {
+    test('invalid waiver fails validation', () => {
       const invalid = {
-        'WV-0002': {
-          // Missing required fields: gate, reason, owner, expiry
-          gate: 'coverage',
-        },
+        // Missing required fields: id, title, reason, gates, etc.
+        id: 'WV-0002',
+        gates: ['coverage'],
       };
       expect(validate(invalid)).toBe(false);
-
-      // Invalid gate value
-      const badGate = {
-        'WV-0003': {
-          gate: 'nonexistent_gate',
-          reason: 'Some reason that is long enough',
-          owner: '@someone',
-          expiry: '2026-06-01T00:00:00Z',
-        },
-      };
-      expect(validate(badGate)).toBe(false);
     });
 
-    test('empty waivers object is valid', () => {
-      expect(validate({})).toBe(true);
+    test('waiver with all optional fields passes', () => {
+      const fullWaiver = {
+        id: 'WV-0003',
+        title: 'Full waiver example',
+        reason: 'Experimental feature needs flexibility',
+        description: 'Detailed description of why this waiver exists',
+        gates: ['naming', 'duplication'],
+        created_at: '2026-03-21T00:00:00Z',
+        expires_at: '2026-06-01T00:00:00Z',
+        approved_by: '@manager',
+        impact_level: 'low',
+        mitigation_plan: 'Will add coverage in next sprint',
+        status: 'active',
+        created_by_session: 'session-abc-123',
+        compensating_control: 'Manual review required',
+      };
+      expect(validate(fullWaiver)).toBe(true);
     });
   });
 
@@ -491,7 +495,16 @@ describe('Schema Validation Contracts', () => {
             version: 1,
             worktrees: {},
           },
-          'waivers.schema.json': {},
+          'waivers.schema.json': {
+            id: 'WV-0001',
+            title: 'Drift test waiver',
+            reason: 'Drift detection test fixture reason',
+            gates: ['coverage'],
+            created_at: '2026-03-21T00:00:00Z',
+            expires_at: '2026-06-01T00:00:00Z',
+            approved_by: '@test',
+            status: 'active',
+          },
           'scope.schema.json': {
             version: 1,
             allowedDirectories: ['src/'],
