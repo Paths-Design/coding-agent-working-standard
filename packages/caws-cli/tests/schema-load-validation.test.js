@@ -312,3 +312,173 @@ describe('spec-validation schema first pass', () => {
     expect(result.errors.length).toBeGreaterThan(0);
   });
 });
+
+describe('AJV first pass proves independent value (C3)', () => {
+  // Helper: a fully valid spec that passes both AJV and semantic checks
+  const makeValidSpec = (overrides = {}) => ({
+    id: 'FEAT-001',
+    title: 'A valid test feature title here',
+    risk_tier: 2,
+    mode: 'feature',
+    blast_radius: { modules: ['src/'], data_migration: false },
+    operational_rollback_slo: '5m',
+    scope: { in: ['src/'], out: ['node_modules/'] },
+    invariants: ['System stays stable'],
+    acceptance: [{ id: 'A1', given: 'x', when: 'y', then: 'z' }],
+    non_functional: { a11y: ['keyboard'], perf: {}, security: ['input-validation'] },
+    contracts: [{ type: 'openapi', path: 'api.yaml' }],
+    ...overrides,
+  });
+
+  test('C3.1: AJV catches scope.in as string — semantic pass would miss this (type mismatch)', () => {
+    const { validateWorkingSpec } = require('../src/validation/spec-validation');
+
+    // scope.in is a string instead of array. The semantic pass calls
+    // spec.scope.in.length which returns the string length (4), so it
+    // would pass the semantic check. Only AJV enforces the array type.
+    const spec = makeValidSpec({ scope: { in: 'src/', out: ['node_modules/'] } });
+    const result = validateWorkingSpec(spec);
+
+    // The spec passes semantic validation (string has .length > 0), so
+    // result.valid is true. But AJV should populate schemaWarnings.
+    expect(result.valid).toBe(true);
+    expect(result.schemaWarnings).toBeDefined();
+    expect(result.schemaWarnings.length).toBeGreaterThan(0);
+
+    // AJV reports "must be array" for type mismatches
+    const typeWarning = result.schemaWarnings.some(
+      w => w.message && w.message.includes('must be array')
+    );
+    expect(typeWarning).toBe(true);
+    // Confirm the warning points to the right path
+    const scopeInWarning = result.schemaWarnings.some(
+      w => w.instancePath === '/scope/in'
+    );
+    expect(scopeInWarning).toBe(true);
+  });
+
+  test('C3.2: AJV catches unknown top-level property — semantic pass ignores extra fields', () => {
+    const { validateWorkingSpec } = require('../src/validation/spec-validation');
+
+    // The schema has additionalProperties: false at the top level.
+    // The semantic pass never checks for extra properties.
+    const spec = makeValidSpec({ foo: 'bar' });
+    const result = validateWorkingSpec(spec);
+
+    // Semantic pass sees all required fields present and valid, so valid = true.
+    // AJV should report the additional property as a warning.
+    expect(result.valid).toBe(true);
+    expect(result.schemaWarnings).toBeDefined();
+    expect(result.schemaWarnings.length).toBeGreaterThan(0);
+
+    const additionalPropWarning = result.schemaWarnings.some(
+      w => w.message && w.message.includes('additional')
+    );
+    expect(additionalPropWarning).toBe(true);
+  });
+
+  test('C3.3: when createValidator throws, validateWorkingSpec still works via semantic pass but schemaWarnings is undefined', () => {
+    // We isolate this by requiring with a fresh module that has schema-validator mocked
+    jest.resetModules();
+    jest.doMock('../src/utils/schema-validator', () => ({
+      createValidator: () => { throw new Error('schema unavailable'); },
+      getSchemaPath: () => '/nonexistent/path',
+    }));
+
+    const { validateWorkingSpec } = require('../src/validation/spec-validation');
+    const spec = makeValidSpec();
+    const result = validateWorkingSpec(spec);
+
+    // Semantic pass should still validate successfully
+    expect(result.valid).toBe(true);
+    // schemaWarnings should be undefined (no AJV ran, no warnings array)
+    expect(result.schemaWarnings).toBeUndefined();
+
+    // Restore modules so other tests use the real validator
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  test('C3.4: valid spec has no schemaWarnings (clean AJV pass)', () => {
+    const { validateWorkingSpec } = require('../src/validation/spec-validation');
+    const spec = makeValidSpec();
+    const result = validateWorkingSpec(spec);
+
+    expect(result.valid).toBe(true);
+    // schemaWarnings is undefined when AJV finds zero issues (line 224 of source)
+    expect(result.schemaWarnings).toBeUndefined();
+  });
+});
+
+describe('validateWorkingSpecWithSuggestions schema first pass proves value (C4)', () => {
+  const makeValidSpec = (overrides = {}) => ({
+    id: 'FEAT-001',
+    title: 'A valid test feature title here',
+    risk_tier: 2,
+    mode: 'feature',
+    blast_radius: { modules: ['src/'], data_migration: false },
+    operational_rollback_slo: '5m',
+    scope: { in: ['src/'], out: ['node_modules/'] },
+    invariants: ['System stays stable'],
+    acceptance: [{ id: 'A1', given: 'x', when: 'y', then: 'z' }],
+    non_functional: { a11y: ['keyboard'], perf: {}, security: ['input-validation'] },
+    contracts: [{ type: 'openapi', path: 'api.yaml' }],
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    // Clear any stale mocks from prior describe blocks (e.g., C3.3's doMock)
+    jest.resetModules();
+  });
+
+  test('C4: scope.in as string triggers schema warning that semantic pass would miss', () => {
+    // Ensure fresh modules — prior tests (C3.3) may have doMock'd schema-validator
+    jest.unmock('../src/utils/schema-validator');
+    jest.resetModules();
+    const { validateWorkingSpecWithSuggestions } = require('../src/validation/spec-validation');
+
+    // scope.in is a string — semantic pass accepts it (.length works on strings),
+    // but AJV catches the type mismatch.
+    const spec = makeValidSpec({ scope: { in: 'src/', out: ['node_modules/'] } });
+    const result = validateWorkingSpecWithSuggestions(spec);
+
+    // The spec may or may not be valid overall (semantic pass decides), but
+    // warnings should contain a Schema-prefixed error from AJV.
+    const schemaWarnings = result.warnings.filter(w => w.message && w.message.startsWith('Schema:'));
+    expect(schemaWarnings.length).toBeGreaterThan(0);
+
+    // AJV reports "must be array" — prefixed with "Schema: " by the function
+    const arrayWarning = schemaWarnings.some(w => w.message.includes('must be array'));
+    expect(arrayWarning).toBe(true);
+    // Confirm it points to the right path
+    const scopeInWarning = schemaWarnings.some(w => w.instancePath === '/scope/in');
+    expect(scopeInWarning).toBe(true);
+  });
+});
+
+describe('validateWorkingSpec vs validateWorkingSpecWithSuggestions behavioral difference', () => {
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
+  test('validateWorkingSpec returns on first semantic error; WithSuggestions reports all', () => {
+    const {
+      validateWorkingSpec,
+      validateWorkingSpecWithSuggestions,
+    } = require('../src/validation/spec-validation');
+
+    // Minimal spec missing almost everything — only id present
+    const minimalSpec = { id: 'bad' };
+
+    // validateWorkingSpec returns on the first missing required field
+    const basicResult = validateWorkingSpec(minimalSpec);
+    expect(basicResult.valid).toBe(false);
+    expect(basicResult.errors.length).toBe(1);
+
+    // validateWorkingSpecWithSuggestions collects ALL missing fields
+    const enhancedResult = validateWorkingSpecWithSuggestions(minimalSpec);
+    expect(enhancedResult.valid).toBe(false);
+    // Should report many more errors (multiple missing fields + format issues)
+    expect(enhancedResult.errors.length).toBeGreaterThan(basicResult.errors.length);
+  });
+});
