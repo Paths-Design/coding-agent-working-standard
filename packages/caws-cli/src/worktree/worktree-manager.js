@@ -881,17 +881,32 @@ function mergeWorktree(name, options = {}) {
 
   const baseBranch = entry.baseBranch || 'main';
 
-  // Check for uncommitted work in the worktree
+  // Check for uncommitted work in the worktree.
+  // Ignore .caws/ changes (provenance chain, registry) — these are
+  // infrastructure artifacts written by git hooks, not user work.
+  // The post-commit hook appends to .caws/provenance/chain.json after
+  // every commit, which immediately dirties the tree and blocks merges.
   if (fs.existsSync(entry.path)) {
     try {
-      const status = execFileSync(
+      const rawStatus = execFileSync(
         'git',
         ['status', '--porcelain'],
         { cwd: entry.path, encoding: 'utf8', stdio: 'pipe' }
-      ).trim();
-      if (status) {
+      );
+      // Filter out .caws/ infrastructure changes (provenance, registry).
+      // Git porcelain format: "XY PATH" — 2 status chars, space, path.
+      // IMPORTANT: do NOT .trim() the raw output — it strips the leading
+      // space from " M file" (unstaged), corrupting the XY prefix and
+      // breaking substring(3) path extraction.
+      const statusLines = rawStatus.split('\n').filter(l => l.length > 0);
+      const userChanges = statusLines
+        .filter(line => {
+          const filePath = line.substring(3);
+          return !filePath.startsWith('.caws/');
+        }).join('\n');
+      if (userChanges) {
         throw new Error(
-          `Worktree '${name}' has uncommitted changes:\n${status}\n` +
+          `Worktree '${name}' has uncommitted changes:\n${userChanges}\n` +
             `Commit or discard changes before merging.`
         );
       }

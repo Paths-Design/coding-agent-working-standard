@@ -490,6 +490,13 @@ function generatePostCommitHook() {
     exit 0
   fi
 
+  # Skip during merge operations — caws worktree merge triggers a merge
+  # commit, and writing to .caws/provenance/chain.json here would dirty
+  # the tree mid-merge, blocking subsequent operations.
+  if [ -f ".git/MERGE_HEAD" ] || [ -f "$(git rev-parse --git-dir 2>/dev/null)/MERGE_HEAD" ]; then
+    exit 0
+  fi
+
   # Get the current commit hash
   COMMIT_HASH=$(git rev-parse HEAD)
 
