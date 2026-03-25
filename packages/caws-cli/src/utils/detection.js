@@ -33,11 +33,16 @@ function findPackageRoot(startDir = __dirname) {
  * @returns {Object} Setup information
  */
 function detectCAWSSetup(cwd = process.cwd()) {
-  // Skip logging for version/help commands
+  // Skip logging for version/help/quiet commands, or when CAWS_QUIET is set.
+  // Verbose detection output contributes to Claude Code context-window
+  // exhaustion when agents run many caws commands in a single session.
   const isQuietCommand =
     process.argv.includes('--version') ||
     process.argv.includes('-V') ||
-    process.argv.includes('--help');
+    process.argv.includes('--help') ||
+    process.argv.includes('--quiet') ||
+    process.argv.includes('-q') ||
+    process.env.CAWS_QUIET === '1';
 
   if (!isQuietCommand) {
     console.log(chalk.blue('Detecting CAWS setup...'));

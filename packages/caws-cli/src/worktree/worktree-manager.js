@@ -124,6 +124,11 @@ function getCurrentBranch() {
   }).trim();
 }
 
+// Track whether we've already warned about schema violations this process.
+// loadRegistry() is called multiple times per command; warning every time
+// floods stderr and contributes to Claude Code context-window exhaustion.
+let _schemaWarned = false;
+
 /**
  * Load the worktree registry
  * @param {string} root - Repository root
@@ -137,11 +142,15 @@ function loadRegistry(root) {
       try {
         const validate = createValidator(getSchemaPath('worktrees.schema.json', root));
         const result = validate(data);
-        if (!result.valid) {
+        if (!result.valid && !_schemaWarned) {
+          _schemaWarned = true;
           console.warn('Worktree registry has schema violations:', result.errors);
         }
       } catch (schemaErr) {
-        console.warn('Could not validate worktree registry schema:', schemaErr.message);
+        if (!_schemaWarned) {
+          _schemaWarned = true;
+          console.warn('Could not validate worktree registry schema:', schemaErr.message);
+        }
       }
       return data;
     }
