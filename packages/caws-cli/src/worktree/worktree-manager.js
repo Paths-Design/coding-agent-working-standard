@@ -968,11 +968,16 @@ function mergeWorktree(name, options = {}) {
   }
 
   // Merge
+  // Use --no-verify to skip pre-commit/commit-msg hooks during merge.
+  // The worktree commits were already validated by those hooks when originally
+  // committed. Re-running them here adds seconds of blocking time (especially
+  // in projects with heavy hooks like quality gates, YAML validation, etc.)
+  // and can trigger OAuth token expiry races in long-running sessions.
   const mergeMessage = message || `merge(worktree): ${name}`;
   try {
     execFileSync(
       'git',
-      ['merge', '--no-ff', entry.branch, '-m', mergeMessage],
+      ['merge', '--no-ff', '--no-verify', entry.branch, '-m', mergeMessage],
       { cwd: root, stdio: 'pipe' }
     );
   } catch (error) {
