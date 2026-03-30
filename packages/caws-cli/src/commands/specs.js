@@ -15,6 +15,34 @@ const { SPEC_TYPES } = require('../constants/spec-types');
 // Import suggestFeatureBreakdown from spec-resolver
 const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
 const { findProjectRoot } = require('../utils/detection');
+const { loadRegistry: loadWorktreeRegistry, getRepoRoot } = require('../worktree/worktree-manager');
+
+/**
+ * Check if a spec is referenced by any active worktree.
+ * Returns the list of worktree names that reference it, or empty array.
+ * @param {string} specId - Spec identifier to check
+ * @returns {string[]} Names of worktrees referencing this spec
+ */
+function getWorktreesReferencingSpec(specId) {
+  try {
+    const root = getRepoRoot();
+    const registry = loadWorktreeRegistry(root);
+    const matches = [];
+    for (const [name, entry] of Object.entries(registry.worktrees || {})) {
+      if (
+        entry.specId === specId &&
+        entry.status !== 'destroyed' &&
+        entry.status !== 'merged'
+      ) {
+        matches.push(name);
+      }
+    }
+    return matches;
+  } catch {
+    // If worktree registry can't be loaded (e.g., no .caws dir), no conflict
+    return [];
+  }
+}
 
 /**
  * Specs directory structure — anchored to the CAWS project root,
@@ -192,8 +220,28 @@ async function createSpec(id, options = {}) {
     }
   }
 
-  // If we got here via override choice, proceed with creation
+  // If we got here via override choice, check ownership and worktree associations
   if (specExists && (force || answer === 'override')) {
+    // Check session ownership — only the creator session can override
+    const registry = await loadSpecsRegistry();
+    const existingEntry = registry.specs[id];
+    const currentSession = process.env.CLAUDE_SESSION_ID || null;
+    if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
+      throw new Error(
+        `Cannot override spec '${id}': owned by another session (${existingEntry.owner}). ` +
+          `Only the creator session can override a spec. Create a new spec with a different ID instead.`
+      );
+    }
+
+    // Check for active worktree associations
+    const referencingWorktrees = getWorktreesReferencingSpec(id);
+    if (referencingWorktrees.length > 0) {
+      const names = referencingWorktrees.join(', ');
+      throw new Error(
+        `Cannot override spec '${id}': active worktree(s) [${names}] reference it. ` +
+          `Destroy the worktree(s) first with 'caws worktree destroy <name>', or create a new spec with a different ID.`
+      );
+    }
     console.log(chalk.yellow('Overriding existing spec...'));
   }
 
@@ -325,6 +373,7 @@ async function createSpec(id, options = {}) {
     status: 'draft',
     created_at: specContent.created_at,
     updated_at: specContent.updated_at,
+    owner: process.env.CLAUDE_SESSION_ID || null,
   };
   await saveSpecsRegistry(registry);
 
@@ -547,6 +596,26 @@ async function deleteSpec(id) {
     return false;
   }
 
+  // Block deletion if owned by another session
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const existingEntry = registry.specs[id];
+  if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
+    throw new Error(
+      `Cannot delete spec '${id}': owned by another session (${existingEntry.owner}). ` +
+        `Only the creator session can delete a spec.`
+    );
+  }
+
+  // Block deletion if active worktrees reference this spec
+  const referencingWorktrees = getWorktreesReferencingSpec(id);
+  if (referencingWorktrees.length > 0) {
+    const names = referencingWorktrees.join(', ');
+    throw new Error(
+      `Cannot delete spec '${id}': active worktree(s) [${names}] reference it. ` +
+        `Destroy the worktree(s) first with 'caws worktree destroy <name>'.`
+    );
+  }
+
   const specPath = path.join(getSpecsDir(), registry.specs[id].path);
 
   // Remove file
@@ -577,6 +646,34 @@ async function closeSpec(id) {
   }
   if (currentStatus === 'archived') {
     console.log(chalk.yellow(`Spec '${id}' is archived and cannot be closed.`));
+    return false;
+  }
+
+  // Block closure if owned by another session
+  const registry = await loadSpecsRegistry();
+  const existingEntry = registry.specs[id];
+  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
+    console.error(
+      chalk.red(
+        `Cannot close spec '${id}': owned by another session (${existingEntry.owner}). ` +
+          `Only the creator session can close a spec.`
+      )
+    );
+    return false;
+  }
+
+  // Block closure if active worktrees reference this spec (closing removes scope enforcement)
+  const referencingWorktrees = getWorktreesReferencingSpec(id);
+  if (referencingWorktrees.length > 0) {
+    const names = referencingWorktrees.join(', ');
+    console.error(
+      chalk.red(
+        `Cannot close spec '${id}': active worktree(s) [${names}] reference it. ` +
+          `Closing would remove scope enforcement while work is in progress. ` +
+          `Destroy the worktree(s) first with 'caws worktree destroy <name>'.`
+      )
+    );
     return false;
   }
 
