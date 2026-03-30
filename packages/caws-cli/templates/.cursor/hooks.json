@@ -3,48 +3,73 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "./.cursor/hooks/block-dangerous.sh"
+        "command": ".cursor/hooks/block-dangerous.sh"
       },
       {
-        "command": "./.cursor/hooks/audit.sh"
+        "command": ".cursor/hooks/session-log.sh"
+      },
+      {
+        "command": ".cursor/hooks/audit.sh"
       }
     ],
     "beforeReadFile": [
       {
-        "command": "./.cursor/hooks/scan-secrets.sh"
+        "command": ".cursor/hooks/scan-secrets.sh"
       },
       {
-        "command": "./.cursor/hooks/caws-scope-guard.sh"
+        "command": ".cursor/hooks/caws-scope-guard.sh"
+      },
+      {
+        "command": ".cursor/hooks/session-log.sh"
       }
     ],
     "afterFileEdit": [
       {
-        "command": "./.cursor/hooks/format.sh"
+        "command": ".cursor/hooks/format.sh"
       },
       {
-        "command": "./.cursor/hooks/naming-check.sh"
+        "command": ".cursor/hooks/naming-check.sh"
       },
       {
-        "command": "./.cursor/hooks/validate-spec.sh"
+        "command": ".cursor/hooks/validate-spec.sh"
       },
       {
-        "command": "./.cursor/hooks/caws-quality-check.sh"
+        "command": ".cursor/hooks/caws-quality-check.sh"
       },
       {
-        "command": "./.cursor/hooks/audit.sh"
+        "command": ".cursor/hooks/session-log.sh"
+      },
+      {
+        "command": ".cursor/hooks/audit.sh"
       }
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "./.cursor/hooks/caws-scope-guard.sh"
+        "command": ".cursor/hooks/caws-scope-guard.sh"
       },
       {
-        "command": "./.cursor/hooks/audit.sh"
+        "command": ".cursor/hooks/session-log.sh"
+      },
+      {
+        "command": ".cursor/hooks/audit.sh"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": ".cursor/hooks/session-log.sh"
+      }
+    ],
+    "afterAgentThought": [
+      {
+        "command": ".cursor/hooks/session-log.sh"
       }
     ],
     "stop": [
       {
-        "command": "./.cursor/hooks/audit.sh"
+        "command": ".cursor/hooks/session-log.sh"
+      },
+      {
+        "command": ".cursor/hooks/audit.sh"
       }
     ]
   }
