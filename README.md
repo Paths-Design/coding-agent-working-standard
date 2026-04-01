@@ -162,6 +162,9 @@ agents:
 - **[Agent Workflow Guide](docs/agents/full-guide.md)** - Complete guide for AI agents
 - **[Agent Integration Guide](docs/guides/agent-integration-guide.md)** - Technical integration details
 - **[Agent Workflow Extensions](docs/guides/agent-workflow-extensions.md)** - Advanced agent features
+- **[CAWS and Claude Code Cross-Analysis](docs/guides/claude-code-cross-analysis.md)** - How CAWS compares to Claude Code's harness patterns
+- **[Claude Code-Informed Runtime Recommendations](docs/guides/claude-code-runtime-recommendations-for-caws.md)** - CAWS-specific recommendations from Claude Code learnings
+- **[Claude Code Implementation Learnings for CAWS](docs/guides/claude-code-implementation-learnings-for-caws.md)** - Deeper feature-by-feature lessons applicable to CAWS
 
 ### Examples & Templates
 

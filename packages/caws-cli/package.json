@@ -17,7 +17,7 @@
     "dev": "mkdir -p dist && cp -r src/* dist/ && node dist/index.js",
     "typecheck": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
-    "test": "npm run build && jest && npm run test:cleanup",
+    "test": "node scripts/run-tests.js",
     "test:unit": "npm run build && jest --testPathIgnorePatterns='perf-budgets|integration|e2e|mutation|axe|contract' && npm run test:cleanup",
     "test:contract": "npm run build && jest --testPathPatterns=contract && npm run test:cleanup",
     "test:integration": "npm run build && jest --testPathPatterns=integration && npm run test:cleanup",

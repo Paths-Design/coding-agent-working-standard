@@ -170,7 +170,7 @@ caws parallel setup parallel-plan.yaml
 caws parallel status
 
 # 5. Merge when all agents complete
-caws parallel merge --strategy rebase
+caws parallel merge --strategy merge
 
 # 6. Clean up
 caws parallel teardown --delete-branches
