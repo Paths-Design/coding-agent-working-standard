@@ -166,9 +166,14 @@ describe('resolveSpec schema validation', () => {
 
     const { resolveSpec } = require('../src/utils/spec-resolver');
 
-    await expect(resolveSpec({ specFile: specFilePath })).rejects.toThrow(
-      /schema violations/
-    );
+    // Schema violations are now warnings, not errors — resolveSpec should
+    // resolve successfully but emit a warning to stderr.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await resolveSpec({ specFile: specFilePath });
+    expect(result.spec).toBeDefined();
+    expect(result.spec.id).toBe('bad');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Schema warnings'));
+    warnSpy.mockRestore();
   });
 });
 

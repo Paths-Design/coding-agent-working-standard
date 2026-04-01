@@ -8,12 +8,6 @@
  */
 
 const { Command } = require('commander');
-// eslint-disable-next-line no-unused-vars
-const fs = require('fs-extra');
-// eslint-disable-next-line no-unused-vars
-const path = require('path');
-// eslint-disable-next-line no-unused-vars
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 
 if (
@@ -68,16 +62,8 @@ const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
 // Import git hooks functionality
 const { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require('./scaffold/git-hooks');
 
-// Import validation functionality
-// eslint-disable-next-line no-unused-vars
-const { validateWorkingSpecWithSuggestions } = require('./validation/spec-validation');
-
 // Import finalization utilities
 const {
-  // eslint-disable-next-line no-unused-vars
-  finalizeProject,
-  // eslint-disable-next-line no-unused-vars
-  continueToSuccess,
   setFinalizationDependencies,
 } = require('./utils/finalization');
 

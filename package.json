@@ -45,9 +45,6 @@
     "caws:start": "node apps/tools/caws/start.js",
     "caws:validate": "node .caws/validate.js .caws/working-spec.yaml",
     "caws:verify": "exec bash scripts/verify.sh",
-    "caws:attest": "node apps/tools/caws/attest.js > .agent/attestation.json",
-    "caws:prompt-lint": "node apps/tools/caws/prompt-lint.js .agent/prompts/*.md --allowlist apps/tools/caws/tools-allow.json",
-    "caws:provenance": "node apps/tools/caws/provenance.js > .agent/provenance.json",
     "caws:pr-comment": "node apps/tools/caws/pr-comment.js",
     "quality-gates": "node packages/quality-gates/run-quality-gates.mjs",
 

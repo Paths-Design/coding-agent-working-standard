@@ -42,7 +42,14 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     }
 
     // Parse current state from options
-    const currentState = options.currentState ? JSON.parse(options.currentState) : {};
+    let currentState = {};
+    if (options.currentState) {
+      try {
+        currentState = JSON.parse(options.currentState);
+      } catch {
+        console.error('Invalid JSON in --current-state. Using defaults.');
+      }
+    }
     const stateDescription = currentState.description || 'Starting implementation';
 
     console.log(chalk.blue('\nIterative Development Guidance\n'));

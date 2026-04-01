@@ -8,7 +8,12 @@ const cache = new Map();
 function createValidator(schemaPath) {
   const resolved = path.resolve(schemaPath);
   if (cache.has(resolved)) return cache.get(resolved);
-  const schema = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  let schema;
+  try {
+    schema = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  } catch (err) {
+    throw new Error(`Failed to parse schema file ${resolved}: ${err.message}`);
+  }
   // Remove $schema keyword — Ajv handles validation without it and
   // the 2020-12 meta-schema URI is not bundled with the base Ajv package.
   delete schema.$schema;
