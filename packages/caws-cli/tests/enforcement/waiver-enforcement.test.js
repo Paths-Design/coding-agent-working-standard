@@ -234,27 +234,33 @@ describe('Waiver self-approval prevention', () => {
     // Empty string is falsy, so creatorSession becomes null via `'' || null`.
     // Self-approval prevention is skipped because we can't identify who the
     // creator is. This is intentional/documented behavior.
+    const savedCursorTrace = process.env.CURSOR_TRACE_ID;
+    delete process.env.CURSOR_TRACE_ID;
     process.env.CLAUDE_SESSION_ID = '';
 
-    await runCreateWaiver(
-      validWaiverOptions({ approvedBy: 'anyone' })
-    );
+    try {
+      await runCreateWaiver(
+        validWaiverOptions({ approvedBy: 'anyone' })
+      );
 
-    const errors = getConsoleErrors();
-    expect(errors).not.toContain('Waiver creator cannot be the approver');
+      const errors = getConsoleErrors();
+      expect(errors).not.toContain('Waiver creator cannot be the approver');
 
-    const waiverFiles = fs
-      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
-      .filter((f) => f.endsWith('.yaml'));
-    expect(waiverFiles.length).toBe(1);
+      const waiverFiles = fs
+        .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+        .filter((f) => f.endsWith('.yaml'));
+      expect(waiverFiles.length).toBe(1);
 
-    // Verify created_by_session is null (not empty string)
-    const waiverContent = fs.readFileSync(
-      path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
-      'utf8'
-    );
-    const waiver = yaml.load(waiverContent);
-    expect(waiver.created_by_session).toBeNull();
+      // Verify created_by_session is null (not empty string)
+      const waiverContent = fs.readFileSync(
+        path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
+        'utf8'
+      );
+      const waiver = yaml.load(waiverContent);
+      expect(waiver.created_by_session).toBeNull();
+    } finally {
+      if (savedCursorTrace) process.env.CURSOR_TRACE_ID = savedCursorTrace;
+    }
   });
 
   // H9: Waiver ID collision risk — documents the weak ID generation
@@ -278,25 +284,31 @@ describe('Waiver self-approval prevention', () => {
     expect(waiverFiles[0]).toMatch(/^WV-\d{4}\.yaml$/);
   });
 
-  // Verify created_by_session is null when CLAUDE_SESSION_ID unset
+  // Verify created_by_session is null when no agent session is detectable
   test('created_by_session is null when CLAUDE_SESSION_ID is not set', async () => {
+    const savedCursorTrace = process.env.CURSOR_TRACE_ID;
+    delete process.env.CURSOR_TRACE_ID;
     delete process.env.CLAUDE_SESSION_ID;
 
-    await runCreateWaiver(
-      validWaiverOptions({ approvedBy: '@someone' })
-    );
+    try {
+      await runCreateWaiver(
+        validWaiverOptions({ approvedBy: '@someone' })
+      );
 
-    const waiverFiles = fs
-      .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
-      .filter((f) => f.endsWith('.yaml'));
-    expect(waiverFiles.length).toBe(1);
+      const waiverFiles = fs
+        .readdirSync(path.join(tmpDir, '.caws', 'waivers'))
+        .filter((f) => f.endsWith('.yaml'));
+      expect(waiverFiles.length).toBe(1);
 
-    const waiverContent = fs.readFileSync(
-      path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
-      'utf8'
-    );
-    const waiver = yaml.load(waiverContent);
-    expect(waiver.created_by_session).toBeNull();
+      const waiverContent = fs.readFileSync(
+        path.join(tmpDir, '.caws', 'waivers', waiverFiles[0]),
+        'utf8'
+      );
+      const waiver = yaml.load(waiverContent);
+      expect(waiver.created_by_session).toBeNull();
+    } finally {
+      if (savedCursorTrace) process.env.CURSOR_TRACE_ID = savedCursorTrace;
+    }
   });
 
   // Verify waiver file is NOT written when self-approval is rejected
