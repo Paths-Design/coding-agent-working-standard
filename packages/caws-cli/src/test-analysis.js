@@ -7,6 +7,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
+const { resolveSpec } = require('./utils/spec-resolver');
 
 /**
  * Waiver Pattern Learning Engine
@@ -595,17 +596,17 @@ class BudgetPredictor {
 /**
  * Main Test Analysis CLI handler
  */
-async function testAnalysisCommand(subcommand, options = []) {
+async function testAnalysisCommand(subcommand, options = [], commandOptions = {}) {
   const chalk = (await import('chalk')).default;
 
   try {
     switch (subcommand) {
       case 'assess-budget':
-        return await handleAssessBudget(options);
+        return await handleAssessBudget(options, commandOptions);
       case 'analyze-patterns':
         return await handleAnalyzePatterns(options);
       case 'find-similar':
-        return await handleFindSimilar(options);
+        return await handleFindSimilar(options, commandOptions);
       default:
         console.log(chalk.red('Unknown test-analysis subcommand'));
         console.log('Available commands:');
@@ -620,27 +621,48 @@ async function testAnalysisCommand(subcommand, options = []) {
 }
 
 /**
- * Handle budget assessment command
+ * Resolve the current spec for analysis commands.
+ * Supports explicit `--spec <path>` for compatibility, but prefers
+ * the suite-standard resolver and `--spec-id`.
+ * @param {string[]} optionArgs
+ * @param {Object} commandOptions
+ * @returns {Promise<{spec: Object, specPath: string}>}
  */
-async function handleAssessBudget(options) {
-  const chalk = (await import('chalk')).default;
-  const predictor = new BudgetPredictor();
-
-  // Load current spec
-  let specPath = '.caws/working-spec.yaml';
-  if (options.includes('--spec')) {
-    const specIndex = options.indexOf('--spec');
-    if (specIndex + 1 < options.length) {
-      specPath = options[specIndex + 1];
+async function resolveAnalysisSpec(optionArgs = [], commandOptions = {}) {
+  let specFile = null;
+  if (Array.isArray(optionArgs) && optionArgs.includes('--spec')) {
+    const specIndex = optionArgs.indexOf('--spec');
+    if (specIndex + 1 < optionArgs.length) {
+      specFile = optionArgs[specIndex + 1];
     }
   }
 
+  const resolved = await resolveSpec({
+    specId: commandOptions.specId,
+    specFile,
+    warnLegacy: false,
+    interactive: false,
+  });
+
+  return {
+    spec: resolved.spec,
+    specPath: resolved.path,
+  };
+}
+
+/**
+ * Handle budget assessment command
+ */
+async function handleAssessBudget(options, commandOptions = {}) {
+  const chalk = (await import('chalk')).default;
+  const predictor = new BudgetPredictor();
+
   try {
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
+    const { spec, specPath } = await resolveAnalysisSpec(options, commandOptions);
 
     console.log(chalk.cyan(`Budget Assessment for ${spec.id}`));
     console.log('==============================================');
+    console.log(chalk.gray(`Spec: ${path.relative(process.cwd(), specPath)}`));
 
     const result = predictor.assessBudget(spec);
 
@@ -727,25 +749,16 @@ async function handleAnalyzePatterns(options) {
 /**
  * Handle find similar projects command
  */
-async function handleFindSimilar(options) {
+async function handleFindSimilar(options, commandOptions = {}) {
   const chalk = (await import('chalk')).default;
   const matcher = new ProjectSimilarityMatcher();
 
-  // Load current spec
-  let specPath = '.caws/working-spec.yaml';
-  if (options.includes('--spec')) {
-    const specIndex = options.indexOf('--spec');
-    if (specIndex + 1 < options.length) {
-      specPath = options[specIndex + 1];
-    }
-  }
-
   try {
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
+    const { spec, specPath } = await resolveAnalysisSpec(options, commandOptions);
 
     console.log(chalk.cyan(`Finding projects similar to ${spec.id}`));
     console.log('==============================================');
+    console.log(chalk.gray(`Spec: ${path.relative(process.cwd(), specPath)}`));
 
     const similar = matcher.findSimilarProjects(spec);
 

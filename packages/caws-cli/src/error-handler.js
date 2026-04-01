@@ -73,7 +73,7 @@ async function safeAsync(operation, context = '', includeTiming = false) {
   try {
     const result = await operation();
 
-    if (includeTiming && timer) {
+    if (includeTiming && timer && !isJsonOutput() && process.env.CAWS_QUIET !== '1') {
       const duration = timer.formatDuration();
       console.log(chalk.gray(`   (completed in ${duration})`));
     }
@@ -110,7 +110,7 @@ function safeSync(operation, context = '', includeTiming = false) {
   try {
     const result = operation();
 
-    if (includeTiming && timer) {
+    if (includeTiming && timer && !isJsonOutput() && process.env.CAWS_QUIET !== '1') {
       const duration = timer.formatDuration();
       console.log(chalk.gray(`   (completed in ${duration})`));
     }

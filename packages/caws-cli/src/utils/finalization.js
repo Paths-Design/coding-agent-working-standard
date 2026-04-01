@@ -95,7 +95,7 @@ async function finalizeProject(projectName, options, answers) {
       ],
       prompts: Object.keys(answers),
       commit: null, // Will be set after git init
-      artifacts: ['.caws/working-spec.yaml'],
+      artifacts: ['.caws/specs/', '.caws/working-spec.yaml'],
       results: {
         project_id: answers.projectId,
         project_title: answers.projectTitle,
@@ -212,13 +212,14 @@ function continueToSuccess() {
   }
 
   console.log(chalk.bold('\nNext steps:'));
-  console.log('1. Customize .caws/working-spec.yaml');
-  console.log('2. Review added CAWS tools and documentation');
+  console.log('1. Customize .caws/specs/<spec-id>.yaml');
+  console.log('2. Treat .caws/working-spec.yaml as a compatibility mirror');
+  console.log('3. Review added CAWS tools and documentation');
   if (!isCurrentDir) {
-    console.log('3. Move CAWS files to your main project if needed');
+    console.log('4. Move CAWS files to your main project if needed');
   }
-  console.log('4. npm install (if using Node.js)');
-  console.log('5. Set up your CI/CD pipeline');
+  console.log('5. npm install (if using Node.js)');
+  console.log('6. Set up your CI/CD pipeline');
   console.log(chalk.blue('\nFor help: caws --help'));
 }
 

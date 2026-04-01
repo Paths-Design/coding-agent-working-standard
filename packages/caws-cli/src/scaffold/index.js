@@ -728,11 +728,12 @@ async function scaffoldProject(options) {
       } else {
         console.log('2. Run: caws validate (verify setup)');
         console.log('3. Run: caws diagnose (check project health)');
-        console.log('4. Customize .caws/working-spec.yaml for your project');
-        console.log('5. Optional: Create .caws/policy.yaml for tier-specific budgets');
+        console.log('4. Customize .caws/specs/<spec-id>.yaml for your project');
+        console.log('5. Treat .caws/working-spec.yaml as a compatibility mirror');
+        console.log('6. Optional: Create .caws/policy.yaml for tier-specific budgets');
         if (!qualityGatesAdded && !options.minimal) {
           console.log(
-            chalk.gray('6. Note: Quality gates scripts skipped (git hooks use CAWS CLI by default)')
+            chalk.gray('7. Note: Quality gates scripts skipped (git hooks use CAWS CLI by default)')
           );
           console.log(
             chalk.gray(

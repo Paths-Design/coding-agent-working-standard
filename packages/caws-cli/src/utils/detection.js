@@ -40,6 +40,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
     process.argv.includes('--version') ||
     process.argv.includes('-V') ||
     process.argv.includes('--help') ||
+    process.argv.includes('--json') ||
     process.argv.includes('--quiet') ||
     process.argv.includes('-q') ||
     process.env.CAWS_QUIET === '1';
