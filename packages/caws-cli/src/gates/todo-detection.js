@@ -99,6 +99,7 @@ function scanStagedDiff(projectRoot) {
   const diff = execSync('git diff --cached -U0', {
     cwd: projectRoot,
     encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let currentFile = null;

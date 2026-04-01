@@ -24,6 +24,7 @@ function getStagedStats(stagedFiles, projectRoot) {
     const numstat = execSync('git diff --cached --numstat', {
       cwd: projectRoot,
       encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     for (const line of numstat.trim().split('\n').filter(Boolean)) {
       const [added, removed] = line.split('\t');

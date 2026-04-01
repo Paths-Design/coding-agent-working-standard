@@ -24,27 +24,31 @@ function getActualBudgetStats(specDir) {
     try {
       baseRef = execSync('git describe --tags --abbrev=0 2>/dev/null', {
         cwd,
-        encoding: 'utf8'
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
       }).trim();
     } catch {
       // No tags found, use initial commit
       baseRef = execSync('git rev-list --max-parents=0 HEAD', {
         cwd,
-        encoding: 'utf8'
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
       }).trim();
     }
 
     // Count files changed since base ref
     const filesOutput = execSync(`git diff --name-only ${baseRef}..HEAD`, {
       cwd,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
     const files_changed = filesOutput.trim().split('\n').filter(Boolean).length;
 
     // Count lines changed (added + removed)
     const numstatOutput = execSync(`git diff --numstat ${baseRef}..HEAD`, {
       cwd,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
     let lines_changed = 0;
     for (const line of numstatOutput.trim().split('\n').filter(Boolean)) {

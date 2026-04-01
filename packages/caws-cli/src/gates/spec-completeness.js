@@ -17,25 +17,29 @@ const name = 'spec_completeness';
  * @param {string} params.projectRoot - Project root
  * @returns {Promise<Object>} Gate result with status and messages
  */
-async function run({ projectRoot }) {
+async function run({ projectRoot, spec }) {
   const messages = [];
 
-  // Load the working spec
-  const specPath = path.join(projectRoot, '.caws', 'working-spec.yaml');
-  if (!await fs.pathExists(specPath)) {
-    return { status: 'fail', messages: ['No working-spec.yaml found. Create one with: caws init'] };
+  let specObject = spec;
+  if (!specObject) {
+    const specPath = path.join(projectRoot, '.caws', 'working-spec.yaml');
+    if (!await fs.pathExists(specPath)) {
+      return {
+        status: 'fail',
+        messages: ['No working-spec.yaml found. Create one with: caws init or caws specs create <id>'],
+      };
+    }
+
+    try {
+      const content = await fs.readFile(specPath, 'utf8');
+      specObject = yaml.load(content);
+    } catch (err) {
+      return { status: 'fail', messages: [`Failed to parse working-spec.yaml: ${err.message}`] };
+    }
   }
 
-  let spec;
-  try {
-    const content = await fs.readFile(specPath, 'utf8');
-    spec = yaml.load(content);
-  } catch (err) {
-    return { status: 'fail', messages: [`Failed to parse working-spec.yaml: ${err.message}`] };
-  }
-
-  if (!spec) {
-    return { status: 'fail', messages: ['working-spec.yaml is empty'] };
+  if (!specObject) {
+    return { status: 'fail', messages: ['Resolved spec is empty'] };
   }
 
   // Try to find and load the schema
@@ -60,7 +64,7 @@ async function run({ projectRoot }) {
   if (!schema) {
     // No schema available; do basic structural validation
     const requiredFields = ['title', 'risk_tier'];
-    const missing = requiredFields.filter(f => !(f in spec));
+    const missing = requiredFields.filter(f => !(f in specObject));
     if (missing.length > 0) {
       messages.push(`Missing required fields: ${missing.join(', ')}`);
       return { status: 'fail', messages };
@@ -79,7 +83,7 @@ async function run({ projectRoot }) {
       ajv = new Ajv({ allErrors: true, strict: false });
     }
     const validate = ajv.compile(schema);
-    const valid = validate(spec);
+    const valid = validate(specObject);
 
     if (!valid) {
       for (const error of validate.errors) {
