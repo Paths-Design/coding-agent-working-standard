@@ -11,6 +11,7 @@ const chalk = require('chalk');
 // child_process removed - execSync no longer used directly
 const { safeAsync, outputResult } = require('../error-handler');
 const { parallel } = require('../utils/async-utils');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Load working specification (legacy single file approach)
@@ -27,6 +28,41 @@ async function loadWorkingSpec(specPath = '.caws/working-spec.yaml') {
     return yaml.load(content);
   } catch (error) {
     return null;
+  }
+}
+
+/**
+ * Resolve the primary spec for status display when explicitly targeted
+ * or when the resolver can identify a single canonical spec.
+ * Returns null when no spec can be auto-selected.
+ * @param {Object} options
+ * @returns {Promise<Object|null>}
+ */
+async function loadResolvedStatusSpec(options = {}) {
+  try {
+    const resolved = await resolveSpec({
+      specId: options.specId,
+      specFile: options.spec,
+      warnLegacy: false,
+      interactive: false,
+      quiet: Boolean(options.json),
+    });
+    return {
+      ...resolved,
+      selected: true,
+    };
+  } catch (error) {
+    if (
+      error.message === 'Spec ID required when multiple specs exist' &&
+      !options.specId &&
+      !options.spec
+    ) {
+      return null;
+    }
+    if (error.message.includes('No CAWS spec found')) {
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -317,7 +353,7 @@ function getTimeSince(timestamp) {
  * @param {Object} data - Status data
  */
 function displayStatus(data) {
-  const { spec, hooks, provenance, waivers, gates } = data;
+  const { spec, specSelection, hooks, provenance, waivers, gates } = data;
 
   console.log(chalk.bold.cyan('\nCAWS Project Status'));
   console.log(chalk.cyan('==============================================\n'));
@@ -327,6 +363,9 @@ function displayStatus(data) {
     console.log(chalk.green('Working Spec'));
     console.log(chalk.gray(`   ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`));
     console.log(chalk.gray(`   Title: ${spec.title}`));
+    if (specSelection?.specType) {
+      console.log(chalk.gray(`   Source: ${specSelection.specType} (${specSelection.specPath})`));
+    }
   } else {
     console.log(chalk.red('Working Spec'));
     console.log(chalk.gray('   No working spec found'));
@@ -894,14 +933,23 @@ async function statusCommand(options = {}) {
       const currentMode = await modes.getCurrentMode();
 
       // Load all status data in parallel for better performance
-      const [spec, specs, hooks, provenance, waivers, gates] = await parallel([
-        () => loadWorkingSpec(options.spec || '.caws/working-spec.yaml'),
+      const [resolvedSpec, specs, hooks, provenance, waivers, gates] = await parallel([
+        () => loadResolvedStatusSpec(options),
         () => loadSpecsFromMultiSpec(),
         () => checkGitHooks(),
         () => loadProvenanceChain(),
         () => loadWaiverStatus(),
         () => checkQualityGates(),
       ]);
+      const spec = resolvedSpec?.spec || null;
+      const specSelection = resolvedSpec
+        ? {
+            specPath: resolvedSpec.path
+              ? path.relative(process.cwd(), resolvedSpec.path)
+              : null,
+            specType: resolvedSpec.type,
+          }
+        : null;
 
       // Display status (visual mode if requested)
       if (options.visual || options.json) {
@@ -932,6 +980,8 @@ async function statusCommand(options = {}) {
                   title: spec.title,
                   riskTier: spec.risk_tier,
                   mode: spec.mode,
+                  specType: specSelection?.specType || null,
+                  specPath: specSelection?.specPath || null,
                   acceptanceCriteria: spec.acceptance_criteria?.length || 0,
                   completedCriteria:
                     spec.acceptance_criteria?.filter((c) => c.completed).length || 0,
@@ -962,6 +1012,7 @@ async function statusCommand(options = {}) {
             },
             overallProgress: calculateOverallProgress({
               spec,
+              specSelection,
               specs,
               hooks,
               provenance,
@@ -971,6 +1022,7 @@ async function statusCommand(options = {}) {
           };
 
           console.log(JSON.stringify(result, null, 2));
+          return result;
         } else {
           // Visual output
           await displayVisualStatus(
@@ -989,11 +1041,19 @@ async function statusCommand(options = {}) {
         // Original text-based output
         displayStatus({
           spec,
+          specSelection,
           hooks,
           provenance,
           waivers,
           gates,
         });
+      }
+
+      if (options.json) {
+        return {
+          command: 'status',
+          mode: 'json',
+        };
       }
 
       const result = outputResult({
@@ -1027,13 +1087,14 @@ async function statusCommand(options = {}) {
       return result;
     },
     'status check',
-    true
+    !options.json
   );
 }
 
 module.exports = {
   statusCommand,
   loadWorkingSpec,
+  loadResolvedStatusSpec,
   checkGitHooks,
   loadProvenanceChain,
   loadWaiverStatus,

@@ -8,9 +8,8 @@
  */
 
 const chalk = require('chalk');
-const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Analyze quality impact of an action
@@ -79,52 +78,58 @@ function analyzeQualityImpact(action, files = [], context = {}) {
       analysis.recommendations = ['Run CAWS evaluation to assess impact'];
   }
 
-  // Load working spec to check risk tier
-  try {
-    const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
-    if (fs.existsSync(specPath)) {
-      const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-      const projectTier = spec.risk_tier;
-
-      analysis.project_tier = projectTier;
-
-      // Add context-specific recommendations for high-risk projects
-      if (projectTier <= 2) {
-        analysis.recommendations.unshift(
-          'High-risk project (Tier ' + projectTier + '): Run comprehensive validation'
-        );
-        if (analysis.risk_level === 'low') {
-          analysis.risk_level = 'medium';
-        } else if (analysis.risk_level === 'medium') {
-          analysis.risk_level = 'high';
-        }
-      }
-
-      // Add tier-specific quality gates
-      if (projectTier === 1) {
-        analysis.quality_gates = [
-          'Branch coverage ≥ 90%',
-          'Mutation score ≥ 70%',
-          'All contract tests passing',
-          'Manual code review required',
-        ];
-      } else if (projectTier === 2) {
-        analysis.quality_gates = [
-          'Branch coverage ≥ 80%',
-          'Mutation score ≥ 50%',
-          'Contract tests passing (if applicable)',
-        ];
-      } else {
-        analysis.quality_gates = ['Branch coverage ≥ 70%', 'Mutation score ≥ 30%'];
-      }
-    }
-  } catch (error) {
-    // Ignore if we can't load spec
-  }
-
   // Add context-based recommendations
   if (context.project_tier) {
     analysis.project_tier = context.project_tier;
+  }
+
+  return analysis;
+}
+
+/**
+ * Enrich analysis with project tier and resolved spec metadata.
+ * @param {Object} analysis
+ * @param {Object|null} resolvedSpec
+ * @returns {Object}
+ */
+function applySpecContext(analysis, resolvedSpec) {
+  if (!resolvedSpec?.spec) {
+    return analysis;
+  }
+
+  const projectTier = resolvedSpec.spec.risk_tier;
+  analysis.project_tier = projectTier;
+  analysis.spec_id = resolvedSpec.spec.id || null;
+  analysis.spec_path = resolvedSpec.path
+    ? path.relative(process.cwd(), resolvedSpec.path)
+    : null;
+
+  if (projectTier <= 2) {
+    analysis.recommendations.unshift(
+      'High-risk project (Tier ' + projectTier + '): Run comprehensive validation'
+    );
+    if (analysis.risk_level === 'low') {
+      analysis.risk_level = 'medium';
+    } else if (analysis.risk_level === 'medium') {
+      analysis.risk_level = 'high';
+    }
+  }
+
+  if (projectTier === 1) {
+    analysis.quality_gates = [
+      'Branch coverage ≥ 90%',
+      'Mutation score ≥ 70%',
+      'All contract tests passing',
+      'Manual code review required',
+    ];
+  } else if (projectTier === 2) {
+    analysis.quality_gates = [
+      'Branch coverage ≥ 80%',
+      'Mutation score ≥ 50%',
+      'Contract tests passing (if applicable)',
+    ];
+  } else {
+    analysis.quality_gates = ['Branch coverage ≥ 70%', 'Mutation score ≥ 30%'];
   }
 
   return analysis;
@@ -170,7 +175,18 @@ async function qualityMonitorCommand(action, options = {}) {
     }
 
     // Analyze quality impact
-    const analysis = analyzeQualityImpact(action, files, context);
+    let analysis = analyzeQualityImpact(action, files, context);
+
+    try {
+      const resolved = await resolveSpec({
+        specId: options.specId,
+        warnLegacy: false,
+        interactive: false,
+      });
+      analysis = applySpecContext(analysis, resolved);
+    } catch {
+      // Best-effort enrichment only
+    }
 
     // Display results
     console.log(chalk.bold('\nCAWS Quality Monitor\n'));
@@ -219,6 +235,9 @@ async function qualityMonitorCommand(action, options = {}) {
     // Project tier
     if (analysis.project_tier) {
       console.log(chalk.bold(`\nProject Tier: ${analysis.project_tier}`));
+      if (analysis.spec_id) {
+        console.log(chalk.gray(`Spec: ${analysis.spec_id}${analysis.spec_path ? ` (${analysis.spec_path})` : ''}`));
+      }
     }
 
     // Quality gates

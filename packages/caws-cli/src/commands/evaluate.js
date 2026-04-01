@@ -12,6 +12,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Evaluate command handler
@@ -29,20 +30,19 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
     }
 
-    // Load working spec
-    const specPath = path.isAbsolute(specFile) ? specFile : path.join(process.cwd(), specFile);
-
-    if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`\nWorking spec not found: ${specFile}`));
-      console.error(chalk.yellow('Run: caws init to create a working spec'));
-      process.exit(1);
-    }
-
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
+    const resolved = await resolveSpec({
+      specId: options.specId,
+      specFile,
+      warnLegacy: false,
+      interactive: false,
+    });
+    const specPath = resolved.path;
+    const spec = resolved.spec;
 
     console.log(chalk.blue('\nEvaluating CAWS Quality Standards\n'));
     console.log('-'.repeat(60));
+    console.log(chalk.gray(`Spec: ${path.relative(process.cwd(), specPath)}`));
+    console.log(chalk.gray(`Type: ${resolved.type}`));
 
     // Evaluation results
     const results = {

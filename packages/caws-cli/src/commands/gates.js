@@ -46,7 +46,11 @@ async function gatesCommand(options = {}) {
       const { execSync } = require('child_process');
       if (context === 'commit') {
         try {
-          stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf8' })
+          stagedFiles = execSync('git diff --cached --name-only', {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
             .trim()
             .split('\n')
             .filter(Boolean);
@@ -58,7 +62,12 @@ async function gatesCommand(options = {}) {
       } else if (context === 'cli') {
         // For CLI context, use all tracked files so gates can provide meaningful analysis
         try {
-          stagedFiles = execSync('git ls-files', { cwd: projectRoot, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
+          stagedFiles = execSync('git ls-files', {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            maxBuffer: 10 * 1024 * 1024,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
             .trim()
             .split('\n')
             .filter(Boolean);

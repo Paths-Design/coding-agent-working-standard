@@ -12,6 +12,41 @@ const crypto = require('crypto');
 const yaml = require('js-yaml');
 const { execSync } = require('child_process');
 const { commandWrapper } = require('../utils/command-wrapper');
+const { resolveSpec } = require('../utils/spec-resolver');
+
+async function resolveProvenanceSpec(options = {}) {
+  try {
+    return await resolveSpec({
+      specId: options.specId,
+      specFile: options.specFile,
+      warnLegacy: false,
+    });
+  } catch (error) {
+    const shouldFallbackToLegacy =
+      !options.specId &&
+      !options.specFile &&
+      error.message.includes('schema violations');
+
+    if (!shouldFallbackToLegacy) {
+      throw error;
+    }
+
+    const legacyPath = path.join(process.cwd(), '.caws', 'working-spec.yaml');
+    if (!(await fs.pathExists(legacyPath))) {
+      throw error;
+    }
+
+    const legacyContent = await fs.readFile(legacyPath, 'utf8');
+    const legacySpec = yaml.load(legacyContent);
+
+    return {
+      path: legacyPath,
+      type: 'legacy',
+      spec: legacySpec,
+      degradedValidation: true,
+    };
+  }
+}
 
 /**
  * Get quality gates status from saved report
@@ -90,14 +125,8 @@ async function updateProvenance(options) {
   // Ensure output directory exists
   await fs.ensureDir(output);
 
-  // Load current working spec
-  const specPath = '.caws/working-spec.yaml';
-  if (!(await fs.pathExists(specPath))) {
-    throw new Error('Working spec not found - not in CAWS project');
-  }
-
-  const specContent = await fs.readFile(specPath, 'utf8');
-  const spec = yaml.load(specContent);
+  const resolved = await resolveProvenanceSpec(options);
+  const spec = resolved.spec;
 
   // Load existing provenance chain
   const provenanceChain = await loadProvenanceChain(output);
@@ -116,6 +145,9 @@ async function updateProvenance(options) {
       title: spec.title,
       risk_tier: spec.risk_tier,
       mode: spec.mode,
+      type: resolved.type,
+      path: resolved.path,
+      status: spec.status || null,
       waiver_ids: spec.waiver_ids || [],
     },
     quality_gates: getQualityGatesStatus(),
@@ -148,6 +180,10 @@ async function updateProvenance(options) {
 
   if (!quiet) {
     console.log(`Provenance updated for commit ${commit.substring(0, 8)}`);
+    console.log(`   Spec: ${spec.id} (${resolved.type}) -> ${resolved.path}`);
+    if (resolved.degradedValidation) {
+      console.log('   Note: using legacy spec metadata despite schema validation issues');
+    }
     console.log(`   Chain length: ${provenanceChain.length} entries`);
     console.log(`   Hash: ${newEntry.hash.substring(0, 16)}...`);
   }
@@ -929,16 +965,11 @@ async function initProvenance(options) {
   await fs.ensureDir(output);
   console.log(`Created provenance directory: ${output}`);
 
-  // Load working spec to validate CAWS project
-  const specPath = '.caws/working-spec.yaml';
-  if (!(await fs.pathExists(specPath))) {
-    console.log('');
-    console.log('Not in a CAWS project - missing working spec');
-    console.log('Run "caws init" first to create a CAWS project');
-    process.exit(1);
+  const resolved = await resolveProvenanceSpec(options);
+  console.log(`Found CAWS spec: ${resolved.spec.id} (${resolved.type})`);
+  if (resolved.degradedValidation) {
+    console.log('   Proceeding with legacy spec metadata despite schema validation issues');
   }
-
-  console.log('Found CAWS working spec');
 
   // Initialize empty chain
   const initialChain = [];
@@ -947,6 +978,11 @@ async function initProvenance(options) {
 
   // Create environment configuration hints
   const envConfig = {
+    spec: {
+      id: resolved.spec.id,
+      path: resolved.path,
+      type: resolved.type,
+    },
     cursor_tracking_api: cursorApi || process.env.CURSOR_TRACKING_API || 'not_configured',
     cursor_checkpoint_api: process.env.CURSOR_CHECKPOINT_API || 'not_configured',
     cursor_project_id: process.env.CURSOR_PROJECT_ID || 'not_configured',

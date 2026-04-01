@@ -10,6 +10,7 @@ const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { execSync } = require('child_process');
 const { safeAsync, outputResult } = require('../error-handler');
+const { findProjectRoot } = require('../utils/detection');
 
 // Import spec resolution system
 const { resolveSpec } = require('../utils/spec-resolver');
@@ -20,7 +21,8 @@ const { resolveSpec } = require('../utils/spec-resolver');
  * @returns {Promise<Object|null>} Change data or null
  */
 async function loadChange(changeId) {
-  const changesDir = '.caws/changes';
+  const projectRoot = findProjectRoot();
+  const changesDir = path.join(projectRoot, '.caws/changes');
   const changePath = path.join(changesDir, changeId);
 
   if (!(await fs.pathExists(changePath))) {
@@ -44,10 +46,11 @@ async function loadChange(changeId) {
       path: changePath,
       metadata,
       workingSpec,
+      workingSpecPath: (await fs.pathExists(workingSpecPath)) ? workingSpecPath : null,
       exists: true,
     };
   } catch (error) {
-    return null;
+    throw new Error(`Failed to load change '${changeId}': ${error.message}`);
   }
 }
 
@@ -57,18 +60,24 @@ async function loadChange(changeId) {
  * @returns {Promise<Object>} Validation result
  */
 async function validateAcceptanceCriteria(workingSpec) {
-  if (!workingSpec || !workingSpec.acceptance_criteria) {
+  const criteria = Array.isArray(workingSpec?.acceptance_criteria)
+    ? workingSpec.acceptance_criteria
+    : Array.isArray(workingSpec?.acceptance)
+      ? workingSpec.acceptance
+      : [];
+
+  if (!workingSpec || criteria.length === 0) {
     return {
       valid: false,
       message: 'No acceptance criteria found in working spec',
     };
   }
 
-  const criteria = workingSpec.acceptance_criteria;
+  const hasCompletionTracking = criteria.some((criterion) => criterion.completed !== undefined);
   const incomplete = [];
 
   for (const criterion of criteria) {
-    if (!criterion.completed) {
+    if (criterion.completed === false) {
       incomplete.push(criterion.id || 'unknown');
     }
   }
@@ -77,6 +86,13 @@ async function validateAcceptanceCriteria(workingSpec) {
     return {
       valid: false,
       message: `Incomplete acceptance criteria: ${incomplete.join(', ')}`,
+    };
+  }
+
+  if (!hasCompletionTracking) {
+    return {
+      valid: true,
+      message: `Acceptance criteria present (${criteria.length}); no explicit completion flags found`,
     };
   }
 
@@ -212,8 +228,8 @@ async function validateQualityGates(_changeId) {
  * @param {Object} change - Change data
  * @returns {Promise<string>} Summary text
  */
-async function generateChangeSummary(change) {
-  const { workingSpec, metadata } = change;
+async function generateChangeSummary(change, workingSpec) {
+  const { metadata } = change;
 
   let summary = `# Change Summary: ${change.id}\n\n`;
 
@@ -267,7 +283,7 @@ async function archiveChange(change) {
  * @param {Object} change - Change data
  * @returns {Promise<void>}
  */
-async function updateProvenance(change) {
+async function updateProvenance(change, specSelection) {
   const provenanceDir = '.caws/provenance';
   const chainPath = path.join(provenanceDir, 'chain.json');
 
@@ -284,8 +300,11 @@ async function updateProvenance(change) {
       action: 'change_completed',
       change_id: change.id,
       metadata: {
-        title: change.workingSpec?.title,
-        risk_tier: change.workingSpec?.risk_tier,
+        title: specSelection?.spec?.title || change.workingSpec?.title,
+        risk_tier: specSelection?.spec?.risk_tier || change.workingSpec?.risk_tier,
+        spec_id: specSelection?.spec?.id || change.workingSpec?.id || null,
+        spec_path: specSelection?.path || change.workingSpecPath || null,
+        spec_type: specSelection?.type || (change.workingSpecPath ? 'change-snapshot' : null),
         files_changed: change.metadata?.files_changed || 0,
         lines_added: change.metadata?.lines_added || 0,
         lines_removed: change.metadata?.lines_removed || 0,
@@ -309,9 +328,19 @@ async function updateProvenance(change) {
  * @param {Object} validation - Validation result
  * @param {Object} qualityGates - Quality gates result
  */
-function displayArchiveResults(change, validation, qualityGates) {
+function displayArchiveResults(change, validation, qualityGates, specSelection) {
   console.log(chalk.bold.cyan(`\nArchiving Change: ${change.id}`));
   console.log(chalk.cyan('==============================================\n'));
+
+  if (specSelection?.spec) {
+    console.log(chalk.blue('Spec Context:'));
+    console.log(
+      chalk.gray(
+        `   ${specSelection.spec.id || 'unknown'} (${specSelection.type}) -> ${specSelection.path}`
+      )
+    );
+    console.log('');
+  }
 
   // Validation status
   if (validation.valid) {
@@ -363,21 +392,26 @@ async function archiveCommand(changeId, options = {}) {
       }
 
       // Resolve spec using priority system
-      let workingSpec = change.workingSpec;
-      if (!workingSpec && options.specId) {
-        // If change doesn't have a working spec but spec-id is provided, load it
-        try {
-          const resolved = await resolveSpec({
-            specId: options.specId,
-            warnLegacy: false,
-          });
-          workingSpec = resolved.spec;
-        } catch (error) {
-          console.log(
-            chalk.yellow(`Could not load spec '${options.specId}': ${error.message}`)
-          );
-        }
+      let specSelection = null;
+      if (options.specId || options.specFile) {
+        specSelection = await resolveSpec({
+          specId: options.specId,
+          specFile: options.specFile,
+          warnLegacy: false,
+        });
+      } else if (change.workingSpec) {
+        specSelection = {
+          path: change.workingSpecPath || path.join(change.path, 'working-spec.yaml'),
+          type: 'change-snapshot',
+          spec: change.workingSpec,
+        };
+      } else {
+        specSelection = await resolveSpec({
+          warnLegacy: false,
+        });
       }
+
+      const workingSpec = specSelection.spec;
 
       // Validate acceptance criteria
       const validation = await validateAcceptanceCriteria(workingSpec);
@@ -386,7 +420,7 @@ async function archiveCommand(changeId, options = {}) {
       const qualityGates = await validateQualityGates(changeId);
 
       // Display results
-      displayArchiveResults(change, validation, qualityGates);
+      displayArchiveResults(change, validation, qualityGates, specSelection);
 
       // Check if we should proceed with archival
       if (!validation.valid) {
@@ -423,7 +457,7 @@ async function archiveCommand(changeId, options = {}) {
       change.metadata.archived = true;
 
       // Generate and save summary
-      const summary = await generateChangeSummary(change);
+      const summary = await generateChangeSummary(change, workingSpec);
       const summaryPath = path.join(change.path, 'archive-summary.md');
       await fs.writeFile(summaryPath, summary);
 
@@ -431,7 +465,7 @@ async function archiveCommand(changeId, options = {}) {
       await archiveChange(change);
 
       // Update provenance
-      await updateProvenance(change);
+      await updateProvenance(change, specSelection);
 
       console.log(chalk.green(`\nSuccessfully archived change: ${changeId}`));
 
@@ -439,6 +473,11 @@ async function archiveCommand(changeId, options = {}) {
         command: 'archive',
         change: changeId,
         archived: true,
+        specSelection: {
+          id: workingSpec?.id || null,
+          path: specSelection?.path || null,
+          type: specSelection?.type || null,
+        },
         validation: validation.valid,
         qualityGates: qualityGates.valid,
         summary: summary,

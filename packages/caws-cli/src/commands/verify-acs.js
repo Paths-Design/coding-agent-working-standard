@@ -7,13 +7,10 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { execFileSync } = require('child_process');
 const { findProjectRoot } = require('../utils/detection');
-
-const SPECS_DIR = '.caws/specs';
-const TERMINAL_STATUSES = new Set(['completed', 'closed', 'archived']);
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Detect the project's test runner from config files.
@@ -319,55 +316,6 @@ function verifySpec(spec, projectRoot, options = {}) {
 }
 
 /**
- * Load all active specs from .caws/specs/
- * @param {string} projectRoot
- * @param {string} [targetSpecId] - If provided, only load this spec
- * @returns {Array<{path: string, spec: Object}>}
- */
-function loadSpecs(projectRoot, targetSpecId) {
-  const specs = [];
-  const specsDir = path.join(projectRoot, SPECS_DIR);
-
-  if (targetSpecId) {
-    const specPath = path.join(specsDir, `${targetSpecId}.yaml`);
-    if (!fs.existsSync(specPath)) {
-      const ymlPath = path.join(specsDir, `${targetSpecId}.yml`);
-      if (!fs.existsSync(ymlPath)) {
-        throw new Error(`Spec '${targetSpecId}' not found at ${specPath}`);
-      }
-      specs.push({ path: ymlPath, spec: yaml.load(fs.readFileSync(ymlPath, 'utf8')) });
-    } else {
-      specs.push({ path: specPath, spec: yaml.load(fs.readFileSync(specPath, 'utf8')) });
-    }
-    return specs;
-  }
-
-  // Also check working-spec.yaml
-  const workingSpec = path.join(projectRoot, '.caws/working-spec.yaml');
-  if (fs.existsSync(workingSpec)) {
-    try {
-      const s = yaml.load(fs.readFileSync(workingSpec, 'utf8'));
-      if (s && !TERMINAL_STATUSES.has(s.status)) {
-        specs.push({ path: workingSpec, spec: s });
-      }
-    } catch (_) { /* ignore unreadable config */ }
-  }
-
-  if (fs.existsSync(specsDir)) {
-    for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
-      try {
-        const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
-        if (s && !TERMINAL_STATUSES.has(s.status)) {
-          specs.push({ path: path.join(specsDir, f), spec: s });
-        }
-      } catch (_) { /* ignore unreadable config */ }
-    }
-  }
-
-  return specs;
-}
-
-/**
  * Main command handler
  */
 async function verifyAcsCommand(options = {}) {
@@ -379,33 +327,26 @@ async function verifyAcsCommand(options = {}) {
     process.exit(1);
   }
 
-  const specs = loadSpecs(projectRoot, options.specId);
-
-  if (specs.length === 0) {
-    console.log(chalk.yellow('No active specs found.'));
-    return;
-  }
+  const resolved = await resolveSpec({
+    specId: options.specId,
+    warnLegacy: false,
+  });
 
   const allResults = [];
   let totalAcs = 0, totalMechanical = 0, totalPass = 0, totalFail = 0, totalUnchecked = 0;
+  const result = verifySpec(resolved.spec, projectRoot, {
+    run: options.run || false,
+    runner: options.runner,
+  });
+  result.path = resolved.path;
+  result.type = resolved.type;
+  allResults.push(result);
 
-  for (const { spec } of specs) {
-    const acs = extractACs(spec);
-    if (acs.length === 0) continue;
-
-    const result = verifySpec(spec, projectRoot, {
-      run: options.run || false,
-      runner: options.runner,
-    });
-    allResults.push(result);
-
-    // Tally
-    for (const r of result.results) {
-      totalAcs++;
-      if (r.status === 'PASS') { totalPass++; totalMechanical++; }
-      else if (r.status === 'FAIL') { totalFail++; totalMechanical++; }
-      else { totalUnchecked++; }
-    }
+  for (const r of result.results) {
+    totalAcs++;
+    if (r.status === 'PASS') { totalPass++; totalMechanical++; }
+    else if (r.status === 'FAIL') { totalFail++; totalMechanical++; }
+    else { totalUnchecked++; }
   }
 
   // Output
@@ -421,7 +362,11 @@ async function verifyAcsCommand(options = {}) {
   // Table output
   for (const result of allResults) {
     console.log(chalk.cyan(`\n## ${result.specId} — ${result.title}`));
-    console.log(chalk.gray(`   Test runner: ${result.runner} | Mode: ${options.run ? 'run' : 'collect-only'}`));
+    console.log(
+      chalk.gray(
+        `   Test runner: ${result.runner} | Mode: ${options.run ? 'run' : 'collect-only'} | Spec: ${result.type} -> ${result.path}`
+      )
+    );
     console.log();
 
     const widths = { id: 8, desc: 40, method: 14, status: 10 };

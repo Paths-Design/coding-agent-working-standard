@@ -14,7 +14,11 @@ const {
 } = require('../validation/spec-validation');
 
 // Import spec resolution system
-const { resolveSpec, suggestMigration } = require('../utils/spec-resolver');
+const {
+  resolveSpec,
+  suggestMigration,
+  loadSpecsRegistry,
+} = require('../utils/spec-resolver');
 
 /**
  * Validate command handler
@@ -75,12 +79,14 @@ async function validateCommand(specFile, options = {}) {
       // Check scope conflicts (if multiple specs exist)
       const { checkMultiSpecStatus } = require('../utils/spec-resolver');
       const multiSpecStatus = await checkMultiSpecStatus();
+      const registry =
+        multiSpecStatus.registry ||
+        await loadSpecsRegistry();
+      const specIds = Object.keys(registry.specs || {});
 
-      if (multiSpecStatus.specCount > 1) {
+      if (specIds.length > 1) {
         const { checkScopeConflicts } = require('../utils/spec-resolver');
-        const conflicts = await checkScopeConflicts(
-          Object.keys(multiSpecStatus.registry?.specs || {})
-        );
+        const conflicts = await checkScopeConflicts(specIds);
 
         if (conflicts.length > 0) {
           const myConflicts = conflicts.filter((c) => c.spec1 === spec.id || c.spec2 === spec.id);
@@ -236,7 +242,8 @@ async function validateCommand(specFile, options = {}) {
     if (error.message === 'Spec ID required when multiple specs exist' && !options.specId) {
       const { checkMultiSpecStatus } = require('../utils/spec-resolver');
       const status = await checkMultiSpecStatus();
-      const specIds = Object.keys(status.registry?.specs || {});
+      const registry = status.registry || await loadSpecsRegistry();
+      const specIds = Object.keys(registry.specs || {});
 
       if (specIds.length === 0) {
         console.error(chalk.red('No specs found in registry'));

@@ -72,10 +72,11 @@ function getProjectRoot() {
  * @param {string} [options.specFile] - Explicit file path override
  * @param {boolean} [options.warnLegacy=true] - Warn when falling back to legacy spec
  * @param {boolean} [options.interactive=false] - Use interactive spec selection for multiple specs
+ * @param {boolean} [options.quiet=false] - Suppress informational logging for machine-readable output
  * @returns {Promise<{path: string, type: 'feature' | 'legacy', spec: Object}>}
  */
 async function resolveSpec(options = {}) {
-  const { specId, specFile, warnLegacy = true, interactive = false } = options;
+  const { specId, specFile, warnLegacy = true, interactive = false, quiet = false } = options;
 
   // 1. Explicit file path takes highest priority
   if (specFile) {
@@ -107,7 +108,9 @@ async function resolveSpec(options = {}) {
       const spec = yaml.load(content);
       validateSpecSchema(spec, featurePath);
 
-      console.log(chalk.green(`Using feature-specific spec: ${specId}`));
+      if (!quiet) {
+        console.log(chalk.green(`Using feature-specific spec: ${specId}`));
+      }
 
       return {
         path: featurePath,
@@ -136,7 +139,9 @@ async function resolveSpec(options = {}) {
       const spec = yaml.load(content);
       validateSpecSchema(spec, singleSpecPath);
 
-      console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
+      if (!quiet) {
+        console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
+      }
 
       return {
         path: singleSpecPath,
@@ -146,7 +151,9 @@ async function resolveSpec(options = {}) {
     }
   } else if (specIds.length > 1) {
     // Multiple specs - require explicit selection with enhanced guidance
-    console.error(chalk.red('Multiple specs detected. Please specify which one:'));
+    if (!quiet) {
+      console.error(chalk.red('Multiple specs detected. Please specify which one:'));
+    }
 
     // Show specs with details
     const specsInfo = [];
@@ -158,7 +165,9 @@ async function resolveSpec(options = {}) {
         try {
           spec = yaml.load(content);
         } catch (yamlError) {
-          console.log(chalk.yellow(`   - ${id} (YAML syntax error: ${yamlError.message})`));
+          if (!quiet) {
+            console.log(chalk.yellow(`   - ${id} (YAML syntax error: ${yamlError.message})`));
+          }
           specsInfo.push({ id, type: 'unknown', status: 'unknown', title: 'YAML error' });
           continue;
         }
@@ -168,14 +177,18 @@ async function resolveSpec(options = {}) {
           status === 'active' ? chalk.green : status === 'completed' ? chalk.blue : chalk.yellow;
         const typeColor = SPEC_TYPES[type] ? SPEC_TYPES[type].color : chalk.white;
 
-        console.log(
-          chalk.yellow(
-            `   - ${id} ${typeColor(`(${type})`)} ${statusColor(`[${status}]`)} - ${spec.title || 'Untitled'}`
-          )
-        );
+        if (!quiet) {
+          console.log(
+            chalk.yellow(
+              `   - ${id} ${typeColor(`(${type})`)} ${statusColor(`[${status}]`)} - ${spec.title || 'Untitled'}`
+            )
+          );
+        }
         specsInfo.push({ id, type, status, title: spec.title || 'Untitled' });
       } catch (error) {
-        console.log(chalk.yellow(`   - ${id} (error loading details: ${error.message})`));
+        if (!quiet) {
+          console.log(chalk.yellow(`   - ${id} (error loading details: ${error.message})`));
+        }
         specsInfo.push({ id, type: 'unknown', status: 'unknown', title: 'Error loading' });
       }
     }
@@ -190,14 +203,17 @@ async function resolveSpec(options = {}) {
           specId: selectedSpecId,
           warnLegacy,
           interactive: false, // Prevent infinite recursion
+          quiet,
         });
       } catch (error) {
         throw new Error(`Interactive selection failed: ${error.message}`);
       }
     }
 
-    console.log(chalk.blue('\n   Usage: caws <command> --spec-id <spec-id>'));
-    console.log(chalk.gray(`   Example: caws validate --spec-id ${specIds[0]}`));
+    if (!quiet) {
+      console.log(chalk.blue('\n   Usage: caws <command> --spec-id <spec-id>'));
+      console.log(chalk.gray(`   Example: caws validate --spec-id ${specIds[0]}`));
+    }
 
     // Suggest most likely spec (active first, then by type priority)
     const priorityOrder = { active: 0, draft: 1, completed: 2 };
@@ -215,11 +231,15 @@ async function resolveSpec(options = {}) {
       return aTypePriority - bTypePriority;
     });
 
-    console.log(chalk.green('\nQuick suggestion:'));
-    console.log(chalk.gray(`   Try: caws <command> --spec-id ${sortedSpecs[0]}`));
+    if (!quiet) {
+      console.log(chalk.green('\nQuick suggestion:'));
+      console.log(chalk.gray(`   Try: caws <command> --spec-id ${sortedSpecs[0]}`));
+    }
 
     // Interactive mode suggestion
-    console.log(chalk.blue('\n   Interactive mode: caws <command> --interactive-spec-selection'));
+    if (!quiet) {
+      console.log(chalk.blue('\n   Interactive mode: caws <command> --interactive-spec-selection'));
+    }
 
     throw new Error('Spec ID required when multiple specs exist');
   }
@@ -233,7 +253,7 @@ async function resolveSpec(options = {}) {
     const spec = yaml.load(content);
     validateSpecSchema(spec, legacyPath);
 
-    if (warnLegacy) {
+    if (warnLegacy && !quiet) {
       console.log(chalk.yellow('Using legacy working-spec.yaml'));
       console.log(chalk.gray('   For multi-agent workflows, use feature-specific specs:'));
       console.log(chalk.blue('   caws specs create <feature-id>'));
@@ -270,7 +290,19 @@ async function loadSpecsRegistry() {
 
   try {
     const registry = await fs.readJson(registryPath);
-    return registry;
+    const sanitizedSpecs = {};
+
+    for (const [id, entry] of Object.entries(registry.specs || {})) {
+      const specPath = path.join(getProjectRoot(), SPECS_DIR, entry.path);
+      if (await fs.pathExists(specPath)) {
+        sanitizedSpecs[id] = entry;
+      }
+    }
+
+    return {
+      ...registry,
+      specs: sanitizedSpecs,
+    };
   } catch (error) {
     return {
       version: '1.0.0',
@@ -413,7 +445,10 @@ async function checkScopeConflicts(specIds) {
 
   // Load all specs and their scopes
   for (const id of specIds) {
-    const specPath = path.join(SPECS_DIR, registry.specs[id].path);
+    const entry = registry.specs[id];
+    if (!entry) continue;
+
+    const specPath = path.join(getProjectRoot(), SPECS_DIR, entry.path);
 
     try {
       const content = await fs.readFile(specPath, 'utf8');

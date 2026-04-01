@@ -10,7 +10,7 @@ const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 
 // Import spec resolution system
-const { resolveSpec } = require('../utils/spec-resolver');
+const { resolveSpec, loadSpecsRegistry } = require('../utils/spec-resolver');
 
 /**
  * Plan templates for different spec types
@@ -86,15 +86,11 @@ const PLAN_TEMPLATES = {
  * @returns {Promise<Object|null>} Spec data or null
  */
 async function loadSpecForPlanning(specId) {
-  try {
-    const resolved = await resolveSpec({
-      specId,
-      warnLegacy: false,
-    });
-    return resolved.spec;
-  } catch (error) {
-    return null;
-  }
+  const resolved = await resolveSpec({
+    specId,
+    warnLegacy: false,
+  });
+  return resolved.spec;
 }
 
 /**
@@ -398,21 +394,18 @@ async function planCommand(action, options = {}) {
 
             if (status.specCount === 1) {
               // Use the single spec automatically
-              const registry = await require('../utils/spec-resolver').loadSpecsRegistry();
+              const registry = await loadSpecsRegistry();
               const singleSpecId = Object.keys(registry.specs)[0];
               console.log(chalk.blue(`Auto-detected single spec: ${singleSpecId}`));
 
               const spec = await loadSpecForPlanning(singleSpecId);
-              if (!spec) {
-                throw new Error(`Auto-detected spec '${singleSpecId}' could not be loaded`);
-              }
-
               await generateAndDisplayPlan(spec, singleSpecId, options);
             } else if (status.specCount > 1) {
+              const registry = await loadSpecsRegistry();
               throw new Error(
                 'Multiple specs detected. Please specify which one: caws plan generate --spec-id <id>\n' +
                   'Available specs: ' +
-                  Object.keys(status.registry?.specs || {}).join(', ')
+                  Object.keys(registry.specs || {}).join(', ')
               );
             } else {
               throw new Error('No specs found. Create a spec first: caws specs create <id>');
@@ -420,9 +413,6 @@ async function planCommand(action, options = {}) {
           } else {
             // Load spec for planning
             const spec = await loadSpecForPlanning(specId);
-            if (!spec) {
-              throw new Error(`Spec '${specId}' not found`);
-            }
 
             return await generateAndDisplayPlan(spec, specId, options);
           }

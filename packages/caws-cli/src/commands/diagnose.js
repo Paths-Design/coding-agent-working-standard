@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 // Import utilities
 const { checkTypeScriptTestConfig } = require('../utils/typescript-detector');
@@ -17,29 +18,23 @@ const { configureJestForTypeScript } = require('../generators/jest-config-genera
  * Health check: Working spec validity
  * @returns {Promise<Object>} Check result
  */
-async function checkWorkingSpec() {
-  const specPath = '.caws/working-spec.yaml';
-
-  if (!(await fs.pathExists(specPath))) {
-    return {
-      passed: false,
-      severity: 'high',
-      message: 'Working spec not found',
-      fix: 'Initialize CAWS: caws init .',
-      autoFixable: false,
-    };
-  }
-
+async function checkWorkingSpec(options = {}) {
   try {
-    const content = await fs.readFile(specPath, 'utf8');
-    const spec = yaml.load(content);
+    const resolved = await resolveSpec({
+      specId: options.specId,
+      specFile: options.spec,
+      warnLegacy: false,
+      interactive: false,
+    });
+    const spec = resolved.spec;
+    const specPath = path.relative(process.cwd(), resolved.path);
 
     // Basic validation
     if (!spec.id || !spec.title || !spec.risk_tier) {
       return {
         passed: false,
         severity: 'high',
-        message: 'Working spec missing required fields',
+        message: `Spec missing required fields (${specPath})`,
         fix: 'Run: caws validate for details',
         autoFixable: false,
       };
@@ -47,13 +42,31 @@ async function checkWorkingSpec() {
 
     return {
       passed: true,
-      message: 'Working spec is valid',
+      message: `Spec is valid (${specPath})`,
     };
   } catch (error) {
+    if (error.message === 'Spec ID required when multiple specs exist' && !options.specId) {
+      return {
+        passed: false,
+        severity: 'high',
+        message: 'Multiple specs detected, but no --spec-id was provided',
+        fix: 'Run: caws diagnose --spec-id <id>',
+        autoFixable: false,
+      };
+    }
+    if (error.message.includes('No CAWS spec found')) {
+      return {
+        passed: false,
+        severity: 'high',
+        message: 'No CAWS spec found',
+        fix: 'Initialize CAWS: caws init . or create a feature spec with caws specs create <id>',
+        autoFixable: false,
+      };
+    }
     return {
       passed: false,
       severity: 'high',
-      message: `Working spec has errors: ${error.message}`,
+      message: `Spec has errors: ${error.message}`,
       fix: 'Run: caws validate for details',
       autoFixable: false,
     };
@@ -285,9 +298,9 @@ async function checkCAWSTools() {
  * Run all health checks
  * @returns {Promise<Object>} Diagnosis results
  */
-async function runDiagnosis() {
+async function runDiagnosis(options = {}) {
   const checks = [
-    { name: 'Working spec validity', fn: checkWorkingSpec },
+    { name: 'Working spec validity', fn: () => checkWorkingSpec(options) },
     { name: 'Git repository', fn: checkGitSetup },
     { name: 'Git hooks', fn: checkGitHooks },
     { name: 'TypeScript configuration', fn: checkTypeScriptConfig },
@@ -447,7 +460,7 @@ async function applyAutoFixes(results) {
 async function diagnoseCommand(options = {}) {
   try {
     // Run all health checks
-    const results = await runDiagnosis();
+    const results = await runDiagnosis(options);
 
     // Display results
     displayResults(results);
