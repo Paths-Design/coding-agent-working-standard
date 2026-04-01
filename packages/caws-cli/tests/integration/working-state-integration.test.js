@@ -8,8 +8,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const yaml = require('js-yaml');
-
 const { loadState, saveState, initializeState, STATE_DIR } = require('../../src/utils/working-state');
 const { recordValidation, recordEvaluation, recordGates, recordACVerification } = require('../../src/utils/working-state');
 

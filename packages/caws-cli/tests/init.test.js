@@ -159,14 +159,9 @@ describe('caws init --non-interactive', () => {
   test('init is idempotent — running twice does not crash or corrupt files', async () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
-    // Capture state after first init
-    const specAfterFirst = fs.readFileSync(
-      path.join(testDir, '.caws', 'working-spec.yaml'),
-      'utf8'
-    );
-    const registryAfterFirst = fs.readJsonSync(
-      path.join(testDir, '.caws', 'specs', 'registry.json')
-    );
+    // Verify first init produced valid files
+    expect(fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(testDir, '.caws', 'specs', 'registry.json'))).toBe(true);
 
     // Second init should not throw
     await expect(
