@@ -89,6 +89,24 @@ async function run({ stagedFiles, spec, _policy, projectRoot, riskTier, context 
       return { status: 'fail', messages };
     }
 
+    // Emit budget:pressure if usage > 80% but still compliant
+    try {
+      const filePercent = budget.max_files > 0 ? stats.files_changed / budget.max_files : 0;
+      const locPercent = budget.max_loc > 0 ? stats.lines_changed / budget.max_loc : 0;
+      if (filePercent > 0.8 || locPercent > 0.8) {
+        const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
+        lifecycle.emit(EVENTS.BUDGET_PRESSURE, {
+          specId: spec?.id || null,
+          filesUsed: stats.files_changed,
+          filesLimit: budget.max_files,
+          locUsed: stats.lines_changed,
+          locLimit: budget.max_loc,
+          percentUsed: Math.round(Math.max(filePercent, locPercent) * 100),
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch { /* non-fatal */ }
+
     return { status: 'pass', messages };
   } catch (err) {
     return { status: 'fail', messages: [`Budget check error: ${err.message}`] };

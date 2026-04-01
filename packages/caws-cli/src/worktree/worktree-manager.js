@@ -10,6 +10,7 @@ const path = require('path');
 const chalk = require('chalk');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 const { getAgentSessionId } = require('../utils/agent-session');
+const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
 
 const WORKTREES_DIR = '.caws/worktrees';
 const REGISTRY_FILE = '.caws/worktrees.json';
@@ -995,6 +996,14 @@ function mergeWorktree(name, options = {}) {
     };
   }
 
+  // Emit merge:pre event
+  try {
+    lifecycle.emit(EVENTS.MERGE_PRE, {
+      worktreeName: name, branch: entry.branch, baseBranch, conflicts,
+      timestamp: new Date().toISOString(),
+    });
+  } catch { /* non-fatal */ }
+
   // Ensure CWD is the repo root BEFORE destroying the worktree.
   // If the caller's CWD is inside the worktree directory, destroying it
   // removes the CWD out from under the process, causing all subsequent
@@ -1026,14 +1035,15 @@ function mergeWorktree(name, options = {}) {
       { cwd: root, stdio: 'pipe' }
     );
   } catch (error) {
-    return {
-      name,
-      branch: entry.branch,
-      baseBranch,
-      merged: false,
+    const failResult = {
+      name, branch: entry.branch, baseBranch, merged: false,
       conflicts: [`Merge failed: ${error.message}`],
       message: 'Merge conflicts detected. Resolve with git and commit.',
     };
+    try {
+      lifecycle.emit(EVENTS.MERGE_POST, { ...failResult, timestamp: new Date().toISOString() });
+    } catch { /* non-fatal */ }
+    return failResult;
   }
 
   // Delete branch after successful merge
@@ -1045,13 +1055,11 @@ function mergeWorktree(name, options = {}) {
     }
   }
 
-  return {
-    name,
-    branch: entry.branch,
-    baseBranch,
-    merged: true,
-    conflicts: [],
-  };
+  const mergeResult = { name, branch: entry.branch, baseBranch, merged: true, conflicts: [] };
+  try {
+    lifecycle.emit(EVENTS.MERGE_POST, { ...mergeResult, timestamp: new Date().toISOString() });
+  } catch { /* non-fatal */ }
+  return mergeResult;
 }
 
 /**

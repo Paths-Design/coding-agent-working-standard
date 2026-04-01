@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { PolicyManager } = require('../policy/PolicyManager');
 const WaiversManager = require('../waivers-manager');
+const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
 
 /**
  * Auto-discover gate modules from the gates directory
@@ -136,6 +137,29 @@ async function evaluateGates({ projectRoot, stagedFiles, spec, context }) {
     report.warnings = report.warnings || [];
     report.warnings.push('No policy.yaml found — using built-in defaults. Create .caws/policy.yaml for project-specific gate configuration.');
   }
+
+  // Emit lifecycle events
+  try {
+    if (blocked.length > 0) {
+      for (const b of blocked) {
+        lifecycle.emit(EVENTS.GATES_BLOCKED, {
+          specId: spec?.id || null,
+          gateName: b.name,
+          mode: b.mode,
+          messages: b.messages,
+          context,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } else {
+      lifecycle.emit(EVENTS.GATES_PASSED, {
+        specId: spec?.id || null,
+        summary: report.summary,
+        context,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch { /* non-fatal */ }
 
   return report;
 }

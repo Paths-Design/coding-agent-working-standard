@@ -6,10 +6,11 @@
  */
 
 const { evaluateGates } = require('../gates/pipeline');
-const { formatText, formatJson } = require('../gates/format');
+const { formatText, formatJson, formatEnrichedText } = require('../gates/format');
+const { enrichGateResults } = require('../gates/feedback');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { commandWrapper } = require('../utils/command-wrapper');
-const { recordGates } = require('../utils/working-state');
+const { recordGates, loadState } = require('../utils/working-state');
 
 /**
  * Run quality gates via the v2 pipeline
@@ -87,7 +88,22 @@ async function gatesCommand(options = {}) {
       if (options.json || options.format === 'json') {
         console.log(formatJson(report));
       } else if (!options.quiet) {
-        console.log(formatText(report));
+        // Enrich feedback on failure or --verbose
+        if (!report.passed || options.verbose) {
+          try {
+            const state = spec?.id ? loadState(spec.id, projectRoot) : null;
+            const enrichments = enrichGateResults(report, { spec, state, projectRoot });
+            if (enrichments.size > 0) {
+              console.log(formatEnrichedText(report, enrichments));
+            } else {
+              console.log(formatText(report));
+            }
+          } catch {
+            console.log(formatText(report));
+          }
+        } else {
+          console.log(formatText(report));
+        }
       }
 
       // Exit with appropriate code

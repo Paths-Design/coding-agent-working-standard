@@ -434,3 +434,51 @@ describe('computeNextActions', () => {
     expect(actions[0]).toContain('Ready for merge');
   });
 });
+
+// ============================================================
+// Phase transition events
+// ============================================================
+
+describe('phase transition events', () => {
+  const { lifecycle, EVENTS } = require('../src/utils/lifecycle-events');
+
+  afterEach(() => {
+    lifecycle.removeAllListeners();
+  });
+
+  test('emits phase:transition when phase changes via updateState', () => {
+    saveState('pt', initializeState('pt'), tmpDir);
+
+    let received = null;
+    lifecycle.on(EVENTS.PHASE_TRANSITION, (payload) => { received = payload; });
+
+    // First update: validation fails → spec-authoring (from not-started)
+    updateState('pt', {
+      validation: { last_run: new Date().toISOString(), passed: false, error_count: 2, warning_count: 0 },
+    }, { projectRoot: tmpDir });
+
+    expect(received).not.toBeNull();
+    expect(received.specId).toBe('pt');
+    expect(received.oldPhase).toBe('not-started');
+    expect(received.newPhase).toBe('spec-authoring');
+  });
+
+  test('does not emit when phase stays the same', () => {
+    saveState('pt2', initializeState('pt2'), tmpDir);
+
+    // First: move to spec-authoring
+    updateState('pt2', {
+      validation: { last_run: new Date().toISOString(), passed: false, error_count: 1, warning_count: 0 },
+    }, { projectRoot: tmpDir });
+
+    let callCount = 0;
+    lifecycle.on(EVENTS.PHASE_TRANSITION, () => { callCount++; });
+
+    // Second update still fails → stays in spec-authoring
+    updateState('pt2', {
+      validation: { last_run: new Date().toISOString(), passed: false, error_count: 3, warning_count: 0 },
+    }, { projectRoot: tmpDir });
+
+    expect(callCount).toBe(0);
+  });
+});

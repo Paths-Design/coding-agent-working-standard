@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { lifecycle, EVENTS } = require('./lifecycle-events');
 
 const STATE_DIR = '.caws/state';
 const STATE_SCHEMA_VERSION = 'caws.state.v1';
@@ -162,8 +163,19 @@ function updateState(specId, patch, options = {}) {
   // Recompute derived fields
   state.blockers = computeBlockers(state);
   state.next_actions = computeNextActions(state, spec);
+  const oldPhase = state.phase;
   state.phase = computePhase(state, spec);
   state.updated_at = new Date().toISOString();
+
+  // Emit phase transition event
+  if (oldPhase && oldPhase !== state.phase) {
+    try {
+      lifecycle.emit(EVENTS.PHASE_TRANSITION, {
+        specId, oldPhase, newPhase: state.phase,
+        timestamp: state.updated_at,
+      });
+    } catch { /* non-fatal */ }
+  }
 
   saveState(specId, state, projectRoot);
   return state;

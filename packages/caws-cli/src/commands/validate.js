@@ -20,6 +20,7 @@ const {
   loadSpecsRegistry,
 } = require('../utils/spec-resolver');
 const { recordValidation } = require('../utils/working-state');
+const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
 
 /**
  * Validate command handler
@@ -154,6 +155,26 @@ async function validateCommand(specFile, options = {}) {
         error_count: (finalResult.errors || []).length,
         warning_count: (finalResult.warnings || []).length,
       });
+    } catch { /* non-fatal */ }
+
+    // Emit lifecycle event
+    try {
+      const grade = finalResult.complianceScore !== undefined
+        ? getComplianceGrade(finalResult.complianceScore)
+        : null;
+      if (finalResult.valid) {
+        lifecycle.emit(EVENTS.VALIDATION_PASSED, {
+          specId: spec.id, grade, complianceScore: finalResult.complianceScore,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        lifecycle.emit(EVENTS.VALIDATION_FAILED, {
+          specId: spec.id, errors: finalResult.errors || [],
+          errorCount: (finalResult.errors || []).length,
+          warningCount: (finalResult.warnings || []).length,
+          timestamp: new Date().toISOString(),
+        });
+      }
     } catch { /* non-fatal */ }
 
     // Format output based on requested format
