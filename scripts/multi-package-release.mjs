@@ -33,16 +33,7 @@ const PACKAGES = [
       tarballDir: 'dist',
     },
   },
-  {
-    name: '@paths.design/caws-mcp-server',
-    path: 'packages/caws-mcp-server',
-    scope: 'mcp-server',
-    tagFormat: 'caws-mcp-server-v${version}',
-    config: {
-      pkgRoot: 'packages/caws-mcp-server',
-    },
-  },
-  {
+{
     name: '@paths.design/caws-types',
     path: 'packages/caws-types',
     scope: 'caws-types',
