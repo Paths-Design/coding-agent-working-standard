@@ -14,6 +14,74 @@ const WORKTREES_DIR = '.caws/worktrees';
 const REGISTRY_FILE = '.caws/worktrees.json';
 const BRANCH_PREFIX = 'caws/';
 
+function findFeatureSpecPath(root, specId) {
+  if (!specId) return null;
+
+  const candidates = [
+    path.join(root, '.caws', 'specs', `${specId}.yaml`),
+    path.join(root, '.caws', 'specs', `${specId}.yml`),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
+  if (!specId) return;
+
+  const canonicalSpecPath = findFeatureSpecPath(root, specId);
+  const workingSpecPath = path.join(cawsDest, 'working-spec.yaml');
+
+  if (canonicalSpecPath) {
+    const destSpecsDir = path.join(cawsDest, 'specs');
+    const destSpecPath = path.join(destSpecsDir, path.basename(canonicalSpecPath));
+    fs.ensureDirSync(destSpecsDir);
+
+    // Keep a canonical feature-spec copy inside the worktree and align
+    // working-spec.yaml to that exact content for legacy-compatible commands.
+    const specContent = fs.readFileSync(canonicalSpecPath, 'utf8');
+    fs.writeFileSync(destSpecPath, specContent);
+    fs.writeFileSync(workingSpecPath, specContent);
+    return;
+  }
+
+  const { generateWorkingSpec } = require('../generators/working-spec');
+  const specContent = generateWorkingSpec({
+    projectId: specId,
+    projectTitle: `Worktree: ${worktreeName}`,
+    projectDescription: `Isolated worktree for ${worktreeName}`,
+    riskTier: 3,
+    projectMode: 'feature',
+    scopeIn: scope || 'src/',
+    scopeOut: 'node_modules/, dist/, build/',
+    maxFiles: 25,
+    maxLoc: 1000,
+    blastModules: scope || 'src',
+    dataMigration: false,
+    rollbackSlo: '5m',
+    projectThreats: '',
+    projectInvariants: 'System maintains data consistency',
+    acceptanceCriteria: 'Given current state, when action occurs, then expected result',
+    a11yRequirements: 'keyboard',
+    perfBudget: 250,
+    securityRequirements: 'validation',
+    contractType: '',
+    contractPath: '',
+    observabilityLogs: '',
+    observabilityMetrics: '',
+    observabilityTraces: '',
+    migrationPlan: '',
+    rollbackPlan: '',
+    needsOverride: false,
+    isExperimental: false,
+    aiConfidence: 0.8,
+    uncertaintyAreas: '',
+    complexityFactors: '',
+  });
+
+  fs.ensureDirSync(path.dirname(workingSpecPath));
+  fs.writeFileSync(workingSpecPath, specContent);
+}
+
 /**
  * Get the last commit info for a branch
  * @param {string} branch - Branch name
@@ -434,46 +502,16 @@ function createWorktree(name, options = {}) {
     }
   }
 
-  // Generate working spec if in standard+ mode and specId provided
+  // Materialize a worktree-local working spec. Prefer the canonical feature
+  // spec when it exists so isolated worktrees stay aligned with the main
+  // registry/resolver model.
   if (specId) {
     try {
-      const { generateWorkingSpec } = require('../generators/working-spec');
-      const specContent = generateWorkingSpec({
-        projectId: specId,
-        projectTitle: `Worktree: ${name}`,
-        projectDescription: `Isolated worktree for ${name}`,
-        riskTier: 3,
-        projectMode: 'feature',
-        scopeIn: scope || 'src/',
-        scopeOut: 'node_modules/, dist/, build/',
-        maxFiles: 25,
-        maxLoc: 1000,
-        blastModules: scope || 'src',
-        dataMigration: false,
-        rollbackSlo: '5m',
-        projectThreats: '',
-        projectInvariants: 'System maintains data consistency',
-        acceptanceCriteria: 'Given current state, when action occurs, then expected result',
-        a11yRequirements: 'keyboard',
-        perfBudget: 250,
-        securityRequirements: 'validation',
-        contractType: '',
-        contractPath: '',
-        observabilityLogs: '',
-        observabilityMetrics: '',
-        observabilityTraces: '',
-        migrationPlan: '',
-        rollbackPlan: '',
-        needsOverride: false,
-        isExperimental: false,
-        aiConfidence: 0.8,
-        uncertaintyAreas: '',
-        complexityFactors: '',
-      });
-      const specPath = path.join(cawsDest, 'working-spec.yaml');
-      fs.ensureDirSync(path.dirname(specPath));
-      fs.writeFileSync(specPath, specContent);
-    } catch {
+      materializeWorktreeSpec(root, cawsDest, specId, name, scope);
+    } catch (error) {
+      console.warn(
+        chalk.yellow(`Could not materialize spec '${specId}' for worktree '${name}': ${error.message}`)
+      );
       // Non-fatal: spec generation is optional
     }
   }
@@ -1110,4 +1148,6 @@ module.exports = {
   WORKTREES_DIR,
   REGISTRY_FILE,
   BRANCH_PREFIX,
+  findFeatureSpecPath,
+  materializeWorktreeSpec,
 };

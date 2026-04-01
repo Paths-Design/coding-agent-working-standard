@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const inquirer = require('inquirer');
 const chalk = require('chalk');
+const yaml = require('js-yaml');
 
 // Import shared utilities
 const { detectCAWSSetup } = require('../utils/detection');
@@ -27,6 +28,117 @@ const {
   getRecommendedIDEs,
   parseIDESelection,
 } = require('../utils/ide-detection');
+
+function buildInitialFeatureSpec(specContent, fallbackId) {
+  const parsed = yaml.load(specContent);
+  const riskTier =
+    typeof parsed.risk_tier === 'string'
+      ? parseInt(parsed.risk_tier.replace(/^T/i, ''), 10) || 3
+      : parsed.risk_tier || 3;
+  const aiConfidenceRaw = parsed.ai_assessment?.confidence_level;
+  const aiConfidence =
+    typeof aiConfidenceRaw === 'number' && aiConfidenceRaw <= 1
+      ? Math.max(1, Math.min(10, Math.round(aiConfidenceRaw * 10)))
+      : typeof aiConfidenceRaw === 'number'
+        ? Math.max(1, Math.min(10, Math.round(aiConfidenceRaw)))
+        : 8;
+  const normalizedContracts =
+    Array.isArray(parsed.contracts) && parsed.contracts.length > 0
+      ? parsed.contracts.map((contract, index) => ({
+          type: ['openapi', 'graphql', 'proto', 'pact'].includes(contract?.type)
+            ? contract.type
+            : 'openapi',
+          path:
+            contract?.path ||
+            (index === 0 ? 'docs/api/initial-feature.yaml' : `docs/api/contract-${index + 1}.yaml`),
+        }))
+      : riskTier <= 2
+        ? [{ type: 'openapi', path: 'docs/api/initial-feature.yaml' }]
+        : [];
+
+  return {
+    id: parsed.id || fallbackId,
+    title: parsed.title || 'New CAWS Project',
+    risk_tier: riskTier,
+    mode: parsed.mode || 'feature',
+    blast_radius: parsed.blast_radius || { modules: ['src', 'tests'], data_migration: false },
+    operational_rollback_slo: parsed.operational_rollback_slo || '5m',
+    scope: parsed.scope || {
+      in: ['src/', 'tests/'],
+      out: ['node_modules/', 'dist/', 'build/'],
+    },
+    invariants: Array.isArray(parsed.invariants) && parsed.invariants.length > 0
+      ? parsed.invariants
+      : ['System maintains data consistency'],
+    acceptance: Array.isArray(parsed.acceptance) && parsed.acceptance.length > 0
+      ? parsed.acceptance
+      : [
+          {
+            id: 'A1',
+            given: 'Current system state',
+            when: 'the initial project is bootstrapped',
+            then: 'the CAWS project should validate successfully',
+          },
+        ],
+    non_functional: parsed.non_functional || {
+      a11y: ['keyboard'],
+      perf: { api_p95_ms: 250 },
+      security: [],
+    },
+    contracts: normalizedContracts,
+    observability: parsed.observability || { logs: [], metrics: [], traces: [] },
+    migrations: Array.isArray(parsed.migrations) ? parsed.migrations : [],
+    rollback: Array.isArray(parsed.rollback) ? parsed.rollback : [],
+    ai_assessment: {
+      confidence_level: aiConfidence,
+      uncertainty_areas: Array.isArray(parsed.ai_assessment?.uncertainty_areas)
+        ? parsed.ai_assessment.uncertainty_areas
+        : [],
+      recommended_pairing:
+        parsed.ai_assessment?.recommended_pairing !== undefined
+          ? Boolean(parsed.ai_assessment.recommended_pairing)
+          : aiConfidence <= 6,
+    },
+  };
+}
+
+async function writeInitialSpecArtifacts(specContent, fallbackId) {
+  const canonicalSpec = buildInitialFeatureSpec(specContent, fallbackId);
+  const now = new Date().toISOString();
+  const canonicalContent = yaml.dump(canonicalSpec, { indent: 2 });
+  const specsDir = path.join('.caws', 'specs');
+  const featureSpecPath = path.join(specsDir, `${canonicalSpec.id}.yaml`);
+  const workingSpecPath = path.join('.caws', 'working-spec.yaml');
+  const registryPath = path.join(specsDir, 'registry.json');
+
+  await fs.ensureDir(specsDir);
+  await fs.writeFile(featureSpecPath, canonicalContent);
+  await fs.writeFile(workingSpecPath, canonicalContent);
+  await fs.writeJson(
+    registryPath,
+    {
+      version: '1.0.0',
+      specs: {
+        [canonicalSpec.id]: {
+          path: `${canonicalSpec.id}.yaml`,
+          type: 'feature',
+          status: 'active',
+          created_at: now,
+          updated_at: now,
+          owner: null,
+        },
+      },
+      lastUpdated: now,
+    },
+    { spaces: 2 }
+  );
+
+  return {
+    canonicalSpec,
+    featureSpecPath,
+    workingSpecPath,
+  };
+}
 
 /**
  * Initialize a new project with CAWS
@@ -492,10 +604,12 @@ async function initProject(projectName, options) {
       console.log(chalk.blue('\nGenerating CAWS working spec...'));
       const specContent = generateWorkingSpec(answers);
 
-      // Write working spec
+      // Write canonical feature spec plus legacy compatibility mirror
       await fs.ensureDir('.caws');
-      await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
+      const initialSpec = await writeInitialSpecArtifacts(specContent, answers.projectId);
+      console.log(chalk.green(`Created ${initialSpec.featureSpecPath}`));
       console.log(chalk.green('Created .caws/working-spec.yaml'));
+      console.log(chalk.green('Created .caws/specs/registry.json'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
       const policyPath = path.join('.caws', 'policy.yaml');
@@ -503,7 +617,6 @@ async function initProject(projectName, options) {
         const { PolicyManager } = require('../policy/PolicyManager');
         const policyManager = new PolicyManager();
         const defaultPolicy = policyManager.getDefaultPolicy();
-        const yaml = require('js-yaml');
         const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
         await fs.writeFile(policyPath, policyContent);
         console.log(chalk.green('Created .caws/policy.yaml (optional - defaults work fine)'));
@@ -522,10 +635,20 @@ ${answers.projectDescription}
 ## Risk Tier: ${answers.riskTier === 1 ? 'High (T1)' : answers.riskTier === 2 ? 'Medium (T2)' : 'Low (T3)'}
 
 ## Next Steps
-1. Review and customize \`.caws/working-spec.yaml\`
+1. Review and customize \`.caws/specs/${answers.projectId}.yaml\`
 2. Set up your development environment
 3. Implement features according to the spec
-4. Run \`caws validate\` to check your progress
+4. Run \`caws validate --spec-id ${answers.projectId}\` to check your progress
+
+## Multi-Agent Recommendation
+The initial project spec is also available in \`.caws/specs/${answers.projectId}.yaml\`.
+For multi-agent work, treat feature specs in \`.caws/specs/\` as canonical and use
+\`.caws/working-spec.yaml\` only as a compatibility mirror:
+
+\`\`\`bash
+caws specs create my-feature --type feature --title "My Feature"
+caws validate --spec-id my-feature
+\`\`\`
 
 ## Quality Gates
 - **Coverage**: ${answers.riskTier === 1 ? '90%+' : answers.riskTier === 2 ? '80%+' : '70%+'}
@@ -584,7 +707,7 @@ Happy coding! `;
         projectTitle: path.basename(process.cwd()),
         projectDescription: `A ${detectedType} project managed with CAWS`,
         riskTier: 2,
-        projectId: `PROJ-${Math.floor(Math.random() * 1000) + 1}`,
+        projectId: `PROJ-${String(Math.floor(Math.random() * 1000) + 1).padStart(3, '0')}`,
         useCursorHooks: true,
         generateExamples: false,
         projectMode: 'feature',
@@ -624,8 +747,10 @@ Happy coding! `;
 
       const specContent = generateWorkingSpec(defaultAnswers);
       await fs.ensureDir('.caws');
-      await fs.writeFile(path.join('.caws', 'working-spec.yaml'), specContent);
+      const initialSpec = await writeInitialSpecArtifacts(specContent, defaultAnswers.projectId);
+      console.log(chalk.green(`Created ${initialSpec.featureSpecPath}`));
       console.log(chalk.green('Created .caws/working-spec.yaml'));
+      console.log(chalk.green('Created .caws/specs/registry.json'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
       const policyPath = path.join('.caws', 'policy.yaml');
@@ -633,7 +758,6 @@ Happy coding! `;
         const { PolicyManager } = require('../policy/PolicyManager');
         const policyManager = new PolicyManager();
         const defaultPolicy = policyManager.getDefaultPolicy();
-        const yaml = require('js-yaml');
         const policyContent = yaml.dump(defaultPolicy, { indent: 2 });
         await fs.writeFile(policyPath, policyContent);
         console.log(chalk.green('Created .caws/policy.yaml (optional - defaults work fine)'));
@@ -670,8 +794,10 @@ Happy coding! `;
     // Success message
     console.log(chalk.green('\nCAWS project initialized successfully!'));
     console.log(chalk.blue('\nNext steps:'));
-    console.log('1. Review .caws/working-spec.yaml');
-    console.log('2. Customize the specification for your needs');
+    console.log('1. Review .caws/specs/<spec-id>.yaml');
+    console.log('2. Treat .caws/working-spec.yaml as the compatibility mirror, not the long-term source of truth');
+    console.log('3. If multiple agents will collaborate, create more feature specs with `caws specs create <id>`');
+    console.log('4. Use `--spec-id` on validation/status/diagnose commands for feature work');
 
     // Show contract requirements if Tier 1 or 2
     // Use answers if available (interactive mode), otherwise default to 2
@@ -688,16 +814,18 @@ Happy coding! `;
     }
 
     console.log('\nRecommended Setup Workflow:');
-    console.log('   1. Review .caws/working-spec.yaml');
+    console.log('   1. Review .caws/specs/<spec-id>.yaml');
     console.log('   2. Run: caws scaffold (adds tools and templates)');
-    console.log('   3. Run: caws validate (verify setup)');
-    console.log('   4. Run: caws diagnose (check health)');
-    console.log('   5. Optional: Create .caws/policy.yaml for custom budgets');
+    console.log('   3. For multi-agent work, run: caws specs create <feature-id>');
+    console.log('   4. Run: caws validate --spec-id <spec-id> (verify setup)');
+    console.log('   5. Run: caws diagnose --spec-id <spec-id> (check health)');
+    console.log('   6. Optional: Create .caws/policy.yaml for custom budgets');
     const finalIDEs = answers?.selectedIDEs || [];
     if (finalIDEs.includes('cursor') || finalIDEs.includes('claude') || options.interactive === false) {
-      console.log('   6. Restart your IDE to activate quality gates');
+      console.log('   7. Restart your IDE to activate quality gates');
     }
     console.log('\nQuick start: caws scaffold && caws validate && caws diagnose');
+    console.log('Multi-agent quick start: caws specs create my-feature && caws validate --spec-id my-feature');
   } catch (error) {
     console.error(chalk.red('Error during initialization:'), error.message);
     if (error.stack) {

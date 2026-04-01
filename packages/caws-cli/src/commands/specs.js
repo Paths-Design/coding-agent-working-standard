@@ -97,6 +97,116 @@ async function saveSpecsRegistry(registry) {
 }
 
 /**
+ * Read and validate a spec YAML file that was just written.
+ * This catches malformed YAML and duplicate keys before registry sync.
+ * @param {string} filePath - Absolute path to the spec file
+ * @returns {Promise<Object>} Parsed spec object
+ */
+async function validateAndReadSpecFile(filePath) {
+  const writtenContent = await fs.readFile(filePath, 'utf8');
+  const parsed = yaml.load(writtenContent);
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Failed to parse written spec file - invalid YAML structure');
+  }
+
+  const { validateWorkingSpec } = require('../validation/spec-validation');
+  const validation = validateWorkingSpec(parsed);
+
+  if (!validation.valid) {
+    const errorMessages = validation.errors
+      .map((e) => `${e.instancePath}: ${e.message}`)
+      .join('; ');
+    throw new Error(`Spec validation failed: ${errorMessages}`);
+  }
+
+  return parsed;
+}
+
+/**
+ * Build the registry entry from the parsed spec content instead of caller assumptions.
+ * @param {Object} spec - Parsed spec object
+ * @param {string} fileName - Registry path for the spec
+ * @param {string|null} owner - Session owner for the registry entry
+ * @returns {Object} Registry entry
+ */
+function buildRegistryEntryFromSpec(spec, fileName, owner = null) {
+  return {
+    path: fileName,
+    type: spec.type || 'feature',
+    status: spec.status || 'draft',
+    created_at: spec.created_at || new Date().toISOString(),
+    updated_at: spec.updated_at || new Date().toISOString(),
+    owner,
+  };
+}
+
+/**
+ * Backfill legacy sparse specs so write-time validation can succeed when
+ * update/merge flows touch older files created before the stricter schema.
+ * @param {Object} spec - Spec content to normalize
+ * @returns {Object} Normalized spec content
+ */
+function normalizeSpecForValidation(spec = {}) {
+  const normalizedRiskTier =
+    typeof spec.risk_tier === 'string'
+      ? parseInt(spec.risk_tier.replace(/^T/i, ''), 10) || 3
+      : spec.risk_tier || 3;
+
+  return {
+    type: 'feature',
+    status: 'draft',
+    risk_tier: normalizedRiskTier,
+    mode: 'standard',
+    blast_radius: {
+      modules: [],
+      data_migration: false,
+    },
+    operational_rollback_slo: '5m',
+    scope: {
+      in: ['src/', 'tests/'],
+      out: ['node_modules/', 'dist/', 'build/'],
+    },
+    invariants: ['System maintains data consistency'],
+    acceptance: [],
+    acceptance_criteria: [],
+    non_functional: {
+      a11y: [],
+      perf: {},
+      security: [],
+    },
+    contracts: [],
+    ...spec,
+    blast_radius: {
+      modules: [],
+      data_migration: false,
+      ...(spec.blast_radius || {}),
+    },
+    scope: {
+      in: ['src/', 'tests/'],
+      out: ['node_modules/', 'dist/', 'build/'],
+      ...(spec.scope || {}),
+    },
+    non_functional: {
+      a11y: [],
+      perf: {},
+      security: [],
+      ...(spec.non_functional || {}),
+    },
+    acceptance: Array.isArray(spec.acceptance)
+      ? spec.acceptance
+      : Array.isArray(spec.acceptance_criteria)
+        ? spec.acceptance_criteria
+        : [],
+    acceptance_criteria: Array.isArray(spec.acceptance_criteria)
+      ? spec.acceptance_criteria
+      : Array.isArray(spec.acceptance)
+        ? spec.acceptance
+        : [],
+  };
+}
+
+/**
  * List all spec files in the specs directory
  * @returns {Promise<Array>} Array of spec file info
  */
@@ -328,27 +438,9 @@ async function createSpec(id, options = {}) {
   await fs.writeFile(filePath, yamlContent);
 
   // Validate written file (YAML syntax and structure)
+  let parsedSpec;
   try {
-    const writtenContent = await fs.readFile(filePath, 'utf8');
-    const parsed = yaml.load(writtenContent);
-
-    // Validate YAML syntax was preserved
-    if (!parsed || typeof parsed !== 'object') {
-      await fs.remove(filePath);
-      throw new Error('Failed to parse written spec file - invalid YAML structure');
-    }
-
-    // Validate spec structure using CAWS validation
-    const { validateWorkingSpec } = require('../validation/spec-validation');
-    const validation = validateWorkingSpec(parsed);
-
-    if (!validation.valid) {
-      await fs.remove(filePath);
-      const errorMessages = validation.errors
-        .map((e) => `${e.instancePath}: ${e.message}`)
-        .join('; ');
-      throw new Error(`Spec validation failed: ${errorMessages}`);
-    }
+    parsedSpec = await validateAndReadSpecFile(filePath);
   } catch (error) {
     // Clean up invalid file if it exists
     if (await fs.pathExists(filePath)) {
@@ -367,26 +459,23 @@ async function createSpec(id, options = {}) {
 
   // Update registry
   const registry = await loadSpecsRegistry();
-  registry.specs[id] = {
-    path: fileName,
-    type,
-    status: 'draft',
-    created_at: specContent.created_at,
-    updated_at: specContent.updated_at,
-    owner: process.env.CLAUDE_SESSION_ID || null,
-  };
+  registry.specs[id] = buildRegistryEntryFromSpec(
+    parsedSpec,
+    fileName,
+    process.env.CLAUDE_SESSION_ID || null
+  );
   await saveSpecsRegistry(registry);
 
   return {
     id,
     path: fileName,
-    type,
-    title,
-    status: 'draft',
-    risk_tier: numericRiskTier,
-    mode,
-    created_at: specContent.created_at,
-    updated_at: specContent.updated_at,
+    type: parsedSpec.type || type,
+    title: parsedSpec.title || title,
+    status: parsedSpec.status || 'draft',
+    risk_tier: parsedSpec.risk_tier || numericRiskTier,
+    mode: parsedSpec.mode || mode,
+    created_at: parsedSpec.created_at || specContent.created_at,
+    updated_at: parsedSpec.updated_at || specContent.updated_at,
   };
 }
 
@@ -408,7 +497,7 @@ async function loadSpec(id) {
     const content = await fs.readFile(specPath, 'utf8');
     return yaml.load(content);
   } catch (error) {
-    return null;
+    throw new Error(`Failed to load spec '${id}' from ${specPath}: ${error.message}`);
   }
 }
 
@@ -441,18 +530,28 @@ async function updateSpec(id, updates = {}) {
     ...updates,
     updated_at: new Date().toISOString(),
   };
-
-  // Update registry
-  const registry = await loadSpecsRegistry();
-  registry.specs[id].updated_at = updatedSpec.updated_at;
-  if (updates.status) {
-    registry.specs[id].status = updates.status;
-  }
-  await saveSpecsRegistry(registry);
+  const normalizedSpec = normalizeSpecForValidation(updatedSpec);
 
   // Write back to file
+  const registry = await loadSpecsRegistry();
   const specPath = path.join(getSpecsDir(), registry.specs[id].path);
-  await fs.writeFile(specPath, yaml.dump(updatedSpec, { indent: 2 }));
+  const previousContent = await fs.readFile(specPath, 'utf8');
+  await fs.writeFile(specPath, yaml.dump(normalizedSpec, { indent: 2 }));
+
+  let parsedSpec;
+  try {
+    parsedSpec = await validateAndReadSpecFile(specPath);
+  } catch (error) {
+    await fs.writeFile(specPath, previousContent);
+    throw new Error(`Failed to update spec '${id}': ${error.message}`);
+  }
+
+  registry.specs[id] = buildRegistryEntryFromSpec(
+    parsedSpec,
+    registry.specs[id].path,
+    registry.specs[id].owner || null
+  );
+  await saveSpecsRegistry(registry);
 
   return true;
 }
