@@ -73,12 +73,12 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
    - Verify: Working spec completeness
 
 2. **Plan Implementation**
-   - Get CAWS guidance: `caws agent iterate --current-state "Planning phase"`
+   - Get CAWS guidance: `caws iterate --current-state "Planning phase"`
    - Define acceptance criteria
 
 3. **Implement Core Functionality**
    - Write code with TDD approach
-   - Run frequent validation: `caws agent evaluate`
+   - Run frequent validation: `caws evaluate`
    - Address failing quality gates immediately
 
 4. **Quality Assurance**
@@ -381,13 +381,13 @@ class QualityAwareAgent {
 
 1. **Assess Current State**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Get baseline quality assessment*
 
 2. **Plan Next Phase**
    ```
-   caws agent iterate --current-state "Planning next implementation phase"
+   caws iterate --current-state "Planning next implementation phase"
    ```
    *Receive AI-guided development suggestions*
 
@@ -398,7 +398,7 @@ class QualityAwareAgent {
 
 4. **Quality Validation**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Validate implementation meets quality standards*
 
@@ -518,8 +518,8 @@ cp -r packages/caws-cli/templates/.cursor .
 caws init my-project --interactive --enable-all-integrations
 
 # Agents get comprehensive tool access
-caws agent evaluate    # Quality assessment
-caws agent iterate     # Development guidance
+caws evaluate    # Quality assessment
+caws iterate     # Development guidance
 caws waivers create    # Exception handling
 ```
 

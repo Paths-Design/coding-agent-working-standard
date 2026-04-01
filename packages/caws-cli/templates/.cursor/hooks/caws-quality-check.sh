@@ -21,11 +21,11 @@ if [[ "$FILE_PATH" =~ \.(js|ts|jsx|tsx|py|go|rs|java)$ ]] && [[ ! "$FILE_PATH" =
       echo "🔍 Running CAWS quality check..." >&2
 
       # Run CAWS evaluation in quiet mode for fast feedback
-      if caws agent evaluate .caws/working-spec.yaml --quiet 2>/dev/null; then
+      if caws evaluate .caws/working-spec.yaml --quiet 2>/dev/null; then
         echo '{"userMessage": "✅ CAWS quality check passed", "agentMessage": "Quality standards maintained"}'
       else
         # Get detailed feedback
-        EVALUATION=$(caws agent evaluate .caws/working-spec.yaml --json 2>/dev/null || echo '{"success": false, "error": "Evaluation failed"}')
+        EVALUATION=$(caws evaluate .caws/working-spec.yaml --json 2>/dev/null || echo '{"success": false, "error": "Evaluation failed"}')
 
         # Parse the evaluation result
         SUCCESS=$(echo "$EVALUATION" | jq -r '.success // false')
@@ -37,10 +37,10 @@ if [[ "$FILE_PATH" =~ \.(js|ts|jsx|tsx|py|go|rs|java)$ ]] && [[ ! "$FILE_PATH" =
           FAILED_GATES=$(echo "$EVALUATION" | jq -r '.evaluation.criteria[] | select(.status == "failed") | .name' | tr '\n' ', ' | sed 's/, $//')
 
           echo '{
-            "userMessage": "⚠️ CAWS quality issues detected. Run: caws agent evaluate",
+            "userMessage": "⚠️ CAWS quality issues detected. Run: caws evaluate",
             "agentMessage": "Quality gates failed: '"$FAILED_GATES"'",
             "suggestions": [
-              "Run caws agent evaluate for detailed feedback",
+              "Run caws evaluate for detailed feedback",
               "Consider creating a waiver if justified: caws waivers create",
               "Address failing quality gates before proceeding"
             ]

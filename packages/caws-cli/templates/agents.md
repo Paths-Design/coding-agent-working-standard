@@ -26,9 +26,9 @@ caws validate            # Validate the current CAWS spec
 
 1. **Read the canonical spec**: Use `.caws/specs/<spec-id>.yaml` when feature specs exist
 2. **Validate**: Run `caws validate --spec-id <spec-id>` for feature work
-3. **Plan**: Run `caws agent iterate` for implementation guidance
+3. **Plan**: Run `caws iterate` for implementation guidance
 4. **Implement**: Write tests first, then implementation. Stay within scope boundaries.
-5. **Verify**: Run `caws agent evaluate` to check quality compliance
+5. **Verify**: Run `caws evaluate` to check quality compliance
 6. **Commit**: Use conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
 
 For a new feature in a multi-agent project:

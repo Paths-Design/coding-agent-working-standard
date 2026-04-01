@@ -36,10 +36,10 @@ caws validate --spec-id FEAT-001
 caws gates run
 
 # Get iteration guidance
-caws agent iterate --current-state "describe what you're about to do"
+caws iterate --current-state "describe what you're about to do"
 
 # After implementation, evaluate quality
-caws agent evaluate
+caws evaluate
 
 # Check status for the same feature
 caws status --spec-id FEAT-001

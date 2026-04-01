@@ -30,9 +30,9 @@ Always validate working specs: `caws validate`
 
 ## Quality Workflow
 
-1. **Before implementation**: `caws agent iterate --current-state "describe what you're about to do"`
-2. **During implementation**: `caws agent evaluate --quiet`
-3. **Before commit**: `caws validate && caws agent evaluate`
+1. **Before implementation**: `caws iterate --current-state "describe what you're about to do"`
+2. **During implementation**: `caws evaluate --quiet`
+3. **Before commit**: `caws validate && caws evaluate`
 
 ## Quality Gates by Risk Tier
 
@@ -65,8 +65,8 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ### Feature Development
 1. Validate working spec: `caws validate`
-2. Get implementation guidance: `caws agent iterate`
-3. Implement with quality checks: `caws agent evaluate --quiet`
+2. Get implementation guidance: `caws iterate`
+3. Implement with quality checks: `caws evaluate --quiet`
 4. Run full validation: `caws validate && npm test`
 
 ### Bug Fixes

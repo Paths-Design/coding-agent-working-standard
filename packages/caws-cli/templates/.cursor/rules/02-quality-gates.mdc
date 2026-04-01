@@ -342,12 +342,10 @@ Tag placeholders explicitly in code:
 # Run comprehensive test suite
 caws quality-gates --test-coverage --mutation-testing
 
-# Check test quality metrics
-caws metrics track --metric="test_coverage" --value=85
-caws metrics track --metric="mutation_score" --value=70
+# Metrics are tracked automatically via working state
 
-# Update progress with test completion
-caws progress update --criterion-id="TEST-001" --status="completed" --tests-passing=25
+# Verify acceptance criteria for test completion
+caws verify-acs --spec-id <id>
 ```
 
 ### Test Analysis

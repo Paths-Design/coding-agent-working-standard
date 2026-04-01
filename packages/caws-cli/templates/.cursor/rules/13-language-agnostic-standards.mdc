@@ -485,24 +485,14 @@ caws quality-gates --check-universal-standards
 ### Metrics Tracking
 
 ```bash
-# Track complexity metrics
-caws metrics track --metric="cyclomatic_complexity" --value=8
-
-# Track maintainability metrics
-caws metrics track --metric="function_size" --value=25
-
-# Track architectural compliance
-caws metrics track --metric="dependency_injection" --value=1
+# Metrics are tracked automatically via working state
 ```
 
 ### Progress Tracking
 
 ```bash
-# Update progress with complexity compliance
-caws progress update --criterion-id="COMPLEXITY-001" --status="completed"
-
-# Track architectural pattern implementation
-caws progress update --criterion-id="ARCHITECTURE-001" --status="in_progress"
+# Verify acceptance criteria for complexity compliance
+caws verify-acs --spec-id <id>
 ```
 
 ## Enforcement Mechanisms

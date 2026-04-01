@@ -89,7 +89,7 @@ if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
         "agentMessage": "File '"$FILE_PATH"' is outside primary scope but allowed",
         "suggestions": [
           "Check if needed in primary scope: edit .caws/working-spec.yaml scope.in",
-          "Consider scope implications: caws agent evaluate",
+          "Consider scope implications: caws evaluate",
           "Document scope decision in working spec invariants",
           "Validate scope changes: caws validate .caws/working-spec.yaml"
         ]

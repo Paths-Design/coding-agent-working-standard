@@ -842,7 +842,7 @@ Monitor code quality impact in real-time.
       \"files_affected\": 1,
       \"quality_impact\": \"code_change\",
       \"recommendations\": [
-        \"Run CAWS validation: caws agent evaluate\",
+        \"Run CAWS validation: caws evaluate\",
         \"Check for linting issues\"
       ],
       \"risk_level\": \"medium\"

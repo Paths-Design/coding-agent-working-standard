@@ -20,7 +20,7 @@ caws init feature-name --interactive
 ### 2. Plan Implementation Strategy
 ```
 # Get CAWS guidance for implementation approach
-caws agent iterate --current-state "Planning phase complete, need implementation strategy"
+caws iterate --current-state "Planning phase complete, need implementation strategy"
 
 # CAWS will suggest:
 # - Implementation steps
@@ -35,7 +35,7 @@ caws agent iterate --current-state "Planning phase complete, need implementation
 # Real-time feedback via CAWS tools
 
 # Regular quality checks
-caws agent evaluate --quiet
+caws evaluate --quiet
 ```
 
 ### 4. Quality Assurance Integration
@@ -63,7 +63,7 @@ npm run test:contract
 ### 6. Final Quality Review
 ```
 # Complete CAWS evaluation
-caws agent evaluate
+caws evaluate
 
 # Generate provenance report
 caws provenance generate

@@ -246,7 +246,7 @@ check-change-budget() {
 # GitHub Actions example
 - name: Check Scope Compliance
   run: |
-    if ! caws validate --scope-check; then
+    if ! caws gates run; then
       echo "❌ Scope violation detected"
       exit 1
     fi
@@ -317,11 +317,8 @@ risk_tier: 'T2' # T1, T2, or T3
 ### CAWS Commands
 
 ```bash
-# Validate scope compliance
-caws validate --scope-check
-
-# Check change budget
-caws validate --budget-check
+# Run quality gates (includes scope and budget checks)
+caws gates run
 
 # Create emergency waiver
 caws waivers create \
@@ -343,14 +340,14 @@ caws waivers status --waiver-id="AUTH-FIX-001"
 ### Quality Gate Integration
 
 ```bash
-# Run quality gates with tier-specific requirements
-caws quality-gates --tier=T2
+# Run quality gates (tier is determined from spec)
+caws gates run
 
-# Check if waiver is required
-caws quality-gates --check-waiver-required
+# List active waivers
+caws waivers list
 
-# Apply waiver to quality gates
-caws quality-gates --apply-waiver=AUTH-FIX-001
+# Create a waiver for quality gates
+caws waivers create
 ```
 
 ## Continuous Improvement
@@ -372,14 +369,13 @@ caws quality-gates --apply-waiver=AUTH-FIX-001
 ### CAWS Integration Points
 
 ```bash
-# Track scope compliance in CAWS metrics
-caws metrics track --metric="scope_violations" --value=0
+# Metrics are tracked automatically via working state
 
-# Update progress with scope compliance
-caws progress update --criterion-id="SCOPE-001" --status="completed"
+# Verify acceptance criteria for scope compliance
+caws verify-acs --spec-id <id>
 
-# Archive changes with scope compliance verification
-caws archive FEAT-001 --verify-scope-compliance
+# Archive changes
+caws archive FEAT-001
 ```
 
 This rule ensures proper scope management while providing structured escape hatches for critical situations that require immediate attention, fully integrated with CAWS workflow and quality gates.

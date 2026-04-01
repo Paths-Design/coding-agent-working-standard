@@ -50,9 +50,7 @@ const { iterateCommand } = require('./commands/iterate');
 const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
-const { qualityGatesCommand } = require('./commands/quality-gates');
 const { gatesCommand } = require('./commands/gates');
-const { troubleshootCommand } = require('./commands/troubleshoot');
 const { archiveCommand } = require('./commands/archive');
 const { specsCommand } = require('./commands/specs');
 const { modeCommand } = require('./commands/mode');
@@ -152,7 +150,7 @@ program
 // Gates command group (v2 pipeline)
 const gatesCmd = program
   .command('gates')
-  .description('Quality gate evaluation via the v2 pipeline');
+  .description('Run quality gate checks');
 
 gatesCmd
   .command('run')
@@ -268,7 +266,7 @@ specsCmd
   .action(() => specsCommand('types', {}));
 
 // Sidecar command group
-const sidecarCmd = program.command('sidecar').description('Governance sidecar analyses');
+const sidecarCmd = program.command('sidecar').description('Advisory analysis tools (drift, gaps, waivers, provenance)');
 
 sidecarCmd
   .command('drift')
@@ -312,13 +310,6 @@ modeCmd
   .command('set <mode>')
   .description('Set CAWS complexity tier')
   .action((mode) => modeCommand('set', { mode }));
-
-modeCmd
-  .command('set')
-  .description('Set CAWS complexity tier (interactive)')
-  .option('-i, --interactive', 'Interactive mode selection', false)
-  .option('-m, --mode <mode>', 'Specific mode to set')
-  .action((options) => modeCommand('set', options));
 
 modeCmd
   .command('compare')
@@ -576,7 +567,7 @@ waiversCmd
   .action((id, options) => waiversCommand('revoke', { ...options, id }));
 
 // Workflow command group
-const workflowCmd = program
+program
   .command('workflow <type>')
   .description('Get workflow-specific guidance')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
@@ -740,6 +731,36 @@ program.configureHelp({
   showError: () => {}, // Suppress default error display
 });
 
+const VALID_COMMANDS = [
+  'init',
+  'validate',
+  'scaffold',
+  'status',
+  'archive',
+  'specs',
+  'sidecar',
+  'mode',
+  'tutorial',
+  'plan',
+  'templates',
+  'diagnose',
+  'evaluate',
+  'iterate',
+  'waivers',
+  'workflow',
+  'quality-monitor',
+  'quality-gates',
+  'gates',
+  'provenance',
+  'hooks',
+  'burnup',
+  'tool',
+  'worktree',
+  'session',
+  'parallel',
+  'verify-acs',
+];
+
 program.exitOverride((err) => {
   // Handle help and version requests gracefully
   if (
@@ -754,37 +775,7 @@ program.exitOverride((err) => {
 
   // Check for unknown command
   if (err.code === 'commander.unknownCommand') {
-    const validCommands = [
-      'init',
-      'validate',
-      'scaffold',
-      'status',
-      'archive',
-      'specs',
-      'mode',
-      'tutorial',
-      'plan',
-      'templates',
-      'diagnose',
-      'evaluate',
-      'iterate',
-      'waivers',
-      'workflow',
-      'quality-monitor',
-      'quality-gates',
-      'gates',
-      'troubleshoot',
-      'provenance',
-      'hooks',
-      'burnup',
-      'tool',
-      'worktree',
-      'session',
-      'parallel',
-      'verify-acs',
-      'sidecar',
-    ];
-    const similar = findSimilarCommand(commandName, validCommands);
+    const similar = findSimilarCommand(commandName, VALID_COMMANDS);
 
     console.error(chalk.red(`\nUnknown command: ${commandName}`));
 
@@ -792,9 +783,7 @@ program.exitOverride((err) => {
       console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
     }
 
-    console.error(
-      chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, gates')
-    );
+    console.error(chalk.yellow('Run: caws --help for the full command list'));
     console.error(chalk.yellow('Try: caws --help for full command list'));
     console.error(
       chalk.blue(
@@ -868,27 +857,7 @@ if (require.main === module) {
 
     // Check for unknown command
     if (error.code === 'commander.unknownCommand') {
-      const validCommands = [
-        'init',
-        'validate',
-        'scaffold',
-        'status',
-        'archive',
-        'specs',
-        'mode',
-        'tutorial',
-        'plan',
-        'provenance',
-        'hooks',
-        'burnup',
-        'tool',
-        'worktree',
-        'session',
-        'parallel',
-        'gates',
-        'quality-gates',
-      ];
-      const similar = findSimilarCommand(commandName, validCommands);
+      const similar = findSimilarCommand(commandName, VALID_COMMANDS);
 
       console.error(chalk.red(`\nUnknown command: ${commandName}`));
 
@@ -896,9 +865,7 @@ if (require.main === module) {
         console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
       }
 
-      console.error(
-        chalk.yellow('Available commands: init, validate, scaffold, provenance, hooks, gates')
-      );
+      console.error(chalk.yellow('Run: caws --help for the full command list'));
       console.error(chalk.yellow('Try: caws --help for full command list'));
       console.error(
         chalk.blue(

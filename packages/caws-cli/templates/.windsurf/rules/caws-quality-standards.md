@@ -29,8 +29,8 @@ Always check `.caws/working-spec.yaml` before making changes. It defines:
 
 ```bash
 caws validate                    # Validate working spec
-caws agent iterate               # Get implementation guidance
-caws agent evaluate              # Evaluate quality compliance
+caws iterate               # Get implementation guidance
+caws evaluate              # Evaluate quality compliance
 caws waivers create --reason ... # Create waiver for justified exceptions
 ```
 

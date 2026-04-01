@@ -23,13 +23,13 @@ CAWS provides agents with:
 
 ```bash
 # Check if working spec is ready for implementation
-caws agent evaluate --feedback-only .caws/working-spec.yaml
+caws evaluate --feedback-only .caws/working-spec.yaml
 
 # Evaluate current implementation progress
-caws agent evaluate .caws/working-spec.yaml
+caws evaluate .caws/working-spec.yaml
 
 # Get iterative development guidance
-caws agent iterate --current-state '{"description": "Started core implementation"}' .caws/working-spec.yaml
+caws iterate --current-state '{"description": "Started core implementation"}' .caws/working-spec.yaml
 ```
 
 ## Agent Workflow Integration
@@ -40,7 +40,7 @@ Before starting work, agents should validate the working spec:
 
 ```bash
 # Get structured feedback on spec readiness
-FEEDBACK=$(caws agent evaluate --feedback-only .caws/working-spec.yaml)
+FEEDBACK=$(caws evaluate --feedback-only .caws/working-spec.yaml)
 
 # Parse the JSON response
 if [ "$(echo $FEEDBACK | jq -r '.success')" = "true" ]; then
@@ -67,7 +67,7 @@ while true; do
     echo "Evaluating current progress..."
 
     # Run quality evaluation
-    RESULT=$(caws agent evaluate $WORKING_SPEC)
+    RESULT=$(caws evaluate $WORKING_SPEC)
     SUCCESS=$(echo $RESULT | jq -r '.success')
     STATUS=$(echo $RESULT | jq -r '.evaluation.overall_status')
 
@@ -77,7 +77,7 @@ while true; do
     fi
 
     # Get guidance for next iteration
-    GUIDANCE=$(caws agent iterate --current-state "{\"description\": \"$CURRENT_STATE\"}" $WORKING_SPEC)
+    GUIDANCE=$(caws iterate --current-state "{\"description\": \"$CURRENT_STATE\"}" $WORKING_SPEC)
 
     # Extract next steps from guidance
     NEXT_STEPS=$(echo $GUIDANCE | jq -r '.iteration.next_steps[]')
@@ -121,7 +121,7 @@ jobs:
 
       - name: Run Quality Gates
         run: |
-          RESULT=$(caws agent evaluate .caws/working-spec.yaml)
+          RESULT=$(caws evaluate .caws/working-spec.yaml)
           SUCCESS=$(echo $RESULT | jq -r '.success')
 
           if [ "$SUCCESS" != "true" ]; then
@@ -132,7 +132,7 @@ jobs:
 
       - name: Generate Quality Report
         run: |
-          caws agent evaluate .caws/working-spec.yaml > quality-report.json
+          caws evaluate .caws/working-spec.yaml > quality-report.json
           echo "## Quality Report" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           cat quality-report.json >> $GITHUB_STEP_SUMMARY
@@ -145,7 +145,7 @@ jobs:
 
 **Usage:**
 ```bash
-caws agent evaluate [options] <spec-file>
+caws evaluate [options] <spec-file>
 ```
 
 **Options:**
@@ -198,7 +198,7 @@ caws agent evaluate [options] <spec-file>
 
 **Usage:**
 ```bash
-caws agent iterate [options] <spec-file>
+caws iterate [options] <spec-file>
 ```
 
 **Options:**
@@ -258,17 +258,17 @@ class CawsGuidedAgent {
   }
 
   async evaluateSpec(specPath) {
-    const result = await exec(`caws agent evaluate --feedback-only ${specPath}`);
+    const result = await exec(`caws evaluate --feedback-only ${specPath}`);
     return JSON.parse(result.stdout);
   }
 
   async getIterativeGuidance(specPath, currentState) {
-    const result = await exec(`caws agent iterate --current-state '${JSON.stringify({description: currentState})}' ${specPath}`);
+    const result = await exec(`caws iterate --current-state '${JSON.stringify({description: currentState})}' ${specPath}`);
     return JSON.parse(result.stdout);
   }
 
   async evaluateProgress(specPath) {
-    const result = await exec(`caws agent evaluate ${specPath}`);
+    const result = await exec(`caws evaluate ${specPath}`);
     return JSON.parse(result.stdout);
   }
 
@@ -367,7 +367,7 @@ class RiskAwareAgent {
 ### Getting Help
 
 - Run `caws --help` for command overview
-- Use `caws agent evaluate --help` for detailed options
+- Use `caws evaluate --help` for detailed options
 - Check CAWS logs for detailed error information
 - Review working spec against CAWS schema requirements
 

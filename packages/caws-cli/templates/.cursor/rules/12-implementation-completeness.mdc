@@ -484,11 +484,11 @@ def calculate_completeness_score(analysis_results):
 ### CAWS Quality Monitoring
 
 ```bash
-# Use CAWS quality monitoring
-caws quality-monitor --action=code_edited --files="$(git diff --name-only)"
+# Run quality gates after code changes
+caws gates run
 
-# Track TODO resolution progress
-caws progress-update --criterion-id="TODO-001" --status="completed" --tests-passing=1
+# Verify acceptance criteria for TODO resolution
+caws verify-acs --spec-id <id>
 ```
 
 ### Continuous Improvement

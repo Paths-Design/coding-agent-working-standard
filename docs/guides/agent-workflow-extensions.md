@@ -107,13 +107,13 @@ GitHub's Preview SDK simplifies building Copilot extensions that integrate tools
    - Verify: Working spec completeness
 
 2. **Plan Implementation**
-   - Get CAWS guidance: `caws agent iterate --current-state "Planning phase"`
+   - Get CAWS guidance: `caws iterate --current-state "Planning phase"`
    - Define acceptance criteria
    - Break down into manageable tasks
 
 3. **Implement Core Functionality**
    - Write code with TDD approach
-   - Run frequent validation: `caws agent evaluate`
+   - Run frequent validation: `caws evaluate`
    - Address failing quality gates immediately
 
 4. **Quality Assurance**
@@ -181,7 +181,7 @@ class CawsMcpServer extends Server {
   async runCawsEvaluation(args) {
     const { execSync } = require('child_process');
     try {
-      const result = execSync(`caws agent evaluate ${args.specFile}`, {
+      const result = execSync(`caws evaluate ${args.specFile}`, {
         encoding: 'utf8',
         cwd: args.workingDirectory || process.cwd()
       });
@@ -194,7 +194,7 @@ class CawsMcpServer extends Server {
   async runCawsGuidance(args) {
     const { execSync } = require('child_process');
     try {
-      const cmd = `caws agent iterate --current-state "${args.currentState}" ${args.specFile}`;
+      const cmd = `caws iterate --current-state "${args.currentState}" ${args.specFile}`;
       const result = execSync(cmd, {
         encoding: 'utf8',
         cwd: args.workingDirectory || process.cwd()
@@ -277,7 +277,7 @@ function handlePreAgentAction(hookData) {
   if (action === 'code_edit' && project_tier <= 2) {
     try {
       // Run quick validation
-      const result = execSync('caws agent evaluate --feedback-only .caws/working-spec.yaml', {
+      const result = execSync('caws evaluate --feedback-only .caws/working-spec.yaml', {
         encoding: 'utf8'
       });
 
@@ -317,7 +317,7 @@ function handlePostAgentAction(hookData) {
     // Suggest CAWS validation after edit
     const response = {
       suggestions: [
-        'Consider running: caws agent evaluate',
+        'Consider running: caws evaluate',
         'Check quality gates: caws validate'
       ],
       caws_recommendation: 'Validate changes against CAWS quality standards'
@@ -342,7 +342,7 @@ function handlePostAgentAction(hookData) {
 
 1. **Define Requirements**
    ```
-   caws agent evaluate --feedback-only .caws/working-spec.yaml
+   caws evaluate --feedback-only .caws/working-spec.yaml
    ```
    *Ensure acceptance criteria are well-defined*
 
@@ -359,7 +359,7 @@ function handlePostAgentAction(hookData) {
 
 4. **Run CAWS Validation**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Check if implementation meets quality standards*
 
@@ -389,7 +389,7 @@ function handlePostAgentAction(hookData) {
 
 1. **Baseline Quality Check**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Establish current quality baseline*
 
@@ -406,7 +406,7 @@ function handlePostAgentAction(hookData) {
 
 4. **Comprehensive Testing**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Full quality gate validation*
 
@@ -453,7 +453,7 @@ function handlePostAgentAction(hookData) {
 
 4. **Validate with Waiver**
    ```
-   caws agent evaluate .caws/working-spec.yaml
+   caws evaluate .caws/working-spec.yaml
    ```
    *Should pass with waiver applied*
 

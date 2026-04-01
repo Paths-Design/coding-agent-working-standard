@@ -285,7 +285,7 @@ packages/
 **Recommendation**: Skip - MCP replaces this functionality
 The MCP protocol itself is the programmatic interface for tool execution.
 
-### 3. `caws agent evaluate` Subcommand
+### 3. `caws evaluate` Subcommand
 
 **Current Status**: Referenced by `caws_evaluate` MCP tool, but doesn't exist
 
@@ -296,7 +296,7 @@ The MCP protocol itself is the programmatic interface for tool execution.
 caws evaluate .caws/working-spec.yaml
 ```
 
-### 4. `caws agent iterate` Subcommand
+### 4. `caws iterate` Subcommand
 
 **Current Status**: Referenced by `caws_iterate` MCP tool, but doesn't exist
 

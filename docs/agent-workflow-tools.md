@@ -151,11 +151,11 @@ caws waivers create \
   --approved-by="agent-handle"
 ```
 
-### **caws agent evaluate** - Quality assessment
+### **caws evaluate** - Quality assessment
 
 ```bash
 # Get structured evaluation
-caws agent evaluate
+caws evaluate
 
 # Returns JSON with:
 # - Overall quality score
@@ -163,11 +163,11 @@ caws agent evaluate
 # - Actionable improvement suggestions
 ```
 
-### **caws agent iterate** - Iterative guidance
+### **caws iterate** - Iterative guidance
 
 ```bash
 # Get next steps for current work
-caws agent iterate
+caws iterate
 
 # Returns JSON with:
 # - Current status assessment
@@ -181,12 +181,12 @@ caws agent iterate
 
 ### **Daily Development Loop**:
 
-1. **Start work**: `caws agent evaluate` to check current status
+1. **Start work**: `caws evaluate` to check current status
 2. **Plan changes**: Reference waiver_ids if budget exceptions needed
 3. **Implement**: Stay within scope and budget limits
 4. **Validate**: `caws validate` frequently to catch issues early
 5. **Check budget**: `caws burnup` when approaching complexity limits
-6. **Get guidance**: `caws agent iterate` for next steps
+6. **Get guidance**: `caws iterate` for next steps
 7. **Handle blocks**: Use appropriate waiver creation workflow
 
 ### **When Budget Issues Arise**:
@@ -214,8 +214,8 @@ caws agent iterate
 | Validate work         | `caws validate`                              | Check compliance               |
 | Need budget exception | `caws waivers create --gates=budget_limit`   | Request budget waiver          |
 | Need scope exception  | `caws waivers create --gates=scope_boundary` | Request scope waiver           |
-| Get evaluation        | `caws agent evaluate`                        | Structured quality assessment  |
-| Get next steps        | `caws agent iterate`                         | Iterative development guidance |
+| Get evaluation        | `caws evaluate`                        | Structured quality assessment  |
+| Get next steps        | `caws iterate`                         | Iterative development guidance |
 | Check scope           | `caws validate --scope-check "file"`         | Verify file access             |
 
 ---
@@ -226,7 +226,7 @@ caws agent iterate
 2. **Waivers are normal**: Budget/scope exceptions happen - just follow the process
 3. **Dual control**: Policy changes require human approval - respect this
 4. **Transparency**: All exceptions are auditable and time-bound
-5. **Iterative**: Use `caws agent iterate` to maintain quality throughout work
+5. **Iterative**: Use `caws iterate` to maintain quality throughout work
 
 **Remember**: CAWS tools exist to help you succeed within quality constraints, not to prevent success. The guardrails guide you to the proper path for achieving your objectives safely and sustainably.
 

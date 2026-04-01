@@ -337,11 +337,10 @@ caws validate --check-documentation-quality
 # Generate documentation quality report
 caws docs quality-report --include-marketing-check --include-status-verification
 
-# Track documentation quality metrics
-caws metrics track --metric="documentation_quality_score" --value=95
+# Metrics are tracked automatically via working state
 
-# Update progress with documentation quality
-caws progress update --criterion-id="DOCS-001" --status="completed"
+# Verify acceptance criteria for documentation quality
+caws verify-acs --spec-id <id>
 ```
 
 ## Continuous Improvement
@@ -377,14 +376,10 @@ caws progress update --criterion-id="DOCS-001" --status="completed"
 ### CAWS Integration Points
 
 ```bash
-# Track documentation quality trends
-caws metrics trends --metric="documentation_quality_score" --period="30d"
+# Metrics are tracked automatically via working state
 
-# Export documentation quality metrics
-caws metrics export --format=json --include-documentation-quality
-
-# Archive documentation with quality verification
-caws archive DOCS-001 --verify-documentation-quality
+# Archive documentation
+caws archive DOCS-001
 ```
 
 This rule ensures documentation maintains engineering-grade quality and prevents the accumulation of problematic content that requires manual cleanup, fully integrated with CAWS workflow and quality gates.
