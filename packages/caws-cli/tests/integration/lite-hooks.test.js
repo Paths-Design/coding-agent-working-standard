@@ -5,10 +5,11 @@
 
 const path = require('path');
 const fs = require('fs-extra');
-const os = require('os');
 const { execFileSync, execSync } = require('child_process');
+const { createTemplateRepo, cloneFixture, cleanupTestDir, cleanupTemplate } = require('../helpers/git-fixture');
 
 describe('lite-hooks integration', () => {
+  let gitTemplate;
   let testDir;
   let originalCwd;
   let templateDir;
@@ -16,21 +17,17 @@ describe('lite-hooks integration', () => {
   beforeAll(() => {
     // Find the templates directory
     templateDir = path.resolve(__dirname, '../../templates');
+    // Create reusable git template
+    gitTemplate = createTemplateRepo();
+  });
+
+  afterAll(() => {
+    cleanupTemplate(gitTemplate);
   });
 
   beforeEach(() => {
     originalCwd = process.cwd();
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-lite-hooks-'));
-
-    // Initialize git repo
-    execFileSync('git', ['init'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: testDir, stdio: 'pipe' });
-
-    // Create initial commit
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test');
-    execFileSync('git', ['add', '.'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: testDir, stdio: 'pipe' });
+    testDir = cloneFixture(gitTemplate, 'caws-lite-hooks-');
 
     // Setup lite mode config
     fs.ensureDirSync(path.join(testDir, '.caws'));
@@ -76,7 +73,7 @@ describe('lite-hooks integration', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.removeSync(testDir);
+    cleanupTestDir(testDir);
   });
 
   /**

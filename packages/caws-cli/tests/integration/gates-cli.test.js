@@ -7,9 +7,9 @@
 
 const path = require('path');
 const fs = require('fs-extra');
-const os = require('os');
 const { execSync, execFileSync } = require('child_process');
 const yaml = require('js-yaml');
+const { createTemplateRepo, cloneFixture, cleanupTemplate } = require('../helpers/git-fixture');
 
 const cliPath = path.join(__dirname, '../../src/index.js');
 
@@ -39,17 +39,14 @@ function buildValidSpec(overrides = {}) {
  * Create a temp directory with a git repo, .caws/policy.yaml, and .caws/working-spec.yaml.
  * Returns the directory path. Caller must clean up.
  */
+// Shared git template — created once per test suite
+let _gatesCLITemplate = null;
+
 function createTestProject(overrides = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-gates-cli-'));
-
-  // Initialize git repo (some gates need git context)
-  execFileSync('git', ['init'], { cwd: dir, stdio: 'pipe' });
-  execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'pipe' });
-  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'pipe' });
-
-  // Initial commit so HEAD exists
-  fs.writeFileSync(path.join(dir, '.gitkeep'), '');
-  execSync('git add .gitkeep && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  if (!_gatesCLITemplate) {
+    _gatesCLITemplate = createTemplateRepo();
+  }
+  const dir = cloneFixture(_gatesCLITemplate, 'caws-gates-cli-');
 
   // Create .caws directory
   fs.ensureDirSync(path.join(dir, '.caws'));
@@ -142,6 +139,13 @@ function extractJson(stdout) {
 
 describe('gates CLI integration', () => {
   let testDir;
+
+  afterAll(() => {
+    if (_gatesCLITemplate) {
+      cleanupTemplate(_gatesCLITemplate);
+      _gatesCLITemplate = null;
+    }
+  });
 
   afterEach(async () => {
     if (testDir) {

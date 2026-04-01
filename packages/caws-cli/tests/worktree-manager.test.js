@@ -4,8 +4,8 @@
 
 const path = require('path');
 const fs = require('fs-extra');
-const os = require('os');
 const { execFileSync } = require('child_process');
+const { createTemplateRepo, cloneFixture, cleanupTestDir, cleanupTemplate } = require('./helpers/git-fixture');
 
 // Module under test
 const {
@@ -30,45 +30,35 @@ const {
 } = require('../src/worktree/worktree-manager');
 
 describe('worktree-manager', () => {
+  let templateDir;
   let testDir;
   let originalCwd;
   let originalSessionId;
 
-  beforeEach(async () => {
+  // Create template repo once for all tests
+  beforeAll(() => {
+    templateDir = createTemplateRepo();
+  });
+
+  afterAll(() => {
+    cleanupTemplate(templateDir);
+  });
+
+  beforeEach(() => {
     originalCwd = process.cwd();
     originalSessionId = process.env.CLAUDE_SESSION_ID;
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-worktree-test-'));
-
-    // Initialize a git repo
-    execFileSync('git', ['init', '-b', 'main'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: testDir, stdio: 'pipe' });
-
-    // Create initial commit
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test');
-    fs.ensureDirSync(path.join(testDir, 'src'));
-    fs.writeFileSync(path.join(testDir, 'src', 'index.js'), 'module.exports = {};');
-    execFileSync('git', ['add', '.'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: testDir, stdio: 'pipe' });
-
+    testDir = cloneFixture(templateDir, 'caws-worktree-test-');
     process.chdir(testDir);
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     process.chdir(originalCwd);
-    // Restore session ID
     if (originalSessionId !== undefined) {
       process.env.CLAUDE_SESSION_ID = originalSessionId;
     } else {
       delete process.env.CLAUDE_SESSION_ID;
     }
-    // Clean up worktrees first (required before deleting dir)
-    try {
-      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
-    } catch {
-      // ignore
-    }
-    fs.removeSync(testDir);
+    cleanupTestDir(testDir);
   });
 
   describe('createWorktree', () => {

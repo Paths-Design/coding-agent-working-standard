@@ -23,21 +23,24 @@ const specCompleteness = require('../src/gates/spec-completeness');
 
 // Helpers
 const yaml = require('js-yaml');
+const { createTemplateRepo, cloneFixture, cleanupTemplate } = require('./helpers/git-fixture');
 
-/**
- * Create a minimal temp git repo for tests that need real git operations.
- * Returns the repo path. Caller must clean up.
- */
+// Shared git template for gates that need real git repos
+let _gatesGitTemplate = null;
+
 function createTempGitRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-gates-test-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
-  // Initial commit so HEAD exists
-  fs.writeFileSync(path.join(dir, '.gitkeep'), '');
-  execSync('git add .gitkeep && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
-  return dir;
+  if (!_gatesGitTemplate) {
+    _gatesGitTemplate = createTemplateRepo();
+  }
+  return cloneFixture(_gatesGitTemplate, 'caws-gates-test-');
 }
+
+afterAll(() => {
+  if (_gatesGitTemplate) {
+    cleanupTemplate(_gatesGitTemplate);
+    _gatesGitTemplate = null;
+  }
+});
 
 // ============================================================
 // Pipeline tests

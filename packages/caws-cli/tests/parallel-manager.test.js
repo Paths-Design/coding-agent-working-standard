@@ -4,9 +4,9 @@
 
 const path = require('path');
 const fs = require('fs-extra');
-const os = require('os');
 const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
+const { createTemplateRepo, cloneFixture, cleanupTestDir, cleanupTemplate } = require('./helpers/git-fixture');
 
 // Modules under test
 const {
@@ -24,41 +24,33 @@ const {
 const { loadRegistry: loadWorktreeRegistry } = require('../src/worktree/worktree-manager');
 
 describe('parallel-manager', () => {
+  let templateDir;
   let testDir;
   let originalCwd;
 
-  beforeEach(async () => {
+  beforeAll(() => {
+    templateDir = createTemplateRepo({
+      files: {
+        'src/auth/login.js': 'module.exports = {};',
+        'src/payments/stripe.js': 'module.exports = {};',
+      },
+    });
+  });
+
+  afterAll(() => {
+    cleanupTemplate(templateDir);
+  });
+
+  beforeEach(() => {
     originalCwd = process.cwd();
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-parallel-test-'));
-
-    // Initialize a git repo
-    execFileSync('git', ['init'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: testDir, stdio: 'pipe' });
-
-    // Create initial file structure and commit
-    fs.ensureDirSync(path.join(testDir, 'src', 'auth'));
-    fs.ensureDirSync(path.join(testDir, 'src', 'payments'));
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test');
-    fs.writeFileSync(path.join(testDir, 'src', 'auth', 'login.js'), 'module.exports = {};');
-    fs.writeFileSync(path.join(testDir, 'src', 'payments', 'stripe.js'), 'module.exports = {};');
-    execFileSync('git', ['add', '.'], { cwd: testDir, stdio: 'pipe' });
-    execFileSync('git', ['commit', '-m', 'initial'], { cwd: testDir, stdio: 'pipe' });
-
-    // Ensure .caws dir exists
+    testDir = cloneFixture(templateDir, 'caws-parallel-test-');
     fs.ensureDirSync(path.join(testDir, '.caws'));
-
     process.chdir(testDir);
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     process.chdir(originalCwd);
-    try {
-      execFileSync('git', ['worktree', 'prune'], { cwd: testDir, stdio: 'pipe' });
-    } catch {
-      // ignore
-    }
-    fs.removeSync(testDir);
+    cleanupTestDir(testDir);
   });
 
   // Helper to write a plan file
