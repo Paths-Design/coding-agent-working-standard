@@ -14,12 +14,13 @@ This project is built with the **Coding Agent Workflow System (CAWS)** - an engi
 
 ### 1. Project Setup
 The project is already scaffolded with CAWS. Review and customize:
-- `.caws/working-spec.yaml` - Project specification and requirements
+- `.caws/specs/<spec-id>.yaml` - Canonical feature specification and requirements
+- `.caws/working-spec.yaml` - Compatibility mirror for legacy paths
 - `.caws/policy/tier-policy.json` - Risk tier definitions
 - `.github/workflows/caws.yml` - CI/CD quality gates
 
 ### 2. Development Workflow
-1. **Plan**: Update working spec with requirements and scope
+1. **Plan**: Update the active feature spec with requirements and scope
 2. **Implement**: Follow agent conduct rules and mode constraints
 3. **Verify**: Run tests and quality gates locally
 4. **Document**: Update documentation and generate provenance
@@ -111,7 +112,7 @@ The project includes automated quality gates:
 
 ### Common Issues
 1. **Trust Score Low**: Check test coverage and quality gates
-2. **Scope Violations**: Ensure changes align with working spec
+2. **Scope Violations**: Ensure changes align with the active spec
 3. **Budget Exceeded**: Review change size and complexity
 4. **Flaky Tests**: Use property testing and proper mocking
 
@@ -124,14 +125,14 @@ The project includes automated quality gates:
 ## Contributing
 
 ### Development Process
-1. Update working specification
+1. Update the active feature specification
 2. Create comprehensive tests
 3. Implement with quality gates
 4. Generate provenance artifacts
 5. Document changes thoroughly
 
 ### Code Review
-- Review against working specification
+- Review against the active feature spec
 - Check trust score and quality gates
 - Validate observability and rollback
 - Ensure documentation completeness
@@ -139,7 +140,7 @@ The project includes automated quality gates:
 ## Resources
 
 - **[CAWS Framework](agents.md)**: Complete system documentation
-- **[Working Specification](.caws/working-spec.yaml)**: Project requirements
+- **[Canonical Specs](.caws/specs/)**: Project requirements
 - **[Quality Gates](.github/workflows/caws.yml)**: CI/CD pipeline
 - **[Tools](apps/tools/caws/)**: Development utilities
 

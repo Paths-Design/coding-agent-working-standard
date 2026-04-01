@@ -23,11 +23,14 @@ caws validate
 
 ## CAWS Workflow
 
-Before writing code, check the working spec:
+Before writing code, check the canonical spec for the current feature:
 
 ```bash
-# Validate the working spec
-caws validate
+# Create a feature spec for isolated work
+caws specs create FEAT-001 --type feature --title "description"
+
+# Validate the feature spec
+caws validate --spec-id FEAT-001
 
 # Run quality gates v2 pipeline
 caws gates run
@@ -38,13 +41,13 @@ caws agent iterate --current-state "describe what you're about to do"
 # After implementation, evaluate quality
 caws agent evaluate
 
-# Create a feature spec for isolated work
-caws specs create FEAT-001 --type feature --title "description"
+# Check status for the same feature
+caws status --spec-id FEAT-001
 ```
 
 ### Working Spec
 
-The project spec lives at `.caws/working-spec.yaml`. Feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs create <id> --type feature --title "description"`). It defines:
+Canonical feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs create <id> --type feature --title "description"`). `.caws/working-spec.yaml` is a compatibility mirror for older tooling and legacy single-spec flows. The active spec defines:
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
 - **Mode**: The type of change (`feature`, `refactor`, `fix`, `doc`, `chore`) -- required
@@ -98,7 +101,8 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ```
 .caws/
-  working-spec.yaml   # Project spec (risk tier, scope, acceptance criteria)
+  working-spec.yaml   # Compatibility mirror for legacy commands
+  specs/              # Canonical feature specs
   policy.yaml         # Quality policy overrides (optional)
   waivers.yml         # Active waivers
 ```

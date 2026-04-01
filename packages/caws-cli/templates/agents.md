@@ -9,26 +9,34 @@ npm install              # Install dependencies
 npm test                 # Run tests
 npm run lint             # Lint code
 npm run typecheck        # Type check (if TypeScript)
-caws validate            # Validate CAWS working spec
+caws validate            # Validate the current CAWS spec
 ```
 
 ## Project Structure
 
 ```
 .caws/
-  working-spec.yaml      # Project spec (risk tier, scope, acceptance criteria)
+  working-spec.yaml      # Compatibility mirror for legacy paths
+  specs/                 # Canonical feature specs
   policy.yaml            # Quality policy overrides (optional)
   waivers.yml            # Active waivers (optional)
 ```
 
 ## CAWS Workflow
 
-1. **Read the working spec**: Check `.caws/working-spec.yaml` for scope, risk tier, and acceptance criteria
-2. **Validate**: Run `caws validate` to ensure the spec is valid
+1. **Read the canonical spec**: Use `.caws/specs/<spec-id>.yaml` when feature specs exist
+2. **Validate**: Run `caws validate --spec-id <spec-id>` for feature work
 3. **Plan**: Run `caws agent iterate` for implementation guidance
 4. **Implement**: Write tests first, then implementation. Stay within scope boundaries.
 5. **Verify**: Run `caws agent evaluate` to check quality compliance
 6. **Commit**: Use conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
+
+For a new feature in a multi-agent project:
+
+```bash
+caws specs create my-feature --type feature --title "My Feature"
+caws validate --spec-id my-feature
+```
 
 ## Key Rules
 
@@ -44,7 +52,7 @@ caws validate            # Validate CAWS working spec
 
 ## Quality Gates
 
-Requirements are tiered based on the `risk_tier` in the working spec:
+Requirements are tiered based on the `risk_tier` in the active spec:
 
 | Gate | T1 (Critical) | T2 (Standard) | T3 (Low Risk) |
 |------|---------------|----------------|----------------|
@@ -94,7 +102,7 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ## Pre-Submit Checklist
 
-- [ ] Working spec exists and validates (`caws validate`)
+- [ ] Canonical spec exists and validates (`caws validate --spec-id <spec-id>` when applicable)
 - [ ] All tests pass (`npm test`)
 - [ ] Coverage meets tier requirements
 - [ ] Lints pass (`npm run lint`)
