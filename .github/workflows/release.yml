@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'packages/caws-cli/**'
-      - 'packages/caws-mcp-server/**'
+      # caws-mcp-server removed in 1cd9401
       - 'packages/quality-gates/**'
       - 'scripts/**'
       - '.releaserc.json'
@@ -78,8 +78,8 @@ jobs:
             echo "::warning::Security audit found vulnerabilities. Review npm audit output above."
             # Monorepo peer-dep conflicts prevent npm audit fix from resolving
             # even non-breaking fixes (ajv, js-yaml). Warn but don't block.
-            # TODO: revisit after next major dependency refresh.
-            true
+            # TODO: revisit after monorepo restructure / next major dep refresh.
+            echo "::warning::Vulnerabilities present but unblocked — see TODO above."
           }
 
       - name: Run tests

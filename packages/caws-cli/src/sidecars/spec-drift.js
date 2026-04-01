@@ -6,7 +6,9 @@
  */
 
 const _minimatch = require('minimatch');
-const minimatch = typeof _minimatch === 'function' ? _minimatch : _minimatch.minimatch;
+const minimatch = typeof _minimatch === 'function'
+  ? _minimatch
+  : (_minimatch.minimatch || (() => { throw new Error('minimatch export not found — expected v3 default or v5+ named export'); }));
 const { createSidecarOutput, createNoStateOutput } = require('./schema');
 const { getRecurrence } = require('../gates/feedback');
 
