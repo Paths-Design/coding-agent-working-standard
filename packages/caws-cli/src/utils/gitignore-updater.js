@@ -58,6 +58,9 @@ caws-debug.log*
 caws.local.*
 .caws/local.*
 
+# CAWS working state (runtime, not committed)
+.caws/state/
+
 # CAWS Worktrees (local, should not be tracked)
 .caws/worktrees/
 .caws/worktrees.json

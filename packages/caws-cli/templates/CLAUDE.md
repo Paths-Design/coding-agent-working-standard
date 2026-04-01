@@ -41,8 +41,25 @@ caws iterate --current-state "describe what you're about to do"
 # After implementation, evaluate quality
 caws evaluate
 
+# Verify acceptance criteria have evidence
+caws verify-acs --spec-id FEAT-001
+
+# Check budget burn-up
+caws burnup --spec-id FEAT-001
+
 # Check status for the same feature
 caws status --spec-id FEAT-001
+```
+
+### Advisory Sidecars
+
+Sidecar commands are diagnostic analysis tools. They don't enforce anything -- they help you understand what's happening and what to do next.
+
+```bash
+caws sidecar drift       # Compare spec intent vs current implementation
+caws sidecar gaps        # Diagnose quality gaps blocking gate passage
+caws sidecar waiver-draft  # Generate pre-filled waiver template for a failing gate
+caws sidecar provenance  # Summarize work history for merge readiness review
 ```
 
 ### Working Spec
@@ -105,7 +122,12 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
   specs/              # Canonical feature specs
   policy.yaml         # Quality policy overrides (optional)
   waivers.yml         # Active waivers
+  state/              # Runtime working state (auto-managed)
 ```
+
+> **Working state**: `.caws/state/<spec-id>.json` tracks runtime progress -- current phase,
+> validation/evaluation results, gate history, and files touched. This is maintained
+> automatically by CAWS commands. Agents don't need to manage it directly.
 
 ## Hooks
 

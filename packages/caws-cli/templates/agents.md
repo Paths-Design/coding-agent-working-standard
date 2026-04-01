@@ -108,5 +108,17 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 - [ ] Lints pass (`npm run lint`)
 - [ ] Types check (`npm run typecheck`)
 - [ ] No scope violations
-- [ ] Change budget not exceeded
+- [ ] Change budget not exceeded (`caws burnup --spec-id <spec-id>` shows budget consumption)
+- [ ] Acceptance criteria proven (`caws verify-acs --spec-id <spec-id>` checks evidence exists)
 - [ ] Conventional commit message
+
+### Optional: Self-Diagnosis with Sidecars
+
+If a gate blocks you, use sidecar commands to understand why before retrying:
+
+```bash
+caws sidecar gaps          # What's missing? Which gates are failing and why?
+caws sidecar drift         # Has implementation drifted from the spec intent?
+caws sidecar waiver-draft  # Generate a pre-filled waiver if the gap is acceptable
+caws sidecar provenance    # Summarize work history for merge readiness
+```

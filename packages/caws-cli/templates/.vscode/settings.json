@@ -22,12 +22,14 @@
   // Exclude CAWS-generated files from search and navigation
   "files.exclude": {
     ".caws/cache/": true,
+    ".caws/state/": true,
     ".caws/waivers/review-*.md": true
   },
 
   // Search excludes for CAWS artifacts
   "search.exclude": {
     ".caws/cache/**": true,
+    ".caws/state/**": true,
     "packages/*/dist/**": true,
     "packages/*/node_modules/**": true
   },
@@ -57,7 +59,7 @@
         "label": "CAWS: Evaluate Quality",
         "type": "shell",
         "command": "caws",
-        "args": ["agent", "evaluate", ".caws/working-spec.yaml"],
+        "args": ["evaluate"],
         "group": "test",
         "presentation": {
           "echo": true,
