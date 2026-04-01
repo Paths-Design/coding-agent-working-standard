@@ -62,6 +62,7 @@ const { worktreeCommand } = require('./commands/worktree');
 const { sessionCommand } = require('./commands/session');
 const { parallelCommand } = require('./commands/parallel');
 const { verifyAcsCommand } = require('./commands/verify-acs');
+const { sidecarCommand } = require('./commands/sidecar');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -265,6 +266,38 @@ specsCmd
   .command('types')
   .description('Show available spec types')
   .action(() => specsCommand('types', {}));
+
+// Sidecar command group
+const sidecarCmd = program.command('sidecar').description('Governance sidecar analyses');
+
+sidecarCmd
+  .command('drift')
+  .description('Analyze spec drift vs implementation evidence')
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--json', 'Output as JSON', false)
+  .action((options) => sidecarCommand('drift', options));
+
+sidecarCmd
+  .command('gaps')
+  .description('Diagnose quality gaps preventing phase advancement')
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--json', 'Output as JSON', false)
+  .action((options) => sidecarCommand('gaps', options));
+
+sidecarCmd
+  .command('waiver-draft')
+  .description('Generate pre-filled waiver templates from gate failures')
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--gate <gate>', 'Specific gate to draft waiver for')
+  .option('--json', 'Output as JSON', false)
+  .action((options) => sidecarCommand('waiver-draft', options));
+
+sidecarCmd
+  .command('provenance')
+  .description('Summarize work provenance for merge readiness')
+  .option('--spec-id <id>', 'Target spec ID')
+  .option('--json', 'Output as JSON', false)
+  .action((options) => sidecarCommand('provenance', options));
 
 // Mode command group
 const modeCmd = program.command('mode').description('Manage CAWS complexity tiers');
@@ -749,6 +782,7 @@ program.exitOverride((err) => {
       'session',
       'parallel',
       'verify-acs',
+      'sidecar',
     ];
     const similar = findSimilarCommand(commandName, validCommands);
 
@@ -804,6 +838,12 @@ program.exitOverride((err) => {
   );
   process.exit(1);
 });
+
+// Register sidecar lifecycle listeners (non-fatal hints)
+try {
+  const { registerSidecarListeners } = require('./sidecars/listeners');
+  registerSidecarListeners();
+} catch { /* sidecars module not available — non-fatal */ }
 
 // Parse and run
 if (require.main === module) {

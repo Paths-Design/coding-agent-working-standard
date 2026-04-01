@@ -112,6 +112,18 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
       guidance.blockers.forEach((blocker) => {
         console.log(chalk.red(`   ${blocker}`));
       });
+
+      // Show quality gap summary if sidecars available
+      try {
+        const { diagnoseQualityGaps } = require('../sidecars');
+        if (workingState) {
+          const gapResult = diagnoseQualityGaps(workingState, spec);
+          if (gapResult.data && gapResult.data.gaps && gapResult.data.gaps.length > 0) {
+            console.log(chalk.yellow(`\n   Quality gaps: ${gapResult.data.summary}`));
+            console.log(chalk.yellow('   Run: caws sidecar gaps --spec-id ' + spec.id));
+          }
+        }
+      } catch { /* sidecars not available — non-fatal */ }
     }
 
     console.log(chalk.blue('\nRecommendations:\n'));
