@@ -11,6 +11,7 @@ const path = require('path');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 const { resolveSpec } = require('../utils/spec-resolver');
+const { recordEvaluation } = require('../utils/working-state');
 
 /**
  * Evaluate command handler
@@ -200,6 +201,19 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
             : percentage >= 60
               ? 'D'
               : 'F';
+
+    // Record to working state
+    try {
+      const checksPassed = results.checks.filter(c => c.status === 'pass').length;
+      recordEvaluation(spec.id, {
+        score: results.score,
+        max_score: results.maxScore,
+        percentage,
+        grade,
+        checks_passed: checksPassed,
+        checks_total: results.checks.length,
+      });
+    } catch { /* non-fatal */ }
 
     console.log('\n' + '-'.repeat(60));
     console.log(

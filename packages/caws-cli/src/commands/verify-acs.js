@@ -11,6 +11,7 @@ const chalk = require('chalk');
 const { execFileSync } = require('child_process');
 const { findProjectRoot } = require('../utils/detection');
 const { resolveSpec } = require('../utils/spec-resolver');
+const { recordACVerification } = require('../utils/working-state');
 
 /**
  * Detect the project's test runner from config files.
@@ -348,6 +349,17 @@ async function verifyAcsCommand(options = {}) {
     else if (r.status === 'FAIL') { totalFail++; totalMechanical++; }
     else { totalUnchecked++; }
   }
+
+  // Record to working state
+  try {
+    recordACVerification(resolved.spec.id, {
+      total: totalAcs,
+      pass: totalPass,
+      fail: totalFail,
+      unchecked: totalUnchecked,
+      results: result.results,
+    }, projectRoot);
+  } catch { /* non-fatal */ }
 
   // Output
   if (options.format === 'json') {

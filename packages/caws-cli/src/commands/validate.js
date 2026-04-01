@@ -19,6 +19,7 @@ const {
   suggestMigration,
   loadSpecsRegistry,
 } = require('../utils/spec-resolver');
+const { recordValidation } = require('../utils/working-state');
 
 /**
  * Validate command handler
@@ -140,6 +141,20 @@ async function validateCommand(specFile, options = {}) {
     }
 
     const finalResult = enhancedValidation;
+
+    // Record to working state
+    try {
+      const grade = finalResult.complianceScore !== undefined
+        ? getComplianceGrade(finalResult.complianceScore)
+        : null;
+      recordValidation(spec.id, {
+        passed: finalResult.valid,
+        compliance_score: finalResult.complianceScore ?? null,
+        grade,
+        error_count: (finalResult.errors || []).length,
+        warning_count: (finalResult.warnings || []).length,
+      });
+    } catch { /* non-fatal */ }
 
     // Format output based on requested format
     if (options.format === 'json') {

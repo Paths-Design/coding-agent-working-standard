@@ -12,6 +12,7 @@ const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 const { parallel } = require('../utils/async-utils');
 const { resolveSpec } = require('../utils/spec-resolver');
+const { loadState } = require('../utils/working-state');
 
 /**
  * Load working specification (legacy single file approach)
@@ -373,6 +374,47 @@ function displayStatus(data) {
   }
 
   console.log('');
+
+  // Working State
+  if (spec && spec.id) {
+    let ws = null;
+    try { ws = loadState(spec.id); } catch { /* non-fatal */ }
+    if (ws && ws.phase !== 'not-started') {
+      const phaseLabels = {
+        'not-started': 'Not Started',
+        'spec-authoring': 'Spec Authoring',
+        'implementation': 'Implementation',
+        'verification': 'Verification',
+        'complete': 'Complete',
+      };
+      console.log(chalk.green('Working State'));
+      console.log(chalk.gray(`   Phase: ${phaseLabels[ws.phase] || ws.phase}`));
+      if (ws.validation) {
+        const vIcon = ws.validation.passed ? chalk.green('pass') : chalk.red('fail');
+        console.log(chalk.gray(`   Validation: ${vIcon}${ws.validation.grade ? ` (Grade ${ws.validation.grade})` : ''}`));
+      }
+      if (ws.evaluation) {
+        console.log(chalk.gray(`   Evaluation: ${ws.evaluation.percentage}% (Grade ${ws.evaluation.grade})`));
+      }
+      if (ws.gates) {
+        const gIcon = ws.gates.passed ? chalk.green('pass') : chalk.red('blocked');
+        const s = ws.gates.summary;
+        console.log(chalk.gray(`   Gates: ${gIcon} (${s.passed} pass, ${s.blocked} blocked, ${s.warned} warned)`));
+      }
+      if (ws.acceptance_criteria) {
+        const ac = ws.acceptance_criteria;
+        console.log(chalk.gray(`   ACs: ${ac.pass}/${ac.total} pass, ${ac.fail} fail, ${ac.unchecked} unchecked`));
+      }
+      if (ws.files_touched && ws.files_touched.length > 0) {
+        console.log(chalk.gray(`   Files touched: ${ws.files_touched.length}`));
+      }
+      if (ws.blockers && ws.blockers.length > 0) {
+        console.log(chalk.red(`   Blockers: ${ws.blockers.length}`));
+        ws.blockers.forEach(b => console.log(chalk.red(`      - ${b.message}`)));
+      }
+      console.log('');
+    }
+  }
 
   // Git Hooks Status
   if (hooks.installed) {
@@ -1010,6 +1052,7 @@ async function statusCommand(options = {}) {
               passed: gates.passed,
               message: gates.message,
             },
+            workingState: spec && spec.id ? (loadState(spec.id) || null) : null,
             overallProgress: calculateOverallProgress({
               spec,
               specSelection,

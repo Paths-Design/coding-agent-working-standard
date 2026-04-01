@@ -14,6 +14,7 @@ const { initializeGlobalSetup } = require('../config');
 
 // Import spec resolution system
 const { resolveSpec } = require('../utils/spec-resolver');
+const { loadState } = require('../utils/working-state');
 
 /**
  * Iterate command handler
@@ -50,8 +51,47 @@ async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}
     console.log(`ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`);
     console.log(`Current State: ${stateDescription}\n`);
 
+    // Load working state for evidence-based guidance
+    let workingState = null;
+    try { workingState = loadState(spec.id); } catch { /* non-fatal */ }
+
     // Analyze progress based on mode
     const guidance = generateGuidance(spec, currentState, options);
+
+    // If working state exists, overlay evidence-based data
+    if (workingState && workingState.phase !== 'not-started') {
+      guidance.phase = formatPhase(workingState.phase);
+
+      // Build evidence-based completed steps
+      const evidence = [];
+      if (workingState.validation && workingState.validation.passed) {
+        evidence.push(`Validation passed (Grade ${workingState.validation.grade || '?'})`);
+      }
+      if (workingState.evaluation) {
+        evidence.push(`Evaluation: ${workingState.evaluation.percentage}% (Grade ${workingState.evaluation.grade})`);
+      }
+      if (workingState.gates && workingState.gates.passed) {
+        evidence.push(`All gates passing (last run: ${workingState.gates.context} context)`);
+      }
+      if (workingState.acceptance_criteria) {
+        const ac = workingState.acceptance_criteria;
+        evidence.push(`AC verification: ${ac.pass}/${ac.total} pass, ${ac.fail} fail, ${ac.unchecked} unchecked`);
+      }
+      if (workingState.files_touched && workingState.files_touched.length > 0) {
+        evidence.push(`${workingState.files_touched.length} file(s) touched`);
+      }
+      if (evidence.length > 0) {
+        guidance.completed = evidence;
+      }
+
+      // Overlay blockers and next actions from state
+      if (workingState.blockers && workingState.blockers.length > 0) {
+        guidance.blockers = workingState.blockers.map(b => b.message);
+      }
+      if (workingState.next_actions && workingState.next_actions.length > 0) {
+        guidance.nextActions = workingState.next_actions;
+      }
+    }
 
     // Display guidance
     console.log(chalk.blue('Current Phase:\n'));
@@ -335,6 +375,20 @@ function getQualityGates(riskTier) {
   };
 
   return gates[riskTier] || gates[2];
+}
+
+/**
+ * Format phase slug into human-readable label
+ */
+function formatPhase(phase) {
+  const labels = {
+    'not-started': 'Not Started',
+    'spec-authoring': 'Spec Authoring',
+    'implementation': 'Implementation',
+    'verification': 'Verification',
+    'complete': 'Complete',
+  };
+  return labels[phase] || phase;
 }
 
 module.exports = { iterateCommand };

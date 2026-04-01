@@ -17,6 +17,7 @@ const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
 const { findProjectRoot } = require('../utils/detection');
 const { loadRegistry: loadWorktreeRegistry, getRepoRoot } = require('../worktree/worktree-manager');
 const { getAgentSessionId } = require('../utils/agent-session');
+const { initializeState, saveState, deleteState } = require('../utils/working-state');
 
 /**
  * Check if a spec is referenced by any active worktree.
@@ -449,6 +450,12 @@ async function createSpec(id, options = {}) {
   );
   await saveSpecsRegistry(registry);
 
+  // Initialize working state for new spec
+  try {
+    const initialState = initializeState(id);
+    saveState(id, initialState, findProjectRoot());
+  } catch { /* non-fatal */ }
+
   return {
     id,
     path: fileName,
@@ -702,6 +709,9 @@ async function deleteSpec(id) {
 
   // Remove file
   await fs.remove(specPath);
+
+  // Clean up working state
+  try { deleteState(id, findProjectRoot()); } catch { /* non-fatal */ }
 
   // Update registry
   delete registry.specs[id];

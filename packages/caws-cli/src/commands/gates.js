@@ -9,6 +9,7 @@ const { evaluateGates } = require('../gates/pipeline');
 const { formatText, formatJson } = require('../gates/format');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { commandWrapper } = require('../utils/command-wrapper');
+const { recordGates } = require('../utils/working-state');
 
 /**
  * Run quality gates via the v2 pipeline
@@ -77,6 +78,11 @@ async function gatesCommand(options = {}) {
       }
 
       const report = await evaluateGates({ projectRoot, stagedFiles, spec, context });
+
+      // Record to working state
+      if (spec && spec.id) {
+        try { recordGates(spec.id, report, context, projectRoot); } catch { /* non-fatal */ }
+      }
 
       if (options.json || options.format === 'json') {
         console.log(formatJson(report));

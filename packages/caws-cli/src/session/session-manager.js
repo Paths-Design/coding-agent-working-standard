@@ -11,6 +11,8 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 
+const { mergeFilesTouched } = require('../utils/working-state');
+
 const SESSIONS_DIR = '.caws/sessions';
 const REGISTRY_FILE = '.caws/sessions.json';
 const CAPSULE_SCHEMA_VERSION = 'caws.capsule.v1';
@@ -363,6 +365,11 @@ function checkpointSession(data = {}) {
   // Write updated capsule
   fs.writeFileSync(capsulePath, JSON.stringify(capsule, null, 2));
 
+  // Bridge to working state (per-spec)
+  if (capsule.spec_id && capsule.work_summary.paths_touched.length > 0) {
+    try { mergeFilesTouched(capsule.spec_id, capsule.work_summary.paths_touched, root); } catch { /* non-fatal */ }
+  }
+
   return capsule;
 }
 
@@ -429,6 +436,11 @@ function endSession(data = {}) {
 
   // Write finalized capsule
   fs.writeFileSync(capsulePath, JSON.stringify(capsule, null, 2));
+
+  // Bridge to working state (per-spec)
+  if (capsule.spec_id && capsule.work_summary.paths_touched.length > 0) {
+    try { mergeFilesTouched(capsule.spec_id, capsule.work_summary.paths_touched, root); } catch { /* non-fatal */ }
+  }
 
   // Update registry
   registry.sessions[sessionId].status = 'completed';
