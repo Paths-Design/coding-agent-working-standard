@@ -382,11 +382,126 @@ describe('Multi-Spec Command Integration', () => {
       const { archiveCommand } = require('../src/commands/archive');
       await archiveCommand('FEAT-001', { specId: 'test-spec' });
 
-      // Archive command only calls resolveSpec when the change has no workingSpec
-      // AND options.specId is provided. Since our mock loadChange returns a change
-      // with a workingSpec (from yaml.load), resolveSpec may not be called.
-      // The important thing is the command completed successfully.
-      expect(console.log).toHaveBeenCalled();
+      expect(specResolver.resolveSpec).toHaveBeenCalledWith({
+        specId: 'test-spec',
+        specFile: undefined,
+        warnLegacy: false,
+      });
+    });
+
+    test('should fall back to archived working spec snapshot when no explicit spec target is given', async () => {
+      const specResolver = require('../src/utils/spec-resolver');
+      const fsExtra = require('fs-extra');
+      const yaml = require('js-yaml');
+
+      fsExtra.pathExists.mockResolvedValue(true);
+      fsExtra.readFile.mockResolvedValue('title: Snapshot Change');
+      fsExtra.ensureDir.mockResolvedValue(undefined);
+      fsExtra.writeFile.mockResolvedValue(undefined);
+      fsExtra.move.mockResolvedValue(undefined);
+
+      yaml.load.mockReturnValue({
+        id: 'snapshot-spec',
+        title: 'Snapshot Change',
+        risk_tier: 2,
+        acceptance_criteria: [{ id: 'A1', completed: true }],
+      });
+
+      const { archiveCommand } = require('../src/commands/archive');
+      const result = await archiveCommand('FEAT-001', {});
+
+      expect(specResolver.resolveSpec).not.toHaveBeenCalled();
+      expect(result.specSelection).toEqual({
+        id: 'snapshot-spec',
+        path: expect.stringContaining(path.join('.caws', 'changes', 'FEAT-001', 'working-spec.yaml')),
+        type: 'change-snapshot',
+      });
+    });
+  });
+
+  describe('Verify ACs Command Integration', () => {
+    test('should resolve a single targeted spec for acceptance verification', async () => {
+      const specResolver = require('../src/utils/spec-resolver');
+
+      specResolver.resolveSpec.mockResolvedValue({
+        path: '.caws/specs/test-spec.yaml',
+        type: 'feature',
+        spec: mockSpec,
+      });
+
+      const { verifyAcsCommand } = require('../src/commands/verify-acs');
+      await verifyAcsCommand({ specId: 'test-spec' });
+
+      expect(specResolver.resolveSpec).toHaveBeenCalledWith({
+        specId: 'test-spec',
+        warnLegacy: false,
+      });
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringContaining('test-spec')
+      );
+    });
+  });
+
+  describe('Provenance Command Integration', () => {
+    test('should initialize provenance against the resolved spec', async () => {
+      const specResolver = require('../src/utils/spec-resolver');
+      const fsExtra = require('fs-extra');
+
+      specResolver.resolveSpec.mockResolvedValue({
+        path: '.caws/specs/test-spec.yaml',
+        type: 'feature',
+        spec: mockSpec,
+      });
+
+      fsExtra.pathExists.mockResolvedValue(false);
+      fsExtra.ensureDir.mockResolvedValue(undefined);
+      fsExtra.writeFile.mockResolvedValue(undefined);
+
+      const { initProvenance } = require('../src/commands/provenance');
+      await initProvenance({ specId: 'test-spec', output: '.caws/provenance' });
+
+      expect(specResolver.resolveSpec).toHaveBeenCalledWith({
+        specId: 'test-spec',
+        specFile: undefined,
+        warnLegacy: false,
+      });
+      expect(fsExtra.writeFile).toHaveBeenCalledWith(
+        path.join('.caws/provenance', 'config.json'),
+        expect.stringContaining('"id": "test-spec"')
+      );
+    });
+
+    test('should attach resolved spec metadata to provenance updates', async () => {
+      const specResolver = require('../src/utils/spec-resolver');
+      const fsExtra = require('fs-extra');
+
+      specResolver.resolveSpec.mockResolvedValue({
+        path: '.caws/specs/test-spec.yaml',
+        type: 'feature',
+        spec: mockSpec,
+      });
+
+      fsExtra.pathExists.mockResolvedValue(false);
+      fsExtra.ensureDir.mockResolvedValue(undefined);
+      fsExtra.writeFile.mockResolvedValue(undefined);
+
+      const { updateProvenance } = require('../src/commands/provenance');
+      await updateProvenance({
+        commit: 'abc12345def67890',
+        specId: 'test-spec',
+        output: '.caws/provenance',
+        quiet: true,
+      });
+
+      expect(specResolver.resolveSpec).toHaveBeenCalledWith({
+        specId: 'test-spec',
+        specFile: undefined,
+        warnLegacy: false,
+      });
+      expect(fsExtra.writeFile).toHaveBeenCalledWith(
+        path.join('.caws/provenance', 'chain.json'),
+        expect.stringContaining('"type": "feature"')
+      );
     });
   });
 

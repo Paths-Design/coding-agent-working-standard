@@ -302,13 +302,18 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       };
 
       fs.pathExists.mockResolvedValue(true);
+      let writtenContent = '';
       fs.readFile.mockImplementation(async (filePath) => {
         if (String(filePath).includes('registry.json')) {
           return JSON.stringify(mockRegistry);
         }
-        return yaml.dump(existingSpec);
+        return writtenContent || yaml.dump(existingSpec);
       });
-      fs.writeFile.mockResolvedValue(undefined);
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        if (String(filePath).endsWith('.yaml')) {
+          writtenContent = content;
+        }
+      });
       fs.ensureDir.mockResolvedValue(undefined);
 
       // Mock readline to return '3' (merge)

@@ -193,6 +193,34 @@ describe('parallel-manager', () => {
       // Should be whatever the current branch is (main or master)
       expect(reg.baseBranch).toBeTruthy();
     });
+
+    test('propagates canonical feature specs into agent worktrees', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const canonicalSpec = [
+        'id: auth-feature',
+        'title: Auth Feature',
+        'risk_tier: 2',
+        'mode: feature',
+        'acceptance:',
+        '  - id: A1',
+        '    given: auth is configured',
+        '    when: the agent enters its worktree',
+        '    then: it should see the canonical feature spec',
+      ].join('\n');
+      fs.writeFileSync(path.join(testDir, '.caws', 'specs', 'auth-feature.yaml'), canonicalSpec);
+
+      const plan = loadPlan(
+        writePlan({
+          version: 1,
+          agents: [{ name: 'agent-auth', spec_id: 'auth-feature' }],
+        })
+      );
+
+      const results = setupParallel(plan);
+      const worktreeSpecPath = path.join(results[0].path, '.caws', 'working-spec.yaml');
+
+      expect(fs.readFileSync(worktreeSpecPath, 'utf8')).toBe(canonicalSpec);
+    });
   });
 
   describe('getParallelStatus', () => {

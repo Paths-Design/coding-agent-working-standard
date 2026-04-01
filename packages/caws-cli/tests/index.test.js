@@ -432,6 +432,33 @@ module.exports = { runCodemod };`
       expect(workingSpec).toHaveProperty('mode');
     });
 
+    test('should create canonical feature spec and specs registry', () => {
+      const cliPath = path.resolve(__dirname, '../dist/index.js');
+      try {
+        execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+          encoding: 'utf8',
+          cwd: testTempDir,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      } catch (_error) {
+        // CLI may "fail" due to stderr warnings but still create files
+      }
+
+      const projectRoot = path.join(testTempDir, testProjectName);
+      const workingSpecPath = path.join(projectRoot, '.caws', 'working-spec.yaml');
+      const workingSpec = yaml.load(fs.readFileSync(workingSpecPath, 'utf8'));
+      const featureSpecPath = path.join(projectRoot, '.caws', 'specs', `${workingSpec.id}.yaml`);
+      const registryPath = path.join(projectRoot, '.caws', 'specs', 'registry.json');
+
+      expect(fs.existsSync(featureSpecPath)).toBe(true);
+      expect(fs.existsSync(registryPath)).toBe(true);
+      expect(fs.readFileSync(featureSpecPath, 'utf8')).toBe(fs.readFileSync(workingSpecPath, 'utf8'));
+
+      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      expect(registry.specs[workingSpec.id]).toBeDefined();
+      expect(registry.specs[workingSpec.id].path).toBe(`${workingSpec.id}.yaml`);
+    });
+
     test('should create agents.md guide', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       try {

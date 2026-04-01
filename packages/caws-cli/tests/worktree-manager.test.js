@@ -166,6 +166,31 @@ describe('worktree-manager', () => {
       const entry = createWorktree('with-spec', { specId: 'FEAT-001' });
       expect(entry.specId).toBe('FEAT-001');
     });
+
+    test('derives worktree working spec from canonical feature spec when available', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const canonicalSpec = [
+        'id: FEAT-001',
+        'title: Canonical Feature',
+        'risk_tier: 2',
+        'mode: feature',
+        'acceptance:',
+        '  - id: A1',
+        '    given: user is in worktree',
+        '    when: the feature spec is resolved',
+        '    then: the worktree should use canonical content',
+      ].join('\n');
+      fs.writeFileSync(path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml'), canonicalSpec);
+
+      const entry = createWorktree('with-canonical-spec', { specId: 'FEAT-001' });
+      const worktreeWorkingSpec = path.join(entry.path, '.caws', 'working-spec.yaml');
+      const worktreeFeatureSpec = path.join(entry.path, '.caws', 'specs', 'FEAT-001.yaml');
+
+      expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
+      expect(fs.existsSync(worktreeFeatureSpec)).toBe(true);
+      expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toBe(canonicalSpec);
+      expect(fs.readFileSync(worktreeFeatureSpec, 'utf8')).toBe(canonicalSpec);
+    });
   });
 
   describe('listWorktrees', () => {
