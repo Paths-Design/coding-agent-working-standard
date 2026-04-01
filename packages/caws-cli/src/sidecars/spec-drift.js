@@ -5,7 +5,8 @@
  * @author @darianrosebrook
  */
 
-const minimatch = require('minimatch');
+const _minimatch = require('minimatch');
+const minimatch = typeof _minimatch === 'function' ? _minimatch : _minimatch.minimatch;
 const { createSidecarOutput, createNoStateOutput } = require('./schema');
 const { getRecurrence } = require('../gates/feedback');
 
