@@ -30,15 +30,13 @@ function validateSpecSchema(spec, specPath) {
       const errorDetails = result.errors
         .map(e => `  ${e.path}: ${e.message}`)
         .join('\n');
-      throw new Error(
-        `Spec file has schema violations (${specPath}):\n${errorDetails}`
-      );
+      // Schema violations are warnings, not fatal — the spec is still loadable.
+      // Commands like validate will report these; other commands shouldn't be blocked.
+      if (process.env.CAWS_QUIET !== '1') {
+        console.warn(`Schema warnings for ${specPath}:\n${errorDetails}`);
+      }
     }
   } catch (schemaErr) {
-    // If the error is from our own validation, re-throw it
-    if (schemaErr.message.includes('schema violations')) {
-      throw schemaErr;
-    }
     // Schema loading/compilation errors are non-fatal — warn and continue
     console.warn('Could not validate spec schema:', schemaErr.message);
   }

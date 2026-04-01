@@ -100,14 +100,15 @@ describe('formatSidecarText', () => {
       current_phase: 'implement',
       target_phase: 'verify',
       gaps: [
-        { id: 'G-1', severity: 'high', description: 'No tests written' },
-        { id: 'G-2', severity: 'low', description: 'Docs incomplete' },
+        { category: 'validation_failure', severity: 'blocker', message: 'No tests written', remediation: 'caws validate' },
+        { category: 'no_evaluation', severity: 'warning', message: 'Docs incomplete', remediation: 'caws evaluate' },
       ],
     });
     const text = formatSidecarText(output);
     expect(text).toContain('Phase Gaps');
     expect(text).toContain('implement');
     expect(text).toContain('No tests written');
+    expect(text).toContain('caws validate');
   });
 
   test('renders waiver-draft output without crashing', () => {

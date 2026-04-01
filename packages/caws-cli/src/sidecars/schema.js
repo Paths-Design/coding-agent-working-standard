@@ -83,8 +83,9 @@ function formatGaps(data) {
   if (data.target_phase) lines.push(`  Target phase:  ${data.target_phase}`);
   if (data.gaps && data.gaps.length > 0) {
     data.gaps.forEach(g => {
-      const sev = g.severity === 'high' ? chalk.red(g.severity) : chalk.yellow(g.severity);
-      lines.push(`  - [${sev}] ${g.description || g.id}`);
+      const sev = g.severity === 'blocker' ? chalk.red(g.severity) : chalk.yellow(g.severity);
+      lines.push(`  - [${sev}] ${g.message || g.category}`);
+      if (g.remediation) lines.push(`    Fix: ${g.remediation}`);
     });
   }
   return lines.join('\n');
