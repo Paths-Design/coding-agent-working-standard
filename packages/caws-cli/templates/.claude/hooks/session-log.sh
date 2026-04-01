@@ -549,12 +549,85 @@ handle_pre_compact() {
 }
 
 # ============================================================
+# Agent registry heartbeat — register this agent with CAWS
+# ============================================================
+AGENTS_REGISTRY="${CWD}/.caws/agents.json"
+
+heartbeat_agent() {
+  [ "$SESSION_ID" = "unknown" ] && return
+  [ ! -d "${CWD}/.caws" ] && return
+
+  local model_val
+  model_val=$(echo "$INPUT" | jq -r '.model // "unknown"' 2>/dev/null)
+
+  local registry
+  if [ -f "$AGENTS_REGISTRY" ]; then
+    registry=$(cat "$AGENTS_REGISTRY" 2>/dev/null || echo '{"version":1,"agents":{}}')
+  else
+    registry='{"version":1,"agents":{}}'
+  fi
+
+  registry=$(echo "$registry" | python3 -c "
+import json, sys
+from datetime import datetime, timedelta, timezone
+
+TTL = timedelta(minutes=30)
+now = datetime.now(timezone.utc)
+sid = '$SESSION_ID'
+model = '$model_val'
+
+data = json.load(sys.stdin)
+agents = data.get('agents', {})
+
+pruned = {}
+for k, entry in agents.items():
+    try:
+        last = datetime.fromisoformat(entry['lastSeen'].replace('Z', '+00:00'))
+        if now - last < TTL:
+            pruned[k] = entry
+    except (KeyError, ValueError):
+        pass
+
+existing = pruned.get(sid, {})
+pruned[sid] = {
+    'sessionId': sid,
+    'platform': 'claude-code',
+    'model': model if model != 'unknown' else existing.get('model'),
+    'specId': existing.get('specId'),
+    'ttl': 1800000,
+    'firstSeen': existing.get('firstSeen', now.strftime('%Y-%m-%dT%H:%M:%SZ')),
+    'lastSeen': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+}
+
+data['agents'] = pruned
+json.dump(data, sys.stdout, indent=2)
+" 2>/dev/null)
+
+  [ -n "$registry" ] && echo "$registry" > "$AGENTS_REGISTRY"
+}
+
+remove_agent() {
+  [ "$SESSION_ID" = "unknown" ] && return
+  [ ! -f "$AGENTS_REGISTRY" ] && return
+
+  python3 -c "
+import json
+sid = '$SESSION_ID'
+with open('$AGENTS_REGISTRY', 'r') as f:
+    data = json.load(f)
+data.get('agents', {}).pop(sid, None)
+with open('$AGENTS_REGISTRY', 'w') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null || true
+}
+
+# ============================================================
 # DISPATCH
 # ============================================================
 case "$HOOK_EVENT" in
-  SessionStart)   handle_session_start ;;
-  Stop)           handle_stop ;;
-  PreCompact)     handle_pre_compact ;;
+  SessionStart)   handle_session_start; heartbeat_agent ;;
+  Stop)           handle_stop; remove_agent ;;
+  PreCompact)     handle_pre_compact; heartbeat_agent ;;
   *)              ;; # Other events: no-op
 esac
 

@@ -820,6 +820,86 @@ ensure_meta() {
 }
 
 # ============================================================
+# Agent registry heartbeat — register this agent with CAWS
+# ============================================================
+AGENTS_REGISTRY="${CWD}/.caws/agents.json"
+
+heartbeat_agent() {
+  [ "$CONVERSATION_ID" = "unknown" ] && return
+
+  mkdir -p "$(dirname "$AGENTS_REGISTRY")"
+
+  # Read existing registry or start fresh
+  local registry
+  if [ -f "$AGENTS_REGISTRY" ]; then
+    registry=$(cat "$AGENTS_REGISTRY" 2>/dev/null || echo '{"version":1,"agents":{}}')
+  else
+    registry='{"version":1,"agents":{}}'
+  fi
+
+  # Prune stale entries (older than 30 minutes) and upsert this agent
+  registry=$(echo "$registry" | python3 -c "
+import json, sys
+from datetime import datetime, timedelta, timezone
+
+TTL = timedelta(minutes=30)
+now = datetime.now(timezone.utc)
+conv_id = '$CONVERSATION_ID'
+
+data = json.load(sys.stdin)
+agents = data.get('agents', {})
+
+# Prune stale
+pruned = {}
+for sid, entry in agents.items():
+    try:
+        last = datetime.fromisoformat(entry['lastSeen'].replace('Z', '+00:00'))
+        if now - last < TTL:
+            pruned[sid] = entry
+    except (KeyError, ValueError):
+        pass
+
+# Upsert current agent
+existing = pruned.get(conv_id, {})
+pruned[conv_id] = {
+    'sessionId': conv_id,
+    'platform': 'cursor',
+    'model': existing.get('model'),
+    'specId': existing.get('specId'),
+    'ttl': 1800000,
+    'firstSeen': existing.get('firstSeen', now.strftime('%Y-%m-%dT%H:%M:%SZ')),
+    'lastSeen': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+}
+
+data['agents'] = pruned
+json.dump(data, sys.stdout, indent=2)
+" 2>/dev/null)
+
+  [ -n "$registry" ] && echo "$registry" > "$AGENTS_REGISTRY"
+}
+
+remove_agent() {
+  [ "$CONVERSATION_ID" = "unknown" ] && return
+  [ ! -f "$AGENTS_REGISTRY" ] && return
+
+  # Remove this agent from registry
+  python3 -c "
+import json, sys
+
+conv_id = '$CONVERSATION_ID'
+with open('$AGENTS_REGISTRY', 'r') as f:
+    data = json.load(f)
+
+agents = data.get('agents', {})
+agents.pop(conv_id, None)
+data['agents'] = agents
+
+with open('$AGENTS_REGISTRY', 'w') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null || true
+}
+
+# ============================================================
 # DISPATCH
 # ============================================================
 ensure_meta
@@ -831,9 +911,12 @@ case "$HOOK_EVENT" in
   beforeReadFile)        handle_before_read_file ;;
   afterAgentResponse)    handle_after_agent_response ;;
   afterAgentThought)     handle_after_agent_thought ;;
-  stop)                  handle_stop ;;
+  stop)                  handle_stop; remove_agent ;;
   *)                     ;;
 esac
+
+# Heartbeat on every event (keeps TTL fresh while agent is active)
+heartbeat_agent
 
 # Always allow — this is observation only
 echo '{"permission":"allow"}' 2>/dev/null || true

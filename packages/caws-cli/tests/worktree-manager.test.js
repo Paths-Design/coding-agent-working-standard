@@ -979,8 +979,10 @@ describe('worktree-manager', () => {
 
   describe('H5: collision with null CLAUDE_SESSION_ID', () => {
     test('worktree lifecycle works when CLAUDE_SESSION_ID is undefined', () => {
-      // Delete CLAUDE_SESSION_ID entirely — owner will be null
+      // Delete all agent session sources — owner will be null
       delete process.env.CLAUDE_SESSION_ID;
+      const savedTraceId = process.env.CURSOR_TRACE_ID;
+      delete process.env.CURSOR_TRACE_ID;
 
       const entry = createWorktree('null-owner');
       expect(entry.owner).toBeNull();
@@ -1016,6 +1018,11 @@ describe('worktree-manager', () => {
 
       // Cleanup
       destroyWorktree('null-owner', { force: true, deleteBranch: true });
+
+      // Restore env
+      if (savedTraceId !== undefined) {
+        process.env.CURSOR_TRACE_ID = savedTraceId;
+      }
     });
   });
 

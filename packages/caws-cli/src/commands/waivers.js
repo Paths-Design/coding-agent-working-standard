@@ -13,6 +13,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
+const { getAgentSessionId } = require('../utils/agent-session');
 const WaiversManager = require('../waivers-manager');
 const { commandWrapper, Output } = require('../utils/command-wrapper');
 
@@ -141,7 +142,7 @@ async function createWaiver(options) {
   // case (approver is a prefix of the session ID).
   // When CLAUDE_SESSION_ID is unset or empty, we can't identify the creator,
   // so self-approval prevention is skipped ('' || null → null → falsy guard).
-  const creatorSession = process.env.CLAUDE_SESSION_ID || null;
+  const creatorSession = getAgentSessionId(process.cwd());
   if (creatorSession && options.approvedBy) {
     if (options.approvedBy === creatorSession) {
       throw new Error(

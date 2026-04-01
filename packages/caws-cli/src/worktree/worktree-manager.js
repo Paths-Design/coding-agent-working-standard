@@ -9,6 +9,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
+const { getAgentSessionId } = require('../utils/agent-session');
 
 const WORKTREES_DIR = '.caws/worktrees';
 const REGISTRY_FILE = '.caws/worktrees.json';
@@ -391,7 +392,7 @@ function createWorktree(name, options = {}) {
       );
     }
     // Destroyed entries: check if another session owns the branch
-    if (existing.owner && existing.owner !== (process.env.CLAUDE_SESSION_ID || null)) {
+    if (existing.owner && existing.owner !== getAgentSessionId(root)) {
       // Branch may still be in use by the owning session for merge
       try {
         const branchExists = execFileSync('git', ['rev-parse', '--verify', BRANCH_PREFIX + name], {
@@ -423,7 +424,7 @@ function createWorktree(name, options = {}) {
       cwd: root, stdio: 'pipe',
     });
     // Branch exists — refuse unless it's fully merged into base
-    const currentSession = process.env.CLAUDE_SESSION_ID || null;
+    const currentSession = getAgentSessionId(root);
     const registryOwner = registry.worktrees[name]?.owner;
     if (registryOwner && registryOwner !== currentSession) {
       throw new Error(
@@ -524,7 +525,7 @@ function createWorktree(name, options = {}) {
     baseBranch: base,
     scope: scope || null,
     specId: specId || null,
-    owner: options.owner || process.env.CLAUDE_SESSION_ID || null,
+    owner: options.owner || getAgentSessionId(root) || null,
     createdAt: new Date().toISOString(),
     status: 'fresh',
   };
@@ -660,7 +661,7 @@ function repairWorktrees(options = {}) {
   const root = getRepoRoot();
   const registry = loadRegistry(root);
   const { entries } = reconcileRegistry(root);
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(root);
 
   const repaired = [];
   const pruned = [];
@@ -794,7 +795,7 @@ function destroyWorktree(name, options = {}) {
   }
 
   // Ownership check: refuse to destroy another agent's worktree without --force
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(root);
   const isLiveStatus = entry.status === 'active' || entry.status === 'fresh' || entry.status === 'merged';
   if (
     !force &&
@@ -1059,7 +1060,7 @@ function pruneWorktrees(options = {}) {
   const root = getRepoRoot();
   const registry = loadRegistry(root);
   const { maxAgeDays = 30, recentCommitMinutes = 60, force = false } = options;
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(root);
 
   const now = new Date();
   const pruned = [];

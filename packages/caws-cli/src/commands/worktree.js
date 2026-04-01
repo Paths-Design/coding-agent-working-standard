@@ -13,6 +13,7 @@ const {
   pruneWorktrees,
   repairWorktrees,
 } = require('../worktree/worktree-manager');
+const { getAgentSessionId } = require('../utils/agent-session');
 
 /**
  * Handle worktree subcommands
@@ -92,7 +93,7 @@ function handleList() {
   console.log(chalk.gray('-'.repeat(totalWidth)));
 
   // Show current session for comparison
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(process.cwd());
   if (currentSession) {
     const shortCurrent = currentSession.length > 8 ? '...' + currentSession.slice(-8) : currentSession;
     console.log(chalk.gray(`You: ${shortCurrent}`));

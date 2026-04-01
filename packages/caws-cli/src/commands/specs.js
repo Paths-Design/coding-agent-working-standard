@@ -16,6 +16,7 @@ const { SPEC_TYPES } = require('../constants/spec-types');
 const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
 const { findProjectRoot } = require('../utils/detection');
 const { loadRegistry: loadWorktreeRegistry, getRepoRoot } = require('../worktree/worktree-manager');
+const { getAgentSessionId } = require('../utils/agent-session');
 
 /**
  * Check if a spec is referenced by any active worktree.
@@ -335,7 +336,7 @@ async function createSpec(id, options = {}) {
     // Check session ownership — only the creator session can override
     const registry = await loadSpecsRegistry();
     const existingEntry = registry.specs[id];
-    const currentSession = process.env.CLAUDE_SESSION_ID || null;
+    const currentSession = getAgentSessionId(process.cwd());
     if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
       throw new Error(
         `Cannot override spec '${id}': owned by another session (${existingEntry.owner}). ` +
@@ -462,7 +463,7 @@ async function createSpec(id, options = {}) {
   registry.specs[id] = buildRegistryEntryFromSpec(
     parsedSpec,
     fileName,
-    process.env.CLAUDE_SESSION_ID || null
+    getAgentSessionId(process.cwd())
   );
   await saveSpecsRegistry(registry);
 
@@ -696,7 +697,7 @@ async function deleteSpec(id) {
   }
 
   // Block deletion if owned by another session
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(process.cwd());
   const existingEntry = registry.specs[id];
   if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
     throw new Error(
@@ -751,7 +752,7 @@ async function closeSpec(id) {
   // Block closure if owned by another session
   const registry = await loadSpecsRegistry();
   const existingEntry = registry.specs[id];
-  const currentSession = process.env.CLAUDE_SESSION_ID || null;
+  const currentSession = getAgentSessionId(process.cwd());
   if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
     console.error(
       chalk.red(
