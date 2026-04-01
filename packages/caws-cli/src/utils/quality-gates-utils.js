@@ -36,12 +36,32 @@ const CONFIG = {
 function detectCrisisMode() {
   try {
     const crisisIndicators = [
-      // Check for crisis response in working spec
+      // Check for crisis response in any active spec (feature specs then legacy)
       () => {
-        const specPath = path.join(process.cwd(), '.caws/working-spec.yaml');
-        if (fs.existsSync(specPath)) {
-          const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
-          return spec.mode === 'crisis' || spec.crisis_mode === true;
+        // Check feature specs first
+        const specsDir = path.join(process.cwd(), '.caws/specs');
+        if (fs.existsSync(specsDir)) {
+          try {
+            const files = fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+            for (const file of files) {
+              const spec = yaml.load(fs.readFileSync(path.join(specsDir, file), 'utf8'));
+              if (spec && (spec.mode === 'crisis' || spec.crisis_mode === true)) {
+                return true;
+              }
+            }
+          } catch {
+            // Fall through to legacy check
+          }
+        }
+        // Legacy fallback
+        const legacyPath = path.join(process.cwd(), '.caws/working-spec.yaml');
+        if (fs.existsSync(legacyPath)) {
+          try {
+            const spec = yaml.load(fs.readFileSync(legacyPath, 'utf8'));
+            return spec.mode === 'crisis' || spec.crisis_mode === true;
+          } catch {
+            // Ignore
+          }
         }
         return false;
       },
@@ -73,7 +93,10 @@ function detectCrisisMode() {
  */
 function getStagedFiles() {
   try {
-    const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf8' })
+    const stagedFiles = execSync('git diff --cached --name-only', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
       .trim()
       .split('\n')
       .filter((file) => file.trim() !== '');

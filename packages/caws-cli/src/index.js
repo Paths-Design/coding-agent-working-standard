@@ -16,6 +16,14 @@ const path = require('path');
 const yaml = require('js-yaml');
 const chalk = require('chalk');
 
+if (
+  process.argv.includes('--json') ||
+  process.argv.includes('--quiet') ||
+  process.argv.includes('-q')
+) {
+  process.env.CAWS_QUIET = '1';
+}
+
 // Import configuration and utilities
 const {
   CLI_VERSION,
@@ -191,6 +199,7 @@ program
   .command('archive <change-id>')
   .description('Archive completed change')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
+  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
   .option('-f, --force', 'Force archive even if criteria not met', false)
   .option('--dry-run', 'Preview archive without performing it', false)
   .action(archiveCommand);
@@ -484,6 +493,14 @@ program
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(iterateCommand);
 
+// Burnup command
+program
+  .command('burnup [spec-file]')
+  .description('Generate budget burn-up report for scope visibility')
+  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action(burnupCommand);
+
 // Waivers command group
 const waiversCmd = program.command('waivers').description('Manage CAWS quality gate waivers');
 
@@ -562,7 +579,9 @@ program
   .command('test-analysis <subcommand> [options...]')
   .description('Statistical analysis for budget prediction')
   .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .action(testAnalysisCommand);
+  .action((subcommand, optionArgs, command) => {
+    testAnalysisCommand(subcommand, optionArgs, command.opts());
+  });
 
 // Provenance command group
 const provenanceCmd = program.command('provenance').description('Manage CAWS provenance tracking');
@@ -572,6 +591,8 @@ provenanceCmd
   .command('update')
   .description('Add new commit to provenance chain')
   .requiredOption('-c, --commit <hash>', 'Git commit hash')
+  .option('--spec-id <id>', 'Feature-specific spec ID')
+  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
   .option('-m, --message <msg>', 'Commit message')
   .option('-a, --author <info>', 'Author information')
   .option('-q, --quiet', 'Suppress output')
@@ -608,6 +629,8 @@ provenanceCmd
 provenanceCmd
   .command('init')
   .description('Initialize provenance tracking for the project')
+  .option('--spec-id <id>', 'Feature-specific spec ID')
+  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
   .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
   .option('--cursor-api <url>', 'Cursor tracking API endpoint')
   .option('--cursor-key <key>', 'Cursor API key')

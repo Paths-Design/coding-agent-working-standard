@@ -11,6 +11,7 @@ const chalk = require('chalk');
 const { execSync } = require('child_process');
 
 const { deriveBudget, generateBurnupReport } = require('../budget-derivation');
+const { resolveSpec } = require('../utils/spec-resolver');
 
 /**
  * Get actual git change statistics from the repository
@@ -86,19 +87,27 @@ function getGitChangeStats(specDir) {
 
 /**
  * Burn-up command handler
- * @param {string} specFile - Path to spec file
+ * @param {string} specFile - Path to spec file (positional, optional)
+ * @param {object} options - Command options including --spec-id
  */
-async function burnupCommand(specFile) {
+async function burnupCommand(specFile, options = {}) {
   try {
-    let specPath = specFile || path.join('.caws', 'working-spec.yaml');
+    let specPath;
+    let spec;
 
-    if (!fs.existsSync(specPath)) {
-      console.error(chalk.red(`Spec file not found: ${specPath}`));
-      process.exit(1);
+    // Resolve spec: explicit file > --spec-id > resolver default
+    if (specFile) {
+      specPath = specFile;
+      if (!fs.existsSync(specPath)) {
+        console.error(chalk.red(`Spec file not found: ${specPath}`));
+        process.exit(1);
+      }
+      spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+    } else {
+      const resolved = await resolveSpec({ specId: options.specId });
+      specPath = resolved.specPath;
+      spec = resolved.spec;
     }
-
-    const specContent = fs.readFileSync(specPath, 'utf8');
-    const spec = yaml.load(specContent);
 
     console.log(chalk.cyan('Generating CAWS budget burn-up report...'));
 

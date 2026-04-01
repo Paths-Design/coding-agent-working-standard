@@ -79,16 +79,62 @@ function getWorkspaceFingerprint(cwd) {
 }
 
 /**
- * Get project name from working spec or directory
+ * Load the best available spec synchronously (feature specs first, then legacy).
  * @param {string} root - Repository root
+ * @param {string} [specId] - Optional specific spec ID
+ * @returns {object|null} Parsed spec object or null
+ */
+function loadBestSpecSync(root, specId) {
+  const yaml = require('js-yaml');
+
+  // If a specific spec ID is requested, load it directly
+  if (specId) {
+    for (const ext of ['.yaml', '.yml']) {
+      const p = path.join(root, '.caws/specs', `${specId}${ext}`);
+      if (fs.existsSync(p)) {
+        try { return yaml.load(fs.readFileSync(p, 'utf8')); } catch { /* skip */ }
+      }
+    }
+  }
+
+  // Check registry for active feature specs
+  const registryPath = path.join(root, '.caws/specs/registry.json');
+  if (fs.existsSync(registryPath)) {
+    try {
+      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      const specs = registry.specs || {};
+      const activeIds = Object.keys(specs).filter(
+        id => specs[id].status !== 'closed' && specs[id].status !== 'archived'
+      );
+      for (const id of activeIds) {
+        const specEntry = specs[id];
+        const p = path.join(root, '.caws/specs', specEntry.path || `${id}.yaml`);
+        if (fs.existsSync(p)) {
+          try { return yaml.load(fs.readFileSync(p, 'utf8')); } catch { /* skip */ }
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Legacy fallback
+  const legacyPath = path.join(root, '.caws/working-spec.yaml');
+  if (fs.existsSync(legacyPath)) {
+    try { return yaml.load(fs.readFileSync(legacyPath, 'utf8')); } catch { /* skip */ }
+  }
+
+  return null;
+}
+
+/**
+ * Get project name from best available spec or directory
+ * @param {string} root - Repository root
+ * @param {string} [specId] - Optional specific spec ID
  * @returns {string}
  */
-function getProjectName(root) {
+function getProjectName(root, specId) {
   try {
-    const yaml = require('js-yaml');
-    const specPath = path.join(root, '.caws/working-spec.yaml');
-    if (fs.existsSync(specPath)) {
-      const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+    const spec = loadBestSpecSync(root, specId);
+    if (spec) {
       return spec.title || spec.id || path.basename(root);
     }
   } catch {
@@ -98,16 +144,15 @@ function getProjectName(root) {
 }
 
 /**
- * Get skein ID from working spec
+ * Get skein ID from best available spec
  * @param {string} root - Repository root
+ * @param {string} [specId] - Optional specific spec ID
  * @returns {string}
  */
-function getSkeinId(root) {
+function getSkeinId(root, specId) {
   try {
-    const yaml = require('js-yaml');
-    const specPath = path.join(root, '.caws/working-spec.yaml');
-    if (fs.existsSync(specPath)) {
-      const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+    const spec = loadBestSpecSync(root, specId);
+    if (spec) {
       return spec.id || 'unknown';
     }
   } catch {
@@ -201,8 +246,8 @@ function startSession(options = {}) {
 
   const capsule = {
     schema: CAPSULE_SCHEMA_VERSION,
-    project: getProjectName(root),
-    skein_id: getSkeinId(root),
+    project: getProjectName(root, specId),
+    skein_id: getSkeinId(root, specId),
     session_id: sessionId,
     role,
     spec_id: specId || null,

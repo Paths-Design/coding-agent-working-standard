@@ -115,9 +115,10 @@ Follow this proven TDD workflow:
 7. **Archive**: Complete and archive finished work
 
 Key commands:
-- \`caws progress update --criterion-id A1 --status completed\`
-- \`caws validate\` - Validate current work
-- \`caws status --visual\` - Check progress
+- \`caws validate --spec-id FEAT-001\` - Validate current work
+- \`caws status --spec-id FEAT-001\` - Check progress
+- \`caws evaluate --spec-id FEAT-001\` - Quality/readiness scoring
+- \`caws burnup --spec-id FEAT-001\` - Budget burn-up report
 - \`caws archive <change-id>\` - Complete work
         `,
         action: 'Try: caws status --visual',
@@ -235,18 +236,18 @@ Let's get you started!
 First, ensure CAWS is properly initialized:
 
 1. Initialize CAWS: \`caws init .\`
-2. Choose your complexity mode: \`caws mode set --interactive\`
+2. Create a feature spec: \`caws specs create FEAT-001 --type feature --title "My Feature"\`
 3. Set up git hooks: \`caws hooks install\`
 4. Initialize provenance: \`caws provenance init\`
 
 For existing projects, use: \`caws scaffold\`
 
-Choose a mode that fits your project:
-- Simple: Small projects, quick prototyping
-- Standard: Most teams and projects
-- Enterprise: Large teams, compliance requirements
+All commands support \`--spec-id\` to target a specific feature spec:
+- \`caws validate --spec-id FEAT-001\`
+- \`caws status --spec-id FEAT-001\`
+- \`caws evaluate --spec-id FEAT-001\`
         `,
-        action: 'Try: caws mode current',
+        action: 'Try: caws specs list',
         verify: 'mode_setup',
       },
       {
