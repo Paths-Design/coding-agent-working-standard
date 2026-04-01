@@ -82,7 +82,8 @@ function loadAgentRegistry(root) {
   let pruned = false;
   for (const [id, entry] of Object.entries(registry.agents || {})) {
     const ttl = entry.ttl || DEFAULT_TTL_MS;
-    const lastSeen = new Date(entry.lastSeen).getTime();
+    const lastSeenTime = entry.lastSeen ? new Date(entry.lastSeen).getTime() : 0;
+    const lastSeen = isNaN(lastSeenTime) ? 0 : lastSeenTime;
     if (now - lastSeen > ttl) {
       delete registry.agents[id];
       pruned = true;
@@ -97,7 +98,7 @@ function loadAgentRegistry(root) {
 }
 
 /**
- * Save the agent registry.
+ * Save the agent registry atomically (write-then-rename).
  * @param {string} root - Project root
  * @param {object} registry - Registry object
  */
@@ -107,7 +108,9 @@ function saveAgentRegistry(root, registry) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+  const tmpPath = registryPath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, JSON.stringify(registry, null, 2));
+  fs.renameSync(tmpPath, registryPath);
 }
 
 /**

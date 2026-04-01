@@ -32,6 +32,12 @@ function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
   const canonicalSpecPath = findFeatureSpecPath(root, specId);
   const workingSpecPath = path.join(cawsDest, 'working-spec.yaml');
 
+  if (!canonicalSpecPath) {
+    console.warn(
+      chalk.yellow(`Warning: spec '${specId}' not found in .caws/specs/ — generating default working spec for worktree`)
+    );
+  }
+
   if (canonicalSpecPath) {
     const destSpecsDir = path.join(cawsDest, 'specs');
     const destSpecPath = path.join(destSpecsDir, path.basename(canonicalSpecPath));

@@ -7,9 +7,7 @@
  * @author @darianrosebrook
  */
 
-const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 const { resolveSpec } = require('../utils/spec-resolver');

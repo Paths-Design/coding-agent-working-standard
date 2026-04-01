@@ -154,56 +154,38 @@ function normalizeSpecForValidation(spec = {}) {
       ? parseInt(spec.risk_tier.replace(/^T/i, ''), 10) || 3
       : spec.risk_tier || 3;
 
-  return {
+  const acceptanceVal = Array.isArray(spec.acceptance)
+    ? spec.acceptance
+    : Array.isArray(spec.acceptance_criteria)
+      ? spec.acceptance_criteria
+      : [];
+
+  const defaults = {
     type: 'feature',
     status: 'draft',
     risk_tier: normalizedRiskTier,
     mode: 'standard',
-    blast_radius: {
-      modules: [],
-      data_migration: false,
-    },
+    blast_radius: { modules: [], data_migration: false },
     operational_rollback_slo: '5m',
-    scope: {
-      in: ['src/', 'tests/'],
-      out: ['node_modules/', 'dist/', 'build/'],
-    },
+    scope: { in: ['src/', 'tests/'], out: ['node_modules/', 'dist/', 'build/'] },
     invariants: ['System maintains data consistency'],
     acceptance: [],
     acceptance_criteria: [],
-    non_functional: {
-      a11y: [],
-      perf: {},
-      security: [],
-    },
+    non_functional: { a11y: [], perf: {}, security: [] },
     contracts: [],
+  };
+
+  return {
+    ...defaults,
     ...spec,
-    blast_radius: {
-      modules: [],
-      data_migration: false,
-      ...(spec.blast_radius || {}),
-    },
-    scope: {
-      in: ['src/', 'tests/'],
-      out: ['node_modules/', 'dist/', 'build/'],
-      ...(spec.scope || {}),
-    },
-    non_functional: {
-      a11y: [],
-      perf: {},
-      security: [],
-      ...(spec.non_functional || {}),
-    },
-    acceptance: Array.isArray(spec.acceptance)
-      ? spec.acceptance
-      : Array.isArray(spec.acceptance_criteria)
-        ? spec.acceptance_criteria
-        : [],
+    risk_tier: normalizedRiskTier,
+    blast_radius: { ...defaults.blast_radius, ...(spec.blast_radius || {}) },
+    scope: { ...defaults.scope, ...(spec.scope || {}) },
+    non_functional: { ...defaults.non_functional, ...(spec.non_functional || {}) },
+    acceptance: acceptanceVal,
     acceptance_criteria: Array.isArray(spec.acceptance_criteria)
       ? spec.acceptance_criteria
-      : Array.isArray(spec.acceptance)
-        ? spec.acceptance
-        : [],
+      : acceptanceVal,
   };
 }
 
@@ -336,7 +318,7 @@ async function createSpec(id, options = {}) {
     // Check session ownership — only the creator session can override
     const registry = await loadSpecsRegistry();
     const existingEntry = registry.specs[id];
-    const currentSession = getAgentSessionId(process.cwd());
+    const currentSession = getAgentSessionId(findProjectRoot());
     if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
       throw new Error(
         `Cannot override spec '${id}': owned by another session (${existingEntry.owner}). ` +
@@ -463,7 +445,7 @@ async function createSpec(id, options = {}) {
   registry.specs[id] = buildRegistryEntryFromSpec(
     parsedSpec,
     fileName,
-    getAgentSessionId(process.cwd())
+    getAgentSessionId(findProjectRoot())
   );
   await saveSpecsRegistry(registry);
 
@@ -697,7 +679,7 @@ async function deleteSpec(id) {
   }
 
   // Block deletion if owned by another session
-  const currentSession = getAgentSessionId(process.cwd());
+  const currentSession = getAgentSessionId(findProjectRoot());
   const existingEntry = registry.specs[id];
   if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
     throw new Error(
@@ -752,7 +734,7 @@ async function closeSpec(id) {
   // Block closure if owned by another session
   const registry = await loadSpecsRegistry();
   const existingEntry = registry.specs[id];
-  const currentSession = getAgentSessionId(process.cwd());
+  const currentSession = getAgentSessionId(findProjectRoot());
   if (existingEntry?.owner && currentSession && existingEntry.owner !== currentSession) {
     console.error(
       chalk.red(

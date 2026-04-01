@@ -85,7 +85,12 @@ async function resolveSpec(options = {}) {
     if (await fs.pathExists(explicitPath)) {
       const yaml = require('js-yaml');
       const content = await fs.readFile(explicitPath, 'utf8');
-      const spec = yaml.load(content);
+      let spec;
+      try {
+        spec = yaml.load(content);
+      } catch (yamlError) {
+        throw new Error(`Invalid YAML in spec file ${explicitPath}: ${yamlError.message}`);
+      }
       validateSpecSchema(spec, explicitPath);
 
       return {
@@ -158,7 +163,7 @@ async function resolveSpec(options = {}) {
     // Show specs with details
     const specsInfo = [];
     for (const id of specIds) {
-      const specPath = path.join(SPECS_DIR, registry.specs[id].path);
+      const specPath = path.join(getProjectRoot(), SPECS_DIR, registry.specs[id].path);
       try {
         const content = await fs.readFile(specPath, 'utf8');
         let spec;

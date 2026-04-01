@@ -55,7 +55,7 @@ function getStagedStats(stagedFiles, projectRoot) {
  * @param {string} [params.context] - Execution context (commit, cli, edit)
  * @returns {Promise<Object>} Gate result with status and messages
  */
-async function run({ stagedFiles, spec, policy, projectRoot, riskTier, context }) {
+async function run({ stagedFiles, spec, _policy, projectRoot, riskTier, context }) {
   const messages = [];
 
   // Budget limits apply to changes, not to the entire repo.

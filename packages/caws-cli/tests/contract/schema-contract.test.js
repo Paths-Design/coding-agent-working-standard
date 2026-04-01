@@ -10,7 +10,7 @@ const path = require('path');
 const Ajv = require('ajv');
 const yaml = require('js-yaml');
 
-const { createValidator, getSchemaPath } = require('../../src/utils/schema-validator');
+const { createValidator } = require('../../src/utils/schema-validator');
 
 const SCHEMAS_DIR = path.join(__dirname, '../../templates/.caws/schemas');
 
