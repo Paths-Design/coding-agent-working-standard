@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - 'packages/caws-cli/**'
-      # caws-mcp-server removed in 1cd9401
       - 'packages/quality-gates/**'
       - 'scripts/**'
+      - '.github/workflows/release.yml'
       - '.releaserc.json'
       - 'CHANGELOG.md'
       - 'package.json'
