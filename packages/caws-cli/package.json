@@ -34,7 +34,7 @@
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node ../../.caws/validate.js ../../.caws/working-spec.yaml",
     "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
-    "prepare": "husky"
+    "prepare": "husky >/dev/null 2>&1 || true"
   },
   "keywords": [
     "caws",

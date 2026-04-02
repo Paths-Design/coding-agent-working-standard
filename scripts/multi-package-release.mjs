@@ -30,7 +30,6 @@ const PACKAGES = [
     tagFormat: 'v${version}', // CLI uses plain v-tags (historical convention)
     config: {
       pkgRoot: 'packages/caws-cli',
-      tarballDir: 'dist',
     },
   },
   // caws-types and quality-gates are folded into caws-cli — no longer published separately
