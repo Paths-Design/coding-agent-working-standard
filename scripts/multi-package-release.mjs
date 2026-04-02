@@ -120,7 +120,7 @@ function createPackageConfig(pkg) {
         {
           npmPublish: true,
           ...pkg.config,
-          provenance: false,
+          provenance: true,
         },
       ],
       [
