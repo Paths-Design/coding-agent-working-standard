@@ -7,8 +7,6 @@
  * Also covers graceful degradation when optional spec fields are missing.
  */
 
-const chalk = require('chalk');
-
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 jest.mock('fs-extra', () => ({
