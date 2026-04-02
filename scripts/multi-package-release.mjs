@@ -173,6 +173,7 @@ function releasePackage(pkg) {
       env: {
         ...process.env,
         GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+        NPM_TOKEN: process.env.NPM_TOKEN || process.env.NODE_AUTH_TOKEN,
       },
     });
 

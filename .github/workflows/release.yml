@@ -111,11 +111,14 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
-          # No NODE_AUTH_TOKEN — OIDC trusted publisher handles auth via id-token
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN needed for @semantic-release/npm verifyConditions step.
+          # Actual publish uses OIDC provenance via trusted publisher (bypasses OTP).
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Use multi-package release script to handle multiple packages
           # Falls back to standard semantic-release if script doesn't exist
