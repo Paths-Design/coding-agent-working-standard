@@ -46,7 +46,7 @@ async function waiversCommand(subcommand = 'list', options = {}) {
       const setup = initializeGlobalSetup();
 
       if (setup.hasWorkingSpec) {
-        Output.success(`Detected ${setup.setupType} CAWS setup`, {
+        Output.success(`Detected ${setup.type} CAWS setup`, {
           capabilities: setup.capabilities,
         });
       }

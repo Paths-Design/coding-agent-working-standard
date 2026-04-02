@@ -112,7 +112,7 @@ async function burnupCommand(specFile, options = {}) {
     console.log(chalk.cyan('Generating CAWS budget burn-up report...'));
 
     // Derive budget
-    const derivedBudget = deriveBudget(spec, path.dirname(specPath));
+    const derivedBudget = await deriveBudget(spec, path.dirname(specPath));
 
     // Get actual git change statistics
     const gitStats = getGitChangeStats(path.dirname(specPath));

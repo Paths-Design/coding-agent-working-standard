@@ -37,7 +37,7 @@ async function iterateCommand(specFile, options = {}) {
     const setup = initializeGlobalSetup();
 
     if (setup.hasWorkingSpec) {
-      console.log(`Detected ${setup.setupType} CAWS setup`);
+      console.log(`Detected ${setup.type} CAWS setup`);
       console.log(`   Capabilities: ${setup.capabilities.join(', ')}`);
     }
 
