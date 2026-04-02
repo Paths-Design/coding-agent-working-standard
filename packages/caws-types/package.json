@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-types",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "TypeScript type definitions for CAWS (Coding Agent Workflow System)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
