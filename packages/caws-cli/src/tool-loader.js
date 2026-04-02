@@ -128,7 +128,7 @@ class ToolLoader extends EventEmitter {
       this.emit('tool:loaded', { id: toolId, metadata: tool.metadata });
 
       return tool;
-    }, `Tool loading failed: ${toolId}`);
+    }, 'Tool loading failed');
   }
 
   /**

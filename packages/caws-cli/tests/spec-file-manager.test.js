@@ -1,3 +1,4 @@
+/* global setTimeout */
 /**
  * @fileoverview Tests for SpecFileManager - WorkingSpec file operations
  * @author @darianrosebrook

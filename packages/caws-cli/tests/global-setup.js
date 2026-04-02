@@ -4,7 +4,6 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 
 module.exports = async () => {
   // Ensure we have a valid working directory

@@ -7,9 +7,7 @@
 const chalk = require('chalk');
 const {
   ERROR_CATEGORIES,
-  ERROR_CODES,
   getErrorCategory,
-  getCategorySuggestions,
 } = require('./utils/error-categories');
 
 /**
@@ -181,15 +179,6 @@ const COMMAND_SUGGESTIONS = {
     if (similar) {
       suggestions.push(`Did you mean: caws ${similar}?`);
     }
-
-    // Context-aware suggestions based on command type
-    const commandCategories = {
-      setup: ['init', 'scaffold', 'templates'],
-      validation: ['validate', 'status', 'diagnose'],
-      analysis: ['evaluate', 'iterate', 'test-analysis'],
-      compliance: ['waivers', 'workflow', 'quality-monitor'],
-      history: ['provenance', 'hooks'],
-    };
 
     // Suggest category based on what user might be trying to do
     if (command.includes('setup') || command.includes('start') || command.includes('create')) {

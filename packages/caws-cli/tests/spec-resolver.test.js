@@ -6,17 +6,12 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
-
 // Mock the file system operations
 jest.mock('fs-extra');
 jest.mock('js-yaml');
 
 describe('Spec Resolver System', () => {
-  const SPECS_DIR = '.caws/specs';
   const LEGACY_SPEC = '.caws/working-spec.yaml';
-  const SPECS_REGISTRY = '.caws/specs/registry.json';
-
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -58,7 +53,6 @@ describe('Spec Resolver System', () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
       const mockSpec = { id: 'user-auth', title: 'User Authentication' };
-      const specPath = path.join(SPECS_DIR, 'user-auth.yaml');
 
       fs.pathExists.mockResolvedValue(true); // Spec file exists
       fs.readFile.mockResolvedValue('id: user-auth\ntitle: User Authentication');
@@ -78,7 +72,6 @@ describe('Spec Resolver System', () => {
       const { resolveSpec } = require('../src/utils/spec-resolver');
 
       const mockSpec = { id: 'single-spec', title: 'Single Spec' };
-      const specPath = path.join(SPECS_DIR, 'single-spec.yaml');
 
       const mockRegistry = {
         specs: {

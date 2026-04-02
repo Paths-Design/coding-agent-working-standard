@@ -5,7 +5,6 @@
  */
 
 const fs = require('fs-extra');
-const path = require('path');
 
 // Mock dependencies
 jest.mock('fs-extra');
@@ -234,7 +233,7 @@ describe('Migration Tools', () => {
       });
 
       // Mock fs.readFile - return empty string (content doesn't matter since we mock yaml.load)
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         if (String(filePath).includes('registry.json')) {
           return JSON.stringify({
             version: '1.0.0',

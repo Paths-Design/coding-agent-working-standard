@@ -4,8 +4,6 @@
  * @author @darianrosebrook
  */
 
-const path = require('path');
-
 // Create a chalk mock that handles chaining (chalk.blue(), chalk.red.bold(), etc.)
 const chalkHandler = {
   get(target, prop) {
@@ -76,9 +74,6 @@ jest.mock('../src/validation/spec-validation', () => ({
     warnings: [],
   })),
 }));
-
-const fs = require('fs-extra');
-const yaml = require('js-yaml');
 
 describe('Scope Conflict Detection', () => {
   beforeEach(() => {

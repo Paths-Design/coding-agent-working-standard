@@ -199,7 +199,7 @@ class WaiverPatternLearner {
   /**
    * Analyze budget overrun patterns
    */
-  analyzeBudgetOverruns(waivers, specs) {
+  analyzeBudgetOverruns(waivers, _specs) {
     const budgetWaivers = waivers.filter((w) => w.gates?.includes('budget_limit'));
 
     if (budgetWaivers.length === 0) {
@@ -267,7 +267,7 @@ class WaiverPatternLearner {
   /**
    * Identify risk factors from waiver patterns
    */
-  identifyRiskFactors(waivers, specs) {
+  identifyRiskFactors(waivers, _specs) {
     // Simple risk factor identification based on waiver frequency
     const riskFactors = [];
 
@@ -703,7 +703,7 @@ async function handleAssessBudget(options, commandOptions = {}) {
 /**
  * Handle pattern analysis command
  */
-async function handleAnalyzePatterns(options) {
+async function handleAnalyzePatterns(_options) {
   const chalk = (await import('chalk')).default;
   const learner = new WaiverPatternLearner();
 

@@ -20,12 +20,10 @@ const {
   hasDivergentCommits,
   hasDirtyFiles,
   discoverUnregisteredWorktrees,
-  autoRegisterWorktree,
   repairWorktrees,
   reconcileRegistry,
   getRepoRoot,
   WORKTREES_DIR,
-  REGISTRY_FILE,
   BRANCH_PREFIX,
 } = require('../src/worktree/worktree-manager');
 
@@ -89,7 +87,7 @@ describe('worktree-manager', () => {
       // Simulate: Agent A creates worktree, destroys it, branch still exists
       const original = process.env.CLAUDE_SESSION_ID;
       process.env.CLAUDE_SESSION_ID = 'session-agent-A';
-      const entry = createWorktree('owned-branch');
+      createWorktree('owned-branch');
       destroyWorktree('owned-branch');
 
       // Agent B tries to create same name
@@ -109,7 +107,9 @@ describe('worktree-manager', () => {
       // Manually delete the branch to simulate full cleanup
       try {
         execFileSync('git', ['branch', '-D', branchName], { cwd: testDir, stdio: 'pipe' });
-      } catch (_) {}
+      } catch (_) {
+        // Expected: branch may not exist
+      }
 
       // Should succeed — both registry entry destroyed and branch gone
       const reused = createWorktree('reusable');
@@ -600,7 +600,7 @@ describe('worktree-manager', () => {
 
   describe('reconcileRegistry', () => {
     test('classifies fresh, active, missing, and unregistered entries', () => {
-      const entry = createWorktree('recon-fresh');
+      createWorktree('recon-fresh');
       const activeEntry = createWorktree('recon-active');
       createWorktree('recon-vanish');
 
@@ -785,7 +785,7 @@ describe('worktree-manager', () => {
 
   describe('status lifecycle', () => {
     test('fresh worktree has no divergent commits and no dirty files', () => {
-      const entry = createWorktree('lifecycle-fresh');
+      createWorktree('lifecycle-fresh');
       const entries = listWorktrees();
       const wt = entries.find((e) => e.name === 'lifecycle-fresh');
       expect(wt.status).toBe('fresh');

@@ -30,8 +30,6 @@ jest.mock('../src/worktree/worktree-manager', () => ({
 // Don't mock the specs module - we want to test the real createSpec function
 
 describe('Enhanced Spec Creation with Conflict Resolution', () => {
-  const SPECS_DIR = '.caws/specs';
-
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -79,7 +77,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('createSpec with conflict detection', () => {
     test('should create new spec when no conflicts exist', async () => {
       const { createSpec } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
@@ -98,7 +95,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Mock fs.readFile to return stored content
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         const resolvedPath = path.resolve(filePath);
         const fileName = path.basename(filePath);
         // Try multiple keys
@@ -172,10 +169,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Capture written content and return it when read
       let writtenContent = '';
-      fs.writeFile.mockImplementation(async (filePath, content) => {
+      fs.writeFile.mockImplementation(async (_filePath, content) => {
         writtenContent = content;
       });
-      fs.readFile.mockImplementation(async (filePath) => {
+      fs.readFile.mockImplementation(async (_filePath) => {
         // Return existing spec on first read (conflict check), then written content
         if (writtenContent) {
           return writtenContent;
@@ -243,10 +240,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Capture written content and return it when read
       let writtenContent = '';
-      fs.writeFile.mockImplementation(async (filePath, content) => {
+      fs.writeFile.mockImplementation(async (_filePath, content) => {
         writtenContent = content;
       });
-      fs.readFile.mockImplementation(async (filePath) => {
+      fs.readFile.mockImplementation(async (_filePath) => {
         // Return existing spec on first read (conflict check), then written content
         if (writtenContent) {
           return writtenContent;
@@ -357,10 +354,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
       // Capture written content and return it when read
       let writtenContent = '';
-      fs.writeFile.mockImplementation(async (filePath, content) => {
+      fs.writeFile.mockImplementation(async (_filePath, content) => {
         writtenContent = content;
       });
-      fs.readFile.mockImplementation(async (filePath) => {
+      fs.readFile.mockImplementation(async (_filePath) => {
         // Return existing spec on first read (conflict check), then written content
         if (writtenContent) {
           return writtenContent;
@@ -523,7 +520,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('specsCommand integration with conflict resolution', () => {
     test('should pass force option to createSpec', async () => {
       const { specsCommand } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
@@ -542,7 +538,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Mock fs.readFile to return stored content
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         const resolvedPath = path.resolve(filePath);
         const fileName = path.basename(filePath);
         // Try multiple keys
@@ -564,7 +560,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should pass interactive option to createSpec', async () => {
       const { specsCommand } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
@@ -583,7 +578,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Mock fs.readFile to return stored content
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         const resolvedPath = path.resolve(filePath);
         const fileName = path.basename(filePath);
         // Try multiple keys
@@ -641,7 +636,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
   describe('CLI integration', () => {
     test('should pass force option from CLI to specsCommand', async () => {
       const { specsCommand } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
@@ -660,7 +654,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Mock fs.readFile to return stored content
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         const resolvedPath = path.resolve(filePath);
         const fileName = path.basename(filePath);
         // Try multiple keys
@@ -683,7 +677,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('should pass interactive option from CLI to specsCommand', async () => {
       const { specsCommand } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       fs.pathExists.mockResolvedValue(false); // No existing spec
       fs.ensureDir.mockResolvedValue(undefined);
@@ -702,7 +695,7 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       });
 
       // Mock fs.readFile to return stored content
-      fs.readFile.mockImplementation(async (filePath, encoding) => {
+      fs.readFile.mockImplementation(async (filePath, _encoding) => {
         const resolvedPath = path.resolve(filePath);
         const fileName = path.basename(filePath);
         // Try multiple keys
@@ -1165,7 +1158,6 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
 
     test('createSpec should store owner in registry entry', async () => {
       const { createSpec } = require('../src/commands/specs');
-      const yaml = require('js-yaml');
 
       process.env.CLAUDE_SESSION_ID = 'session-test-123';
 

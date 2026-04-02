@@ -1,3 +1,4 @@
+/* global setTimeout */
 /**
  * @fileoverview Tests for PolicyManager - Policy loading with caching
  * @author @darianrosebrook

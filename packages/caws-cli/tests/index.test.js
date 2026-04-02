@@ -673,14 +673,13 @@ module.exports = { runCodemod };`
       fs.writeFileSync(path.join(scaffoldTestDir, '.caws/test.txt'), 'existing file');
 
       const cliPath = path.resolve(__dirname, '../dist/index.js');
-      let output;
       try {
-        output = execSync(`node "${cliPath}" scaffold`, {
+        execSync(`node "${cliPath}" scaffold`, {
           encoding: 'utf8',
           cwd: scaffoldTestDir,
         });
       } catch (error) {
-        output = error.stdout || '';
+        // scaffold command may fail in test env; we only check side effects below
       }
       // Tool directory creation depends on template availability
       // In test environment, templates may not be available

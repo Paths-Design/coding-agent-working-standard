@@ -15,13 +15,9 @@ const {
   getParallelStatus,
   mergeParallel,
   teardownParallel,
-  detectFileConflicts,
   loadParallelRegistry,
-  removeParallelRegistry,
-  PARALLEL_REGISTRY,
 } = require('../src/parallel/parallel-manager');
 
-const { loadRegistry: loadWorktreeRegistry } = require('../src/worktree/worktree-manager');
 
 describe('parallel-manager', () => {
   let templateDir;
@@ -179,7 +175,7 @@ describe('parallel-manager', () => {
       const plan = loadPlan(
         writePlan({ version: 1, agents: [{ name: 'auto-base' }] })
       );
-      const results = setupParallel(plan);
+      setupParallel(plan);
 
       const reg = loadParallelRegistry(testDir);
       // Should be whatever the current branch is (main or master)
