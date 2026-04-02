@@ -19,7 +19,7 @@ const { recordEvaluation } = require('../utils/working-state');
  * @param {string} specFile - Path to working spec file
  * @param {object} options - Command options
  */
-async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {}) {
+async function evaluateCommand(specFile, options = {}) {
   try {
     console.log('Detecting CAWS setup...');
     const setup = initializeGlobalSetup();
@@ -31,7 +31,7 @@ async function evaluateCommand(specFile = '.caws/working-spec.yaml', options = {
 
     const resolved = await resolveSpec({
       specId: options.specId,
-      specFile,
+      specFile: specFile || undefined,
       warnLegacy: false,
       interactive: false,
     });

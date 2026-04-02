@@ -105,7 +105,7 @@ async function burnupCommand(specFile, options = {}) {
       spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
     } else {
       const resolved = await resolveSpec({ specId: options.specId });
-      specPath = resolved.specPath;
+      specPath = resolved.path;
       spec = resolved.spec;
     }
 

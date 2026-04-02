@@ -80,7 +80,7 @@ jest.mock('../src/constants/spec-types', () => ({
 
 // Mock async-utils (used by status)
 jest.mock('../src/utils/async-utils', () => ({
-  parallel: jest.fn(async (fns) => Promise.all(fns.map((f) => f()))),
+  parallel: jest.fn(async (items) => Promise.all(items.map((f) => typeof f === 'function' ? f() : f))),
 }));
 
 // Mock child_process (used by archive's validateQualityGates)
@@ -264,7 +264,7 @@ describe('Multi-Spec Command Integration', () => {
 
       expect(specResolver.resolveSpec).toHaveBeenCalledWith({
         specId: 'test-spec',
-        specFile: null,
+        specFile: undefined,
         warnLegacy: false,
       });
     });

@@ -22,12 +22,12 @@ const { loadState } = require('../utils/working-state');
  * @param {string} specFile - Path to working spec file
  * @param {object} options - Command options
  */
-async function iterateCommand(specFile = '.caws/working-spec.yaml', options = {}) {
+async function iterateCommand(specFile, options = {}) {
   try {
     // Resolve spec using priority system
     const resolved = await resolveSpec({
       specId: options.specId,
-      specFile,
+      specFile: specFile || undefined,
       warnLegacy: false,
     });
 

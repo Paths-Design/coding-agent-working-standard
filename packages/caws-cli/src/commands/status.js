@@ -976,12 +976,12 @@ async function statusCommand(options = {}) {
 
       // Load all status data in parallel for better performance
       const [resolvedSpec, specs, hooks, provenance, waivers, gates] = await parallel([
-        () => loadResolvedStatusSpec(options),
-        () => loadSpecsFromMultiSpec(),
-        () => checkGitHooks(),
-        () => loadProvenanceChain(),
-        () => loadWaiverStatus(),
-        () => checkQualityGates(),
+        loadResolvedStatusSpec(options),
+        loadSpecsFromMultiSpec(),
+        checkGitHooks(),
+        loadProvenanceChain(),
+        loadWaiverStatus(),
+        checkQualityGates(),
       ]);
       const spec = resolvedSpec?.spec || null;
       const specSelection = resolvedSpec
