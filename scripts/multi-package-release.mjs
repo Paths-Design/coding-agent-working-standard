@@ -115,18 +115,11 @@ function createPackageConfig(pkg) {
             // Alternative scope format: packages/caws-cli
             { type: 'feat', scope: `packages/${dirName}`, release: 'minor' },
             { type: 'fix', scope: `packages/${dirName}`, release: 'patch' },
-            // Block everything else from triggering a release for this package
-            { type: 'feat', release: false },
-            { type: 'fix', release: false },
-            { type: 'perf', release: false },
-            { type: 'revert', release: false },
-            { type: 'docs', release: false },
-            { type: 'style', release: false },
-            { type: 'chore', release: false },
-            { type: 'refactor', release: false },
-            { type: 'test', release: false },
-            { type: 'build', release: false },
-            { type: 'ci', release: false },
+            // Note: no catch-all { type: 'fix', release: false } rules here.
+            // Unscoped rules with release:false defeat scoped rules due to a
+            // semantic-release quirk. Cross-package filtering is handled by
+            // hasPackageChanges() which only runs semantic-release when files
+            // in the package directory actually changed.
           ],
           parserOpts: {
             noteKeywords: ['BREAKING CHANGE', 'BREAKING CHANGES'],
