@@ -33,24 +33,7 @@ const PACKAGES = [
       tarballDir: 'dist',
     },
   },
-{
-    name: '@paths.design/caws-types',
-    path: 'packages/caws-types',
-    scope: 'caws-types',
-    tagFormat: 'caws-types-v${version}',
-    config: {
-      pkgRoot: 'packages/caws-types',
-    },
-  },
-  {
-    name: '@paths.design/quality-gates',
-    path: 'packages/quality-gates',
-    scope: 'quality-gates',
-    tagFormat: 'quality-gates-v${version}',
-    config: {
-      pkgRoot: 'packages/quality-gates',
-    },
-  },
+  // caws-types and quality-gates are folded into caws-cli — no longer published separately
 ];
 
 /**
