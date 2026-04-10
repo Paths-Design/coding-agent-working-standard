@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.session_ended",
+  "title": "session_ended event data",
+  "description": "Emitted by session-manager.endSession after the capsule is finalized. Carries the final files_touched list so the renderer can merge it into the spec view via isEventForSpec's session_ended branch.",
+  "type": "object",
+  "required": ["session_id", "files_touched", "outcome"],
+  "properties": {
+    "session_id": { "type": "string", "minLength": 1 },
+    "files_touched": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["success", "error"]
+    },
+    "spec_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Duplicated here so the renderer can filter session events by spec without walking the envelope."
+    }
+  },
+  "additionalProperties": false
+}

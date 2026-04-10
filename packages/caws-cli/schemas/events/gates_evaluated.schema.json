@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.gates_evaluated",
+  "title": "gates_evaluated event data",
+  "description": "Emitted by gates.js after recordGates. Spec-scoped.",
+  "type": "object",
+  "required": ["context", "passed", "gates"],
+  "properties": {
+    "context": {
+      "type": "string",
+      "enum": ["cli", "commit", "edit"],
+      "description": "Where the gate run was invoked from."
+    },
+    "passed": { "type": "boolean" },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "passed": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "warned": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "mode"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "fail", "warn", "skip"] },
+          "mode": { "type": "string", "enum": ["block", "warn", "off"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

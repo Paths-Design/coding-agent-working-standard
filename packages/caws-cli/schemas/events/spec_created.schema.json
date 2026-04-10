@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.spec_created",
+  "title": "spec_created event data",
+  "description": "Emitted by specs.js createSpec after the spec file and registry entry are persisted. Spec-scoped.",
+  "type": "object",
+  "required": ["id", "type", "title", "risk_tier", "mode"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z]{2,6}-\\d{3,4}$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["feature", "fix", "refactor", "chore", "docs"]
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "risk_tier": {
+      "type": ["integer", "string"],
+      "enum": [1, 2, 3, "1", "2", "3"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["feature", "refactor", "fix", "doc", "docs", "chore", "development"]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.spec_closed",
+  "title": "spec_closed event data",
+  "description": "Emitted by specs.js closeSpec after the spec status is updated. Records the prior status so the renderer can reconstruct the lifecycle. Spec-scoped.",
+  "type": "object",
+  "required": ["id", "prior_status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Z]{2,6}-\\d{3,4}$" },
+    "prior_status": {
+      "type": "string",
+      "enum": ["draft", "active", "in_progress", "completed"]
+    }
+  },
+  "additionalProperties": false
+}

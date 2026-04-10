@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.session_started",
+  "title": "session_started event data",
+  "description": "Emitted by session-manager.startSession after the capsule and registry are persisted. spec_id on the envelope is optional — a session can exist without being bound to a spec.",
+  "type": "object",
+  "required": ["session_id", "role"],
+  "properties": {
+    "session_id": { "type": "string", "minLength": 1 },
+    "role": { "type": "string" },
+    "branch": { "type": ["string", "null"] },
+    "head_rev": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

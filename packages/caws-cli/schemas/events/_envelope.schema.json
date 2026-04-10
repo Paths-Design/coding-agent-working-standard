@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.envelope",
+  "title": "CAWS Event Envelope (v1)",
+  "description": "Common wrapper for every event in .caws/events.jsonl. Per-event payload schemas extend this via the 'data' field. See docs/internal/EVENTS_LOG_MIGRATION.md for the design.",
+  "type": "object",
+  "required": [
+    "seq",
+    "ts",
+    "session_id",
+    "actor",
+    "event",
+    "prev_hash",
+    "event_hash"
+  ],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic sequence number, starts at 1 for the genesis event."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 UTC timestamp. Informational only; ordering is by seq."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session correlator. Defaults to env CAWS_SESSION_ID or 'standalone'."
+    },
+    "actor": {
+      "type": "string",
+      "enum": ["cli", "hook", "session", "agent"],
+      "description": "Who emitted the event. Subagent names may be added in future versions."
+    },
+    "event": {
+      "type": "string",
+      "description": "Event type from the v0 vocabulary. See the individual schema files."
+    },
+    "spec_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Required for spec-scoped events, optional for session/worktree lifecycle events."
+    },
+    "data": {
+      "type": "object",
+      "description": "Event-type-specific payload. Each event type has its own schema file that defines this object's shape."
+    },
+    "prev_hash": {
+      "type": "string",
+      "pattern": "^(sha256:[0-9a-f]{64}|)$",
+      "description": "Empty string for genesis, sha256:<hex> for all subsequent events."
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Domain-separated sha256 over the canonical JSON of the event with this field stripped."
+    }
+  },
+  "additionalProperties": false
+}

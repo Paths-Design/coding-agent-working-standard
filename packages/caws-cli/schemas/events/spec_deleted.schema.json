@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caws.events.v1.spec_deleted",
+  "title": "spec_deleted event data",
+  "description": "Emitted by specs.js deleteSpec after the spec file, state file, and registry entry are removed. The event is the only remaining persistent record that this spec ever existed. Spec-scoped.",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Z]{2,6}-\\d{3,4}$" }
+  },
+  "additionalProperties": false
+}
