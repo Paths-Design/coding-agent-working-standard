@@ -29,6 +29,9 @@ Before writing code, check the canonical spec for the current feature:
 # Create a feature spec for isolated work
 caws specs create FEAT-001 --type feature --title "description"
 
+# If you're in a CAWS worktree, the created spec should record it:
+# worktree: <worktree-name>
+
 # Validate the feature spec
 caws validate --spec-id FEAT-001
 
@@ -68,6 +71,7 @@ Canonical feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
 - **Mode**: The type of change (`feature`, `refactor`, `fix`, `doc`, `chore`) -- required
+- **Worktree**: The owning CAWS worktree name for this spec (`worktree`) -- recommended for all isolated work
 - **Blast radius**: Which modules are affected (`blast_radius.modules`) -- required
 - **Operational rollback SLO**: Time target for rollback (e.g. `"30m"`) -- required
 - **Scope**: Which files you can edit (`scope.in`) and which are off-limits (`scope.out`)
@@ -75,6 +79,36 @@ Canonical feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs
 - **Acceptance criteria**: What "done" means -- IDs must match `^A\d+$` (e.g. `A1`, `A12`)
 
 Always stay within scope boundaries and change budgets.
+
+Recommended operating rule: one active feature spec, one active worktree. If a task has a worktree, record that ownership in the spec YAML with `worktree: <name>`.
+
+### Scope and Worktree Binding
+
+The scope guard enforces file edit boundaries based on your spec's `scope.in` and `scope.out` patterns. **How it enforces depends on whether your worktree is bound to a spec:**
+
+- **Authoritative mode** (worktree bound to a spec): Only your spec's scope patterns are checked. Other agents' specs cannot block your edits. This is the correct state.
+- **Union mode** (no binding): The guard checks ALL active specs. Any `scope.out` from any spec can block you, even unrelated ones. This is the common source of "why is spec X blocking me?" confusion.
+
+**The mutual binding** requires both sides:
+1. The worktree registry (`.caws/worktrees.json`) must have `specId` pointing to your spec
+2. Your spec (`.caws/specs/<id>.yaml`) must have `worktree: <name>` pointing to your worktree
+
+If either side is missing, the guard falls back to union mode.
+
+**Quick commands:**
+```bash
+# See your effective scope and binding health
+caws scope show
+
+# Fix a broken binding
+caws worktree bind <spec-id>
+```
+
+**Recovery checklist** (when the scope guard blocks you unexpectedly):
+1. Run `caws scope show` — check if you're in authoritative or union mode
+2. If union mode: bind your spec with `caws worktree bind <spec-id>`
+3. If authoritative but still blocked: the file is genuinely outside your spec's scope. Update your spec's `scope.in` if the file should be in scope, or request a waiver
+4. Do NOT modify another spec's `scope.out` to unblock yourself — that defeats the isolation
 
 > **Budget note**: `change_budget:` in a spec is informational documentation only. CAWS
 > derives the enforced budget from `policy.yaml` keyed on `risk_tier`. The field in the

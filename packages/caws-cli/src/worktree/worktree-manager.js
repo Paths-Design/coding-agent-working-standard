@@ -1296,6 +1296,7 @@ module.exports = {
   repairWorktrees,
   reconcileRegistry,
   loadRegistry,
+  saveRegistry,
   getRepoRoot,
   getLastCommitInfo,
   isBranchMerged,

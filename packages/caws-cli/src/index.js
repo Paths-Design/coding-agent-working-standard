@@ -55,6 +55,7 @@ const { sessionCommand } = require('./commands/session');
 const { parallelCommand } = require('./commands/parallel');
 const { verifyAcsCommand } = require('./commands/verify-acs');
 const { sidecarCommand } = require('./commands/sidecar');
+const { scopeCommand } = require('./commands/scope');
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -379,6 +380,22 @@ worktreeCmd
   .option('--prune', 'Remove destroyed, stale-merged, and missing entries', false)
   .option('--force', 'Allow pruning entries owned by other sessions', false)
   .action((options) => worktreeCommand('repair', options));
+
+worktreeCmd
+  .command('bind <spec-id>')
+  .description('Bind a spec to this worktree (fixes mutual reference)')
+  .option('--name <name>', 'Worktree name (auto-detected from cwd if omitted)')
+  .action((specId, options) => worktreeCommand('bind', { specId, ...options }));
+
+// Scope command group
+const scopeCmd = program
+  .command('scope')
+  .description('Inspect and manage scope boundaries');
+
+scopeCmd
+  .command('show')
+  .description('Show effective scope for the current context')
+  .action(() => scopeCommand('show'));
 
 // Session command group
 const sessionCmd = program
@@ -745,6 +762,7 @@ const VALID_COMMANDS = [
   'session',
   'parallel',
   'verify-acs',
+  'scope',
 ];
 
 program.exitOverride((err) => {

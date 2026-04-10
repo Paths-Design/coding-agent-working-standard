@@ -70,25 +70,70 @@ function checkFileScope(filePath, projectDir) {
     return { inScope: true, reason: 'js-yaml not available' };
   }
 
-  const specs = [];
+  // --- Authoritative spec detection ---
+  // If inside a worktree with a mutual spec binding, only check that spec.
+  let authoritativeSpec = null;
+  let mode = 'union';
 
-  if (fs.existsSync(specFile)) {
-    try {
-      const s = yaml.load(fs.readFileSync(specFile, 'utf8'));
-      if (s && !TERMINAL.has(s.status)) {
-        specs.push({ source: 'working-spec', spec: s });
-      }
-    } catch (_) {}
-  }
+  const registryPath = path.join(projectDir, '.caws', 'worktrees.json');
+  const worktreesBase = path.join(projectDir, '.caws', 'worktrees');
+  const cwd = process.cwd();
 
-  if (fs.existsSync(specsDir)) {
-    for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+  if (cwd.startsWith(worktreesBase + path.sep)) {
+    const relative = path.relative(worktreesBase, cwd);
+    const worktreeName = relative.split(path.sep)[0];
+
+    if (worktreeName && fs.existsSync(registryPath)) {
       try {
-        const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
-        if (s && !TERMINAL.has(s.status)) {
-          specs.push({ source: f, spec: s });
+        const reg = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+        const entry = reg.worktrees && reg.worktrees[worktreeName];
+
+        if (entry && entry.specId) {
+          const specCandidates = [
+            path.join(specsDir, entry.specId + '.yaml'),
+            path.join(specsDir, entry.specId + '.yml'),
+          ];
+          for (const candidate of specCandidates) {
+            if (fs.existsSync(candidate)) {
+              try {
+                const s = yaml.load(fs.readFileSync(candidate, 'utf8'));
+                if (s && !TERMINAL.has(s.status) && s.worktree === worktreeName) {
+                  authoritativeSpec = { source: path.basename(candidate), spec: s };
+                  mode = 'authoritative';
+                }
+              } catch (_) {}
+              break;
+            }
+          }
         }
       } catch (_) {}
+    }
+  }
+
+  // --- Collect specs based on mode ---
+  const specs = [];
+
+  if (authoritativeSpec) {
+    specs.push(authoritativeSpec);
+  } else {
+    if (fs.existsSync(specFile)) {
+      try {
+        const s = yaml.load(fs.readFileSync(specFile, 'utf8'));
+        if (s && !TERMINAL.has(s.status)) {
+          specs.push({ source: 'working-spec', spec: s });
+        }
+      } catch (_) {}
+    }
+
+    if (fs.existsSync(specsDir)) {
+      for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+        try {
+          const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
+          if (s && !TERMINAL.has(s.status)) {
+            specs.push({ source: f, spec: s });
+          }
+        } catch (_) {}
+      }
     }
   }
 
@@ -100,17 +145,23 @@ function checkFileScope(filePath, projectDir) {
   for (const { source, spec } of specs) {
     for (const pattern of (spec.scope?.out || [])) {
       if (globToRegex(pattern).test(filePath)) {
-        return { inScope: false, reason: `out-of-scope in ${source} (pattern: ${pattern})` };
+        const modeHint = mode === 'union'
+          ? '. No authoritative spec bound — checking all active specs. Fix: caws worktree bind <spec-id>'
+          : '';
+        return { inScope: false, reason: `out-of-scope in ${source} (pattern: ${pattern})${modeHint}` };
       }
     }
   }
 
-  // Union all scope.in — must match at least one
+  // scope.in — must match at least one
   const allIn = specs.flatMap(({ spec }) => spec.scope?.in || []);
   if (allIn.length > 0) {
     const found = allIn.some(pattern => globToRegex(pattern).test(filePath));
     if (!found) {
-      return { inScope: false, reason: 'not in any active spec scope.in' };
+      const modeHint = mode === 'union'
+        ? '. No authoritative spec bound — checking all active specs. Fix: caws worktree bind <spec-id>'
+        : '';
+      return { inScope: false, reason: `not in any active spec scope.in${modeHint}` };
     }
   }
 

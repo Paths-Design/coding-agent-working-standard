@@ -204,30 +204,82 @@ if command -v node >/dev/null 2>&1; then
         process.exit(0);
       }
 
-      // Collect all active specs (working-spec + feature specs)
-      const specs = [];
+      const projectDir = '$PROJECT_DIR';
 
-      // Load working-spec.yaml if present
-      const mainSpec = '$SPEC_FILE';
-      if (fs.existsSync(mainSpec)) {
-        try {
-          const s = yaml.load(fs.readFileSync(mainSpec, 'utf8'));
-          if (s && !TERMINAL.has(s.status)) {
-            specs.push({ source: 'working-spec', spec: s });
-          }
-        } catch (_) {}
-      }
+      // --- Authoritative spec detection ---
+      // If we are inside a worktree with a bound specId, ONLY check that spec.
+      // This prevents unrelated specs from blocking writes via broad scope.out.
+      let authoritativeSpec = null;
+      let mode = 'union';
 
-      // Load feature specs from .caws/specs/
-      const specsDir = '$SPECS_DIR';
-      if (fs.existsSync(specsDir)) {
-        for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+      const registryPath = path.join(projectDir, '.caws', 'worktrees.json');
+      const cwd = process.cwd();
+      const worktreesBase = path.join(projectDir, '.caws', 'worktrees');
+
+      if (cwd.startsWith(worktreesBase + '/')) {
+        const relative = cwd.slice(worktreesBase.length + 1);
+        const worktreeName = relative.split('/')[0];
+
+        if (worktreeName && fs.existsSync(registryPath)) {
           try {
-            const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
-            if (s && !TERMINAL.has(s.status)) {
-              specs.push({ source: f, spec: s });
+            const reg = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            const entry = reg.worktrees && reg.worktrees[worktreeName];
+
+            if (entry && entry.specId) {
+              // Try to load the bound spec
+              const specsDir = '$SPECS_DIR';
+              const specCandidates = [
+                path.join(specsDir, entry.specId + '.yaml'),
+                path.join(specsDir, entry.specId + '.yml'),
+              ];
+              for (const candidate of specCandidates) {
+                if (fs.existsSync(candidate)) {
+                  try {
+                    const s = yaml.load(fs.readFileSync(candidate, 'utf8'));
+                    if (s && !TERMINAL.has(s.status)) {
+                      // Verify mutual binding: spec must also reference this worktree
+                      if (s.worktree === worktreeName) {
+                        authoritativeSpec = { source: path.basename(candidate), spec: s };
+                        mode = 'authoritative';
+                      }
+                    }
+                  } catch (_) {}
+                  break;
+                }
+              }
             }
           } catch (_) {}
+        }
+      }
+
+      // --- Collect specs based on mode ---
+      const specs = [];
+
+      if (authoritativeSpec) {
+        // Authoritative: only the bound spec matters
+        specs.push(authoritativeSpec);
+      } else {
+        // Union: load all active specs
+        const mainSpec = '$SPEC_FILE';
+        if (fs.existsSync(mainSpec)) {
+          try {
+            const s = yaml.load(fs.readFileSync(mainSpec, 'utf8'));
+            if (s && !TERMINAL.has(s.status)) {
+              specs.push({ source: 'working-spec', spec: s });
+            }
+          } catch (_) {}
+        }
+
+        const specsDir = '$SPECS_DIR';
+        if (fs.existsSync(specsDir)) {
+          for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+            try {
+              const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
+              if (s && !TERMINAL.has(s.status)) {
+                specs.push({ source: f, spec: s });
+              }
+            } catch (_) {}
+          }
         }
       }
 
@@ -237,18 +289,18 @@ if command -v node >/dev/null 2>&1; then
         process.exit(0);
       }
 
-      // Check scope.out across ALL active specs — any match blocks
+      // Check scope.out — any match blocks
       for (const { source, spec } of specs) {
         for (const pattern of (spec.scope?.out || [])) {
           const regex = globToRegex(pattern);
           if (regex.test(filePath)) {
-            console.log('out_of_scope:' + source + ':' + pattern);
+            console.log('out_of_scope:' + mode + ':' + source + ':' + pattern);
             process.exit(0);
           }
         }
       }
 
-      // Union all scope.in patterns — file must match at least one
+      // scope.in — file must match at least one pattern
       const allInScope = specs.flatMap(({ spec }) => spec.scope?.in || []);
       if (allInScope.length > 0) {
         let found = false;
@@ -260,7 +312,7 @@ if command -v node >/dev/null 2>&1; then
           }
         }
         if (!found) {
-          console.log('not_in_scope');
+          console.log('not_in_scope:' + mode);
           process.exit(0);
         }
       }
@@ -282,18 +334,45 @@ if command -v node >/dev/null 2>&1; then
 
   if [[ "$SCOPE_CHECK" == out_of_scope:* ]]; then
     DETAIL="${SCOPE_CHECK#out_of_scope:}"
-    SOURCE="${DETAIL%%:*}"
-    PATTERN="${DETAIL#*:}"
+    # Format: mode:source:pattern
+    MODE="${DETAIL%%:*}"
+    REST="${DETAIL#*:}"
+    SOURCE="${REST%%:*}"
+    PATTERN="${REST#*:}"
     echo "BLOCKED: $REL_PATH is excluded by scope.out in $SOURCE (pattern: $PATTERN)"
-    echo "  Scope allows: files not matching scope.out patterns"
-    echo "  To modify scope, update the spec's scope.out field"
+    if [[ "$MODE" == "union" ]]; then
+      echo "  Mode: union (no authoritative spec bound to this worktree)"
+      echo "  The scope guard is checking ALL active specs because the worktree<->spec"
+      echo "  binding is missing. An unrelated spec may be blocking this edit."
+      echo "  Fix: caws worktree bind <your-spec-id>"
+      echo "  Diagnose: caws scope show"
+    else
+      echo "  Mode: authoritative (checking only your bound spec)"
+      echo "  To modify scope, update the spec's scope.out field"
+    fi
     exit 2
   fi
 
+  if [[ "$SCOPE_CHECK" == not_in_scope:* ]]; then
+    MODE="${SCOPE_CHECK#not_in_scope:}"
+    echo "BLOCKED: $REL_PATH is not in the defined scope.in of any active spec"
+    if [[ "$MODE" == "union" ]]; then
+      echo "  Mode: union (no authoritative spec bound to this worktree)"
+      echo "  The scope guard is checking ALL active specs because the worktree<->spec"
+      echo "  binding is missing. Your file may be in a scope that no spec covers."
+      echo "  Fix: caws worktree bind <your-spec-id>"
+      echo "  Diagnose: caws scope show"
+    else
+      echo "  Mode: authoritative (checking only your bound spec)"
+      echo "  To modify scope, update the spec's scope.in field"
+    fi
+    exit 2
+  fi
+
+  # Legacy fallback for unqualified not_in_scope (shouldn't happen with updated logic)
   if [[ "$SCOPE_CHECK" == "not_in_scope" ]]; then
     echo "BLOCKED: $REL_PATH is not in the defined scope.in of any active spec"
-    echo "  Scope allows: files matching scope.in patterns in active specs"
-    echo "  To modify scope, update the spec's scope.in field"
+    echo "  Diagnose: caws scope show"
     exit 2
   fi
 fi

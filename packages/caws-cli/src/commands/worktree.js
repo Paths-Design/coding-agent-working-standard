@@ -12,6 +12,10 @@ const {
   mergeWorktree,
   pruneWorktrees,
   repairWorktrees,
+  loadRegistry,
+  saveRegistry,
+  getRepoRoot,
+  findFeatureSpecPath,
 } = require('../worktree/worktree-manager');
 const { getAgentSessionId } = require('../utils/agent-session');
 
@@ -35,9 +39,11 @@ async function worktreeCommand(subcommand, options = {}) {
         return handlePrune(options);
       case 'repair':
         return handleRepair(options);
+      case 'bind':
+        return handleBind(options);
       default:
         console.error(chalk.red(`Unknown worktree subcommand: ${subcommand}`));
-        console.log(chalk.blue('Available: create, list, destroy, merge, prune, repair'));
+        console.log(chalk.blue('Available: create, list, destroy, merge, prune, repair, bind'));
         process.exit(1);
     }
   } catch (error) {
@@ -301,6 +307,80 @@ function handleRepair(options) {
   if (dryRun) {
     console.log(chalk.blue('\nDry-run complete. Run without --dry-run to persist changes.'));
   }
+}
+
+function handleBind(options) {
+  const path = require('path');
+  const fs = require('fs-extra');
+  const yaml = require('js-yaml');
+  const { specId, name } = options;
+
+  if (!specId) {
+    console.error(chalk.red('Spec ID is required'));
+    console.log(chalk.blue('Usage: caws worktree bind <spec-id> [--name <worktree-name>]'));
+    process.exit(1);
+  }
+
+  // Determine worktree name: from option, or detect from cwd
+  let worktreeName = name;
+  if (!worktreeName) {
+    const root = getRepoRoot();
+    const cwd = process.cwd();
+    const worktreesBase = path.join(root, '.caws', 'worktrees');
+
+    if (cwd.startsWith(worktreesBase + path.sep)) {
+      const relative = path.relative(worktreesBase, cwd);
+      worktreeName = relative.split(path.sep)[0];
+    }
+  }
+
+  if (!worktreeName) {
+    console.error(chalk.red('Could not determine worktree name.'));
+    console.log(chalk.blue('Either run this from inside a worktree, or pass --name <worktree-name>'));
+    process.exit(1);
+  }
+
+  const root = getRepoRoot();
+  const registry = loadRegistry(root);
+
+  // Find the worktree entry in the registry
+  if (!registry.worktrees || !registry.worktrees[worktreeName]) {
+    console.error(chalk.red(`Worktree '${worktreeName}' not found in registry.`));
+    console.log(chalk.blue('Run: caws worktree list  to see available worktrees'));
+    process.exit(1);
+  }
+
+  // Load the spec file
+  const specPath = findFeatureSpecPath(root, specId);
+  if (!specPath) {
+    console.error(chalk.red(`Spec '${specId}' not found in .caws/specs/`));
+    console.log(chalk.blue('Run: caws specs list  to see available specs'));
+    process.exit(1);
+  }
+
+  const specContent = fs.readFileSync(specPath, 'utf8');
+  const specData = yaml.load(specContent);
+
+  // Warn if spec already bound to a different worktree
+  if (specData.worktree && specData.worktree !== worktreeName) {
+    console.log(chalk.yellow(`Warning: Spec '${specId}' is currently bound to worktree '${specData.worktree}'.`));
+    console.log(chalk.yellow(`Rebinding to '${worktreeName}'.`));
+  }
+
+  // Update registry side: set specId on the worktree entry
+  registry.worktrees[worktreeName].specId = specId;
+  saveRegistry(root, registry);
+
+  // Update spec side: set worktree field
+  specData.worktree = worktreeName;
+  const updatedYaml = yaml.dump(specData, { lineWidth: 120, noRefs: true });
+  fs.writeFileSync(specPath, updatedYaml, 'utf8');
+
+  console.log(chalk.green(`Binding established`));
+  console.log(chalk.gray(`   Worktree: ${worktreeName} -> spec: ${specId}`));
+  console.log(chalk.gray(`   Spec: ${specId} -> worktree: ${worktreeName}`));
+  console.log(chalk.gray(`   Registry: ${path.join(root, '.caws', 'worktrees.json')}`));
+  console.log(chalk.gray(`   Spec file: ${specPath}`));
 }
 
 module.exports = { worktreeCommand };

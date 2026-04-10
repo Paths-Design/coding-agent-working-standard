@@ -28,6 +28,7 @@ const {
   BRANCH_PREFIX,
   inferSpecIdForWorktree,
   findSpecByWorktreeName,
+  saveRegistry,
 } = require('../src/worktree/worktree-manager');
 
 describe('worktree-manager', () => {
@@ -1148,6 +1149,60 @@ describe('worktree-manager', () => {
       const registry = loadRegistry(testDir);
       expect(registry.worktrees['auto-bind-wt']).toBeDefined();
       expect(registry.worktrees['auto-bind-wt'].specId).toBe('AUTO-BIND');
+    });
+  });
+
+  describe('saveRegistry and bind workflow', () => {
+    test('saveRegistry persists specId update to worktree entry', () => {
+      const entry = createWorktree('bind-target');
+      expect(entry.specId).toBeNull();
+
+      // Simulate bind: update specId in registry
+      const registry = loadRegistry(testDir);
+      registry.worktrees['bind-target'].specId = 'BOUND-001';
+      saveRegistry(testDir, registry);
+
+      // Verify persistence
+      const reloaded = loadRegistry(testDir);
+      expect(reloaded.worktrees['bind-target'].specId).toBe('BOUND-001');
+    });
+
+    test('full bind workflow updates both registry and spec YAML', () => {
+      const yaml = require('js-yaml');
+
+      // Create a spec file without worktree field
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'BIND-FULL.yaml'),
+        ['id: BIND-FULL', 'title: Full bind test', 'status: draft'].join('\n')
+      );
+      execFileSync('git', ['add', '.caws/specs/BIND-FULL.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add bind-full spec'], { cwd: testDir, stdio: 'pipe' });
+
+      // Create worktree (no specId)
+      const entry = createWorktree('bind-full-wt');
+      expect(entry.specId).toBeNull();
+
+      // Simulate bind: update registry
+      const registry = loadRegistry(testDir);
+      registry.worktrees['bind-full-wt'].specId = 'BIND-FULL';
+      saveRegistry(testDir, registry);
+
+      // Simulate bind: update spec YAML
+      const specPath = path.join(testDir, '.caws', 'specs', 'BIND-FULL.yaml');
+      const specData = yaml.load(fs.readFileSync(specPath, 'utf8'));
+      specData.worktree = 'bind-full-wt';
+      fs.writeFileSync(specPath, yaml.dump(specData, { lineWidth: 120, noRefs: true }));
+
+      // Verify both sides
+      const reloaded = loadRegistry(testDir);
+      expect(reloaded.worktrees['bind-full-wt'].specId).toBe('BIND-FULL');
+
+      const updatedSpec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+      expect(updatedSpec.worktree).toBe('bind-full-wt');
+
+      // findSpecByWorktreeName should now resolve this
+      expect(findSpecByWorktreeName(testDir, 'bind-full-wt')).toBe('BIND-FULL');
     });
   });
 
