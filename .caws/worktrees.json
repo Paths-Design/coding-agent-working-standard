@@ -10,7 +10,8 @@
       "specId": "EVLOG-001",
       "owner": null,
       "createdAt": "2026-04-10T19:05:32.791Z",
-      "status": "active"
+      "status": "destroyed",
+      "destroyedAt": "2026-04-10T21:10:44.613Z"
     }
   }
 }
