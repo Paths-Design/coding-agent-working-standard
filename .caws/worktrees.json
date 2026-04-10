@@ -1,29 +1,16 @@
 {
   "version": 1,
   "worktrees": {
-    "schema-validator-foundation": {
-      "name": "schema-validator-foundation",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/schema-validator-foundation",
-      "branch": "caws/schema-validator-foundation",
+    "evlog-001": {
+      "name": "evlog-001",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/evlog-001",
+      "branch": "caws/evlog-001",
       "baseBranch": "main",
       "scope": null,
-      "specId": null,
+      "specId": "EVLOG-001",
       "owner": null,
-      "createdAt": "2026-03-22T00:45:29.230Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-03-22T00:54:41.175Z"
-    },
-    "enforcement-behavior": {
-      "name": "enforcement-behavior",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/enforcement-behavior",
-      "branch": "caws/enforcement-behavior",
-      "baseBranch": "main",
-      "scope": null,
-      "specId": null,
-      "owner": null,
-      "createdAt": "2026-03-22T00:45:29.772Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-03-22T01:17:50.799Z"
+      "createdAt": "2026-04-10T19:05:32.791Z",
+      "status": "active"
     }
   }
 }
