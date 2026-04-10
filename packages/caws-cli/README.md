@@ -110,6 +110,19 @@ caws worktree merge <name>
 
 # Destroy a worktree
 caws worktree destroy <name>
+
+# Bind a spec to a worktree (fixes authoritative scope mode)
+caws worktree bind <spec-id>
+
+# Repair registry inconsistencies
+caws worktree repair
+```
+
+### Scope Management
+
+```bash
+# Inspect effective scope boundaries, mode, and binding health
+caws scope show
 ```
 
 ### Session Management

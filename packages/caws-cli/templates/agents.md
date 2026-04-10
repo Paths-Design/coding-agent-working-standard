@@ -38,6 +38,27 @@ caws specs create my-feature --type feature --title "My Feature"
 caws validate --spec-id my-feature
 ```
 
+## Scope and Worktree Binding
+
+The scope guard enforces `scope.in` and `scope.out` from your spec. How it enforces depends on binding:
+
+- **Authoritative mode** (worktree bound to a spec): Only your spec's scope is checked. Other agents' specs cannot block you.
+- **Union mode** (no binding): ALL active specs are checked. Any `scope.out` from any spec can block you.
+
+```bash
+# See your effective scope and binding health
+caws scope show
+
+# Fix a broken binding
+caws worktree bind <spec-id>
+```
+
+**Recovery** (when blocked unexpectedly):
+1. Run `caws scope show` to check mode and binding health
+2. If union mode: `caws worktree bind <spec-id>`
+3. If authoritative but blocked: update your spec's `scope.in`
+4. Do NOT edit another spec's `scope.out` to unblock yourself
+
 ## Key Rules
 
 1. **Stay in scope** -- only edit files listed in `scope.in`, never touch `scope.out`

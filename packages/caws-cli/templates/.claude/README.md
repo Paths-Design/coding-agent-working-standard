@@ -38,7 +38,7 @@ Run before Claude executes a tool:
 |------|---------|---------|
 | `block-dangerous.sh` | `Bash` | Block destructive shell commands |
 | `scan-secrets.sh` | `Read` | Warn when reading sensitive files |
-| `scope-guard.sh` | `Write\|Edit` | Check scope boundaries before edits |
+| `scope-guard.sh` | `Write\|Edit` | Check scope boundaries before edits (use `caws scope show` to diagnose blocks) |
 
 ### PostToolUse Hooks
 
