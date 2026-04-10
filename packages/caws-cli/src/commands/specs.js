@@ -18,6 +18,7 @@ const { findProjectRoot } = require('../utils/detection');
 const { loadRegistry: loadWorktreeRegistry, getRepoRoot } = require('../worktree/worktree-manager');
 const { getAgentSessionId } = require('../utils/agent-session');
 const { initializeState, saveState, deleteState } = require('../utils/working-state');
+const { appendEvent } = require('../utils/event-log');
 
 /**
  * Check if a spec is referenced by any active worktree.
@@ -490,6 +491,42 @@ async function createSpec(id, options = {}) {
     saveState(id, initialState, findProjectRoot());
   } catch { /* non-fatal */ }
 
+  // EVLOG-001: emit spec_created event alongside state write.
+  //
+  // Spec-lifecycle events (spec_created / spec_closed / spec_deleted) are
+  // **informational redundancy** with the spec file + registry, which are
+  // the true sources of truth for spec identity. In contrast, the
+  // validation/evaluation/gates/verify_acs events are the ONLY record of
+  // those verification runs and losing them is real data loss.
+  //
+  // So we deliberately wrap spec-lifecycle emits in try/catch: a
+  // filesystem error here (test mocks, readonly fs, etc.) must not crash
+  // the spec create/close/delete flow, because the spec file itself is
+  // already persisted by the time we get here. This is a principled
+  // divergence from the strict contract for the observation events —
+  // see docs/internal/EVENTS_LOG_MIGRATION.md §4.5 and EVLOG-001 spec.
+  try {
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'spec_created',
+        spec_id: id,
+        data: {
+          id,
+          type: parsedSpec.type || type,
+          title: parsedSpec.title || title,
+          risk_tier: parsedSpec.risk_tier || numericRiskTier,
+          mode: parsedSpec.mode || mode,
+        },
+      },
+      { projectRoot: findProjectRoot() }
+    );
+  } catch (err) {
+    // Surface on stderr but don't propagate — the spec is already created.
+    // eslint-disable-next-line no-console
+    console.error(`event-log: failed to record spec_created for ${id}: ${err.message}`);
+  }
+
   return {
     id,
     path: fileName,
@@ -751,6 +788,19 @@ async function deleteSpec(id) {
   delete registry.specs[id];
   await saveSpecsRegistry(registry);
 
+  // EVLOG-001: emit spec_deleted event in best-effort mode. See the
+  // createSpec commentary for why spec-lifecycle events diverge from
+  // the strict fail-loud contract used by the observation events.
+  try {
+    await appendEvent(
+      { actor: 'cli', event: 'spec_deleted', spec_id: id, data: { id } },
+      { projectRoot: findProjectRoot() }
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`event-log: failed to record spec_deleted for ${id}: ${err.message}`);
+  }
+
   return true;
 }
 
@@ -803,7 +853,29 @@ async function closeSpec(id) {
     return false;
   }
 
-  return await updateSpec(id, { status: 'closed' });
+  const ok = await updateSpec(id, { status: 'closed' });
+
+  // EVLOG-001: emit spec_closed event after the status update succeeds.
+  // Records the prior status so the renderer can reconstruct the lifecycle.
+  // Best-effort mode — see createSpec commentary.
+  if (ok) {
+    try {
+      await appendEvent(
+        {
+          actor: 'cli',
+          event: 'spec_closed',
+          spec_id: id,
+          data: { id, prior_status: currentStatus },
+        },
+        { projectRoot: findProjectRoot() }
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`event-log: failed to record spec_closed for ${id}: ${err.message}`);
+    }
+  }
+
+  return ok;
 }
 
 /**

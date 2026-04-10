@@ -12,6 +12,7 @@ const { execFileSync } = require('child_process');
 const { findProjectRoot } = require('../utils/detection');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { recordACVerification } = require('../utils/working-state');
+const { appendEvent } = require('../utils/event-log');
 
 /**
  * Detect the project's test runner from config files.
@@ -350,16 +351,25 @@ async function verifyAcsCommand(options = {}) {
     else { totalUnchecked++; }
   }
 
-  // Record to working state
+  // Record to working state (Phase 1 dual-write: state layer + event log)
+  const acPayload = {
+    total: totalAcs,
+    pass: totalPass,
+    fail: totalFail,
+    unchecked: totalUnchecked,
+    results: result.results,
+  };
   try {
-    recordACVerification(resolved.spec.id, {
-      total: totalAcs,
-      pass: totalPass,
-      fail: totalFail,
-      unchecked: totalUnchecked,
-      results: result.results,
-    }, projectRoot);
+    recordACVerification(resolved.spec.id, acPayload, projectRoot);
   } catch { /* non-fatal */ }
+
+  // EVLOG-001: emit verify_acs_completed event alongside state write.
+  if (resolved.spec && resolved.spec.id) {
+    await appendEvent(
+      { actor: 'cli', event: 'verify_acs_completed', spec_id: resolved.spec.id, data: acPayload },
+      { projectRoot }
+    );
+  }
 
   // Output
   if (options.format === 'json') {

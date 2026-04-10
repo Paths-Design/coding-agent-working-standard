@@ -11,6 +11,7 @@ const { enrichGateResults } = require('../gates/feedback');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { commandWrapper } = require('../utils/command-wrapper');
 const { recordGates, loadState } = require('../utils/working-state');
+const { appendEvent } = require('../utils/event-log');
 
 /**
  * Run quality gates via the v2 pipeline
@@ -80,9 +81,30 @@ async function gatesCommand(options = {}) {
 
       const report = await evaluateGates({ projectRoot, stagedFiles, spec, context });
 
-      // Record to working state
+      // Record to working state (Phase 1 dual-write: state layer + event log)
       if (spec && spec.id) {
         try { recordGates(spec.id, report, context, projectRoot); } catch { /* non-fatal */ }
+
+        // EVLOG-001: emit gates_evaluated event alongside state write.
+        // Payload shape mirrors the `gates` field produced by recordGates.
+        await appendEvent(
+          {
+            actor: 'cli',
+            event: 'gates_evaluated',
+            spec_id: spec.id,
+            data: {
+              context,
+              passed: report.passed,
+              summary: report.summary || {},
+              gates: (report.gates || []).map((g) => ({
+                name: g.name,
+                status: g.status,
+                mode: g.mode,
+              })),
+            },
+          },
+          { projectRoot }
+        );
       }
 
       if (options.json || options.format === 'json') {

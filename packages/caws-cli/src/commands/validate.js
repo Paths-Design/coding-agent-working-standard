@@ -20,6 +20,7 @@ const {
   loadSpecsRegistry,
 } = require('../utils/spec-resolver');
 const { recordValidation } = require('../utils/working-state');
+const { appendEvent } = require('../utils/event-log');
 const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
 
 /**
@@ -143,19 +144,32 @@ async function validateCommand(specFile, options = {}) {
 
     const finalResult = enhancedValidation;
 
-    // Record to working state
+    // Record to working state (Phase 1 dual-write: state layer + event log)
+    const validationGrade = finalResult.complianceScore !== undefined
+      ? getComplianceGrade(finalResult.complianceScore)
+      : null;
+    const validationPayload = {
+      passed: finalResult.valid,
+      compliance_score: finalResult.complianceScore ?? null,
+      grade: validationGrade,
+      error_count: (finalResult.errors || []).length,
+      warning_count: (finalResult.warnings || []).length,
+    };
     try {
-      const grade = finalResult.complianceScore !== undefined
-        ? getComplianceGrade(finalResult.complianceScore)
-        : null;
-      recordValidation(spec.id, {
-        passed: finalResult.valid,
-        compliance_score: finalResult.complianceScore ?? null,
-        grade,
-        error_count: (finalResult.errors || []).length,
-        warning_count: (finalResult.warnings || []).length,
-      });
+      recordValidation(spec.id, validationPayload);
     } catch { /* non-fatal */ }
+
+    // EVLOG-001: emit event log entry alongside state write. Only if
+    // spec.id is present — the fence in appendEvent would throw otherwise,
+    // which is intentional for the undefined.json bug class but wrong for
+    // legitimate legacy specs without an id field. Errors here are NOT
+    // swallowed: a failure to append an event is a real defect we want to
+    // surface, not a silent data-loss event.
+    if (spec && spec.id) {
+      await appendEvent(
+        { actor: 'cli', event: 'validation_completed', spec_id: spec.id, data: validationPayload }
+      );
+    }
 
     // Emit lifecycle event
     try {

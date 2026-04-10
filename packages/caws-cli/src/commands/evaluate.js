@@ -12,6 +12,7 @@ const chalk = require('chalk');
 const { initializeGlobalSetup } = require('../config');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { recordEvaluation } = require('../utils/working-state');
+const { appendEvent } = require('../utils/event-log');
 
 /**
  * Evaluate command handler
@@ -202,18 +203,26 @@ async function evaluateCommand(specFile, options = {}) {
               ? 'D'
               : 'F';
 
-    // Record to working state
+    // Record to working state (Phase 1 dual-write: state layer + event log)
+    const checksPassed = results.checks.filter(c => c.status === 'pass').length;
+    const evaluationPayload = {
+      score: results.score,
+      max_score: results.maxScore,
+      percentage,
+      grade,
+      checks_passed: checksPassed,
+      checks_total: results.checks.length,
+    };
     try {
-      const checksPassed = results.checks.filter(c => c.status === 'pass').length;
-      recordEvaluation(spec.id, {
-        score: results.score,
-        max_score: results.maxScore,
-        percentage,
-        grade,
-        checks_passed: checksPassed,
-        checks_total: results.checks.length,
-      });
+      recordEvaluation(spec.id, evaluationPayload);
     } catch { /* non-fatal */ }
+
+    // EVLOG-001: emit evaluation_completed event alongside state write.
+    if (spec && spec.id) {
+      await appendEvent(
+        { actor: 'cli', event: 'evaluation_completed', spec_id: spec.id, data: evaluationPayload }
+      );
+    }
 
     console.log('\n' + '-'.repeat(60));
     console.log(

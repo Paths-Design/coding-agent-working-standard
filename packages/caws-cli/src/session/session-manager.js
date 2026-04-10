@@ -12,6 +12,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { mergeFilesTouched } = require('../utils/working-state');
+const { appendEventSync } = require('../utils/event-log');
 
 const SESSIONS_DIR = '.caws/sessions';
 const REGISTRY_FILE = '.caws/sessions.json';
@@ -297,6 +298,22 @@ function startSession(options = {}) {
   };
   saveRegistry(root, registry);
 
+  // EVLOG-001: emit session_started event via the sync append path.
+  // spec_id is optional for this event type; we include it only when
+  // the session is bound to a spec.
+  const sessionStartedEvent = {
+    actor: 'session',
+    event: 'session_started',
+    data: {
+      session_id: sessionId,
+      role,
+      branch: capsule.base_state.branch,
+      head_rev: capsule.base_state.head_rev,
+    },
+  };
+  if (specId) sessionStartedEvent.spec_id = specId;
+  appendEventSync(sessionStartedEvent, { projectRoot: root, session_id: sessionId });
+
   return capsule;
 }
 
@@ -446,6 +463,23 @@ function endSession(data = {}) {
   registry.sessions[sessionId].status = 'completed';
   registry.sessions[sessionId].ended_at = capsule.ended_at;
   saveRegistry(root, registry);
+
+  // EVLOG-001: emit session_ended event with final files_touched list.
+  // The renderer uses this to merge file touches into the spec view.
+  const sessionEndedEvent = {
+    actor: 'session',
+    event: 'session_ended',
+    data: {
+      session_id: sessionId,
+      files_touched: capsule.work_summary.paths_touched || [],
+      outcome: capsule.known_issues.some((i) => i.type === 'error') ? 'error' : 'success',
+    },
+  };
+  if (capsule.spec_id) {
+    sessionEndedEvent.spec_id = capsule.spec_id;
+    sessionEndedEvent.data.spec_id = capsule.spec_id;
+  }
+  appendEventSync(sessionEndedEvent, { projectRoot: root, session_id: sessionId });
 
   return capsule;
 }
