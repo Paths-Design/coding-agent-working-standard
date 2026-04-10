@@ -129,6 +129,28 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
+    test('should record the current worktree in created spec yaml', async () => {
+      jest.spyOn(process, 'cwd').mockReturnValue('/mock/repo/.caws/worktrees/p02-capability-gate');
+      const { createSpec } = require('../src/commands/specs');
+
+      fs.pathExists.mockResolvedValue(false);
+      fs.ensureDir.mockResolvedValue(undefined);
+
+      let writtenYaml = '';
+      fs.writeFile.mockImplementation(async (_filePath, content) => {
+        writtenYaml = content;
+      });
+      fs.readFile.mockImplementation(async () => writtenYaml);
+
+      await createSpec('FEAT-001', {
+        type: 'feature',
+        title: 'Feature in worktree',
+        risk_tier: 2,
+      });
+
+      expect(writtenYaml).toContain('worktree: p02-capability-gate');
+    });
+
     test('should detect existing spec conflict', async () => {
       const { createSpec } = require('../src/commands/specs');
 

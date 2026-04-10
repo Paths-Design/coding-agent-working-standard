@@ -1,5 +1,7 @@
 id: '{{FEATURE_ID}}'
 title: '{{FEATURE_TITLE}}'
+# Recommended when the spec belongs to a CAWS worktree:
+# worktree: '{{WORKTREE_NAME}}'
 risk_tier: {{TIER}}
 mode: feature
 blast_radius:
@@ -75,4 +77,3 @@ rollback:
 #   reason: "Urgent production fix - bypassing mutation tests for immediate deployment"
 #   waived_requirements: ["mutation_testing", "manual_review"]
 #   expiry_date: "2025-10-01T00:00:00Z"
-

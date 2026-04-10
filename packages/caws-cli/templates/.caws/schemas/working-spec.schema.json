@@ -25,6 +25,10 @@
     },
     "created_at": { "type": "string" },
     "updated_at": { "type": "string" },
+    "worktree": {
+      "type": "string",
+      "description": "CAWS worktree name assigned to this spec"
+    },
     "risk_tier": { "type": ["integer", "string"], "enum": [1, 2, 3, "1", "2", "3"] },
     "mode": { "type": "string", "enum": ["feature", "refactor", "fix", "doc", "docs", "chore", "development"] },
     "waiver_ids": {

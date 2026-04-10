@@ -56,6 +56,35 @@ function getSpecsDir() {
 function getSpecsRegistry() {
   return path.join(findProjectRoot(), '.caws', 'specs', 'registry.json');
 }
+
+function detectCurrentWorktreeName() {
+  const cwd = process.cwd().replace(/\\/g, '/');
+  const worktreeMatch = cwd.match(/\/\.caws\/worktrees\/([^/]+)(?:\/|$)/);
+  if (worktreeMatch) {
+    return worktreeMatch[1];
+  }
+
+  try {
+    const root = getRepoRoot();
+    const branch = require('child_process')
+      .execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })
+      .trim();
+    const registry = loadWorktreeRegistry(root);
+    for (const [name, entry] of Object.entries(registry.worktrees || {})) {
+      if (entry.branch === branch && entry.status !== 'destroyed' && entry.status !== 'merged') {
+        return name;
+      }
+    }
+  } catch {
+    // Best-effort only; specs can still be created outside a worktree.
+  }
+
+  return null;
+}
 // Legacy constants kept for backward compatibility in tests
 const SPECS_DIR = '.caws/specs';
 const SPECS_REGISTRY = '.caws/specs/registry.json';
@@ -373,6 +402,11 @@ async function createSpec(id, options = {}) {
     },
     contracts: [],
   };
+
+  const detectedWorktree = detectCurrentWorktreeName();
+  if (detectedWorktree) {
+    defaultSpec.worktree = detectedWorktree;
+  }
 
   // Merge template, but preserve required structure
   // Map template.criteria to acceptance if present
