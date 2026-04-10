@@ -449,7 +449,7 @@ public
 # =============
 # CAWS runtime caches and ephemeral state
 .caws/cache/
-.caws/state/
+**/.caws/state/
 .caws/duplication-cache.json
 
 # Generated provenance and attestation files
