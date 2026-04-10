@@ -20,11 +20,14 @@ const {
   hasDivergentCommits,
   hasDirtyFiles,
   discoverUnregisteredWorktrees,
+  autoRegisterWorktree,
   repairWorktrees,
   reconcileRegistry,
   getRepoRoot,
   WORKTREES_DIR,
   BRANCH_PREFIX,
+  inferSpecIdForWorktree,
+  findSpecByWorktreeName,
 } = require('../src/worktree/worktree-manager');
 
 describe('worktree-manager', () => {
@@ -157,6 +160,17 @@ describe('worktree-manager', () => {
       expect(entry.specId).toBe('FEAT-001');
     });
 
+    test('infers specId from a worktree-local spec copy', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-123.yaml'),
+        ['id: FEAT-123', 'title: Feature 123', 'acceptance: []'].join('\n')
+      );
+
+      const entry = createWorktree('with-inferred-spec', { specId: 'FEAT-123' });
+      expect(inferSpecIdForWorktree(entry.path)).toBe('FEAT-123');
+    });
+
     test('derives worktree working spec from canonical feature spec when available', () => {
       fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
       const canonicalSpec = [
@@ -178,8 +192,57 @@ describe('worktree-manager', () => {
 
       expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
       expect(fs.existsSync(worktreeFeatureSpec)).toBe(true);
-      expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toBe(canonicalSpec);
-      expect(fs.readFileSync(worktreeFeatureSpec, 'utf8')).toBe(canonicalSpec);
+      const canonicalAfter = fs.readFileSync(path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml'), 'utf8');
+      const worktreeWorkingContent = fs.readFileSync(worktreeWorkingSpec, 'utf8');
+      const worktreeFeatureContent = fs.readFileSync(worktreeFeatureSpec, 'utf8');
+
+      expect(canonicalAfter).toContain('worktree: with-canonical-spec');
+      expect(worktreeWorkingContent).toBe(canonicalAfter);
+      expect(worktreeFeatureContent).toBe(canonicalAfter);
+    });
+
+    test('auto-commits only the canonical spec before creating a bound worktree', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-900.yaml'),
+        [
+          'id: FEAT-900',
+          'title: Dirty canonical spec',
+          'risk_tier: 2',
+          'mode: feature',
+          'acceptance: []',
+          'notes: pending bind',
+        ].join('\n')
+      );
+      fs.writeFileSync(path.join(testDir, 'unrelated-dirty.txt'), 'leave me dirty\n');
+
+      const entry = createWorktree('auto-commit-spec', { specId: 'FEAT-900' });
+      const specPath = path.join(testDir, '.caws', 'specs', 'FEAT-900.yaml');
+      const worktreeSpecPath = path.join(entry.path, '.caws', 'specs', 'FEAT-900.yaml');
+      const status = execFileSync('git', ['status', '--porcelain'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      const lastSubject = execFileSync('git', ['log', '-1', '--format=%s'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      expect(fs.readFileSync(specPath, 'utf8')).toContain('worktree: auto-commit-spec');
+      expect(fs.readFileSync(worktreeSpecPath, 'utf8')).toContain('worktree: auto-commit-spec');
+      expect(status).toContain('?? unrelated-dirty.txt');
+      expect(status).not.toContain('.caws/specs/FEAT-900.yaml');
+      expect(lastSubject).toBe('chore(caws): bind spec FEAT-900 to worktree auto-commit-spec');
+    });
+
+    test('adds worktree field to generated fallback working spec', () => {
+      const entry = createWorktree('generated-spec', { specId: 'FEAT-404' });
+      const worktreeWorkingSpec = path.join(entry.path, '.caws', 'working-spec.yaml');
+
+      expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
+      expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toContain('worktree: generated-spec');
     });
   });
 
@@ -258,6 +321,29 @@ describe('worktree-manager', () => {
       const entries = listWorktrees();
       const wt = entries.find((e) => e.name === 'owned-wt');
       expect(wt.owner).toBe('test-session-abc123');
+    });
+  });
+
+  describe('autoRegisterWorktree', () => {
+    test('recovers specId from worktree-local spec files', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-777.yaml'),
+        ['id: FEAT-777', 'title: Recovered spec', 'acceptance: []'].join('\n')
+      );
+
+      const created = createWorktree('recover-spec', { specId: 'FEAT-777' });
+      const registry = loadRegistry(testDir);
+      delete registry.worktrees['recover-spec'];
+
+      const registered = autoRegisterWorktree(testDir, registry, {
+        name: 'recover-spec',
+        path: created.path,
+        branch: created.branch,
+      });
+
+      expect(registered.specId).toBe('FEAT-777');
+      expect(registry.worktrees['recover-spec'].specId).toBe('FEAT-777');
     });
   });
 
@@ -1013,6 +1099,55 @@ describe('worktree-manager', () => {
       if (savedTraceId !== undefined) {
         process.env.CURSOR_TRACE_ID = savedTraceId;
       }
+    });
+  });
+
+  describe('findSpecByWorktreeName', () => {
+    test('returns spec id when a spec declares matching worktree field', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'BIND-001.yaml'),
+        ['id: BIND-001', 'title: Bindable spec', 'worktree: bind-target'].join('\n')
+      );
+
+      const result = findSpecByWorktreeName(testDir, 'bind-target');
+      expect(result).toBe('BIND-001');
+    });
+
+    test('returns null when no spec matches the worktree name', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'BIND-002.yaml'),
+        ['id: BIND-002', 'title: Other spec', 'worktree: other-wt'].join('\n')
+      );
+
+      const result = findSpecByWorktreeName(testDir, 'no-match');
+      expect(result).toBeNull();
+    });
+
+    test('returns null when .caws/specs/ does not exist', () => {
+      const result = findSpecByWorktreeName(testDir, 'anything');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createWorktree auto-bind', () => {
+    test('auto-binds specId from spec worktree field when no explicit specId given', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'AUTO-BIND.yaml'),
+        ['id: AUTO-BIND', 'title: Auto bind test', 'worktree: auto-bind-wt'].join('\n')
+      );
+      // Commit the spec so ensureCanonicalSpecCommitted doesn't fail
+      execFileSync('git', ['add', '.caws/specs/AUTO-BIND.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add auto-bind spec'], { cwd: testDir, stdio: 'pipe' });
+
+      const entry = createWorktree('auto-bind-wt');
+      expect(entry.specId).toBe('AUTO-BIND');
+
+      const registry = loadRegistry(testDir);
+      expect(registry.worktrees['auto-bind-wt']).toBeDefined();
+      expect(registry.worktrees['auto-bind-wt'].specId).toBe('AUTO-BIND');
     });
   });
 

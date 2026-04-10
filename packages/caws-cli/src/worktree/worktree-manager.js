@@ -27,6 +27,59 @@ function findFeatureSpecPath(root, specId) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
+function writeSpecWithWorktree(filePath, worktreeName) {
+  const yaml = require('js-yaml');
+  const content = fs.readFileSync(filePath, 'utf8');
+  const parsed = yaml.load(content);
+  if (!parsed || typeof parsed !== 'object') {
+    return content;
+  }
+
+  parsed.worktree = worktreeName;
+  return yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+}
+
+function hasPathChanges(root, relativePath) {
+  try {
+    const output = execFileSync(
+      'git',
+      ['status', '--porcelain', '--', relativePath],
+      { cwd: root, encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    return output.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function ensureCanonicalSpecCommitted(root, specPath, specId, worktreeName) {
+  const relativeSpecPath = path.relative(root, specPath);
+  const nextContent = writeSpecWithWorktree(specPath, worktreeName);
+  const currentContent = fs.readFileSync(specPath, 'utf8');
+
+  if (currentContent !== nextContent) {
+    fs.writeFileSync(specPath, nextContent);
+  }
+
+  if (!hasPathChanges(root, relativeSpecPath)) {
+    return false;
+  }
+
+  execFileSync('git', ['add', '--', relativeSpecPath], {
+    cwd: root,
+    stdio: 'pipe',
+  });
+  execFileSync(
+    'git',
+    ['commit', '-m', `chore(caws): bind spec ${specId} to worktree ${worktreeName}`, '--', relativeSpecPath],
+    {
+      cwd: root,
+      stdio: 'pipe',
+    }
+  );
+  return true;
+}
+
 function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
   if (!specId) return;
 
@@ -46,14 +99,14 @@ function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
 
     // Keep a canonical feature-spec copy inside the worktree and align
     // working-spec.yaml to that exact content for legacy-compatible commands.
-    const specContent = fs.readFileSync(canonicalSpecPath, 'utf8');
+    const specContent = writeSpecWithWorktree(canonicalSpecPath, worktreeName);
     fs.writeFileSync(destSpecPath, specContent);
     fs.writeFileSync(workingSpecPath, specContent);
     return;
   }
 
   const { generateWorkingSpec } = require('../generators/working-spec');
-  const specContent = generateWorkingSpec({
+  let specContent = generateWorkingSpec({
     projectId: specId,
     projectTitle: `Worktree: ${worktreeName}`,
     projectDescription: `Isolated worktree for ${worktreeName}`,
@@ -86,8 +139,82 @@ function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
     complexityFactors: '',
   });
 
+  try {
+    const yaml = require('js-yaml');
+    const parsed = yaml.load(specContent);
+    if (parsed && typeof parsed === 'object') {
+      parsed.worktree = worktreeName;
+      specContent = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+    }
+  } catch {
+    // Keep generated spec content if augmentation fails.
+  }
+
   fs.ensureDirSync(path.dirname(workingSpecPath));
   fs.writeFileSync(workingSpecPath, specContent);
+}
+
+function parseSpecIdFromYamlFile(filePath) {
+  try {
+    const yaml = require('js-yaml');
+    const doc = yaml.load(fs.readFileSync(filePath, 'utf8'));
+    if (doc && typeof doc.id === 'string' && doc.id.trim()) {
+      return doc.id.trim();
+    }
+  } catch {
+    // Ignore malformed YAML during inference
+  }
+  return null;
+}
+
+/**
+ * Scan .caws/specs/ for a spec that declares `worktree: <name>`.
+ * Returns the spec's id if found, null otherwise.
+ * This enables auto-binding: when a spec already names the worktree
+ * it expects, the registry entry gets the specId automatically.
+ * @param {string} root - Repository root
+ * @param {string} worktreeName - Worktree name to match
+ * @returns {string|null} Spec ID or null
+ */
+function findSpecByWorktreeName(root, worktreeName) {
+  const yaml = require('js-yaml');
+  const specsDir = path.join(root, '.caws', 'specs');
+  if (!fs.existsSync(specsDir)) return null;
+
+  const specFiles = fs.readdirSync(specsDir)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
+
+  for (const specFile of specFiles) {
+    try {
+      const doc = yaml.load(fs.readFileSync(path.join(specsDir, specFile), 'utf8'));
+      if (doc && doc.worktree === worktreeName && typeof doc.id === 'string') {
+        return doc.id.trim();
+      }
+    } catch {
+      // Skip malformed spec files
+    }
+  }
+  return null;
+}
+
+function inferSpecIdForWorktree(worktreePath) {
+  if (!worktreePath) return null;
+
+  const specsDir = path.join(worktreePath, '.caws', 'specs');
+  if (fs.existsSync(specsDir)) {
+    const specFiles = fs.readdirSync(specsDir)
+      .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+      .sort();
+
+    for (const specFile of specFiles) {
+      const inferred = parseSpecIdFromYamlFile(path.join(specsDir, specFile));
+      if (inferred) {
+        return inferred;
+      }
+    }
+  }
+
+  return parseSpecIdFromYamlFile(path.join(worktreePath, '.caws', 'working-spec.yaml'));
 }
 
 /**
@@ -356,7 +483,7 @@ function autoRegisterWorktree(root, registry, discovered) {
     branch: discovered.branch,
     baseBranch,
     scope: null,
-    specId: null,
+    specId: inferSpecIdForWorktree(discovered.path),
     owner: null,
     createdAt: new Date().toISOString(),
     status: 'active',
@@ -423,6 +550,7 @@ function createWorktree(name, options = {}) {
   const worktreePath = path.join(root, WORKTREES_DIR, name);
   const branchName = BRANCH_PREFIX + name;
   const base = baseBranch || getCurrentBranch();
+  const canonicalSpecPath = findFeatureSpecPath(root, specId);
 
   // Check if the branch already exists in git (even if not in registry)
   // This catches cases where another agent created the branch outside CAWS
@@ -448,6 +576,10 @@ function createWorktree(name, options = {}) {
 
   // Create the worktree directory
   fs.ensureDirSync(path.dirname(worktreePath));
+
+  if (canonicalSpecPath) {
+    ensureCanonicalSpecCommitted(root, canonicalSpecPath, specId, name);
+  }
 
   // Create git worktree with new branch
   try {
@@ -510,15 +642,26 @@ function createWorktree(name, options = {}) {
     }
   }
 
+  // Auto-bind specId: if no explicit --spec-id was passed, scan .caws/specs/
+  // for a spec that declares `worktree: <name>`. This establishes the mutual
+  // reference that the scope guard uses to treat one spec as authoritative.
+  let resolvedSpecId = specId || null;
+  if (!resolvedSpecId) {
+    resolvedSpecId = findSpecByWorktreeName(root, name);
+    if (resolvedSpecId) {
+      console.log(chalk.gray(`   Auto-bound spec: ${resolvedSpecId}`));
+    }
+  }
+
   // Materialize a worktree-local working spec. Prefer the canonical feature
   // spec when it exists so isolated worktrees stay aligned with the main
   // registry/resolver model.
-  if (specId) {
+  if (resolvedSpecId) {
     try {
-      materializeWorktreeSpec(root, cawsDest, specId, name, scope);
+      materializeWorktreeSpec(root, cawsDest, resolvedSpecId, name, scope);
     } catch (error) {
       console.warn(
-        chalk.yellow(`Could not materialize spec '${specId}' for worktree '${name}': ${error.message}`)
+        chalk.yellow(`Could not materialize spec '${resolvedSpecId}' for worktree '${name}': ${error.message}`)
       );
       // Non-fatal: spec generation is optional
     }
@@ -531,7 +674,7 @@ function createWorktree(name, options = {}) {
     branch: branchName,
     baseBranch: base,
     scope: scope || null,
-    specId: specId || null,
+    specId: resolvedSpecId,
     owner: options.owner || getAgentSessionId(root) || null,
     createdAt: new Date().toISOString(),
     status: 'fresh',
@@ -1165,4 +1308,6 @@ module.exports = {
   BRANCH_PREFIX,
   findFeatureSpecPath,
   materializeWorktreeSpec,
+  inferSpecIdForWorktree,
+  findSpecByWorktreeName,
 };
