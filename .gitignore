@@ -451,6 +451,9 @@ public
 .caws/cache/
 **/.caws/state/
 .caws/duplication-cache.json
+# EVLOG-001: append-only event log — runtime, not versioned
+**/.caws/events.jsonl
+**/.caws/events.jsonl.lock
 
 # Generated provenance and attestation files
 .agent/
