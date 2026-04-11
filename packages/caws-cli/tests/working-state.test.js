@@ -482,3 +482,128 @@ describe('phase transition events', () => {
     expect(callCount).toBe(0);
   });
 });
+
+// ============================================================
+// CAWSFIX-02: fail-loud fence on undefined spec IDs
+//
+// Prevents the .caws/state/undefined.json bug class by refusing to
+// resolve a state path when specId is not a non-empty string.
+// Symmetric with the REQUIRES_SPEC_ID fence in event-log.js (EVLOG-001).
+// ============================================================
+
+describe('CAWSFIX-02 fail-loud fence on getStatePath', () => {
+  test('throws on undefined specId', () => {
+    expect(() => getStatePath(undefined, tmpDir)).toThrow(/non-empty string/);
+    expect(() => getStatePath(undefined, tmpDir)).toThrow(/undefined\.json bug class/);
+  });
+
+  test('throws on null specId', () => {
+    expect(() => getStatePath(null, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('throws on empty string specId', () => {
+    expect(() => getStatePath('', tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('throws on whitespace-only specId', () => {
+    expect(() => getStatePath('   ', tmpDir)).toThrow(/non-empty string/);
+    expect(() => getStatePath('\t\n', tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('throws on non-string specId (number)', () => {
+    expect(() => getStatePath(123, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('throws on non-string specId (object)', () => {
+    expect(() => getStatePath({ id: 'X' }, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('error message includes JSON.stringify of the bad value for debuggability', () => {
+    expect(() => getStatePath(undefined, tmpDir)).toThrow(/undefined/);
+    expect(() => getStatePath(null, tmpDir)).toThrow(/null/);
+    expect(() => getStatePath('', tmpDir)).toThrow(/""/);
+  });
+
+  test('accepts valid spec IDs unchanged', () => {
+    expect(() => getStatePath('TEST-001', tmpDir)).not.toThrow();
+    expect(() => getStatePath('COMPSB-05', tmpDir)).not.toThrow();
+    expect(getStatePath('VALID', tmpDir)).toContain('VALID.json');
+  });
+
+  test('no undefined.json file is written when fence triggers', () => {
+    const stateDir = path.join(tmpDir, STATE_DIR);
+    try { saveState(undefined, { phase: 'test' }, tmpDir); } catch { /* swallow */ }
+    expect(fs.existsSync(path.join(stateDir, 'undefined.json'))).toBe(false);
+  });
+});
+
+describe('CAWSFIX-02 fence propagation through all state-layer entry points', () => {
+  // Every function that accepts a specId must propagate the fence error.
+  // This is the load-bearing defense: no matter which surface a buggy
+  // caller hits, the undefined.json file never gets created.
+
+  test('saveState throws on undefined specId', () => {
+    expect(() => saveState(undefined, { phase: 'test' }, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('loadState throws on undefined specId', () => {
+    expect(() => loadState(undefined, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('deleteState throws on undefined specId', () => {
+    expect(() => deleteState(undefined, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('updateState throws on undefined specId', () => {
+    expect(() => updateState(undefined, { phase: 'test' }, { projectRoot: tmpDir })).toThrow(
+      /non-empty string/
+    );
+  });
+
+  test('recordValidation throws on undefined specId', () => {
+    const payload = { passed: true, grade: 'A', error_count: 0, warning_count: 0 };
+    expect(() => recordValidation(undefined, payload, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('recordEvaluation throws on undefined specId', () => {
+    const payload = { score: 90, max_score: 100, percentage: 90, grade: 'A' };
+    expect(() => recordEvaluation(undefined, payload, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('recordGates throws on undefined specId', () => {
+    const payload = { passed: true, summary: { passed: 5, blocked: 0, warned: 0 }, gates: [] };
+    expect(() => recordGates(undefined, payload, 'cli', tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('recordACVerification throws on undefined specId', () => {
+    const payload = { total: 1, pass: 1, fail: 0, unchecked: 0, results: [] };
+    expect(() => recordACVerification(undefined, payload, tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('mergeFilesTouched throws on undefined specId', () => {
+    expect(() => mergeFilesTouched(undefined, ['a.js'], tmpDir)).toThrow(/non-empty string/);
+  });
+
+  test('after all fence attempts, state directory contains no undefined.json', () => {
+    // Exercise every entry point with undefined specId inside a single test.
+    const attempts = [
+      () => saveState(undefined, { phase: 'x' }, tmpDir),
+      () => loadState(undefined, tmpDir),
+      () => deleteState(undefined, tmpDir),
+      () => updateState(undefined, { phase: 'x' }, { projectRoot: tmpDir }),
+      () => recordValidation(undefined, { passed: true }, tmpDir),
+      () => recordEvaluation(undefined, { score: 50 }, tmpDir),
+      () => recordGates(undefined, { passed: true, summary: {}, gates: [] }, 'cli', tmpDir),
+      () => recordACVerification(undefined, { total: 0 }, tmpDir),
+      () => mergeFilesTouched(undefined, [], tmpDir),
+    ];
+    for (const fn of attempts) {
+      try { fn(); } catch { /* expected */ }
+    }
+    const stateDirPath = path.join(tmpDir, STATE_DIR);
+    if (fs.existsSync(stateDirPath)) {
+      const files = fs.readdirSync(stateDirPath);
+      expect(files).not.toContain('undefined.json');
+    }
+  });
+});

@@ -155,9 +155,16 @@ async function validateCommand(specFile, options = {}) {
       error_count: (finalResult.errors || []).length,
       warning_count: (finalResult.warnings || []).length,
     };
-    try {
-      recordValidation(spec.id, validationPayload);
-    } catch { /* non-fatal */ }
+    // CAWSFIX-02: guard recordValidation with the same `spec && spec.id`
+    // check that gates.js already uses and that the appendEvent call below
+    // enforces. Without this, legacy working-specs without an id silently
+    // wrote `.caws/state/undefined.json` — now blocked by the state-layer
+    // fence, but guarding here keeps the intent explicit.
+    if (spec && spec.id) {
+      try {
+        recordValidation(spec.id, validationPayload);
+      } catch { /* non-fatal */ }
+    }
 
     // EVLOG-001: emit event log entry alongside state write. Only if
     // spec.id is present — the fence in appendEvent would throw otherwise,

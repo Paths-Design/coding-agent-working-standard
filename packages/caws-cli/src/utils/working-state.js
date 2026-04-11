@@ -40,11 +40,36 @@ function findRoot(startDir) {
 
 /**
  * Resolve the absolute path for a spec's state file.
+ *
+ * **Fail-loud contract (CAWSFIX-02)**: throws if `specId` is undefined,
+ * null, empty, non-string, or whitespace-only. This fence prevents the
+ * `.caws/state/undefined.json` bug class — a historical source of
+ * silent data corruption where legacy callers passed `spec.id` without
+ * checking whether `spec` was a valid resolved spec.
+ *
+ * Symmetric with the `REQUIRES_SPEC_ID` fence in `event-log.js` from
+ * EVLOG-001: both state-layer and event-log writes now refuse to
+ * proceed with an undefined spec id. Callers that legitimately lack a
+ * spec id (e.g. legacy working-specs, failed resolveSpec) must guard
+ * their calls with `if (spec && spec.id)` — the pattern `gates.js`
+ * already uses and which `validate.js`/`evaluate.js`/`verify-acs.js`
+ * are updated to use in the same tranche.
+ *
  * @param {string} specId
  * @param {string} [projectRoot]
  * @returns {string}
+ * @throws {Error} if specId is not a non-empty string
  */
 function getStatePath(specId, projectRoot) {
+  if (!specId || typeof specId !== 'string' || specId.trim() === '') {
+    throw new Error(
+      `working-state.getStatePath: specId must be a non-empty string ` +
+        `(got ${JSON.stringify(specId)}). This is the fence that prevents ` +
+        `the .caws/state/undefined.json bug class — callers without a ` +
+        `resolved spec id must guard with \`if (spec && spec.id)\` before ` +
+        `invoking saveState/updateState/recordValidation/etc.`
+    );
+  }
   const root = projectRoot || findRoot();
   return path.join(root, STATE_DIR, `${specId}.json`);
 }

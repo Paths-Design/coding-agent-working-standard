@@ -213,9 +213,14 @@ async function evaluateCommand(specFile, options = {}) {
       checks_passed: checksPassed,
       checks_total: results.checks.length,
     };
-    try {
-      recordEvaluation(spec.id, evaluationPayload);
-    } catch { /* non-fatal */ }
+    // CAWSFIX-02: guard recordEvaluation with `spec && spec.id` check to
+    // prevent the .caws/state/undefined.json bug class. Matches the pattern
+    // gates.js already uses and the appendEvent call below.
+    if (spec && spec.id) {
+      try {
+        recordEvaluation(spec.id, evaluationPayload);
+      } catch { /* non-fatal */ }
+    }
 
     // EVLOG-001: emit evaluation_completed event alongside state write.
     if (spec && spec.id) {

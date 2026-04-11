@@ -359,9 +359,14 @@ async function verifyAcsCommand(options = {}) {
     unchecked: totalUnchecked,
     results: result.results,
   };
-  try {
-    recordACVerification(resolved.spec.id, acPayload, projectRoot);
-  } catch { /* non-fatal */ }
+  // CAWSFIX-02: guard recordACVerification with `resolved.spec && resolved.spec.id`
+  // check to prevent the .caws/state/undefined.json bug class. Matches the
+  // pattern gates.js already uses and the appendEvent call below.
+  if (resolved.spec && resolved.spec.id) {
+    try {
+      recordACVerification(resolved.spec.id, acPayload, projectRoot);
+    } catch { /* non-fatal */ }
+  }
 
   // EVLOG-001: emit verify_acs_completed event alongside state write.
   if (resolved.spec && resolved.spec.id) {
