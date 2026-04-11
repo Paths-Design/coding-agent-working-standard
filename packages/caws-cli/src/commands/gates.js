@@ -10,7 +10,12 @@ const { formatText, formatJson, formatEnrichedText } = require('../gates/format'
 const { enrichGateResults } = require('../gates/feedback');
 const { resolveSpec } = require('../utils/spec-resolver');
 const { commandWrapper } = require('../utils/command-wrapper');
-const { recordGates, loadState } = require('../utils/working-state');
+// EVLOG-002 Phase 2 read flip: gates still writes via recordGates (state layer)
+// AND emits a gates_evaluated event (from Phase 1), but the feedback-enrichment
+// READ at line ~116 now goes through the event log renderer instead of loadState.
+// The write path is deliberately unchanged in Phase 2 — only reads flip.
+const { recordGates } = require('../utils/working-state');
+const { loadStateFromEvents } = require('../utils/event-renderer');
 const { appendEvent } = require('../utils/event-log');
 
 /**
@@ -110,10 +115,10 @@ async function gatesCommand(options = {}) {
       if (options.json || options.format === 'json') {
         console.log(formatJson(report));
       } else if (!options.quiet) {
-        // Enrich feedback on failure or --verbose
+        // Enrich feedback on failure or --verbose (EVLOG-002: from event log)
         if (!report.passed || options.verbose) {
           try {
-            const state = spec?.id ? loadState(spec.id, projectRoot) : null;
+            const state = spec?.id ? loadStateFromEvents(spec.id, { projectRoot }) : null;
             const enrichments = enrichGateResults(report, { spec, state, projectRoot });
             if (enrichments.size > 0) {
               console.log(formatEnrichedText(report, enrichments));

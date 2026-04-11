@@ -7,7 +7,10 @@
 
 const chalk = require('chalk');
 const { resolveSpec } = require('../utils/spec-resolver');
-const { loadState } = require('../utils/working-state');
+// EVLOG-002 Phase 2 read flip: sidecars read state from the event log via the
+// pure renderer. loadStateFromEvents matches loadState's null contract exactly,
+// so the existing "state may be null — sidecars handle that" behavior stays.
+const { loadStateFromEvents } = require('../utils/event-renderer');
 const { commandWrapper } = require('../utils/command-wrapper');
 const { SIDECARS, formatSidecarText } = require('../sidecars');
 
@@ -45,8 +48,8 @@ async function sidecarCommand(subcommand, options = {}) {
         process.exit(1);
       }
 
-      // Load working state (may be null — sidecars handle that)
-      const state = loadState(spec.id);
+      // Load working state (may be null — sidecars handle that; EVLOG-002: from event log)
+      const state = loadStateFromEvents(spec.id);
 
       // Build sidecar-specific options
       const sidecarOptions = {};
