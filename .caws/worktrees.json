@@ -10,7 +10,8 @@
       "specId": "EVLOG-002",
       "owner": null,
       "createdAt": "2026-04-11T00:27:57.957Z",
-      "status": "fresh"
+      "status": "destroyed",
+      "destroyedAt": "2026-04-11T00:54:51.580Z"
     }
   }
 }
