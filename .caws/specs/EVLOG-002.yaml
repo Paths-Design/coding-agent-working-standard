@@ -40,8 +40,12 @@ invariants:
   - State layer (working-state.js) writes continue unchanged — Phase 2 is read-only
   - recordGates write at gates.js stays on the state layer; only the feedback-enrichment loadState call flips
   - loadStateFromEvents returns null for specs with zero matching events, matching loadState's contract exactly
-  - Every consumer produces byte-identical output whether it reads from loadState or loadStateFromEvents (given the same event stream + state)
-  - Deleting .caws/state/<spec-id>.json between runs does not change any consumer's output, because the event log alone is sufficient
+  - >-
+    Every consumer produces byte-identical output whether it reads from loadState or loadStateFromEvents (given the same
+    event stream + state)
+  - >-
+    Deleting .caws/state/<spec-id>.json between runs does not change any consumer's output, because the event log alone
+    is sufficient
 acceptance:
   - id: A1
     given: A spec with events but no .caws/state/ file
@@ -75,18 +79,19 @@ acceptance:
     given: A spec that has been fully exercised through validate/evaluate/verify-acs/gates
     when: .caws/state/<spec-id>.json is deleted and each consumer command (iterate/status/sidecar/gates) is re-run
     then: >-
-      Every consumer produces output identical to the pre-delete output, proving the event log alone is sufficient
-      as a source of truth
+      Every consumer produces output identical to the pre-delete output, proving the event log alone is sufficient as a
+      source of truth
   - id: A7
     given: The full jest suite before and after this change
     when: The suite is run
-    then: No pre-existing test regresses beyond the 2 known pre-existing failures (spec-creation worktree-recording, parallel-manager spec propagation)
+    then: >-
+      No pre-existing test regresses beyond the 2 known pre-existing failures (spec-creation worktree-recording,
+      parallel-manager spec propagation)
 non_functional:
   perf:
     api_p95_ms: 50
   a11y: []
   security:
-    - >-
-      Phase 2 is read-only — no new writes, no new persisted surfaces. Read path already validated in EVLOG-001 Phase 1.
+    - Phase 2 is read-only — no new writes, no new persisted surfaces. Read path already validated in EVLOG-001 Phase 1.
 contracts: []
 worktree: evlog-002

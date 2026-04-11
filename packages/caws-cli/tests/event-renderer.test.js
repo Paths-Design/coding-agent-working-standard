@@ -7,12 +7,19 @@
  * renderer in isolation.
  */
 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
 const {
   renderSpecState,
   renderAllSpecStates,
+  loadStateFromEvents,
   emptyView,
   _internal,
 } = require('../src/utils/event-renderer');
+
+const { appendEvent } = require('../src/utils/event-log');
 
 const { applyEvent, computePhase, computeBlockers, computeNextActions, isEventForSpec } =
   _internal;
@@ -528,5 +535,106 @@ describe('applyEvent — unknown event tolerance', () => {
     expect(view.acceptance_criteria).toEqual(before.acceptance_criteria);
     expect(view.files_touched).toEqual(before.files_touched);
     expect(view.history).toEqual(before.history);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadStateFromEvents — filesystem-reading convenience wrapper
+//
+// Contract: must match working-state.loadState exactly — return null when
+// there are zero events for the spec, return a view object otherwise.
+// This is load-bearing for Phase 2 read flips (EVLOG-002). The existing
+// call sites all check `workingState && ...` or `loadState(id) || null`,
+// so flipping from loadState to loadStateFromEvents only preserves
+// semantics if the "untouched spec" case returns null.
+// ---------------------------------------------------------------------------
+
+describe('loadStateFromEvents — null contract parity with loadState', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-evlog-render-'));
+    fs.mkdirSync(path.join(tmpDir, '.caws'), { recursive: true });
+  });
+
+  afterEach(() => {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns null when events.jsonl does not exist (matches loadState(missing-file))', () => {
+    const result = loadStateFromEvents('TEST-001', { projectRoot: tmpDir });
+    expect(result).toBeNull();
+  });
+
+  test('returns null when events.jsonl is empty', () => {
+    fs.writeFileSync(path.join(tmpDir, '.caws', 'events.jsonl'), '');
+    const result = loadStateFromEvents('TEST-001', { projectRoot: tmpDir });
+    expect(result).toBeNull();
+  });
+
+  test('returns null when events exist but none match the requested spec', async () => {
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'OTHER-001',
+        data: { passed: true, grade: 'A' },
+      },
+      { projectRoot: tmpDir }
+    );
+    const result = loadStateFromEvents('TEST-001', { projectRoot: tmpDir });
+    expect(result).toBeNull();
+  });
+
+  test('returns a view when at least one event matches the spec', async () => {
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'TEST-001',
+        data: { passed: true, grade: 'A', score: 95 },
+      },
+      { projectRoot: tmpDir }
+    );
+    const result = loadStateFromEvents('TEST-001', { projectRoot: tmpDir });
+    expect(result).not.toBeNull();
+    expect(result.spec_id).toBe('TEST-001');
+    expect(result.validation).toMatchObject({ passed: true, grade: 'A' });
+  });
+
+  test('multi-spec log returns null for untouched specs and views for touched ones', async () => {
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'A-001',
+        data: { passed: true, grade: 'A' },
+      },
+      { projectRoot: tmpDir }
+    );
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'B-002',
+        data: { passed: false, grade: 'F' },
+      },
+      { projectRoot: tmpDir }
+    );
+
+    expect(loadStateFromEvents('A-001', { projectRoot: tmpDir })).not.toBeNull();
+    expect(loadStateFromEvents('B-002', { projectRoot: tmpDir })).not.toBeNull();
+    expect(loadStateFromEvents('C-003', { projectRoot: tmpDir })).toBeNull();
+  });
+
+  test('`null &&` guard idiom used by iterate/status call sites works under the event-log path', async () => {
+    // Simulates: `let ws = null; try { ws = loadStateFromEvents(id); } catch {}`
+    // then `if (ws && ws.phase !== 'not-started') { ... }`.
+    // With the null contract, untouched specs never enter the branch.
+    const untouched = loadStateFromEvents('UNTOUCHED-001', { projectRoot: tmpDir });
+    const enteredBranch = untouched && untouched.phase !== 'not-started';
+    expect(enteredBranch).toBeFalsy();
   });
 });

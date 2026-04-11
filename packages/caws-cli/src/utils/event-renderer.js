@@ -439,13 +439,34 @@ function renderAllSpecStates(events) {
  * Convenience: read the event log and render a single spec's view.
  * Equivalent to calling `loadState(specId)` but backed by the event log.
  *
+ * **Contract parity with `working-state.loadState`**: returns `null` when
+ * there are zero events for this spec, matching `loadState`'s behavior of
+ * returning `null` when the state file does not exist. This is load-bearing
+ * for Phase 2 read flips — call sites like `status.js`'s
+ * `loadState(id) || null` coalesce depend on it, and `iterate.js`'s
+ * `if (workingState) { ... }` guard would otherwise always be truthy under
+ * the event-log path even for untouched specs.
+ *
+ * `renderSpecState` itself stays pure and always returns a view object
+ * (possibly empty). The null translation only happens here, at the
+ * `loadState`-compatible boundary.
+ *
  * @param {string} specId
  * @param {object} [options]
  * @param {string} [options.projectRoot]
- * @returns {object}
+ * @returns {object|null}
  */
 function loadStateFromEvents(specId, options = {}) {
   const events = readEvents(options);
+  // If no events match this spec, return null to match loadState's contract.
+  let hasMatch = false;
+  for (const event of events) {
+    if (isEventForSpec(event, specId)) {
+      hasMatch = true;
+      break;
+    }
+  }
+  if (!hasMatch) return null;
   return renderSpecState(events, specId);
 }
 
