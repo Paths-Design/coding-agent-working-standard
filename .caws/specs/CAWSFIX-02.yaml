@@ -1,0 +1,72 @@
+id: CAWSFIX-02
+type: fix
+title: Fail-loud fence on state layer — prevent .caws/state/undefined.json bug class
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-11T01:05:33.438Z'
+updated_at: '2026-04-11T01:05:33.439Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/utils/working-state
+    - packages/caws-cli/src/commands/validate
+    - packages/caws-cli/src/commands/evaluate
+    - packages/caws-cli/src/commands/verify-acs
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/utils/working-state.js
+    - packages/caws-cli/src/commands/validate.js
+    - packages/caws-cli/src/commands/evaluate.js
+    - packages/caws-cli/src/commands/verify-acs.js
+    - packages/caws-cli/tests/working-state.test.js
+    - .caws/specs/CAWSFIX-02.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/src/utils/event-log.js
+    - packages/caws-cli/src/utils/event-renderer.js
+    - packages/caws-cli/src/commands/gates.js
+invariants:
+  - getStatePath throws loudly on undefined/null/empty/non-string specId
+  - No code path can silently write .caws/state/undefined.json ever again
+  - saveState, updateState, loadState, deleteState, and all recordX functions propagate the fence error
+  - Existing callers that pass a valid specId continue to work unchanged
+  - The state-layer fence is symmetric with the event-log REQUIRES_SPEC_ID fence from EVLOG-001
+acceptance:
+  - id: A1
+    given: A caller invokes getStatePath with undefined specId
+    when: The call executes
+    then: It throws an error naming the undefined.json bug class, with no filesystem write
+  - id: A2
+    given: A caller invokes getStatePath with null, empty string, or whitespace-only specId
+    when: The call executes
+    then: It throws the same fence error, no filesystem write
+  - id: A3
+    given: A caller invokes saveState, updateState, loadState, deleteState, or any recordX with an undefined specId
+    when: The call executes
+    then: The error from getStatePath propagates up through the call chain
+  - id: A4
+    given: A caller invokes validate or evaluate or verify-acs with a spec that has no id field
+    when: The command executes
+    then: The recordX call is now guarded by `if (spec && spec.id)`, matching the pattern gates.js already uses, and no undefined.json file is created
+  - id: A5
+    given: An existing spec with a valid id
+    when: validate, evaluate, verify-acs, or any state-layer command runs
+    then: All existing behavior is preserved — recordX calls succeed, state files are written correctly
+  - id: A6
+    given: The full jest suite before and after this change
+    when: The suite is run
+    then: No new regressions beyond the 2 pre-existing baseline failures
+non_functional:
+  perf:
+    api_p95_ms: 50
+  a11y: []
+  security:
+    - >-
+      Fence prevents silent data corruption (writing state under undefined filename). This is a defense-in-depth
+      fix — the EVLOG-001 event-log fence already covers the event log path; this closes the same gap on the
+      state layer.
+contracts: []
