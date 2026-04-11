@@ -21,8 +21,15 @@ jest.mock('../../src/config', () => ({
   initializeGlobalSetup: jest.fn(),
 }));
 
+// EVLOG-002: iterate now reads from event-renderer, not working-state.
+// The working-state mock is kept for safety (in case another path reaches it)
+// but the tests below mock loadStateFromEvents directly.
 jest.mock('../../src/utils/working-state', () => ({
   loadState: jest.fn().mockReturnValue(null),
+}));
+
+jest.mock('../../src/utils/event-renderer', () => ({
+  loadStateFromEvents: jest.fn().mockReturnValue(null),
 }));
 
 jest.mock('../../src/sidecars', () => ({
@@ -163,8 +170,10 @@ describe('iterateCommand', () => {
 
   describe('working state overlay', () => {
     test('overlays evidence-based completed steps when state exists', async () => {
-      const { loadState } = require('../../src/utils/working-state');
-      loadState.mockReturnValue({
+      // EVLOG-002: iterate reads from loadStateFromEvents (event-renderer),
+      // not loadState (working-state). Mock the new surface.
+      const { loadStateFromEvents } = require('../../src/utils/event-renderer');
+      loadStateFromEvents.mockReturnValue({
         phase: 'implementation',
         validation: { passed: true, grade: 'B' },
         evaluation: { percentage: 85, grade: 'B' },
@@ -180,8 +189,8 @@ describe('iterateCommand', () => {
     });
 
     test('handles null working state gracefully', async () => {
-      const { loadState } = require('../../src/utils/working-state');
-      loadState.mockReturnValue(null);
+      const { loadStateFromEvents } = require('../../src/utils/event-renderer');
+      loadStateFromEvents.mockReturnValue(null);
 
       await expect(iterateCommand(undefined, {})).resolves.not.toThrow();
     });
