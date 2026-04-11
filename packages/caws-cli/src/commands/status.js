@@ -12,7 +12,11 @@ const chalk = require('chalk');
 const { safeAsync, outputResult } = require('../error-handler');
 const { parallel } = require('../utils/async-utils');
 const { resolveSpec } = require('../utils/spec-resolver');
-const { loadState } = require('../utils/working-state');
+// EVLOG-002 Phase 2 read flip: status reads working state from the event log
+// via the pure renderer. loadStateFromEvents matches loadState's null contract
+// exactly, so the `ws && ws.phase !== 'not-started'` guard and the
+// `loadState(id) || null` coalesce below stay semantically correct.
+const { loadStateFromEvents } = require('../utils/event-renderer');
 
 /**
  * Load working specification (legacy single file approach)
@@ -375,10 +379,10 @@ function displayStatus(data) {
 
   console.log('');
 
-  // Working State
+  // Working State (EVLOG-002: from event log)
   if (spec && spec.id) {
     let ws = null;
-    try { ws = loadState(spec.id); } catch { /* non-fatal */ }
+    try { ws = loadStateFromEvents(spec.id); } catch { /* non-fatal */ }
     if (ws && ws.phase !== 'not-started') {
       const phaseLabels = {
         'not-started': 'Not Started',
@@ -1052,7 +1056,7 @@ async function statusCommand(options = {}) {
               passed: gates.passed,
               message: gates.message,
             },
-            workingState: spec && spec.id ? (loadState(spec.id) || null) : null,
+            workingState: spec && spec.id ? (loadStateFromEvents(spec.id) || null) : null,
             overallProgress: calculateOverallProgress({
               spec,
               specSelection,
