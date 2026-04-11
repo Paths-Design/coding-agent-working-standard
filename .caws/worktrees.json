@@ -1,17 +1,16 @@
 {
   "version": 1,
   "worktrees": {
-    "evlog-001": {
-      "name": "evlog-001",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/evlog-001",
-      "branch": "caws/evlog-001",
+    "evlog-002": {
+      "name": "evlog-002",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/evlog-002",
+      "branch": "caws/evlog-002",
       "baseBranch": "main",
       "scope": null,
-      "specId": "EVLOG-001",
+      "specId": "EVLOG-002",
       "owner": null,
-      "createdAt": "2026-04-10T19:05:32.791Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-04-10T21:10:44.613Z"
+      "createdAt": "2026-04-11T00:27:57.957Z",
+      "status": "fresh"
     }
   }
 }
