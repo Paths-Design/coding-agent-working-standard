@@ -14,7 +14,11 @@ const { initializeGlobalSetup } = require('../config');
 
 // Import spec resolution system
 const { resolveSpec } = require('../utils/spec-resolver');
-const { loadState } = require('../utils/working-state');
+// EVLOG-002 Phase 2 read flip: iterate reads from the event log instead of
+// the state layer. loadStateFromEvents matches loadState's contract exactly
+// (returns null for specs with no events), so the `workingState &&` guard
+// below stays correct without code changes.
+const { loadStateFromEvents } = require('../utils/event-renderer');
 
 /**
  * Iterate command handler
@@ -58,9 +62,9 @@ async function iterateCommand(specFile, options = {}) {
     console.log(`ID: ${spec.id} | Tier: ${spec.risk_tier} | Mode: ${spec.mode}`);
     console.log(`Current State: ${stateDescription}\n`);
 
-    // Load working state for evidence-based guidance
+    // Load working state for evidence-based guidance (EVLOG-002: from event log)
     let workingState = null;
-    try { workingState = loadState(spec.id); } catch { /* non-fatal */ }
+    try { workingState = loadStateFromEvents(spec.id); } catch { /* non-fatal */ }
 
     // Analyze progress based on mode
     const guidance = generateGuidance(spec, currentState, options);
