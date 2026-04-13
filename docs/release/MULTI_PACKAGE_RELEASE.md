@@ -3,14 +3,13 @@
 CAWS monorepo contains multiple publishable packages that need independent versioning and releases:
 
 - `@paths.design/caws-cli` - CLI tools
-- `@paths.design/caws-mcp-server` - MCP server
 - `@paths.design/quality-gates` - Quality gates package
 
 ## Current Approach
 
 **Single-Package Release (CLI Only)**
 
-The current `.releaserc.json` is configured to release only the CLI package. This works for CLI-focused changes but doesn't handle MCP server or quality-gates releases automatically.
+The current `.releaserc.json` is configured to release only the CLI package. This works for CLI-focused changes but doesn't handle quality-gates releases automatically.
 
 **Multi-Package Release Script**
 
@@ -42,11 +41,6 @@ The GitHub Actions workflow (`/.github/workflows/release.yml`) automatically use
 ```bash
 # Release all changed packages
 node scripts/multi-package-release.mjs
-
-# Or release specific package manually
-cd packages/caws-mcp-server
-npm version patch
-npm publish
 ```
 
 ## Commit Message Format
@@ -56,9 +50,6 @@ Use scoped commit messages to target specific packages:
 ```bash
 # CLI changes
 git commit -m "feat(cli): add new command"
-
-# MCP server changes
-git commit -m "feat(mcp-server): add new tool"
 
 # Quality gates changes
 git commit -m "feat(quality-gates): add new gate"
@@ -71,7 +62,6 @@ Each package is released based on commit scope:
 | Scope | Package | Release Type |
 |-------|---------|--------------|
 | `cli` | `@paths.design/caws-cli` | Minor (feat) / Patch (fix) |
-| `mcp-server` | `@paths.design/caws-mcp-server` | Minor (feat) / Patch (fix) |
 | `quality-gates` | `@paths.design/quality-gates` | Minor (feat) / Patch (fix) |
 
 ## Future Improvements
@@ -80,26 +70,6 @@ Consider migrating to:
 - **Changesets** - Better monorepo support, explicit versioning
 - **semantic-release-monorepo** - Once compatible with semantic-release@25
 - **Lerna** - Full monorepo management with independent versioning
-
-## Manual Release Process
-
-If automatic release fails, you can manually release packages:
-
-```bash
-# 1. Update version
-cd packages/caws-mcp-server
-npm version patch  # or minor, major
-
-# 2. Build (if needed)
-npm run build
-
-# 3. Publish
-npm publish
-
-# 4. Create git tag
-git tag @paths.design/caws-mcp-server-v$(node -p "require('./package.json').version")
-git push origin @paths.design/caws-mcp-server-v$(node -p "require('./package.json').version")
-```
 
 ## Troubleshooting
 
@@ -111,4 +81,3 @@ git push origin @paths.design/caws-mcp-server-v$(node -p "require('./package.jso
 
 **Issue**: Package not detected as changed
 **Solution**: Ensure commits modify files in the package directory
-

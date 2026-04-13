@@ -13,7 +13,6 @@
 
 **Packages Affected**:
 - `@caws/quality-gates` - Missing typecheck script
-- `caws-mcp-server` - Missing typecheck script  
 - `@paths.design/caws-types` - Missing typecheck script
 - `@caws/test-project` - Missing typecheck script
 
@@ -39,11 +38,6 @@
 **`packages/quality-gates/package.json`**:
 ```json
 "typecheck": "echo 'Type checking not required for quality gates (ES modules)'"
-```
-
-**`packages/caws-mcp-server/package.json`**:
-```json
-"typecheck": "echo 'MCP Server type checking not configured (ES modules)'"
 ```
 
 **`packages/caws-types/package.json`**:

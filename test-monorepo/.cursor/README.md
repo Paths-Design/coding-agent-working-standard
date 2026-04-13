@@ -9,7 +9,7 @@ Cursor hooks enable seamless integration between CAWS and the Cursor IDE, provid
 - **Real-time quality validation** as you code
 - **Automatic spec validation** when editing working specs
 - **Scope enforcement** preventing out-of-scope file access
-- **Tool validation** for safe MCP execution
+- **Tool validation** for safe tool execution
 - **Quality monitoring** after file edits
 
 ## Hook Configuration
@@ -45,7 +45,7 @@ The `hooks.json` file defines when each hook runs:
 
 #### `caws-tool-validation.sh`
 - **Trigger**: `beforeMCPExecution`
-- **Purpose**: Validates CAWS MCP tool calls for security
+- **Purpose**: Validates CAWS tool calls for security
 - **Blocks**: Yes (for dangerous operations or invalid waivers)
 - **Validates**: Waiver creation, tool permissions, command safety
 
@@ -232,17 +232,15 @@ export CURSOR_HOOKS_DEBUG=1
 ### Relationship to Other Tools
 
 ```
-Cursor Hooks ←→ CAWS CLI ←→ VS Code Extension
-     ↓              ↓              ↓
-  Real-time      Command-line    Rich IDE
-  Validation     Interface       Integration
+Cursor Hooks ←→ CAWS CLI
+     ↓              ↓
+  Real-time      Command-line
+  Validation     Interface
 ```
 
 ### Complementary Tools
 
 - **Git Hooks**: `.git/hooks/` for commit/push validation
-- **VS Code Extension**: Rich UI for CAWS operations
-- **MCP Server**: Agent tool integration
 - **CAWS CLI**: Core functionality
 
 ### Data Flow

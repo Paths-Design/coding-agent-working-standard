@@ -112,7 +112,6 @@ on:
   pull_request:
     paths:
       - 'packages/caws-cli/src/**'
-      - 'packages/caws-mcp-server/src/**'
 
 jobs:
   self-audit:
@@ -487,7 +486,6 @@ By validating itself against its own standards, CAWS:
 
 ## Additional Resources
 
-- [MCP Server Patterns](../guides/mcp-server-patterns.md)
 - [CAWS Working Spec](../api/schema.md)
 - [Provenance Tracking](../guides/provenance.md)
 - [Waiver System](../guides/waivers.md)

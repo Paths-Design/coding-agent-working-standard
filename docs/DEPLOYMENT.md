@@ -438,17 +438,17 @@ If deploying CAWS as a hosted service:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: caws-mcp-server
+  name: caws-service
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: caws-mcp
+      app: caws
   template:
     spec:
       containers:
-        - name: caws-mcp
-          image: caws-mcp-server:latest
+        - name: caws
+          image: caws-service:latest
           resources:
             requests:
               memory: '512Mi'

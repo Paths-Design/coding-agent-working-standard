@@ -12,8 +12,6 @@
 
 - [ ] **Linting**: `npm run lint` passes with zero errors
   - [ ] CLI package linting passes
-  - [ ] MCP server linting passes
-  - [ ] Extension linting passes
   - [ ] Quality gates package linting passes (if applicable)
 
 - [ ] **Type Checking**: `npm run typecheck` passes
@@ -73,13 +71,10 @@
 
 - [ ] **Full Build**: `npm run build` succeeds
   - [ ] CLI package builds successfully
-  - [ ] MCP server builds successfully
-  - [ ] Extension bundles correctly
   - [ ] Quality gates package builds (if applicable)
 
 - [ ] **Build Artifacts**: Verify all dist/out directories populated
   - [ ] CLI dist/ contains compiled JavaScript
-  - [ ] Extension out/ contains compiled TypeScript
   - [ ] All package.json files updated correctly
 
 ### Package Verification
@@ -91,13 +86,10 @@
 
 - [ ] **Package Versions**: All packages have correct versions
   - [ ] CLI version matches release version
-  - [ ] MCP server version matches release version
-  - [ ] Extension version matches release version
   - [ ] Root package.json version updated (if applicable)
 
 - [ ] **NPM Dry Run**: Test publish with `--dry-run`
   - [ ] CLI dry-run succeeds: `cd packages/caws-cli && npm publish --dry-run`
-  - [ ] MCP server dry-run succeeds: `cd packages/caws-mcp-server && npm publish --dry-run`
   - [ ] Verify tarball contents are correct
 
 ### Git Hooks Status
@@ -220,7 +212,6 @@ npm run build
 
 # Verify builds
 ls -la packages/caws-cli/dist/
-ls -la packages/caws-mcp-server/
 ```
 
 ### Step 4: Version Check
@@ -228,7 +219,6 @@ ls -la packages/caws-mcp-server/
 ```bash
 # Verify versions are correct
 cat packages/caws-cli/package.json | grep version
-cat packages/caws-mcp-server/package.json | grep version
 ```
 
 ### Step 5: Git Preparation
@@ -262,18 +252,12 @@ git push origin main
 # Publish CLI
 cd packages/caws-cli
 npm publish
-
-# Publish MCP Server
-cd ../caws-mcp-server
-npm publish
 ```
 
 ### Step 7: Post-Release Verification
 
 - [ ] **NPM Verification**: Packages published correctly
   - [ ] CLI available: `npm view @paths.design/caws-cli version`
-  - [ ] MCP server available: `npm view caws-mcp-server version`
-  - [ ] Extension version updated in marketplace
 
 - [ ] **Installation Test**: Test fresh install
 
@@ -344,12 +328,7 @@ npm publish
    - **Priority**: Medium
    - **Status**: Temporary workaround in place
 
-2. **Extension Packaging**: VS Code extension has template dependency issues
-   - **Impact**: Extension not published in v4.1.0
-   - **Priority**: High
-   - **Status**: Requires investigation
-
-3. **CI/CD Test Coverage**: Some test scripts have fallback warnings
+2. **CI/CD Test Coverage**: Some test scripts have fallback warnings
    - **Impact**: Tests may silently skip
    - **Priority**: Low
    - **Status**: Acceptable for now

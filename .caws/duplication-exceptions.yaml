@@ -39,8 +39,3 @@ exceptions:
     approved_by: "architecture"
     expires_at: "2027-12-31T23:59:59Z"
 
-  # caws-mcp-server package index.js files
-  - pattern: "packages/caws-mcp-server/**"
-    reason: "Multiple index.js entry points is standard Node.js convention"
-    approved_by: "architecture"
-    expires_at: "2027-12-31T23:59:59Z"

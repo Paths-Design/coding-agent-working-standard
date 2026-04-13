@@ -111,13 +111,6 @@ All packages tested and verified working together.
 
 ## Testing the Integration
 
-### Test MCP Server
-```bash
-cd packages/caws-mcp-server
-node index.js
-# Server should start without errors
-```
-
 ### Test CLI
 ```bash
 npx @paths.design/caws-cli --version

@@ -352,27 +352,6 @@ If two features need to interact:
 3. Other agent consumes the contract
 4. No direct file modifications across scopes
 
-## MCP Server Support
-
-The CAWS MCP server fully supports multi-spec workflows:
-
-```javascript
-// Via MCP server
-{
-  "command": "/caws:validate",
-  "specId": "user-auth"  // Feature-specific
-}
-
-{
-  "command": "/caws:status",
-  "specId": "payment-system"  // Another feature
-}
-
-{
-  "command": "/caws:specs list"  // List all features
-}
-```
-
 ## Summary
 
 ### Key Takeaways

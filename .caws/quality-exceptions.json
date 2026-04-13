@@ -171,16 +171,6 @@
       "expires_at": "2027-12-31T23:59:59Z",
       "file_pattern": "packages/caws-cli/**/index.js",
       "violation_type": "BASENAME_DUPLICATE_WITHIN_PACKAGE"
-    },
-    {
-      "id": "ex_index_basename_mcp_server",
-      "gate": "duplication",
-      "reason": "Multiple index.js files in caws-mcp-server is standard Node.js package convention",
-      "approved_by": "architecture",
-      "approved_at": "2026-01-25T00:00:00Z",
-      "expires_at": "2027-12-31T23:59:59Z",
-      "file_pattern": "packages/caws-mcp-server/**/index.js",
-      "violation_type": "BASENAME_DUPLICATE_WITHIN_PACKAGE"
     }
   ]
 }

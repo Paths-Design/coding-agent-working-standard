@@ -199,14 +199,9 @@ caws-cli/
         │                       │
         └───────────────────────┘
                 │
-        ┌─────────────────┐
-        │ caws-mcp-server │
-        │ (Agent Bridge)  │
-        └─────────────────┘
 ```
 
 - **caws-template**: Provides the tools and configurations that CLI manages
-- **caws-mcp-server**: Exposes CLI functionality to AI agents via MCP protocol
 
 ### Quality Gates Integration
 

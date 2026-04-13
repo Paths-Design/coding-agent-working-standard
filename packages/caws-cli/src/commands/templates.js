@@ -53,14 +53,6 @@ const BUILTIN_TEMPLATES = {
     features: ['React', 'TypeScript', 'Storybook', 'Jest', 'Publishing'],
     path: 'templates/react/component-library',
   },
-  'vscode-extension': {
-    name: 'VS Code Extension',
-    description: 'VS Code extension with TypeScript',
-    category: 'Extension',
-    tier: 2,
-    features: ['TypeScript', 'VS Code API', 'Jest', 'Publishing'],
-    path: 'templates/vscode-extension',
-  },
 };
 
 /**

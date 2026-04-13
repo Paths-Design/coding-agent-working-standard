@@ -16,7 +16,6 @@ function runTestCodemod(dryRun = true) {
   // Load source files from packages
   const sourceFiles = project.addSourceFilesAtPaths([
     'packages/caws-cli/src/**/*.ts',
-    'packages/caws-mcp-server/**/*.js',
   ]);
 
   console.log(`📁 Found ${sourceFiles.length} source files to process`);

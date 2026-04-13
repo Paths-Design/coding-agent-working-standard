@@ -9,8 +9,8 @@ waivers:
     description: >-
       Feature implementation exceeded initial budget due to comprehensive IDE
       integrations, agent workflows, and quality gate enhancements. Additional
-      scope includes MCP server, VS Code extension, Cursor hooks, Git
-      integrations, and complete scaffolding system.
+      scope includes Cursor hooks, Git integrations, and complete scaffolding
+      system.
     expires_at: '2025-12-31T23:59:59Z'
     gates:
       - budget_limit

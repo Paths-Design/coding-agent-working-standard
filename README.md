@@ -209,15 +209,7 @@ Complete audit trail with:
 - Quality metrics over time
 - Automated git hooks
 
-#### 4. **MCP Server** (`packages/caws-mcp-server/`)
-
-Model Context Protocol server providing:
-
-- Standardized tool interface for AI agents
-- Real-time validation and guidance
-- Workflow state management
-
-#### 5. **Contract-First Development**
+#### 4. **Contract-First Development**
 
 API contracts defined before implementation:
 
@@ -265,7 +257,6 @@ See the **[Agent Workflow Guide](docs/agents/full-guide.md)** for detailed instr
 | Package                   | Description                                 | Status                  |
 | ------------------------- | ------------------------------------------- | ----------------------- |
 | **caws-cli**              | Command-line interface for CAWS operations  | Stable (v3.4.0)      |
-| **caws-mcp-server**       | Model Context Protocol server for AI agents | Stable (v1.0.0)      |
 ### Development Packages
 
 | Package                | Description                          | Status    |
@@ -300,9 +291,6 @@ caws/
 │   │   ├── src/                  # CLI source code
 │   │   ├── templates/            # Project templates
 │   │   └── demo-project/         # Working example
-│   ├── caws-mcp-server/          # MCP server
-│   │   ├── src/                  # Server source
-│   │   └── index.js              # Entry point
 ├── docs/                         # Documentation
 │   ├── agents/                   # Agent guides
 │   ├── guides/                   # Integration guides

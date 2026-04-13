@@ -99,115 +99,7 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 - **`/caws-feature-workflow`** - Feature development lifecycle
 - **`/caws-emergency-fix`** - Emergency fixes with waivers
 
-### 3. **MCP Server Integration** - Tool Exposure for Agents
-
-Model Context Protocol server exposes CAWS tools to AI agents.
-
-#### Available Tools
-
-```javascript
-// MCP Tool Registry
-const CAWS_TOOLS = [
-  {
-    name: 'caws_evaluate',
-    description: 'Evaluate work against CAWS quality standards',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        specFile: { type: 'string', default: '.caws/working-spec.yaml' },
-        workingDirectory: { type: 'string' }
-      }
-    }
-  },
-  {
-    name: 'caws_iterate',
-    description: 'Get iterative development guidance',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        currentState: { type: 'string', description: 'Current implementation state' }
-      }
-    }
-  },
-  {
-    name: 'caws_waiver_create',
-    description: 'Create a waiver for exceptional circumstances',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        reason: { type: 'string', enum: ['emergency_hotfix', 'legacy_integration', ...] },
-        gates: { type: 'array', items: { type: 'string' } },
-        expiresAt: { type: 'string' },
-        approvedBy: { type: 'string' },
-        impactLevel: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
-        mitigationPlan: { type: 'string' }
-      },
-      required: ['title', 'reason', 'gates', 'expiresAt', 'approvedBy', 'impactLevel', 'mitigationPlan']
-    }
-  }
-];
-```
-
-#### Usage in Agents
-
-```javascript
-// Agent using MCP CAWS tools
-async function developWithCaws() {
-  // Evaluate current progress
-  const evaluation = await mcpClient.callTool('caws_evaluate', {
-    specFile: '.caws/working-spec.yaml'
-  });
-
-  if (evaluation.success && evaluation.quality_score >= 0.75) {
-    return "Implementation complete";
-  }
-
-  // Get guidance for next steps
-  const guidance = await mcpClient.callTool('caws_iterate', {
-    currentState: "Implementation in progress"
-  });
-
-  // Execute recommended steps
-  await implementSteps(guidance.next_steps);
-
-  return "Continuing development";
-}
-```
-
-### 4. **VS Code Extension** - IDE Integration
-
-Real-time CAWS integration within the development environment.
-
-#### Features
-
-- **Status Bar**: Live quality score display
-- **Code Actions**: Context-aware CAWS suggestions
-- **Webview Dashboard**: Interactive quality monitoring
-- **File Watchers**: Real-time validation feedback
-- **Command Palette**: Full CAWS command access
-
-#### Extension Capabilities
-
-```typescript
-// VS Code extension registration
-export function activate(context: vscode.ExtensionContext) {
-  // Quality monitoring
-  const qualityMonitor = new CawsQualityMonitor(mcpClient);
-
-  // Status bar with live scores
-  const statusBar = new CawsStatusBar();
-
-  // Code action providers
-  vscode.languages.registerCodeActionsProvider('*', new CawsCodeActionProvider());
-
-  // File change monitoring
-  const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-  watcher.onDidChange(uri => qualityMonitor.onFileChanged(uri));
-}
-```
-
-### 5. **Preview SDK Integration** - Copilot Extensions
+### 3. **Preview SDK Integration** - Copilot Extensions
 
 GitHub Copilot extensions using Preview SDK for seamless tool integration.
 
@@ -238,7 +130,7 @@ server.setRequestHandler('tools/call', async (request) => {
 });
 ```
 
-### 6. **Git Hooks** - Traditional Development Gates
+### 4. **Git Hooks** - Traditional Development Gates
 
 Standard git hooks for commit and push validation.
 
@@ -268,26 +160,22 @@ npm run hooks:install
 | Platform | Integration Method | Real-time | Structured Workflows | Tool Access |
 |----------|-------------------|-----------|---------------------|-------------|
 | **Cursor** | Native hooks | Yes (Instant) | No | Yes (Direct) |
-| **VS Code** | Extension + MCP | Yes (Real-time) | Yes (Workflows) | Yes (MCP tools) |
-| **Windsurf** | Cascade workflows | Partial (Workflow-based) | Yes (Structured) | Yes (MCP tools) |
+| **Windsurf** | Cascade workflows | Partial (Workflow-based) | Yes (Structured) | Yes (CLI) |
 | **GitHub Copilot** | Preview SDK | Partial (Chat-based) | No | Yes (SDK tools) |
-| **Generic IDEs** | MCP server | No | No | Yes (MCP tools) |
 | **CLI Tools** | Direct API | No | Yes (Scripts) | Yes (Full API) |
 
 ### Choosing Integration Strategy
 
 #### For **Real-time Feedback**
 - **Primary**: Cursor hooks (instant, < 500ms)
-- **Secondary**: VS Code extension (real-time, < 2s)
-- **Fallback**: MCP server polling
+- **Fallback**: CLI polling
 
 #### For **Structured Workflows**
 - **Primary**: Cascade workflows (markdown-based, team shareable)
-- **Secondary**: VS Code extension workflows
 - **Fallback**: CLI scripts
 
 #### For **Tool Integration**
-- **Primary**: MCP server (standardized protocol)
+- **Primary**: CLI (direct invocation)
 - **Secondary**: Preview SDK (Copilot-specific)
 - **Fallback**: Direct API calls
 
@@ -461,16 +349,6 @@ ls -la .cursor/hooks/*.sh
 echo '{"file_path":"test.js"}' | .cursor/hooks/format.sh
 
 # Restart Cursor after configuration changes
-```
-
-#### MCP Server Connection Issues
-```bash
-# Check MCP server status
-ps aux | grep caws-mcp-server
-
-# Restart MCP server
-pkill -f caws-mcp-server
-npm run mcp:start
 ```
 
 #### Cascade Workflow Not Found
