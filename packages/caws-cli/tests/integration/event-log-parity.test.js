@@ -33,8 +33,10 @@ const { appendEvent, appendEventSync, readEvents } = require('../../src/utils/ev
 const { renderSpecState } = require('../../src/utils/event-renderer');
 
 let tmpDir;
+let originalCwd;
 
 beforeEach(() => {
+  originalCwd = process.cwd();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-parity-test-'));
   fs.mkdirSync(path.join(tmpDir, '.caws'), { recursive: true });
   // Pin cwd so loadState's findRoot walk resolves to our tmpdir.
@@ -42,6 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.chdir(originalCwd);
   if (tmpDir && fs.existsSync(tmpDir)) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
