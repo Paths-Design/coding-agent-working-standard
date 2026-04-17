@@ -613,7 +613,7 @@ risk_tier: 2 # Choose 1, 2, or 3 based on impact
 
 #### Error: `Invalid ID format`
 
-**Cause**: ID doesn't match `PREFIX-NUMBER` pattern.
+**Cause**: ID doesn't match `PREFIX-NUMBER` or `PREFIX-SEGMENT-NUMBER` pattern.
 
 **Fix**:
 
@@ -623,10 +623,15 @@ id: feature-001
 id: FEAT001
 id: feat_001
 
-# ✅ Good
+# ✅ Good (single-segment)
 id: FEAT-001
 id: FIX-042
 id: REFACTOR-003
+
+# ✅ Good (multi-segment — accepted since CAWSFIX-10)
+id: P03-IMPL-01
+id: ALG-001A-HARDEN-01
+id: CAWSFIX-14
 ```
 
 #### Error: `scope.in is required`
