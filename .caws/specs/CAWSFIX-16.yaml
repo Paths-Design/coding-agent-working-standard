@@ -1,0 +1,71 @@
+id: CAWSFIX-16
+type: fix
+title: Relax PolicyManager.validatePolicy to accept any subset of tiers 1-3
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-17T22:00:00.000Z'
+updated_at: '2026-04-17T22:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/policy
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 2
+  max_loc: 40
+scope:
+  in:
+    - packages/caws-cli/src/policy/PolicyManager.js
+    - packages/caws-cli/tests/policy-manager.test.js
+    - .caws/specs/CAWSFIX-16.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/templates/.caws/schemas/policy.schema.json
+invariants:
+  - >-
+    PolicyManager.validatePolicy accepts any non-empty subset of tiers
+    1, 2, 3 — matching the active policy.schema.json which uses
+    patternProperties "^[1-3]$" with no property-level required.
+  - >-
+    Policies with zero tiers, unknown tier keys (e.g. "4"), or tiers
+    with missing/invalid budget limits still throw with an explicit
+    message naming the offending condition.
+  - >-
+    The runtime validator and the active schema agree on what counts
+    as a valid policy after this change.
+acceptance:
+  - id: A1
+    given: "A policy with only risk_tiers containing tier 2 (max_files 10, max_loc 500)"
+    when: PolicyManager.loadPolicy() runs against that policy
+    then: >-
+      It resolves without throwing and the returned policy exposes the
+      tier 2 budget.
+  - id: A2
+    given: "A policy with risk_tiers set to an empty object (zero tiers)"
+    when: validatePolicy runs
+    then: >-
+      It throws an error whose message includes "at least one risk tier".
+  - id: A3
+    given: A policy with tier key "4" present in risk_tiers
+    when: validatePolicy runs
+    then: >-
+      It throws an error naming the unknown tier key.
+  - id: A4
+    given: A policy with a valid tier key but missing max_files
+    when: validatePolicy runs
+    then: >-
+      The error message names the offending tier number.
+  - id: A5
+    given: The pre-existing test "should reject policy with missing tier"
+    when: this change lands
+    then: >-
+      That test is deleted (not flipped) — A1 fully covers the new behavior.
+non_functional:
+  perf:
+    api_p95_ms: 5
+  a11y: []
+  security:
+    - Validator does not read policy content from untrusted sources
+contracts: []

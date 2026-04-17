@@ -270,15 +270,17 @@ class PolicyManager {
       throw new Error('Policy missing risk_tiers configuration');
     }
 
-    // Validate all tiers have required fields
-    for (const tier of [1, 2, 3]) {
-      const budget = policy.risk_tiers[tier];
-      if (!budget) {
-        throw new Error(`Policy missing risk tier ${tier} configuration`);
+    const tierKeys = Object.keys(policy.risk_tiers);
+    if (tierKeys.length === 0) {
+      throw new Error('Policy risk_tiers must define at least one risk tier (1, 2, or 3)');
+    }
+    for (const key of tierKeys) {
+      if (!/^[1-3]$/.test(key)) {
+        throw new Error(`Policy risk_tiers has unknown tier '${key}' (expected 1, 2, or 3)`);
       }
-
+      const budget = policy.risk_tiers[key];
       if (typeof budget.max_files !== 'number' || typeof budget.max_loc !== 'number') {
-        throw new Error(`Risk tier ${tier} missing or invalid budget limits`);
+        throw new Error(`Risk tier ${key} missing or invalid budget limits`);
       }
     }
 

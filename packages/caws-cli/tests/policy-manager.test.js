@@ -274,33 +274,47 @@ describe('PolicyManager', () => {
       );
     });
 
-    test('should reject policy with missing tier', () => {
+    test('A1: should accept policy with only one tier (CAWSFIX-16)', () => {
+      const policy = {
+        version: 1,
+        risk_tiers: {
+          2: { max_files: 10, max_loc: 500 },
+        },
+      };
+
+      expect(() => policyManager.validatePolicy(policy)).not.toThrow();
+      expect(policy.risk_tiers[2].max_files).toBe(10);
+      expect(policy.risk_tiers[1]).toBeUndefined();
+      expect(policy.risk_tiers[3]).toBeUndefined();
+    });
+
+    test('A2: should reject policy with zero tiers (CAWSFIX-16)', () => {
+      const policy = { version: 1, risk_tiers: {} };
+      expect(() => policyManager.validatePolicy(policy)).toThrow(/at least one risk tier/i);
+    });
+
+    test('A3: should reject policy with unknown tier key (CAWSFIX-16)', () => {
       const policy = {
         version: 1,
         risk_tiers: {
           1: { max_files: 10, max_loc: 250 },
-          2: { max_files: 50, max_loc: 2000 },
-          // Missing tier 3
+          4: { max_files: 20, max_loc: 500 },
         },
       };
-
-      expect(() => policyManager.validatePolicy(policy)).toThrow(
-        'Policy missing risk tier 3 configuration'
-      );
+      expect(() => policyManager.validatePolicy(policy)).toThrow(/unknown tier.*'4'/i);
     });
 
-    test('should reject policy with invalid budget limits', () => {
+    test('A4: should reject policy with tier missing max_files', () => {
       const policy = {
         version: 1,
         risk_tiers: {
           1: { max_files: 10 }, // Missing max_loc
           2: { max_files: 50, max_loc: 2000 },
-          3: { max_files: 100, max_loc: 5000 },
         },
       };
 
       expect(() => policyManager.validatePolicy(policy)).toThrow(
-        'Risk tier 1 missing or invalid budget limits'
+        /Risk tier 1 missing or invalid budget limits/
       );
     });
   });
