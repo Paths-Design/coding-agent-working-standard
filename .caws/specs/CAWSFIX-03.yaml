@@ -34,53 +34,51 @@ invariants:
   - The JSON Schema at .caws/working-spec.schema.json is the single source of truth for spec structure
   - Every field the old validate.js required is expressed in the JSON Schema (no field silently dropped)
   - >-
-    spec-completeness.js gate continues to pass on all currently-active specs (EVLOG-001, EVLOG-002,
-    CAWSFIX-02, and the four new CAWSFIX specs)
+    spec-completeness.js gate continues to pass on all currently-active specs (EVLOG-001, EVLOG-002, CAWSFIX-02, and the
+    four new CAWSFIX specs)
   - No consumer of .caws/validate.js is left with a dangling reference after deletion
 acceptance:
   - id: A1
     given: The current repo with .caws/validate.js present
     when: A reviewer greps the tree for "validate.js" references (excluding node_modules and dist)
     then: >-
-      Only the file itself remains until it is deleted, and the sole external reference is
-      package.json:46 ("caws:validate" script). After the fix, the file is gone and package.json
-      either points at the schema-based validator (`caws validate`) or the script is removed.
+      Only the file itself remains until it is deleted, and the sole external reference is package.json:46
+      ("caws:validate" script). After the fix, the file is gone and package.json either points at the schema-based
+      validator (`caws validate`) or the script is removed.
   - id: A2
     given: >-
-      The full set of required/checked fields enforced by .caws/validate.js (id, title, risk_tier,
-      mode, change_budget, blast_radius, operational_rollback_slo, scope, invariants, acceptance,
-      non_functional, contracts, with the same constraints on each)
+      The full set of required/checked fields enforced by .caws/validate.js (id, title, risk_tier, mode, change_budget,
+      blast_radius, operational_rollback_slo, scope, invariants, acceptance, non_functional, contracts, with the same
+      constraints on each)
     when: Those same specs are validated against the updated .caws/working-spec.schema.json
     then: >-
-      Every spec that previously failed the JS validator for a given reason fails the JSON Schema
-      validator for a semantically equivalent reason, and every spec that passed continues to pass.
-      No required field is silently dropped from the enforcement surface.
+      Every spec that previously failed the JS validator for a given reason fails the JSON Schema validator for a
+      semantically equivalent reason, and every spec that passed continues to pass. No required field is silently
+      dropped from the enforcement surface.
   - id: A3
     given: The spec-completeness gate module at packages/caws-cli/src/gates/spec-completeness.js
     when: >-
-      It is invoked against each active spec (.caws/specs/EVLOG-001.yaml, EVLOG-002.yaml,
-      CAWSFIX-02.yaml, CAWSFIX-03.yaml, CAWSFIX-04.yaml, CAWSFIX-05.yaml, CAWSFIX-06.yaml)
+      It is invoked against each active spec (.caws/specs/EVLOG-001.yaml, EVLOG-002.yaml, CAWSFIX-02.yaml,
+      CAWSFIX-03.yaml, CAWSFIX-04.yaml, CAWSFIX-05.yaml, CAWSFIX-06.yaml)
     then: >-
-      Each spec passes the gate without modification, or the fix explicitly updates those specs
-      to conform and documents the update.
+      Each spec passes the gate without modification, or the fix explicitly updates those specs to conform and documents
+      the update.
   - id: A4
     given: The package.json `caws:validate` script currently runs `node .caws/validate.js`
     when: The fix is applied
     then: >-
-      Either the script is removed (preferred — users should run `caws validate --spec-id <id>`)
-      or it is rewritten to invoke the bundled CLI. No script in package.json references a
-      deleted file.
+      Either the script is removed (preferred — users should run `caws validate --spec-id <id>`) or it is rewritten to
+      invoke the bundled CLI. No script in package.json references a deleted file.
   - id: A5
     given: The existing test suite before the change
     when: '`cd packages/caws-cli && npx jest` is run after the change'
-    then: >-
-      No pre-existing test regresses. Any test that covers spec validation continues to pass.
+    then: No pre-existing test regresses. Any test that covers spec validation continues to pass.
   - id: A6
     given: The JSON Schema has additionalProperties currently set to true (permissive)
     when: A spec is submitted with unknown top-level keys
     then: >-
-      The schema's handling of unknown keys is explicit (either documented as permissive with a
-      rationale, or tightened to warn/fail). The behavior is not accidental.
+      The schema's handling of unknown keys is explicit (either documented as permissive with a rationale, or tightened
+      to warn/fail). The behavior is not accidental.
 non_functional:
   perf:
     api_p95_ms: 50
