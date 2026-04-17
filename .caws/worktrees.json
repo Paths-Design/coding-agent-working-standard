@@ -34,7 +34,8 @@
       "specId": "CAWSFIX-09",
       "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86",
       "createdAt": "2026-04-17T16:41:06.341Z",
-      "status": "fresh"
+      "status": "destroyed",
+      "destroyedAt": "2026-04-17T16:58:14.644Z"
     }
   }
 }
