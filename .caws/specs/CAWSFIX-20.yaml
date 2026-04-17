@@ -21,6 +21,8 @@ scope:
     - packages/caws-cli/templates/.caws/schemas/policy.schema.json
     - .caws/working-spec.schema.json
     - packages/caws-cli/tests/contract/schema-contract.test.js
+    - packages/caws-cli/tests/policy-manager.test.js
+    - packages/caws-cli/tests/schema-load-validation.test.js
     - .caws/specs/CAWSFIX-20.yaml
   out:
     - node_modules/

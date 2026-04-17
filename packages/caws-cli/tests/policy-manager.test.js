@@ -49,6 +49,12 @@ describe('PolicyManager', () => {
     policyManager.clearCache();
   });
 
+  // CAWSFIX-20: template policy schema now requires edit_rules (synced from runtime).
+  const EDIT_RULES_FIXTURE = {
+    policy_and_code_same_pr: false,
+    min_approvers_for_budget_raise: 2,
+  };
+
   describe('loadPolicy', () => {
     test('should load policy from file', async () => {
       const testPolicy = {
@@ -58,6 +64,7 @@ describe('PolicyManager', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES_FIXTURE,
       };
 
       const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
@@ -328,6 +335,7 @@ describe('PolicyManager', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES_FIXTURE,
       };
 
       const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
@@ -354,6 +362,7 @@ describe('PolicyManager', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES_FIXTURE,
       };
 
       const policyPath = path.join(tempDir, '.caws', 'policy.yaml');

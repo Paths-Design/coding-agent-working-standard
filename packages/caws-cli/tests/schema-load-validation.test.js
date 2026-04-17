@@ -362,24 +362,25 @@ describe('AJV first pass proves independent value (C3)', () => {
     expect(scopeInWarning).toBe(true);
   });
 
-  test('C3.2: AJV catches unknown top-level property — semantic pass ignores extra fields', () => {
+  test('C3.2: AJV catches type violations — semantic pass only checks presence (CAWSFIX-20)', () => {
     const { validateWorkingSpec } = require('../src/validation/spec-validation');
 
-    // The schema has additionalProperties: false at the top level.
-    // The semantic pass never checks for extra properties.
-    const spec = makeValidSpec({ foo: 'bar' });
+    // CAWSFIX-20: the top-level schema is deliberately permissive (additionalProperties:
+    // true) because agents legitimately add fields like `worktree:`, `status:`. But the
+    // schema is still strict about TYPES of required fields. Provide a boolean field as
+    // a string and the semantic pass lets it through; AJV catches the type mismatch.
+    const spec = makeValidSpec();
+    spec.blast_radius.data_migration = 'yes'; // should be boolean
     const result = validateWorkingSpec(spec);
 
-    // Semantic pass sees all required fields present and valid, so valid = true.
-    // AJV should report the additional property as a warning.
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(true); // semantic pass only checks presence
     expect(result.schemaWarnings).toBeDefined();
     expect(result.schemaWarnings.length).toBeGreaterThan(0);
 
-    const additionalPropWarning = result.schemaWarnings.some(
-      w => w.message && w.message.includes('additional')
+    const typeWarning = result.schemaWarnings.some(
+      w => w.message && w.message.includes('must be boolean')
     );
-    expect(additionalPropWarning).toBe(true);
+    expect(typeWarning).toBe(true);
   });
 
   test('C3.3: when createValidator throws, validateWorkingSpec still works via semantic pass but schemaWarnings is undefined', () => {
