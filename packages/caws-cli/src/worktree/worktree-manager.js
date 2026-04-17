@@ -1198,11 +1198,48 @@ function mergeWorktree(name, options = {}) {
     }
   }
 
-  const mergeResult = { name, branch: entry.branch, baseBranch, merged: true, conflicts: [] };
+  // Auto-close the bound spec if one exists. A worktree merge is the
+  // lifecycle signal that the spec's work is done; leaving the spec
+  // `active` after merge accumulates stale-active entries (D6). Direct
+  // YAML status flip bypasses the ownership + worktree-reference checks
+  // in `closeSpec` — the caller has already proven authority by merging.
+  let autoClosedSpecId = null;
+  if (entry.specId) {
+    autoClosedSpecId = autoCloseBoundSpec(root, entry.specId);
+  }
+
+  const mergeResult = {
+    name, branch: entry.branch, baseBranch, merged: true, conflicts: [],
+    specId: entry.specId || null, autoClosedSpecId,
+  };
   try {
     lifecycle.emit(EVENTS.MERGE_POST, { ...mergeResult, timestamp: new Date().toISOString() });
   } catch { /* non-fatal */ }
   return mergeResult;
+}
+
+/**
+ * Flip a spec's status to `closed` by rewriting just the `status:` line.
+ * Idempotent: no-op when the spec is already closed or the file is missing.
+ * Returns the spec ID on success, null if skipped or failed.
+ * @param {string} root - Repo root
+ * @param {string} specId - Spec identifier (e.g. CAWSFIX-14)
+ * @returns {string|null}
+ */
+function autoCloseBoundSpec(root, specId) {
+  try {
+    const specPath = findFeatureSpecPath(root, specId);
+    if (!specPath || !fs.existsSync(specPath)) return null;
+    const original = fs.readFileSync(specPath, 'utf8');
+    // Idempotent: already closed → no-op, no write, no diff.
+    if (/^status:\s*closed\s*$/m.test(original)) return specId;
+    const patched = original.replace(/^status:\s*active\s*$/m, 'status: closed');
+    if (patched === original) return null; // status was e.g. draft/archived
+    fs.writeFileSync(specPath, patched, 'utf8');
+    return specId;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1292,6 +1329,7 @@ module.exports = {
   listWorktrees,
   destroyWorktree,
   mergeWorktree,
+  autoCloseBoundSpec,
   pruneWorktrees,
   repairWorktrees,
   reconcileRegistry,

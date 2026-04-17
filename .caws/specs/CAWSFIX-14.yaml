@@ -1,0 +1,82 @@
+id: CAWSFIX-14
+type: fix
+title: Worktree merge auto-closes bound spec (D6)
+status: active
+risk_tier: 2
+mode: development
+created_at: '2026-04-17T19:15:00.000Z'
+updated_at: '2026-04-17T19:15:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree/worktree-manager
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 3
+  max_loc: 60
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/tests/worktree-auto-close-spec.test.js
+    - .caws/specs/CAWSFIX-14.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/utils/lifecycle-events.js
+    - packages/caws-cli/src/budget-derivation.js
+    - .caws/worktrees.json
+invariants:
+  - >-
+    After `mergeWorktree` succeeds and the entry has a `specId`, the bound
+    spec's file transitions from `status: active` to `status: closed`.
+  - The auto-close is idempotent — merging twice, or merging a spec that
+    is already closed, produces no error and no file diff.
+  - >-
+    A merge with no bound spec (`entry.specId` null) completes successfully
+    with `autoClosedSpecId: null` — no crash.
+  - >-
+    Auto-close uses direct YAML line-rewrite (not `closeSpec`) so it does
+    not trigger the session-ownership or active-worktree guards. This is
+    deliberate: the caller already proved authority by merging.
+  - `mergeResult` now includes `specId` and `autoClosedSpecId` so consumers
+    (CI logs, event-log) can observe the lifecycle transition.
+acceptance:
+  - id: A1
+    given: >-
+      A worktree entry with `specId: TEST-01` and a spec file at
+      `.caws/specs/TEST-01.yaml` containing `status: active`
+    when: mergeWorktree(name) succeeds
+    then: >-
+      The spec file's `status:` line becomes `status: closed`. mergeResult
+      includes `specId: 'TEST-01'` and `autoClosedSpecId: 'TEST-01'`.
+  - id: A2
+    given: A worktree entry with `specId: null` (no bound spec)
+    when: mergeWorktree(name) succeeds
+    then: >-
+      Merge completes normally. mergeResult has `specId: null` and
+      `autoClosedSpecId: null`. No crash.
+  - id: A3
+    given: The bound spec is already `status: closed` before the merge
+    when: mergeWorktree(name) succeeds
+    then: >-
+      No write happens — the spec file is byte-identical before and after.
+      mergeResult still reports `autoClosedSpecId: 'TEST-01'` for observability.
+  - id: A4
+    given: The bound spec file does not exist on disk (renamed, deleted)
+    when: mergeWorktree(name) succeeds
+    then: >-
+      Auto-close is skipped silently (`autoClosedSpecId: null`). Merge
+      itself still succeeds.
+  - id: A5
+    given: Existing worktree-manager tests before this change
+    when: '`npx jest worktree-manager` runs'
+    then: No pre-existing test regresses. New tests in worktree-auto-close-spec.test.js cover A1-A4.
+non_functional:
+  perf:
+    api_p95_ms: 10
+  a11y: []
+  security:
+    - Direct file write uses anchored regex on the canonical status line only; no YAML eval
+contracts: []
