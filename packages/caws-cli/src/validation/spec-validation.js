@@ -67,6 +67,42 @@ function getActualBudgetStats(specDir) {
 }
 
 /**
+ * Alias the modern `acceptance_criteria` key into `acceptance` so the semantic
+ * validator (which historically keys off `acceptance`) accepts both shapes.
+ *
+ * Precedence (per CAWSFIX-09 A3 invariant):
+ *   - If `acceptance` is present (legacy shape: {id,given,when,then}), it wins.
+ *   - Otherwise `acceptance_criteria` (modern shape: {id,description,test_nodeids,status})
+ *     is copied into `acceptance`.
+ *
+ * IMPORTANT: this function mutates the spec in place. The existing validator
+ * also mutates in place (risk_tier string→number coercion at line ~141; auto-fix
+ * writes via `current[pathParts[...]] = fix.value`). Callers of
+ * `validateWorkingSpecWithSuggestions({...}, {autoFix:true})` observe those
+ * mutations on the object they passed in — see `Multiple Auto-Fixes` tests.
+ * Returning a clone here would silently break that contract.
+ *
+ * @param {Object} spec - Raw spec object (mutated in place)
+ * @returns {Object} Same spec reference
+ */
+function aliasAcceptanceCriteria(spec) {
+  if (!spec || typeof spec !== 'object') return spec;
+
+  const hasLegacy = Array.isArray(spec.acceptance) && spec.acceptance.length > 0;
+  const hasModern =
+    Array.isArray(spec.acceptance_criteria) && spec.acceptance_criteria.length > 0;
+
+  // Only alias when: legacy is absent AND modern has content.
+  // (Legacy wins when both present; empty modern arrays do not satisfy the
+  // required-field check — see edge-case tests in acceptance-criteria-alias.test.js.)
+  if (!hasLegacy && hasModern) {
+    spec.acceptance = spec.acceptance_criteria;
+  }
+
+  return spec;
+}
+
+/**
  * Basic validation of working spec
  * @param {Object} spec - Working spec object
  * @param {Object} options - Validation options
@@ -74,6 +110,11 @@ function getActualBudgetStats(specDir) {
  */
 const validateWorkingSpec = (spec, _options = {}) => {
   try {
+    // CAWSFIX-09: Alias `acceptance_criteria` -> `acceptance` before any
+    // semantic checks so specs using the modern shape don't trigger
+    // "Missing required field: acceptance" false negatives.
+    aliasAcceptanceCriteria(spec);
+
     // First pass: AJV schema validation (non-blocking — results collected as warnings)
     let schemaWarnings = [];
     try {
@@ -252,6 +293,12 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
   const { autoFix = false, checkBudget = false, projectRoot } = options;
 
   try {
+    // CAWSFIX-09: Alias `acceptance_criteria` -> `acceptance` so the
+    // required-field check and the "No acceptance criteria defined" warning
+    // recognize the modern shape as valid. Mutates in place to preserve the
+    // existing auto-fix contract (callers observe fixes on their object).
+    aliasAcceptanceCriteria(spec);
+
     let errors = [];
     let warnings = [];
     let fixes = [];
