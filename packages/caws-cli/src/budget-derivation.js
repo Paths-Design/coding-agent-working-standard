@@ -157,6 +157,168 @@ function getDefaultPolicy() {
 }
 
 /**
+ * Load policy.yaml synchronously for contexts that can't go async.
+ * Falls back to the bundled default policy when the file is absent or invalid.
+ * NOTE: bypasses PolicyManager's TTL cache by design — callers that need
+ * caching should use the async `deriveBudget` path.
+ * @param {string} projectRoot - Project root directory
+ * @returns {Object} Policy object (validated, with _isDefault flag if fallback used)
+ */
+function loadPolicySync(projectRoot) {
+  const policyPath = path.join(projectRoot, '.caws', 'policy.yaml');
+  if (!fs.existsSync(policyPath)) {
+    return { ...getDefaultPolicy(), _isDefault: true };
+  }
+
+  let policyContent;
+  try {
+    policyContent = yaml.load(fs.readFileSync(policyPath, 'utf-8'));
+  } catch (error) {
+    console.warn(`Could not parse policy.yaml (${error.message}); using defaults`);
+    return { ...getDefaultPolicy(), _isDefault: true };
+  }
+
+  if (!policyContent || typeof policyContent !== 'object') {
+    return { ...getDefaultPolicy(), _isDefault: true };
+  }
+
+  try {
+    validatePolicy(policyContent);
+  } catch (error) {
+    // Policy file exists but is structurally invalid — surface as warning and
+    // fall back to defaults so validation can continue. The PolicyManager
+    // async path uses console.warn for the same shape.
+    console.warn(`Policy has structure violations (${error.message}); using defaults`);
+    return { ...getDefaultPolicy(), _isDefault: true };
+  }
+
+  return policyContent;
+}
+
+/**
+ * Normalize spec.risk_tier to a canonical lookup key.
+ * Accepts numeric tier (2), numeric-string ("2"), or "T2"/"t2" forms.
+ * Returns the numeric tier (2) when the input is recognizable, otherwise
+ * returns the original value so downstream "missing tier" logic can report it.
+ * @param {*} riskTier - spec.risk_tier
+ * @returns {number|*} numeric tier or original value
+ */
+function normalizeRiskTier(riskTier) {
+  if (typeof riskTier === 'number') {
+    return riskTier;
+  }
+  if (typeof riskTier === 'string') {
+    const match = riskTier.match(/^T?(\d)$/i);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+  }
+  return riskTier;
+}
+
+/**
+ * Look up a tier in policy.risk_tiers, tolerant of numeric vs string keys.
+ * policy.yaml serializes tier keys as strings ("1", "2", "3") while specs
+ * may use numeric risk_tier. Check both representations.
+ * @param {Object} policy - Policy object with risk_tiers map
+ * @param {number|string} tier - Normalized tier key
+ * @returns {Object|undefined} Tier budget config or undefined if missing
+ */
+function lookupTierBudget(policy, tier) {
+  if (!policy || !policy.risk_tiers) {
+    return undefined;
+  }
+  return policy.risk_tiers[tier] ?? policy.risk_tiers[String(tier)];
+}
+
+/**
+ * Build a derived-budget result from a spec, policy, and optional project root.
+ * Shared by both `deriveBudget` (async) and `deriveBudgetSync`. Pure function
+ * over already-loaded policy — no I/O.
+ *
+ * Baseline resolution order (per CAWSFIX-07 A1/A2):
+ *   1. If spec.change_budget has numeric max_files and max_loc, use it.
+ *      Legacy specs still in the tree may carry change_budget; CAWSFIX-03
+ *      forbade it in the schema but not the runtime, so we honor it when
+ *      present.
+ *   2. Otherwise, fall back to policy.risk_tiers[spec.risk_tier].
+ *
+ * Throws a named-tier error (A3) if the tier isn't present in policy and no
+ * spec-level change_budget is available.
+ *
+ * @param {Object} spec - Working spec
+ * @param {Object} policy - Loaded policy object
+ * @param {string} projectRoot - Project root (for waiver loading)
+ * @returns {Object} { baseline, effective, waivers_applied, derived_at }
+ */
+function applyBudgetDerivation(spec, policy, projectRoot) {
+  const riskTier = normalizeRiskTier(spec.risk_tier);
+  const tierBudget = lookupTierBudget(policy, riskTier);
+  const specBudget = spec && spec.change_budget;
+  const hasSpecBudget =
+    specBudget &&
+    typeof specBudget.max_files === 'number' &&
+    typeof specBudget.max_loc === 'number';
+
+  let baseline;
+  if (hasSpecBudget) {
+    baseline = {
+      max_files: specBudget.max_files,
+      max_loc: specBudget.max_loc,
+    };
+  } else if (tierBudget) {
+    baseline = {
+      max_files: tierBudget.max_files,
+      max_loc: tierBudget.max_loc,
+    };
+  } else {
+    const available = policy && policy.risk_tiers ? Object.keys(policy.risk_tiers).join(', ') : 'none';
+    throw new Error(
+      `Risk tier ${spec.risk_tier} not defined in policy.yaml\n` +
+        `Policy only defines tiers: ${available}\n` +
+        `Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)` +
+        (typeof spec.risk_tier === 'string'
+          ? `\nHint: use numeric risk_tier (e.g., 2) instead of "${spec.risk_tier}"`
+          : '')
+    );
+  }
+
+  let effectiveBudget = { ...baseline };
+
+  if (spec.waiver_ids && Array.isArray(spec.waiver_ids)) {
+    for (const waiverId of spec.waiver_ids) {
+      const waiver = loadWaiver(waiverId, projectRoot);
+      if (waiver && waiver.status === 'active' && isWaiverValid(waiver)) {
+        if (!waiver.gates || !waiver.gates.includes('budget_limit')) {
+          console.warn(
+            `\nWaiver ${waiverId} does not cover 'budget_limit' gate\n` +
+              `   Current gates: [${waiver.gates ? waiver.gates.join(', ') : 'none'}]\n` +
+              `   Add 'budget_limit' to gates array to apply to budget violations\n`
+          );
+          continue;
+        }
+
+        if (waiver.delta) {
+          if (waiver.delta.max_files) {
+            effectiveBudget.max_files += waiver.delta.max_files;
+          }
+          if (waiver.delta.max_loc) {
+            effectiveBudget.max_loc += waiver.delta.max_loc;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    baseline,
+    effective: effectiveBudget,
+    waivers_applied: spec.waiver_ids || [],
+    derived_at: new Date().toISOString(),
+  };
+}
+
+/**
  * Derive budget for a working spec based on policy and waivers
  * Enhanced to use PolicyManager for caching
  * @param {Object} spec - Working spec object
@@ -204,70 +366,32 @@ async function deriveBudget(spec, projectRoot = process.cwd(), options = {}) {
       }
     }
 
-    // Normalize risk_tier: accept "T1"/"T2"/"T3" strings and convert to numeric
-    let riskTier = spec.risk_tier;
-    if (typeof riskTier === 'string') {
-      const match = riskTier.match(/^T?(\d)$/i);
-      if (match) {
-        riskTier = parseInt(match[1], 10);
-      }
-    }
+    return applyBudgetDerivation(spec, policy, projectRoot);
+  } catch (error) {
+    throw new Error(`Budget derivation failed: ${error.message}`);
+  }
+}
 
-    // Check if risk tier exists in policy
-    if (!policy.risk_tiers[riskTier]) {
-      throw new Error(
-        `Risk tier ${spec.risk_tier} not defined in policy.yaml\n` +
-          `Policy only defines tiers: ${Object.keys(policy.risk_tiers).join(', ')}\n` +
-          `Valid tiers are: 1 (critical), 2 (standard), 3 (low-risk)` +
-          (typeof spec.risk_tier === 'string'
-            ? `\nHint: use numeric risk_tier (e.g., 2) instead of "${spec.risk_tier}"`
-            : '')
-      );
-    }
-
-    const tierBudget = policy.risk_tiers[riskTier];
-    const baseline = {
-      max_files: tierBudget.max_files,
-      max_loc: tierBudget.max_loc,
-    };
-
-    // Start with baseline budget
-    let effectiveBudget = { ...baseline };
-
-    // Apply waivers if any
-    if (spec.waiver_ids && Array.isArray(spec.waiver_ids)) {
-      for (const waiverId of spec.waiver_ids) {
-        const waiver = loadWaiver(waiverId, projectRoot);
-        if (waiver && waiver.status === 'active' && isWaiverValid(waiver)) {
-          // Validate waiver covers budget_limit gate
-          if (!waiver.gates || !waiver.gates.includes('budget_limit')) {
-            console.warn(
-              `\nWaiver ${waiverId} does not cover 'budget_limit' gate\n` +
-                `   Current gates: [${waiver.gates ? waiver.gates.join(', ') : 'none'}]\n` +
-                `   Add 'budget_limit' to gates array to apply to budget violations\n`
-            );
-            continue;
-          }
-
-          // Apply additive deltas
-          if (waiver.delta) {
-            if (waiver.delta.max_files) {
-              effectiveBudget.max_files += waiver.delta.max_files;
-            }
-            if (waiver.delta.max_loc) {
-              effectiveBudget.max_loc += waiver.delta.max_loc;
-            }
-          }
-        }
-      }
-    }
-
-    return {
-      baseline,
-      effective: effectiveBudget,
-      waivers_applied: spec.waiver_ids || [],
-      derived_at: new Date().toISOString(),
-    };
+/**
+ * Synchronous version of deriveBudget for callers that cannot go async.
+ * Uses `loadPolicySync` (no PolicyManager caching) and otherwise shares
+ * the same derivation semantics as the async variant.
+ *
+ * Added for CAWSFIX-07: the legacy synchronous call site in
+ * `validation/spec-validation.js` was passing the un-awaited Promise from
+ * `deriveBudget` into `checkBudgetCompliance`, which then read
+ * `derivedBudget.effective.max_files` on an undefined `.effective` —
+ * producing the "Cannot read properties of undefined (reading 'max_files')"
+ * warning on every schema-compliant spec.
+ *
+ * @param {Object} spec - Working spec object
+ * @param {string} projectRoot - Project root directory
+ * @returns {Object} Derived budget with baseline and effective limits
+ */
+function deriveBudgetSync(spec, projectRoot = process.cwd()) {
+  try {
+    const policy = loadPolicySync(projectRoot);
+    return applyBudgetDerivation(spec, policy, projectRoot);
   } catch (error) {
     throw new Error(`Budget derivation failed: ${error.message}`);
   }
@@ -592,6 +716,7 @@ function generateBurnupReport(derivedBudget, currentStats) {
 
 module.exports = {
   deriveBudget,
+  deriveBudgetSync,
   loadWaiver,
   isWaiverValid,
   checkBudgetCompliance,

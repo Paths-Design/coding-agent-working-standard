@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { deriveBudget, checkBudgetCompliance } = require('../budget-derivation');
+const { deriveBudgetSync, checkBudgetCompliance } = require('../budget-derivation');
 const { execSync } = require('child_process');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 
@@ -646,10 +646,18 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
     }
 
     // Derive and check budget if requested
+    //
+    // CAWSFIX-07: use `deriveBudgetSync` here. The async `deriveBudget`
+    // returns a Promise; this synchronous function previously passed the
+    // Promise straight into `checkBudgetCompliance`, which then read
+    // `derivedBudget.effective.max_files` on an undefined `.effective` and
+    // threw "Cannot read properties of undefined (reading 'max_files')" —
+    // surfaced as the "Budget derivation failed" warning on every
+    // schema-compliant spec.
     let budgetCheck = null;
     if (checkBudget && projectRoot) {
       try {
-        const derivedBudget = deriveBudget(spec, projectRoot);
+        const derivedBudget = deriveBudgetSync(spec, projectRoot);
 
         // Get actual stats from git history
         const actualStats = getActualBudgetStats(projectRoot) || {
