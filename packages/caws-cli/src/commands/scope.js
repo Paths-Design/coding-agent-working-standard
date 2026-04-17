@@ -136,7 +136,7 @@ function printScopePatterns(data, indent = '   ') {
  * Handle the 'show' subcommand
  * @param {Object} options - Command options
  */
-function handleShow(options) {
+function handleShow(_options) {
   const root = getRepoRoot();
   const { inWorktree, worktreeName } = detectWorktreeContext(root);
 
@@ -211,10 +211,7 @@ function handleAuthoritativeMode(root, worktreeName) {
   const specWorktreeRef = specData.worktree || null;
   const registrySpecRef = specId;
 
-  let bindingHealthy = true;
-
   if (specWorktreeRef !== worktreeName) {
-    bindingHealthy = false;
     console.log(chalk.yellow('Binding health: BROKEN'));
     console.log(chalk.yellow(`  Registry points to spec '${registrySpecRef}'`));
     console.log(chalk.yellow(`  Spec 'worktree' field: ${specWorktreeRef || '(missing)'} (expected: ${worktreeName})`));

@@ -139,7 +139,7 @@ function computeEventHash(event) {
  * @returns {Promise<void>}
  */
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => { globalThis.setTimeout(resolve, ms); });
 }
 
 /**
@@ -257,7 +257,7 @@ function releaseLock(handle) {
   } catch (err) {
     if (err.code !== 'ENOENT') {
       // Surface unexpected release failures on stderr so they're diagnosable.
-      // eslint-disable-next-line no-console
+       
       console.error(`event-log: failed to release lock ${handle.lockPath}: ${err.message}`);
     }
   }

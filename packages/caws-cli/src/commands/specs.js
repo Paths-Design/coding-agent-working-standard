@@ -544,7 +544,7 @@ async function createSpec(id, options = {}) {
     );
   } catch (err) {
     // Surface on stderr but don't propagate — the spec is already created.
-    // eslint-disable-next-line no-console
+     
     console.error(`event-log: failed to record spec_created for ${id}: ${err.message}`);
   }
 
@@ -818,7 +818,7 @@ async function deleteSpec(id) {
       { projectRoot: findProjectRoot() }
     );
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error(`event-log: failed to record spec_deleted for ${id}: ${err.message}`);
   }
 
@@ -911,7 +911,7 @@ async function closeSpec(id) {
         { projectRoot: findProjectRoot() }
       );
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(`event-log: failed to record spec_closed for ${id}: ${err.message}`);
     }
   }
