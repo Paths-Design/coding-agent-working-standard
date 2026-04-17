@@ -26,75 +26,54 @@ scope:
     - .caws/working-spec.schema.json
     - .caws/working-spec.yaml
 invariants:
+  - The CI gate validates every YAML file in .caws/specs/ on every PR (not just .caws/working-spec.yaml)
+  - Policy-discipline and budget-immutability checks continue to behave identically for working-spec.yaml edits
+  - The shadow-file naming guard catches the *.backup suffix in addition to the existing backup-*/enhanced-* patterns
+  - A PR that modifies only feature specs (no changes to working-spec.yaml) is not silently exempt from validation
   - >-
-    The CI gate validates every YAML file in .caws/specs/ on every PR (not just
-    .caws/working-spec.yaml)
-  - >-
-    Policy-discipline and budget-immutability checks continue to behave identically for
-    working-spec.yaml edits
-  - >-
-    The shadow-file naming guard catches the *.backup suffix in addition to the existing
-    backup-*/enhanced-* patterns
-  - >-
-    A PR that modifies only feature specs (no changes to working-spec.yaml) is not silently exempt
-    from validation
-  - >-
-    A PR with a malformed feature spec (invalid YAML, schema violation) fails the gate with a
-    clear error naming the file
+    A PR with a malformed feature spec (invalid YAML, schema violation) fails the gate with a clear error naming the
+    file
 acceptance:
   - id: A1
-    given: >-
-      A PR that edits .caws/specs/FEAT-999.yaml (a new feature spec) but leaves
-      .caws/working-spec.yaml untouched
+    given: A PR that edits .caws/specs/FEAT-999.yaml (a new feature spec) but leaves .caws/working-spec.yaml untouched
     when: The caws-gate workflow runs
-    then: >-
-      The workflow validates FEAT-999.yaml against the schema and fails the job if the spec is
-      invalid.
+    then: The workflow validates FEAT-999.yaml against the schema and fails the job if the spec is invalid.
   - id: A2
     given: A PR that adds two feature specs, one valid and one with a schema violation
     when: The caws-gate workflow runs
-    then: >-
-      The workflow fails, the log identifies the invalid file by path, and the valid file does
-      not suppress the failure.
+    then: The workflow fails, the log identifies the invalid file by path, and the valid file does not suppress the failure.
   - id: A3
     given: A PR that edits .caws/working-spec.yaml to add a change_budget key (which is forbidden)
     when: The caws-gate workflow runs
-    then: >-
-      The "Check budget immutability" step fails exactly as it did before this change —
-      regression-free.
+    then: The "Check budget immutability" step fails exactly as it did before this change — regression-free.
   - id: A4
     given: A PR that introduces a file named something.backup at the repo root
     when: The caws-guards workflow runs
     then: >-
-      The naming_guard job fails, citing the *.backup suffix as a shadow pattern. (Current state:
-      .backup is NOT caught; the existing patterns only match backup-* prefix.)
+      The naming_guard job fails, citing the *.backup suffix as a shadow pattern. (Current state: .backup is NOT caught;
+      the existing patterns only match backup-* prefix.)
   - id: A5
     given: A PR that introduces a file named backup-legacy.js (existing-matched pattern)
     when: The caws-guards workflow runs
-    then: >-
-      The naming_guard job fails as before — existing detection is not regressed.
+    then: The naming_guard job fails as before — existing detection is not regressed.
   - id: A6
     given: A PR that modifies .caws/policy.yaml
     when: The caws-gate workflow runs
-    then: >-
-      The existing dual-control check (require 2 approvals) continues to enforce —
-      regression-free.
+    then: The existing dual-control check (require 2 approvals) continues to enforce — regression-free.
   - id: A7
     given: The current CI workflow YAML files
     when: '`yamllint` or `actionlint` is applied to the updated workflows'
     then: >-
-      The workflows parse cleanly and GitHub Actions schema validation passes (no unrecognized
-      keys, no shell syntax errors in run blocks).
+      The workflows parse cleanly and GitHub Actions schema validation passes (no unrecognized keys, no shell syntax
+      errors in run blocks).
 non_functional:
   perf:
     api_p95_ms: 30000
   a11y: []
   security:
     - >-
-      Workflow changes do not add new secret access, new runners, or external network calls
-      beyond the existing CAWS CLI install step
-    - >-
-      No use of untrusted PR inputs in shell commands (standard ${{ }} interpolation only on
-      trusted fields)
+      Workflow changes do not add new secret access, new runners, or external network calls beyond the existing CAWS CLI
+      install step
+    - No use of untrusted PR inputs in shell commands (standard ${{ }} interpolation only on trusted fields)
 contracts: []
 worktree: cawsfix-05
