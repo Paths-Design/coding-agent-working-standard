@@ -23,8 +23,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[A-Z][A-Z0-9]{1,9}-\\d{2,4}$",
-      "description": "Unique identifier for the change (2-10 uppercase/digit chars, dash, 2-4 digits). Legacy validator accepted any non-empty string. The template schema used ^[A-Z]{2,6}-\\d{3,4}$, but that is too narrow for in-repo IDs like CAWSFIX-03 (7-char prefix, 2-digit suffix)."
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+$",
+      "description": "Unique identifier for the change. Format: uppercase/digit PREFIX segments separated by dashes, final segment is one+ digits (e.g. CAWSFIX-16, P03-TRUTH-001, ALG-001A-HARDEN-01). Matches SPEC_ID_PATTERN in spec-validation.js (CAWSFIX-21 alignment)."
     },
     "title": {
       "type": "string",

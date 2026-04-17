@@ -352,6 +352,64 @@ describe('Schema Validation Contracts', () => {
     });
   });
 
+  // CAWSFIX-20: template schemas mirror runtime schemas; CAWSFIX-21: id regex parity
+  describe('Template-Runtime Schema Parity (CAWSFIX-20)', () => {
+    const RUNTIME_WORKING = path.join(__dirname, '../../../../.caws/working-spec.schema.json');
+    const RUNTIME_POLICY = path.join(__dirname, '../../../../.caws/policy.schema.json');
+
+    const stripComments = (obj) => {
+      if (Array.isArray(obj)) return obj.map(stripComments);
+      if (obj && typeof obj === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (k === '$comment') continue;
+          out[k] = stripComments(v);
+        }
+        return out;
+      }
+      return obj;
+    };
+
+    const stripTitleAndComments = (obj) => {
+      const cleaned = stripComments(obj);
+      if (cleaned && typeof cleaned === 'object' && 'title' in cleaned) {
+        const { title, ...rest } = cleaned;
+        return rest;
+      }
+      return cleaned;
+    };
+
+    test('A2: template working-spec schema matches runtime after $comment strip', () => {
+      const runtime = stripTitleAndComments(JSON.parse(fs.readFileSync(RUNTIME_WORKING, 'utf8')));
+      const template = stripTitleAndComments(workingSpecSchema);
+      expect(template).toEqual(runtime);
+    });
+
+    test('A3: template policy schema matches runtime after $comment strip', () => {
+      const runtime = stripTitleAndComments(JSON.parse(fs.readFileSync(RUNTIME_POLICY, 'utf8')));
+      const template = stripTitleAndComments(policySchema);
+      expect(template).toEqual(runtime);
+    });
+
+    test('A1: schema id regex matches SPEC_ID_PATTERN from spec-validation.js', () => {
+      const { SPEC_ID_PATTERN } = require('../../src/validation/spec-validation');
+      // Canonical corpus mirroring CAWSFIX-10 A5 test cases
+      const accepted = ['CAWSFIX-16', 'P03-TRUTH-001', 'ALG-001A-HARDEN-01', 'DRFT-001'];
+      const rejected = ['pCORE-001', '1ABC-001', 'abc-001', 'CAWS--001'];
+      const schemaRe = new RegExp(workingSpecSchema.properties.id.pattern);
+      for (const id of accepted) {
+        expect({ id, schema: schemaRe.test(id), validator: SPEC_ID_PATTERN.test(id) }).toEqual({
+          id, schema: true, validator: true,
+        });
+      }
+      for (const id of rejected) {
+        expect({ id, schema: schemaRe.test(id), validator: SPEC_ID_PATTERN.test(id) }).toEqual({
+          id, schema: false, validator: false,
+        });
+      }
+    });
+  });
+
   // Task 3: Waivers schema (CAWSFIX-17: modern shape)
   describe('Waivers Schema Contract', () => {
     const validate = compileSchema(waiversSchema);

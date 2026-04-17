@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CAWS Working Spec",
   "type": "object",
   "required": [
@@ -15,83 +15,178 @@
     "non_functional",
     "contracts"
   ],
+  "not": {
+    "required": [
+      "change_budget"
+    ]
+  },
   "properties": {
-    "id": { "type": "string", "pattern": "^[A-Z]{2,6}-\\d{3,4}$" },
-    "title": { "type": "string", "minLength": 10, "maxLength": 200 },
-    "type": { "type": "string", "enum": ["feature", "fix", "refactor", "chore", "docs"] },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+$",
+      "description": "Unique identifier for the change. Format: uppercase/digit PREFIX segments separated by dashes, final segment is one+ digits (e.g. CAWSFIX-16, P03-TRUTH-001, ALG-001A-HARDEN-01). Matches SPEC_ID_PATTERN in spec-validation.js (CAWSFIX-21 alignment)."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200,
+      "description": "Clear, descriptive title"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "feature",
+        "fix",
+        "refactor",
+        "chore",
+        "doc",
+        "docs"
+      ],
+      "description": "Type of work (informational; `mode` is the enforced gate input)"
+    },
     "status": {
       "type": "string",
-      "enum": ["draft", "active", "in_progress", "completed", "closed", "archived"]
+      "enum": [
+        "draft",
+        "active",
+        "in_progress",
+        "completed",
+        "closed",
+        "archived"
+      ]
     },
-    "created_at": { "type": "string" },
-    "updated_at": { "type": "string" },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
     "worktree": {
       "type": "string",
       "description": "CAWS worktree name assigned to this spec"
     },
-    "risk_tier": { "type": ["integer", "string"], "enum": [1, 2, 3, "1", "2", "3"] },
-    "mode": { "type": "string", "enum": ["feature", "refactor", "fix", "doc", "docs", "chore", "development"] },
+    "risk_tier": {
+      "type": [
+        "integer",
+        "string"
+      ],
+      "enum": [
+        1,
+        2,
+        3,
+        "1",
+        "2",
+        "3"
+      ],
+      "description": "Risk level (1=high, 2=medium, 3=low)"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "feature",
+        "refactor",
+        "fix",
+        "doc",
+        "docs",
+        "chore",
+        "development"
+      ],
+      "description": "Mode of change. `development` is the default used by `caws specs create`; feature/refactor/fix/doc/chore are the classic modes the legacy validator accepted."
+    },
     "waiver_ids": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^WV-\\d{4}$" },
+      "items": {
+        "type": "string",
+        "pattern": "^WV-\\d{4}$"
+      },
       "description": "IDs of active waivers applying to this spec"
     },
     "blast_radius": {
       "type": "object",
-      "required": ["modules"],
+      "required": [
+        "modules",
+        "data_migration"
+      ],
       "properties": {
-        "modules": { "type": "array", "items": { "type": "string" } },
-        "data_migration": { "type": "boolean" }
-      }
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of modules/paths the change touches"
+        },
+        "data_migration": {
+          "type": "boolean",
+          "description": "Whether the change requires a data migration"
+        }
+      },
+      "additionalProperties": true
     },
-    "operational_rollback_slo": { "type": "string" },
+    "operational_rollback_slo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Time target for operational rollback (e.g. '5m', '30m', '1h')"
+    },
     "scope": {
       "type": "object",
-      "required": ["in", "out"],
+      "required": [
+        "in"
+      ],
       "properties": {
-        "in": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-        "out": { "type": "array", "items": { "type": "string" } }
-      }
+        "in": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Files/paths allowed to be edited (non-empty)"
+        },
+        "out": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files/paths explicitly excluded from edits"
+        }
+      },
+      "additionalProperties": true
     },
-    "invariants": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "Properties that must hold across the change (non-empty)"
+    },
     "acceptance": {
       "type": "array",
-      "minItems": 0,
+      "minItems": 1,
+      "description": "Given/When/Then acceptance criteria (non-empty)",
       "items": {
         "type": "object",
-        "required": ["id", "given", "when", "then"],
+        "required": [
+          "id",
+          "given",
+          "when",
+          "then"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^A\\d+$" },
-          "given": { "type": "string" },
-          "when": { "type": "string" },
-          "then": { "type": "string" }
-        }
-      }
-    },
-    "acceptance_criteria": {
-      "type": "array",
-      "minItems": 0,
-      "items": {
-        "type": "object",
-        "required": ["id"],
-        "properties": {
-          "id": { "type": "string" },
-          "description": { "type": "string" },
-          "completed": { "type": "boolean" },
-          "test": { "type": "string" },
-          "test_command": { "type": "string" },
-          "test_nodeids": {
-            "type": "array",
-            "items": { "type": "string" }
+          "id": {
+            "type": "string",
+            "minLength": 1
           },
-          "evidence": {
-            "oneOf": [
-              { "type": "string" },
-              {
-                "type": "array",
-                "items": { "type": "string" }
-              }
-            ]
+          "given": {
+            "type": "string",
+            "minLength": 1
+          },
+          "when": {
+            "type": "string",
+            "minLength": 1
+          },
+          "then": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "additionalProperties": true
@@ -99,82 +194,147 @@
     },
     "non_functional": {
       "type": "object",
+      "required": [
+        "a11y",
+        "perf",
+        "security"
+      ],
       "properties": {
-        "a11y": { "type": "array", "items": { "type": "string" } },
+        "a11y": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Accessibility requirements (may be empty array if not applicable)"
+        },
         "perf": {
           "type": "object",
-          "properties": {
-            "api_p95_ms": { "type": "integer", "minimum": 1 },
-            "lcp_ms": { "type": "integer", "minimum": 1 }
-          },
-          "additionalProperties": false
+          "description": "Performance requirements (e.g. api_p95_ms, lcp_ms)"
         },
-        "security": { "type": "array", "items": { "type": "string" } }
+        "security": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Security requirements (may be empty array if not applicable)"
+        }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "contracts": {
       "type": "array",
+      "description": "API contracts. Empty array is permitted; CAWSFIX-06 will warn (not fail) when mode=feature with empty contracts.",
       "items": {
         "type": "object",
-        "required": ["type", "path"],
+        "required": [
+          "type",
+          "path"
+        ],
         "properties": {
-          "type": { "type": "string", "enum": ["openapi", "graphql", "proto", "pact", "project_setup"] },
-          "path": { "type": "string" },
-          "description": { "type": "string" },
-          "version": { "type": "string" }
-        }
+          "type": {
+            "type": "string",
+            "enum": [
+              "openapi",
+              "graphql",
+              "proto",
+              "pact",
+              "project_setup"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
       }
     },
     "observability": {
-      "type": "object",
-      "properties": {
-        "logs": { "type": "array", "items": { "type": "string" } },
-        "metrics": { "type": "array", "items": { "type": "string" } },
-        "traces": { "type": "array", "items": { "type": "string" } }
+      "type": "object"
+    },
+    "migrations": {
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     },
-    "migrations": { "type": "array", "items": { "type": "string" } },
-    "rollback": { "type": "array", "items": { "type": "string" } },
+    "rollback": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "experimental_mode": {
       "type": "object",
-      "description": "Enables experimental mode with reduced requirements",
-      "required": ["enabled", "rationale", "expires_at"],
+      "required": [
+        "enabled",
+        "rationale",
+        "expires_at"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "rationale": { "type": "string" },
-        "expires_at": { "type": "string" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        }
       }
     },
     "timeboxed_hours": {
       "type": "integer",
-      "minimum": 1,
-      "description": "Time limit for experimental features in hours"
+      "minimum": 1
     },
     "human_override": {
       "type": "object",
+      "required": [
+        "approved_by",
+        "reason"
+      ],
       "properties": {
-        "approved_by": { "type": "string" },
-        "reason": { "type": "string" },
+        "approved_by": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
         "waived_requirements": {
           "type": "array",
           "items": {
-            "type": "string",
-            "enum": ["mutation_testing", "contract_tests", "coverage", "manual_review"]
+            "type": "string"
           }
         },
-        "expiry_date": { "type": "string", "format": "date-time" }
-      },
-      "required": ["approved_by", "reason"]
+        "expiry_date": {
+          "type": "string"
+        }
+      }
     },
     "ai_assessment": {
       "type": "object",
       "properties": {
-        "confidence_level": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "uncertainty_areas": { "type": "array", "items": { "type": "string" } },
-        "recommended_pairing": { "type": "boolean" }
+        "confidence_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "uncertainty_areas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommended_pairing": {
+          "type": "boolean"
+        }
       }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": true
 }

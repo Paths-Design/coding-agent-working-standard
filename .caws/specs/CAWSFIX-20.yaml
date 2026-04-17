@@ -1,0 +1,84 @@
+id: CAWSFIX-20
+type: fix
+title: Sync template schemas to runtime + align schema ID regex with validator (includes CAWSFIX-21)
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-17T23:30:00.000Z'
+updated_at: '2026-04-17T23:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/.caws/schemas
+    - .caws
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 4
+  max_loc: 180
+scope:
+  in:
+    - packages/caws-cli/templates/.caws/schemas/working-spec.schema.json
+    - packages/caws-cli/templates/.caws/schemas/policy.schema.json
+    - .caws/working-spec.schema.json
+    - packages/caws-cli/tests/contract/schema-contract.test.js
+    - .caws/specs/CAWSFIX-20.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/validation/spec-validation.js
+    - packages/caws-cli/src/
+invariants:
+  - >-
+    Template working-spec.schema.json and template policy.schema.json
+    contain the same content as the corresponding .caws/*.schema.json at
+    the repo root, after stripping $comment fields. One source of truth.
+  - >-
+    The working-spec schema's id pattern matches the runtime semantic
+    validator's SPEC_ID_PATTERN (/^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+$/),
+    so multi-segment IDs like P03-TRUTH-001 validate without AJV warnings
+    and without compliance-score penalties.
+  - >-
+    Templates use draft-07, matching the runtime — Ajv without strict mode
+    support for draft-2020-12 would otherwise emit meta-schema errors.
+acceptance:
+  - id: A1
+    given: "The working-spec schema regex at .caws/working-spec.schema.json"
+    when: it is read and compared to SPEC_ID_PATTERN from spec-validation.js
+    then: >-
+      The schema's id.pattern produces the same match/reject verdicts as
+      the semantic validator for the canonical ID corpus (CAWSFIX-03,
+      P03-TRUTH-001, ALG-001A-HARDEN-01, pCORE-001, 1ABC-001).
+  - id: A2
+    given: "Both template and runtime working-spec schemas loaded from disk"
+    when: their JSON content is compared after stripping $comment keys
+    then: >-
+      deepStrictEqual passes — the required arrays, property shapes,
+      patterns, and additionalProperties settings all match.
+  - id: A3
+    given: "Both template and runtime policy schemas loaded from disk"
+    when: their JSON content is compared after stripping $comment keys
+    then: >-
+      deepStrictEqual passes.
+  - id: A4
+    given: "A spec with id 'P03-TRUTH-001' and minimal required fields"
+    when: validated against the updated template working-spec schema via Ajv
+    then: >-
+      validate(fixture) returns true.
+  - id: A5
+    given: "A spec with id 'pCORE-001' (lowercase start)"
+    when: validated against the updated template schema
+    then: >-
+      validate(fixture) returns false.
+  - id: A6
+    given: "The existing schema-contract test suite"
+    when: it runs after this change
+    then: >-
+      All tests pass. If any fixture needs migration, at most 2 test files
+      are touched — otherwise STOP and split off a fixture-migration task.
+non_functional:
+  perf:
+    api_p95_ms: 5
+  a11y: []
+  security:
+    - Schema changes affect validation semantics; tightening regex may reject specs that previously passed
+contracts: []
