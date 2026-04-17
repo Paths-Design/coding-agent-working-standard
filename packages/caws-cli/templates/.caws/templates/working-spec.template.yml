@@ -6,6 +6,7 @@ risk_tier: {{TIER}}
 mode: feature
 blast_radius:
   modules: []
+  data_migration: false
 operational_rollback_slo: "30m"
 scope:
   in:

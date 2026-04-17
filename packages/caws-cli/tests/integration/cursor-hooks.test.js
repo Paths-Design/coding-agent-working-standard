@@ -265,7 +265,7 @@ describe('Cursor Hooks Integration', () => {
       expect(content).toContain('Agent Workflow Extensions & Hooks Strategy');
       expect(content).toContain('Cursor IDE Hooks');
       expect(content).toContain('Cascade Workflows');
-      expect(content).toContain('MCP Server Integration');
+      // MCP Server was intentionally removed (305d23e); don't assert its presence
       expect(content).toContain('Real-time Quality Gates');
       expect(content).toContain('Quality monitoring');
     });

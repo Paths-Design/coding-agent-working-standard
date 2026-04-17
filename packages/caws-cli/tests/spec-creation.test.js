@@ -137,8 +137,10 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
       fs.ensureDir.mockResolvedValue(undefined);
 
       let writtenYaml = '';
-      fs.writeFile.mockImplementation(async (_filePath, content) => {
-        writtenYaml = content;
+      fs.writeFile.mockImplementation(async (filePath, content) => {
+        if (filePath.endsWith('.yaml')) {
+          writtenYaml = content;
+        }
       });
       fs.readFile.mockImplementation(async () => writtenYaml);
 

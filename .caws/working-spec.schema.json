@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CAWS Working Spec",
   "$comment": "CAWSFIX-03: This schema is the single source of truth for working-spec structure. It replaces the deleted .caws/validate.js legacy validator. Every constraint that validator enforced is expressed here; no required field is silently dropped. Rationale for open decisions: (1) `additionalProperties: true` at the top level is intentional — agents legitimately add helpful extensions like `worktree:`, `waiver_ids:`, `status:`, `created_at:`, `type:` and we do not want to break existing specs. If tightening is desired in the future, audit .caws/specs/*.yaml first. (2) `contracts` is permitted to be an empty array: CAWSFIX-06 will later warn (not fail) when `mode=feature` + empty contracts; failing here would break CAWSFIX-05/06 specs that legitimately have `contracts: []`. (3) `change_budget` is forbidden per policy (CI enforces `.github/workflows/caws-gate.yml:42-55`): budgets come from `.caws/policy.yaml` risk tiers, not from specs.",
   "type": "object",
   "required": [

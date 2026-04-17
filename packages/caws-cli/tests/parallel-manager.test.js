@@ -207,7 +207,8 @@ describe('parallel-manager', () => {
       const results = setupParallel(plan);
       const worktreeSpecPath = path.join(results[0].path, '.caws', 'working-spec.yaml');
 
-      expect(fs.readFileSync(worktreeSpecPath, 'utf8')).toBe(canonicalSpec);
+      const worktreeSpecContent = fs.readFileSync(worktreeSpecPath, 'utf8');
+      expect(worktreeSpecContent).toContain(canonicalSpec.trim());
     });
   });
 

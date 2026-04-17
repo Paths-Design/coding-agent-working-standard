@@ -85,6 +85,7 @@ describe('Schema Validation Contracts', () => {
         mode: 'feature',
         blast_radius: {
           modules: ['src/utils'],
+          data_migration: false,
         },
         operational_rollback_slo: '4h',
         scope: {
@@ -100,7 +101,7 @@ describe('Schema Validation Contracts', () => {
             then: 'Expected outcome is achieved',
           },
         ],
-        non_functional: {},
+        non_functional: { a11y: [], perf: {}, security: [] },
         contracts: [
           { type: 'openapi', path: 'api/spec.yaml' },
         ],
@@ -117,12 +118,12 @@ describe('Schema Validation Contracts', () => {
         title: 'Test Feature Implementation Plan',
         risk_tier: '2',
         mode: 'feature',
-        blast_radius: { modules: ['src/'] },
+        blast_radius: { modules: ['src/'], data_migration: false },
         operational_rollback_slo: '4h',
         scope: { in: ['src/'], out: ['node_modules/'] },
         invariants: ['Invariant one'],
         acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
-        non_functional: {},
+        non_functional: { a11y: [], perf: {}, security: [] },
         contracts: [{ type: 'openapi', path: 'api.yaml' }],
       };
 
@@ -151,12 +152,12 @@ describe('Schema Validation Contracts', () => {
         title: 'Test with string scope in',
         risk_tier: 1,
         mode: 'feature',
-        blast_radius: { modules: ['src/'] },
+        blast_radius: { modules: ['src/'], data_migration: false },
         operational_rollback_slo: '4h',
         scope: { in: 'src/', out: ['node_modules/'] },
         invariants: ['test invariant'],
         acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
-        non_functional: {},
+        non_functional: { a11y: [], perf: {}, security: [] },
         contracts: [{ type: 'openapi', path: 'api.yaml' }],
       };
 
@@ -170,7 +171,7 @@ describe('Schema Validation Contracts', () => {
         title: 'Test with Acceptance Criteria Validation',
         risk_tier: 1,
         mode: 'feature',
-        blast_radius: { modules: ['src/'] },
+        blast_radius: { modules: ['src/'], data_migration: false },
         operational_rollback_slo: '4h',
         scope: { in: ['src/'], out: ['node_modules/'] },
         invariants: ['test invariant'],
@@ -182,7 +183,7 @@ describe('Schema Validation Contracts', () => {
             then: 'Valid then clause',
           },
         ],
-        non_functional: {},
+        non_functional: { a11y: [], perf: {}, security: [] },
         contracts: [{ type: 'openapi', path: 'api.yaml' }],
       };
 
@@ -257,6 +258,7 @@ describe('Schema Validation Contracts', () => {
         '{{TRACE_SPAN}}': 'feature.process',
         '{{MIGRATION_DESCRIPTION}}': 'Add new column to features table',
         '{{ROLLBACK_STRATEGY}}': 'Revert migration and redeploy previous version',
+        '{{WORKTREE_NAME}}': 'my-worktree',
       };
 
       for (const [placeholder, value] of Object.entries(substitutions)) {
@@ -438,9 +440,9 @@ describe('Schema Validation Contracts', () => {
       const emptyAllowed = { version: 1, allowedDirectories: [] };
       expect(validate(emptyAllowed)).toBe(false);
 
-      // Missing version
+      // version is optional per CAWSFIX-11 (inline scope blocks don't carry version)
       const noVersion = { allowedDirectories: ['src/'] };
-      expect(validate(noVersion)).toBe(false);
+      expect(validate(noVersion)).toBe(true);
     });
   });
 
@@ -455,6 +457,10 @@ describe('Schema Validation Contracts', () => {
           '1': { max_files: 5, max_loc: 200 },
           '2': { max_files: 15, max_loc: 500 },
           '3': { max_files: 30, max_loc: 1000 },
+        },
+        edit_rules: {
+          policy_and_code_same_pr: false,
+          min_approvers_for_budget_raise: 2,
         },
       };
 
@@ -539,12 +545,12 @@ describe('Schema Validation Contracts', () => {
             title: 'Drift detection test fixture',
             risk_tier: 1,
             mode: 'fix',
-            blast_radius: { modules: ['src/'] },
+            blast_radius: { modules: ['src/'], data_migration: false },
             operational_rollback_slo: '1h',
             scope: { in: ['src/'], out: [] },
             invariants: ['no drift'],
             acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
-            non_functional: {},
+            non_functional: { a11y: [], perf: {}, security: [] },
             contracts: [{ type: 'openapi', path: 'api.yaml' }],
           },
           'worktrees.schema.json': {
@@ -571,6 +577,10 @@ describe('Schema Validation Contracts', () => {
               '1': { max_files: 5, max_loc: 200 },
               '2': { max_files: 15, max_loc: 500 },
               '3': { max_files: 30, max_loc: 1000 },
+            },
+            edit_rules: {
+              policy_and_code_same_pr: false,
+              min_approvers_for_budget_raise: 2,
             },
           },
         };
