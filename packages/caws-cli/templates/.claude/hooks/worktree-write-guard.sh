@@ -66,12 +66,105 @@ if [[ "$WT_COUNT" -le 0 ]] 2>/dev/null; then
   exit 0
 fi
 
-# Allow edits to configuration and documentation (benign, no merge conflict risk)
+# Main is blocked during active worktree work because shared unstaged state makes
+# agents stash, checkpoint, or explain each other's edits. Keep direct main edits
+# limited to coordination/docs/scratch paths, then use active spec scope below to
+# permit only files no worktree claims.
 if [[ -n "$FILE_PATH" ]]; then
   case "$FILE_PATH" in
-    */.claude/*|*/.caws/*) exit 0 ;;
-    */docs/*) exit 0 ;;
+    .caws/*|*/.caws/*) exit 0 ;;
+    .claude/*|*/.claude/*) exit 0 ;;
+    .gitignore|*/.gitignore) exit 0 ;;
+    .tmp/*|*/.tmp/*) exit 0 ;;
+    tmp/*|*/tmp/*) exit 0 ;;
+    .archive/*|*/.archive/*) exit 0 ;;
+    .githooks/*|*/.githooks/*) exit 0 ;;
+    .github/*|*/.github/*) exit 0 ;;
+    docs/*|*/docs/*) exit 0 ;;
   esac
+fi
+
+if [[ -n "$FILE_PATH" ]]; then
+  REL_PATH="$FILE_PATH"
+  if [[ "$FILE_PATH" == "$PROJECT_DIR"/* ]]; then
+    REL_PATH="${FILE_PATH#$PROJECT_DIR/}"
+  fi
+
+  SPEC_CONTENTION_CHECK=$(PROJECT_DIR="$PROJECT_DIR" CURRENT_BRANCH="$CURRENT_BRANCH" REL_PATH="$REL_PATH" node -e "
+    var fs = require('fs');
+    var path = require('path');
+    var yaml;
+
+    try {
+      yaml = require('js-yaml');
+    } catch (_) {
+      console.log('unknown:no-js-yaml');
+      process.exit(0);
+    }
+
+    function globToRegExp(pattern) {
+      return new RegExp(String(pattern).replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+    }
+
+    try {
+      var projectDir = process.env.PROJECT_DIR;
+      var currentBranch = process.env.CURRENT_BRANCH;
+      var relPath = process.env.REL_PATH;
+      var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
+      var registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      var worktrees = Object.values(registry.worktrees || {}).filter(function(w) {
+        return (w.status === 'active' || w.status === 'fresh' || w.status === 'merged') && w.baseBranch === currentBranch;
+      });
+
+      if (worktrees.length === 0) {
+        console.log('unknown:no-registry-worktrees');
+        process.exit(0);
+      }
+
+      for (var wi = 0; wi < worktrees.length; wi++) {
+        var wt = worktrees[wi];
+        if (!wt.specId) {
+          console.log('unknown:missing-specId:' + (wt.name || 'unnamed'));
+          process.exit(0);
+        }
+
+        var specPath = path.join(projectDir, '.caws', 'specs', wt.specId + '.yaml');
+        if (!fs.existsSync(specPath)) {
+          specPath = path.join(projectDir, '.caws', 'specs', wt.specId + '.yml');
+        }
+        if (!fs.existsSync(specPath)) {
+          console.log('unknown:missing-spec:' + wt.specId);
+          process.exit(0);
+        }
+
+        var spec = yaml.load(fs.readFileSync(specPath, 'utf8')) || {};
+        var scope = spec.scope || {};
+        var patterns = []
+          .concat(Array.isArray(scope.in) ? scope.in : [])
+          .concat(Array.isArray(scope.out) ? scope.out : []);
+
+        if (patterns.length === 0) {
+          console.log('unknown:missing-scope:' + wt.specId);
+          process.exit(0);
+        }
+
+        for (var pi = 0; pi < patterns.length; pi++) {
+          if (globToRegExp(patterns[pi]).test(relPath)) {
+            console.log('claimed:' + (wt.name || wt.specId) + ':' + patterns[pi]);
+            process.exit(0);
+          }
+        }
+      }
+
+      console.log('clear');
+    } catch (error) {
+      console.log('unknown:' + error.message);
+    }
+  " 2>/dev/null || echo "unknown:node-error")
+
+  if [[ "$SPEC_CONTENTION_CHECK" == "clear" ]]; then
+    exit 0
+  fi
 fi
 
 # Allow edits during an active merge (conflict resolution).
