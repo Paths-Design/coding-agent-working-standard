@@ -148,22 +148,18 @@ describe('CAWSFIX-07 — Budget derivation without change_budget (D4)', () => {
   // A4 — waiver deltas apply on top of the policy baseline
   // ---------------------------------------------------------------------------
   describe('A4: waiver deltas apply on top of policy baseline', () => {
-    // NOTE: this fixture matches the shape `validateWaiverStructure` in
-    // budget-derivation.js currently enforces (requires `title`, `reason`,
-    // `approvers: string[]`). That shape DIVERGES from
-    // .caws/waiver.schema.json (which requires `reason_code`, `mitigation`,
-    // `approvers: [{handle, approved_at}]`). The two definitions being out of
-    // sync is a real follow-up bug to file — outside CAWSFIX-07's scope.
+    // Modern waiver shape per .caws/waiver.schema.json (post-CAWSFIX-13).
     const writeWaiver = async (id, delta, status = 'active') => {
       const waiver = {
         id,
-        title: `Test waiver ${id}`,
-        reason: 'test',
-        status,
+        applies_to: 'TEST-006',
         gates: ['budget_limit'],
         delta,
+        reason_code: 'other',
         expires_at: '2099-12-31T23:59:59Z',
-        approvers: ['test@example.com'],
+        risk_owner: 'test-owner',
+        approvers: [{ handle: 'test', approved_at: '2025-01-01T00:00:00Z' }],
+        status,
       };
       await fs.mkdir(path.join(tempDir, '.caws', 'waivers'), { recursive: true });
       await fs.writeFile(
@@ -214,13 +210,14 @@ describe('CAWSFIX-07 — Budget derivation without change_budget (D4)', () => {
       await writePolicy(standardPolicy);
       const expiredWaiver = {
         id: 'WV-9999',
-        title: 'Expired test waiver',
-        reason: 'test',
-        status: 'active',
+        applies_to: 'TEST-006',
         gates: ['budget_limit'],
         delta: { max_files: 1000, max_loc: 1000000 },
+        reason_code: 'other',
         expires_at: '2020-01-01T00:00:00Z', // way in the past
-        approvers: ['test@example.com'],
+        risk_owner: 'test-owner',
+        approvers: [{ handle: 'test', approved_at: '2025-01-01T00:00:00Z' }],
+        status: 'active',
       };
       await fs.mkdir(path.join(tempDir, '.caws', 'waivers'), { recursive: true });
       await fs.writeFile(

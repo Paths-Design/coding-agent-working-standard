@@ -85,16 +85,17 @@ describe('Budget Derivation (Async)', () => {
 
   const createMockWaiver = (id, overrides = {}) => ({
     id,
-    title: 'Test Waiver',
-    reason: 'test',
-    status: 'active',
+    applies_to: overrides.applies_to || 'TEST-0001',
     gates: ['budget_limit'],
-    expires_at: new Date(Date.now() + 86400000).toISOString(), // +1 day
-    approvers: ['test@example.com'],
     delta: {
       max_files: overrides.max_files || 0,
       max_loc: overrides.max_loc || 0,
     },
+    reason_code: 'other',
+    expires_at: new Date(Date.now() + 86400000).toISOString(), // +1 day
+    risk_owner: 'test-owner',
+    approvers: [{ handle: 'test', approved_at: '2025-01-01T00:00:00Z' }],
+    status: 'active',
     ...overrides,
   });
 

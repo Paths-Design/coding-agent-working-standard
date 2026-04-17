@@ -402,15 +402,25 @@ function deriveBudgetSync(spec, projectRoot = process.cwd()) {
  * @param {Object} waiver - Waiver document to validate
  * @throws {Error} If waiver structure is invalid
  */
-function validateWaiverStructure(waiver) {
-  const requiredFields = ['id', 'title', 'reason', 'status', 'gates', 'expires_at', 'approvers'];
+const WAIVER_REQUIRED_FIELDS = [
+  'id',
+  'applies_to',
+  'gates',
+  'delta',
+  'reason_code',
+  'expires_at',
+  'risk_owner',
+  'approvers',
+  'status',
+];
 
+function validateWaiverStructure(waiver) {
   // Check all required fields present
-  for (const field of requiredFields) {
+  for (const field of WAIVER_REQUIRED_FIELDS) {
     if (!(field in waiver)) {
       throw new Error(
         `Waiver missing required field: ${field}\n` +
-          `Required fields: ${requiredFields.join(', ')}\n` +
+          `Required fields: ${WAIVER_REQUIRED_FIELDS.join(', ')}\n` +
           `Fix the waiver file at .caws/waivers/${waiver.id || 'unknown'}.yaml`
       );
     }
@@ -426,8 +436,8 @@ function validateWaiverStructure(waiver) {
     );
   }
 
-  // Validate status
-  const validStatuses = ['active', 'expired', 'revoked'];
+  // Validate status (proposed is valid per schema but not applied by derivation)
+  const validStatuses = ['proposed', 'active', 'expired', 'revoked'];
   if (!validStatuses.includes(waiver.status)) {
     throw new Error(
       `Invalid waiver status: ${waiver.status}\n` +
@@ -446,14 +456,24 @@ function validateWaiverStructure(waiver) {
     );
   }
 
-  // Validate approvers is array
+  // Validate approvers is array of {handle, approved_at?} objects
   if (!Array.isArray(waiver.approvers) || waiver.approvers.length === 0) {
     throw new Error(
       `Invalid waiver approvers: ${JSON.stringify(waiver.approvers)}\n` +
-        'approvers must be a non-empty array of approver names/emails\n' +
-        'Example: approvers: ["tech-lead@company.com"]\n' +
+        'approvers must be a non-empty array of objects with a `handle` field\n' +
+        'Example: approvers: [{ handle: "tech-lead", approved_at: "2025-01-01T00:00:00Z" }]\n' +
         `Fix the approvers field in .caws/waivers/${waiver.id}.yaml`
     );
+  }
+  for (const approver of waiver.approvers) {
+    if (typeof approver !== 'object' || approver === null || typeof approver.handle !== 'string') {
+      throw new Error(
+        `Invalid waiver approver entry: ${JSON.stringify(approver)}\n` +
+          'Each approver must be an object with a required `handle` field (string).\n' +
+          'Expected shape: { handle: "github-or-email", approved_at: "ISO-8601" }\n' +
+          `Fix the approvers field in .caws/waivers/${waiver.id}.yaml`
+      );
+    }
   }
 
   // Validate expires_at is valid date string
@@ -575,8 +595,9 @@ function isWaiverValid(waiver, policy = null) {
       }
     }
 
-    // Check required fields
-    if (!waiver.id || !waiver.title || !waiver.gates) {
+    // Shallow sanity check. Full schema conformance is enforced by
+    // validateWaiverStructure at load time (see loadWaiver).
+    if (!waiver.id || !waiver.gates) {
       console.warn(`Waiver ${waiver.id || 'unknown'} missing required fields`);
       return false;
     }
@@ -726,4 +747,5 @@ module.exports = {
   validatePolicy,
   getDefaultPolicy,
   validateWaiverStructure,
+  WAIVER_REQUIRED_FIELDS,
 };

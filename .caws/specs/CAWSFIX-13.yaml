@@ -1,0 +1,74 @@
+id: CAWSFIX-13
+type: fix
+title: Waiver validator accepts modern schema shape (reason_code/delta/approvers-as-objects)
+status: active
+risk_tier: 2
+mode: development
+created_at: '2026-04-17T18:00:00.000Z'
+updated_at: '2026-04-17T18:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/budget-derivation
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 3
+  max_loc: 80
+scope:
+  in:
+    - packages/caws-cli/src/budget-derivation.js
+    - packages/caws-cli/tests/validation/budget-derivation-waiver-shape.test.js
+    - .caws/specs/CAWSFIX-13.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - .caws/waiver.schema.json
+    - .caws/waivers/
+    - packages/caws-cli/src/waivers-manager.js
+    - packages/caws-cli/src/commands/
+invariants:
+  - >-
+    validateWaiverStructure required-field list matches .caws/waiver.schema.json:required
+    (id, applies_to, gates, delta, reason_code, expires_at, risk_owner, approvers, status)
+  - Waivers conforming to .caws/waiver.schema.json load successfully through loadWaiver
+  - Legacy string-approvers shape is rejected with a message naming the expected {handle} shape
+  - applyBudgetDerivation continues to read waiver.delta.max_files and waiver.delta.max_loc (unchanged)
+acceptance:
+  - id: A1
+    given: >-
+      A modern-shape waiver (id, applies_to, gates, delta, reason_code, expires_at,
+      risk_owner, approvers: [{handle, approved_at}], status)
+    when: validateWaiverStructure(waiver) is called
+    then: It returns without throwing. loadWaiver returns the waiver, not null.
+  - id: A2
+    given: >-
+      A spec with an active modern waiver lifting delta.max_files by 5
+    when: applyBudgetDerivation runs against the spec
+    then: >-
+      The resulting effective max_files equals baseline + 5. The waiver is applied, not silently dropped.
+  - id: A3
+    given: A waiver missing the delta field
+    when: validateWaiverStructure runs
+    then: It throws with a message naming `delta` as a required field.
+  - id: A4
+    given: >-
+      A waiver with legacy-shape approvers (`approvers: ["@alice"]` — array of strings)
+    when: validateWaiverStructure runs
+    then: >-
+      It throws with a message naming the expected `{handle, approved_at}` object shape.
+  - id: A5
+    given: .caws/waiver.schema.json and validateWaiverStructure
+    when: A parity test compares the schema's required array to the validator's required list
+    then: They match exactly. No field is required by one and not the other.
+  - id: A6
+    given: Existing budget-derivation-async.test.js before this change
+    when: '`npx jest validation/budget-derivation` runs'
+    then: No pre-existing test regresses. New tests in budget-derivation-waiver-shape.test.js cover A1-A5.
+non_functional:
+  perf:
+    api_p95_ms: 10
+  a11y: []
+  security:
+    - No new parsing surface; validator only tightens its field list to match the schema
+contracts: []
