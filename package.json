@@ -43,7 +43,7 @@
 
     "// CAWS-specific tools": "",
     "caws:start": "node apps/tools/caws/start.js",
-    "caws:validate": "node .caws/validate.js .caws/working-spec.yaml",
+    "caws:validate": "caws validate",
     "caws:verify": "exec bash scripts/verify.sh",
     "caws:pr-comment": "node apps/tools/caws/pr-comment.js",
     "quality-gates": "node packages/quality-gates/run-quality-gates.mjs",
