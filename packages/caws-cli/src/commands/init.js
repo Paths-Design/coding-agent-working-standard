@@ -28,6 +28,8 @@ const {
   getRecommendedIDEs,
   parseIDESelection,
 } = require('../utils/ide-detection');
+// CAWSFIX-10: share the canonical spec-ID regex with the validator
+const { SPEC_ID_PATTERN } = require('../validation/spec-validation');
 
 function buildInitialFeatureSpec(specContent, fallbackId) {
   const parsed = yaml.load(specContent);
@@ -519,11 +521,12 @@ async function initProject(projectName, options) {
             return `PROJ-${randomNum.toString().padStart(3, '0')}`;
           },
           validate: (input) => {
-            if (!input.match(/^[A-Z]+-\d+$/)) {
-              return 'Project ID must be in format PREFIX-NUMBER (e.g., PROJ-001)';
+            // CAWSFIX-10: accept multi-segment IDs like P03-IMPL-01
+            if (!SPEC_ID_PATTERN.test(input)) {
+              return 'Project ID must be in format PREFIX-NUMBER or PREFIX-SEGMENT-NUMBER (e.g., PROJ-001, P03-IMPL-01)';
             }
-            if (input.length > 20) {
-              return 'Project ID must be less than 20 characters';
+            if (input.length > 40) {
+              return 'Project ID must be less than 40 characters';
             }
             return true;
           },

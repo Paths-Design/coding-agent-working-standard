@@ -11,6 +11,38 @@ const { execSync } = require('child_process');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
 
 /**
+ * CAWSFIX-10: Canonical regex for valid spec IDs.
+ *
+ * Accepts:
+ *   - Single-segment: FEAT-001, EVLOG-002, CAWSFIX-06 (legacy shape)
+ *   - Multi-segment:  P03-IMPL-01, ALG-001A-HARDEN-01, CAWS-FIX-03
+ *
+ * Rejects:
+ *   - lowercase (feat-001)
+ *   - leading digit (01-FEAT)
+ *   - missing number suffix (FEAT-)
+ *   - trailing hyphen (FEAT-01-)
+ *   - leading/double hyphen (--FEAT-01, FEAT--001)
+ *   - empty string
+ *
+ * Grammar: [PREFIX](-[SEGMENT])*-NUMBER
+ *   - PREFIX  = [A-Z] followed by zero+ [A-Z0-9]
+ *   - SEGMENT = one+ [A-Z0-9]  (alphanumeric, uppercase only)
+ *   - NUMBER  = one+ digits
+ *
+ * Defined once per A4 invariant; referenced by both the basic validator
+ * (line ~125 pre-fix) and the enhanced validator (line ~307 pre-fix).
+ */
+const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+$/;
+
+/**
+ * User-facing error message for bad spec IDs (CAWSFIX-10 A5).
+ * Kept as a module constant so the message stays in sync with the pattern.
+ */
+const SPEC_ID_ERROR_MESSAGE =
+  'Project ID should be in format: PREFIX-NUMBER or PREFIX-SEGMENT-NUMBER (e.g., FEAT-001, P03-IMPL-01)';
+
+/**
  * Get actual budget statistics from git history
  * Analyzes changes since last tag or initial commit
  * @param {string} specDir - Project directory
@@ -162,14 +194,14 @@ const validateWorkingSpec = (spec, _options = {}) => {
       }
     }
 
-    // Validate specific field formats
-    if (!/^[A-Z]+-\d+$/.test(spec.id)) {
+    // Validate specific field formats (CAWSFIX-10: DRY regex via SPEC_ID_PATTERN)
+    if (!SPEC_ID_PATTERN.test(spec.id)) {
       return {
         valid: false,
         errors: [
           {
             instancePath: '/id',
-            message: 'Project ID should be in format: PREFIX-NUMBER (e.g., FEAT-1234)',
+            message: SPEC_ID_ERROR_MESSAGE,
           },
         ],
       };
@@ -350,12 +382,12 @@ function validateWorkingSpecWithSuggestions(spec, options = {}) {
 
     // Semantic checks that AJV can't express
 
-    // Validate specific field formats
-    if (spec.id && !/^[A-Z]+-\d+$/.test(spec.id)) {
+    // Validate specific field formats (CAWSFIX-10: DRY regex via SPEC_ID_PATTERN)
+    if (spec.id && !SPEC_ID_PATTERN.test(spec.id)) {
       errors.push({
         instancePath: '/id',
-        message: 'Project ID should be in format: PREFIX-NUMBER (e.g., FEAT-1234)',
-        suggestion: 'Use format like: PROJ-001, FEAT-002, FIX-003',
+        message: SPEC_ID_ERROR_MESSAGE,
+        suggestion: 'Use format like: PROJ-001, FEAT-002, P03-IMPL-01, ALG-001A-HARDEN-01',
         canAutoFix: false,
       });
     }
@@ -883,4 +915,7 @@ module.exports = {
   canAutoFixField,
   calculateComplianceScore,
   getComplianceGrade,
+  // CAWSFIX-10: exported so init.js and tests reference the same regex
+  SPEC_ID_PATTERN,
+  SPEC_ID_ERROR_MESSAGE,
 };
