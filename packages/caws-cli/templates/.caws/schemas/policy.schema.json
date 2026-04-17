@@ -94,9 +94,13 @@
             "description": {
               "type": "string",
               "description": "Human-readable description of the gate"
+            },
+            "thresholds": {
+              "type": "object",
+              "description": "Gate-specific thresholds (e.g. warning/critical limits)"
             }
           },
-          "additionalProperties": true
+          "additionalProperties": false
         }
       },
       "additionalProperties": false,

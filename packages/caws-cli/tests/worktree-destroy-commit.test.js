@@ -100,6 +100,32 @@ describe('CAWSFIX-18 — destroyWorktree auto-commits registry', () => {
     expect(porcelain('.caws/worktrees.json')).toBe('');
   });
 
+  test('A2: destroy succeeds and warns when git commit fails', () => {
+    createWorktree('cf18-fail');
+    execFileSync('git', ['add', '.caws/worktrees.json'], { cwd: testDir });
+    execFileSync('git', ['commit', '-m', 'chore(worktree): register cf18-fail'], { cwd: testDir });
+
+    const hookDir = path.join(testDir, '.git', 'hooks');
+    fs.ensureDirSync(hookDir);
+    fs.writeFileSync(path.join(hookDir, 'pre-commit'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => destroyWorktree('cf18-fail')).not.toThrow();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('could not auto-commit .caws/worktrees.json')
+      );
+
+      const reg = JSON.parse(fs.readFileSync(
+        path.join(testDir, '.caws', 'worktrees.json'), 'utf8'
+      ));
+      expect(reg.worktrees['cf18-fail'].status).toBe('destroyed');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   test('A5: uses chore(worktree) prefix when no other worktrees remain active', () => {
     createWorktree('cf18-solo');
     execFileSync('git', ['add', '.caws/worktrees.json'], { cwd: testDir });
