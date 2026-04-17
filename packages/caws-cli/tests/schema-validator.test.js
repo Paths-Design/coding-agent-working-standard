@@ -77,9 +77,7 @@ describe('getSchemaPath', () => {
     expect(result).toContain('templates/.caws/schemas/worktrees.schema.json');
   });
 
-  test('resolves from project root when project schema exists', () => {
-    // Use the worktree itself as the "project root" since it has .caws/schemas via templates
-    // We need a project root that actually has .caws/schemas/ — create a temp scenario
+  test('A2: resolves from nested .caws/schemas/ when that layout exists', () => {
     const fs = require('fs-extra');
     const os = require('os');
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-test-'));
@@ -90,7 +88,39 @@ describe('getSchemaPath', () => {
     const result = getSchemaPath('test.schema.json', tmpDir);
     expect(result).toBe(path.join(schemasDir, 'test.schema.json'));
 
-    // Cleanup
+    fs.removeSync(tmpDir);
+  });
+
+  test('A1: resolves flat .caws/<name>.schema.json ahead of nested and bundled', () => {
+    const fs = require('fs-extra');
+    const os = require('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-test-'));
+    const cawsDir = path.join(tmpDir, '.caws');
+    fs.mkdirpSync(cawsDir);
+    const flatPath = path.join(cawsDir, 'test.schema.json');
+    fs.writeFileSync(flatPath, '{}');
+
+    const result = getSchemaPath('test.schema.json', tmpDir);
+    expect(result).toBe(flatPath);
+
+    fs.removeSync(tmpDir);
+  });
+
+  test('A4: flat wins when both flat and nested exist', () => {
+    const fs = require('fs-extra');
+    const os = require('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-test-'));
+    const cawsDir = path.join(tmpDir, '.caws');
+    const schemasDir = path.join(cawsDir, 'schemas');
+    fs.mkdirpSync(schemasDir);
+    const flatPath = path.join(cawsDir, 'test.schema.json');
+    const nestedPath = path.join(schemasDir, 'test.schema.json');
+    fs.writeFileSync(flatPath, '{}');
+    fs.writeFileSync(nestedPath, '{}');
+
+    const result = getSchemaPath('test.schema.json', tmpDir);
+    expect(result).toBe(flatPath);
+
     fs.removeSync(tmpDir);
   });
 });

@@ -34,8 +34,16 @@ function createValidator(schemaPath) {
 }
 
 function getSchemaPath(schemaName, projectRoot) {
-  const projectPath = path.join(projectRoot, '.caws', 'schemas', schemaName);
-  if (fs.existsSync(projectPath)) return projectPath;
+  // Order: flat repo layout (`.caws/<name>.schema.json`) wins so
+  // repos that tightened a schema in-place (e.g. CAWSFIX-03) are
+  // the authoritative source. Nested `.caws/schemas/<name>.schema.json`
+  // is the legacy layout kept for back-compat. Bundled template is
+  // the last-resort fallback used by globally-installed CLIs and
+  // projects without a local copy.
+  const flatPath = path.join(projectRoot, '.caws', schemaName);
+  if (fs.existsSync(flatPath)) return flatPath;
+  const nestedPath = path.join(projectRoot, '.caws', 'schemas', schemaName);
+  if (fs.existsSync(nestedPath)) return nestedPath;
   return path.join(__dirname, '../../templates/.caws/schemas', schemaName);
 }
 

@@ -1,0 +1,65 @@
+id: CAWSFIX-08
+type: fix
+title: Schema resolver prefers flat .caws/<name>.schema.json over bundled template
+status: active
+risk_tier: 2
+mode: development
+created_at: '2026-04-17T18:45:00.000Z'
+updated_at: '2026-04-17T18:45:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/utils/schema-validator
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 2
+  max_loc: 30
+scope:
+  in:
+    - packages/caws-cli/src/utils/schema-validator.js
+    - packages/caws-cli/tests/schema-validator.test.js
+    - .caws/specs/CAWSFIX-08.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/templates/
+    - .caws/working-spec.schema.json
+    - packages/caws-cli/src/validation/spec-validation.js
+    - packages/caws-cli/src/gates/spec-completeness.js
+invariants:
+  - >-
+    `getSchemaPath()` resolves to the flat repo-level `.caws/<name>.schema.json`
+    path ahead of the nested legacy path and ahead of the bundled template.
+  - >-
+    Projects without any repo-level schema still fall back to the bundled
+    template — the change is additive-prefer, not removal.
+  - CAWSFIX-03's tightened `.caws/working-spec.schema.json` becomes authoritative at runtime.
+acceptance:
+  - id: A1
+    given: A project with a flat `.caws/working-spec.schema.json`
+    when: getSchemaPath('working-spec.schema.json', root) is called
+    then: It returns the flat path, not the bundled template.
+  - id: A2
+    given: A project with only a nested `.caws/schemas/working-spec.schema.json` (legacy layout)
+    when: getSchemaPath is called
+    then: It returns the nested path (back-compat preserved).
+  - id: A3
+    given: A project with neither layout present
+    when: getSchemaPath is called
+    then: It returns the bundled template path under caws-cli/templates/.caws/schemas/.
+  - id: A4
+    given: Both flat and nested copies exist in the same project
+    when: getSchemaPath is called
+    then: The flat path wins (flat is the newer canonical layout).
+  - id: A5
+    given: The existing schema-load-validation test suite
+    when: '`npx jest unit/schema-validator schema-load-validation` runs'
+    then: No pre-existing test regresses. New tests cover A1-A4.
+non_functional:
+  perf:
+    api_p95_ms: 1
+  a11y: []
+  security:
+    - Resolver only reads file paths; no new I/O surface
+contracts: []
