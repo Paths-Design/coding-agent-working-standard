@@ -27,10 +27,18 @@ scope:
     - .caws/working-spec.schema.json
     - packages/caws-cli/src/commands/
 invariants:
-  - A CAWS Lite `.caws/scope.json` file MUST continue to require `version` (tracked state artifact; compatibility contract)
-  - An inline `scope:` block (inside a working-spec.yaml or feature spec) does NOT require `version` — scope blocks inside specs are governed by the working-spec schema, not the standalone scope schema
-  - The standalone scope.schema.json is used only to validate `.caws/scope.json` on disk, never to validate inline scope blocks (separating the two surfaces)
-  - OR alternatively, the `version` requirement is lifted from scope.schema.json entirely if no read path actually enforces version mismatch; if that path exists, document it and keep version as required with a default
+  - >-
+    A CAWS Lite `.caws/scope.json` file MUST continue to require `version` (tracked state artifact; compatibility
+    contract)
+  - >-
+    An inline `scope:` block (inside a working-spec.yaml or feature spec) does NOT require `version` — scope blocks
+    inside specs are governed by the working-spec schema, not the standalone scope schema
+  - >-
+    The standalone scope.schema.json is used only to validate `.caws/scope.json` on disk, never to validate inline scope
+    blocks (separating the two surfaces)
+  - >-
+    OR alternatively, the `version` requirement is lifted from scope.schema.json entirely if no read path actually
+    enforces version mismatch; if that path exists, document it and keep version as required with a default
   - Sterling's turn-023 D3 reproduction no longer emits "scope.json schema violation: must have required property 'version'" during spec validation
 acceptance:
   - id: A1
@@ -41,31 +49,27 @@ acceptance:
     given: A CAWS Lite project with `.caws/scope.json` missing the version field
     when: Scope validation runs
     then: >-
-      EITHER validation fails with a clear error ("scope.json must have required property 'version'")
-      — same as today — AND an explanation points at CAWSFIX-11's decision to keep version required on
-      standalone files; OR validation passes with a warning that version is missing and a default of 1
-      is assumed. The choice is documented in the spec's commit message.
+      EITHER validation fails with a clear error ("scope.json must have required property 'version'") — same as today —
+      AND an explanation points at CAWSFIX-11's decision to keep version required on standalone files; OR validation
+      passes with a warning that version is missing and a default of 1 is assumed. The choice is documented in the
+      spec's commit message.
   - id: A3
-    given: >-
-      A feature spec YAML with an inline `scope:` block containing `in:` and `out:` lists (no version key)
-    when: >-
-      The full spec validation runs (including whatever path currently triggers the scope-schema check)
+    given: A feature spec YAML with an inline `scope:` block containing `in:` and `out:` lists (no version key)
+    when: The full spec validation runs (including whatever path currently triggers the scope-schema check)
     then: >-
-      The scope.json schema-violation warning about the missing `version` property does NOT appear.
-      The inline scope block validates via the working-spec schema's scope sub-schema, not the standalone
-      scope.schema.json.
+      The scope.json schema-violation warning about the missing `version` property does NOT appear. The inline scope
+      block validates via the working-spec schema's scope sub-schema, not the standalone scope.schema.json.
   - id: A4
     given: The caws-cli source code
     when: A reviewer traces which code paths load and apply `scope.schema.json`
     then: >-
-      The only caller is the standalone `.caws/scope.json` validator (CAWS Lite scope). Inline scope blocks
-      inside working-spec.yaml or feature specs do NOT invoke the standalone schema. This is documented
-      in a comment in scope.schema.json or in the module that loads it.
+      The only caller is the standalone `.caws/scope.json` validator (CAWS Lite scope). Inline scope blocks inside
+      working-spec.yaml or feature specs do NOT invoke the standalone schema. This is documented in a comment in
+      scope.schema.json or in the module that loads it.
   - id: A5
     given: >-
-      Sterling's turn-023 reproduction where `caws validate --spec-id P03-IMPL-01` emits a scope.json
-      schema-violation warning about the missing `version` property — despite the spec having no
-      standalone scope.json file
+      Sterling's turn-023 reproduction where `caws validate --spec-id P03-IMPL-01` emits a scope.json schema-violation
+      warning about the missing `version` property — despite the spec having no standalone scope.json file
     when: The same command is run after this fix
     then: That specific warning no longer appears.
   - id: A6
