@@ -101,7 +101,39 @@
       "created_at": "2026-04-11T01:05:33.438Z",
       "updated_at": "2026-04-11T01:05:33.439Z",
       "owner": null
+    },
+    "CAWSFIX-03": {
+      "path": "CAWSFIX-03.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T15:40:11.009Z",
+      "updated_at": "2026-04-17T15:40:11.009Z",
+      "owner": null
+    },
+    "CAWSFIX-04": {
+      "path": "CAWSFIX-04.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T15:40:12.192Z",
+      "updated_at": "2026-04-17T15:40:12.193Z",
+      "owner": null
+    },
+    "CAWSFIX-05": {
+      "path": "CAWSFIX-05.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T15:40:13.357Z",
+      "updated_at": "2026-04-17T15:40:13.358Z",
+      "owner": null
+    },
+    "CAWSFIX-06": {
+      "path": "CAWSFIX-06.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T15:40:14.514Z",
+      "updated_at": "2026-04-17T15:40:14.514Z",
+      "owner": null
     }
   },
-  "lastUpdated": "2026-04-11T01:05:33.590Z"
+  "lastUpdated": "2026-04-17T15:40:15.010Z"
 }
