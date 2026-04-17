@@ -180,9 +180,8 @@ async function createWaiver(options) {
     const { createValidator, getSchemaPath } = require('../utils/schema-validator');
     const schemaPath = getSchemaPath('waivers.schema.json', process.cwd());
     const validate = createValidator(schemaPath);
-    // waivers.schema.json uses patternProperties keyed by waiver ID
-    const waiverDoc = { [waiverId]: waiver };
-    const result = validate(waiverDoc);
+    // waivers.schema.json validates a single waiver document directly (CAWSFIX-17)
+    const result = validate(waiver);
     if (!result.valid) {
       console.warn(chalk.yellow('Waiver has schema violations:'));
       result.errors.forEach((err) => {
@@ -250,7 +249,7 @@ async function listWaivers(_options) {
 
     // Validate each loaded waiver against schema
     if (waiverValidate && waiver && waiver.id) {
-      const result = waiverValidate({ [waiver.id]: waiver });
+      const result = waiverValidate(waiver);
       if (!result.valid) {
         console.warn(chalk.yellow(`Schema warning for ${file}:`));
         result.errors.forEach((err) => {

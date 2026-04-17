@@ -1,0 +1,74 @@
+id: CAWSFIX-17
+type: fix
+title: Sync template waiver schema to modern shape and fix validation wrapping
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-17T22:40:00.000Z'
+updated_at: '2026-04-17T22:40:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/templates/.caws/schemas
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 3
+  max_loc: 90
+scope:
+  in:
+    - packages/caws-cli/templates/.caws/schemas/waivers.schema.json
+    - packages/caws-cli/src/commands/waivers.js
+    - packages/caws-cli/tests/contract/schema-contract.test.js
+    - .caws/specs/CAWSFIX-17.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/utils/schema-validator.js
+    - .caws/waiver.schema.json
+invariants:
+  - >-
+    Template waiver schema and runtime waiver schema agree on required
+    fields (id, applies_to, gates, delta, reason_code, expires_at,
+    risk_owner, approvers, status).
+  - >-
+    Waiver validation in src/commands/waivers.js validates a single
+    waiver object directly, not wrapped in an aggregate key.
+  - >-
+    The template schema filename remains `waivers.schema.json` (plural)
+    to preserve back-compat with projects that have already scaffolded
+    this filename. Filename unification is deferred.
+acceptance:
+  - id: A1
+    given: "Both template and runtime waiver schemas loaded from disk"
+    when: Their `required` arrays are compared
+    then: >-
+      deepStrictEqual passes — arrays have the same elements in the
+      same order.
+  - id: A2
+    given: "A waiver object with modern shape (id, applies_to, gates, delta, reason_code, expires_at, risk_owner, approvers, status)"
+    when: The waiver is validated against the updated template schema
+    then: >-
+      validate(waiver) returns true with zero errors.
+  - id: A3
+    given: "A waiver object with legacy shape (id, title, reason, gates, created_at, expires_at, approved_by, status)"
+    when: The waiver is validated against the updated template schema
+    then: >-
+      validate(waiver) returns false — missing reason_code, delta, applies_to, risk_owner, approvers.
+  - id: A4
+    given: "A fresh waiver creation in a tmp project with scaffolded template"
+    when: waivers.js validates the waiver during createWaiver
+    then: >-
+      It calls validate(waiver) directly — not validate({[id]: waiver}).
+  - id: A5
+    given: "Existing waiver command tests before this change"
+    when: They run after this change
+    then: >-
+      Zero regressions.
+non_functional:
+  perf:
+    api_p95_ms: 50
+  a11y: []
+  security:
+    - Schema validation failures log warnings but do not block waiver creation
+contracts: []

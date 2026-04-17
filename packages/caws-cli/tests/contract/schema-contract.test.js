@@ -352,52 +352,49 @@ describe('Schema Validation Contracts', () => {
     });
   });
 
-  // Task 3: Waivers schema
+  // Task 3: Waivers schema (CAWSFIX-17: modern shape)
   describe('Waivers Schema Contract', () => {
     const validate = compileSchema(waiversSchema);
 
-    test('valid waiver passes validation', () => {
+    test('A2: valid modern-shape waiver passes validation', () => {
       const validWaiver = {
         id: 'WV-0001',
-        title: 'Coverage waiver for legacy module',
-        reason: 'Legacy integration requires time to add coverage',
+        applies_to: 'CAWSFIX-17',
+        gates: ['coverage_threshold'],
+        delta: { max_files: 2, max_loc: 50 },
+        reason_code: 'legacy_integration',
+        expires_at: '2026-06-01T00:00:00Z',
+        risk_owner: '@darianrosebrook',
+        approvers: [{ handle: '@darianrosebrook', approved_at: '2026-03-21T00:00:00Z' }],
+        status: 'active',
+      };
+
+      expect(validate(validWaiver)).toBe(true);
+    });
+
+    test('A3: legacy-shape waiver fails validation (missing modern required fields)', () => {
+      const legacyWaiver = {
+        id: 'WV-0002',
+        title: 'Coverage waiver',
+        reason: 'Legacy integration',
         gates: ['coverage'],
         created_at: '2026-03-21T00:00:00Z',
         expires_at: '2026-06-01T00:00:00Z',
         approved_by: '@darianrosebrook',
         status: 'active',
       };
-
-      const isValid = validate(validWaiver);
-      expect(isValid).toBe(true);
+      expect(validate(legacyWaiver)).toBe(false);
     });
 
-    test('invalid waiver fails validation', () => {
-      const invalid = {
-        // Missing required fields: id, title, reason, gates, etc.
-        id: 'WV-0002',
-        gates: ['coverage'],
-      };
+    test('invalid waiver (missing required) fails validation', () => {
+      const invalid = { id: 'WV-0003', gates: ['coverage_threshold'] };
       expect(validate(invalid)).toBe(false);
     });
 
-    test('waiver with all optional fields passes', () => {
-      const fullWaiver = {
-        id: 'WV-0003',
-        title: 'Full waiver example',
-        reason: 'Experimental feature needs flexibility',
-        description: 'Detailed description of why this waiver exists',
-        gates: ['naming', 'duplication'],
-        created_at: '2026-03-21T00:00:00Z',
-        expires_at: '2026-06-01T00:00:00Z',
-        approved_by: '@manager',
-        impact_level: 'low',
-        mitigation_plan: 'Will add coverage in next sprint',
-        status: 'active',
-        created_by_session: 'session-abc-123',
-        compensating_control: 'Manual review required',
-      };
-      expect(validate(fullWaiver)).toBe(true);
+    test('A1: template and runtime waiver schemas agree on required fields', () => {
+      const runtimeSchemaPath = path.join(__dirname, '../../../../.caws/waiver.schema.json');
+      const runtimeSchema = JSON.parse(fs.readFileSync(runtimeSchemaPath, 'utf8'));
+      expect(waiversSchema.required).toEqual(runtimeSchema.required);
     });
   });
 
@@ -559,12 +556,13 @@ describe('Schema Validation Contracts', () => {
           },
           'waivers.schema.json': {
             id: 'WV-0001',
-            title: 'Drift test waiver',
-            reason: 'Drift detection test fixture reason',
-            gates: ['coverage'],
-            created_at: '2026-03-21T00:00:00Z',
+            applies_to: 'DRFT-001',
+            gates: ['coverage_threshold'],
+            delta: { max_files: 1, max_loc: 10 },
+            reason_code: 'legacy_integration',
             expires_at: '2026-06-01T00:00:00Z',
-            approved_by: '@test',
+            risk_owner: '@test',
+            approvers: [{ handle: '@test', approved_at: '2026-03-21T00:00:00Z' }],
             status: 'active',
           },
           'scope.schema.json': {
