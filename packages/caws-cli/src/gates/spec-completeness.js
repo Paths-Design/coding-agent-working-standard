@@ -42,10 +42,17 @@ async function run({ projectRoot, spec }) {
     return { status: 'fail', messages: ['Resolved spec is empty'] };
   }
 
-  // Try to find and load the schema
+  // Try to find and load the schema.
+  // CAWSFIX-03: The canonical project-level schema lives at
+  // `.caws/working-spec.schema.json` (flat layout, matches the pattern used for
+  // policy.schema.json and waiver.schema.json). Older projects may still have
+  // a `.caws/schemas/` directory from scaffolded templates, so we check both.
+  // Bundled fallbacks cover packaged installs.
   const schemaPaths = [
+    path.join(projectRoot, '.caws', 'working-spec.schema.json'),
     path.join(projectRoot, '.caws', 'schemas', 'working-spec.schema.json'),
     path.join(projectRoot, 'node_modules', '@caws', 'cli', 'templates', '.caws', 'schemas', 'working-spec.schema.json'),
+    path.join(projectRoot, 'node_modules', '@paths.design', 'caws-cli', 'templates', '.caws', 'schemas', 'working-spec.schema.json'),
   ];
 
   let schema = null;
