@@ -1,0 +1,83 @@
+id: CAWSFIX-10
+type: fix
+title: Spec-ID regex accepts multi-segment IDs like P03-IMPL-01 (D2)
+status: active
+risk_tier: 2
+mode: development
+created_at: '2026-04-17T16:37:05.436Z'
+updated_at: '2026-04-17T16:37:05.436Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/validation/spec-validation
+    - packages/caws-cli/src/commands/init
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/validation/spec-validation.js
+    - packages/caws-cli/src/commands/init.js
+    - packages/caws-cli/tests/validation/spec-validation.test.js
+    - packages/caws-cli/tests/validation/spec-id-regex.test.js
+    - .caws/specs/CAWSFIX-10.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - .caws/working-spec.schema.json
+    - packages/caws-cli/templates/.caws/schemas/
+    - packages/caws-cli/src/commands/specs.js
+invariants:
+  - The regex governing valid spec IDs is expressed exactly once (DRY) — not duplicated at `spec-validation.js:125` and `:307`
+  - Multi-segment IDs like `P03-IMPL-01`, `ALG-001A-HARDEN-01`, `CAWS-FIX-03` validate cleanly
+  - Single-segment IDs like `FEAT-001`, `EVLOG-002`, `CAWSFIX-06` continue to validate (regression-free)
+  - Lowercase, leading digit, trailing hyphen, empty string, and other junk continue to be rejected
+  - The error message to the user matches the new accepted shape — no longer says "PREFIX-NUMBER (e.g., FEAT-1234)" when multi-segment is also accepted
+acceptance:
+  - id: A1
+    given: The current regex `^[A-Z]+-\d+$` at spec-validation.js:125 and :307 that rejects `P03-IMPL-01`
+    when: Validator runs against a spec with id=P03-IMPL-01
+    then: >-
+      Validation accepts the ID. The "Project ID should be in format: PREFIX-NUMBER" error does not fire.
+      No schema warning about the ID pattern is emitted from the semantic validator.
+  - id: A2
+    given: The new regex (proposed `^([A-Z][A-Z0-9]*)(-[A-Z0-9]+)*-\d+$` or equivalent)
+    when: Validator runs against `FEAT-001`, `EVLOG-002`, `CAWSFIX-06`, `ALG-001A-HARDEN-01`, `P03-IMPL-01`
+    then: All five IDs pass. Back-compat with single-segment IDs is preserved.
+  - id: A3
+    given: The same regex
+    when: >-
+      Validator runs against `feat-001` (lowercase), `01-FEAT` (leading digit), `FEAT-` (no number),
+      `FEAT-01-` (trailing hyphen), `--FEAT-01`, and the empty string
+    then: All six are rejected with a clear format error referencing the accepted shape.
+  - id: A4
+    given: The regex is defined in one canonical location (a module constant or an exported helper)
+    when: A reviewer greps the src/ tree for `^\[A-Z\]` regex patterns
+    then: >-
+      The regex string appears once in spec-validation.js (or an extracted helper), not twice.
+      Both the warning-issuing check (line 125) and the error-issuing check (line 307) reference the same constant.
+  - id: A5
+    given: The user-facing error message template
+    when: A bad ID is rejected
+    then: >-
+      The message says something like "Project ID should be in format: PREFIX-NUMBER or PREFIX-SEGMENT-NUMBER
+      (e.g., FEAT-001, P03-IMPL-01)". It accurately reflects the updated regex.
+  - id: A6
+    given: >-
+      Sterling's turn-023 reproduction where `caws specs create P03-TEST-THROWAWAY` crashes with a
+      "Project ID should be in format: PREFIX-NUMBER" error
+    when: >-
+      The same command is run after this fix ships (and CAWSFIX-09 lands so the validator runs end-to-end)
+    then: >-
+      The command accepts the ID and creates the spec. `P03-IMPL-01` validates without ID warnings.
+  - id: A7
+    given: The existing test suite before this change
+    when: '`cd packages/caws-cli && npx jest validation` is run'
+    then: No pre-existing test regresses. New tests in spec-id-regex.test.js cover A1-A3.
+non_functional:
+  perf:
+    api_p95_ms: 10
+  a11y: []
+  security:
+    - Regex is anchored at both ends; no ReDoS risk from the proposed pattern (linear matching)
+contracts: []
+worktree: cawsfix-10

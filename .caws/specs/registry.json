@@ -133,7 +133,39 @@
       "created_at": "2026-04-17T15:40:14.514Z",
       "updated_at": "2026-04-17T16:21:30.258Z",
       "owner": null
+    },
+    "CAWSFIX-07": {
+      "path": "CAWSFIX-07.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T16:37:05.364Z",
+      "updated_at": "2026-04-17T16:37:05.365Z",
+      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86"
+    },
+    "CAWSFIX-09": {
+      "path": "CAWSFIX-09.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T16:37:06.569Z",
+      "updated_at": "2026-04-17T16:37:06.569Z",
+      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86"
+    },
+    "CAWSFIX-10": {
+      "path": "CAWSFIX-10.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T16:37:07.782Z",
+      "updated_at": "2026-04-17T16:37:07.786Z",
+      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86"
+    },
+    "CAWSFIX-11": {
+      "path": "CAWSFIX-11.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-17T16:37:08.982Z",
+      "updated_at": "2026-04-17T16:37:08.983Z",
+      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86"
     }
   },
-  "lastUpdated": "2026-04-17T16:21:35.256Z"
+  "lastUpdated": "2026-04-17T16:37:09.606Z"
 }

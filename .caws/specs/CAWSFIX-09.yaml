@@ -1,0 +1,87 @@
+id: CAWSFIX-09
+type: fix
+title: Validator accepts modern acceptance_criteria shape as an alias (D1)
+status: active
+risk_tier: 2
+mode: development
+created_at: '2026-04-17T16:37:05.400Z'
+updated_at: '2026-04-17T16:37:05.400Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/validation/spec-validation
+    - packages/caws-cli/src/commands/specs
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/validation/spec-validation.js
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/tests/validation/spec-validation.test.js
+    - packages/caws-cli/tests/validation/acceptance-criteria-alias.test.js
+    - .caws/specs/CAWSFIX-09.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - .caws/working-spec.schema.json
+    - packages/caws-cli/templates/.caws/schemas/
+    - .caws/policy.yaml
+    - .caws/waivers/
+invariants:
+  - A spec with only `acceptance_criteria:` (no `acceptance:`) passes the semantic validator when its criteria are well-formed
+  - A spec with only `acceptance:` (legacy shape) continues to pass — no regression
+  - >-
+    A spec with both keys present picks `acceptance` as the source of truth (primary); `acceptance_criteria`
+    is ignored for validation purposes; and no duplicate-key error is emitted
+  - >-
+    The JSON schema warnings may still flag `acceptance_criteria` as an unknown property (schema work is
+    CAWSFIX-08, not this spec) — but the semantic validator does not fail
+  - >-
+    `normalizeSpecForValidation` already performs this aliasing; CAWSFIX-09 ensures ALL validator entry
+    points use the normalized spec before running semantic checks
+acceptance:
+  - id: A1
+    given: >-
+      A spec file with `acceptance_criteria:` (list of {id, description, test_nodeids, status}) and no
+      top-level `acceptance:` key, matching the shape Sterling's P03-IMPL-01 uses
+    when: '`caws validate --spec-id <id>` is run'
+    then: >-
+      The "Missing required field: acceptance" error does NOT appear. The "No acceptance criteria defined"
+      warning does NOT appear. Validation either passes or fails on an unrelated reason (e.g. ID regex).
+  - id: A2
+    given: A spec with `acceptance:` (legacy shape, list of {id, given, when, then})
+    when: '`caws validate --spec-id <id>` is run'
+    then: >-
+      Behavior is unchanged from before CAWSFIX-09 — the legacy shape continues to validate. Regression check:
+      every spec under .caws/specs/ using `acceptance:` still passes.
+  - id: A3
+    given: A spec with BOTH `acceptance:` and `acceptance_criteria:` populated and different (e.g. acceptance has 3 items, acceptance_criteria has 5)
+    when: Validator runs
+    then: >-
+      `acceptance:` is the source of truth (3 items counted). No error, no warning about the duplicate.
+      `acceptance_criteria:` is ignored by the semantic validator. This is documented as the precedence rule.
+  - id: A4
+    given: A spec with `acceptance_criteria:` where each item has `{id, description, status}` (modern shape, no given/when/then)
+    when: Validator runs
+    then: >-
+      Semantic validator does not require each item to have given/when/then fields (the modern shape uses
+      `description` + `test_nodeids` instead). The old per-item {id, given, when, then} check applies only
+      when the source shape is legacy `acceptance`.
+  - id: A5
+    given: Sterling repo's P03-IMPL-01 reproduction from turn-023 defect ledger D1
+    when: '`caws validate --spec-id P03-IMPL-01` is run after this fix ships'
+    then: >-
+      The "Missing required field: acceptance" and "No acceptance criteria defined" lines no longer appear.
+      Other validator output (ID regex, budget derivation) may still emit until CAWSFIX-07/10 land.
+  - id: A6
+    given: The existing test suite before this change
+    when: '`cd packages/caws-cli && npx jest validation` is run'
+    then: No pre-existing test regresses. New tests in acceptance-criteria-alias.test.js cover A1-A4.
+non_functional:
+  perf:
+    api_p95_ms: 50
+  a11y: []
+  security:
+    - No new parsing surface; acceptance_criteria was already read by normalizeSpecForValidation
+contracts: []
+worktree: cawsfix-09
