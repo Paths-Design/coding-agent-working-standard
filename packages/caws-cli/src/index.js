@@ -569,6 +569,15 @@ waiversCmd
   .option('-v, --verbose', 'Show detailed error information', false)
   .action((id, options) => waiversCommand('revoke', { ...options, id }));
 
+waiversCmd
+  .command('prune')
+  .description('Prune expired waivers (dry-run by default; use --apply to persist)')
+  .option('--expired', 'Prune active waivers whose expires_at is in the past')
+  .option('--apply', 'Actually transition status (default: dry run)')
+  .option('--json', 'Emit machine-readable JSON output')
+  .option('-v, --verbose', 'Show detailed error information', false)
+  .action((options) => waiversCommand('prune', options));
+
 // Workflow command group
 program
   .command('workflow <type>')

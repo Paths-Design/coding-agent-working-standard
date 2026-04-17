@@ -66,10 +66,12 @@ async function waiversCommand(subcommand = 'list', options = {}) {
           return await showWaiver(options.id, options);
         case 'revoke':
           return await revokeWaiver(options.id, options);
+        case 'prune':
+          return await pruneWaivers(options);
         default:
           throw new Error(
             `Unknown waiver subcommand: ${subcommand}.\n` +
-            'Available subcommands: create, list, show, revoke'
+            'Available subcommands: create, list, show, revoke, prune'
           );
       }
     },
@@ -403,6 +405,147 @@ async function revokeWaiver(waiverId, options) {
   console.log(`   Revoked at: ${waiver.revoked_at}`);
   console.log(`   Revoked by: ${waiver.revoked_by}`);
   console.log(`   Reason: ${waiver.revocation_reason}\n`);
+}
+
+/**
+ * Prune expired waivers.
+ *
+ * Behavior per CAWSFIX-04 AC3-A6:
+ *   --expired            : dry run — list prunable waivers, no disk changes,
+ *                          no events emitted. Exit 0.
+ *   --expired --apply    : transition each prunable waiver from
+ *                          `status: active` to `status: expired` in place
+ *                          (file is updated, NOT deleted, to preserve the
+ *                          audit trail) and append a `waiver_pruned` event
+ *                          to the event log for each.
+ *
+ * A waiver is "prunable" iff `status === 'active'` AND `expires_at < now`.
+ * Waivers already `expired` or `revoked` are untouched (A4). Non-expired
+ * active waivers are untouched (A5). Empty registries exit 0 with a
+ * friendly message (A6).
+ *
+ * @param {object} options
+ * @param {boolean} [options.expired] — currently the only prune criterion
+ * @param {boolean} [options.apply] — if false, dry-run (default)
+ * @param {boolean} [options.json] — machine-readable output
+ */
+async function pruneWaivers(options = {}) {
+  if (!options.expired) {
+    console.error(chalk.red('\n`caws waivers prune` requires --expired\n'));
+    console.log(chalk.yellow('Usage: caws waivers prune --expired [--apply]\n'));
+    process.exit(1);
+  }
+
+  const waiversManager = new WaiversManager();
+
+  // Fast path: no waivers directory or no waiver files at all.
+  const allWaivers = waiversManager.enumerateWaiverFiles();
+  if (allWaivers.length === 0) {
+    const msg = 'No active waivers to check.';
+    if (options.json) {
+      console.log(JSON.stringify({ status: 'ok', pruned: [], message: msg }));
+    } else {
+      console.log(chalk.yellow(`\n${msg}\n`));
+    }
+    return { pruned: [], applied: false };
+  }
+
+  const candidates = waiversManager.findExpiredWaivers();
+
+  // No prunable waivers — report and return.
+  if (candidates.length === 0) {
+    const msg = 'No expired waivers to prune.';
+    if (options.json) {
+      console.log(JSON.stringify({ status: 'ok', pruned: [], message: msg }));
+    } else {
+      console.log(chalk.green(`\n${msg}\n`));
+    }
+    return { pruned: [], applied: false };
+  }
+
+  const apply = Boolean(options.apply);
+
+  if (!apply) {
+    // Dry run — report only, no disk changes, no events.
+    if (options.json) {
+      console.log(
+        JSON.stringify({
+          status: 'dry_run',
+          applied: false,
+          pruned: candidates.map((c) => ({ id: c.id, expires_at: c.expires_at })),
+        })
+      );
+    } else {
+      console.log(chalk.yellow(`\nDry run — ${candidates.length} waiver(s) would be pruned:\n`));
+      candidates.forEach((c) => {
+        console.log(`  ${chalk.bold(c.id)}  expired at ${c.expires_at}`);
+      });
+      console.log(chalk.dim('\nRe-run with --apply to transition status to expired.\n'));
+    }
+    return { pruned: candidates, applied: false };
+  }
+
+  // Apply path — transition each file and emit events.
+  const { appendEvent } = require('../utils/event-log');
+  const pruned = [];
+  const failures = [];
+
+  for (const c of candidates) {
+    try {
+      const updated = waiversManager.markWaiverExpired(c.path);
+
+      // Emit waiver_pruned event. spec_id is optional for this event
+      // (waivers may or may not be tied to a spec). Using the waiver's
+      // applies_to field when available, otherwise omitting.
+      const spec_id =
+        updated && typeof updated.applies_to === 'string' && updated.applies_to.trim() !== ''
+          ? updated.applies_to
+          : undefined;
+
+      await appendEvent({
+        actor: 'cli',
+        event: 'waiver_pruned',
+        spec_id,
+        data: {
+          waiver_id: c.id,
+          expires_at: c.expires_at,
+          previous_status: 'active',
+          new_status: 'expired',
+        },
+      });
+
+      pruned.push({ id: c.id, expires_at: c.expires_at });
+    } catch (err) {
+      failures.push({ id: c.id, error: err.message });
+    }
+  }
+
+  if (options.json) {
+    console.log(
+      JSON.stringify({
+        status: failures.length === 0 ? 'ok' : 'partial',
+        applied: true,
+        pruned,
+        failures,
+      })
+    );
+  } else {
+    console.log(
+      chalk.green(`\nPruned ${pruned.length} expired waiver(s):\n`)
+    );
+    pruned.forEach((p) => {
+      console.log(`  ${chalk.bold(p.id)}  (was expired at ${p.expires_at})`);
+    });
+    if (failures.length > 0) {
+      console.log(chalk.red(`\n${failures.length} failure(s):\n`));
+      failures.forEach((f) => {
+        console.log(`  ${chalk.bold(f.id)}: ${f.error}`);
+      });
+    }
+    console.log();
+  }
+
+  return { pruned, applied: true, failures };
 }
 
 /**

@@ -276,6 +276,90 @@ class WaiversManager {
   }
 
   /**
+   * Enumerate individual waiver files (WV-XXXX.yaml) on disk and return
+   * their parsed contents. These files are the source of truth per the
+   * CAWSFIX-04 invariants; active-waivers.yaml is an aggregate index.
+   *
+   * @returns {Array<{id: string, path: string, data: object}>}
+   */
+  enumerateWaiverFiles() {
+    const out = [];
+    if (!fs.existsSync(this.waiversDir)) return out;
+
+    const files = fs.readdirSync(this.waiversDir);
+    for (const file of files) {
+      const match = file.match(/^(WV-\d{4})\.yaml$/);
+      if (!match) continue;
+
+      const filePath = path.join(this.waiversDir, file);
+      let data;
+      try {
+        data = yaml.load(fs.readFileSync(filePath, 'utf8'));
+      } catch (err) {
+        // Skip unparseable files; do not swallow — warn the caller.
+        console.warn(`Warning: could not parse ${file}: ${err.message}`);
+        continue;
+      }
+      if (data && typeof data === 'object') {
+        out.push({ id: match[1], path: filePath, data });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Identify waivers that are candidates for expiry-based pruning.
+   * A waiver is prunable iff `status === 'active'` AND
+   * `expires_at < now`. Already-expired or revoked waivers are skipped
+   * (their status is correct; pruning wouldn't change anything).
+   *
+   * @param {Date} [nowOverride] — inject clock for tests
+   * @returns {Array<{id: string, path: string, expires_at: string}>}
+   */
+  findExpiredWaivers(nowOverride) {
+    const now = nowOverride instanceof Date ? nowOverride : new Date();
+    const records = this.enumerateWaiverFiles();
+    const candidates = [];
+
+    for (const rec of records) {
+      const w = rec.data;
+      const status = w.status;
+      // Only active waivers are prunable. Waivers with no status field are
+      // treated as active (matches existing loadActiveWaivers() assumption).
+      if (status && status !== 'active') continue;
+      if (!w.expires_at) continue;
+
+      const expiresAt = new Date(w.expires_at);
+      if (!Number.isFinite(expiresAt.getTime())) continue; // malformed date
+      if (expiresAt < now) {
+        candidates.push({
+          id: rec.id,
+          path: rec.path,
+          expires_at: w.expires_at,
+        });
+      }
+    }
+    return candidates;
+  }
+
+  /**
+   * Transition a single waiver file from `status: active` to
+   * `status: expired` in place. The file is rewritten with its existing
+   * field order where possible; a `status` field is added or replaced.
+   *
+   * @param {string} filePath
+   * @returns {object} the updated waiver object
+   */
+  markWaiverExpired(filePath) {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const data = yaml.load(raw) || {};
+    data.status = 'expired';
+    data.expired_at = new Date().toISOString();
+    fs.writeFileSync(filePath, yaml.dump(data, { lineWidth: -1 }), 'utf8');
+    return data;
+  }
+
+  /**
    * Revoke a waiver
    */
   async revokeWaiver(waiverId, reason = 'Manual revocation') {
