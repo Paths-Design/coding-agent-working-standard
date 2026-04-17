@@ -32,7 +32,8 @@
       "specId": "CAWSFIX-05",
       "owner": null,
       "createdAt": "2026-04-17T15:43:56.254Z",
-      "status": "active"
+      "status": "destroyed",
+      "destroyedAt": "2026-04-17T16:00:56.740Z"
     },
     "cawsfix-06": {
       "name": "cawsfix-06",
