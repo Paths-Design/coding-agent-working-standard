@@ -1,4 +1,4 @@
-## [Unreleased]
+## [10.1.0] (2026-04-17)
 
 ### Features
 
@@ -29,6 +29,7 @@
 ### Chores
 
 * **.gitignore:** ignore `.caws/agents.json` (per-CLI-invocation session state, not versioned — CAWSFIX-15)
+* **tests:** align test fixtures with post-CAWSFIX schema requirements (data_migration, non_functional, MCP removal, worktree binding)
 
 ## [10.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.0.0...v10.0.1) (2026-04-02)
 
