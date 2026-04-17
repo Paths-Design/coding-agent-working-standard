@@ -1,0 +1,75 @@
+id: CAWSFIX-15
+type: fix
+title: Hygiene — gitignore agents.json + one-line spec close diff (D8/D9)
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-17T19:45:00.000Z'
+updated_at: '2026-04-17T19:45:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/specs
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 3
+  max_loc: 40
+scope:
+  in:
+    - .gitignore
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/tests/specs-close-diff.test.js
+    - .caws/specs/CAWSFIX-15.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/budget-derivation.js
+    - packages/caws-cli/src/utils/schema-validator.js
+invariants:
+  - >-
+    `.caws/agents.json` is gitignored at the repo root and at every
+    nested path (no matter which project caws is installed in).
+  - >-
+    `caws specs close <id>` on an otherwise-unchanged spec produces a
+    single-line diff on the `status:` line (plus a single-line diff
+    on `updated_at:` for lifecycle accuracy).
+  - >-
+    Specs whose close would require structural reshape (missing fields,
+    drift from schema) still route through the full updateSpec path —
+    the fast path only applies to pure status flips.
+  - The registry (`.caws/specs/registry.json`) is still updated with the
+    new status and updated_at for consumers that rely on the cached view.
+acceptance:
+  - id: A1
+    given: A spec file with `status: active` and no other pending changes
+    when: `closeSpec(id)` runs and succeeds
+    then: >-
+      The only lines that change in the YAML are `status:` (active → closed)
+      and `updated_at:`. Field order, comments, and YAML anchors are preserved.
+  - id: A2
+    given: An already-closed spec
+    when: `closeSpec(id)` runs
+    then: It short-circuits at the existing "already closed" branch — no diff.
+  - id: A3
+    given: The registry after a successful close
+    when: `loadSpecsRegistry()` is called
+    then: >-
+      `registry.specs[id].status === 'closed'` and the `updated_at` matches
+      the timestamp just written to the YAML file.
+  - id: A4
+    given: `.caws/agents.json` is generated during a CLI invocation
+    when: `git status` runs
+    then: The file does not appear as untracked.
+  - id: A5
+    given: The existing specs test suite before this change
+    when: '`npx jest specs` runs'
+    then: No pre-existing test regresses.
+non_functional:
+  perf:
+    api_p95_ms: 5
+  a11y: []
+  security:
+    - Line-replace uses an anchored regex on the canonical `status:` line only
+contracts: []

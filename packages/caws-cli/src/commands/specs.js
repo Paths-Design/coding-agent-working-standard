@@ -874,7 +874,27 @@ async function closeSpec(id) {
     return false;
   }
 
-  const ok = await updateSpec(id, { status: 'closed' });
+  // CAWSFIX-15: status-only flip uses targeted line-replace so the diff
+  // stays a single line. Full `updateSpec` reserializes the whole YAML,
+  // reordering fields and injecting `*ref_0` anchors for the
+  // acceptance/acceptance_criteria alias — ~20 lines of noise for what
+  // should be a one-word change.
+  const specPath = path.join(getSpecsDir(), registry.specs[id].path);
+  const original = await fs.readFile(specPath, 'utf8');
+  const nowIso = new Date().toISOString();
+  let patched = original.replace(/^status:\s*\S+\s*$/m, 'status: closed');
+  patched = patched.replace(/^updated_at:.*$/m, `updated_at: '${nowIso}'`);
+  let ok = false;
+  if (patched !== original) {
+    await fs.writeFile(specPath, patched);
+    registry.specs[id] = {
+      ...registry.specs[id],
+      status: 'closed',
+      updated_at: nowIso,
+    };
+    await saveSpecsRegistry(registry);
+    ok = true;
+  }
 
   // EVLOG-001: emit spec_closed event after the status update succeeds.
   // Records the prior status so the renderer can reconstruct the lifecycle.

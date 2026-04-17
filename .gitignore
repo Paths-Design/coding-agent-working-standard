@@ -453,6 +453,10 @@ public
 **/.caws/state/
 .caws/duplication-cache.json
 
+# CAWSFIX-15: agent-session tracking is per-CLI-invocation state, not repo state
+.caws/agents.json
+**/.caws/agents.json
+
 # EVLOG-001: append-only event log — runtime, not versioned
 **/.caws/events.jsonl
 **/.caws/events.jsonl.lock
