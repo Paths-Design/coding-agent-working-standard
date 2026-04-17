@@ -6,12 +6,15 @@ set -e
 
 echo "🔍 Running CAWS verification pipeline..."
 
-# Validate working specification
-if [ -f ".caws/validate.js" ]; then
+# Validate working specification via bundled CAWS CLI
+# CAWSFIX-12: replaces the deleted `.caws/validate.js` (removed in CAWSFIX-03).
+# Validation now comes from `caws validate` (the bundled CLI) which uses the
+# same JSON Schema + spec-completeness gate that the git hooks and CI use.
+if command -v caws >/dev/null 2>&1; then
   echo "📋 Validating working specification..."
-  node .caws/validate.js .caws/working-spec.yaml || exit 1
+  caws validate || exit 1
 else
-  echo "⚠️  CAWS validation not available - skipping"
+  echo "⚠️  caws CLI not installed - skipping validation (install: npm i -g @paths.design/caws-cli)"
 fi
 
 # Run type checking
