@@ -1035,9 +1035,31 @@ function destroyWorktree(name, options = {}) {
   }
 
   // Update registry
+  const wasAlreadyDestroyed = registry.worktrees[name].status === 'destroyed';
   registry.worktrees[name].status = 'destroyed';
   registry.worktrees[name].destroyedAt = new Date().toISOString();
   saveRegistry(root, registry);
+
+  // CAWSFIX-18: auto-commit the registry so the working tree stays clean
+  if (!wasAlreadyDestroyed) {
+    try {
+      const status = execFileSync('git', ['status', '--porcelain', '.caws/worktrees.json'], {
+        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+      }).toString().trim();
+      if (status) {
+        const otherActive = Object.values(registry.worktrees || {}).some(
+          (e) => e.status === 'active' || e.status === 'fresh'
+        );
+        const prefix = otherActive ? 'wip(checkpoint)' : 'chore(worktree)';
+        execFileSync('git', ['add', '.caws/worktrees.json'], { cwd: root, stdio: 'pipe' });
+        execFileSync('git', ['commit', '-m', `${prefix}: record destroyed ${name}`], {
+          cwd: root, stdio: 'pipe',
+        });
+      }
+    } catch (err) {
+      console.warn(chalk.yellow(`   Warning: could not auto-commit .caws/worktrees.json: ${err.message}`));
+    }
+  }
 }
 
 /**

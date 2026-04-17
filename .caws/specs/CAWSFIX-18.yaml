@@ -1,0 +1,73 @@
+id: CAWSFIX-18
+type: fix
+title: Auto-commit .caws/worktrees.json after destroyWorktree
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-17T23:00:00.000Z'
+updated_at: '2026-04-17T23:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 2
+  max_loc: 40
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/tests/worktree-destroy-commit.test.js
+    - .caws/specs/CAWSFIX-18.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/specs.js
+invariants:
+  - >-
+    destroyWorktree leaves the working tree clean for .caws/worktrees.json
+    when the destroy itself succeeds. Other dirty files in the tree are
+    untouched (only .caws/worktrees.json is staged).
+  - >-
+    The auto-commit never causes destroyWorktree to throw. If git add or
+    commit fails (hook rejection, detached HEAD), the destroy still
+    succeeds and a warning is logged to stderr.
+  - >-
+    No empty commit is created when saveRegistry was a no-op (idempotent
+    destroy of an already-destroyed worktree).
+acceptance:
+  - id: A1
+    given: "An active worktree registered in .caws/worktrees.json (the only one)"
+    when: destroyWorktree(name) completes
+    then: >-
+      git status --porcelain .caws/worktrees.json returns empty string.
+  - id: A2
+    given: "A git commit that fails during auto-commit (e.g., hook rejects)"
+    when: destroyWorktree reaches the commit step
+    then: >-
+      The destroy still succeeds, the registry is updated on disk, and a
+      warning is logged. No exception propagates.
+  - id: A3
+    given: "A worktree already marked destroyed (idempotent destroy)"
+    when: destroyWorktree is invoked twice in a row
+    then: >-
+      The second invocation does not create an empty commit.
+  - id: A4
+    given: "The auto-commit logic"
+    when: it stages files
+    then: >-
+      Only .caws/worktrees.json is passed to git add — never -A, never any
+      other path.
+  - id: A5
+    given: "Other active worktrees exist besides the one being destroyed"
+    when: destroyWorktree auto-commits
+    then: >-
+      The commit message uses wip(checkpoint) format (allowed by hook during
+      active worktrees), not chore(worktree).
+non_functional:
+  perf:
+    api_p95_ms: 200
+  a11y: []
+  security:
+    - Only .caws/worktrees.json is staged; no other file paths are passed to git add
+contracts: []
