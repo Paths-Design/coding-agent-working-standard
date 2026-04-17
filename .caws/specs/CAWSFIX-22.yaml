@@ -1,0 +1,60 @@
+id: CAWSFIX-22
+type: fix
+title: Migrate gates.test.js + gates-cli.test.js policy fixtures (post-CAWSFIX-20)
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-18T00:15:00.000Z'
+updated_at: '2026-04-18T00:15:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 2
+  max_loc: 40
+scope:
+  in:
+    - packages/caws-cli/tests/gates.test.js
+    - packages/caws-cli/tests/integration/gates-cli.test.js
+    - .caws/specs/CAWSFIX-22.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/
+    - packages/caws-cli/templates/
+invariants:
+  - >-
+    Test policy fixtures in gates.test.js and gates-cli.test.js include
+    an edit_rules object matching the required schema shape.
+  - No production code changes; test fixtures only.
+  - >-
+    The pre-existing assertions in these suites still fire against the
+    same policy semantics — adding edit_rules doesn't shift the meaning
+    of any individual test.
+acceptance:
+  - id: A1
+    given: "The gates.test.js suite after this change"
+    when: "`npx jest gates.test.js --no-coverage` runs"
+    then: >-
+      All tests pass. The pipeline > evaluateGates tests (6 previously
+      failing) produce report.passed === true.
+  - id: A2
+    given: "The gates-cli.test.js suite after this change"
+    when: "`npx jest integration/gates-cli --no-coverage` runs"
+    then: >-
+      All tests pass.
+  - id: A3
+    given: "The diff for this change"
+    when: "inspected"
+    then: >-
+      Only test files are modified. No files under packages/caws-cli/src/
+      or packages/caws-cli/templates/ are touched.
+non_functional:
+  perf:
+    api_p95_ms: 5
+  a11y: []
+  security:
+    - Test-only change; no attack surface
+contracts: []

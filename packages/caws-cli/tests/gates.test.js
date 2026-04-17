@@ -25,6 +25,9 @@ const specCompleteness = require('../src/gates/spec-completeness');
 const yaml = require('js-yaml');
 const { createTemplateRepo, cloneFixture, cleanupTemplate } = require('./helpers/git-fixture');
 
+// CAWSFIX-22: policy schema requires edit_rules; shared fixture for test policies
+const EDIT_RULES = { policy_and_code_same_pr: false, min_approvers_for_budget_raise: 2 };
+
 // Shared git template for gates that need real git repos
 let _gatesGitTemplate = null;
 
@@ -84,6 +87,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           scope_boundary: { enabled: true, mode: 'warn' },
         },
@@ -116,6 +120,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           scope_boundary: { enabled: true, mode: 'block' },
         },
@@ -147,6 +152,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           scope_boundary: { enabled: false, mode: 'block' },
           god_object: { enabled: true, mode: 'warn' },
@@ -181,6 +187,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           todo_detection: { enabled: true, mode: 'skip' },
         },
@@ -210,6 +217,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           nonexistent_gate: { enabled: true, mode: 'warn' },
         },
@@ -241,6 +249,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           nonexistent_gate: { enabled: true, mode: 'block' },
         },
@@ -276,6 +285,7 @@ describe('pipeline', () => {
           2: { max_files: 50, max_loc: 2000 },
           3: { max_files: 100, max_loc: 5000 },
         },
+        edit_rules: EDIT_RULES,
         gates: {
           scope_boundary: { enabled: true, mode: 'block' },
         },
@@ -402,6 +412,7 @@ describe('budget-limit gate', () => {
         2: { max_files: 50, max_loc: 2000 },
         3: { max_files: 100, max_loc: 5000 },
       },
+      edit_rules: EDIT_RULES,
     };
     fs.writeFileSync(
       path.join(repoDir, '.caws', 'policy.yaml'),
@@ -461,6 +472,7 @@ describe('budget-limit gate', () => {
     const policy = {
       version: 1,
       risk_tiers: { 1: { max_files: 25, max_loc: 1000 }, 2: { max_files: 50, max_loc: 2000 }, 3: { max_files: 100, max_loc: 5000 } },
+      edit_rules: EDIT_RULES,
     };
     fs.writeFileSync(path.join(nonGitDir, '.caws', 'policy.yaml'), yaml.dump(policy));
 

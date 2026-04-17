@@ -13,6 +13,9 @@ const { createTemplateRepo, cloneFixture, cleanupTemplate } = require('../helper
 
 const cliPath = path.join(__dirname, '../../src/index.js');
 
+// CAWSFIX-22: policy schema requires edit_rules; shared fixture for test policies
+const EDIT_RULES = { policy_and_code_same_pr: false, min_approvers_for_budget_raise: 2 };
+
 /**
  * Build a minimal schema-valid working-spec.yaml object.
  * The v10 schema requires id, title, risk_tier, mode, blast_radius,
@@ -59,6 +62,7 @@ function createTestProject(overrides = {}) {
       2: { max_files: 50, max_loc: 2000 },
       3: { max_files: 100, max_loc: 5000 },
     },
+    edit_rules: EDIT_RULES,
     gates: {
       scope_boundary: { enabled: true, mode: 'warn' },
       budget_limit: { enabled: true, mode: 'warn' },
@@ -188,6 +192,7 @@ describe('gates CLI integration', () => {
             2: { max_files: 5, max_loc: 100 },
             3: { max_files: 100, max_loc: 5000 },
           },
+          edit_rules: EDIT_RULES,
           gates: {
             budget_limit: { enabled: true, mode: 'block' },
           },
@@ -303,6 +308,7 @@ describe('gates CLI integration', () => {
             2: { max_files: 50, max_loc: 2000 },
             3: { max_files: 100, max_loc: 5000 },
           },
+          edit_rules: EDIT_RULES,
           gates: {
             scope_boundary: { enabled: true, mode: 'block' },
           },

@@ -68,12 +68,17 @@
               "type": "boolean",
               "description": "Whether this gate is active"
             },
+            "mode": {
+              "type": "string",
+              "enum": ["warn", "block", "skip"],
+              "description": "How the gate reports failures: warn, block, or skip entirely"
+            },
             "description": {
               "type": "string",
               "description": "Human-readable description of the gate"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         }
       },
       "additionalProperties": false,
