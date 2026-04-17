@@ -1,0 +1,36 @@
+version: 1
+base_branch: main
+merge_strategy: merge
+agents:
+  - name: cawsfix-07
+    spec_id: CAWSFIX-07
+    role: worker
+    intent: Budget derivation no-ops cleanly when spec has no change_budget (D4)
+    scope: |
+      packages/caws-cli/src/budget-derivation.js
+      packages/caws-cli/tests/validation/budget-derivation-async.test.js
+      packages/caws-cli/tests/budget-derivation-absent-spec.test.js
+
+  - name: cawsfix-11
+    spec_id: CAWSFIX-11
+    role: worker
+    intent: scope.schema.json version optional on inline blocks (D3)
+    scope: |
+      packages/caws-cli/templates/.caws/schemas/scope.schema.json
+      packages/caws-cli/tests/lite-scope.test.js
+      packages/caws-cli/tests/validation/scope-version-optional.test.js
+
+  - name: cawsfix-09-10
+    spec_id: CAWSFIX-09
+    role: worker
+    intent: >-
+      Combined validator fix — acceptance_criteria alias (D1, CAWSFIX-09) and
+      multi-segment spec-ID regex (D2, CAWSFIX-10). Both edit spec-validation.js
+      so they ship as one worktree with two commits.
+    scope: |
+      packages/caws-cli/src/validation/spec-validation.js
+      packages/caws-cli/src/commands/specs.js
+      packages/caws-cli/src/commands/init.js
+      packages/caws-cli/tests/validation/spec-validation.test.js
+      packages/caws-cli/tests/validation/acceptance-criteria-alias.test.js
+      packages/caws-cli/tests/validation/spec-id-regex.test.js
