@@ -1,11 +1,7 @@
-id: EVLOG-002
 type: feature
-title: Event log reads — flip iterate/status/sidecar/gates to the renderer (Phase 2)
-status: active
+status: closed
 risk_tier: 3
 mode: development
-created_at: '2026-04-11T00:27:05.215Z'
-updated_at: '2026-04-11T00:27:05.215Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/commands/iterate
@@ -37,61 +33,84 @@ scope:
     - packages/caws-cli/src/commands/specs.js
     - packages/caws-cli/src/session/session-manager.js
 invariants:
-  - State layer (working-state.js) writes continue unchanged — Phase 2 is read-only
-  - recordGates write at gates.js stays on the state layer; only the feedback-enrichment loadState call flips
-  - loadStateFromEvents returns null for specs with zero matching events, matching loadState's contract exactly
   - >-
-    Every consumer produces byte-identical output whether it reads from loadState or loadStateFromEvents (given the same
-    event stream + state)
+    State layer (working-state.js) writes continue unchanged — Phase 2 is
+    read-only
   - >-
-    Deleting .caws/state/<spec-id>.json between runs does not change any consumer's output, because the event log alone
-    is sufficient
-acceptance:
+    recordGates write at gates.js stays on the state layer; only the
+    feedback-enrichment loadState call flips
+  - >-
+    loadStateFromEvents returns null for specs with zero matching events,
+    matching loadState's contract exactly
+  - >-
+    Every consumer produces byte-identical output whether it reads from
+    loadState or loadStateFromEvents (given the same event stream + state)
+  - >-
+    Deleting .caws/state/<spec-id>.json between runs does not change any
+    consumer's output, because the event log alone is sufficient
+acceptance: &ref_0
   - id: A1
     given: A spec with events but no .caws/state/ file
     when: iterate --spec-id X --current-state "test" is run
     then: >-
-      The command produces the same guidance it would produce with the state file present, and the workingState overlay
-      correctly reflects validation/evaluation/gates evidence from the event log
+      The command produces the same guidance it would produce with the state
+      file present, and the workingState overlay correctly reflects
+      validation/evaluation/gates evidence from the event log
   - id: A2
-    given: A spec with a full observation pipeline (validate/evaluate/verify-acs/gates) recorded in the event log
+    given: >-
+      A spec with a full observation pipeline
+      (validate/evaluate/verify-acs/gates) recorded in the event log
     when: status --spec-id X is run
     then: >-
-      Phase, validation grade, evaluation percentage, gates context, AC counts, and files_touched all match what the
-      state-layer read would produce
+      Phase, validation grade, evaluation percentage, gates context, AC counts,
+      and files_touched all match what the state-layer read would produce
   - id: A3
     given: A spec with events recorded
     when: sidecar drift gaps and waiver-draft subcommands are run
-    then: Each subcommand produces identical output under event-log reads and state-layer reads
+    then: >-
+      Each subcommand produces identical output under event-log reads and
+      state-layer reads
   - id: A4
     given: A spec with events recorded
     when: gates run is invoked
     then: >-
-      The feedback enrichment at gates.js:116 surfaces the same blockers and next_actions as the state-layer read, and
-      the recordGates write at ~85 is unchanged (still uses the state layer)
+      The feedback enrichment at gates.js:116 surfaces the same blockers and
+      next_actions as the state-layer read, and the recordGates write at ~85 is
+      unchanged (still uses the state layer)
   - id: A5
     given: A fresh project with no events.jsonl and no state file
     when: loadStateFromEvents('NONEXISTENT') is called
     then: >-
-      It returns null (not emptyView), matching loadState's contract exactly so status.js:1055's `|| null` coalesce
-      remains a no-op
+      It returns null (not emptyView), matching loadState's contract exactly so
+      status.js:1055's `|| null` coalesce remains a no-op
   - id: A6
-    given: A spec that has been fully exercised through validate/evaluate/verify-acs/gates
-    when: .caws/state/<spec-id>.json is deleted and each consumer command (iterate/status/sidecar/gates) is re-run
+    given: >-
+      A spec that has been fully exercised through
+      validate/evaluate/verify-acs/gates
+    when: >-
+      .caws/state/<spec-id>.json is deleted and each consumer command
+      (iterate/status/sidecar/gates) is re-run
     then: >-
-      Every consumer produces output identical to the pre-delete output, proving the event log alone is sufficient as a
-      source of truth
+      Every consumer produces output identical to the pre-delete output, proving
+      the event log alone is sufficient as a source of truth
   - id: A7
     given: The full jest suite before and after this change
     when: The suite is run
     then: >-
-      No pre-existing test regresses beyond the 2 known pre-existing failures (spec-creation worktree-recording,
-      parallel-manager spec propagation)
+      No pre-existing test regresses beyond the 2 known pre-existing failures
+      (spec-creation worktree-recording, parallel-manager spec propagation)
+acceptance_criteria: *ref_0
 non_functional:
+  a11y: []
   perf:
     api_p95_ms: 50
-  a11y: []
   security:
-    - Phase 2 is read-only — no new writes, no new persisted surfaces. Read path already validated in EVLOG-001 Phase 1.
+    - >-
+      Phase 2 is read-only — no new writes, no new persisted surfaces. Read path
+      already validated in EVLOG-001 Phase 1.
 contracts: []
+id: EVLOG-002
+title: Event log reads — flip iterate/status/sidecar/gates to the renderer (Phase 2)
+created_at: '2026-04-11T00:27:05.215Z'
+updated_at: '2026-04-17T16:21:34.875Z'
 worktree: evlog-002

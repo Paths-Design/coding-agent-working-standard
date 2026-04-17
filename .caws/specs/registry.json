@@ -81,59 +81,59 @@
     "EVLOG-001": {
       "path": "EVLOG-001.yaml",
       "type": "feature",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-10T19:04:40.489Z",
-      "updated_at": "2026-04-10T19:04:40.489Z",
+      "updated_at": "2026-04-17T16:21:33.314Z",
       "owner": null
     },
     "EVLOG-002": {
       "path": "EVLOG-002.yaml",
       "type": "feature",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-11T00:27:05.215Z",
-      "updated_at": "2026-04-11T00:27:05.215Z",
+      "updated_at": "2026-04-17T16:21:34.875Z",
       "owner": null
     },
     "CAWSFIX-02": {
       "path": "CAWSFIX-02.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-11T01:05:33.438Z",
-      "updated_at": "2026-04-11T01:05:33.439Z",
+      "updated_at": "2026-04-17T16:21:31.765Z",
       "owner": null
     },
     "CAWSFIX-03": {
       "path": "CAWSFIX-03.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-17T15:40:11.009Z",
-      "updated_at": "2026-04-17T15:40:11.009Z",
+      "updated_at": "2026-04-17T16:21:21.285Z",
       "owner": null
     },
     "CAWSFIX-04": {
       "path": "CAWSFIX-04.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-17T15:40:12.192Z",
-      "updated_at": "2026-04-17T15:40:12.193Z",
+      "updated_at": "2026-04-17T16:21:27.181Z",
       "owner": null
     },
     "CAWSFIX-05": {
       "path": "CAWSFIX-05.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-17T15:40:13.357Z",
-      "updated_at": "2026-04-17T15:40:13.358Z",
+      "updated_at": "2026-04-17T16:21:28.697Z",
       "owner": null
     },
     "CAWSFIX-06": {
       "path": "CAWSFIX-06.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-17T15:40:14.514Z",
-      "updated_at": "2026-04-17T15:40:14.514Z",
+      "updated_at": "2026-04-17T16:21:30.258Z",
       "owner": null
     }
   },
-  "lastUpdated": "2026-04-17T15:40:15.010Z"
+  "lastUpdated": "2026-04-17T16:21:35.256Z"
 }

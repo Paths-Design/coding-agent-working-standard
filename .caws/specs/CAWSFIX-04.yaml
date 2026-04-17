@@ -1,11 +1,7 @@
-id: CAWSFIX-04
 type: fix
-title: Waiver hygiene — fix active-waivers.yaml schema drift and add prune command
-status: active
+status: closed
 risk_tier: 3
 mode: development
-created_at: '2026-04-17T15:40:12.192Z'
-updated_at: '2026-04-17T15:40:12.193Z'
 blast_radius:
   modules:
     - .caws/waivers
@@ -30,63 +26,90 @@ scope:
     - .caws/validate.js
     - .github/workflows/
 invariants:
-  - Individual waiver files (.caws/waivers/WV-*.yaml) remain untouched — they already conform to the schema
   - >-
-    After the fix, active-waivers.yaml is structurally valid against .caws/waiver.schema.json OR is replaced by a
-    derived/indexed structure with explicit schema
-  - '`caws waivers list` output is unchanged in human-readable form (field renames are internal)'
+    Individual waiver files (.caws/waivers/WV-*.yaml) remain untouched — they
+    already conform to the schema
+  - >-
+    After the fix, active-waivers.yaml is structurally valid against
+    .caws/waiver.schema.json OR is replaced by a derived/indexed structure with
+    explicit schema
+  - >-
+    `caws waivers list` output is unchanged in human-readable form (field
+    renames are internal)
   - '`caws waivers prune --expired` never deletes a non-expired waiver'
-  - '`caws waivers prune` without --apply is a dry run (reports what would be pruned, changes nothing on disk)'
-  - Pruning emits a `waiver_pruned` event per removed waiver (fits existing event-log vocabulary patterns)
-acceptance:
+  - >-
+    `caws waivers prune` without --apply is a dry run (reports what would be
+    pruned, changes nothing on disk)
+  - >-
+    Pruning emits a `waiver_pruned` event per removed waiver (fits existing
+    event-log vocabulary patterns)
+acceptance: &ref_0
   - id: A1
     given: >-
-      The current .caws/waivers/active-waivers.yaml which uses fields (approved_by, reason, risk_assessment, title) that
-      are not in the waiver schema
+      The current .caws/waivers/active-waivers.yaml which uses fields
+      (approved_by, reason, risk_assessment, title) that are not in the waiver
+      schema
     when: It is validated against .caws/waiver.schema.json using AJV
     then: >-
-      Before the fix, validation fails. After the fix, validation passes — either because the file is restructured to
-      match the schema (with `approvers` array, `reason_code`, `mitigation`) or because the file is removed and replaced
-      with a derived index whose schema is documented.
+      Before the fix, validation fails. After the fix, validation passes —
+      either because the file is restructured to match the schema (with
+      `approvers` array, `reason_code`, `mitigation`) or because the file is
+      removed and replaced with a derived index whose schema is documented.
   - id: A2
     given: The .caws/waivers/ directory with ~19 waiver files and active-waivers.yaml
     when: '`caws waivers list` is run'
     then: >-
-      The output is identical in content to the pre-fix output (same waiver IDs listed, same statuses), or any
-      differences are explicitly attributable to expired waivers being filtered out.
+      The output is identical in content to the pre-fix output (same waiver IDs
+      listed, same statuses), or any differences are explicitly attributable to
+      expired waivers being filtered out.
   - id: A3
     given: A mix of active, expired, and revoked waivers in the registry
     when: '`caws waivers prune --expired` is run without --apply'
     then: >-
-      The command prints (in text or JSON mode) which waiver IDs would be pruned, with their expiry dates, and makes no
-      changes to disk. Exit code 0.
+      The command prints (in text or JSON mode) which waiver IDs would be
+      pruned, with their expiry dates, and makes no changes to disk. Exit code
+      0.
   - id: A4
     given: The same registry
     when: '`caws waivers prune --expired --apply` is run'
     then: >-
-      Every waiver with `status: active` AND `expires_at < now` is transitioned to `status: expired` (the waiver file is
-      updated in place, not deleted) and a `waiver_pruned` event is appended to the event log for each. Files whose
-      status is already `expired` or `revoked` are untouched.
+      Every waiver with `status: active` AND `expires_at < now` is transitioned
+      to `status: expired` (the waiver file is updated in place, not deleted)
+      and a `waiver_pruned` event is appended to the event log for each. Files
+      whose status is already `expired` or `revoked` are untouched.
   - id: A5
     given: A waiver that is active and not yet expired
     when: '`caws waivers prune --expired --apply` is run'
-    then: The waiver is untouched (no file change, no event emitted, not in the reported list).
+    then: >-
+      The waiver is untouched (no file change, no event emitted, not in the
+      reported list).
   - id: A6
     given: No waivers exist in the project
     when: '`caws waivers prune --expired` is run'
-    then: Exits 0 with a message like "No active waivers to check." No event emitted.
+    then: >-
+      Exits 0 with a message like "No active waivers to check." No event
+      emitted.
   - id: A7
     given: The test suite before this change
     when: '`cd packages/caws-cli && npx jest` is run'
-    then: No pre-existing test regresses. New tests in waivers-prune.test.js cover A3-A6 above.
+    then: >-
+      No pre-existing test regresses. New tests in waivers-prune.test.js cover
+      A3-A6 above.
+acceptance_criteria: *ref_0
 non_functional:
+  a11y: []
   perf:
     api_p95_ms: 200
-  a11y: []
   security:
-    - Prune only modifies waiver status, never removes files from disk (preserves audit trail)
+    - >-
+      Prune only modifies waiver status, never removes files from disk
+      (preserves audit trail)
     - Event log entries prove when and why each waiver was marked expired
 contracts:
   - type: openapi
     path: .caws/waiver.schema.json
+id: CAWSFIX-04
+title: Waiver hygiene — fix active-waivers.yaml schema drift and add prune command
+created_at: '2026-04-17T15:40:12.192Z'
+updated_at: '2026-04-17T16:21:27.181Z'
 worktree: cawsfix-04

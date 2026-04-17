@@ -1,11 +1,7 @@
-id: CAWSFIX-06
 type: fix
-title: Small hardening — budget-gate skipped status, contracts warning, version signage
-status: active
+status: closed
 risk_tier: 3
 mode: development
-created_at: '2026-04-17T15:40:14.514Z'
-updated_at: '2026-04-17T15:40:14.514Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/gates/budget-limit
@@ -32,60 +28,77 @@ scope:
     - packages/caws-cli/package.json
 invariants:
   - >-
-    Budget gate in CLI context returns status "skipped" (not "pass") to match pipeline.js semantics for gates that did
-    not run
-  - Budget gate in commit/edit context remains unchanged (still counts staged files + LOC)
+    Budget gate in CLI context returns status "skipped" (not "pass") to match
+    pipeline.js semantics for gates that did not run
   - >-
-    Spec creation with mode=feature and contracts=[] (or missing) emits a warning to stderr but does NOT fail the
-    command
-  - Spec creation with mode in (fix, refactor, chore, doc) and contracts=[] is silent (no warning)
+    Budget gate in commit/edit context remains unchanged (still counts staged
+    files + LOC)
   - >-
-    README.md reports one consistent version (no drift between the top "What's New" section, the bottom footer, and
-    package.json)
+    Spec creation with mode=feature and contracts=[] (or missing) emits a
+    warning to stderr but does NOT fail the command
+  - >-
+    Spec creation with mode in (fix, refactor, chore, doc) and contracts=[] is
+    silent (no warning)
+  - >-
+    README.md reports one consistent version (no drift between the top "What's
+    New" section, the bottom footer, and package.json)
   - No existing test regresses
-acceptance:
+acceptance: &ref_0
   - id: A1
     given: A clean repo with a working spec
     when: '`caws gates run --context cli` is invoked'
     then: >-
-      The budget_limit gate appears in results with status "skipped" and a message explaining budgets apply to changes
-      not to full-repo scans. Pipeline summary counts it under `skipped`, not `passed`.
+      The budget_limit gate appears in results with status "skipped" and a
+      message explaining budgets apply to changes not to full-repo scans.
+      Pipeline summary counts it under `skipped`, not `passed`.
   - id: A2
     given: Staged files that exceed the configured budget
     when: '`caws gates run --context commit` is invoked'
     then: >-
-      The budget_limit gate returns "fail" with the violation message, exactly as it did before this change. Staged-file
-      counting logic is not regressed.
+      The budget_limit gate returns "fail" with the violation message, exactly
+      as it did before this change. Staged-file counting logic is not regressed.
   - id: A3
     given: >-
-      A new spec creation `caws specs create TEST-999 --type feature --title "X"` where the resulting spec has
-      contracts=[]
+      A new spec creation `caws specs create TEST-999 --type feature --title
+      "X"` where the resulting spec has contracts=[]
     when: The command runs
     then: >-
-      The spec file is created successfully (exit 0), and stderr contains a warning line mentioning that `mode=feature`
-      with empty `contracts` is discouraged and suggests running `caws specs update TEST-999` to add a contract. The
-      warning is not an error.
+      The spec file is created successfully (exit 0), and stderr contains a
+      warning line mentioning that `mode=feature` with empty `contracts` is
+      discouraged and suggests running `caws specs update TEST-999` to add a
+      contract. The warning is not an error.
   - id: A4
     given: '`caws specs create TEST-998 --type fix --title "X"` (non-feature mode)'
     when: The command runs
     then: No contracts-related warning is emitted.
   - id: A5
     given: >-
-      README.md before the change, which shows "v3.4.0" at top and "CAWS v9.0.0" at the bottom footer, while
-      packages/caws-cli/package.json reports 10.0.1
+      README.md before the change, which shows "v3.4.0" at top and "CAWS v9.0.0"
+      at the bottom footer, while packages/caws-cli/package.json reports 10.0.1
     when: A reader opens README.md
     then: >-
-      The version reference is consistent — either removed (preferred — CHANGELOG is the source of truth) or updated to
-      reference packages/caws-cli/package.json as the authoritative version. No two version strings in README disagree.
+      The version reference is consistent — either removed (preferred —
+      CHANGELOG is the source of truth) or updated to reference
+      packages/caws-cli/package.json as the authoritative version. No two
+      version strings in README disagree.
   - id: A6
     given: The test suite before the change
     when: '`cd packages/caws-cli && npx jest` is run'
     then: No pre-existing test regresses. New tests cover A1, A2, A3, A4.
+acceptance_criteria: *ref_0
 non_functional:
+  a11y: []
   perf:
     api_p95_ms: 50
-  a11y: []
   security:
-    - Warning text does not leak filesystem paths or spec contents beyond the spec ID
+    - >-
+      Warning text does not leak filesystem paths or spec contents beyond the
+      spec ID
 contracts: []
+id: CAWSFIX-06
+title: >-
+  Small hardening — budget-gate skipped status, contracts warning, version
+  signage
+created_at: '2026-04-17T15:40:14.514Z'
+updated_at: '2026-04-17T16:21:30.258Z'
 worktree: cawsfix-06

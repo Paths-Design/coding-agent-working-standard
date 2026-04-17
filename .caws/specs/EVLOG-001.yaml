@@ -1,11 +1,7 @@
-id: EVLOG-001
 type: feature
-title: Event log dual-write (Phase 1)
-status: active
+status: closed
 risk_tier: 3
 mode: development
-created_at: '2026-04-10T19:04:40.489Z'
-updated_at: '2026-04-10T19:04:40.489Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/utils/event-log
@@ -36,18 +32,20 @@ scope:
     - packages/caws-cli/dist/
     - packages/caws-cli/src/utils/working-state.js
 invariants:
-  - State layer continues to work unchanged during Phase 1 (dual-write, not cut-over)
+  - >-
+    State layer continues to work unchanged during Phase 1 (dual-write, not
+    cut-over)
   - Event log is append-only; no in-place edits after a record is committed
   - Events missing a required spec_id fail loudly — no silent writes
   - renderSpecState is a pure function with no filesystem or side effects
   - Hash chain is contiguous from genesis to tail
-acceptance:
+acceptance: &ref_0
   - id: A1
     given: A fresh project with no .caws/events.jsonl
     when: validate is run against a fixture spec
     then: >-
-      .caws/events.jsonl is created with a single validation_completed event at seq=1 with empty prev_hash and a
-      computed event_hash
+      .caws/events.jsonl is created with a single validation_completed event at
+      seq=1 with empty prev_hash and a computed event_hash
   - id: A2
     given: An existing .caws/events.jsonl with N events
     when: A new event is appended
@@ -56,33 +54,43 @@ acceptance:
     given: A spec that has been validated evaluated and gated
     when: renderSpecState events and spec id is called
     then: >-
-      The returned view is equivalent to loadState on the fields iterate consumes phase validation evaluation gates
-      acceptance_criteria blockers next_actions files_touched
+      The returned view is equivalent to loadState on the fields iterate
+      consumes phase validation evaluation gates acceptance_criteria blockers
+      next_actions files_touched
   - id: A4
     given: A call to appendEvent with an event type that requires spec_id
     when: spec_id is undefined or null or empty string
-    then: appendEvent throws a loud error naming the event type and the violated contract and no file write occurs
+    then: >-
+      appendEvent throws a loud error naming the event type and the violated
+      contract and no file write occurs
   - id: A5
     given: A spec that has been closed via specs close
     when: The event log is rendered
-    then: A spec_closed event is present with the prior status and renderSpecState returns phase closed for that spec
+    then: >-
+      A spec_closed event is present with the prior status and renderSpecState
+      returns phase closed for that spec
   - id: A6
     given: A session has started and ended
     when: The event log is rendered
     then: >-
-      session_started and session_ended events exist with matching session id and session_ended data includes the final
-      files_touched list
+      session_started and session_ended events exist with matching session id
+      and session_ended data includes the final files_touched list
   - id: A7
     given: The full jest suite before and after this change
     when: The suite is run
     then: No pre-existing test regresses and state layer behavior is unchanged
+acceptance_criteria: *ref_0
 non_functional:
+  a11y: []
   perf:
     api_p95_ms: 50
-  a11y: []
   security:
     - >-
-      Event log contains spec IDs and file paths but no secrets. Existing gitignore pattern for .caws/state/ is extended
-      to .caws/events.jsonl.
+      Event log contains spec IDs and file paths but no secrets. Existing
+      gitignore pattern for .caws/state/ is extended to .caws/events.jsonl.
 contracts: []
+id: EVLOG-001
+title: Event log dual-write (Phase 1)
+created_at: '2026-04-10T19:04:40.489Z'
+updated_at: '2026-04-17T16:21:33.314Z'
 worktree: evlog-001
