@@ -60,8 +60,13 @@ async function run({ stagedFiles, spec, _policy, projectRoot, riskTier, context 
 
   // Budget limits apply to changes, not to the entire repo.
   // In cli context with all tracked files, budget check is meaningless.
+  // Return 'skipped' (not 'pass') so the pipeline summary counts this gate under
+  // `skipped`, matching pipeline.js semantics for gates that did not actually run.
   if (context === 'cli') {
-    return { status: 'pass', messages: ['Budget check skipped in CLI context (budget applies to changes, not full repo)'] };
+    return {
+      status: 'skipped',
+      messages: ['Budget check skipped in CLI context (budget applies to changes, not full repo)'],
+    };
   }
 
   // Build a minimal spec for deriveBudget

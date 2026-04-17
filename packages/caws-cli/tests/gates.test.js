@@ -487,7 +487,10 @@ describe('budget-limit gate', () => {
       context: 'cli',
     });
 
-    expect(result.status).toBe('pass');
+    // CAWSFIX-06: CLI context returns 'skipped' (not 'pass') so the pipeline
+    // summary counts this gate under `skipped`, matching pipeline.js semantics
+    // for gates that did not actually run.
+    expect(result.status).toBe('skipped');
     expect(result.messages[0]).toMatch(/skipped in CLI context/i);
   });
 });
