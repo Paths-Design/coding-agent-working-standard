@@ -1,7 +1,7 @@
 id: CAWSFIX-08
 type: fix
 title: Schema resolver prefers flat .caws/<name>.schema.json over bundled template
-status: active
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-04-17T18:45:00.000Z'
