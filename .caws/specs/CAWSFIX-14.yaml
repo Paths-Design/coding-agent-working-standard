@@ -1,7 +1,7 @@
 id: CAWSFIX-14
 type: fix
 title: Worktree merge auto-closes bound spec (D6)
-status: active
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-04-17T19:15:00.000Z'
