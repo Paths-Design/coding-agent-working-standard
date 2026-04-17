@@ -29,50 +29,51 @@ scope:
 invariants:
   - Calling budget derivation on a spec with no `change_budget` key never throws "Cannot read properties of undefined"
   - When spec has no change_budget, derivation falls back to `policy.risk_tiers[spec.risk_tier]` (baseline from policy)
-  - When policy is also missing the tier entry, derivation throws a clear error naming the missing tier, not an opaque undefined-read
+  - >-
+    When policy is also missing the tier entry, derivation throws a clear error naming the missing tier, not an opaque
+    undefined-read
   - Waiver-delta application is unchanged (still adds to the policy baseline)
   - >-
-    `caws validate --spec-id <id>` no longer emits "Budget derivation failed: Cannot read properties of
-    undefined (reading 'max_files')" on schema-compliant specs
+    `caws validate --spec-id <id>` no longer emits "Budget derivation failed: Cannot read properties of undefined
+    (reading 'max_files')" on schema-compliant specs
 acceptance:
   - id: A1
     given: >-
-      A spec YAML file with all required fields per CAWSFIX-03 schema but no `change_budget` key
-      (this is every spec that validates cleanly — change_budget is forbidden in specs per policy)
+      A spec YAML file with all required fields per CAWSFIX-03 schema but no `change_budget` key (this is every spec
+      that validates cleanly — change_budget is forbidden in specs per policy)
     when: '`caws validate --spec-id <id>` is run against that spec'
     then: >-
-      No "Cannot read properties of undefined (reading 'max_files')" error appears in stderr or warnings.
-      Validation either passes or fails with a different reason. The budget derivation step either returns
-      the policy-baseline budget for that risk_tier, or explicitly reports "no change_budget, using policy
-      baseline" as an info message.
+      No "Cannot read properties of undefined (reading 'max_files')" error appears in stderr or warnings. Validation
+      either passes or fails with a different reason. The budget derivation step either returns the policy-baseline
+      budget for that risk_tier, or explicitly reports "no change_budget, using policy baseline" as an info message.
   - id: A2
     given: A spec with risk_tier=2 and no change_budget, and a policy.yaml with risk_tiers.2.max_files=100
     when: deriveBudget(spec, projectRoot) is called directly
     then: >-
-      The returned budget has max_files=100 and max_loc matching the policy tier. No exception is thrown.
-      The baseline/effective distinction is preserved (no waivers → baseline == effective).
+      The returned budget has max_files=100 and max_loc matching the policy tier. No exception is thrown. The
+      baseline/effective distinction is preserved (no waivers → baseline == effective).
   - id: A3
     given: A spec with risk_tier=2 and a policy.yaml that is missing risk_tiers.2
     when: deriveBudget(spec, projectRoot) is called
     then: >-
-      An error is thrown with a message naming the missing tier (e.g. "Policy is missing risk_tiers.2 ...")
-      — NOT a TypeError or undefined-read error. The existing tier-missing validation path is reused.
+      An error is thrown with a message naming the missing tier (e.g. "Policy is missing risk_tiers.2 ...") — NOT a
+      TypeError or undefined-read error. The existing tier-missing validation path is reused.
   - id: A4
     given: A spec with risk_tier=2, no change_budget, and waiver_ids referencing an active waiver with delta.max_files=10
     when: deriveBudget is called
     then: >-
-      effectiveBudget.max_files = policy.risk_tiers.2.max_files + 10. Waiver deltas still apply on top of the
-      policy baseline. Regression check: previously this path crashed before reaching waiver application.
+      effectiveBudget.max_files = policy.risk_tiers.2.max_files + 10. Waiver deltas still apply on top of the policy
+      baseline. Regression check: previously this path crashed before reaching waiver application.
   - id: A5
     given: The existing tests/validation/budget-derivation-async.test.js before this change
-    when: 'the new tests + `cd packages/caws-cli && npx jest budget-derivation` is run'
+    when: the new tests + `cd packages/caws-cli && npx jest budget-derivation` is run
     then: No pre-existing test regresses. New tests in budget-derivation-absent-spec.test.js cover A1-A4.
   - id: A6
     given: Sterling repo's P03-IMPL-01 reproduction from turn-023 defect ledger D4
-    when: 'The same `caws validate` command is run against that spec after this fix ships'
+    when: The same `caws validate` command is run against that spec after this fix ships
     then: >-
-      The "Budget derivation failed" line no longer appears in the warnings. Other validator output
-      (ID regex, acceptance_criteria shape) may still emit until CAWSFIX-09/10 land.
+      The "Budget derivation failed" line no longer appears in the warnings. Other validator output (ID regex,
+      acceptance_criteria shape) may still emit until CAWSFIX-09/10 land.
 non_functional:
   perf:
     api_p95_ms: 50
