@@ -1,0 +1,44 @@
+version: 1
+base_branch: main
+merge_strategy: merge
+agents:
+  - name: cawsfix-03
+    spec_id: CAWSFIX-03
+    role: worker
+    intent: Unify spec validators — delete legacy validate.js, keep JSON schema authoritative
+    scope: |
+      .caws/validate.js
+      .caws/working-spec.schema.json
+      package.json
+      packages/caws-cli/src/gates/spec-completeness.js
+      packages/caws-cli/tests/spec-completeness.test.js
+
+  - name: cawsfix-04
+    spec_id: CAWSFIX-04
+    role: worker
+    intent: Waiver hygiene — fix active-waivers.yaml schema drift and add prune command
+    scope: |
+      .caws/waivers/active-waivers.yaml
+      packages/caws-cli/src/commands/waivers.js
+      packages/caws-cli/src/waivers-manager.js
+      packages/caws-cli/tests/waivers.test.js
+      packages/caws-cli/tests/waivers-prune.test.js
+
+  - name: cawsfix-05
+    spec_id: CAWSFIX-05
+    role: worker
+    intent: CI validates all feature specs + catch .backup naming pattern
+    scope: |
+      .github/workflows/caws-gate.yml
+      .github/workflows/caws-guards.yml
+
+  - name: cawsfix-06
+    spec_id: CAWSFIX-06
+    role: worker
+    intent: Budget-gate skipped status, contracts warning, version signage
+    scope: |
+      packages/caws-cli/src/gates/budget-limit.js
+      packages/caws-cli/src/commands/specs.js
+      packages/caws-cli/tests/budget-limit.test.js
+      packages/caws-cli/tests/specs-contracts-warning.test.js
+      README.md
