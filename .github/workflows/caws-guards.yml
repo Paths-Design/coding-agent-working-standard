@@ -27,8 +27,10 @@ jobs:
           echo "🔍 Checking for shadow/duplicate filename patterns against $BASE_REF..."
 
           # Get files that have been added or modified
+          # Patterns cover: /copy-/final-/enhanced-/v2- path segments, /new- prefix,
+          # " - copy." in filename, /duplicate-, /backup- prefix, and .backup suffix.
           BAD=$(git diff --name-only "$BASE_REF"... | \
-            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.|/duplicate-|/backup-' || true)
+            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.|/duplicate-|/backup-|\.backup$' || true)
 
           if [ -n "$BAD" ]; then
             echo "❌ Shadow/duplicate filename patterns detected:"
