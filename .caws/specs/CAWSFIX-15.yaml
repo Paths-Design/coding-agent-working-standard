@@ -1,7 +1,7 @@
 id: CAWSFIX-15
 type: fix
 title: Hygiene — gitignore agents.json + one-line spec close diff (D8/D9)
-status: active
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-04-17T19:45:00.000Z'
