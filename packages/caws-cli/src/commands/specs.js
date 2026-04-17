@@ -491,6 +491,27 @@ async function createSpec(id, options = {}) {
     saveState(id, initialState, findProjectRoot());
   } catch { /* non-fatal */ }
 
+  // CAWSFIX-06: warn when a feature spec is created without contracts.
+  // Contract-first development is a CAWS value proposition; empty `contracts`
+  // on a feature-type spec is discouraged but not fatal. Emit a non-fatal
+  // warning to stderr so agents and humans notice and can update the spec.
+  //
+  // Note: the spec's acceptance text uses "mode=feature" colloquially, but in
+  // CAWS the discriminator is the `type` field (feature/fix/refactor/chore),
+  // not the `mode` field (development/pilot/etc.). We key off `type` to match
+  // the --type CLI flag and the schema.
+  const specType = parsedSpec.type || type;
+  const specContracts = Array.isArray(parsedSpec.contracts) ? parsedSpec.contracts : [];
+  if (specType === 'feature' && specContracts.length === 0) {
+    console.warn(
+      chalk.yellow(
+        `⚠  Spec ${id} has mode=feature but no contracts. ` +
+          `mode=feature without contracts is discouraged — ` +
+          `run 'caws specs update ${id}' to add a contract reference.`
+      )
+    );
+  }
+
   // EVLOG-001: emit spec_created event alongside state write.
   //
   // Spec-lifecycle events (spec_created / spec_closed / spec_deleted) are
