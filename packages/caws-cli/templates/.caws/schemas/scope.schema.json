@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CAWS Lite Scope Configuration",
-  "description": "Scope configuration for CAWS lite mode — guardrails without YAML specs",
+  "description": "Scope configuration for CAWS lite mode — guardrails without YAML specs. This schema governs the standalone .caws/scope.json file ONLY; inline scope: blocks inside working-spec.yaml or feature specs are governed by the working-spec schema's scope sub-schema and do NOT invoke this schema. See CAWSFIX-11.",
   "type": "object",
-  "required": ["version", "allowedDirectories"],
+  "required": ["allowedDirectories"],
   "properties": {
     "version": {
       "type": "integer",
       "const": 1,
-      "description": "Schema version"
+      "description": "Schema version. Optional for back-compat with scope.json files that predate versioning; the runtime (src/config/lite-scope.js) defaults to 1 when missing. If present, must be exactly 1. CAWSFIX-11 lifted `version` from the required list because no code path enforces a version mismatch — only the schema did, producing spurious warnings for pre-versioning scope.json files."
     },
     "allowedDirectories": {
       "type": "array",
