@@ -32,14 +32,9 @@ npm install -g @paths.design/caws-cli
 caws --version
 ```
 
-### What's New in v3.4.0
+### Release Notes
 
-- **10x Performance Boost**: Intelligent policy caching for faster validation
-- **Programmatic API**: Type-safe JavaScript API for custom integrations
-- **MCP Server Patterns**: Production-tested patterns for building MCP servers
-- **Reflexivity Framework**: Self-audit capabilities for governance tools
-
-See [IMPLEMENTATION_COMPLETE.md](./IMPLEMENTATION_COMPLETE.md) for details.
+See [CHANGELOG.md](./CHANGELOG.md) for release notes. For the installed CLI version, run `caws --version`.
 
 ### Your First CAWS Project
 
@@ -341,4 +336,4 @@ This project uses CAWS for its own development. All contributions must:
 
 ---
 
-**CAWS v9.0.0** - Making AI-human collaboration reliable, explainable, and high-quality.
+**CAWS** - Making AI-human collaboration reliable, explainable, and high-quality.
