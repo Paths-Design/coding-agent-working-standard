@@ -1,3 +1,47 @@
+# [10.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.0.1...v10.1.0) (2026-04-17)
+
+
+### Bug Fixes
+
+* **budget:** sync derivation path + no-crash on absent change_budget (CAWSFIX-07) ([018188b](https://github.com/Paths-Design/coding-agent-working-standard/commit/018188b5a18756929e6362e8536076347f2ec65d))
+* **caws:** repoint dangling .caws/validate.js refs at bundled CLI (CAWSFIX-12) ([7f5d4ad](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f5d4ad64f6c859ccfb6d8a519965796c2699278))
+* **gates:** budget-limit returns skipped (not pass) in CLI context [CAWSFIX-06] ([0bd49ac](https://github.com/Paths-Design/coding-agent-working-standard/commit/0bd49acc4ae7e977ca550381834edeeecfc771a6))
+* **gates:** point spec-completeness at real schema location (CAWSFIX-03) ([2893d83](https://github.com/Paths-Design/coding-agent-working-standard/commit/2893d83d400e1c4c12fa6971f0ac8ab052e58c2d))
+* **lint:** add ignoreRestSiblings, remove unused imports to pass CI lint ([7c7c901](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c7c9016a7afc561339ed25caab1e1de9d01744d))
+* **lint:** resolve 3 errors and 4 warnings blocking CI ([3052a54](https://github.com/Paths-Design/coding-agent-working-standard/commit/3052a54cc023e05468aeca6ca6bda4ed889baa42))
+* **policy:** accept any subset of tiers 1-3 in validatePolicy (CAWSFIX-16) ([ad8ef0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad8ef0ebab823890b86da3015e5e7f576000734b))
+* **schema+tests:** gates policy schema + fixture migration (CAWSFIX-22) ([59ff892](https://github.com/Paths-Design/coding-agent-working-standard/commit/59ff8921153ce9688065a944cad4e803db985686))
+* **schema:** resolver prefers flat .caws/<name>.schema.json over bundled (CAWSFIX-08) ([dbbbf0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/dbbbf0d17a9c032fc97664aecee722ba97074344))
+* **schemas:** lift required version from scope.schema.json + document inline-block boundary (CAWSFIX-11) ([5376531](https://github.com/Paths-Design/coding-agent-working-standard/commit/5376531f5b914cb8e50608db2bcb6d81184f4899))
+* **schema:** sync template schemas to runtime + align id regex with validator (CAWSFIX-20+21) ([19d5e8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/19d5e8c070e0c2cae0e46f211795534d180dc22d))
+* **schema:** tighten working-spec schema to match legacy validator (CAWSFIX-03) ([4771dcd](https://github.com/Paths-Design/coding-agent-working-standard/commit/4771dcd50118e864305546aeec698be144180026))
+* **specs:** one-line diff on close + gitignore agents.json (CAWSFIX-15) ([02c6447](https://github.com/Paths-Design/coding-agent-working-standard/commit/02c64475420c76ee990361d6545d6717ae1cf282))
+* **state:** fail-loud fence on undefined specId (CAWSFIX-02) ([e10e8f8](https://github.com/Paths-Design/coding-agent-working-standard/commit/e10e8f8baf2ab37bb3959feba1bb474d63c0979f))
+* **tests+schema:** add CAWSFIX-18 A2 commit-failure test, tighten policy gate schema ([5efeee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/5efeee58eb85d672018d91117eaf3a144c8924e8))
+* **tests:** align test fixtures with post-CAWSFIX schema requirements ([e79692b](https://github.com/Paths-Design/coding-agent-working-standard/commit/e79692b87595b37428f4aad0fcf55ed66d777911))
+* **tests:** resolve 3 flaky test suites that failed under parallel Jest workers ([0759cbe](https://github.com/Paths-Design/coding-agent-working-standard/commit/0759cbe9e5e9babd7910b27f31a634dbf0ceda1f))
+* **validation:** accept modern acceptance_criteria shape as alias (CAWSFIX-09) ([d796b9e](https://github.com/Paths-Design/coding-agent-working-standard/commit/d796b9eff5a77589723d94ba317b405e09c5b606))
+* **validation:** accept multi-segment spec IDs like P03-IMPL-01 (CAWSFIX-10) ([3091ce0](https://github.com/Paths-Design/coding-agent-working-standard/commit/3091ce0a2fd6e8b2c3b6b40486573c8da753232b))
+* **waivers:** restructure active-waivers.yaml to conform to schema (CAWSFIX-04 A1) ([adf8b3f](https://github.com/Paths-Design/coding-agent-working-standard/commit/adf8b3f94726c83340612faeccf71f055e7b1cac))
+* **waivers:** sync template schema to modern shape + fix wrapping (CAWSFIX-17) ([df0840e](https://github.com/Paths-Design/coding-agent-working-standard/commit/df0840e07266a4ec69a57b26bf8ef448ecc30255))
+* **waivers:** validateWaiverStructure accepts modern schema shape (CAWSFIX-13) ([3c18681](https://github.com/Paths-Design/coding-agent-working-standard/commit/3c18681a54d104858192bf946028186c734a0da8))
+* **worktree:** auto-close bound spec on successful merge (CAWSFIX-14) ([6834372](https://github.com/Paths-Design/coding-agent-working-standard/commit/683437239c68759e2cdde55743f3938ca0d12779))
+* **worktree:** auto-commit .caws/worktrees.json after destroy (CAWSFIX-18) ([ff86ee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/ff86ee5c75c07b17652b535f9deae8c1aadceaf0))
+
+
+### Features
+
+* **evlog:** add append-only event log and pure renderer (EVLOG-001) ([25506a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/25506a524e40df8abbb73a8e3c3f864ea87cfed6))
+* **evlog:** flip iterate.js to loadStateFromEvents (EVLOG-002 A1/A6) ([e280197](https://github.com/Paths-Design/coding-agent-working-standard/commit/e2801976df1f821de1986fb461df9ed3c6243e42))
+* **evlog:** flip sidecar.js + gates.js feedback enrichment (EVLOG-002 A3/A4) ([ecf0662](https://github.com/Paths-Design/coding-agent-working-standard/commit/ecf066274c842adc5173415cce0f7c7d696feab6))
+* **evlog:** flip status.js to loadStateFromEvents (EVLOG-002 A2) ([9cff551](https://github.com/Paths-Design/coding-agent-working-standard/commit/9cff551a41d47aee2a6e6d3eea37df169fa7a26c))
+* **evlog:** loadStateFromEvents returns null on no-events (EVLOG-002 A5) ([5109a15](https://github.com/Paths-Design/coding-agent-working-standard/commit/5109a151c35719cb4c989f794fa9531cf04939c1))
+* **evlog:** wire dual-write into 9 recorder and lifecycle call sites ([9564f5c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9564f5c89671eae48635d30d78523820b6e8fabd))
+* **scope:** add binding-aware scope guard, `scope show`, and `worktree bind` ([3f41720](https://github.com/Paths-Design/coding-agent-working-standard/commit/3f41720ce243e3508bc0fbb0eb5d2db376d1056b))
+* **specs:** warn when feature spec is created with empty contracts [CAWSFIX-06] ([5e44e38](https://github.com/Paths-Design/coding-agent-working-standard/commit/5e44e38553b251db1f431a034bc5b943e14e3cb5))
+* **waivers:** add `caws waivers prune --expired` (CAWSFIX-04 A3-A6) ([5f1d263](https://github.com/Paths-Design/coding-agent-working-standard/commit/5f1d26399a492cc6909ce36cd33521c3da7adfca))
+* **worktree:** auto-bind specId from spec worktree field during create ([46ad82c](https://github.com/Paths-Design/coding-agent-working-standard/commit/46ad82c1e2fc6735cad254b1660fa370ae1dc9b9))
+
 ## [10.1.0] (2026-04-17)
 
 ### Features
