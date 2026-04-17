@@ -1,7 +1,7 @@
 id: CAWSFIX-07
 type: fix
 title: Budget derivation no-ops cleanly when spec has no change_budget (D4)
-status: active
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-04-17T16:37:05.364Z'

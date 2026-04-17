@@ -1,41 +1,4 @@
 {
   "version": 1,
-  "worktrees": {
-    "cawsfix-07": {
-      "name": "cawsfix-07",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/cawsfix-07",
-      "branch": "caws/cawsfix-07",
-      "baseBranch": "main",
-      "scope": "packages/caws-cli/src/budget-derivation.js\npackages/caws-cli/tests/validation/budget-derivation-async.test.js\npackages/caws-cli/tests/budget-derivation-absent-spec.test.js\n",
-      "specId": "CAWSFIX-07",
-      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86",
-      "createdAt": "2026-04-17T16:41:03.776Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-04-17T16:57:33.432Z"
-    },
-    "cawsfix-11": {
-      "name": "cawsfix-11",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/cawsfix-11",
-      "branch": "caws/cawsfix-11",
-      "baseBranch": "main",
-      "scope": "packages/caws-cli/templates/.caws/schemas/scope.schema.json\npackages/caws-cli/tests/lite-scope.test.js\npackages/caws-cli/tests/validation/scope-version-optional.test.js\n",
-      "specId": "CAWSFIX-11",
-      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86",
-      "createdAt": "2026-04-17T16:41:05.049Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-04-17T16:56:59.332Z"
-    },
-    "cawsfix-09-10": {
-      "name": "cawsfix-09-10",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/cawsfix-09-10",
-      "branch": "caws/cawsfix-09-10",
-      "baseBranch": "main",
-      "scope": "packages/caws-cli/src/validation/spec-validation.js\npackages/caws-cli/src/commands/specs.js\npackages/caws-cli/src/commands/init.js\npackages/caws-cli/tests/validation/spec-validation.test.js\npackages/caws-cli/tests/validation/acceptance-criteria-alias.test.js\npackages/caws-cli/tests/validation/spec-id-regex.test.js\n",
-      "specId": "CAWSFIX-09",
-      "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86",
-      "createdAt": "2026-04-17T16:41:06.341Z",
-      "status": "destroyed",
-      "destroyedAt": "2026-04-17T16:58:14.644Z"
-    }
-  }
+  "worktrees": {}
 }
