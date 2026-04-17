@@ -18,8 +18,51 @@ jobs:
       - name: Install CAWS CLI
         run: npm install -g @caws/cli
 
-      - name: Validate working spec
-        run: caws validate .caws/working-spec.yaml --quiet
+      - name: Validate changed specs
+        run: |
+          set -u
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # Collect every spec file touched in this PR:
+          #   - feature specs at .caws/specs/*.yaml or *.yml
+          #   - the legacy .caws/working-spec.yaml if it changed
+          CHANGED_SPECS=$(git diff --name-only "$BASE" "$HEAD" \
+            | grep -E '^\.caws/(specs/.+\.(yaml|yml)|working-spec\.yaml)$' \
+            | sort -u || true)
+
+          if [ -z "$CHANGED_SPECS" ]; then
+            echo "ℹ️ No CAWS spec files changed in this PR — skipping spec validation."
+            exit 0
+          fi
+
+          echo "🔍 Validating changed spec files:"
+          echo "$CHANGED_SPECS" | sed 's/^/   - /'
+          echo ""
+
+          FAIL=0
+          FAILED_FILES=""
+          for f in $CHANGED_SPECS; do
+            if [ ! -f "$f" ]; then
+              # File was deleted in this PR — nothing to validate.
+              echo "⏭️  Skipping deleted spec: $f"
+              continue
+            fi
+            echo "▶️  caws validate $f"
+            if ! caws validate "$f" --quiet; then
+              echo "❌ Invalid spec: $f"
+              FAIL=1
+              FAILED_FILES="$FAILED_FILES $f"
+            fi
+          done
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo ""
+            echo "❌ Spec validation failed for:$FAILED_FILES"
+            exit 1
+          fi
+
+          echo "✅ All changed specs validate cleanly."
 
       - name: Enforce path discipline
         run: |
