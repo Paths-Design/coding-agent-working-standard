@@ -15,7 +15,6 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
 const { execSync } = require('child_process');
 const yaml = require('js-yaml');
 

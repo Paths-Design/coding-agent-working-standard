@@ -11,7 +11,7 @@ module.exports = {
   },
   rules: {
     'no-console': 'off', // CLI tools need console output
-    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_', ignoreRestSiblings: true }],
     'node/no-missing-require': 'off',
     'node/no-extraneous-require': 'off',
     'node/no-unpublished-require': 'off',

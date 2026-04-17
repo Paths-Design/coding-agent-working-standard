@@ -29,7 +29,7 @@ module.exports = [
     rules: {
       ...js.configs.recommended.rules,
       'no-console': 'off', // CLI tools need console output
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }],
       'no-process-exit': 'off', // CLI tools need process.exit
     },
   },

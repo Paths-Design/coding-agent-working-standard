@@ -104,13 +104,6 @@ function writeWaiver(id, fields) {
 }
 
 /**
- * Helper: capture all console.log output as a single string.
- */
-function getConsoleOutput() {
-  return console.log.mock.calls.map((args) => args.join(' ')).join('\n');
-}
-
-/**
  * Helper: find the first console.log call that is valid JSON and return its
  * parsed value. Needed because commandWrapper/safeAsync emits timing lines
  * that pollute the output stream in text mode.
