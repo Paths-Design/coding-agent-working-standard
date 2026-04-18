@@ -578,6 +578,9 @@ function createWorktree(name, options = {}) {
   fs.ensureDirSync(path.dirname(worktreePath));
 
   if (canonicalSpecPath) {
+    // CAWSFIX-23: flip draft→active BEFORE the bind commit so the spec
+    // lifecycle transition lands in the same commit as the worktree field.
+    autoActivateBoundSpec(root, specId);
     ensureCanonicalSpecCommitted(root, canonicalSpecPath, specId, name);
   }
 
@@ -650,6 +653,8 @@ function createWorktree(name, options = {}) {
     resolvedSpecId = findSpecByWorktreeName(root, name);
     if (resolvedSpecId) {
       console.log(chalk.gray(`   Auto-bound spec: ${resolvedSpecId}`));
+      // CAWSFIX-23: activate the auto-bound spec if it's still at draft.
+      autoActivateBoundSpec(root, resolvedSpecId);
     }
   }
 
@@ -1222,17 +1227,33 @@ function mergeWorktree(name, options = {}) {
 
   // Auto-close the bound spec if one exists. A worktree merge is the
   // lifecycle signal that the spec's work is done; leaving the spec
-  // `active` after merge accumulates stale-active entries (D6). Direct
-  // YAML status flip bypasses the ownership + worktree-reference checks
-  // in `closeSpec` — the caller has already proven authority by merging.
-  let autoClosedSpecId = null;
+  // `active` (or `draft`, pre-CAWSFIX-23) after merge accumulates stale
+  // entries (D6). Direct YAML status flip bypasses the ownership +
+  // worktree-reference checks in `closeSpec` — the caller has already
+  // proven authority by merging.
+  let autoClose = {
+    specId: null, acsPassing: null, acsFailureCount: 0, acsTotal: 0, acsFailureIds: [],
+  };
   if (entry.specId) {
-    autoClosedSpecId = autoCloseBoundSpec(root, entry.specId);
+    autoClose = autoCloseBoundSpec(root, entry.specId);
+    if (autoClose.acsPassing === false && autoClose.acsFailureCount > 0) {
+      console.warn(chalk.yellow(
+        `   ⚠ Spec ${entry.specId} closed with ${autoClose.acsFailureCount}/${autoClose.acsTotal} failing AC(s): ${autoClose.acsFailureIds.join(', ')}`
+      ));
+      console.warn(chalk.yellow(
+        `     Merge succeeded — the spec reflects that — but follow up to address the failing ACs.`
+      ));
+    }
   }
 
   const mergeResult = {
     name, branch: entry.branch, baseBranch, merged: true, conflicts: [],
-    specId: entry.specId || null, autoClosedSpecId,
+    specId: entry.specId || null,
+    autoClosedSpecId: autoClose.specId,
+    acsPassing: autoClose.acsPassing,
+    acsFailureCount: autoClose.acsFailureCount,
+    acsTotal: autoClose.acsTotal,
+    acsFailureIds: autoClose.acsFailureIds,
   };
   try {
     lifecycle.emit(EVENTS.MERGE_POST, { ...mergeResult, timestamp: new Date().toISOString() });
@@ -1241,26 +1262,86 @@ function mergeWorktree(name, options = {}) {
 }
 
 /**
- * Flip a spec's status to `closed` by rewriting just the `status:` line.
- * Idempotent: no-op when the spec is already closed or the file is missing.
- * Returns the spec ID on success, null if skipped or failed.
+ * Flip a spec's status from `draft` to `active` by rewriting just the
+ * `status:` line. Called on worktree-bind so specs whose work is
+ * starting transition out of draft without manual intervention.
+ * Idempotent: no-op when the spec is already active/closed/etc.
  * @param {string} root - Repo root
- * @param {string} specId - Spec identifier (e.g. CAWSFIX-14)
- * @returns {string|null}
+ * @param {string} specId - Spec identifier
+ * @returns {string|null} specId on flip, null if no change
  */
-function autoCloseBoundSpec(root, specId) {
+function autoActivateBoundSpec(root, specId) {
   try {
     const specPath = findFeatureSpecPath(root, specId);
     if (!specPath || !fs.existsSync(specPath)) return null;
     const original = fs.readFileSync(specPath, 'utf8');
-    // Idempotent: already closed → no-op, no write, no diff.
-    if (/^status:\s*closed\s*$/m.test(original)) return specId;
-    const patched = original.replace(/^status:\s*active\s*$/m, 'status: closed');
-    if (patched === original) return null; // status was e.g. draft/archived
+    // Idempotent: already active/closed/archived → no write.
+    if (/^status:[ \t]*active[ \t]*$/m.test(original)) return specId;
+    const patched = original.replace(/^status:[ \t]*draft[ \t]*$/m, 'status: active');
+    if (patched === original) return null;
     fs.writeFileSync(specPath, patched, 'utf8');
     return specId;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Flip a spec's status to `closed` by rewriting just the `status:` line.
+ * Accepts both `draft` and `active` as source states — merge is the
+ * authoritative "work done" signal regardless of whether the spec ever
+ * transitioned through active. Runs verify-acs in collect-only mode
+ * before the flip and returns AC health so the caller can warn.
+ * @param {string} root - Repo root
+ * @param {string} specId - Spec identifier (e.g. CAWSFIX-14)
+ * @returns {{specId: string|null, acsPassing: boolean|null, acsFailureCount: number, acsTotal: number, acsFailureIds: string[]}}
+ */
+function autoCloseBoundSpec(root, specId) {
+  const result = {
+    specId: null,
+    acsPassing: null,
+    acsFailureCount: 0,
+    acsTotal: 0,
+    acsFailureIds: [],
+  };
+  try {
+    const specPath = findFeatureSpecPath(root, specId);
+    if (!specPath || !fs.existsSync(specPath)) return result;
+    const original = fs.readFileSync(specPath, 'utf8');
+    // Idempotent: already closed → no-op, no write, no diff.
+    if (/^status:[ \t]*closed[ \t]*$/m.test(original)) {
+      result.specId = specId;
+      return result;
+    }
+    // Run verify-acs in collect-only mode before flipping. Never throws —
+    // any error (missing tests, unavailable runner, malformed spec) leaves
+    // acsPassing: null so the caller knows verification didn't run.
+    try {
+      const yaml = require('js-yaml');
+      const { verifySpec } = require('../commands/verify-acs');
+      const parsed = yaml.load(original);
+      if (parsed && typeof parsed === 'object') {
+        const verdict = verifySpec(parsed, root, { run: false });
+        const fails = (verdict.results || []).filter((r) => r.status === 'FAIL');
+        result.acsTotal = (verdict.results || []).length;
+        result.acsFailureCount = fails.length;
+        result.acsFailureIds = fails.map((r) => r.id);
+        result.acsPassing = fails.length === 0;
+      }
+    } catch {
+      // verify-acs unavailable — don't block close
+    }
+    // Flip status. Accept both draft and active as source so specs that
+    // never transitioned through active (D6 pre-CAWSFIX-23 drift) still close.
+    const patched = original.replace(/^status:[ \t]*(?:draft|active)[ \t]*$/m, 'status: closed');
+    if (patched === original) {
+      return result; // status was archived/unknown — leave alone
+    }
+    fs.writeFileSync(specPath, patched, 'utf8');
+    result.specId = specId;
+    return result;
+  } catch {
+    return result;
   }
 }
 
@@ -1351,6 +1432,7 @@ module.exports = {
   listWorktrees,
   destroyWorktree,
   mergeWorktree,
+  autoActivateBoundSpec,
   autoCloseBoundSpec,
   pruneWorktrees,
   repairWorktrees,

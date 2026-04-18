@@ -16,6 +16,7 @@ const {
   saveRegistry,
   getRepoRoot,
   findFeatureSpecPath,
+  autoActivateBoundSpec,
 } = require('../worktree/worktree-manager');
 const { getAgentSessionId } = require('../utils/agent-session');
 
@@ -376,9 +377,16 @@ function handleBind(options) {
   const updatedYaml = yaml.dump(specData, { lineWidth: 120, noRefs: true });
   fs.writeFileSync(specPath, updatedYaml, 'utf8');
 
+  // CAWSFIX-23: activate the spec if it's still at draft — bind is the
+  // lifecycle signal that work is starting.
+  const activated = autoActivateBoundSpec(root, specId);
+
   console.log(chalk.green(`Binding established`));
   console.log(chalk.gray(`   Worktree: ${worktreeName} -> spec: ${specId}`));
   console.log(chalk.gray(`   Spec: ${specId} -> worktree: ${worktreeName}`));
+  if (activated) {
+    console.log(chalk.gray(`   Status: draft -> active`));
+  }
   console.log(chalk.gray(`   Registry: ${path.join(root, '.caws', 'worktrees.json')}`));
   console.log(chalk.gray(`   Spec file: ${specPath}`));
 }

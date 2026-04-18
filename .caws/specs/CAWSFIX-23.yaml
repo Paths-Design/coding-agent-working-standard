@@ -1,0 +1,99 @@
+id: CAWSFIX-23
+type: fix
+title: Spec lifecycle — draft to active on bind, active to closed with verify-acs warning on merge
+status: active
+risk_tier: 3
+mode: development
+created_at: '2026-04-18T01:00:00.000Z'
+updated_at: '2026-04-18T01:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/commands
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 4
+  max_loc: 120
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/tests/worktree-auto-activate-spec.test.js
+    - packages/caws-cli/tests/worktree-auto-close-spec.test.js
+    - packages/caws-cli/tests/worktree-manager.test.js
+    - .caws/specs/CAWSFIX-23.yaml
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/verify-acs.js
+invariants:
+  - >-
+    A spec transitions draft -> active exactly when a worktree binds to it,
+    via createWorktree (explicit --spec-id or auto-bound) or via the `caws
+    worktree bind` command. Specs in any other status (active, closed,
+    archived, etc.) are not modified by the activation path.
+  - >-
+    A spec transitions active -> closed when its bound worktree merges
+    successfully. The close path runs verify-acs in collect-only mode
+    before the status flip and emits a yellow warning if any AC fails,
+    but the close still proceeds — merge is the authoritative signal
+    that the worktree's work is done, independent of AC coverage.
+  - >-
+    Both auto-transition helpers are idempotent: calling them on a spec
+    already in the target status is a no-op (no file write, no diff).
+  - >-
+    Neither helper throws on missing specs or verify-acs failures; they
+    return structured results the caller can log or ignore.
+acceptance:
+  - id: A1
+    given: "A spec at status: draft with no bound worktree"
+    when: "caws worktree create <name> --spec-id <id> runs and the spec's worktree field is written"
+    then: >-
+      The spec's status line flips to `status: active` and only the
+      status line changes — no other YAML reshuffle.
+  - id: A2
+    given: "A spec already at status: active"
+    when: "autoActivateBoundSpec(root, specId) runs"
+    then: >-
+      No file write happens, no diff is produced, and the function
+      returns null (or the specId — implementation choice; but the
+      file must be byte-identical).
+  - id: A3
+    given: "A spec at status: draft with a bound worktree, whose branch has just been merged"
+    when: "mergeWorktree succeeds and autoCloseBoundSpec runs"
+    then: >-
+      The spec's status line flips to `status: closed` (handling draft
+      as well as active as a valid source status). The merge result
+      object reports autoClosedSpecId, acsPassing, acsFailureCount,
+      and acsTotal.
+  - id: A4
+    given: "A spec whose verify-acs collection reports 2 FAIL results"
+    when: "autoCloseBoundSpec runs"
+    then: >-
+      The spec is still closed. The function returns an object whose
+      acsPassing is false and acsFailureCount is 2. mergeWorktree
+      surfaces this to the caller via console.warn (yellow) naming
+      the failing AC IDs.
+  - id: A5
+    given: "caws worktree bind <spec-id> invoked against a draft spec"
+    when: "the command completes"
+    then: >-
+      The spec's worktree field is set AND its status flips draft -> active,
+      reported in the bind command output.
+  - id: A6
+    given: "createWorktree auto-bind flow (no explicit --spec-id, but a spec declares worktree: <name>)"
+    when: "the auto-bind scan resolves the specId at line ~650"
+    then: >-
+      The spec is activated via the same autoActivateBoundSpec helper,
+      not duplicated.
+non_functional:
+  perf:
+    api_p95_ms: 250
+  a11y: []
+  security:
+    - >-
+      Anchored regex on canonical status: line only. No broader YAML
+      manipulation; no arbitrary file overwrite.
+contracts: []

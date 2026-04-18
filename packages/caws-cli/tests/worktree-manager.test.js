@@ -1152,6 +1152,41 @@ describe('worktree-manager', () => {
     });
   });
 
+  describe('CAWSFIX-23 — createWorktree activates bound spec end-to-end', () => {
+    test('explicit --spec-id: draft spec flips to active after createWorktree', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const specPath = path.join(testDir, '.caws', 'specs', 'EXPL-ACT.yaml');
+      fs.writeFileSync(
+        specPath,
+        ['id: EXPL-ACT', 'title: Explicit activate test', 'status: draft'].join('\n') + '\n'
+      );
+      execFileSync('git', ['add', '.caws/specs/EXPL-ACT.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add expl-act spec'], { cwd: testDir, stdio: 'pipe' });
+
+      createWorktree('expl-act-wt', { specId: 'EXPL-ACT' });
+
+      const updatedSpec = fs.readFileSync(specPath, 'utf8');
+      expect(updatedSpec).toMatch(/^status: active$/m);
+      expect(updatedSpec).not.toMatch(/^status: draft$/m);
+    });
+
+    test('auto-bind: draft spec with worktree field flips to active', () => {
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const specPath = path.join(testDir, '.caws', 'specs', 'AUTO-ACT.yaml');
+      fs.writeFileSync(
+        specPath,
+        ['id: AUTO-ACT', 'title: Auto activate test', 'status: draft', 'worktree: auto-act-wt'].join('\n') + '\n'
+      );
+      execFileSync('git', ['add', '.caws/specs/AUTO-ACT.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add auto-act spec'], { cwd: testDir, stdio: 'pipe' });
+
+      createWorktree('auto-act-wt');
+
+      const updatedSpec = fs.readFileSync(specPath, 'utf8');
+      expect(updatedSpec).toMatch(/^status: active$/m);
+    });
+  });
+
   describe('saveRegistry and bind workflow', () => {
     test('saveRegistry persists specId update to worktree entry', () => {
       const entry = createWorktree('bind-target');
