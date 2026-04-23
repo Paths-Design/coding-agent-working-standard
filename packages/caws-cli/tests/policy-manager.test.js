@@ -401,5 +401,77 @@ describe('PolicyManager', () => {
       expect(defaultPolicy.risk_tiers[3].max_loc).toBe(5000);
       expect(defaultPolicy.edit_rules.policy_and_code_same_pr).toBe(false);
     });
+
+    test('CAWSFIX-26 / D9 A4: default policy carries an empty non_governed_zones array', () => {
+      const defaultPolicy = policyManager.getDefaultPolicy();
+      expect(Array.isArray(defaultPolicy.non_governed_zones)).toBe(true);
+      expect(defaultPolicy.non_governed_zones).toEqual([]);
+    });
+  });
+
+  describe('CAWSFIX-26 / D9 — non_governed_zones', () => {
+    test('A1 passthrough: loaded policy carries non_governed_zones verbatim', async () => {
+      const testPolicy = {
+        version: 1,
+        risk_tiers: {
+          1: { max_files: 10, max_loc: 250 },
+          2: { max_files: 50, max_loc: 2000 },
+          3: { max_files: 100, max_loc: 5000 },
+        },
+        edit_rules: EDIT_RULES_FIXTURE,
+        non_governed_zones: ['research/**', 'playground/**'],
+      };
+      const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
+      await fs.writeFile(policyPath, yaml.dump(testPolicy));
+
+      const result = await policyManager.loadPolicy(tempDir);
+      expect(result.non_governed_zones).toEqual(['research/**', 'playground/**']);
+    });
+
+    test('A5: non-string element in non_governed_zones surfaces a schema violation', async () => {
+      const testPolicy = {
+        version: 1,
+        risk_tiers: {
+          1: { max_files: 10, max_loc: 250 },
+          2: { max_files: 50, max_loc: 2000 },
+          3: { max_files: 100, max_loc: 5000 },
+        },
+        edit_rules: EDIT_RULES_FIXTURE,
+        // Deliberate wrong-type element — schema requires { type: "string" }.
+        non_governed_zones: ['research/**', 42],
+      };
+      const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
+      await fs.writeFile(policyPath, yaml.dump(testPolicy));
+
+      // loadPolicy contract: on schema violation, warn + fall back to default.
+      // The D9 assertion is that the schema actually catches the bad element
+      // (so _schemaErrors names the zone path), not that the loader throws.
+      const result = await policyManager.loadPolicy(tempDir);
+      expect(result._isDefault).toBe(true);
+      expect(Array.isArray(result._schemaErrors)).toBe(true);
+      const zoneError = result._schemaErrors.find((e) =>
+        typeof e.path === 'string' && e.path.includes('non_governed_zones')
+      );
+      expect(zoneError).toBeDefined();
+      expect(zoneError.message).toMatch(/string/i);
+    });
+
+    test('policy without non_governed_zones field loads normally', async () => {
+      const testPolicy = {
+        version: 1,
+        risk_tiers: {
+          1: { max_files: 10, max_loc: 250 },
+          2: { max_files: 50, max_loc: 2000 },
+          3: { max_files: 100, max_loc: 5000 },
+        },
+        edit_rules: EDIT_RULES_FIXTURE,
+      };
+      const policyPath = path.join(tempDir, '.caws', 'policy.yaml');
+      await fs.writeFile(policyPath, yaml.dump(testPolicy));
+
+      const result = await policyManager.loadPolicy(tempDir);
+      // Field absent (not present on the loaded object) — backward compatible.
+      expect(result.non_governed_zones).toBeUndefined();
+    });
   });
 });

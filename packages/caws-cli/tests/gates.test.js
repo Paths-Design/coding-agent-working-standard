@@ -933,6 +933,73 @@ describe('scope-boundary gate', () => {
     expect(result.messages.some(m => /excluded/i.test(m))).toBe(true);
   });
 
+  // ==========================================================
+  // CAWSFIX-26 / D9 — non-governed zones policy
+  // ==========================================================
+  test('CAWSFIX-26 / D9 A1: files in policy.non_governed_zones are exempt from scope.in', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['research/notes.md', 'src/app.js'],
+      spec: { scope: { in: ['src/**'] } },
+      policy: { non_governed_zones: ['research/**'] },
+    });
+
+    expect(result.status).toBe('pass');
+    // Specifically, no violation mentioning research/ should appear.
+    expect(result.messages.some(m => m.includes('research/'))).toBe(false);
+  });
+
+  test('CAWSFIX-26 / D9 A2: non-governed zone wins over scope.out on the same path', async () => {
+    // Deliberate contradiction: zone declares research/ as non-governed
+    // AND spec tries to exclude research/secret.md via scope.out.
+    // Contract: zone exemption short-circuits before scope.out is consulted.
+    const result = await scopeBoundary.run({
+      stagedFiles: ['research/secret.md'],
+      spec: { scope: { out: ['research/secret.md'] } },
+      policy: { non_governed_zones: ['research/**'] },
+    });
+
+    expect(result.status).toBe('pass');
+    expect(result.messages.some(m => /excluded/i.test(m))).toBe(false);
+  });
+
+  test('CAWSFIX-26 / D9 A3: without non_governed_zones, pre-feature behavior is preserved', async () => {
+    // Same inputs as A1 but no policy supplied — the gate must still
+    // fail on the out-of-scope research/notes.md. Proves the feature is
+    // opt-in and doesn't change defaults.
+    const result = await scopeBoundary.run({
+      stagedFiles: ['research/notes.md'],
+      spec: { scope: { in: ['src/**'] } },
+      // no policy param
+    });
+
+    expect(result.status).toBe('fail');
+    expect(result.messages.some(m => /not in allowed paths/i.test(m))).toBe(true);
+  });
+
+  test('CAWSFIX-26 / D9: empty non_governed_zones array is equivalent to absent', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: ['research/notes.md'],
+      spec: { scope: { in: ['src/**'] } },
+      policy: { non_governed_zones: [] },
+    });
+
+    expect(result.status).toBe('fail');
+  });
+
+  test('CAWSFIX-26 / D9: non_governed_zones supports multiple patterns', async () => {
+    const result = await scopeBoundary.run({
+      stagedFiles: [
+        'research/a.md',
+        'playground/script.py',
+        'src/app.js',
+      ],
+      spec: { scope: { in: ['src/**'] } },
+      policy: { non_governed_zones: ['research/**', 'playground/**'] },
+    });
+
+    expect(result.status).toBe('pass');
+  });
+
   test('src/**/*.js matches src/app.js (** matches zero segments)', async () => {
     const result = await scopeBoundary.run({
       stagedFiles: ['src/app.js'],

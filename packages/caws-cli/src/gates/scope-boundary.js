@@ -21,14 +21,27 @@ function matchesAny(filePath, patterns) {
 }
 
 /**
- * Check if a file is an infrastructure file that always passes scope checks.
- * Root-level files are exempt UNLESS they match an explicit scope.out pattern.
+ * Check if a file is infrastructure or lives in a policy-declared
+ * non-governed zone. Exempt files bypass both scope.in and scope.out.
+ *
  * @param {string} filePath - File path to check
- * @returns {boolean} Whether the file is exempt from scope.in checks
+ * @param {string[]} [nonGovernedZones=[]] - Glob patterns from
+ *   policy.non_governed_zones. Paths matching any pattern are exempt
+ *   from scope enforcement entirely. (CAWSFIX-26 / D9)
+ * @returns {boolean} Whether the file is exempt from scope checks
  */
-function isExempt(filePath) {
+function isExempt(filePath, nonGovernedZones = []) {
   // .caws and .claude directories always pass (infrastructure)
   if (filePath.startsWith('.caws/') || filePath.startsWith('.claude/')) return true;
+
+  // Policy-declared non-governed zones short-circuit scope enforcement.
+  // Intentionally wins over scope.out: the contract is that these
+  // subtrees are outside the governance model, not merely excluded
+  // from one spec's scope.
+  if (nonGovernedZones.length > 0 && matchesAny(filePath, nonGovernedZones)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -47,14 +60,20 @@ function isRootLevel(filePath) {
  * @param {Object} params - Gate parameters
  * @param {string[]} params.stagedFiles - Staged file paths
  * @param {Object} params.spec - Working spec with scope.in/scope.out
+ * @param {Object} [params.policy] - Optional CAWS policy. Reads
+ *   policy.non_governed_zones for path exemption (CAWSFIX-26 / D9).
+ *   When absent or the field is empty, only infra dirs are exempt.
  * @returns {Promise<Object>} Gate result with status and messages
  */
-async function run({ stagedFiles, spec }) {
+async function run({ stagedFiles, spec, policy }) {
   const messages = [];
   const violations = [];
 
   const scopeIn = spec?.scope?.in || [];
   const scopeOut = spec?.scope?.out || [];
+  const nonGovernedZones = Array.isArray(policy?.non_governed_zones)
+    ? policy.non_governed_zones
+    : [];
 
   // If no scope defined, pass
   if (scopeIn.length === 0 && scopeOut.length === 0) {
@@ -62,8 +81,8 @@ async function run({ stagedFiles, spec }) {
   }
 
   for (const file of stagedFiles) {
-    // Infrastructure dirs are always exempt
-    if (isExempt(file)) continue;
+    // Infrastructure dirs AND policy-declared non-governed zones are exempt.
+    if (isExempt(file, nonGovernedZones)) continue;
 
     // Check scope.out first (explicit exclusion) — applies to ALL files including root-level
     if (scopeOut.length > 0 && matchesAny(file, scopeOut)) {

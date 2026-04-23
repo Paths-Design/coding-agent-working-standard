@@ -1,0 +1,111 @@
+id: CAWSFIX-26
+type: feature
+title: Policy-level non-governed zones exempt declared subtrees from scope enforcement
+status: closed
+risk_tier: 3
+mode: feature
+created_at: '2026-04-23T05:25:45.924Z'
+updated_at: '2026-04-23T05:25:45.924Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/policy
+    - packages/caws-cli/src/gates
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 8
+  max_loc: 280
+scope:
+  in:
+    - packages/caws-cli/src/policy/PolicyManager.js
+    - packages/caws-cli/src/gates/scope-boundary.js
+    - packages/caws-cli/templates/.caws/schemas/policy.schema.json
+    - .caws/policy.schema.json
+    - packages/caws-cli/tests/gates.test.js
+    - packages/caws-cli/tests/policy-manager.test.js
+    - packages/caws-types/src/policy-types.ts
+    - .caws/specs/CAWSFIX-26.yaml
+    - .caws/specs/registry.json
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/
+    - packages/caws-cli/src/worktree/
+    - packages/caws-cli/templates/.claude/
+invariants:
+  - >-
+    A path that matches any pattern declared in policy.non_governed_zones
+    is exempt from the scope-boundary gate. Exemption short-circuits at
+    isExempt, BEFORE any spec.scope.in or spec.scope.out check, so zone
+    patterns override spec-level allow/deny for any matching file.
+  - >-
+    non_governed_zones is an optional policy field. When absent, empty,
+    or the policy itself is absent, the gate behaves exactly as before
+    (only .caws/ and .claude/ are exempt). Backward compatible.
+  - >-
+    Zone patterns use the same glob semantics as scope.in/scope.out
+    (picomatch, dot:true). A pattern like "research/**" matches every
+    descendant file; "research/README.md" matches only that file.
+  - >-
+    getDefaultPolicy() returns non_governed_zones: [] so a freshly
+    initialized project has the field present but empty. Schema
+    validation accepts the field type-correctly (array of strings).
+acceptance:
+  - id: A1
+    given: >-
+      policy.yaml declares non_governed_zones: ["research/**"] and a spec
+      with scope.in: ["src/**"]
+    when: >-
+      scope-boundary.run is invoked with stagedFiles including
+      research/notes.md and src/app.js
+    then: >-
+      The gate returns status: pass with zero violations. research/notes.md
+      is exempt; src/app.js matches scope.in.
+  - id: A2
+    given: >-
+      policy.yaml declares non_governed_zones: ["research/**"] and a spec
+      with scope.out: ["research/secret.md"] (deliberate contradiction)
+    when: >-
+      scope-boundary.run is invoked with stagedFiles = ["research/secret.md"]
+    then: >-
+      The gate returns status: pass. The zone exemption wins over
+      scope.out — the design contract is that declared non-governed
+      zones are outside the scope model entirely.
+  - id: A3
+    given: >-
+      A policy with no non_governed_zones field (omitted or empty) and
+      a spec with scope.in: ["src/**"]
+    when: >-
+      scope-boundary.run is invoked with stagedFiles = ["research/notes.md"]
+    then: >-
+      The gate returns status: fail with "not in allowed paths". The
+      pre-CAWSFIX-26 behavior is preserved when the feature is unused.
+  - id: A4
+    given: >-
+      PolicyManager.getDefaultPolicy() is called on a project without
+      .caws/policy.yaml
+    when: >-
+      The returned object is inspected
+    then: >-
+      The returned object carries non_governed_zones: [] (an empty array).
+      Writing it out via yaml.dump and reloading produces a valid policy
+      that passes schema validation.
+  - id: A5
+    given: >-
+      A policy.yaml with non_governed_zones containing a non-string
+      element (e.g., a number) is loaded
+    when: >-
+      PolicyManager.loadPolicy() runs
+    then: >-
+      Schema validation fails with a clear type-mismatch error message,
+      consistent with the behavior for other array-of-string fields.
+non_functional:
+  perf:
+    api_p95_ms: 50
+  a11y: []
+  security:
+    - >-
+      The zone check uses the same glob matcher (picomatch) as
+      scope.in/scope.out. No regex-from-user-input, no shell invocation,
+      no filesystem walks driven by the zone list.
+contracts: []

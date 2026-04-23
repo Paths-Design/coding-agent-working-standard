@@ -24,6 +24,15 @@ export interface CAWSPolicy {
 
   /** Waiver approval requirements */
   waiver_approval?: WaiverApprovalPolicy;
+
+  /**
+   * Glob patterns for paths declared outside CAWS scope enforcement.
+   * Any file matching a pattern is exempt from scope-boundary checks —
+   * spec.scope.in and spec.scope.out are not consulted. Intended for
+   * research, playground, or experimental subtrees where governance is
+   * explicitly off by design. (CAWSFIX-26 / D9)
+   */
+  non_governed_zones?: string[];
 }
 
 /**

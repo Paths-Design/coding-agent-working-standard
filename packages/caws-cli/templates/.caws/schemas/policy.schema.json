@@ -105,6 +105,11 @@
       },
       "additionalProperties": false,
       "description": "Quality gate configurations"
+    },
+    "non_governed_zones": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns (picomatch, dot:true) for paths declared outside CAWS scope enforcement. Any file matching a pattern is exempt from scope-boundary checks — neither spec.scope.in nor spec.scope.out are consulted. Intended for research, playground, or experimental subtrees where governance is explicitly off by design. Example: [\"research/**\", \"playground/**\"]. (CAWSFIX-26 / D9)"
     }
   },
   "additionalProperties": false,

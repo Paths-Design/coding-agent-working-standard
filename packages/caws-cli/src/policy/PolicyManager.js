@@ -356,6 +356,11 @@ class PolicyManager {
           description: 'Scan for TODO/FIXME/HACK/XXX markers',
         },
       },
+      // CAWSFIX-26 / D9: empty by default. Projects that need to opt a
+      // subtree out of scope enforcement (e.g., research/, playground/)
+      // add glob patterns here, e.g. ['research/**']. Paths matching any
+      // pattern bypass scope-boundary checks entirely.
+      non_governed_zones: [],
     };
   }
 
