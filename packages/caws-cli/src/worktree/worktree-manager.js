@@ -27,6 +27,48 @@ function findFeatureSpecPath(root, specId) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
+/**
+ * Resolve a feature spec path, preferring a worktree-local copy when cwd
+ * is inside a worktree. Falls back to the main repo.
+ *
+ * Why two-step: `caws worktree bind` may be invoked from inside a worktree
+ * that was forked off a non-main base branch (Option C fork-off-sibling
+ * pattern). In that workflow the spec is committed on the worktree's own
+ * branch and never lands on main. The pre-CAWSFIX-25 behavior of looking
+ * only in `root/.caws/specs/` made bind unusable there (D8 ledger entry).
+ *
+ * @param {string} root - Main repo root (from getRepoRoot())
+ * @param {string} specId - Spec identifier
+ * @param {string} [cwd=process.cwd()] - Directory to resolve from
+ * @returns {string|null} Absolute path to the spec file, or null
+ */
+function findFeatureSpecPathFromCwd(root, specId, cwd) {
+  if (!specId) return null;
+  const effectiveCwd = cwd || process.cwd();
+
+  // Normalize both sides against symlinks before comparing. On macOS
+  // `/tmp` and `/var/folders` are symlinks under `/private`, so the literal
+  // `startsWith` check fails intermittently in the test fixture. Fall back
+  // to the pre-resolution path if realpath throws (e.g., cwd removed).
+  const resolve = (p) => {
+    try { return fs.realpathSync(p); } catch { return p; }
+  };
+  const resolvedCwd = resolve(effectiveCwd);
+  const worktreesBase = resolve(path.join(root, '.caws', 'worktrees'));
+
+  if (resolvedCwd.startsWith(worktreesBase + path.sep)) {
+    const relative = path.relative(worktreesBase, resolvedCwd);
+    const worktreeName = relative.split(path.sep)[0];
+    if (worktreeName) {
+      const worktreeRoot = path.join(worktreesBase, worktreeName);
+      const local = findFeatureSpecPath(worktreeRoot, specId);
+      if (local) return local;
+    }
+  }
+
+  return findFeatureSpecPath(root, specId);
+}
+
 function writeSpecWithWorktree(filePath, worktreeName) {
   const yaml = require('js-yaml');
   const content = fs.readFileSync(filePath, 'utf8');
@@ -393,10 +435,22 @@ function loadRegistry(root) {
  * @param {Object} registry - Registry object
  */
 function saveRegistry(root, registry) {
-  // Auto-prune destroyed entries whose branch and directory are both gone.
-  // This prevents the registry from accumulating ghost entries over time.
+  // Auto-prune ghost entries: any registry entry whose path directory AND
+  // stored branch are BOTH gone. Previously this only fired for entries
+  // explicitly marked `status: destroyed`, which missed two common cases:
+  //   1. A worktree removed via `git worktree remove` (not `caws worktree
+  //      destroy`) that later had its branch manually deleted with
+  //      `git branch -D`.
+  //   2. A worktree whose create failed partway, leaving a registry entry
+  //      at `fresh`/`active` but no artifacts on disk.
+  // Both are pure ghost state — no recoverable work remains in either
+  // the directory or the branch. Pruning is safe. (CAWSFIX-25 / D7)
+  //
+  // Entries with ONE artifact intact (dir gone but branch still present,
+  // or vice versa) are preserved. The branch may still hold unmerged
+  // commits, or the directory may still hold uncommitted work — the user
+  // should merge or explicitly destroy.
   for (const [name, entry] of Object.entries(registry.worktrees || {})) {
-    if (entry.status !== 'destroyed') continue;
     const dirGone = !fs.existsSync(entry.path);
     let branchGone = true;
     if (entry.branch) {
@@ -1319,9 +1373,13 @@ function mergeWorktree(name, options = {}) {
  * @param {string} specId - Spec identifier
  * @returns {string|null} specId on flip, null if no change
  */
-function autoActivateBoundSpec(root, specId) {
+function autoActivateBoundSpec(root, specId, specPathOverride = null) {
   try {
-    const specPath = findFeatureSpecPath(root, specId);
+    // CAWSFIX-25 / D8: callers that resolved a worktree-local spec path
+    // (via findFeatureSpecPathFromCwd) pass it in so the flip lands on
+    // the worktree's copy, not main's. Falls through to main resolution
+    // for backward compatibility when override is null.
+    const specPath = specPathOverride || findFeatureSpecPath(root, specId);
     if (!specPath || !fs.existsSync(specPath)) return null;
     const original = fs.readFileSync(specPath, 'utf8');
     // Idempotent: already active/closed/archived → no write.
@@ -1503,6 +1561,7 @@ module.exports = {
   REGISTRY_FILE,
   BRANCH_PREFIX,
   findFeatureSpecPath,
+  findFeatureSpecPathFromCwd,
   materializeWorktreeSpec,
   inferSpecIdForWorktree,
   findSpecByWorktreeName,

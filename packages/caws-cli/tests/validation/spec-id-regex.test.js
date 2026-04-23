@@ -128,7 +128,9 @@ describe('CAWSFIX-10: multi-segment spec-ID regex', () => {
       // this assertion will still pass; the real DRY evidence is the
       // grep audit noted in the spec. But at least verify the exported
       // source is what we expect.
-      expect(SPEC_ID_PATTERN.source).toBe('^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+$');
+      // CAWSFIX-25 / D2: trailing `[a-z]*` allows lowercase suffix on the
+      // terminal digit group (APC-01a). Interior segments remain uppercase.
+      expect(SPEC_ID_PATTERN.source).toBe('^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$');
     });
   });
 

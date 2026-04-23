@@ -85,7 +85,14 @@ describe('SpecValidator', () => {
     });
 
     it('should accept valid ID formats', () => {
-      const validIds = ['FEAT-001', 'FIX-123', 'REFACTOR-999', 'DOC-042'];
+      const validIds = [
+        'FEAT-001', 'FIX-123', 'REFACTOR-999', 'DOC-042',
+        // CAWSFIX-25 / D2: multi-segment + lowercase suffix forms
+        'P03-IMPL-01',
+        'ALG-WAVE-COLLATE-01',
+        'APC-01a',
+        'ALG-001A-HARDEN-01',
+      ];
 
       for (const id of validIds) {
         const spec = createValidSpec();
@@ -93,6 +100,29 @@ describe('SpecValidator', () => {
         const result = validateWorkingSpec(spec);
 
         expect(result.valid).toBe(true);
+      }
+    });
+
+    it('CAWSFIX-25 / D2: should reject malformed IDs while accepting the new lowercase-suffix form', () => {
+      // Invariant: the lowercase suffix is opt-in on the FINAL segment only.
+      // Lowercase in the prefix or a non-final segment remains a hard reject.
+      const invalidIds = [
+        'feat-001',      // lowercase prefix
+        'FEAT',          // no digit terminator
+        'FEAT-',         // empty suffix
+        'AB-cd-01',      // lowercase in non-final segment
+        '01-FEAT',       // leading digit
+        '--FEAT-01',     // double leading hyphen
+        'FEAT--001',     // double hyphen
+        'FEAT-01-',      // trailing hyphen
+      ];
+
+      for (const id of invalidIds) {
+        const spec = createValidSpec();
+        spec.id = id;
+        const result = validateWorkingSpec(spec);
+
+        expect(result.valid).toBe(false);
       }
     });
 

@@ -23,8 +23,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+$",
-      "description": "Unique identifier for the change. Format: uppercase/digit PREFIX segments separated by dashes, final segment is one+ digits (e.g. CAWSFIX-16, P03-TRUTH-001, ALG-001A-HARDEN-01). Matches SPEC_ID_PATTERN in spec-validation.js (CAWSFIX-21 alignment)."
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Unique identifier for the change. Format: uppercase/digit PREFIX segments separated by dashes, final segment is one+ digits with an optional lowercase suffix (e.g. CAWSFIX-16, P03-TRUTH-001, ALG-001A-HARDEN-01, APC-01a). Matches SPEC_ID_PATTERN in spec-validation.js (CAWSFIX-25 alignment)."
     },
     "title": {
       "type": "string",

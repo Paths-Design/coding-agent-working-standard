@@ -16,31 +16,34 @@ const { createValidator, getSchemaPath } = require('../utils/schema-validator');
  * Accepts:
  *   - Single-segment: FEAT-001, EVLOG-002, CAWSFIX-06 (legacy shape)
  *   - Multi-segment:  P03-IMPL-01, ALG-001A-HARDEN-01, CAWS-FIX-03
+ *   - Lowercase suffix: APC-01a, ALG-01b (CAWSFIX-25 / D2)
  *
  * Rejects:
- *   - lowercase (feat-001)
+ *   - lowercase prefix (feat-001)
+ *   - lowercase in a non-final segment (AB-cd-01)
  *   - leading digit (01-FEAT)
  *   - missing number suffix (FEAT-)
  *   - trailing hyphen (FEAT-01-)
  *   - leading/double hyphen (--FEAT-01, FEAT--001)
  *   - empty string
  *
- * Grammar: [PREFIX](-[SEGMENT])*-NUMBER
+ * Grammar: [PREFIX](-[SEGMENT])*-NUMBER[SUFFIX]?
  *   - PREFIX  = [A-Z] followed by zero+ [A-Z0-9]
  *   - SEGMENT = one+ [A-Z0-9]  (alphanumeric, uppercase only)
  *   - NUMBER  = one+ digits
+ *   - SUFFIX  = zero+ [a-z]    (optional lowercase tail on final segment only)
  *
  * Defined once per A4 invariant; referenced by both the basic validator
  * (line ~125 pre-fix) and the enhanced validator (line ~307 pre-fix).
  */
-const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+$/;
+const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
 
 /**
  * User-facing error message for bad spec IDs (CAWSFIX-10 A5).
  * Kept as a module constant so the message stays in sync with the pattern.
  */
 const SPEC_ID_ERROR_MESSAGE =
-  'Project ID should be in format: PREFIX-NUMBER or PREFIX-SEGMENT-NUMBER (e.g., FEAT-001, P03-IMPL-01)';
+  'Project ID should be in format: PREFIX-NUMBER or PREFIX-SEGMENT-NUMBER with optional lowercase suffix (e.g., FEAT-001, P03-IMPL-01, APC-01a)';
 
 /**
  * Get actual budget statistics from git history

@@ -283,6 +283,41 @@ describe('worktree-manager', () => {
       }
     });
 
+    test('CAWSFIX-25 / D8: findFeatureSpecPathFromCwd prefers worktree-local spec over main', () => {
+      const { findFeatureSpecPathFromCwd } = require('../src/worktree/worktree-manager');
+
+      // Seed a spec on main.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-D8.yaml'),
+        'id: FEAT-D8\ntitle: Main copy\nrisk_tier: 3\nmode: feature\n'
+      );
+
+      // Create a worktree and write a different (branch-local) spec body there.
+      const entry = createWorktree('d8-local', { specId: 'FEAT-D8' });
+      fs.writeFileSync(
+        path.join(entry.path, '.caws', 'specs', 'FEAT-D8-LOCAL.yaml'),
+        'id: FEAT-D8-LOCAL\ntitle: Worktree-only\nrisk_tier: 3\nmode: feature\n'
+      );
+
+      // From inside the worktree, FEAT-D8-LOCAL resolves locally.
+      const localPath = findFeatureSpecPathFromCwd(testDir, 'FEAT-D8-LOCAL', entry.path);
+      expect(localPath).toBe(path.join(entry.path, '.caws', 'specs', 'FEAT-D8-LOCAL.yaml'));
+
+      // FEAT-D8 (exists in both main AND worktree's auto-materialized copy)
+      // resolves to the worktree's copy when cwd is inside the worktree.
+      const bothPath = findFeatureSpecPathFromCwd(testDir, 'FEAT-D8', entry.path);
+      expect(bothPath.startsWith(entry.path)).toBe(true);
+
+      // From main's root (cwd = testDir), FEAT-D8 resolves to main's copy.
+      const mainPath = findFeatureSpecPathFromCwd(testDir, 'FEAT-D8', testDir);
+      expect(mainPath).toBe(path.join(testDir, '.caws', 'specs', 'FEAT-D8.yaml'));
+
+      // Nonexistent spec returns null regardless of cwd.
+      expect(findFeatureSpecPathFromCwd(testDir, 'NONEXISTENT-01', entry.path)).toBeNull();
+      expect(findFeatureSpecPathFromCwd(testDir, 'NONEXISTENT-01', testDir)).toBeNull();
+    });
+
     test('CAWSFIX-24/D10: writeSpecWithWorktree is idempotent for already-bound specs', () => {
       // Setting up a spec that already declares the target worktree should
       // not re-serialize YAML on the second bind pass.
@@ -561,6 +596,67 @@ describe('worktree-manager', () => {
 
     test('throws for unknown worktree', () => {
       expect(() => mergeWorktree('nonexistent')).toThrow('not found');
+    });
+
+    test('CAWSFIX-25 / D7: saveRegistry auto-prunes ghost entries with no dir and no branch', () => {
+      // Seed a registry with three entries:
+      // 1. ghost-both-gone  — dir gone, branch gone, stored status: active
+      //    → should be auto-pruned (new D7 behavior)
+      // 2. ghost-branch-present — dir gone, branch still exists
+      //    → should be preserved (one artifact intact, recoverable)
+      // 3. ghost-dir-present  — dir exists, no branch
+      //    → should be preserved (one artifact intact)
+      const { saveRegistry: save, loadRegistry: load } = require('../src/worktree/worktree-manager');
+
+      // Create branch + dir pair for case 2.
+      const wt2 = createWorktree('branch-present');
+      // Remove directory behind git's back to simulate dir-gone/branch-present.
+      // Use git worktree remove --force to keep branch, drop directory.
+      execFileSync('git', ['worktree', 'remove', '--force', wt2.path], {
+        cwd: testDir, stdio: 'pipe',
+      });
+      // Registry still has an entry for branch-present pointing at a vanished path.
+
+      // Case 1: fabricate a pure-ghost entry (no dir, no branch) via direct
+      // registry mutation.
+      const registry = load(testDir);
+      registry.worktrees['ghost-both-gone'] = {
+        name: 'ghost-both-gone',
+        path: path.join(testDir, '.caws', 'worktrees', 'ghost-both-gone'),
+        branch: 'caws/ghost-both-gone', // branch never created
+        baseBranch: 'main',
+        scope: null,
+        specId: null,
+        owner: null,
+        createdAt: new Date().toISOString(),
+        status: 'active', // deliberately not 'destroyed' — the D7 fix is that
+                          // status no longer matters for pruning decisions
+      };
+      // Case 3: fabricate a dir-present/branch-absent entry.
+      const ghostDirPath = path.join(testDir, '.caws', 'worktrees', 'ghost-dir-present');
+      fs.ensureDirSync(ghostDirPath);
+      registry.worktrees['ghost-dir-present'] = {
+        name: 'ghost-dir-present',
+        path: ghostDirPath,
+        branch: 'caws/never-existed',
+        baseBranch: 'main',
+        scope: null,
+        specId: null,
+        owner: null,
+        createdAt: new Date().toISOString(),
+        status: 'fresh',
+      };
+
+      // Trigger the auto-prune path.
+      save(testDir, registry);
+
+      const after = load(testDir);
+      expect(after.worktrees['ghost-both-gone']).toBeUndefined();  // pruned
+      expect(after.worktrees['ghost-dir-present']).toBeDefined();  // preserved
+      expect(after.worktrees['branch-present']).toBeDefined();     // preserved
+
+      // Cleanup the synthetic dir so afterEach doesn't trip.
+      fs.removeSync(ghostDirPath);
     });
 
     test('CAWSFIX-24 / D6: commits the active->closed spec flip so main stays clean post-merge', () => {

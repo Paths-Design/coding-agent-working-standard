@@ -1,0 +1,121 @@
+id: CAWSFIX-25
+type: fix
+title: D2 lowercase suffix, D7 ghost registry prune, D8 bind resolves worktree-local specs
+status: closed
+risk_tier: 3
+mode: development
+created_at: '2026-04-23T05:05:15.205Z'
+updated_at: '2026-04-23T05:05:15.205Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/validation
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 8
+  max_loc: 320
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/validation/spec-validation.js
+    - packages/caws-cli/templates/.caws/schemas/working-spec.schema.json
+    - packages/caws-cli/tests/worktree-manager.test.js
+    - packages/caws-cli/tests/validation/spec-validation.test.js
+    - .caws/specs/CAWSFIX-25.yaml
+    - .caws/specs/registry.json
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/policy/
+invariants:
+  - >-
+    D2: Spec IDs of the form PREFIX[-SEGMENT]*-DIGITS[LOWERCASE]* pass
+    both schema and runtime validation. The lowercase suffix is opt-in
+    and only appears after the terminal digit group (e.g., APC-01a,
+    ALG-01b, P03-IMPL-01). Invalid shapes (lowercase prefix, no digit
+    terminator, embedded lowercase in an interior segment) are still
+    rejected.
+  - >-
+    D7: saveRegistry auto-prunes any worktree entry whose path directory
+    does not exist AND whose stored branch has been deleted from git,
+    regardless of the entry's stored status. Entries with one artifact
+    intact (dir gone but branch still present, or vice versa) are
+    preserved so a later merge/destroy can complete cleanly.
+  - >-
+    D8: caws worktree bind <spec-id>, invoked from inside a worktree at
+    .caws/worktrees/<name>/, resolves the spec file from the worktree's
+    own .caws/specs/<spec-id>.yaml first, falling back to main's copy
+    only if the worktree has no local spec. The worktree annotation and
+    status flip land on whichever copy resolved.
+acceptance:
+  - id: A1
+    given: >-
+      A spec file .caws/specs/APC-01a.yaml with id APC-01a and a
+      well-formed body
+    when: >-
+      caws validate --spec-id APC-01a runs
+    then: >-
+      The spec validates without a "must match pattern" schema warning
+      and without a "Project ID should be in format" error.
+  - id: A2
+    given: >-
+      A spec whose id is apc-01 (lowercase prefix) or APC-abc (no digit
+      terminator) or AB-01-cd (lowercase in a non-final segment)
+    when: >-
+      caws validate runs against each
+    then: >-
+      Validation fails with a spec-id format error for every case —
+      backward-compatible rejection of malformed IDs.
+  - id: A3
+    given: >-
+      A registry entry whose path directory is gone AND whose caws/<name>
+      branch has been deleted from git
+    when: >-
+      saveRegistry is called
+    then: >-
+      The ghost entry is removed from the registry, regardless of whether
+      its stored status was active, fresh, missing, or destroyed.
+  - id: A4
+    given: >-
+      A registry entry whose directory is gone but whose branch still
+      exists in git
+    when: >-
+      saveRegistry runs
+    then: >-
+      The entry is preserved. The reconciler may classify it as
+      stale-merged or missing in subsequent list calls, but it is not
+      auto-deleted because the branch still holds recoverable state.
+  - id: A5
+    given: >-
+      A worktree at .caws/worktrees/wdoc-01a/ with a spec committed only
+      on branch caws/wdoc-01a at .caws/specs/WDOC-01-ANATOMY-01.yaml,
+      and no such spec present on main
+    when: >-
+      caws worktree bind WDOC-01-ANATOMY-01 is invoked from inside the
+      worktree (cwd under .caws/worktrees/wdoc-01a/)
+    then: >-
+      Bind succeeds. The worktree-local spec receives worktree: wdoc-01a
+      and its status flips draft -> active on the worktree branch. The
+      main repo's .caws/specs/ is not written to.
+  - id: A6
+    given: >-
+      A spec present on main (e.g., already-registered FEAT-X.yaml)
+    when: >-
+      caws worktree bind FEAT-X --name some-wt is invoked from main's
+      repo root
+    then: >-
+      Bind resolves FEAT-X from main exactly as before (backward
+      compatible with the pre-D8 flow).
+non_functional:
+  perf:
+    api_p95_ms: 250
+  a11y: []
+  security:
+    - >-
+      Regex changes are additive. No broadening below [A-Z] for the
+      prefix or below \d for the penultimate segment — existing valid
+      IDs continue to match.
+contracts: []

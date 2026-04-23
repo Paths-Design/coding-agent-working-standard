@@ -15,7 +15,7 @@ const {
   loadRegistry,
   saveRegistry,
   getRepoRoot,
-  findFeatureSpecPath,
+  findFeatureSpecPathFromCwd,
   autoActivateBoundSpec,
 } = require('../worktree/worktree-manager');
 const { getAgentSessionId } = require('../utils/agent-session');
@@ -351,10 +351,12 @@ function handleBind(options) {
     process.exit(1);
   }
 
-  // Load the spec file
-  const specPath = findFeatureSpecPath(root, specId);
+  // Load the spec file. CAWSFIX-25 / D8: when bind runs from inside a
+  // worktree, prefer the worktree's own .caws/specs/ copy so specs that
+  // live only on a feature branch (never mirrored to main) can be bound.
+  const specPath = findFeatureSpecPathFromCwd(root, specId, process.cwd());
   if (!specPath) {
-    console.error(chalk.red(`Spec '${specId}' not found in .caws/specs/`));
+    console.error(chalk.red(`Spec '${specId}' not found in .caws/specs/ (checked worktree-local first, then main)`));
     console.log(chalk.blue('Run: caws specs list  to see available specs'));
     process.exit(1);
   }
@@ -372,14 +374,20 @@ function handleBind(options) {
   registry.worktrees[worktreeName].specId = specId;
   saveRegistry(root, registry);
 
-  // Update spec side: set worktree field
-  specData.worktree = worktreeName;
-  const updatedYaml = yaml.dump(specData, { lineWidth: 120, noRefs: true });
-  fs.writeFileSync(specPath, updatedYaml, 'utf8');
+  // Update spec side: set worktree field. CAWSFIX-24 / D10: skip the write
+  // if the parsed spec already declares the target worktree — yaml.dump
+  // would otherwise re-wrap folded scalars with no semantic change.
+  if (specData.worktree !== worktreeName) {
+    specData.worktree = worktreeName;
+    const updatedYaml = yaml.dump(specData, { lineWidth: 120, noRefs: true });
+    fs.writeFileSync(specPath, updatedYaml, 'utf8');
+  }
 
   // CAWSFIX-23: activate the spec if it's still at draft — bind is the
-  // lifecycle signal that work is starting.
-  const activated = autoActivateBoundSpec(root, specId);
+  // lifecycle signal that work is starting. CAWSFIX-25 / D8: pass the
+  // resolved specPath so the flip lands on whichever copy (worktree-local
+  // or main) was actually bound.
+  const activated = autoActivateBoundSpec(root, specId, specPath);
 
   console.log(chalk.green(`Binding established`));
   console.log(chalk.gray(`   Worktree: ${worktreeName} -> spec: ${specId}`));
