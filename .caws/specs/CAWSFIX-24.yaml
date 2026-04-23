@@ -1,0 +1,114 @@
+id: CAWSFIX-24
+type: fix
+title: Worktree baseline clobber, YAML re-serialize, and post-merge spec commit
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-04-23T04:00:45.534Z'
+updated_at: '2026-04-23T04:00:45.534Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 6
+  max_loc: 220
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/tests/worktree-manager.test.js
+    - packages/caws-cli/tests/worktree-auto-close-spec.test.js
+    - packages/caws-cli/tests/parallel-manager.test.js
+    - .caws/specs/CAWSFIX-24.yaml
+    - .caws/specs/registry.json
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/verify-acs.js
+    - packages/caws-cli/src/validation/
+invariants:
+  - >-
+    Creating or binding a worktree leaves .caws/working-spec.yaml in the
+    worktree's working tree byte-identical to its HEAD copy. The feature
+    spec is materialized only at .caws/specs/<id>.yaml, never by overwriting
+    the shared baseline working-spec.yaml.
+  - >-
+    Writing a feature spec during worktree bind/create re-serializes YAML
+    only when the semantic content actually changes. A spec whose parsed
+    content is already equivalent (same id, title, scope, status, and
+    worktree field) is written back byte-identical to what was read,
+    so `git status` reports clean.
+  - >-
+    After caws worktree merge succeeds and autoCloseBoundSpec flips the
+    spec to status: closed, the change is committed on the base branch
+    before the command returns. Main's working tree is clean on return.
+acceptance:
+  - id: A1
+    given: >-
+      A repo whose .caws/working-spec.yaml contains the project baseline
+      (e.g., id: PTRUTH-001) and whose .caws/specs/FEAT-X.yaml is a
+      feature spec for a different id
+    when: >-
+      caws worktree create some-feature --spec-id FEAT-X runs
+    then: >-
+      The worktree's .caws/working-spec.yaml is byte-identical to
+      main's HEAD copy (baseline preserved). The worktree's
+      .caws/specs/FEAT-X.yaml is present. `git status` inside the
+      worktree does NOT report .caws/working-spec.yaml as modified.
+  - id: A2
+    given: >-
+      A spec at .caws/specs/FEAT-Y.yaml already carries worktree: some-wt
+      and status: active
+    when: >-
+      Any code path invokes writeSpecWithWorktree(path, 'some-wt') on it
+      (re-create, re-bind, auto-activate)
+    then: >-
+      The returned content is byte-identical to the on-disk content. A
+      subsequent fs.writeFileSync(path, returnedContent) is a no-op from
+      git's perspective. Long folded scalars (title:, invariants) are not
+      re-wrapped to a different column width.
+  - id: A3
+    given: >-
+      A worktree bound to FEAT-Z (status: active) whose branch contains
+      feature commits ready to merge
+    when: >-
+      caws worktree merge some-wt succeeds
+    then: >-
+      After the command returns, `git status` on the base branch reports
+      a clean working tree. The status: closed flip on FEAT-Z.yaml has
+      been committed as chore(caws): close FEAT-Z spec post-merge (or
+      folded into the merge commit). The .caws/specs/FEAT-Z.yaml file
+      is not left in the modified state.
+  - id: A4
+    given: >-
+      A spec at status: closed (already)
+    when: >-
+      autoCloseBoundSpec runs
+    then: >-
+      The function returns result.specId = specId, result.acsPassing
+      per verify-acs, and performs no file write, no git add, no
+      git commit — byte-identical file on disk.
+  - id: A5
+    given: >-
+      A worktree-manager.test.js regression fixture that creates a
+      worktree bound to a feature spec and inspects the worktree's
+      filesystem state
+    when: >-
+      The test runs
+    then: >-
+      It asserts (a) .caws/working-spec.yaml in the worktree is
+      byte-identical to the baseline committed on main, and (b)
+      .caws/specs/<id>.yaml in the worktree contains the feature
+      spec content with worktree: <name> field set.
+non_functional:
+  perf:
+    api_p95_ms: 250
+  a11y: []
+  security:
+    - >-
+      No new shell invocations; no changes to scope-guard or write-guard
+      behavior. Regex-anchored status mutations preserved.
+contracts: []

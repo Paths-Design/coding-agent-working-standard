@@ -172,7 +172,7 @@ describe('worktree-manager', () => {
       expect(inferSpecIdForWorktree(entry.path)).toBe('FEAT-123');
     });
 
-    test('derives worktree working spec from canonical feature spec when available', () => {
+    test('derives worktree feature spec from canonical feature spec when available', () => {
       fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
       const canonicalSpec = [
         'id: FEAT-001',
@@ -187,19 +187,43 @@ describe('worktree-manager', () => {
       ].join('\n');
       fs.writeFileSync(path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml'), canonicalSpec);
 
+      // CAWSFIX-24 / D5: capture the project-level baseline BEFORE creating
+      // the worktree. It must survive untouched in the worktree's working tree.
+      const baselineWorkingSpec = fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))
+        ? fs.readFileSync(path.join(testDir, '.caws', 'working-spec.yaml'), 'utf8')
+        : null;
+
       const entry = createWorktree('with-canonical-spec', { specId: 'FEAT-001' });
       const worktreeWorkingSpec = path.join(entry.path, '.caws', 'working-spec.yaml');
       const worktreeFeatureSpec = path.join(entry.path, '.caws', 'specs', 'FEAT-001.yaml');
 
-      expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
       expect(fs.existsSync(worktreeFeatureSpec)).toBe(true);
       const canonicalAfter = fs.readFileSync(path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml'), 'utf8');
-      const worktreeWorkingContent = fs.readFileSync(worktreeWorkingSpec, 'utf8');
       const worktreeFeatureContent = fs.readFileSync(worktreeFeatureSpec, 'utf8');
 
       expect(canonicalAfter).toContain('worktree: with-canonical-spec');
-      expect(worktreeWorkingContent).toBe(canonicalAfter);
       expect(worktreeFeatureContent).toBe(canonicalAfter);
+
+      // CAWSFIX-24 / D5: the shared baseline working-spec.yaml must be
+      // byte-identical to what HEAD had before worktree creation. If it
+      // existed on main, the worktree's copy matches. If it didn't exist,
+      // the worktree must not have materialized one either.
+      if (baselineWorkingSpec !== null) {
+        expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
+        expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toBe(baselineWorkingSpec);
+      } else {
+        expect(fs.existsSync(worktreeWorkingSpec)).toBe(false);
+      }
+
+      // CAWSFIX-24 / D5: `git status` inside the worktree must NOT list
+      // .caws/working-spec.yaml as modified (previously the baseline clobber
+      // left this dirty on every create).
+      const status = execFileSync('git', ['status', '--porcelain', '--', '.caws/working-spec.yaml'], {
+        cwd: entry.path,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      expect(status).toBe('');
     });
 
     test('auto-commits only the canonical spec before creating a bound worktree', () => {
@@ -238,12 +262,57 @@ describe('worktree-manager', () => {
       expect(lastSubject).toBe('chore(caws): bind spec FEAT-900 to worktree auto-commit-spec');
     });
 
-    test('adds worktree field to generated fallback working spec', () => {
+    test('adds worktree field to generated fallback feature spec', () => {
+      // CAWSFIX-24 / D5: when --spec-id references a spec that doesn't exist,
+      // the fallback generator now writes to .caws/specs/<id>.yaml (feature
+      // spec location) rather than clobbering .caws/working-spec.yaml.
+      const baselineWorkingSpec = fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))
+        ? fs.readFileSync(path.join(testDir, '.caws', 'working-spec.yaml'), 'utf8')
+        : null;
+
       const entry = createWorktree('generated-spec', { specId: 'FEAT-404' });
+      const worktreeFeatureSpec = path.join(entry.path, '.caws', 'specs', 'FEAT-404.yaml');
       const worktreeWorkingSpec = path.join(entry.path, '.caws', 'working-spec.yaml');
 
-      expect(fs.existsSync(worktreeWorkingSpec)).toBe(true);
-      expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toContain('worktree: generated-spec');
+      expect(fs.existsSync(worktreeFeatureSpec)).toBe(true);
+      expect(fs.readFileSync(worktreeFeatureSpec, 'utf8')).toContain('worktree: generated-spec');
+
+      // Baseline preserved either way.
+      if (baselineWorkingSpec !== null) {
+        expect(fs.readFileSync(worktreeWorkingSpec, 'utf8')).toBe(baselineWorkingSpec);
+      }
+    });
+
+    test('CAWSFIX-24/D10: writeSpecWithWorktree is idempotent for already-bound specs', () => {
+      // Setting up a spec that already declares the target worktree should
+      // not re-serialize YAML on the second bind pass.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const canonicalSpec = [
+        'id: FEAT-010',
+        'title: >-',
+        '  A deliberately long title to exercise folded-scalar wrapping at',
+        '  the yaml.dump boundary so subsequent serialize passes might otherwise',
+        '  produce different byte widths on different invocations',
+        'risk_tier: 2',
+        'mode: feature',
+        'worktree: idem-test',
+        'acceptance: []',
+        '',
+      ].join('\n');
+      const specPath = path.join(testDir, '.caws', 'specs', 'FEAT-010.yaml');
+      fs.writeFileSync(specPath, canonicalSpec);
+
+      const { materializeWorktreeSpec } = require('../src/worktree/worktree-manager');
+      const cawsDest = path.join(testDir, '.caws'); // pretend this is a worktree caws dir
+      // Snapshot bytes, materialize once, then again — they must match.
+      const before = fs.readFileSync(specPath, 'utf8');
+      materializeWorktreeSpec(testDir, cawsDest, 'FEAT-010', 'idem-test', null);
+      const afterFirst = fs.readFileSync(specPath, 'utf8');
+      materializeWorktreeSpec(testDir, cawsDest, 'FEAT-010', 'idem-test', null);
+      const afterSecond = fs.readFileSync(specPath, 'utf8');
+
+      expect(afterFirst).toBe(before);
+      expect(afterSecond).toBe(before);
     });
   });
 
@@ -492,6 +561,58 @@ describe('worktree-manager', () => {
 
     test('throws for unknown worktree', () => {
       expect(() => mergeWorktree('nonexistent')).toThrow('not found');
+    });
+
+    test('CAWSFIX-24 / D6: commits the active->closed spec flip so main stays clean post-merge', () => {
+      // Seed a feature spec at status: draft. createWorktree --spec-id
+      // flips it to active and commits; mergeWorktree flips it to closed
+      // and must commit that change too, otherwise `.caws/specs/<id>.yaml`
+      // is left dirty on the base branch.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      const specPath = path.join(testDir, '.caws', 'specs', 'FEAT-CLOSE-01.yaml');
+      fs.writeFileSync(
+        specPath,
+        [
+          'id: FEAT-CLOSE-01',
+          'title: Post-merge close test',
+          'risk_tier: 3',
+          'mode: feature',
+          'status: draft',
+          'acceptance: []',
+          '',
+        ].join('\n')
+      );
+      execFileSync('git', ['add', '.caws/specs/FEAT-CLOSE-01.yaml'], {
+        cwd: testDir, stdio: 'pipe',
+      });
+      execFileSync('git', ['commit', '-m', 'chore(caws): seed FEAT-CLOSE-01'], {
+        cwd: testDir, stdio: 'pipe',
+      });
+
+      const entry = createWorktree('close-wt', { specId: 'FEAT-CLOSE-01' });
+      fs.writeFileSync(path.join(entry.path, 'feature.js'), 'const x = 2;');
+      execFileSync('git', ['add', 'feature.js'], { cwd: entry.path, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add feature'], { cwd: entry.path, stdio: 'pipe' });
+
+      const result = mergeWorktree('close-wt');
+      expect(result.merged).toBe(true);
+      expect(result.autoClosedSpecId).toBe('FEAT-CLOSE-01');
+
+      // D6 assertion: working tree on main must be clean — the close flip
+      // must have been committed, not left as a dirty working-tree mutation.
+      const status = execFileSync('git', ['status', '--porcelain'], {
+        cwd: testDir, encoding: 'utf8', stdio: 'pipe',
+      }).trim();
+      expect(status).toBe('');
+
+      // Spec content reflects the close.
+      expect(fs.readFileSync(specPath, 'utf8')).toContain('status: closed');
+
+      // The close commit is the tip commit (post-merge).
+      const lastSubject = execFileSync('git', ['log', '-1', '--format=%s'], {
+        cwd: testDir, encoding: 'utf8', stdio: 'pipe',
+      }).trim();
+      expect(lastSubject).toBe('chore(caws): close FEAT-CLOSE-01 spec post-merge');
     });
   });
 

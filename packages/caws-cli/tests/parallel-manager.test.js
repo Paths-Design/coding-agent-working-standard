@@ -183,6 +183,12 @@ describe('parallel-manager', () => {
     });
 
     test('propagates canonical feature specs into agent worktrees', () => {
+      // CAWSFIX-24 / D5: the canonical feature spec is materialized at
+      // .caws/specs/<id>.yaml inside the worktree, NOT by clobbering the
+      // shared .caws/working-spec.yaml baseline. The worktree receives
+      // the feature-spec copy (with the `worktree: <name>` field added)
+      // under its specs directory; commands resolve it via --spec-id /
+      // registry lookup.
       fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
       const canonicalSpec = [
         'id: auth-feature',
@@ -205,10 +211,12 @@ describe('parallel-manager', () => {
       );
 
       const results = setupParallel(plan);
-      const worktreeSpecPath = path.join(results[0].path, '.caws', 'working-spec.yaml');
+      const worktreeFeatureSpecPath = path.join(results[0].path, '.caws', 'specs', 'auth-feature.yaml');
 
-      const worktreeSpecContent = fs.readFileSync(worktreeSpecPath, 'utf8');
-      expect(worktreeSpecContent).toContain(canonicalSpec.trim());
+      const worktreeFeatureSpecContent = fs.readFileSync(worktreeFeatureSpecPath, 'utf8');
+      expect(worktreeFeatureSpecContent).toContain('id: auth-feature');
+      expect(worktreeFeatureSpecContent).toContain('title: Auth Feature');
+      expect(worktreeFeatureSpecContent).toContain('worktree: agent-auth');
     });
   });
 

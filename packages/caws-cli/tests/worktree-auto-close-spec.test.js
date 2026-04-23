@@ -52,6 +52,22 @@ describe('autoCloseBoundSpec (CAWSFIX-14 + CAWSFIX-23)', () => {
     const result = autoCloseBoundSpec(tempDir, 'TEST-02');
     expect(result.specId).toBe('TEST-02');
     expect(readAll('TEST-02')).toBe(before);
+    // CAWSFIX-24 / D6: idempotent path reports didWrite: false so the
+    // caller (mergeWorktree) knows not to git-add/commit an unchanged file.
+    expect(result.didWrite).toBe(false);
+  });
+
+  test('CAWSFIX-24 / D6: didWrite is true when status actually flips', () => {
+    writeSpec('TEST-DIDWRITE', 'active');
+    const result = autoCloseBoundSpec(tempDir, 'TEST-DIDWRITE');
+    expect(result.didWrite).toBe(true);
+    expect(result.specPath).toContain('TEST-DIDWRITE.yaml');
+  });
+
+  test('CAWSFIX-24 / D6: archived/unknown status reports didWrite: false', () => {
+    writeSpec('TEST-ARCHIVED', 'archived');
+    const result = autoCloseBoundSpec(tempDir, 'TEST-ARCHIVED');
+    expect(result.didWrite).toBe(false);
   });
 
   test('CAWSFIX-23 A3: draft spec flips to closed (merge is authoritative)', () => {

@@ -35,6 +35,18 @@ function writeSpecWithWorktree(filePath, worktreeName) {
     return content;
   }
 
+  // CAWSFIX-24 / D10: if the on-disk spec already declares the target
+  // worktree and reloads to an equivalent object, return the original
+  // bytes untouched. js-yaml.dump re-wraps folded scalars at its own
+  // line-width preference, which otherwise produces spurious bytes-only
+  // diffs on every bind/create. That mechanical churn (a) leaves dirty
+  // files on main after worktree create, and (b) causes merge conflicts
+  // when two validator invocations wrap the same title at different
+  // widths.
+  if (parsed.worktree === worktreeName) {
+    return content;
+  }
+
   parsed.worktree = worktreeName;
   return yaml.dump(parsed, { lineWidth: 120, noRefs: true });
 }
@@ -84,26 +96,37 @@ function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
   if (!specId) return;
 
   const canonicalSpecPath = findFeatureSpecPath(root, specId);
-  const workingSpecPath = path.join(cawsDest, 'working-spec.yaml');
+  const destSpecsDir = path.join(cawsDest, 'specs');
 
-  if (!canonicalSpecPath) {
-    console.warn(
-      chalk.yellow(`Warning: spec '${specId}' not found in .caws/specs/ — generating default working spec for worktree`)
-    );
-  }
+  // CAWSFIX-24 / D5: never write to .caws/working-spec.yaml inside the
+  // worktree. That file is the shared project baseline and must remain
+  // byte-identical to what was checked out from HEAD. The feature spec
+  // is materialized only under .caws/specs/<id>.yaml, which is what
+  // spec-resolver and commands actually read via --spec-id / registry.
 
   if (canonicalSpecPath) {
-    const destSpecsDir = path.join(cawsDest, 'specs');
     const destSpecPath = path.join(destSpecsDir, path.basename(canonicalSpecPath));
     fs.ensureDirSync(destSpecsDir);
 
-    // Keep a canonical feature-spec copy inside the worktree and align
-    // working-spec.yaml to that exact content for legacy-compatible commands.
+    // Keep a canonical feature-spec copy inside the worktree.
     const specContent = writeSpecWithWorktree(canonicalSpecPath, worktreeName);
-    fs.writeFileSync(destSpecPath, specContent);
-    fs.writeFileSync(workingSpecPath, specContent);
+    // writeSpecWithWorktree is idempotent (CAWSFIX-24 / D10): if the spec
+    // already has the worktree field and reloads to equivalent YAML, the
+    // returned content matches what's on disk. Skip the write in that case
+    // so `git status` stays clean.
+    const existing = fs.existsSync(destSpecPath) ? fs.readFileSync(destSpecPath, 'utf8') : null;
+    if (existing !== specContent) {
+      fs.writeFileSync(destSpecPath, specContent);
+    }
     return;
   }
+
+  // specId given but no canonical spec found — generate a default feature
+  // spec at .caws/specs/<specId>.yaml so the worktree has something to
+  // resolve against. Do not touch .caws/working-spec.yaml.
+  console.warn(
+    chalk.yellow(`Warning: spec '${specId}' not found in .caws/specs/ — generating default feature spec for worktree`)
+  );
 
   const { generateWorkingSpec } = require('../generators/working-spec');
   let specContent = generateWorkingSpec({
@@ -150,8 +173,9 @@ function materializeWorktreeSpec(root, cawsDest, specId, worktreeName, scope) {
     // Keep generated spec content if augmentation fails.
   }
 
-  fs.ensureDirSync(path.dirname(workingSpecPath));
-  fs.writeFileSync(workingSpecPath, specContent);
+  fs.ensureDirSync(destSpecsDir);
+  const generatedSpecPath = path.join(destSpecsDir, `${specId}.yaml`);
+  fs.writeFileSync(generatedSpecPath, specContent);
 }
 
 function parseSpecIdFromYamlFile(filePath) {
@@ -1233,6 +1257,7 @@ function mergeWorktree(name, options = {}) {
   // proven authority by merging.
   let autoClose = {
     specId: null, acsPassing: null, acsFailureCount: 0, acsTotal: 0, acsFailureIds: [],
+    didWrite: false, specPath: null,
   };
   if (entry.specId) {
     autoClose = autoCloseBoundSpec(root, entry.specId);
@@ -1243,6 +1268,30 @@ function mergeWorktree(name, options = {}) {
       console.warn(chalk.yellow(
         `     Merge succeeded — the spec reflects that — but follow up to address the failing ACs.`
       ));
+    }
+
+    // CAWSFIX-24 / D6: if the auto-close flipped the status, commit the
+    // change on the base branch before returning. Leaving it uncommitted
+    // was the "dirty main" footgun: the next worktree merge would abort
+    // on "local changes would be overwritten," after the prior worktree
+    // was already destroyed. Use --no-verify to match the merge commit's
+    // hook-skip discipline (the content was verified when the merge ran).
+    if (autoClose.didWrite && autoClose.specPath) {
+      try {
+        const relPath = path.relative(root, autoClose.specPath);
+        execFileSync('git', ['add', '--', relPath], { cwd: root, stdio: 'pipe' });
+        execFileSync(
+          'git',
+          ['commit', '--no-verify', '-m', `chore(caws): close ${autoClose.specId} spec post-merge`, '--', relPath],
+          { cwd: root, stdio: 'pipe' }
+        );
+      } catch (commitErr) {
+        // Non-fatal: a failed auto-commit leaves the spec dirty but the
+        // merge itself already succeeded. Warn so the caller can clean up.
+        console.warn(chalk.yellow(
+          `   ⚠ Auto-commit of ${autoClose.specId} close flip failed: ${commitErr.message}. Commit manually.`
+        ));
+      }
     }
   }
 
@@ -1303,10 +1352,13 @@ function autoCloseBoundSpec(root, specId) {
     acsFailureCount: 0,
     acsTotal: 0,
     acsFailureIds: [],
+    didWrite: false,
+    specPath: null,
   };
   try {
     const specPath = findFeatureSpecPath(root, specId);
     if (!specPath || !fs.existsSync(specPath)) return result;
+    result.specPath = specPath;
     const original = fs.readFileSync(specPath, 'utf8');
     // Idempotent: already closed → no-op, no write, no diff.
     if (/^status:[ \t]*closed[ \t]*$/m.test(original)) {
@@ -1339,6 +1391,7 @@ function autoCloseBoundSpec(root, specId) {
     }
     fs.writeFileSync(specPath, patched, 'utf8');
     result.specId = specId;
+    result.didWrite = true;
     return result;
   } catch {
     return result;

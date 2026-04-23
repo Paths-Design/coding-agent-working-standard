@@ -165,7 +165,15 @@
       "created_at": "2026-04-17T16:37:08.982Z",
       "updated_at": "2026-04-17T16:37:08.983Z",
       "owner": "83bcd40c-211b-4780-9d57-f1f89e1a6c86"
+    },
+    "CAWSFIX-24": {
+      "path": "CAWSFIX-24.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-23T04:00:45.534Z",
+      "updated_at": "2026-04-23T04:00:45.534Z",
+      "owner": "eded4b6b-410b-471a-85a3-75647b46adc2"
     }
   },
-  "lastUpdated": "2026-04-17T16:37:09.606Z"
+  "lastUpdated": "2026-04-23T04:00:46.035Z"
 }
