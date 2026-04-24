@@ -1,11 +1,11 @@
 id: CAWSFIX-27
 type: fix
 title: auto-commit draft→active flip in auto-bind worktree create path
-status: draft
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-04-24T01:05:33.834Z'
-updated_at: '2026-04-24T01:05:33.836Z'
+updated_at: '2026-04-24T01:30:28.149Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/worktree

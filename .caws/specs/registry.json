@@ -193,11 +193,11 @@
     "CAWSFIX-27": {
       "path": "CAWSFIX-27.yaml",
       "type": "fix",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-24T01:05:33.834Z",
-      "updated_at": "2026-04-24T01:05:33.836Z",
+      "updated_at": "2026-04-24T01:30:28.149Z",
       "owner": null
     }
   },
-  "lastUpdated": "2026-04-24T01:05:34.379Z"
+  "lastUpdated": "2026-04-24T01:30:28.254Z"
 }
