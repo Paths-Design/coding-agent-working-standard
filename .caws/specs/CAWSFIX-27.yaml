@@ -1,0 +1,107 @@
+id: CAWSFIX-27
+type: fix
+title: auto-commit draft→active flip in auto-bind worktree create path
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-04-24T01:05:33.834Z'
+updated_at: '2026-04-24T01:05:33.836Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/worktree
+  data_migration: false
+operational_rollback_slo: 5m
+change_budget:
+  max_files: 4
+  max_loc: 200
+scope:
+  in:
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/tests/worktree-manager.test.js
+    - .caws/specs/CAWSFIX-27.yaml
+    - .caws/specs/registry.json
+  out:
+    - node_modules/
+    - dist/
+    - packages/caws-cli/src/commands/
+    - packages/caws-cli/templates/
+invariants:
+  - >-
+    createWorktree resolves the bound spec (explicit --spec-id or auto-bind
+    via worktree-name match) BEFORE calling `git worktree add`, so the
+    draft→active flip + bind commit land on the base branch before the
+    worktree branch forks. Both paths produce identical on-disk state.
+  - >-
+    When createWorktree returns, the base-branch working tree is clean
+    with respect to the bound spec file — no uncommitted status flip or
+    worktree-field churn. Specifically, `git status --porcelain .caws/specs/<id>.yaml`
+    on the base branch is empty after the call.
+  - >-
+    The fix is additive — it does not change behavior when specId cannot
+    be resolved (no explicit flag and no spec declares the worktree name).
+    In that case, createWorktree proceeds without any spec commit, as
+    before CAWSFIX-27.
+acceptance:
+  - id: A1
+    given: >-
+      A spec on main declares `worktree: wt-name` and `status: draft`,
+      and the current branch is clean
+    when: >-
+      createWorktree('wt-name') is invoked WITHOUT an explicit specId option
+    then: >-
+      After the call returns, main's copy of the spec has `status: active`,
+      the change is committed with message
+      "chore(caws): bind spec <id> to worktree wt-name", and
+      `git status --porcelain` is clean for that spec path.
+  - id: A2
+    given: >-
+      A spec on main has `id: FEAT-001`, `status: draft`, and NO worktree
+      field, and the current branch is clean
+    when: >-
+      createWorktree('some-wt', { specId: 'FEAT-001' }) is invoked
+    then: >-
+      After the call returns, main's copy of the spec has both
+      `worktree: some-wt` and `status: active`, the change is committed
+      with the bind commit message, and `git status --porcelain` is clean.
+      (This is the pre-CAWSFIX-27 behavior and must remain unchanged.)
+  - id: A3
+    given: >-
+      No spec on main declares the requested worktree name, and no
+      explicit --spec-id is passed
+    when: >-
+      createWorktree('orphan-wt') is invoked
+    then: >-
+      createWorktree succeeds, no bind commit is produced on main, and
+      main's working tree remains clean with respect to .caws/specs/.
+      entry.specId is null in the returned registry entry.
+  - id: A4
+    given: >-
+      A spec on main is already at `status: active` and already declares
+      the target worktree field
+    when: >-
+      createWorktree('wt-name') is invoked (with or without --spec-id)
+    then: >-
+      No new commit is produced (the auto-commit is a no-op when there's
+      nothing to flip or bind). `git log -1 --format=%s` on main is
+      unchanged by the call.
+  - id: A5
+    given: >-
+      The worktree branch is created after the spec bind commit lands on
+      main
+    when: >-
+      The worktree branch is inspected with `git log`
+    then: >-
+      The bind commit is in the worktree branch's history (inherited from
+      base), and `git diff main..<worktree-branch> -- .caws/specs/<id>.yaml`
+      shows no lingering status or worktree-field delta at creation time.
+non_functional:
+  perf:
+    api_p95_ms: 100
+  a11y: []
+  security:
+    - >-
+      The auto-commit uses the existing ensureCanonicalSpecCommitted helper
+      (already in use for the explicit --spec-id path), which uses
+      execFileSync with array args — no shell interpolation. Commit message
+      is constructed from internal specId/worktreeName values only.
+contracts: []

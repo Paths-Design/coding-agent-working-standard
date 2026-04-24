@@ -262,6 +262,126 @@ describe('worktree-manager', () => {
       expect(lastSubject).toBe('chore(caws): bind spec FEAT-900 to worktree auto-commit-spec');
     });
 
+    test('CAWSFIX-27: auto-bound specs (no --spec-id) also commit draft→active flip', () => {
+      // Pre-CAWSFIX-27 bug: when the caller omits --spec-id but a spec on
+      // main already declares `worktree: <name>`, createWorktree would
+      // flip status: draft → status: active on the main spec but never
+      // commit it, leaving main with an uncommitted dirty spec file.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-AUTO.yaml'),
+        [
+          'id: FEAT-AUTO',
+          'title: Auto-bound spec',
+          'risk_tier: 3',
+          'mode: feature',
+          'status: draft',
+          'worktree: auto-bound-wt',
+          'acceptance: []',
+          '',
+        ].join('\n')
+      );
+      execFileSync('git', ['add', '.caws/specs/FEAT-AUTO.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add FEAT-AUTO spec'], { cwd: testDir, stdio: 'pipe' });
+
+      // Invoke createWorktree WITHOUT specId — auto-bind path.
+      const entry = createWorktree('auto-bound-wt');
+
+      const specPath = path.join(testDir, '.caws', 'specs', 'FEAT-AUTO.yaml');
+      const specContent = fs.readFileSync(specPath, 'utf8');
+      const status = execFileSync('git', ['status', '--porcelain', '--', '.caws/specs/FEAT-AUTO.yaml'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      const lastSubject = execFileSync('git', ['log', '-1', '--format=%s'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      // A1: spec is now active on disk
+      expect(specContent).toMatch(/^status:\s*active\s*$/m);
+      // A1: main's working tree is clean wrt the spec (no uncommitted flip)
+      expect(status).toBe('');
+      // A1: the flip landed as a bind commit on main
+      expect(lastSubject).toBe('chore(caws): bind spec FEAT-AUTO to worktree auto-bound-wt');
+      // The registry entry tracks the auto-resolved specId
+      expect(entry.specId).toBe('FEAT-AUTO');
+    });
+
+    test('CAWSFIX-27: no-match case (no --spec-id, no spec declares worktree) leaves main clean', () => {
+      // A3: if nothing resolves, createWorktree must not produce a bind
+      // commit or dirty the spec tree.
+      const headBefore = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      const entry = createWorktree('orphan-wt');
+
+      const headAfter = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      const specsStatus = execFileSync('git', ['status', '--porcelain', '--', '.caws/specs/'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      expect(headAfter).toBe(headBefore);
+      expect(specsStatus).toBe('');
+      expect(entry.specId).toBeNull();
+    });
+
+    test('CAWSFIX-27: already-active auto-bound spec is a no-op (no redundant commit)', () => {
+      // A4: if the spec is already active AND already declares the worktree
+      // field, the ensureCanonicalSpecCommitted path must not create a new
+      // empty commit — idempotence matters for repeat invocations.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-IDEM.yaml'),
+        [
+          'id: FEAT-IDEM',
+          'title: Already-active spec',
+          'risk_tier: 3',
+          'mode: feature',
+          'status: active',
+          'worktree: idem-wt',
+          'acceptance: []',
+          '',
+        ].join('\n')
+      );
+      execFileSync('git', ['add', '.caws/specs/FEAT-IDEM.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add FEAT-IDEM spec (already active)'], { cwd: testDir, stdio: 'pipe' });
+
+      const headBefore = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      const entry = createWorktree('idem-wt');
+
+      const headAfter = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      const status = execFileSync('git', ['status', '--porcelain', '--', '.caws/specs/FEAT-IDEM.yaml'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+
+      expect(headAfter).toBe(headBefore);
+      expect(status).toBe('');
+      expect(entry.specId).toBe('FEAT-IDEM');
+    });
+
     test('adds worktree field to generated fallback feature spec', () => {
       // CAWSFIX-24 / D5: when --spec-id references a spec that doesn't exist,
       // the fallback generator now writes to .caws/specs/<id>.yaml (feature

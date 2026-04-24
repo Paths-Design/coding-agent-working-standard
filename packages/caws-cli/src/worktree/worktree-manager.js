@@ -628,7 +628,21 @@ function createWorktree(name, options = {}) {
   const worktreePath = path.join(root, WORKTREES_DIR, name);
   const branchName = BRANCH_PREFIX + name;
   const base = baseBranch || getCurrentBranch();
-  const canonicalSpecPath = findFeatureSpecPath(root, specId);
+
+  // CAWSFIX-27: resolve the bound specId (explicit --spec-id OR auto-bind
+  // via worktree-name match) BEFORE creating the worktree, so the
+  // draft→active flip + bind commit land on the base branch before the
+  // worktree forks. Pre-CAWSFIX-27 the auto-bind path activated the spec
+  // but never committed it, leaving main with a dirty spec after
+  // `caws worktree create <name>` (no --spec-id).
+  let resolvedSpecId = specId || null;
+  if (!resolvedSpecId) {
+    resolvedSpecId = findSpecByWorktreeName(root, name);
+    if (resolvedSpecId) {
+      console.log(chalk.gray(`   Auto-bound spec: ${resolvedSpecId}`));
+    }
+  }
+  const canonicalSpecPath = findFeatureSpecPath(root, resolvedSpecId);
 
   // Check if the branch already exists in git (even if not in registry)
   // This catches cases where another agent created the branch outside CAWS
@@ -655,11 +669,14 @@ function createWorktree(name, options = {}) {
   // Create the worktree directory
   fs.ensureDirSync(path.dirname(worktreePath));
 
-  if (canonicalSpecPath) {
+  if (canonicalSpecPath && resolvedSpecId) {
     // CAWSFIX-23: flip draft→active BEFORE the bind commit so the spec
     // lifecycle transition lands in the same commit as the worktree field.
-    autoActivateBoundSpec(root, specId);
-    ensureCanonicalSpecCommitted(root, canonicalSpecPath, specId, name);
+    // CAWSFIX-27: this block now handles BOTH the explicit --spec-id path
+    // and the auto-bind (findSpecByWorktreeName) path — previously only
+    // the explicit path committed the flip.
+    autoActivateBoundSpec(root, resolvedSpecId);
+    ensureCanonicalSpecCommitted(root, canonicalSpecPath, resolvedSpecId, name);
   }
 
   // Create git worktree with new branch
@@ -723,18 +740,10 @@ function createWorktree(name, options = {}) {
     }
   }
 
-  // Auto-bind specId: if no explicit --spec-id was passed, scan .caws/specs/
-  // for a spec that declares `worktree: <name>`. This establishes the mutual
-  // reference that the scope guard uses to treat one spec as authoritative.
-  let resolvedSpecId = specId || null;
-  if (!resolvedSpecId) {
-    resolvedSpecId = findSpecByWorktreeName(root, name);
-    if (resolvedSpecId) {
-      console.log(chalk.gray(`   Auto-bound spec: ${resolvedSpecId}`));
-      // CAWSFIX-23: activate the auto-bound spec if it's still at draft.
-      autoActivateBoundSpec(root, resolvedSpecId);
-    }
-  }
+  // CAWSFIX-27: resolvedSpecId is now computed before the worktree is
+  // added (see block above the `fs.ensureDirSync` call). The activation
+  // and bind-commit already ran on the base branch, so the worktree forks
+  // from a base that already includes the flip commit.
 
   // Materialize a worktree-local working spec. Prefer the canonical feature
   // spec when it exists so isolated worktrees stay aligned with the main
