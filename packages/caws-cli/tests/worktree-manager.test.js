@@ -382,6 +382,60 @@ describe('worktree-manager', () => {
       expect(entry.specId).toBe('FEAT-IDEM');
     });
 
+    test('CAWSFIX-27 A5: worktree branch inherits the bind commit from base', () => {
+      // A5 spec: the bind commit lands on main BEFORE git worktree add, so
+      // the worktree's branch forks from a base that already includes it.
+      // `git diff main..<branch> -- .caws/specs/<id>.yaml` at creation time
+      // must show no lingering delta — otherwise the worktree would see a
+      // pre-flip spec and the merge back would re-apply the flip unnecessarily.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'specs', 'FEAT-A5.yaml'),
+        [
+          'id: FEAT-A5',
+          'title: A5 inheritance test',
+          'risk_tier: 3',
+          'mode: feature',
+          'status: draft',
+          'worktree: a5-inherit-wt',
+          'acceptance: []',
+          '',
+        ].join('\n')
+      );
+      execFileSync('git', ['add', '.caws/specs/FEAT-A5.yaml'], { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add FEAT-A5 spec'], { cwd: testDir, stdio: 'pipe' });
+
+      const entry = createWorktree('a5-inherit-wt');
+
+      // The worktree branch must contain the bind commit in its history.
+      const lastBindSubject = execFileSync('git', ['log', '-1', '--format=%s', entry.branch, '--', '.caws/specs/FEAT-A5.yaml'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      expect(lastBindSubject).toBe('chore(caws): bind spec FEAT-A5 to worktree a5-inherit-wt');
+
+      // No delta on the spec between main and the worktree branch at
+      // creation time: the flip commit was inherited from base, and
+      // materializeWorktreeSpec writes the same committed bytes into the
+      // worktree's own copy (which lives at .caws/specs/FEAT-A5.yaml on the
+      // worktree branch, not on main).
+      const diffAgainstBranch = execFileSync(
+        'git',
+        ['diff', `main..${entry.branch}`, '--', '.caws/specs/FEAT-A5.yaml'],
+        { cwd: testDir, encoding: 'utf8', stdio: 'pipe' }
+      );
+      expect(diffAgainstBranch).toBe('');
+
+      // The committed spec on main has status: active.
+      const mainSpec = execFileSync('git', ['show', 'main:.caws/specs/FEAT-A5.yaml'], {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      expect(mainSpec).toMatch(/^status:\s*active\s*$/m);
+    });
+
     test('adds worktree field to generated fallback feature spec', () => {
       // CAWSFIX-24 / D5: when --spec-id references a spec that doesn't exist,
       // the fallback generator now writes to .caws/specs/<id>.yaml (feature
