@@ -3,11 +3,11 @@ type: feature
 title: >-
   Agent claim model — surface session id mismatches at lifecycle boundaries with
   session-log context
-status: draft
+status: closed
 risk_tier: 3
 mode: feature
 created_at: '2026-04-27T20:41:23.406Z'
-updated_at: '2026-04-27T20:41:23.406Z'
+updated_at: '2026-04-27T21:13:03.913Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/utils/agent-session.js

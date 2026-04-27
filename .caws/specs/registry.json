@@ -225,11 +225,11 @@
     "CAWSFIX-31": {
       "path": "CAWSFIX-31.yaml",
       "type": "feature",
-      "status": "draft",
+      "status": "closed",
       "created_at": "2026-04-27T20:41:23.406Z",
-      "updated_at": "2026-04-27T20:41:23.406Z",
+      "updated_at": "2026-04-27T21:13:03.913Z",
       "owner": null
     }
   },
-  "lastUpdated": "2026-04-27T20:41:23.521Z"
+  "lastUpdated": "2026-04-27T21:13:03.930Z"
 }
