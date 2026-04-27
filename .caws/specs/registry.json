@@ -229,7 +229,15 @@
       "created_at": "2026-04-27T20:41:23.406Z",
       "updated_at": "2026-04-27T21:13:03.913Z",
       "owner": null
+    },
+    "CAWSFIX-32": {
+      "path": "CAWSFIX-32.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-27T21:15:51.200Z",
+      "updated_at": "2026-04-27T21:15:51.201Z",
+      "owner": null
     }
   },
-  "lastUpdated": "2026-04-27T21:13:03.930Z"
+  "lastUpdated": "2026-04-27T21:15:51.317Z"
 }

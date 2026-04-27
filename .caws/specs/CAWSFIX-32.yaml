@@ -1,0 +1,122 @@
+id: CAWSFIX-32
+type: fix
+title: >-
+  Complete CAWSFIX-31 wiring — assertWorktreeOwnership + refreshAgentClaim on
+  bind/merge/auto-bind, status Claim panel E2E test
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-04-27T21:15:51.200Z'
+updated_at: '2026-04-27T21:15:51.201Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/status.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/status.js
+    - packages/caws-cli/tests/agent-claim.test.js
+    - packages/caws-cli/tests/agent-claim-wiring.test.js
+    - .caws/specs/CAWSFIX-32.yaml
+  out:
+    - node_modules/
+    - dist/
+    - build/
+    - .caws/specs/.archive/
+invariants:
+  - 'Every CAWS lifecycle entry point that mutates a worktree (`caws worktree bind`, `caws worktree merge`, the auto-bind path inside `createWorktree`) calls `assertWorktreeOwnership` before mutating the registry. The CAWSFIX-31 invariant "*A session id mismatch on bind, merge, auto-bind, or claim is a soft-block*" must be enforced at every named entry point, not just `claim`.'
+  - 'After a successful `caws worktree create | bind | merge`, the current session entry in `agents.json` reflects the operated worktree (and current spec where applicable). The CLI heartbeats independently of any IDE hook on every lifecycle verb, including worktree-side ones.'
+  - 'The `caws status` Claim panel surface is exercised end-to-end through `displayStatus` so a regression that breaks the integration is caught by jest, not only by manual smoke tests. Silent swallow of `renderClaimPanel` failures is unacceptable.'
+  - 'Foreign-claim soft-blocks must surface the same structured warning across all entry points (claim, bind, merge, auto-bind) — same `<sid>:<platform>` format, same heartbeat age, same session-log pointers, same `--takeover` instruction. No warning-format drift.'
+acceptance:
+  - id: A1
+    given: 'a worktree W bound by session A in `worktrees.json:owner`'
+    when: '`caws worktree bind <spec-id> --name W` runs from session B without `--takeover`'
+    then: 'the bind operation refuses, prints the structured warning naming claimer A as `<sid>:<platform>`, last heartbeat, session-log pointer, and the `--takeover` instruction; exits non-zero; the registry is not mutated'
+  - id: A2
+    given: 'a worktree W bound by session A'
+    when: '`caws worktree bind <spec-id> --name W --takeover` runs from session B'
+    then: 'bind proceeds, owner becomes B, prior_owners audit is appended, agents.json reflects B with `worktree: W` and the operated `specId`'
+  - id: A3
+    given: 'a worktree W with foreign owner'
+    when: '`caws worktree merge W` runs without `--takeover`'
+    then: 'merge refuses with the structured warning; exits non-zero; the merge does not execute'
+  - id: A4
+    given: 'a worktree W with foreign owner'
+    when: '`caws worktree merge W --takeover` runs'
+    then: 'merge proceeds; prior_owners audit is recorded on the worktree entry before merge; agents.json reflects the takeover'
+  - id: A5
+    given: 'a successful `caws worktree create <name>` (no foreign claim path)'
+    when: 'the operation finishes'
+    then: '`agents.json` has an entry for the current session with `worktree: <name>` and `specId: <resolved-spec-id>` (or null if no spec); lastSeen is the operation timestamp'
+  - id: A6
+    given: 'a successful `caws worktree bind <spec-id>` (same-session or post-takeover)'
+    when: 'the operation finishes'
+    then: '`agents.json` has an entry for the current session with `worktree: <name>` and `specId: <spec-id>`'
+  - id: A7
+    given: 'a successful `caws worktree merge <name>` (same-session or post-takeover)'
+    when: 'the operation finishes'
+    then: '`agents.json` has an entry for the current session with the operated worktree captured (lastSeen is the merge timestamp)'
+  - id: A8
+    given: 'a cwd inside a worktree W and a populated `agents.json` for the current session'
+    when: '`displayStatus` runs (the function called by `caws status`)'
+    then: 'the printed output contains the Claim panel — specifically the literal "Claim:" header line plus the `<sid>:<platform>` of the owner. Verified by capturing console.log inside a jest test, not by smoke alone.'
+  - id: A9
+    given: 'a cwd inside a worktree W AND `renderClaimPanel` would throw if invoked (e.g., agents.json is malformed)'
+    when: '`displayStatus` runs'
+    then: 'the panel is omitted but the rest of `displayStatus` continues normally — best-effort swallow is acceptable, but the test asserts the swallow path does not break the rest of the status output'
+  - id: A10
+    given: 'a successful takeover via assertWorktreeOwnership'
+    when: 'the worktrees.json registry is read'
+    then: 'agents.json carries an entry for the current session with `worktree: <name>`. The CAWSFIX-31 takeover-heartbeat is now asserted by jest, not only by smoke. (Closes the gap flagged in the CAWSFIX-31 closure summary.)'
+acceptance_criteria:
+  - id: A1
+    description: '`caws worktree bind` soft-blocks on foreign owner without `--takeover`; warning format matches the claim path.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A1
+  - id: A2
+    description: '`caws worktree bind --takeover` overwrites owner, writes prior_owners audit, refreshes agents.json with worktree+specId.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A2
+  - id: A3
+    description: '`caws worktree merge` soft-blocks on foreign owner without `--takeover`.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A3
+  - id: A4
+    description: '`caws worktree merge --takeover` proceeds with audit + heartbeat refresh.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A4
+  - id: A5
+    description: 'Successful `caws worktree create` refreshes agents.json with current worktree + specId.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A5
+  - id: A6
+    description: 'Successful `caws worktree bind` (same-session or takeover) refreshes agents.json with current worktree + specId.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A6
+  - id: A7
+    description: 'Successful `caws worktree merge` refreshes agents.json with current worktree.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A7
+  - id: A8
+    description: '`displayStatus` integration end-to-end test: captures console.log output and asserts the Claim panel is included when cwd is inside a worktree.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A8
+  - id: A9
+    description: 'Status renders without the Claim panel (silent swallow) when `renderClaimPanel` would throw, but the rest of the status output continues — verifies the swallow does not propagate but does not also mask other failures.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A9
+  - id: A10
+    description: 'Takeover-heartbeat assertion: assertWorktreeOwnership writes an agents.json entry for the current session with `worktree: <name>` after `--takeover`. (Tightens CAWSFIX-31 A3 which only asserted worktrees.json state.)'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim-wiring.test.js::A10
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []
