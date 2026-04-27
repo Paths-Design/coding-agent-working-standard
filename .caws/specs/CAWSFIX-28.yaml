@@ -1,0 +1,29 @@
+id: CAWSFIX-28
+type: fix
+title: Prevent stale repo-local schema mirrors from blocking lifecycle transitions
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-04-27T03:24:40.841Z'
+updated_at: '2026-04-27T03:24:40.842Z'
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - src/
+    - tests/
+  out:
+    - node_modules/
+    - dist/
+    - build/
+invariants:
+  - System maintains data consistency
+acceptance: []
+acceptance_criteria: []
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []

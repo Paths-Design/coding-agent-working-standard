@@ -197,7 +197,15 @@
       "created_at": "2026-04-24T01:05:33.834Z",
       "updated_at": "2026-04-24T01:30:28.149Z",
       "owner": null
+    },
+    "CAWSFIX-28": {
+      "path": "CAWSFIX-28.yaml",
+      "type": "fix",
+      "status": "draft",
+      "created_at": "2026-04-27T03:24:40.841Z",
+      "updated_at": "2026-04-27T03:24:40.842Z",
+      "owner": null
     }
   },
-  "lastUpdated": "2026-04-24T01:30:28.254Z"
+  "lastUpdated": "2026-04-27T03:24:41.337Z"
 }
