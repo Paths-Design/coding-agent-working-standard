@@ -301,6 +301,40 @@ async function createSpec(id, options = {}) {
   const existingSpecPath = path.join(specsDir, `${id}.yaml`);
   const specExists = await fs.pathExists(existingSpecPath);
 
+  // CAWSFIX-30: archive-collision guard. An id that lives in `.archive/`
+  // is still a taken id — surface it before going further. Detection is
+  // filesystem-driven (not registry-driven) so manually-moved legacy
+  // specs are also caught.
+  const archivedSpecPath = path.join(specsDir, ARCHIVE_SUBDIR, `${id}.yaml`);
+  const archivedExists = !specExists && (await fs.pathExists(archivedSpecPath));
+  if (archivedExists && !force) {
+    console.error(
+      chalk.red(
+        `Spec '${id}' already exists in archive: ${path.relative(findProjectRoot(), archivedSpecPath)}`
+      )
+    );
+    console.error(
+      chalk.yellow(
+        `Use --force to remove the archived copy and resurrect the id, ` +
+          `or pick a different id.`
+      )
+    );
+    throw new Error(
+      `Spec '${id}' collides with archived spec at .archive/${id}.yaml. ` +
+        `Use --force to resurrect or choose another id.`
+    );
+  }
+  if (archivedExists && force) {
+    // Resurrection: drop the archived YAML and any registry pointer so
+    // the rest of createSpec can write a fresh draft cleanly.
+    await fs.remove(archivedSpecPath);
+    const registry = await loadSpecsRegistry();
+    if (registry.specs[id]) {
+      delete registry.specs[id];
+      await saveSpecsRegistry(registry);
+    }
+  }
+
   // Handle conflict resolution
   let answer = null;
 

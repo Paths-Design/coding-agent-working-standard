@@ -1,0 +1,66 @@
+id: CAWSFIX-30
+type: fix
+title: Warn on caws specs create when id collides with archived spec
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-04-27T16:58:49.462Z'
+updated_at: '2026-04-27T16:58:49.462Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/specs.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/tests/specs-archive-collision.test.js
+    - .caws/specs/CAWSFIX-30.yaml
+  out:
+    - node_modules/
+    - dist/
+    - build/
+    - .caws/specs/.archive/
+invariants:
+  - 'Spec ids must be globally unique across active and archived locations. `caws specs create <id>` must surface a collision regardless of where the existing copy lives.'
+  - 'A `--force` resurrection of an archived id must remove the archived YAML before creating the new one, so two files never coexist for the same id.'
+  - 'Collision detection is filesystem-driven (checks `.archive/<id>.yaml` directly), not registry-driven, so manually-moved legacy specs in `.archive/` are also detected.'
+acceptance:
+  - id: A1
+    given: 'a spec already exists at `.caws/specs/.archive/<id>.yaml` (registered or not)'
+    when: '`caws specs create <id>` runs without `--force`'
+    then: 'creation fails with an error naming the archived path and instructing the operator to use `--force` to resurrect or pick a different id; no new file is written under `.caws/specs/`'
+  - id: A2
+    given: 'a spec already exists at `.caws/specs/.archive/<id>.yaml`'
+    when: '`caws specs create <id> --force` runs'
+    then: 'the archived YAML is removed, any registry entry for `<id>` is dropped, and a fresh draft is created at `.caws/specs/<id>.yaml` — only one file with that id remains on disk afterward'
+  - id: A3
+    given: 'an archived spec at `.caws/specs/.archive/<id>.yaml` whose registry entry is missing (manually moved by an operator before CAWSFIX-29 shipped)'
+    when: '`caws specs create <id>` runs without `--force`'
+    then: 'creation still fails with the archive-collision error, because detection inspects the filesystem rather than relying on the registry'
+  - id: A4
+    given: 'no spec exists for `<id>` anywhere under `.caws/specs/` (neither active nor archived)'
+    when: '`caws specs create <id>` runs'
+    then: 'creation proceeds normally, unchanged from the prior behavior — the new check is purely additive'
+acceptance_criteria:
+  - id: A1
+    description: 'caws specs create rejects an id that collides with an archived spec when --force is not supplied; error names the archive path.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive-collision.test.js::A1
+  - id: A2
+    description: '--force removes the archived YAML and any registry entry, then creates a fresh draft; only one file for the id remains afterward.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive-collision.test.js::A2
+  - id: A3
+    description: 'collision detection is filesystem-driven — fires even when the archived spec has no registry entry (manually-moved legacy case).'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive-collision.test.js::A3
+  - id: A4
+    description: 'creating an id with no archive collision is unchanged — the guard is additive and does not regress the happy path.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive-collision.test.js::A4
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []

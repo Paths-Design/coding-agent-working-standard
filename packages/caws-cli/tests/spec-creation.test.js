@@ -256,9 +256,11 @@ describe('Enhanced Spec Creation with Conflict Resolution', () => {
         created_at: '2025-01-01T00:00:00Z',
       };
 
-      fs.pathExists
-        .mockResolvedValueOnce(true) // First call: existing spec exists
-        .mockResolvedValueOnce(false); // Second call: new spec doesn't exist
+      // Default: nothing else exists (covers archive-collision check and any
+      // other downstream pathExists calls). Override only the first call to
+      // signal the FEAT-002 active-path collision.
+      fs.pathExists.mockResolvedValue(false);
+      fs.pathExists.mockResolvedValueOnce(true); // First call: FEAT-002 exists at active path
 
       fs.ensureDir.mockResolvedValue(undefined);
 
