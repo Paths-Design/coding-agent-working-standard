@@ -363,6 +363,27 @@ function displayStatus(data) {
   console.log(chalk.bold.cyan('\nCAWS Project Status'));
   console.log(chalk.cyan('==============================================\n'));
 
+  // CAWSFIX-31: Surface worktree claim if cwd is inside a worktree.
+  // Best-effort — failures (no .caws, no registry, etc.) are silent.
+  try {
+    const path = require('path');
+    const { findProjectRoot } = require('../utils/detection');
+    const { renderClaimPanel } = require('../utils/agent-display');
+    const root = findProjectRoot();
+    const cwd = process.cwd();
+    const worktreesBase = path.join(root, '.caws', 'worktrees');
+    if (cwd.startsWith(worktreesBase + path.sep)) {
+      const worktreeName = path.relative(worktreesBase, cwd).split(path.sep)[0];
+      const panel = renderClaimPanel(root, worktreeName);
+      if (panel) {
+        console.log(chalk.green(panel));
+        console.log('');
+      }
+    }
+  } catch {
+    // best-effort
+  }
+
   // Working Spec Status
   if (spec) {
     console.log(chalk.green('Working Spec'));

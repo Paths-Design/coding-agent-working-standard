@@ -9,7 +9,13 @@ const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
 const { createValidator, getSchemaPath } = require('../utils/schema-validator');
-const { getAgentSessionId } = require('../utils/agent-session');
+const {
+  getAgentSessionId,
+  loadAgentRegistry,
+  findSessionLogs,
+  refreshAgentClaim,
+} = require('../utils/agent-session');
+const { formatClaimNotice, formatOrphanLogHint } = require('../utils/agent-display');
 const { lifecycle, EVENTS } = require('../utils/lifecycle-events');
 
 const WORKTREES_DIR = '.caws/worktrees';
@@ -397,6 +403,132 @@ function getCurrentBranch() {
 // loadRegistry() is called multiple times per command; warning every time
 // floods stderr and contributes to Claude Code context-window exhaustion.
 let _schemaWarned = false;
+
+/**
+ * CAWSFIX-31: Assert that the current agent session may operate on
+ * worktree `name`. The decision is purely session-id-equality based —
+ * never TTL, never log freshness — because rolled-over and resumed
+ * sessions should not be auto-blocked just because their registry
+ * entry was pruned.
+ *
+ * Returns `{ allowed, warning?, priorOwner? }`. The caller decides
+ * how to react:
+ *
+ *   - allowed=true,  no warning            → silent proceed (same session id, no claim, etc.)
+ *   - allowed=true,  warning present       → soft notice (orphan session log, no block)
+ *   - allowed=false, warning present       → soft-block; surface warning, exit non-zero
+ *
+ * On takeover (`allowTakeover: true`), the function rewrites the
+ * worktree entry's owner to the current session id and appends the
+ * prior owner to a `prior_owners` audit array (with lastSeen captured
+ * from agents.json at takeover time, or null if pruned).
+ *
+ * @param {string} root - Project root
+ * @param {string} name - Worktree name
+ * @param {object} [opts]
+ * @param {boolean} [opts.allowTakeover=false] - Apply takeover when true
+ * @param {string} [opts.takeoverCommandHint] - Suggested command for the warning
+ * @returns {{ allowed: boolean, warning?: string, priorOwner?: object }}
+ */
+function assertWorktreeOwnership(root, name, opts = {}) {
+  const { allowTakeover = false, takeoverCommandHint } = opts;
+  const registry = loadRegistry(root);
+  const entry = registry.worktrees[name];
+  if (!entry) {
+    return { allowed: true };
+  }
+
+  const currentSession = getAgentSessionId(root);
+  const owner = entry.owner;
+
+  // No CAWS-tracked owner — surface session-log hint if present, but
+  // allow the operation to proceed.
+  if (!owner) {
+    const branch = entry.branch || null;
+    const logs = branch ? findSessionLogs(root, { branch }) : [];
+    if (logs.length > 0) {
+      return {
+        allowed: true,
+        warning: formatOrphanLogHint({ worktree: name, sessionLogs: logs, root }),
+      };
+    }
+    return { allowed: true };
+  }
+
+  // Same session id → silent proceed. Roll-over case included: an
+  // agent that resumed with the same session id is its own claimant.
+  if (currentSession && owner === currentSession) {
+    return { allowed: true };
+  }
+
+  // Foreign claim — gather context.
+  const agentRegistry = loadAgentRegistry(root);
+  const priorOwnerEntry = agentRegistry.agents[owner] || null;
+  const priorOwnerLastSeen = priorOwnerEntry ? priorOwnerEntry.lastSeen : null;
+  const priorOwnerPlatform = priorOwnerEntry ? priorOwnerEntry.platform : 'unknown';
+
+  // Surface session-log pointers (by sid OR by branch).
+  const branch = entry.branch || null;
+  const seen = new Set();
+  const sessionLogs = [];
+  for (const log of findSessionLogs(root, { sessionId: owner })) {
+    if (seen.has(log.path)) continue;
+    seen.add(log.path);
+    sessionLogs.push(log);
+  }
+  if (branch) {
+    for (const log of findSessionLogs(root, { branch })) {
+      if (seen.has(log.path)) continue;
+      seen.add(log.path);
+      sessionLogs.push(log);
+    }
+  }
+
+  const takeoverCommand =
+    takeoverCommandHint || `caws worktree claim ${name} --takeover`;
+  const warning = formatClaimNotice({
+    worktree: name,
+    priorOwnerEntry,
+    priorOwnerSessionId: owner,
+    sessionLogs,
+    root,
+    takeoverCommand,
+  });
+
+  if (!allowTakeover) {
+    return { allowed: false, warning };
+  }
+
+  // Takeover: rewrite owner, append prior_owners audit entry.
+  const priorOwners = Array.isArray(entry.prior_owners) ? entry.prior_owners : [];
+  priorOwners.push({
+    sessionId: owner,
+    platform: priorOwnerPlatform,
+    lastSeen: priorOwnerLastSeen,
+    takenOver_at: new Date().toISOString(),
+  });
+  registry.worktrees[name] = {
+    ...entry,
+    owner: currentSession || null,
+    prior_owners: priorOwners,
+  };
+  saveRegistry(root, registry);
+
+  // Heartbeat the new owner so agents.json reflects the takeover too.
+  // Without this, `caws status` and `caws agents list` would show the
+  // takeover'd worktree with an "unknown / pruned" current owner until
+  // some other lifecycle verb fires.
+  refreshAgentClaim(root, { worktree: name });
+
+  return {
+    allowed: true,
+    priorOwner: {
+      sessionId: owner,
+      platform: priorOwnerPlatform,
+      lastSeen: priorOwnerLastSeen,
+    },
+  };
+}
 
 /**
  * Load the worktree registry
@@ -1559,6 +1691,7 @@ module.exports = {
   reconcileRegistry,
   loadRegistry,
   saveRegistry,
+  assertWorktreeOwnership,
   getRepoRoot,
   getLastCommitInfo,
   isBranchMerged,

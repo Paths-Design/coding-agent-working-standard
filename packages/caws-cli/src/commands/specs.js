@@ -16,7 +16,7 @@ const { SPEC_TYPES } = require('../constants/spec-types');
 const { suggestFeatureBreakdown } = require('../utils/spec-resolver');
 const { findProjectRoot } = require('../utils/detection');
 const { loadRegistry: loadWorktreeRegistry, getRepoRoot } = require('../worktree/worktree-manager');
-const { getAgentSessionId } = require('../utils/agent-session');
+const { getAgentSessionId, refreshAgentClaim } = require('../utils/agent-session');
 const { initializeState, saveState, deleteState } = require('../utils/working-state');
 const { appendEvent } = require('../utils/event-log');
 
@@ -590,9 +590,13 @@ async function createSpec(id, options = {}) {
     );
   } catch (err) {
     // Surface on stderr but don't propagate — the spec is already created.
-     
+
     console.error(`event-log: failed to record spec_created for ${id}: ${err.message}`);
   }
+
+  // CAWSFIX-31: refresh the current agent's claim so agents.json reflects
+  // the current spec context. Best-effort — failures must not break the op.
+  refreshAgentClaim(findProjectRoot(), { specId: id });
 
   return {
     id,
@@ -864,9 +868,13 @@ async function deleteSpec(id) {
       { projectRoot: findProjectRoot() }
     );
   } catch (err) {
-     
+
     console.error(`event-log: failed to record spec_deleted for ${id}: ${err.message}`);
   }
+
+  // CAWSFIX-31: every lifecycle verb refreshes for consistency, even
+  // delete (no other cleanup runs on delete; this is signal-of-presence).
+  refreshAgentClaim(findProjectRoot(), { specId: id });
 
   return true;
 }
@@ -957,9 +965,15 @@ async function closeSpec(id) {
         { projectRoot: findProjectRoot() }
       );
     } catch (err) {
-       
+
       console.error(`event-log: failed to record spec_closed for ${id}: ${err.message}`);
     }
+
+    // CAWSFIX-31: refresh agent claim — also fires on no-op closes
+    // (already-closed specs return ok=true after an early exit) only
+    // when the status actually flipped, since this is the signal that
+    // matters: the agent is currently working on this spec.
+    refreshAgentClaim(findProjectRoot(), { specId: id });
   }
 
   return ok;
@@ -1081,6 +1095,9 @@ async function archiveSpec(id) {
   } catch (err) {
     console.error(`event-log: failed to record spec_archived for ${id}: ${err.message}`);
   }
+
+  // CAWSFIX-31: refresh agent claim after a successful archive transition.
+  refreshAgentClaim(findProjectRoot(), { specId: id });
 
   return true;
 }

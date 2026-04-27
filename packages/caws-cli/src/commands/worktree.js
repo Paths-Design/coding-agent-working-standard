@@ -14,6 +14,7 @@ const {
   repairWorktrees,
   loadRegistry,
   saveRegistry,
+  assertWorktreeOwnership,
   getRepoRoot,
   findFeatureSpecPathFromCwd,
   autoActivateBoundSpec,
@@ -42,9 +43,11 @@ async function worktreeCommand(subcommand, options = {}) {
         return handleRepair(options);
       case 'bind':
         return handleBind(options);
+      case 'claim':
+        return handleClaim(options);
       default:
         console.error(chalk.red(`Unknown worktree subcommand: ${subcommand}`));
-        console.log(chalk.blue('Available: create, list, destroy, merge, prune, repair, bind'));
+        console.log(chalk.blue('Available: create, list, destroy, merge, prune, repair, bind, claim'));
         process.exit(1);
     }
   } catch (error) {
@@ -397,6 +400,78 @@ function handleBind(options) {
   }
   console.log(chalk.gray(`   Registry: ${path.join(root, '.caws', 'worktrees.json')}`));
   console.log(chalk.gray(`   Spec file: ${specPath}`));
+}
+
+/**
+ * CAWSFIX-31: caws worktree claim <name> [--takeover]
+ *
+ * Without --takeover: read-only context surface. Prints the current
+ * claim (owner, heartbeat, session-log pointers) and exits 1 when the
+ * worktree is owned by a different session id. Modifies nothing.
+ *
+ * With --takeover: rewrites the owner to the current session id,
+ * appends the prior owner to the worktree entry's prior_owners audit
+ * array (including their lastSeen-at-takeover from agents.json), and
+ * exits 0.
+ *
+ * Same session-id silent-proceed: if the current session already owns
+ * the worktree, the command is a successful no-op (exit 0, brief
+ * confirmation).
+ */
+function handleClaim(options) {
+  const { name, takeover } = options;
+
+  if (!name) {
+    console.error(chalk.red('Worktree name is required'));
+    console.log(chalk.blue('Usage: caws worktree claim <name> [--takeover]'));
+    process.exit(1);
+  }
+
+  const root = getRepoRoot();
+  const registry = loadRegistry(root);
+  if (!registry.worktrees || !registry.worktrees[name]) {
+    console.error(chalk.red(`Worktree '${name}' not found in registry.`));
+    console.log(chalk.blue('Run: caws worktree list  to see available worktrees'));
+    process.exit(1);
+  }
+
+  const result = assertWorktreeOwnership(root, name, {
+    allowTakeover: !!takeover,
+    takeoverCommandHint: `caws worktree claim ${name} --takeover`,
+  });
+
+  if (!result.allowed) {
+    // Foreign claim, no --takeover. Print the structured warning that
+    // assertWorktreeOwnership built (claimer, heartbeat, session-log
+    // pointers, takeover hint) and exit 1. Modifies nothing.
+    console.error(chalk.yellow(result.warning));
+    process.exit(1);
+  }
+
+  // allowed = true. Three sub-cases:
+  //   1. takeover happened (priorOwner present)
+  //   2. orphan-log soft notice (warning present, no priorOwner)
+  //   3. clean / same-session (no warning)
+  if (result.priorOwner) {
+    console.log(
+      chalk.green(`Took over worktree '${name}'.`)
+    );
+    console.log(
+      chalk.gray(
+        `   Prior owner ${result.priorOwner.sessionId}:${result.priorOwner.platform || 'unknown'} recorded in prior_owners audit.`
+      )
+    );
+  } else if (result.warning) {
+    console.log(chalk.yellow(result.warning));
+    console.log(chalk.green(`Proceeding — no CAWS-tracked claim on '${name}'.`));
+  } else {
+    const entry = registry.worktrees[name];
+    if (entry.owner === getAgentSessionId(root)) {
+      console.log(chalk.green(`Worktree '${name}' is already claimed by the current session.`));
+    } else {
+      console.log(chalk.green(`Worktree '${name}' has no active claim.`));
+    }
+  }
 }
 
 module.exports = { worktreeCommand };

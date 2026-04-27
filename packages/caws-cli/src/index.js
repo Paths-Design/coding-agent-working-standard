@@ -392,6 +392,28 @@ worktreeCmd
   .option('--name <name>', 'Worktree name (auto-detected from cwd if omitted)')
   .action((specId, options) => worktreeCommand('bind', { specId, ...options }));
 
+worktreeCmd
+  .command('claim <name>')
+  .description('Claim worktree session ownership (read-only without --takeover)')
+  .option('--takeover', 'Force takeover of a foreign claim (writes prior_owners audit)', false)
+  .action((name, options) => worktreeCommand('claim', { name, ...options }));
+
+// Agents command group
+const { agentsCommand } = require('./commands/agents');
+const agentsCmd = program
+  .command('agents')
+  .description('Inspect the agent registry and session-log pointers');
+
+agentsCmd
+  .command('list')
+  .description('List active CAWS-registered agent sessions')
+  .action(() => agentsCommand('list', {}));
+
+agentsCmd
+  .command('show <session-id>')
+  .description('Show details for a specific agent session, including session-log pointer')
+  .action((id) => agentsCommand('show', { id }));
+
 // Scope command group
 const scopeCmd = program
   .command('scope')
