@@ -907,6 +907,11 @@ function createWorktree(name, options = {}) {
   registry.worktrees[name] = entry;
   saveRegistry(root, registry);
 
+  // CAWSFIX-32: heartbeat the current session into agents.json so the
+  // worktree+spec context is visible to other agents and to
+  // `caws status` / `caws agents list` immediately after create.
+  refreshAgentClaim(root, { worktree: name, specId: resolvedSpecId || null });
+
   return entry;
 }
 
@@ -1299,7 +1304,7 @@ function destroyWorktree(name, options = {}) {
 function mergeWorktree(name, options = {}) {
   const root = getRepoRoot();
   const registry = loadRegistry(root);
-  const { dryRun = false, deleteBranch = true, message } = options;
+  const { dryRun = false, deleteBranch = true, message, takeover = false } = options;
 
   let entry = registry.worktrees[name];
   if (!entry) {
@@ -1313,6 +1318,26 @@ function mergeWorktree(name, options = {}) {
       throw new Error(`Worktree '${name}' not found in registry or git worktree list`);
     }
   }
+
+  // CAWSFIX-32: assert ownership BEFORE any merge/git work. Foreign
+  // claim soft-blocks unless --takeover is supplied, matching the
+  // bind/claim semantics. Throws on refusal so the CLI command handler
+  // surfaces the structured warning.
+  const ownership = assertWorktreeOwnership(root, name, {
+    allowTakeover: takeover,
+    takeoverCommandHint: `caws worktree merge ${name} --takeover`,
+  });
+  if (!ownership.allowed) {
+    const err = new Error(ownership.warning);
+    err.claimWarning = true;
+    throw err;
+  }
+
+  // CAWSFIX-32: heartbeat the current session into agents.json now that
+  // ownership is confirmed. Same-session merges need this since the
+  // takeover branch only fires inside assertWorktreeOwnership when a
+  // takeover actually occurs.
+  refreshAgentClaim(root, { worktree: name, specId: entry.specId || null });
 
   const baseBranch = entry.baseBranch || 'main';
 

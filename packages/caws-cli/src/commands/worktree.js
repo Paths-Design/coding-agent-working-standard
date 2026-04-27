@@ -19,7 +19,7 @@ const {
   findFeatureSpecPathFromCwd,
   autoActivateBoundSpec,
 } = require('../worktree/worktree-manager');
-const { getAgentSessionId } = require('../utils/agent-session');
+const { getAgentSessionId, refreshAgentClaim } = require('../utils/agent-session');
 
 /**
  * Handle worktree subcommands
@@ -179,7 +179,7 @@ function handleDestroy(options) {
 }
 
 function handleMerge(options) {
-  const { name, dryRun, deleteBranch = true, message } = options;
+  const { name, dryRun, deleteBranch = true, message, takeover = false } = options;
 
   if (!name) {
     console.error(chalk.red('Worktree name is required'));
@@ -197,7 +197,7 @@ function handleMerge(options) {
     console.log(chalk.cyan(`Merging worktree: ${name}`));
   }
 
-  const result = mergeWorktree(name, { dryRun, deleteBranch, message });
+  const result = mergeWorktree(name, { dryRun, deleteBranch, message, takeover });
 
   if (dryRun) {
     if (result.conflicts.length > 0) {
@@ -317,11 +317,11 @@ function handleBind(options) {
   const path = require('path');
   const fs = require('fs-extra');
   const yaml = require('js-yaml');
-  const { specId, name } = options;
+  const { specId, name, takeover } = options;
 
   if (!specId) {
     console.error(chalk.red('Spec ID is required'));
-    console.log(chalk.blue('Usage: caws worktree bind <spec-id> [--name <worktree-name>]'));
+    console.log(chalk.blue('Usage: caws worktree bind <spec-id> [--name <worktree-name>] [--takeover]'));
     process.exit(1);
   }
 
@@ -345,14 +345,34 @@ function handleBind(options) {
   }
 
   const root = getRepoRoot();
-  const registry = loadRegistry(root);
-
-  // Find the worktree entry in the registry
-  if (!registry.worktrees || !registry.worktrees[worktreeName]) {
+  // CAWSFIX-32: probe the registry for existence first, but do NOT load
+  // the full registry into a variable yet — assertWorktreeOwnership may
+  // mutate it on takeover, and we'd overwrite the takeover write later
+  // with our stale in-memory copy. Re-load after the ownership check.
+  const probe = loadRegistry(root);
+  if (!probe.worktrees || !probe.worktrees[worktreeName]) {
     console.error(chalk.red(`Worktree '${worktreeName}' not found in registry.`));
     console.log(chalk.blue('Run: caws worktree list  to see available worktrees'));
     process.exit(1);
+    return;
   }
+
+  // CAWSFIX-32: assert ownership BEFORE any registry/spec mutation.
+  // Foreign claim soft-blocks unless --takeover is supplied, mirroring
+  // `caws worktree claim`.
+  const ownership = assertWorktreeOwnership(root, worktreeName, {
+    allowTakeover: !!takeover,
+    takeoverCommandHint: `caws worktree bind ${specId} --name ${worktreeName} --takeover`,
+  });
+  if (!ownership.allowed) {
+    console.error(chalk.yellow(ownership.warning));
+    process.exit(1);
+    return;
+  }
+
+  // Now load the registry fresh — assertWorktreeOwnership may have
+  // rewritten owner + appended prior_owners on takeover.
+  const registry = loadRegistry(root);
 
   // Load the spec file. CAWSFIX-25 / D8: when bind runs from inside a
   // worktree, prefer the worktree's own .caws/specs/ copy so specs that
@@ -391,6 +411,11 @@ function handleBind(options) {
   // resolved specPath so the flip lands on whichever copy (worktree-local
   // or main) was actually bound.
   const activated = autoActivateBoundSpec(root, specId, specPath);
+
+  // CAWSFIX-32: heartbeat the current session into agents.json so the
+  // bound worktree+spec context is visible to other agents and to
+  // `caws status` / `caws agents list`.
+  refreshAgentClaim(root, { worktree: worktreeName, specId });
 
   console.log(chalk.green(`Binding established`));
   console.log(chalk.gray(`   Worktree: ${worktreeName} -> spec: ${specId}`));

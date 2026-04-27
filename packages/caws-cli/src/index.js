@@ -369,6 +369,7 @@ worktreeCmd
   .option('--dry-run', 'Preview conflicts without merging', false)
   .option('--message <msg>', 'Custom merge commit message')
   .option('--no-delete-branch', 'Keep the branch after merging')
+  .option('--takeover', 'Force takeover of a foreign worktree claim (writes prior_owners audit)', false)
   .action((name, options) => worktreeCommand('merge', { name, ...options }));
 
 worktreeCmd
@@ -390,6 +391,7 @@ worktreeCmd
   .command('bind <spec-id>')
   .description('Bind a spec to this worktree (fixes mutual reference)')
   .option('--name <name>', 'Worktree name (auto-detected from cwd if omitted)')
+  .option('--takeover', 'Force takeover of a foreign worktree claim (writes prior_owners audit)', false)
   .action((specId, options) => worktreeCommand('bind', { specId, ...options }));
 
 worktreeCmd
