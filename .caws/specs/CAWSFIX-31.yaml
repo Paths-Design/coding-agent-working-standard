@@ -1,0 +1,135 @@
+id: CAWSFIX-31
+type: feature
+title: >-
+  Agent claim model — surface session id mismatches at lifecycle boundaries with
+  session-log context
+status: draft
+risk_tier: 3
+mode: feature
+created_at: '2026-04-27T20:41:23.406Z'
+updated_at: '2026-04-27T20:41:23.406Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/utils/agent-session.js
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/commands/status.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/utils/agent-session.js
+    - packages/caws-cli/src/utils/agent-display.js
+    - packages/caws-cli/src/commands/agents.js
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/commands/status.js
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/tests/agent-claim.test.js
+    - .caws/specs/CAWSFIX-31.yaml
+  out:
+    - node_modules/
+    - dist/
+    - build/
+    - .caws/specs/.archive/
+    - .claude/hooks/session-log.sh
+invariants:
+  - 'Worktree session ownership is recorded in `worktrees.json:owner` as a session id. A session id mismatch on bind, merge, auto-bind, or claim is a soft-block that requires explicit `--takeover` to overwrite.'
+  - 'Decision-gating uses session id equality only — never TTL, log freshness, or wall-clock heuristics. The TTL pruning in `agents.json` is registry hygiene; it does not authorize takeover.'
+  - 'All visible references to a claim use the composite `<sessionId>:<platform>` format so an operator or agent can trace provenance to platform-specific transcript directories (e.g., `~/.claude/projects/<slug>/<id>.jsonl`).'
+  - 'CAWS lifecycle CLI operations (specs create/close/archive, worktree create/bind/merge) refresh the current session entry in `agents.json` with `worktree` and `specId` populated. The CLI heartbeats independently of any IDE hook.'
+  - 'Session-log artifacts under `tmp/<sessionId>/` are surfaced as pointers (path, turn count, last-turn timestamp) when a foreign claim is detected. The CLI does not summarize or interpret them; the agent reads them and decides.'
+  - 'Takeover is recorded as durable audit by appending the prior owner to a `prior_owners: [{ sessionId, platform, lastSeen, takenOver_at }]` array on the worktree entry. The `lastSeen` is copied from the prior owner agents.json entry at takeover time (or null if the entry was already TTL-pruned), so postmortems can see how stale the prior heartbeat was when the takeover happened. The audit lives in the file, not in agent memory.'
+acceptance:
+  - id: A1
+    given: 'a worktree W whose `worktrees.json:owner` equals the current agent session id'
+    when: 'any lifecycle operation (`bind`, `merge`, auto-bind, `claim`) runs against W'
+    then: 'the operation proceeds silently with no claim warning printed; the current session re-heartbeats normally'
+  - id: A2
+    given: 'a worktree W whose `worktrees.json:owner` is set to a session id different from the current session'
+    when: 'any lifecycle operation runs against W without `--takeover`'
+    then: 'the operation refuses to proceed and prints a structured warning naming the claimer as `<sid>:<platform>`, the entry last heartbeat, any matching `tmp/<sid>/` session-log pointer, and the exact `--takeover` command to override'
+  - id: A3
+    given: 'a worktree W with a foreign claim and a live agents.json entry for the prior owner'
+    when: 'the lifecycle operation runs with `--takeover`'
+    then: 'the operation proceeds, the current session id replaces the prior owner, and the prior owner is appended to `prior_owners: [{ sessionId, platform, lastSeen, takenOver_at }]` — `lastSeen` carries the prior owner heartbeat from agents.json (or null when the entry was already pruned). The audit is durable in `worktrees.json`.'
+  - id: A4
+    given: 'a worktree W whose `worktrees.json:owner` is set, but whose owner agents.json entry has been TTL-pruned'
+    when: 'a different session attempts a lifecycle operation without `--takeover`'
+    then: 'the operation still soft-blocks because `worktrees.json:owner` is authoritative; the warning notes the heartbeat is stale (and may show "no live agent registry entry") but does not auto-allow'
+  - id: A5
+    given: 'an `agents.json` populated with one or more sessions across platforms (claude-code, cursor, unknown)'
+    when: '`caws agents list` runs'
+    then: 'every entry is shown as `<sessionId>:<platform>` with worktree, specId, firstSeen, lastSeen — no platform filtering applied'
+  - id: A6
+    given: 'a successful invocation of `caws specs create|close|archive|delete` or `caws worktree create|bind|merge`'
+    when: 'the operation finishes'
+    then: '`agents.json` has an entry for the current session id whose `specId` (and `worktree` for worktree-affecting ops) reflects the operation; lastSeen is the operation timestamp. Delete is included for consistency even though no other cleanup runs on delete — every lifecycle verb refreshes.'
+  - id: A7
+    given: 'a foreign claim on worktree W AND an existing `tmp/<owner-sessionId>/.meta.json` whose branch matches W branch'
+    when: 'the soft-block warning prints'
+    then: 'the warning includes the session-log directory path, the turn count, and the last-turn timestamp (read from the most recent `turn-NNN.json` mtime or content) so the agent has a concrete next step for context'
+  - id: A8
+    given: 'a worktree W whose `worktrees.json:owner` is unset, but a `tmp/<sessionId>/.meta.json` exists with a matching branch'
+    when: 'a lifecycle operation runs'
+    then: 'the operation proceeds without `--takeover`, but a softer notice surfaces the session-log path with the message "previous session may still be active — read tmp/.../session.txt for context before continuing"; the operation is not blocked'
+  - id: A9
+    given: 'a cwd inside a worktree'
+    when: '`caws status` runs'
+    then: 'the output includes a "Claim" panel showing the current owner as `<sid>:<platform>`, last heartbeat, and a pointer to any session-log under `tmp/`; if no claim exists it prints "no active claim"'
+  - id: A10
+    given: 'a `caws worktree claim <name>` command is run without `--takeover` against a worktree owned by a different session'
+    when: 'the command executes'
+    then: 'it prints the same context block as the soft-block (claimer + heartbeat + session-log pointer) but exits non-zero without modifying state — claim without `--takeover` is read-only context surfacing'
+acceptance_criteria:
+  - id: A1
+    description: 'lifecycle ops in a worktree owned by the current session id proceed silently and re-heartbeat the agent registry.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A1
+  - id: A2
+    description: 'lifecycle ops in a worktree owned by a different session id soft-block without `--takeover`; warning names claimer, heartbeat, session-log pointer, and the exact takeover command.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A2
+  - id: A3
+    description: '`--takeover` overwrites owner and appends prior owner (with sessionId, platform, lastSeen-at-takeover, takenOver_at) to `prior_owners` audit array on the worktree entry.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A3
+  - id: A4
+    description: 'TTL-expired heartbeat does NOT auto-allow takeover — `worktrees.json:owner` is authoritative; warning text reflects stale heartbeat but still soft-blocks.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A4
+  - id: A5
+    description: '`caws agents list` shows all platforms in `<sid>:<platform>` format with worktree, specId, lastSeen.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A5
+  - id: A6
+    description: 'specs create/close/archive/delete and worktree create/bind/merge refresh the current session entry in `agents.json` with current `specId` (and `worktree` where applicable). Delete included for consistency.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A6
+  - id: A7
+    description: 'soft-block warning includes session-log directory path, turn count, and last-turn timestamp when `tmp/<owner-sid>/.meta.json` matches the worktree branch.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A7
+  - id: A8
+    description: 'unowned worktree with a matching `tmp/<sid>/.meta.json` surfaces a softer notice (read for context) but proceeds without `--takeover`.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A8
+  - id: A9
+    description: '`caws status` adds a Claim panel showing owner, heartbeat, and session-log pointer when cwd is inside a worktree; states "no active claim" when unset.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A9
+  - id: A10
+    description: '`caws worktree claim <name>` without `--takeover` is read-only — surfaces context, exits non-zero on foreign claim, modifies nothing.'
+    test_nodeids:
+      - packages/caws-cli/tests/agent-claim.test.js::A10
+non_functional:
+  a11y: []
+  perf:
+    claim_check_overhead_p95_ms: 50
+    rationale: 'Claim check on every lifecycle op reads agents.json + worktrees.json (small JSON, single-digit KB) and scans `tmp/*/.meta.json` (one stat per dir). Budget keeps the overhead invisible for typical CLI invocations.'
+  security:
+    - 'Session-log scanning under `tmp/` must not follow symlinks outside the project root (use `realpathSync` and verify the resolved path stays under `<root>/tmp/`).'
+    - 'Reading `tmp/<sid>/.meta.json` must tolerate missing or malformed JSON without crashing the CLI — best-effort surfacing only.'
+contracts: []
