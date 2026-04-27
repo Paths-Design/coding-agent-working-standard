@@ -3,11 +3,11 @@ type: fix
 title: >-
   Complete CAWSFIX-31 wiring — assertWorktreeOwnership + refreshAgentClaim on
   bind/merge/auto-bind, status Claim panel E2E test
-status: draft
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-04-27T21:15:51.200Z'
-updated_at: '2026-04-27T21:15:51.201Z'
+updated_at: '2026-04-27T21:31:01.556Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/commands/worktree.js
