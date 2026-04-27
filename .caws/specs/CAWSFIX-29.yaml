@@ -1,0 +1,117 @@
+id: CAWSFIX-29
+type: feature
+title: caws specs archive command — canonical .archive/ directory + status auto-flip
+status: draft
+risk_tier: 3
+mode: feature
+created_at: '2026-04-27T15:33:54.657Z'
+updated_at: '2026-04-27T15:33:54.657Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/utils/spec-resolver.js
+    - packages/caws-cli/src/index.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/utils/spec-resolver.js
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/tests/specs-archive.test.js
+    - .caws/specs/CAWSFIX-29.yaml
+  out:
+    - node_modules/
+    - dist/
+    - build/
+    - .caws/specs/.archive/
+invariants:
+  - 'The canonical archive location for spec YAML files is `.caws/specs/.archive/<id>.yaml`. No other directory under `.caws/specs/` is treated as archived.'
+  - 'A file present in `.caws/specs/.archive/` is reported as `status: archived` by the spec listing/resolver regardless of the YAML literal status field, so manually-moved legacy specs cannot be misclassified.'
+  - 'The archive operation only mutates two YAML lines (status, updated_at) before moving the file. Comments, field ordering, and YAML aliases are preserved (mirrors CAWSFIX-15 closeSpec discipline).'
+  - 'Archive is blocked when active (non-destroyed, non-merged) worktrees reference the spec, because archiving removes scope enforcement.'
+acceptance:
+  - id: A1
+    given: '`.caws/specs/.archive/` does not exist and a spec `<id>.yaml` lives at `.caws/specs/<id>.yaml` with any non-archived status'
+    when: '`caws specs archive <id>` runs'
+    then: '`.caws/specs/.archive/` is created (mode 0755) and `<id>.yaml` is moved into it; the original path no longer exists'
+  - id: A2
+    given: 'a spec at `.caws/specs/<id>.yaml` with `status: closed` (or any non-archived status)'
+    when: '`caws specs archive <id>` runs'
+    then: 'the file at `.caws/specs/.archive/<id>.yaml` contains exactly `status: archived` and a fresh `updated_at` ISO timestamp; every other line of the YAML is byte-identical to the pre-archive content'
+  - id: A3
+    given: 'a spec at `.caws/specs/<id>.yaml` whose YAML already declares `status: archived`'
+    when: '`caws specs archive <id>` runs'
+    then: 'the file is still moved to `.caws/specs/.archive/<id>.yaml` (location is the canonical truth), `updated_at` is bumped, and the command returns success — the operation is idempotent for repeated runs'
+  - id: A4
+    given: 'a spec already located at `.caws/specs/.archive/<id>.yaml` and registered there'
+    when: '`caws specs archive <id>` runs again'
+    then: 'no file moves occur, status remains `archived`, and the command returns success with a `Spec already archived` message'
+  - id: A5
+    given: 'a spec being archived (any starting status, originally at `.caws/specs/<id>.yaml`)'
+    when: '`caws specs archive <id>` completes'
+    then: '`.caws/specs/registry.json` reflects `status: archived` and `path: ".archive/<id>.yaml"` for that spec'
+  - id: A6
+    given: 'a YAML file in `.caws/specs/.archive/` whose internal `status` field disagrees with the directory (e.g., `status: closed` left over from manual archiving)'
+    when: '`caws specs list` (or any resolver listing) enumerates specs'
+    then: 'the spec surfaces as `status: archived` regardless of the YAML literal — directory location is authoritative for archive state'
+  - id: A7
+    given: 'an unknown spec id with no entry in registry.json and no file under `.caws/specs/`'
+    when: '`caws specs archive <id>` runs'
+    then: 'the command exits with a non-zero error code and a clear `Spec <id> not found` message; nothing is moved or created'
+  - id: A8
+    given: 'a spec whose id appears in `.caws/worktrees.json` with status not in {destroyed, merged}'
+    when: '`caws specs archive <id>` runs'
+    then: 'the command refuses with an error naming the referencing worktree(s) and instructing the operator to run `caws worktree destroy <name>` first; no file moves occur'
+  - id: A9
+    given: 'a successful archive run'
+    when: 'the event log is inspected'
+    then: 'a `spec_archived` event with `spec_id`, `prior_status`, and `prior_path` data is appended (best-effort — logging failure does not roll back the archive, mirroring spec_closed)'
+acceptance_criteria:
+  - id: A1
+    description: 'caws specs archive creates `.caws/specs/.archive/` from scratch and moves the YAML there; original path is gone.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A1
+  - id: A2
+    description: 'archived file diff is exactly two lines (status, updated_at); every other line is byte-identical to the pre-archive content (mirrors closeSpec discipline).'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A2
+  - id: A3
+    description: 'a spec already at `status: archived` is still moved to the canonical `.archive/` location with bumped updated_at — operation is idempotent on repeated runs.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A3
+  - id: A4
+    description: 'a spec already in `.archive/` is a no-op — file mtime and content unchanged on repeated archive call.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A4
+  - id: A5
+    description: 'registry.json shows `status: archived` and `path: ".archive/<id>.yaml"` after archive; updated_at matches the YAML.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A5
+  - id: A6
+    description: 'listSpecFiles surfaces files under `.archive/` as `status: archived` even when the YAML literal says otherwise — directory location is authoritative.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A6
+  - id: A7
+    description: 'archiving an unknown spec id returns false; no `.archive/` directory is created.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A7
+  - id: A8
+    description: 'archive refuses when an active (non-destroyed, non-merged) worktree references the spec; error names the referencing worktree.'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A8
+  - id: A9
+    description: '`spec_archived` event is appended to events.jsonl with prior_status and prior_path data (best-effort, mirrors spec_closed).'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::A9
+  - id: SEC-1
+    description: 'path-traversal ids (e.g. `../etc/passwd`) are rejected before any filesystem state is touched (NFR security).'
+    test_nodeids:
+      - packages/caws-cli/tests/specs-archive.test.js::Security
+non_functional:
+  a11y: []
+  perf:
+    archive_op_p95_ms: 200
+  security:
+    - Archive moves files within `.caws/specs/`; resolved paths must remain under that root (no symlink/`..` escape).
+contracts: []

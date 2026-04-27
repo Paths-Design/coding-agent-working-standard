@@ -234,6 +234,11 @@ specsCmd
   .action((id) => specsCommand('close', { id }));
 
 specsCmd
+  .command('archive <id>')
+  .description('Archive a spec — move to .caws/specs/.archive/ and flip status to archived')
+  .action((id) => specsCommand('archive', { id }));
+
+specsCmd
   .command('conflicts')
   .description('Check for scope conflicts between specs')
   .action(() => specsCommand('conflicts', {}));

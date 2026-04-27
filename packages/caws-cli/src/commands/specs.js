@@ -224,6 +224,17 @@ function normalizeSpecForValidation(spec = {}) {
  * List all spec files in the specs directory
  * @returns {Promise<Array>} Array of spec file info
  */
+// Files under this subdir of `.caws/specs/` are treated as archived,
+// regardless of what the YAML's `status` field says (CAWSFIX-29 invariant:
+// directory location is authoritative for archive state).
+const ARCHIVE_SUBDIR = '.archive';
+
+function isArchivePath(relPath) {
+  if (!relPath) return false;
+  const normalized = relPath.replace(/\\/g, '/');
+  return normalized === ARCHIVE_SUBDIR || normalized.startsWith(`${ARCHIVE_SUBDIR}/`);
+}
+
 async function listSpecFiles() {
   const specsDir = getSpecsDir();
   if (!(await fs.pathExists(specsDir))) {
@@ -239,13 +250,14 @@ async function listSpecFiles() {
     try {
       const content = await fs.readFile(filePath, 'utf8');
       const spec = yaml.load(content);
+      const inArchive = isArchivePath(file);
 
       specs.push({
         id: spec.id || path.basename(file, path.extname(file)),
         path: file,
         type: spec.type || 'feature',
         title: spec.title || 'Untitled',
-        status: spec.status || 'draft',
+        status: inArchive ? 'archived' : spec.status || 'draft',
         risk_tier: spec.risk_tier || 'T3',
         mode: spec.mode || 'development',
         created_at: spec.created_at || new Date().toISOString(),
@@ -920,6 +932,126 @@ async function closeSpec(id) {
 }
 
 /**
+ * Archive a spec: move its YAML to `.caws/specs/.archive/<id>.yaml`,
+ * flip status to `archived`, update the registry, and emit a `spec_archived`
+ * event. The archive directory is the canonical truth for archive state —
+ * the listing layer (listSpecFiles) treats any file under `.archive/` as
+ * archived regardless of the YAML literal.
+ *
+ * @param {string} id - Spec identifier
+ * @returns {Promise<boolean>} true on success (including idempotent no-ops),
+ *   false on validation/lookup failure.
+ */
+async function archiveSpec(id) {
+  // Path-traversal guard: ids must be plain filenames, not paths.
+  // Reject before touching any filesystem state.
+  if (!id || typeof id !== 'string' || path.basename(id) !== id || id.includes('..')) {
+    console.error(chalk.red(`Invalid spec id '${id}': must be a plain identifier`));
+    return false;
+  }
+
+  const registry = await loadSpecsRegistry();
+  const entry = registry.specs[id];
+  if (!entry) {
+    console.error(chalk.red(`Spec '${id}' not found`));
+    return false;
+  }
+
+  // Block if owned by another session (mirror closeSpec/deleteSpec).
+  const currentSession = getAgentSessionId(findProjectRoot());
+  if (entry.owner && currentSession && entry.owner !== currentSession) {
+    console.error(
+      chalk.red(
+        `Cannot archive spec '${id}': owned by another session (${entry.owner}). ` +
+          `Only the creator session can archive a spec.`
+      )
+    );
+    return false;
+  }
+
+  // Block if active worktrees still reference the spec — archiving removes
+  // scope enforcement and would invalidate in-flight work.
+  const referencingWorktrees = getWorktreesReferencingSpec(id);
+  if (referencingWorktrees.length > 0) {
+    const names = referencingWorktrees.join(', ');
+    console.error(
+      chalk.red(
+        `Cannot archive spec '${id}': active worktree(s) [${names}] reference it. ` +
+          `Destroy the worktree(s) first with 'caws worktree destroy <name>'.`
+      )
+    );
+    return false;
+  }
+
+  const specsDir = getSpecsDir();
+  const priorPath = entry.path;
+  const currentSpecPath = path.join(specsDir, priorPath);
+
+  // If the file is already in the archive directory, the canonical
+  // location is satisfied — just ensure the registry status agrees and exit.
+  if (isArchivePath(priorPath)) {
+    if (entry.status !== 'archived') {
+      registry.specs[id] = { ...entry, status: 'archived' };
+      await saveSpecsRegistry(registry);
+    }
+    console.log(chalk.yellow(`Spec '${id}' is already archived.`));
+    return true;
+  }
+
+  if (!(await fs.pathExists(currentSpecPath))) {
+    console.error(
+      chalk.red(`Cannot archive spec '${id}': file missing at ${currentSpecPath}`)
+    );
+    return false;
+  }
+
+  // CAWSFIX-15-style targeted rewrite: only `status:` and `updated_at:`
+  // lines move. Comments, ordering, and YAML aliases survive untouched.
+  const original = await fs.readFile(currentSpecPath, 'utf8');
+  const priorStatus = entry.status || 'draft';
+  const nowIso = new Date().toISOString();
+  let patched = original.replace(/^status:\s*\S+\s*$/m, 'status: archived');
+  patched = patched.replace(/^updated_at:.*$/m, `updated_at: '${nowIso}'`);
+
+  const archiveDir = path.join(specsDir, ARCHIVE_SUBDIR);
+  await fs.ensureDir(archiveDir);
+  const newRelPath = `${ARCHIVE_SUBDIR}/${id}.yaml`;
+  const newAbsPath = path.join(specsDir, newRelPath);
+
+  // Write the patched content to the archive location, then remove the
+  // original. fs-extra's writeFile is atomic-enough for single-file moves
+  // on the same filesystem; we avoid `move` because we already mutated content.
+  await fs.writeFile(newAbsPath, patched);
+  await fs.remove(currentSpecPath);
+
+  registry.specs[id] = {
+    ...entry,
+    path: newRelPath,
+    status: 'archived',
+    updated_at: nowIso,
+  };
+  await saveSpecsRegistry(registry);
+
+  // Best-effort event emission, matching spec_closed/spec_deleted policy:
+  // event-log failure does not roll back the archive operation.
+  try {
+    await appendEvent(
+      {
+        actor: 'cli',
+        event: 'spec_archived',
+        spec_id: id,
+        data: { id, prior_status: priorStatus, prior_path: priorPath },
+      },
+      { projectRoot: findProjectRoot() }
+    );
+  } catch (err) {
+    console.error(`event-log: failed to record spec_archived for ${id}: ${err.message}`);
+  }
+
+  return true;
+}
+
+/**
  * Display specs in a formatted table
  * @param {Array} specs - Array of spec objects
  */
@@ -1402,6 +1534,28 @@ async function specsCommand(action, options = {}) {
           });
         }
 
+        case 'archive': {
+          if (!options.id) {
+            throw new Error('Spec ID is required. Usage: caws specs archive <id>');
+          }
+
+          const archived = await archiveSpec(options.id);
+          if (!archived) {
+            throw new Error(`Could not archive spec '${options.id}'`);
+          }
+
+          console.log(
+            chalk.green(
+              `Archived spec: ${options.id} -- moved to .caws/specs/.archive/`
+            )
+          );
+
+          return outputResult({
+            command: 'specs archive',
+            spec: options.id,
+          });
+        }
+
         case 'types': {
           console.log(chalk.bold.cyan('\nAvailable Spec Types'));
           console.log(chalk.cyan('==============================================\n'));
@@ -1420,7 +1574,7 @@ async function specsCommand(action, options = {}) {
 
         default:
           throw new Error(
-            `Unknown specs action: ${action}. Use: list, create, show, update, delete, close, conflicts, migrate, types`
+            `Unknown specs action: ${action}. Use: list, create, show, update, delete, close, archive, conflicts, migrate, types`
           );
       }
     },
@@ -1439,10 +1593,13 @@ module.exports = {
   updateSpec,
   deleteSpec,
   closeSpec,
+  archiveSpec,
   displaySpecsTable,
   displaySpecDetails,
   askConflictResolution,
+  isArchivePath,
   SPECS_DIR,
   SPECS_REGISTRY,
+  ARCHIVE_SUBDIR,
   SPEC_TYPES,
 };
