@@ -10,7 +10,8 @@ CAWS (Coding Agent Workflow System) is both the framework and a live user of it.
 
 1. Check current state: `caws specs list` — see active specs
 2. Check conflicts: `caws specs conflicts` — before editing scope-shared areas
-3. If working in parallel with other agents, use a worktree (`caws worktree create <name>` or `caws parallel setup <plan.yaml>`)
+3. Check for active agent claims: `caws agents list` — surfaces any other sessions registered in `.caws/agents.json` with their bound worktree/spec. Run `caws status` from inside a worktree to see the Claim panel. Don't take over a worktree owned by another session id without confirmation.
+4. If working in parallel with other agents, use a worktree (`caws worktree create <name>` or `caws parallel setup <plan.yaml>`)
 
 ## Spec workflow
 
@@ -43,6 +44,8 @@ When worktrees are active:
 - Commits to the base branch during active worktrees must use the `merge(worktree):` format (enforced by commit-msg hook)
 - On completion: `caws worktree destroy <name>` → `git checkout main` → `git merge --no-ff caws/<name>`
 
+**Foreign claim soft-block (CAWSFIX-31/32):** `caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal prints the claimer as `<sessionId>:<platform>`, the heartbeat age, any `tmp/<sessionId>/` session-log path, and the exact `--takeover` command. Read the session log first; only take over when you have authorization. Takeover writes a durable `prior_owners` audit on the worktree entry.
+
 See `.claude/rules/worktree-isolation.md` for the full list.
 
 ## Commands you'll use
@@ -51,8 +54,11 @@ See `.claude/rules/worktree-isolation.md` for the full list.
 - `caws gates run --context cli|commit` — quality gates (cli context skips budget — it applies to diffs, not the whole repo)
 - `caws verify-acs --spec-id <id>` — check ACs against tests
 - `caws iterate --spec-id <id>` — iteration guidance
-- `caws status [--visual] [--spec-id <id>]` — project health
+- `caws status [--visual] [--spec-id <id>]` — project health (includes Claim panel when cwd is inside a worktree)
 - `caws specs conflicts` — scope overlap check
+- `caws specs archive <id>` — move a closed spec to `.caws/specs/.archive/` (canonical archive location, surfaced as `archived` by `caws specs list`)
+- `caws agents list | show <id>` — inspect registered agents and their session-log pointers
+- `caws worktree claim <name> [--takeover]` — read-only by default; `--takeover` records the prior owner in a durable `prior_owners` audit
 
 ## Test suite
 

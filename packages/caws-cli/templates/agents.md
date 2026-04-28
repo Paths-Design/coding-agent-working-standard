@@ -59,6 +59,32 @@ caws worktree bind <spec-id>
 3. If authoritative but blocked: update your spec's `scope.in`
 4. Do NOT edit another spec's `scope.out` to unblock yourself
 
+## Multi-Agent Claims
+
+Each session is registered in `.caws/agents.json` automatically. Worktree session ownership is recorded in `.caws/worktrees.json:owner` as a session id. `caws worktree bind`, `merge`, and `claim` will refuse to mutate a worktree owned by a different session id without `--takeover`.
+
+```bash
+# See registered agents (composite <sessionId>:<platform> format)
+caws agents list
+
+# Inspect a worktree's claim — read-only by default
+caws worktree claim <name>
+
+# Take over a foreign claim (writes prior_owners audit)
+caws worktree claim <name> --takeover
+```
+
+When a refusal fires, the warning includes the claimer's session id, heartbeat age, and a pointer to any `tmp/<sessionId>/` session-log directory — read that log for context before deciding to take over. A stale heartbeat does NOT mean the prior session is dead; it may be paused.
+
+## Spec Lifecycle: Archive
+
+```bash
+# Move a closed spec to the canonical archive
+caws specs archive <spec-id>
+```
+
+The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws specs list` reports any file under it as `archived` regardless of YAML status. `caws specs create` refuses ids that collide with archived files unless `--force` is supplied (which removes the archived copy and writes a fresh draft).
+
 ## Key Rules
 
 1. **Stay in scope** -- only edit files listed in `scope.in`, never touch `scope.out`

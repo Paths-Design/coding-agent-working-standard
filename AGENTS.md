@@ -137,6 +137,33 @@ caws worktree destroy auth-feature --delete-branch
 caws worktree prune --max-age 7
 ```
 
+#### Agent claim model (CAWSFIX-31/32)
+
+Worktree session ownership is recorded in `.caws/worktrees.json:owner` as a session id. When you encounter a worktree with dirty files or an existing claim, **the system tells you who owns it before you act**:
+
+```bash
+# Inspect the agent registry — who's working what
+caws agents list
+
+# Inside a worktree, caws status shows a Claim panel
+caws status
+
+# Inspect a specific worktree's claim (read-only by default)
+caws worktree claim <name>
+```
+
+`caws worktree bind`, `merge`, and `claim` all soft-block when the worktree is owned by a different session id. The refusal message names the claimer as `<sessionId>:<platform>`, shows the heartbeat age, points at any `tmp/<sessionId>/` session-log directory, and gives the exact `--takeover` command to override:
+
+```
+Worktree 'wt-foreign' is claimed by 8be65780-...:claude-code
+   Last heartbeat: 2026-04-27T17:04:00Z (23 min ago)
+   Session log:    tmp/8be65780-72e0-4fc7-a989-4ebac148c18d
+                   15 turns, last turn 2026-04-27T17:26:49Z
+   To proceed:     caws worktree claim wt-foreign --takeover
+```
+
+**Read the session log first.** A stale heartbeat doesn't mean the prior session is dead — it may be paused. Take over only with explicit authorization. `--takeover` writes a durable `prior_owners` audit on the worktree entry (sessionId, platform, lastSeen-at-takeover, takenOver_at) so postmortems see what happened.
+
 See [Worktree Isolation Guide](docs/guides/worktree-isolation.md) for detailed patterns.
 
 ### Parallel Orchestration (Required for Multi-Agent Work)
@@ -265,8 +292,16 @@ caws status
 ```bash
 # Specs Management - FEATURE-SPECIFIC (Primary Pattern)
 caws specs create <feature-id>               # Create YOUR feature spec
-caws specs list                              # List all specs
+caws specs list                              # List all specs (archived items show status: archived)
 caws specs show <feature-id>                 # View spec details
+caws specs close <feature-id>                # Mark complete (status: closed)
+caws specs archive <feature-id>              # Move to .caws/specs/.archive/ (canonical)
+
+# Agent registry / claim inspection
+caws agents list                             # See active sessions across this repo
+caws agents show <session-id>                # Detail for one session + session-log path
+caws worktree claim <name>                   # Inspect a worktree's claim (read-only)
+caws worktree claim <name> --takeover        # Take over a foreign claim with audit
 
 # Validation & Quality - WITH --spec-id
 caws validate --spec-id <feature-id>         # Validate YOUR spec

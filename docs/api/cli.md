@@ -106,12 +106,14 @@ Create a new spec (with conflict resolution).
 | `--title <title>` | string | | Spec title |
 | `--tier <tier>` | string | `T3` | Risk tier (T1, T2, T3) |
 | `--mode <mode>` | string | `development` | Development mode |
-| `-f, --force` | boolean | `false` | Override existing specs without confirmation |
+| `-f, --force` | boolean | `false` | Override existing specs without confirmation. Also resurrects an id that already exists in `.caws/specs/.archive/` (removes the archived YAML and creates a fresh draft) — see `caws specs archive`. |
 | `-i, --interactive` | boolean | `false` | Ask for confirmation on conflicts |
 
 ```bash
 caws specs create user-auth --type feature --title "User Authentication" --tier T2
 ```
+
+**Archive collision (CAWSFIX-30):** if `<id>.yaml` already exists under `.caws/specs/.archive/`, create refuses without `--force` and prints the archived path. With `--force`, the archived YAML is removed and any stale registry entry is dropped before the new draft is written. Detection is filesystem-driven, so manually-moved legacy specs (no registry entry) are also caught.
 
 #### `caws specs show <id>`
 
@@ -134,6 +136,21 @@ Delete a spec.
 #### `caws specs close <id>`
 
 Close a completed spec (removes scope enforcement).
+
+#### `caws specs archive <id>`
+
+Archive a closed/completed spec — move its YAML to the canonical `.caws/specs/.archive/` directory and flip its status to `archived`. Idempotent: re-archiving a spec already under `.archive/` is a successful no-op. The directory is filesystem-authoritative — `caws specs list` reports any file under `.archive/` as `archived` regardless of the YAML's literal `status` field, so manually-moved legacy specs are correctly classified.
+
+```bash
+caws specs archive my-feature
+```
+
+Refuses to archive when:
+- The id does not match a registered spec.
+- An active worktree references the spec (destroy the worktree first).
+- The spec is owned by a different session (CAWSFIX-31 ownership rule applies).
+
+A `spec_archived` event is appended to the event log with `prior_status` and `prior_path`. Path-traversal ids (`../etc/passwd` etc.) are rejected before any filesystem state is touched.
 
 #### `caws specs conflicts`
 
@@ -492,6 +509,34 @@ Merge a worktree branch back to base (destroy + merge + cleanup).
 | `--dry-run` | boolean | `false` | Preview conflicts without merging |
 | `--message <msg>` | string | | Custom merge commit message |
 | `--no-delete-branch` | boolean | | Keep the branch after merging |
+| `--takeover` | boolean | `false` | Force takeover of a foreign worktree claim before merging (writes prior_owners audit). See `caws worktree claim`. |
+
+#### `caws worktree bind <spec-id>`
+
+Bind a spec to a worktree (fixes the mutual reference between `worktrees.json:specId` and the spec's `worktree:` field). Auto-detects the worktree from the current directory when run from inside one; otherwise pass `--name`.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--name <name>` | string | | Worktree name (auto-detected from cwd if omitted) |
+| `--takeover` | boolean | `false` | Force takeover of a foreign worktree claim. Without this, bind refuses to mutate a worktree owned by a different session. |
+
+#### `caws worktree claim <name>`
+
+Inspect or claim worktree session ownership. Without `--takeover`: read-only context surface. Prints the current claim (`<sessionId>:<platform>`, last heartbeat, any `tmp/<sessionId>/` session-log pointers) and exits non-zero when the worktree is owned by a different session. Modifies nothing.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--takeover` | boolean | `false` | Rewrite the owner to the current session id and append the prior owner (with `lastSeen` heartbeat) to a `prior_owners` audit array on the worktree entry. |
+
+```bash
+# Read-only inspection — exit 1 on foreign claim, with structured warning
+caws worktree claim my-worktree
+
+# Take over a paused agent's worktree (records audit)
+caws worktree claim my-worktree --takeover
+```
+
+The takeover audit on `worktrees.json` is durable and survives across sessions — postmortems can see which session id owned the worktree and how stale the prior owner's heartbeat was at takeover time.
 
 #### `caws worktree prune`
 
@@ -511,6 +556,28 @@ Reconcile registry with git and filesystem state.
 | `--dry-run` | boolean | `false` | Report only, do not persist changes |
 | `--prune` | boolean | `false` | Remove destroyed, stale-merged, and missing entries |
 | `--force` | boolean | `false` | Allow pruning entries owned by other sessions |
+
+### `caws agents <subcommand>`
+
+Inspect the agent registry (`.caws/agents.json`) and any session-log pointers under `tmp/<sessionId>/`. Read-only — write paths belong to the session-log hook (`.claude/hooks/session-log.sh`) and to lifecycle ops in `caws specs` and `caws worktree` (which heartbeat on every successful invocation per CAWSFIX-31/32).
+
+#### `caws agents list`
+
+List active CAWS-registered agent sessions across all platforms (claude-code, cursor, unknown). Each entry is rendered in composite `<sessionId>:<platform>` format with worktree, specId, model, and heartbeat age. Sorted by `lastSeen` descending. TTL-pruned entries (default 30 min) are filtered out automatically by the registry loader.
+
+```bash
+caws agents list
+```
+
+#### `caws agents show <session-id>`
+
+Show full detail for a single session: first/last seen, ttl, worktree, specId, model, plus any matching session-log directory under `tmp/<sessionId>/` (path, turn count, last-turn timestamp).
+
+```bash
+caws agents show 8be65780-72e0-4fc7-a989-4ebac148c18d
+```
+
+The `<sessionId>:<platform>` format lets readers trace provenance to platform-specific transcript directories — e.g., `~/.claude/projects/<slug>/<id>.jsonl` for `claude-code` sessions. CAWS does not summarize the transcript; the agent reads it and decides whether to take over.
 
 ### `caws parallel <subcommand>`
 

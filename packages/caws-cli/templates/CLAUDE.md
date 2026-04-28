@@ -102,6 +102,12 @@ caws scope show
 
 # Fix a broken binding
 caws worktree bind <spec-id>
+
+# Inspect the agent registry — who is currently working what
+caws agents list
+
+# Inspect a specific worktree's claim (read-only by default)
+caws worktree claim <name>
 ```
 
 **Recovery checklist** (when the scope guard blocks you unexpectedly):
@@ -109,6 +115,22 @@ caws worktree bind <spec-id>
 2. If union mode: bind your spec with `caws worktree bind <spec-id>`
 3. If authoritative but still blocked: the file is genuinely outside your spec's scope. Update your spec's `scope.in` if the file should be in scope, or request a waiver
 4. Do NOT modify another spec's `scope.out` to unblock yourself — that defeats the isolation
+
+### Agent Claims & Multi-Agent Coordination
+
+Each session gets registered in `.caws/agents.json` automatically (via the session-log hook and on every CAWS lifecycle CLI invocation). Worktree session ownership is tracked in `.caws/worktrees.json:owner` as a session id.
+
+`caws worktree bind`, `merge`, and `claim` will refuse to mutate a worktree owned by a different session id without explicit `--takeover`. The refusal prints a structured warning naming the claimer as `<sessionId>:<platform>`, the heartbeat age, and any matching `tmp/<sessionId>/` session-log path so you can read context before deciding.
+
+**Decision-gating uses session-id equality only.** TTL pruning of `agents.json` is registry hygiene; it does NOT authorize takeover. A stale heartbeat doesn't mean the prior session is dead — it may be paused.
+
+`--takeover` writes a durable `prior_owners` audit on the worktree entry (sessionId, platform, lastSeen-at-takeover, takenOver_at) so handoffs are traceable in `worktrees.json`, not just in agent memory.
+
+### Spec lifecycle: archive
+
+Use `caws specs archive <id>` to move a closed spec to the canonical `.caws/specs/.archive/` directory. The directory is filesystem-authoritative — `caws specs list` reports any file under `.archive/` as `status: archived` regardless of the YAML literal. This means manually-moved legacy specs (no registry entry) are correctly classified.
+
+If you try to `caws specs create <id>` for an id that already exists in `.archive/`, the command refuses without `--force`. With `--force`, the archived YAML is removed and a fresh draft is created — useful for resurrecting an old id with new intent.
 
 > **Budget note**: `change_budget:` in a spec is informational documentation only. CAWS
 > derives the enforced budget from `policy.yaml` keyed on `risk_tier`. The field in the
