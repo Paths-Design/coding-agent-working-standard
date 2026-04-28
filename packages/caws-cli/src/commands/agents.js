@@ -15,7 +15,6 @@
  */
 
 const chalk = require('chalk');
-const path = require('path');
 
 const { findProjectRoot } = require('../utils/detection');
 const {
