@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "10.1.0",
+  "version": "10.2.0",
   "description": "CAWS CLI - Coding Agent Workflow System command-line tools for spec management, quality gates, and AI-assisted development",
   "main": "dist/index.js",
   "bin": {

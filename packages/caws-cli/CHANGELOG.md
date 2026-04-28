@@ -1,3 +1,24 @@
+# [10.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.1.0...v10.2.0) (2026-04-28)
+
+
+### Bug Fixes
+
+* **agents:** wire assertWorktreeOwnership + refreshAgentClaim into bind/merge/create + status panel E2E test (CAWSFIX-32) ([f3340c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/f3340c7d6575ba0fcdf99373dfa1271579ca9408))
+* **cli:** remove unused 'path' import in commands/agents.js ([df285ce](https://github.com/Paths-Design/coding-agent-working-standard/commit/df285ced098b48a9a07b95af678015841629f6cf))
+* **specs:** warn on caws specs create when id collides with archived spec (CAWSFIX-30) ([274f935](https://github.com/Paths-Design/coding-agent-working-standard/commit/274f935ab7e6032c780e07ae78ea5fe47931a4b6))
+* **types:** correct repository URL in caws-types package.json ([ea84c3e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ea84c3eb0c10cd8cc677d476d89b15ed265331a0))
+* **worktree+validation:** D2 lowercase suffix, D7 ghost prune, D8 bind-local (CAWSFIX-25) ([b8828c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8828c7578bb4293c75b6b9f655538f0395003f1))
+* **worktree:** auto-commit draft→active flip in auto-bind path (CAWSFIX-27) ([1ba4146](https://github.com/Paths-Design/coding-agent-working-standard/commit/1ba4146dd4fac2e48d84941111ad024865090ad5))
+* **worktree:** preserve baseline + idempotent YAML + post-merge close commit (CAWSFIX-24) ([74229e2](https://github.com/Paths-Design/coding-agent-working-standard/commit/74229e28ba9ad9758bfb30999866dddf19e64d16))
+
+
+### Features
+
+* **agents:** session-id agent claim model with lifecycle refresh and session-log surfacing (CAWSFIX-31) ([c7227b0](https://github.com/Paths-Design/coding-agent-working-standard/commit/c7227b0c2e73a499d529bf70b72dcdf8ae49f3ba))
+* **policy+gates:** declare non-governed zones in policy.yaml (CAWSFIX-26) ([e365e76](https://github.com/Paths-Design/coding-agent-working-standard/commit/e365e765d9a8faaddbb9fe43ddaffd95c50d2c9a))
+* **specs:** caws specs archive command — canonical .archive/ directory (CAWSFIX-29) ([b8237d1](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8237d1e01b82bc514ec20245c68da6c461a2b55))
+* **worktree:** spec lifecycle transitions on bind + merge (CAWSFIX-23) ([2cca474](https://github.com/Paths-Design/coding-agent-working-standard/commit/2cca474cda8ce988c1b4905579a00fd4fd1aa1ec))
+
 # [10.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.0.1...v10.1.0) (2026-04-17)
 
 
