@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/policy.v1.json",
+  "title": "CAWS Policy",
+  "description": "Strict policy schema for CAWS vNext. Single authority for risk-tier budgets, gate modes, waivers, and scope-passthrough rules. Rejects: label on tier objects, unknown top-level fields, dangerously broad non_governed_zones patterns without explicit force flag.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "risk_tiers", "gates"],
+  "allOf": [
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "non_governed_zones_force": { "const": true }
+          },
+          "required": ["non_governed_zones_force"]
+        }
+      },
+      "then": {
+        "properties": {
+          "non_governed_zones": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "not": {
+                "enum": ["**", "*", "**/*", ".", "./", "./**", "/**"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Policy schema version. Pinned to 1 for v1.x."
+    },
+    "risk_tiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-tier budgets. Tier keys are integer strings '1', '2', '3' — matching spec.risk_tier coerced to string. Tier 1 is most strict.",
+      "required": ["1", "2", "3"],
+      "properties": {
+        "1": { "$ref": "#/$defs/tierBudget" },
+        "2": { "$ref": "#/$defs/tierBudget" },
+        "3": { "$ref": "#/$defs/tierBudget" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Closed gate vocabulary. Adding a new gate requires a schema bump.",
+      "required": ["budget_limit", "spec_completeness", "scope_boundary"],
+      "properties": {
+        "budget_limit": { "$ref": "#/$defs/gateConfig" },
+        "spec_completeness": { "$ref": "#/$defs/gateConfig" },
+        "scope_boundary": { "$ref": "#/$defs/gateConfig" },
+        "god_object": { "$ref": "#/$defs/gateConfig" },
+        "todo_detection": { "$ref": "#/$defs/gateConfig" }
+      }
+    },
+    "waivers": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Waiver-related policy rules. Individual waivers live in .caws/waivers/, not here.",
+      "properties": {
+        "min_approvers_for_budget_raise": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "max_active_waivers_per_gate": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 = unlimited. Caps runaway waiver inflation."
+        },
+        "default_expiry_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Default validity for newly created waivers if no expires_at supplied."
+        }
+      }
+    },
+    "non_governed_zones": {
+      "type": "array",
+      "description": "Glob patterns whose matching paths skip ALL scope-boundary enforcement. Wins over scope.out. Dangerously broad patterns ('**', '*', '**/*', '.', './', './**', '/**') are rejected unless non_governed_zones_force is explicitly true (enforced via top-level allOf/if).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "non_governed_zones_force": {
+      "type": "boolean",
+      "description": "Override the broad-pattern rejection for non_governed_zones. Authority-relinquishing decision; should require explicit policy review.",
+      "default": false
+    },
+    "root_passthrough": {
+      "type": "array",
+      "description": "The ONLY mechanism by which root-level files (no '/' in path) bypass scope.in. Empty by default — root-level files require explicit listing in either policy.root_passthrough OR a spec's scope.in.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": { "pattern": "/" }
+      },
+      "default": []
+    },
+    "edit_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declarative governance rules. Runtime enforcement is policy-derived; these flags document intent.",
+      "properties": {
+        "policy_and_code_same_pr": {
+          "type": "boolean",
+          "description": "false: policy.yaml changes and code changes must not appear in the same PR."
+        },
+        "require_signed_commits": { "type": "boolean" },
+        "require_dual_control_for_governance": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "tierBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files", "max_loc"],
+      "properties": {
+        "max_files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum files changed in a single PR/slice for this tier."
+        },
+        "max_loc": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum lines of code changed."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional human description (e.g. 'Critical', 'Standard'). NOT a 'label' field — that name is reserved-out to surface the legacy drift."
+        }
+      }
+    },
+    "gateConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "mode"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": {
+          "type": "string",
+          "enum": ["block", "warn", "skip"],
+          "description": "Closed mode vocabulary. block = non-zero exit. warn = advisory zero exit. skip = disabled."
+        },
+        "description": { "type": "string" },
+        "thresholds": {
+          "type": "object",
+          "description": "Gate-specific thresholds. Schema is per-gate; validated at gate-implementation time.",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

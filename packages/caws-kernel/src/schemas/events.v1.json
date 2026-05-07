@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events.v1.json",
+  "title": "CAWS Event (envelope)",
+  "description": "Common envelope for every event in .caws/events.jsonl. Per-event payload schemas live under events/<event>.v1.json. Events are append-only; the kernel hash chain is computed over canonicalJson(event minus event_hash) with domain separator 'caws.events.v1'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "ts", "actor", "event", "prev_hash", "event_hash"],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic 1-based sequence. Authority for event ordering (NOT ts). Genesis event has seq=1."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp. Informational only; ordering is by seq. Cross-machine clock skew is tolerated."
+    },
+    "actor": {
+      "type": "string",
+      "enum": ["cli", "hook", "session", "agent"],
+      "description": "Closed actor enum. Adding a new actor type requires a schema bump."
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "spec_created",
+        "spec_validated",
+        "spec_updated",
+        "spec_closed",
+        "spec_archived",
+        "spec_deleted",
+        "spec_drift_detected",
+        "worktree_created",
+        "worktree_bound",
+        "worktree_merged",
+        "worktree_destroyed",
+        "claim_taken_over",
+        "evidence_recorded",
+        "ac_recorded",
+        "test_recorded",
+        "gate_evaluated",
+        "waiver_applied",
+        "waiver_revoked",
+        "doctor_completed",
+        "session_started",
+        "session_ended",
+        "commit_made",
+        "branch_switched"
+      ],
+      "description": "Closed event vocabulary. Each event type has a corresponding schema under events/<event>.v1.json describing its data payload and spec_id requirement."
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Spec identifier when the event is spec-scoped. Required for events in REQUIRES_SPEC_ID class; forbidden for events in NO_SPEC_ID class. The kernel's requiresSpecId(eventType) function is the runtime authority."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session identifier (CLAUDE_SESSION_ID, CURSOR_TRACE_ID, or CAWS-minted capsule id). Required for actor='session' or actor='agent'."
+    },
+    "data": {
+      "description": "Per-event-type payload. Validated against the event's specific schema (events/<event>.v1.json), NOT against this envelope.",
+      "type": "object"
+    },
+    "prev_hash": {
+      "type": "string",
+      "pattern": "^(|sha256:[0-9a-f]{64})$",
+      "description": "Hash of the previous event's event_hash. Empty string for genesis (seq=1). Format: 'sha256:' + 64 lowercase hex chars."
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Hash of canonicalJson(this event minus event_hash) with domain separator 'caws.events.v1\\x00'. Algorithm authority is the kernel evidence module, not this schema."
+    }
+  },
+  "$comment": "Event vocabulary classes (authority: kernel/evidence/event-classes.ts):\n\nREQUIRES_SPEC_ID: spec_created, spec_validated, spec_updated, spec_closed, spec_archived, spec_deleted, spec_drift_detected, evidence_recorded, ac_recorded, test_recorded, gate_evaluated, waiver_applied, waiver_revoked, worktree_bound\n\nOPTIONAL_SPEC_ID: worktree_created, worktree_merged, worktree_destroyed, claim_taken_over, commit_made\n\nNO_SPEC_ID: session_started, session_ended, branch_switched, doctor_completed\n\nThe class is not encoded in this envelope schema directly because JSON Schema's allOf/if chains for 23 event types would be unreadable; the kernel encodes the classes as a TypeScript Set and validates at append time."
+}

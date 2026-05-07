@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_closed.v1.json",
+  "title": "spec_closed event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition active -> closed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resolution"],
+  "properties": {
+    "resolution": {
+      "type": "string",
+      "enum": ["completed", "superseded", "abandoned"]
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "When resolution=superseded, the spec id this one supersedes (mirror of spec.supersedes)."
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$"
+    },
+    "merge_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "Optional merge commit SHA when closure followed a worktree merge."
+    },
+    "closure_notes": { "type": "string" }
+  }
+}

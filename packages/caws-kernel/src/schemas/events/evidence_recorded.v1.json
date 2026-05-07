@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/evidence_recorded.v1.json",
+  "title": "evidence_recorded event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Generic evidence wrapper. For typed AC/gate/test evidence prefer ac_recorded / gate_evaluated / test_recorded — those carry stronger contracts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "summary"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["narrative", "artifact", "manual"],
+      "description": "narrative = free-text observation; artifact = on-disk evidence; manual = human attestation."
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "artifact_path": {
+      "type": "string",
+      "description": "When kind=artifact, the path to the on-disk artifact."
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "attested_by": {
+      "type": "string",
+      "description": "When kind=manual, who attested."
+    }
+  }
+}

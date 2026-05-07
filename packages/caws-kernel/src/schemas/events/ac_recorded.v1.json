@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/ac_recorded.v1.json",
+  "title": "ac_recorded event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records evidence for a single acceptance criterion. Replaces the legacy verify-acs scattered writes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["criterion_id", "status", "evidence_ref"],
+  "properties": {
+    "criterion_id": {
+      "type": "string",
+      "pattern": "^A\\d+$",
+      "description": "Matches spec.acceptance[].id"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "fail", "unchecked", "waived"]
+    },
+    "evidence_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Reference to the evidence: test command, test_nodeid, artifact path, or waiver id."
+    },
+    "test_nodeid": {
+      "type": "string",
+      "description": "Specific test node id (jest/vitest/pytest) when status was determined by test execution."
+    },
+    "command": {
+      "type": "string",
+      "description": "The command that was run to determine status."
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "artifact_path": {
+      "type": "string"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    }
+  }
+}

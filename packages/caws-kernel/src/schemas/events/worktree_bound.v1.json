@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_bound.v1.json",
+  "title": "worktree_bound event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records bidirectional binding: worktrees.json[name].specId AND spec.worktree both point at each other.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "previously_bound_to": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "If the worktree was previously bound to a different spec, that spec's id."
+    }
+  }
+}
