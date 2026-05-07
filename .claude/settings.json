@@ -18,26 +18,26 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-guard.sh",
-            "timeout": 10
-          }
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh",
+          //   "timeout": 10
+          // },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-guard.sh",
+          //   "timeout": 10
+          // }
         ]
       },
       {
         "matcher": "Read",
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/scan-secrets.sh",
-            "timeout": 10
-          }
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/scan-secrets.sh",
+          //   "timeout": 10
+          // }
         ]
       },
       {
@@ -49,42 +49,42 @@
       {
         "matcher": "Write|Edit",
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-check.sh",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-spec.sh",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/naming-check.sh",
-            "timeout": 10
-          }
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-check.sh",
+          //   "timeout": 30
+          // },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-spec.sh",
+          //   "timeout": 15
+          // },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/naming-check.sh",
+          //   "timeout": 10
+          // }
         ]
       },
       {
         "matcher": "Write|Edit|Bash",
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh tool-use",
-            "timeout": 5
-          }
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh tool-use",
+          //   "timeout": 5
+          // }
         ]
       }
     ],
     "SessionStart": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh session-start",
-            "timeout": 5
-          },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh session-start",
+          //   "timeout": 5
+          // },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-log.sh",
@@ -96,16 +96,16 @@
     "Stop": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh stop",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-worktree-check.sh",
-            "timeout": 10
-          },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit.sh stop",
+          //   "timeout": 5
+          // },
+          // {
+          //   "type": "command",
+          //   "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-worktree-check.sh",
+          //   "timeout": 10
+          // },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-log.sh",

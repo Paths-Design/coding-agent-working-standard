@@ -1,3 +1,0 @@
-[submodule "packages/caws-cli/test-accessibility-spec"]
-    path = packages/caws-cli/test-accessibility-spec
-    url = <REPO_URL>
