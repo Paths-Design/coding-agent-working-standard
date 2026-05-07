@@ -1,0 +1,54 @@
+{
+  "name": "@paths.design/caws-kernel",
+  "version": "0.1.0",
+  "description": "CAWS Kernel — pure TypeScript governance primitives. Spec/policy/scope/evidence/worktree types, parsers, validators, and lifecycle transitions. No I/O.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/schemas"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "clean": "rm -rf dist coverage",
+    "lint": "echo 'kernel lint deferred to Slice 1.9'",
+    "format": "echo 'kernel format deferred to Slice 1.9'",
+    "validate": "echo 'kernel validate not applicable'"
+  },
+  "keywords": [
+    "caws",
+    "kernel",
+    "governance",
+    "schema",
+    "validation"
+  ],
+  "author": "@darianrosebrook",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paths-Design/coding-agent-working-standard.git",
+    "directory": "packages/caws-kernel"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "js-yaml": "4.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "30.0.0",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "20.19.4",
+    "jest": "30.1.3",
+    "ts-jest": "29.4.1",
+    "typescript": "5.6.3"
+  }
+}
