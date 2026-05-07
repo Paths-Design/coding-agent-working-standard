@@ -1,0 +1,50 @@
+# CAWS Policy Configuration
+# Governed file - changes require dual control and CODEOWNERS approval
+# This file defines the quality gate policies for the entire project
+
+version: 1
+
+# Risk tier definitions with default budgets
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+    label: "Critical"
+  "2":
+    max_files: 100
+    max_loc: 10000
+    label: "Standard"
+  "3":
+    max_files: 500
+    max_loc: 40000
+    label: "Low Risk"
+
+# Edit rules for policy changes
+edit_rules:
+  policy_and_code_same_pr: false
+  min_approvers_for_budget_raise: 2
+  require_signed_commits: true
+
+# Quality gates — only gates with implementations
+# mode: block (fails commit), warn (advisory), skip (disabled)
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+  god_object:
+    enabled: true
+    mode: warn
+    thresholds:
+      warning: 1750
+      critical: 2000
+  todo_detection:
+    enabled: true
+    mode: warn
+    thresholds:
+      min_confidence: 0.8

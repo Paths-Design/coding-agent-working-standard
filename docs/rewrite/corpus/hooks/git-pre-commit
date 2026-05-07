@@ -1,0 +1,268 @@
+#!/bin/bash
+# CAWS Git Pre-Commit Hook
+# Runs fast CAWS quality checks before commits
+# @author @darianrosebrook
+
+set -e
+
+# ===== CAWS Multi-Agent Safety Guard =====
+# Prevents unsafe concurrent operations on shared branches
+
+# Resolve main repo root (works from both main checkout and worktrees)
+CAWS_ROOT="."
+if command -v git >/dev/null 2>&1; then
+  _GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")
+  if [ "$_GIT_COMMON" != ".git" ]; then
+    _CANDIDATE=$(cd "$_GIT_COMMON/.." 2>/dev/null && pwd || echo "")
+    if [ -n "$_CANDIDATE" ] && [ -d "$_CANDIDATE/.caws" ]; then
+      CAWS_ROOT="$_CANDIDATE"
+    fi
+  fi
+fi
+
+if [ -d "$CAWS_ROOT/.caws" ]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+  # Detect allowed commits on base branch while worktrees are active:
+  # 1. Git merge (MERGE_HEAD exists)
+  # 2. merge(worktree): message format
+  # 3. wip(checkpoint): for prior-session dirty file cleanup
+  IS_ALLOWED_BASE_COMMIT=false
+  GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo ".git")
+  if [ -f "$GIT_DIR/MERGE_HEAD" ]; then
+    IS_ALLOWED_BASE_COMMIT=true
+  fi
+  if command -v ps >/dev/null 2>&1; then
+    PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null || echo "")
+    case "$PARENT_ARGS" in
+      *merge\(worktree\):*|*"merge(worktree):"*) IS_ALLOWED_BASE_COMMIT=true ;;
+      *wip\(checkpoint\):*|*"wip(checkpoint):"*) IS_ALLOWED_BASE_COMMIT=true ;;
+    esac
+  fi
+
+  # Guard 1a: Block commits on base branch when parallel worktrees are active (caws parallel)
+  if [ "$IS_ALLOWED_BASE_COMMIT" != true ] && [ -f "$CAWS_ROOT/.caws/parallel.json" ] && command -v node >/dev/null 2>&1; then
+    PARALLEL_BASE=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/parallel.json', 'utf8'));
+        console.log(reg.baseBranch || '');
+      } catch(e) { console.log(''); }
+    " 2>/dev/null)
+
+    if [ -n "$PARALLEL_BASE" ] && [ "$CURRENT_BRANCH" = "$PARALLEL_BASE" ]; then
+      AGENT_COUNT=$(node -e "
+        try {
+          var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/parallel.json', 'utf8'));
+          console.log((reg.agents || []).length);
+        } catch(e) { console.log('0'); }
+      " 2>/dev/null)
+
+      if [ "$AGENT_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "BLOCKED: Committing to '$CURRENT_BRANCH' while $AGENT_COUNT parallel agent worktree(s) are active."
+        echo "  Active agents are working in isolated worktrees."
+        echo "  Committing to the base branch risks interleaved history and merge conflicts."
+        echo ""
+        echo "  Allowed commit formats on the base branch:"
+        echo "    merge(worktree): <desc>    — merge a completed worktree branch"
+        echo "    wip(checkpoint): <desc>    — commit prior-session dirty files"
+        echo "    git merge --no-ff <branch> — git merge commit"
+        echo ""
+        echo "  To see parallel status:  caws parallel status"
+        echo "  To override (unsafe):    git commit --no-verify"
+        exit 1
+      fi
+    fi
+  fi
+
+  # Guard 1b: Block commits on base branch when ANY active worktrees exist (caws worktree create)
+  if [ "$IS_ALLOWED_BASE_COMMIT" != true ] && [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+    ACTIVE_WORKTREES=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
+        var wts = Object.values(reg.worktrees || {});
+        var active = wts.filter(function(w) {
+          return w.status === 'active' && w.baseBranch === '$CURRENT_BRANCH';
+        });
+        console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(','));
+      } catch(e) { console.log('0:'); }
+    " 2>/dev/null)
+
+    WT_COUNT=$(echo "$ACTIVE_WORKTREES" | cut -d: -f1)
+    WT_NAMES=$(echo "$ACTIVE_WORKTREES" | cut -d: -f2)
+
+    if [ "$WT_COUNT" -gt 0 ] 2>/dev/null; then
+      echo "BLOCKED: Committing to '$CURRENT_BRANCH' while $WT_COUNT active worktree(s) exist: $WT_NAMES"
+      echo "  You should be working in your worktree, not on the base branch."
+      echo "  Committing here risks interleaved history with agents in worktrees."
+      echo ""
+      echo "  Allowed commit formats on the base branch:"
+      echo "    merge(worktree): <desc>    — merge a completed worktree branch"
+      echo "    wip(checkpoint): <desc>    — commit prior-session dirty files"
+      echo "    git merge --no-ff <branch> — git merge commit"
+      echo ""
+      echo "  To see worktrees:        caws worktree list"
+      echo "  To override (unsafe):    git commit --no-verify"
+      exit 1
+    fi
+  fi
+
+  # Guard 2: Warn if multiple active sessions exist on same branch
+  if [ -f "$CAWS_ROOT/.caws/sessions.json" ] && command -v node >/dev/null 2>&1; then
+    ACTIVE_ON_BRANCH=$(node -e "
+      try {
+        var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/sessions.json', 'utf8'));
+        var count = Object.values(reg.sessions || {}).filter(
+          function(s) { return s.status === 'active' && s.branch === '$CURRENT_BRANCH'; }
+        ).length;
+        console.log(count);
+      } catch(e) { console.log('0'); }
+    " 2>/dev/null)
+
+    if [ "$ACTIVE_ON_BRANCH" -gt 1 ] 2>/dev/null; then
+      echo "WARNING: $ACTIVE_ON_BRANCH active sessions detected on branch '$CURRENT_BRANCH'."
+      echo "  Multiple agents committing to the same branch risks interleaved history."
+      echo "  Consider using worktrees: caws parallel setup <plan-file>"
+      echo ""
+    fi
+  fi
+
+  # Guard 3: Block --amend when worktrees are active
+  AMEND_FLAG=false
+  if command -v ps >/dev/null 2>&1; then
+    PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null || echo "")
+    case "$PARENT_ARGS" in
+      *--amend*) AMEND_FLAG=true ;;
+    esac
+  fi
+
+  if [ "$AMEND_FLAG" = true ]; then
+    BLOCK_AMEND=false
+    if [ -f "$CAWS_ROOT/.caws/parallel.json" ]; then
+      BLOCK_AMEND=true
+    elif [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+      HAS_ACTIVE_WT=$(node -e "
+        try {
+          var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
+          var active = Object.values(reg.worktrees || {}).filter(function(w) { return w.status === 'active'; });
+          console.log(active.length > 0 ? 'yes' : 'no');
+        } catch(e) { console.log('no'); }
+      " 2>/dev/null)
+      if [ "$HAS_ACTIVE_WT" = "yes" ]; then
+        BLOCK_AMEND=true
+      fi
+    fi
+
+    if [ "$BLOCK_AMEND" = true ]; then
+      echo "BLOCKED: --amend is not allowed while worktrees are active."
+      echo "  Amending commits risks rewriting another agent's work."
+      echo "  Create a new commit instead."
+      echo "  To override (dangerous): git commit --amend --no-verify"
+      exit 1
+    fi
+  fi
+fi
+# ===== End Multi-Agent Safety Guard =====
+
+echo "🔍 Running CAWS pre-commit checks..."
+
+# Check if CAWS is available
+if ! command -v caws &> /dev/null; then
+  echo "⚠️  CAWS CLI not found, skipping pre-commit checks"
+  echo "Install with: npm install -g @caws/cli"
+  exit 0
+fi
+
+# Check if we're in a CAWS project
+if [[ ! -f ".caws/working-spec.yaml" ]]; then
+  echo "ℹ️  Not a CAWS project, skipping quality checks"
+  exit 0
+fi
+
+echo "📋 Checking CAWS working spec validity..."
+if ! caws validate .caws/working-spec.yaml --quiet; then
+  echo "❌ CAWS working spec validation failed"
+  echo "Run: caws validate --suggestions"
+  exit 1
+fi
+
+# Check path discipline - policy edits cannot be combined with code changes
+echo "🔒 Checking path discipline..."
+STAGED_FILES=$(git diff --cached --name-only)
+POLICY_CHANGES=$(echo "$STAGED_FILES" | grep -E '^\.caws/policy\.yaml$' || true)
+CODE_CHANGES=$(echo "$STAGED_FILES" | grep -vE '^\.caws/' || true)
+
+if [[ -n "$POLICY_CHANGES" && -n "$CODE_CHANGES" ]]; then
+  echo "❌ POLICY VIOLATION: Policy changes cannot be combined with code changes"
+  echo "Policy changes found: $POLICY_CHANGES"
+  echo "Code changes found: $CODE_CHANGES"
+  echo "💡 Fix this by:"
+  echo "   1. Create separate PR for policy changes only"
+  echo "   2. For budget exceptions: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit"
+  echo "   3. Add waiver_ids to working spec instead of editing policy directly"
+  echo "   4. Get dual approval from @gatekeepers before merging policy changes"
+  exit 1
+fi
+
+# Check that working spec doesn't contain change_budget
+if echo "$STAGED_FILES" | grep -qE '^\.caws/working-spec\.yaml$'; then
+  if git diff --cached .caws/working-spec.yaml | grep -q "change_budget"; then
+    echo "❌ POLICY VIOLATION: working-spec.yaml cannot contain change_budget"
+    echo "💡 Fix this by:"
+    echo "   1. Check current budget: caws burnup"
+    echo "   2. Create waiver: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit --expires-at='2025-12-31T23:59:59Z'"
+    echo "   3. Add waiver_ids to working spec: ['WV-XXXX']"
+    echo "   4. Validate: caws validate .caws/working-spec.yaml"
+    exit 1
+  fi
+fi
+
+# Get staged files for quality checks
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|ts|jsx|tsx|py|go|rs|java)$' | head -10)
+
+if [[ -n "$STAGED_FILES" ]]; then
+  echo "🔧 Running fast quality checks on staged files (filtered for speed)..."
+  echo "   Note: Full test suite will run on push"
+
+  # Run fast unit tests for CLI package if CLI files are staged
+  if echo "$STAGED_FILES" | grep -qE "^packages/caws-cli/"; then
+    echo "🧪 Running fast unit tests for CLI changes (filtered)..."
+    if ! env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE bash "$CAWS_ROOT/scripts/test-runner.sh" --package caws-cli --mode fast --quiet 2>/dev/null; then
+      echo "❌ CLI unit tests failed"
+      echo "Fix test failures before committing"
+      exit 1
+    fi
+  fi
+
+  # Run basic linting/formatting checks
+  if command -v eslint &> /dev/null; then
+    echo "$STAGED_FILES" | xargs -I {} sh -c '
+      if [[ -f "{}" ]] && [[ "{}" =~ \.(js|ts|jsx|tsx)$ ]]; then
+        if ! eslint "{}" --quiet 2>/dev/null; then
+          echo "❌ ESLint failed on {}"
+          exit 1
+        fi
+      fi
+    ' || exit 1
+  fi
+
+  # Check for secrets in staged files
+  echo "🔐 Scanning for secrets..."
+  if echo "$STAGED_FILES" | xargs grep -l -E "(password|secret|key|token).*=.*[^\\*]" 2>/dev/null | grep -v "tests/perf-budgets.test.js" | grep -v "scaffold/claude-hooks.js" | grep -v ".claude/hooks/" | grep -v "tests/integration/" | grep -v "utils/project-analysis.js"; then
+    echo "❌ Potential secrets found in staged files"
+    echo "Remove or mask sensitive information"
+    exit 1
+  fi
+fi
+
+# Check CAWS budget limits (skip if --budget-check not supported)
+echo "📊 Checking CAWS change budget..."
+if caws validate --help 2>&1 | grep -q 'budget-check'; then
+  if ! caws validate .caws/working-spec.yaml --budget-check 2>/dev/null; then
+    echo "❌ CAWS budget exceeded"
+    echo "Reduce scope or update budget in working spec"
+    exit 1
+  fi
+fi
+
+echo "✅ CAWS pre-commit checks passed"
+exit 0

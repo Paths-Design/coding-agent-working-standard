@@ -1,0 +1,253 @@
+id: DX-001
+title: Developer Experience Improvements - Phase 1 Quick Wins
+risk_tier: 2
+mode: feature
+change_budget:
+  max_files: 40
+  max_loc: 2500
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/utils
+    - packages/caws-cli/templates
+  data_migration: false
+operational_rollback_slo: 15m
+threats:
+  - Breaking changes to CLI interface could affect existing users
+  - Auto-configuration might conflict with existing project setups
+  - New commands could introduce unexpected behavior
+scope:
+  in:
+    - packages/caws-cli/src/commands/
+    - packages/caws-cli/src/utils/
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/templates/typescript/
+    - packages/caws-cli/tests/
+    - docs/agents/
+  out:
+    - packages/caws-cli/dist/
+    - node_modules/
+    - .git/
+    - other monorepo packages
+invariants:
+  - Existing CLI commands maintain backward compatibility
+  - All new features are opt-in or gracefully degrade
+  - Error messages always provide actionable next steps
+  - TypeScript detection never modifies existing configurations without user consent
+  - Command execution time remains under 2 seconds for synchronous operations
+acceptance:
+  - id: A1
+    given: A user runs caws validate with an invalid option
+    when: The CLI encounters the error
+    then: Display helpful error with suggestions and documentation link
+  - id: A2
+    given: A TypeScript project without Jest configuration
+    when: User runs caws init or caws scaffold
+    then: Offer to auto-configure Jest for TypeScript with user confirmation
+  - id: A3
+    given: A user runs caws status in a CAWS project
+    when: The command executes
+    then: Display project health overview with spec, hooks, gates, and provenance status
+  - id: A4
+    given: A user runs caws diagnose in a project with configuration issues
+    when: The command analyzes the project
+    then: List all issues with severity, description, and available automatic fixes
+  - id: A5
+    given: A user runs caws templates list
+    when: The command executes
+    then: Display all available built-in templates with descriptions and usage examples
+  - id: A6
+    given: A user encounters a common setup issue
+    when: Using any CAWS command
+    then: Receive contextual help pointing to relevant documentation or fixes
+non_functional:
+  a11y:
+    - Terminal output uses ANSI colors safely with fallbacks
+    - Error messages readable in all terminal themes
+    - Emoji usage optional (can be disabled)
+  perf:
+    api_p95_ms: 2000
+    command_startup_ms: 500
+    status_command_ms: 3000
+    diagnose_command_ms: 5000
+  security:
+    - No secrets exposed in error messages or logs
+    - Safe file system operations with proper permissions checks
+    - Input validation for all user-provided paths
+    - No arbitrary code execution from templates
+  dx:
+    - Time to first success < 5 minutes
+    - Error clarity rating > 8/10
+    - Auto-fix success rate > 75%
+    - Zero breaking changes to existing workflows
+contracts:
+  - type: cli-interface
+    path: docs/api/cli.md
+    description: All command signatures and options
+  - type: error-schema
+    path: src/error-handler.js
+    description: Error message format and suggestion system
+  - type: template-schema
+    path: templates/README.md
+    description: Template structure and metadata format
+observability:
+  logs:
+    - Command execution with timing
+    - Error occurrences with context
+    - Auto-fix application results
+    - Template usage statistics
+  metrics:
+    - command_execution_time_ms
+    - error_rate_by_command
+    - auto_fix_success_rate
+    - template_usage_count
+    - time_to_first_success_seconds
+  traces:
+    - Full command execution flow
+    - TypeScript detection and configuration
+    - Template application process
+    - Diagnostic check execution
+migrations:
+  - Add new commands to CLI help text
+  - Register new commands in src/index.js
+  - Create new template directories
+  - Update documentation with new features
+rollback:
+  - New commands can be disabled via feature flags
+  - TypeScript auto-config is opt-in, no forced changes
+  - Error message improvements are additive, no removals
+  - Templates are versioned, can revert to previous
+  - All changes are backward compatible with v3.2.x
+
+# Task Breakdown
+tasks:
+  - id: T1
+    title: Enhanced Error Messages
+    effort_hours: 16
+    files:
+      - src/error-handler.js
+      - src/commands/*.js
+    tests_required: true
+    
+  - id: T2
+    title: TypeScript Auto-Detection
+    effort_hours: 24
+    files:
+      - src/utils/typescript-detector.js
+      - src/generators/jest-config.js
+      - templates/typescript/
+    tests_required: true
+    
+  - id: T3
+    title: Status Command
+    effort_hours: 16
+    files:
+      - src/commands/status.js
+      - src/utils/status-display.js
+      - src/utils/suggestions-engine.js
+    tests_required: true
+    
+  - id: T4
+    title: Diagnose Command
+    effort_hours: 24
+    files:
+      - src/commands/diagnose.js
+      - src/utils/health-checks/*.js
+      - src/utils/auto-fix.js
+    tests_required: true
+    
+  - id: T5
+    title: Templates List Command
+    effort_hours: 8
+    files:
+      - src/commands/templates.js
+      - templates/typescript/library/
+      - templates/typescript/api/
+    tests_required: true
+
+# AI Assessment
+ai_assessment:
+  confidence_level: 0.85
+  uncertainty_areas:
+    - Edge cases in TypeScript project detection
+    - Auto-fix safety for complex configurations
+    - Template compatibility across Node versions
+  complexity_factors:
+    - Multiple new CLI commands with inter-dependencies
+    - Backward compatibility requirements
+    - Cross-platform terminal compatibility
+  risk_factors:
+    - Breaking existing user workflows
+    - Auto-configuration conflicts
+    - Performance regression in command startup
+
+# Success Metrics
+success_metrics:
+  quantitative:
+    - time_to_first_success_reduction: 66%  # 15min → 5min
+    - error_clarity_rating: 8.5
+    - common_issue_detection_rate: 80%
+    - auto_fix_success_rate: 75%
+    - template_adoption_rate: 50%
+  qualitative:
+    - User feedback sentiment positive
+    - Reduced support requests for setup issues
+    - Increased CLI adoption in TypeScript projects
+    - Community contributions to templates
+
+# Dependencies
+dependencies:
+  internal:
+    - Requires v3.2.4+ with bundled templates working
+    - Builds on existing provenance and validation systems
+  external:
+    - inquirer for interactive prompts
+    - chalk for terminal colors
+    - fs-extra for file operations
+
+# Review Requirements
+review:
+  code_review:
+    required: true
+    reviewers: 2
+  security_review:
+    required: false
+    reason: No security-sensitive changes, only CLI UX improvements
+  architecture_review:
+    required: true
+    reason: New command structure and template system
+  user_testing:
+    required: true
+    sample_size: 5
+    criteria:
+      - Successfully initialize TypeScript project
+      - Understand error messages
+      - Use status and diagnose commands effectively
+
+# Release Strategy
+release:
+  type: minor  # v3.3.0
+  changelog_highlights:
+    - Enhanced error messages with actionable suggestions
+    - TypeScript project auto-detection and configuration
+    - New status command for project health overview
+    - New diagnose command with auto-fix capabilities
+    - Template discovery and listing
+  breaking_changes: none
+  deprecations: none
+  migration_guide_required: false
+  
+# Timeline
+timeline:
+  estimated_duration_weeks: 2
+  sprint_breakdown:
+    week_1:
+      - Enhanced error messages (T1)
+      - TypeScript auto-detection (T2)
+      - Status command (T3)
+    week_2:
+      - Diagnose command (T4)
+      - Templates list (T5)
+      - Documentation updates
+      - Testing and QA
+

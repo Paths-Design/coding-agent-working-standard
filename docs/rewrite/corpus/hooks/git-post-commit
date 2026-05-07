@@ -1,0 +1,28 @@
+#!/bin/bash
+# CAWS Git Post-Commit Hook
+# Updates CAWS provenance tracking after commits
+# @author @darianrosebrook
+
+set -e
+
+# Only run if CAWS is available and we're in a CAWS project
+if command -v caws &> /dev/null && [[ -f ".caws/working-spec.yaml" ]]; then
+
+  echo "📝 Updating CAWS provenance records..."
+
+  # Update provenance with commit information
+  COMMIT_HASH=$(git rev-parse HEAD)
+  COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+  AUTHOR=$(git log -1 --pretty=format:'%an <%ae>')
+
+  # Try to update provenance (suppress all output — this runs on every commit
+  # including merges, and noisy output can cause Claude Code context pressure)
+  caws provenance update \
+    --commit="$COMMIT_HASH" \
+    --message="$COMMIT_MSG" \
+    --author="$AUTHOR" \
+    --quiet >/dev/null 2>&1 || true
+
+fi
+
+exit 0
