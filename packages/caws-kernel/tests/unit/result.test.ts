@@ -7,6 +7,20 @@ const dx = diagnostic({
   message: 'test diagnostic',
 });
 
+const warn = diagnostic({
+  rule: 'test/warning',
+  authority: 'kernel/diagnostics',
+  message: 'test warning',
+  severity: 'warning',
+});
+
+const errSeverity = diagnostic({
+  rule: 'test/error',
+  authority: 'kernel/diagnostics',
+  message: 'test error',
+  severity: 'error',
+});
+
 describe('Result', () => {
   describe('ok / err / type guards', () => {
     it('ok wraps a value', () => {
@@ -79,6 +93,34 @@ describe('Result', () => {
       const r = flatMap(ok(2, [dx]), () => err(dx));
       if (isErr(r)) {
         expect(r.errors.length).toBe(2);
+      }
+    });
+
+    it('flatMap preserves warning severity when the second stage fails (no promotion to error)', () => {
+      // First stage carries a real warning-severity diagnostic. Second stage
+      // fails with an error-severity diagnostic. The returned Err must
+      // contain BOTH, with severity intact — proving warnings are not
+      // silently promoted to errors.
+      const r = flatMap(ok(2, [warn]), () => err(errSeverity));
+      expect(r.ok).toBe(false);
+      if (isErr(r)) {
+        expect(r.errors).toHaveLength(2);
+        const carried = r.errors.find((d) => d.rule === 'test/warning');
+        const downstream = r.errors.find((d) => d.rule === 'test/error');
+        expect(carried?.severity).toBe('warning');
+        expect(downstream?.severity).toBe('error');
+      }
+    });
+
+    it('flatMap preserves warning severity through Ok+Ok chain', () => {
+      const r = flatMap(ok(2, [warn]), (n) => ok(n + 1, [errSeverity]));
+      expect(r.ok).toBe(true);
+      if (isOk(r)) {
+        expect(r.warnings).toHaveLength(2);
+        const carried = r.warnings?.find((d) => d.rule === 'test/warning');
+        const downstream = r.warnings?.find((d) => d.rule === 'test/error');
+        expect(carried?.severity).toBe('warning');
+        expect(downstream?.severity).toBe('error');
       }
     });
 

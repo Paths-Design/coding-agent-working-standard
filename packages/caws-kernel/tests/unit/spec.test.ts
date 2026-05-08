@@ -134,11 +134,46 @@ describe('validateSpecShape (schema layer)', () => {
     }
   });
 
-  it('rejects string risk_tier "T3"', () => {
+  it('rejects string risk_tier "T3" with TYPE_REJECTED rule', () => {
     const r = parseAndValidateSpec(SPEC_WITH_STRING_RISK_TIER);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(rules(r.errors)).toContain(SPEC_RULES.RISK_TIER_STRING_REJECTED);
+      expect(rules(r.errors)).toContain(SPEC_RULES.RISK_TIER_TYPE_REJECTED);
+      const diag = r.errors.find((e) => e.rule === SPEC_RULES.RISK_TIER_TYPE_REJECTED);
+      expect(diag?.narrowRepair).toMatch(/not a string/);
+    }
+  });
+
+  it('rejects integer risk_tier 4 with OUT_OF_RANGE rule (distinct from string rejection)', () => {
+    const yamlSource = `
+id: TEST-OOR-1
+title: Test spec
+risk_tier: 4
+mode: feature
+lifecycle_state: draft
+blast_radius:
+  modules:
+    - src/test
+scope:
+  in:
+    - src/test/**
+invariants:
+  - test invariant
+acceptance:
+  - id: A1
+    given: g
+    when: w
+    then: t
+non_functional: {}
+contracts: []
+`;
+    const r = parseAndValidateSpec(yamlSource);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(rules(r.errors)).toContain(SPEC_RULES.RISK_TIER_OUT_OF_RANGE);
+      // The two rules must not collide: an out-of-range integer must NOT
+      // be mislabeled as a type rejection.
+      expect(rules(r.errors)).not.toContain(SPEC_RULES.RISK_TIER_TYPE_REJECTED);
     }
   });
 

@@ -9,14 +9,28 @@ export function map<T, U>(r: Result<T>, fn: (value: T) => U): Result<U> {
 }
 
 /**
- * Chain a Result-returning function. Warnings from the first stage are
- * forwarded into the second stage's result.
+ * Chain a Result-returning function.
+ *
+ * Warning-propagation contract:
+ *  - First stage Ok + second stage Ok  → warnings from both are concatenated
+ *    into the returned Ok's `warnings` (severities preserved as-authored).
+ *  - First stage Ok + second stage Err → upstream warnings are carried forward
+ *    into the returned Err's `errors` array, **with their original severity
+ *    intact**. A warning from the first stage stays severity:'warning' even
+ *    when it sits next to severity:'error' diagnostics from the failing
+ *    second stage. This means an Err's `errors` may contain a mix of
+ *    severities; consumers that distinguish errors from warnings should
+ *    inspect Diagnostic.severity rather than rely on container shape.
+ *  - First stage Err → second stage is not invoked; first-stage Err returned
+ *    unchanged.
  */
 export function flatMap<T, U>(r: Result<T>, fn: (value: T) => Result<U>): Result<U> {
   if (!r.ok) return r;
   const next = fn(r.value);
   if (!next.ok) {
     if (r.warnings && r.warnings.length > 0) {
+      // Severity-preserving: warnings keep their authored severity in the
+      // concatenated diagnostic list. We do NOT promote them to 'error'.
       return { ok: false, errors: [...r.warnings, ...next.errors] };
     }
     return next;

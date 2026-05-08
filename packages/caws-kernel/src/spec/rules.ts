@@ -16,7 +16,10 @@ export const SPEC_RULES = {
   FORBIDDEN_FIELD_SCOPE_EXCLUDE: 'spec.schema.forbidden_field.scope_exclude',
   FORBIDDEN_FIELD_STATUS: 'spec.schema.forbidden_field.status',
   MODE_DEVELOPMENT_REMOVED: 'spec.schema.mode.development_removed',
-  RISK_TIER_STRING_REJECTED: 'spec.schema.risk_tier.string_rejected',
+  /** risk_tier is not an integer (e.g. string "T3" or "1"). */
+  RISK_TIER_TYPE_REJECTED: 'spec.schema.risk_tier.type_rejected',
+  /** risk_tier is an integer but outside the closed enum [1, 2, 3]. */
+  RISK_TIER_OUT_OF_RANGE: 'spec.schema.risk_tier.out_of_range',
   SCOPE_IN_EMPTY: 'spec.schema.scope.in_empty',
   SCOPE_OUT_GLOB_FORBIDDEN: 'spec.schema.scope.out_glob_forbidden',
   ID_PATTERN_VIOLATION: 'spec.schema.id.pattern_violation',

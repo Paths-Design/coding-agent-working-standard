@@ -9,6 +9,22 @@ import specSchema from '../schemas/spec.v1.json';
 import { SPEC_RULES } from './rules';
 import type { Spec } from './types';
 
+/**
+ * Module-level lazy singleton AJV validator.
+ *
+ * Contract:
+ *  - The AJV instance is constructed once per process lifetime and reused
+ *    across every call to validateSpecShape.
+ *  - allErrors:true and strict:true are fixed; this validator is not
+ *    parameterizable. If a future need arises (e.g. relaxing strict mode
+ *    for a migration-only path), introduce a separate validator alongside
+ *    rather than mutating this one.
+ *  - Tests across files share the same compiled validator. This is
+ *    intentional: the schema is immutable per release, and recompiling
+ *    per-test would only mask schema-load races. No reset hook is exposed.
+ *  - Node worker threads each get a fresh module instance, so cross-thread
+ *    aliasing is not a concern.
+ */
 let validator: ValidateFunction | null = null;
 
 function getValidator(): ValidateFunction {
@@ -105,9 +121,13 @@ function pickStableRule(e: ErrorObject): string {
     return SPEC_RULES.MODE_DEVELOPMENT_REMOVED;
   }
 
-  // risk_tier non-integer (e.g. "T3", "1" string) lands as a type error at /risk_tier.
-  if (e.instancePath === '/risk_tier' && (e.keyword === 'type' || e.keyword === 'enum')) {
-    return SPEC_RULES.RISK_TIER_STRING_REJECTED;
+  // risk_tier non-integer (e.g. "T3", "1" string) lands as a type error.
+  if (e.instancePath === '/risk_tier' && e.keyword === 'type') {
+    return SPEC_RULES.RISK_TIER_TYPE_REJECTED;
+  }
+  // risk_tier integer but outside [1, 2, 3] lands as an enum error.
+  if (e.instancePath === '/risk_tier' && e.keyword === 'enum') {
+    return SPEC_RULES.RISK_TIER_OUT_OF_RANGE;
   }
 
   // scope.in empty.
@@ -175,8 +195,11 @@ function formatRepair(e: ErrorObject): string | undefined {
     return 'Use one of: feature, refactor, fix, doc, chore.';
   }
 
-  if (e.instancePath === '/risk_tier' && (e.keyword === 'type' || e.keyword === 'enum')) {
-    return 'Use integer 1, 2, or 3.';
+  if (e.instancePath === '/risk_tier' && e.keyword === 'type') {
+    return 'Use integer 1, 2, or 3 (not a string like "T3" or "1").';
+  }
+  if (e.instancePath === '/risk_tier' && e.keyword === 'enum') {
+    return 'Use integer 1, 2, or 3 — values outside this range are not permitted.';
   }
 
   if (e.instancePath === '/scope/in' && e.keyword === 'minItems') {

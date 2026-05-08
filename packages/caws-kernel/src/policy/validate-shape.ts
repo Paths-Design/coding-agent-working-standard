@@ -9,6 +9,10 @@ import policySchema from '../schemas/policy.v1.json';
 import { POLICY_RULES } from './rules';
 import type { Policy } from './types';
 
+/**
+ * Module-level lazy singleton AJV validator.
+ * See ../spec/validate-shape.ts for the contract — same rules apply here.
+ */
 let validator: ValidateFunction | null = null;
 
 function getValidator(): ValidateFunction {
