@@ -7,3 +7,4 @@
 export * from './result';
 export * from './diagnostics';
 export * from './spec';
+export * from './policy';
