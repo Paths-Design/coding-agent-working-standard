@@ -57,10 +57,9 @@ function checkFileScope(filePath, projectDir) {
     return { inScope: true, reason: 'allowlisted path' };
   }
 
-  const specFile = path.join(projectDir, '.caws/working-spec.yaml');
   const specsDir = path.join(projectDir, '.caws/specs');
 
-  if (!fs.existsSync(specFile) && !fs.existsSync(specsDir)) {
+  if (!fs.existsSync(specsDir)) {
     return { inScope: true, reason: 'no specs found' };
   }
 
@@ -116,15 +115,6 @@ function checkFileScope(filePath, projectDir) {
   if (authoritativeSpec) {
     specs.push(authoritativeSpec);
   } else {
-    if (fs.existsSync(specFile)) {
-      try {
-        const s = yaml.load(fs.readFileSync(specFile, 'utf8'));
-        if (s && !TERMINAL.has(s.status)) {
-          specs.push({ source: 'working-spec', spec: s });
-        }
-      } catch (_) {}
-    }
-
     if (fs.existsSync(specsDir)) {
       for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
         try {

@@ -5,7 +5,7 @@ This project uses CAWS (Coding Agent Working Standard) for quality-assured AI-as
 ## CAWS Project Detection
 
 Check if current project uses CAWS:
-- Look for `.caws/working-spec.yaml` file
+- Look for active feature specs under `.caws/specs/<id>.yaml`
 - Check for `caws` commands in package.json scripts
 - Verify CAWS CLI availability: `caws --version`
 
@@ -77,6 +77,6 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ## Troubleshooting
 
-- **Working spec invalid**: Run `caws validate --suggestions`
-- **Scope violations**: Update `.caws/working-spec.yaml` scope or create waiver
+- **Spec invalid**: Run `caws validate --spec-id <id> --suggestions`
+- **Scope violations**: Update scope.in in the bound feature spec under `.caws/specs/<id>.yaml` or create waiver
 - **Quality gate failures**: Address root cause rather than creating waivers

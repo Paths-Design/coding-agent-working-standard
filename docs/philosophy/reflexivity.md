@@ -486,7 +486,7 @@ By validating itself against its own standards, CAWS:
 
 ## Additional Resources
 
-- [CAWS Working Spec](../api/schema.md)
+- [CAWS Feature Spec](../api/schema.md)
 - [Provenance Tracking](../guides/provenance.md)
 - [Waiver System](../guides/waivers.md)
 

@@ -1,4 +1,4 @@
-# CAWS Examples - Real Working Specs
+# CAWS Examples - Real Feature Specs
 
 **Example working specifications from real projects**
 

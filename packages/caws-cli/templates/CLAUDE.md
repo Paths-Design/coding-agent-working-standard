@@ -65,9 +65,9 @@ caws sidecar waiver-draft  # Generate pre-filled waiver template for a failing g
 caws sidecar provenance  # Summarize work history for merge readiness review
 ```
 
-### Working Spec
+### Feature Specs
 
-Canonical feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs create <id> --type feature --title "description"`). `.caws/working-spec.yaml` is a compatibility mirror for older tooling and legacy single-spec flows. The active spec defines:
+Feature specs live at `.caws/specs/<ID>.yaml`. There is **no project-level working spec** — every spec is per-feature. Create a spec with `caws specs create <id> --type feature --title "description"`. The active spec defines:
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
 - **Mode**: The type of change (`feature`, `refactor`, `fix`, `doc`, `chore`) -- required
@@ -174,8 +174,7 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ```
 .caws/
-  working-spec.yaml   # Compatibility mirror for legacy commands
-  specs/              # Canonical feature specs
+  specs/              # Per-feature specs (canonical, the only spec location)
   policy.yaml         # Quality policy overrides (optional)
   waivers.yml         # Active waivers
   state/              # Runtime working state (auto-managed)

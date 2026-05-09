@@ -16,20 +16,20 @@ CAWS provides agents with:
 
 ### Prerequisites
 - CAWS CLI installed (`npm install -g @paths.design/caws-cli`)
-- Valid working specification (`.caws/working-spec.yaml`)
+- Valid working specification (`.caws/specs/<spec-id>.yaml`)
 - Project initialized with CAWS
 
 ### Basic Usage
 
 ```bash
 # Check if working spec is ready for implementation
-caws evaluate --feedback-only .caws/working-spec.yaml
+caws evaluate --feedback-only .caws/specs/<spec-id>.yaml
 
 # Evaluate current implementation progress
-caws evaluate .caws/working-spec.yaml
+caws evaluate .caws/specs/<spec-id>.yaml
 
 # Get iterative development guidance
-caws iterate --current-state '{"description": "Started core implementation"}' .caws/working-spec.yaml
+caws iterate --current-state '{"description": "Started core implementation"}' .caws/specs/<spec-id>.yaml
 ```
 
 ## Agent Workflow Integration
@@ -40,7 +40,7 @@ Before starting work, agents should validate the working spec:
 
 ```bash
 # Get structured feedback on spec readiness
-FEEDBACK=$(caws evaluate --feedback-only .caws/working-spec.yaml)
+FEEDBACK=$(caws evaluate --feedback-only .caws/specs/<spec-id>.yaml)
 
 # Parse the JSON response
 if [ "$(echo $FEEDBACK | jq -r '.success')" = "true" ]; then
@@ -60,7 +60,7 @@ Agents should use CAWS throughout development:
 ```bash
 #!/bin/bash
 
-WORKING_SPEC=".caws/working-spec.yaml"
+WORKING_SPEC=".caws/specs/<spec-id>.yaml"
 CURRENT_STATE="Started implementation"
 
 while true; do
@@ -116,12 +116,12 @@ jobs:
       - name: Setup CAWS
         run: npm install -g @paths.design/caws-cli
 
-      - name: Validate Working Spec
-        run: caws validate .caws/working-spec.yaml
+      - name: Validate Feature Spec
+        run: caws validate --spec-id <spec-id>
 
       - name: Run Quality Gates
         run: |
-          RESULT=$(caws evaluate .caws/working-spec.yaml)
+          RESULT=$(caws evaluate .caws/specs/<spec-id>.yaml)
           SUCCESS=$(echo $RESULT | jq -r '.success')
 
           if [ "$SUCCESS" != "true" ]; then
@@ -132,7 +132,7 @@ jobs:
 
       - name: Generate Quality Report
         run: |
-          caws evaluate .caws/working-spec.yaml > quality-report.json
+          caws evaluate .caws/specs/<spec-id>.yaml > quality-report.json
           echo "## Quality Report" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           cat quality-report.json >> $GITHUB_STEP_SUMMARY
@@ -345,8 +345,8 @@ class RiskAwareAgent {
 
 ### Common Issues
 
-**"Working spec file not found"**
-- Ensure `.caws/working-spec.yaml` exists
+**"feature spec file not found"**
+- Ensure `.caws/specs/<spec-id>.yaml` exists
 - Check file permissions and path
 
 **"Spec validation failed"**

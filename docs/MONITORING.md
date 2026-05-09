@@ -280,10 +280,10 @@ module.exports = new Telemetry();
 
 | Level     | Use Case             | Example                                      |
 | --------- | -------------------- | -------------------------------------------- |
-| **ERROR** | Failures, exceptions | "Failed to parse working-spec.yaml"          |
+| **ERROR** | Failures, exceptions | "Failed to parse .caws/specs/<id>.yaml"      |
 | **WARN**  | Recoverable issues   | "Deprecated flag used: --old-flag"           |
 | **INFO**  | Important events     | "Validation complete: 0 errors"              |
-| **DEBUG** | Detailed debugging   | "Loaded config from .caws/working-spec.yaml" |
+| **DEBUG** | Detailed debugging   | "Loaded spec from .caws/specs/<id>.yaml"     |
 
 ### Log Format (JSON)
 
@@ -298,7 +298,7 @@ module.exports = new Telemetry();
   "errors": 0,
   "warnings": 2,
   "metadata": {
-    "spec_file": ".caws/working-spec.yaml",
+    "spec_id": "<feature-spec-id>",
     "risk_tier": 1,
     "version": "3.4.0"
   }

@@ -26,16 +26,16 @@ caws waivers create \
   --mitigation-plan="How you'll address the underlying issue"
 
 # 3. Reference waiver in working spec
-# Edit .caws/working-spec.yaml and add:
+# Edit .caws/specs/<spec-id>.yaml and add:
 waiver_ids: ["WV-XXXX"]  # Replace with actual waiver ID
 
 # 4. Validate your changes
-caws validate .caws/working-spec.yaml
+caws validate --spec-id <spec-id>
 ```
 
 ---
 
-### **Block: "Cannot add change_budget to working-spec.yaml"**
+### **Block: "Cannot add change_budget to <spec-id>.yaml"**
 
 **Why blocked**: Budgets must be derived from policy, not directly editable.
 
@@ -55,11 +55,11 @@ caws waivers create \
   --expires-at="2025-12-31T23:59:59Z"
 
 # 3. Add waiver reference to spec
-# In .caws/working-spec.yaml:
+# In .caws/specs/<spec-id>.yaml:
 waiver_ids: ["WV-XXXX"]
 
 # 4. Validate and proceed
-caws validate .caws/working-spec.yaml
+caws validate --spec-id <spec-id>
 ```
 
 ---
@@ -72,10 +72,10 @@ caws validate .caws/working-spec.yaml
 
 ```bash
 # 1. Check current scope definition
-caws validate .caws/working-spec.yaml
+caws validate --spec-id <spec-id>
 
 # 2. Option A: Update scope in working spec
-# Edit .caws/working-spec.yaml scope.in array to include needed files
+# Edit .caws/specs/<spec-id>.yaml scope.in array to include needed files
 
 # Option B: Create scope waiver
 caws waivers create \
@@ -85,7 +85,7 @@ caws waivers create \
   --description="Need access to [specific files] for [reason]"
 
 # 3. Validate scope changes
-caws validate .caws/working-spec.yaml
+caws validate --spec-id <spec-id>
 ```
 
 ---
@@ -107,7 +107,7 @@ caws waivers create \
   --gates=budget_limit
 
 # 3. Reference waiver in main work PR
-# In working-spec.yaml of main PR:
+# in .caws/specs/<spec-id>.yaml of main PR:
 waiver_ids: ["WV-XXXX"]
 ```
 
@@ -119,10 +119,10 @@ waiver_ids: ["WV-XXXX"]
 
 ```bash
 # Validate working spec
-caws validate .caws/working-spec.yaml
+caws validate --spec-id <spec-id>
 
 # Check if file is in scope
-caws validate .caws/working-spec.yaml --scope-check "path/to/file"
+caws scope check "path/to/file"
 ```
 
 ### **caws burnup** - Budget visibility
@@ -251,7 +251,7 @@ caws iterate
 
 ```bash
 # Before starting work, get intelligent guidance
-$ caws test-analysis assess-budget --spec .caws/working-spec.yaml
+$ caws test-analysis assess-budget --spec .caws/specs/<spec-id>.yaml
 📊 Budget Assessment for FEAT-0123 (Tier 2)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Historical Analysis: 45 similar projects analyzed
@@ -400,7 +400,7 @@ class TestEffectivenessScorer {
 #### **Data Sources**
 
 - Waiver history (`.caws/waivers/`)
-- Working specs (`.caws/working-spec.yaml`)
+- Feature specs (`.caws/specs/<spec-id>.yaml`)
 - Test results (CI artifacts)
 - Git history (change patterns)
 

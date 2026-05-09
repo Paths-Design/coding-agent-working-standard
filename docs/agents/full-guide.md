@@ -26,7 +26,7 @@ This guide teaches agents how to collaborate effectively with humans using CAWS 
 
 When you encounter a CAWS project, follow this sequence:
 
-1. **Check for working spec**: Look for `.caws/working-spec.yaml`
+1. **Check for working spec**: Look for `.caws/specs/<spec-id>.yaml`
 2. **Understand the scope**: Read the `scope.in` and `scope.out` to know boundaries
 3. **Check risk tier**: Tier 1 (critical), Tier 2 (standard), Tier 3 (low risk)
 4. **Review acceptance criteria**: These are your implementation targets
@@ -36,7 +36,7 @@ When you encounter a CAWS project, follow this sequence:
 
 **Never write implementation code until:**
 
-- Working spec exists and validates
+- feature spec exists and validates
 - Test plan is defined
 - Acceptance criteria are clear
 - Scope boundaries are understood
@@ -70,9 +70,9 @@ Risk tiers drive rigor and determine quality gates:
 4. **Secure Prompts**: Never include secrets, `.env` files, or keys in context
 5. **Provenance**: All changes are tracked and attributable
 
-### The Working Spec - Your Blueprint
+### The Feature Spec - Your Blueprint
 
-Every task needs a working spec at `.caws/working-spec.yaml`:
+Every task needs a working spec at `.caws/specs/<spec-id>.yaml`:
 
 ```yaml
 id: FEAT-001
@@ -127,7 +127,7 @@ caws validate --suggestions
 caws validate --auto-fix
 
 # 3. Review acceptance criteria - these are your targets
-cat .caws/working-spec.yaml | grep -A 20 "acceptance:"
+cat .caws/specs/<spec-id>.yaml | grep -A 20 "acceptance:"
 ```
 
 **What to include in your plan:**
@@ -236,9 +236,9 @@ npm run test:e2e          # End-to-end smoke tests
 **PR checklist:**
 
 ```markdown
-## Working Spec
+## Feature Spec
 
-- [ ] `.caws/working-spec.yaml` attached and validates
+- [ ] `.caws/specs/<spec-id>.yaml` attached and validates
 - [ ] Risk tier appropriate for change impact
 - [ ] Acceptance criteria met
 
@@ -437,7 +437,7 @@ vim src/services/user-service.ts
 npm test # Should pass
 
 # 3. Document
-vim .caws/working-spec.yaml # Add root cause note
+vim .caws/specs/<spec-id>.yaml # Add root cause note
 ```
 
 ---
@@ -602,12 +602,12 @@ EOF
 
 #### Error: `risk_tier is required`
 
-**Cause**: Working spec missing risk tier.
+**Cause**: feature spec missing risk tier.
 
 **Fix**:
 
 ```yaml
-# Add to .caws/working-spec.yaml
+# Add to .caws/specs/<spec-id>.yaml
 risk_tier: 2 # Choose 1, 2, or 3 based on impact
 ```
 
@@ -959,7 +959,7 @@ du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
 
 **A: Create one.** Before any implementation:
 
-1. Create `.caws/working-spec.yaml`
+1. Create `.caws/specs/<spec-id>.yaml`
 2. Fill in all required fields
 3. Run `caws validate --suggestions`
 4. Request human approval
@@ -1005,7 +1005,7 @@ Only increase budget with human approval and strong justification.
 
 - **Getting Started**: `.caws/GETTING_STARTED.md` - Generated per project
 - **Templates**: `.caws/templates/` - Feature plans, test plans, PR templates
-- **Examples**: `.caws/examples/` - Working spec examples
+- **Examples**: `.caws/examples/` - feature spec examples
 
 ### Cursor Rules
 
@@ -1018,7 +1018,7 @@ Only increase budget with human approval and strong justification.
 
 Before starting any work:
 
-- [ ] Working spec exists and validates
+- [ ] feature spec exists and validates
 - [ ] Risk tier is appropriate
 - [ ] Acceptance criteria are clear
 - [ ] Scope boundaries are defined

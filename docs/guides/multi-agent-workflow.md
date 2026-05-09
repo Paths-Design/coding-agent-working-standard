@@ -4,11 +4,11 @@
 
 ## The Problem (Anti-Pattern)
 
-**WRONG**: Multiple agents working on `.caws/working-spec.yaml`
+**WRONG**: Multiple agents working on `.caws/specs/<spec-id>.yaml`
 
 - Agent A working on user authentication
 - Agent B working on payment system
-- Both modify `.caws/working-spec.yaml`
+- Both modify `.caws/specs/<spec-id>.yaml`
 - **Result**: Agents overwrite each other's work, conflicts, chaos
 
 ## The Solution (Correct Pattern)
@@ -30,7 +30,7 @@
   │   ├── user-auth.yaml             # Agent A's feature
   │   ├── payment-system.yaml        # Agent B's feature
   │   └── dashboard-ui.yaml          # Agent C's feature
-  └── working-spec.yaml              # Legacy single-spec (DEPRECATED)
+  └── <spec-id>.yaml              # Legacy single-spec (DEPRECATED)
 ```
 
 ### Spec Resolution Priority
@@ -40,7 +40,7 @@ CAWS uses this resolution order:
 1. **Feature spec** (via `--spec-id`): `.caws/specs/<spec-id>.yaml` ← **PREFERRED**
 2. **Explicit path** (via spec-file arg): Custom path
 3. **Auto-detect**: If only 1 spec exists, use it
-4. **Legacy fallback**: `.caws/working-spec.yaml` ← **DEPRECATED**
+4. **Legacy fallback**: `.caws/specs/<spec-id>.yaml` ← **DEPRECATED**
 
 ## Multi-Agent Workflow
 
@@ -235,11 +235,11 @@ dashboard-ui    feature   draft       Admin Dashboard UI
 
 ## Migration from Legacy Single-Spec
 
-### If You're Using `.caws/working-spec.yaml`:
+### If You're Using `.caws/specs/<spec-id>.yaml`:
 
 **Step 1: Identify features in your working spec**
 
-Read your `.caws/working-spec.yaml` and identify distinct features.
+Read your `.caws/specs/<spec-id>.yaml` and identify distinct features.
 
 **Step 2: Split into feature-specific specs**
 
@@ -250,7 +250,7 @@ caws specs create <feature-id> --type feature --title "<Feature Title>"
 
 **Step 3: Copy relevant sections**
 
-Copy the relevant acceptance criteria, scope, and contracts from `working-spec.yaml` to each feature spec.
+Copy the relevant acceptance criteria, scope, and contracts from `<spec-id>.yaml` to each feature spec.
 
 **Step 4: Update agent instructions**
 
@@ -259,7 +259,7 @@ Tell each agent to use `--spec-id <their-feature-id>` in all commands.
 **Step 5: Archive legacy spec (optional)**
 
 ```bash
-mv .caws/working-spec.yaml .caws/working-spec.yaml.legacy
+mv .caws/specs/<spec-id>.yaml .caws/specs/<spec-id>.yaml.legacy
 ```
 
 ## Common Pitfalls & Solutions
@@ -306,12 +306,12 @@ scope:
   out: ["src/auth/", "src/dashboard/"]
 ```
 
-### Pitfall 3: Using Legacy Working Spec
+### Pitfall 3: Treating one spec as the project baseline
 
 **Problem**:
 
 ```bash
-# Multiple agents all editing .caws/working-spec.yaml
+# Multiple agents all editing .caws/specs/<spec-id>.yaml
 caws validate  # Defaults to legacy spec, conflicts!
 ```
 
@@ -357,7 +357,7 @@ If two features need to interact:
 ### Key Takeaways
 
 1. **Feature-specific specs** (`.caws/specs/<id>.yaml`) are the PRIMARY pattern
-2. **Legacy working-spec.yaml** is DEPRECATED for multi-agent workflows
+2. **Legacy <spec-id>.yaml** is DEPRECATED for multi-agent workflows
 3. **Always use `--spec-id`** when multiple specs exist
 4. **Non-overlapping scopes** prevent conflicts
 5. **Each agent owns their feature** completely

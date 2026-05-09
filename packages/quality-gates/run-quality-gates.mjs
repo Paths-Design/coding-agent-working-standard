@@ -402,14 +402,17 @@ class QualityGateRunner {
 
   clearCachesOnFileChanges() {
     try {
-      // Find project root
+      // Find project root by walking up until we find a .caws/ directory
+      // anchored by .caws/policy.yaml (always present) or a .caws/specs/ dir.
       let projectRoot = process.cwd();
       let attempts = 0;
       while (attempts < 10) {
         const cawsDir = path.join(projectRoot, '.caws');
-        const workingSpecPath = path.join(cawsDir, 'working-spec.yaml');
-
-        if (fs.existsSync(cawsDir) && fs.existsSync(workingSpecPath)) {
+        if (
+          fs.existsSync(cawsDir) &&
+          (fs.existsSync(path.join(cawsDir, 'policy.yaml')) ||
+            fs.existsSync(path.join(cawsDir, 'specs')))
+        ) {
           break;
         }
 
@@ -597,15 +600,17 @@ class QualityGateRunner {
    * @returns {Waiver[]} Array of active, non-expired waivers
    */
   loadActiveWaivers() {
-    // Find project root (go up until we find .caws directory with working-spec.yaml)
+    // Find project root by walking up until we find a .caws/ directory
+    // anchored by .caws/policy.yaml (always present) or a .caws/specs/ dir.
     let projectRoot = process.cwd();
     let attempts = 0;
     while (attempts < 10) {
       const cawsDir = path.join(projectRoot, '.caws');
-      const workingSpecPath = path.join(cawsDir, 'working-spec.yaml');
-
-      // Look for .caws directory with working-spec.yaml (indicates project root)
-      if (fs.existsSync(cawsDir) && fs.existsSync(workingSpecPath)) {
+      if (
+        fs.existsSync(cawsDir) &&
+        (fs.existsSync(path.join(cawsDir, 'policy.yaml')) ||
+          fs.existsSync(path.join(cawsDir, 'specs')))
+      ) {
         break;
       }
 

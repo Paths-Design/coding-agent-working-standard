@@ -4,7 +4,7 @@ This directory contains CAWS-specific tools that aren't available in the CLI.
 
 ## scope-guard.js
 
-Checks whether a file is within scope of active working-spec and feature specs. Used by Cursor hooks for scope validation on file attachments.
+Checks whether a file is within scope of any active feature spec under `.caws/specs/`. Used by Cursor hooks for scope validation on file attachments.
 
 ```bash
 # Check if a file is in scope

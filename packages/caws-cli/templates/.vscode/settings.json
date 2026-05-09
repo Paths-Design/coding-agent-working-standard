@@ -14,7 +14,7 @@
 
   // File associations for CAWS files
   "files.associations": {
-    ".caws/working-spec.yaml": "yaml",
+    ".caws/specs/*.yaml": "yaml",
     ".caws/waivers/*.yaml": "yaml",
     "apps/tools/caws/*.js": "javascript"
   },
@@ -89,7 +89,7 @@
 
   // Workspace-specific settings
   "yaml.schemas": {
-    "./.caws/schema/working-spec.schema.json": ".caws/working-spec.yaml",
-    "./.caws/schema/waiver.schema.json": ".caws/waivers/*.yaml"
+    "./.caws/schemas/working-spec.schema.json": ".caws/specs/*.yaml",
+    "./.caws/schemas/waiver.schema.json": ".caws/waivers/*.yaml"
   }
 }

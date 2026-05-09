@@ -14,8 +14,7 @@ This project is built with the **Coding Agent Workflow System (CAWS)** - an engi
 
 ### 1. Project Setup
 The project is already scaffolded with CAWS. Review and customize:
-- `.caws/specs/<spec-id>.yaml` - Canonical feature specification and requirements
-- `.caws/working-spec.yaml` - Compatibility mirror for legacy paths
+- `.caws/specs/<spec-id>.yaml` - Per-feature specifications (canonical, the only spec location)
 - `.caws/policy.yaml` - Risk tier definitions
 - `.github/workflows/caws.yml` - CI/CD quality gates
 

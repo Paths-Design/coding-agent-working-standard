@@ -281,7 +281,7 @@ The quality gates support your engineering-grade TODO template:
 
 ## Integration with CAWS
 
-### Working Spec Integration
+### Feature Spec Integration
 
 Quality gates automatically read your CAWS working spec to determine:
 - Risk tier requirements

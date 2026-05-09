@@ -42,13 +42,13 @@ caws scaffold  # Adds .cursor/ directory
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // ""')
 
-if [[ "$FILE_PATH" == "working-spec.yaml" ]]; then
+if [[ "$FILE_PATH" == "<spec-id>.yaml" ]]; then
   # Validate CAWS spec
   if command -v caws &> /dev/null; then
     if ! caws validate "$FILE_PATH" --quiet 2>/dev/null; then
       echo '{
         "userMessage": "⚠️ CAWS spec validation failed. Run: caws validate --suggestions",
-        "agentMessage": "The working-spec.yaml has validation errors"
+        "agentMessage": "the bound feature spec under .caws/specs/ has validation errors"
       }'
     fi
   fi
@@ -70,7 +70,7 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 
 1. **Initialize CAWS Spec**
    - Run: `caws init feature-name --mode=feature --tier=2`
-   - Verify: Working spec completeness
+   - Verify: feature spec completeness
 
 2. **Plan Implementation**
    - Get CAWS guidance: `caws iterate --current-state "Planning phase"`
@@ -235,7 +235,7 @@ class QualityAwareAgent {
   async checkQuality() {
     try {
       const result = await this.mcpClient.callTool('caws_evaluate', {
-        specFile: '.caws/working-spec.yaml'
+        specFile: '.caws/specs/<spec-id>.yaml'
       });
 
       const evaluation = JSON.parse(result.content[0].text);
@@ -269,7 +269,7 @@ class QualityAwareAgent {
 
 1. **Assess Current State**
    ```
-   caws evaluate .caws/working-spec.yaml
+   caws evaluate .caws/specs/<spec-id>.yaml
    ```
    *Get baseline quality assessment*
 
@@ -286,7 +286,7 @@ class QualityAwareAgent {
 
 4. **Quality Validation**
    ```
-   caws evaluate .caws/working-spec.yaml
+   caws evaluate .caws/specs/<spec-id>.yaml
    ```
    *Validate implementation meets quality standards*
 
@@ -304,7 +304,7 @@ class QualityAwareAgent {
 - Quality score < 0.75 → Continue iteration
 - Quality score ≥ 0.75 → Consider complete
 - Critical quality gates failing → Request human review
-- Working spec changes needed → Escalate to human
+- feature spec changes needed → Escalate to human
 
 **Call Other Workflows**:
 - `/caws-testing-workflow` for comprehensive testing

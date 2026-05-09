@@ -2,48 +2,28 @@
 
 **Essential guide for AI agents working with CAWS projects**
 
-## CRITICAL: Multi-Agent Workflow
+## Multi-Spec is the Only Mode
 
-**If multiple agents are working on this project, each MUST use feature-specific specs to avoid conflicts!**
+**Every spec is per-feature. There is no project-level working spec.** Specs live under `.caws/specs/<id>.yaml`. This applies whether one agent or many are working — single agent still creates a feature spec for each unit of work.
 
-### The Problem
-
-Multiple agents editing `.caws/working-spec.yaml` = conflicts, overwritten work, chaos
-
-### The Solution
-
-Each agent works on `.caws/specs/<feature-id>.yaml` = parallel work, no conflicts, success
-
-**See [Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md) for complete details**
+**See [Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md) for parallel agent details**
 
 ## Getting Started
 
 ### First Steps in Any CAWS Project
 
 ```bash
-# 1. Create YOUR feature-specific spec (if multiple agents)
-caws specs create <your-feature-id> --type feature --title "Your Feature"
+# 1. Create a feature spec for the work
+caws specs create <feature-id> --type feature --title "Your Feature"
 
-# 2. Validate YOUR spec (always use --spec-id with multiple specs)
-caws validate --spec-id <your-feature-id>
+# 2. Validate it
+caws validate --spec-id <feature-id>
 
-# 3. Check current status for YOUR feature
-caws status --visual --spec-id <your-feature-id>
+# 3. Check current status
+caws status --visual --spec-id <feature-id>
 
-# 4. Get iterative guidance for YOUR feature
-caws iterate --spec-id <your-feature-id> --current-state "Starting implementation"
-```
-
-### Single-Agent Projects
-
-If you're the only agent:
-
-```bash
-# Option 1: Create a feature spec (recommended)
-caws specs create my-feature
-
-# Option 2: Use legacy single spec (not recommended for new projects)
-caws init .
+# 4. Get iterative guidance
+caws iterate --spec-id <feature-id> --current-state "Starting implementation"
 ```
 
 ### New Features for Better Agent Experience
@@ -71,8 +51,8 @@ caws archive FEAT-001
 
 **You MUST:**
 
-- **Use feature-specific specs** (if multiple agents working on project)
-- **Always include `--spec-id`** when multiple specs exist
+- **Use a feature spec for every change** (no project-level spec exists)
+- **Always include `--spec-id`** on every command that supports it
 - **Stay within your feature's scope** boundaries
 - **Validate before starting** any work
 - **Create contracts before implementation**
@@ -83,7 +63,6 @@ caws archive FEAT-001
 **You MUST NOT:**
 
 - **Edit other agents' feature specs** or scope directories
-- **Work on `.caws/working-spec.yaml` if multiple agents exist**
 - Write implementation without validated specs
 - Create shadow files (`enhanced-*`, `new-*`)
 - Exceed change budgets
@@ -116,7 +95,7 @@ Lite mode provides guardrails without YAML spec ceremony. Designed for multi-age
 # Initialize in lite mode
 caws init . --mode lite
 
-# Configuration is in .caws/scope.json (not working-spec.yaml)
+# Configuration is in .caws/scope.json (lite mode is YAML-spec-free)
 ```
 
 ### Git Worktree Isolation
@@ -257,7 +236,7 @@ caws progress update --criterion-id A1 --status in_progress
 ### Phase 2: Contract First
 
 ```yaml
-# In .caws/working-spec.yaml, define contracts:
+# In .caws/specs/<spec-id>.yaml, define contracts:
 contracts:
   - type: openapi
     path: docs/api/feature.yaml
@@ -320,11 +299,11 @@ caws archive FEAT-001 --spec-id <feature-id>
 ### Single-Spec Commands (Legacy - Only if Alone)
 
 ```bash
-# Project Management (single agent only)
+# Project Management
 caws init .                      # Initialize new CAWS project
 caws scaffold                    # Add CAWS to existing project
 caws status --visual             # Enhanced status
-caws validate                    # Validate (uses legacy working-spec.yaml)
+caws validate --spec-id <id>     # Validate a feature spec under .caws/specs/
 
 # Mode Management (Complexity Tiers)
 caws mode current               # Check current mode
@@ -352,7 +331,7 @@ caws_slash_commands({
 # Validation (via MCP server)
 caws_slash_commands({
   command: "/caws:validate",
-  specFile: ".caws/working-spec.yaml"
+  specId: "<feature-spec-id>"
 })
 
 # Status checking (via MCP server)
@@ -430,7 +409,7 @@ CAWS includes pre-configured Cursor IDE hooks for Real-Time Quality enforcement 
 # - block-dangerous.sh - Block dangerous commands
 # - scan-secrets.sh - Detect secrets and PII
 # - naming-check.sh - Enforce naming conventions
-# - validate-spec.sh - Check working-spec.yaml
+# - validate-spec.sh - Check feature specs under .caws/specs/
 # - format.sh - Auto-format code
 # - scope-guard.sh - Enforce scope boundaries
 ```
@@ -479,7 +458,7 @@ caws scaffold --with-oidc
 ### Scope Boundaries
 
 ```yaml
-# Respect these in .caws/working-spec.yaml
+# Respect these in .caws/specs/<spec-id>.yaml
 scope:
   in: ['src/feature/', 'tests/feature/'] # ✅ Allowed
   out: ['node_modules/', 'src/other/'] # ❌ Forbidden

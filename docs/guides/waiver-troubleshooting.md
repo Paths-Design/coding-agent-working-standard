@@ -41,7 +41,7 @@ mv .caws/waivers/WV-ARB-003-COMPLETION.yaml .caws/waivers/WV-0001.yaml
 
 ---
 
-### Issue 2: Waiver Not Referenced in Working Spec
+### Issue 2: Waiver Not Referenced in Feature Spec
 
 **Symptom**: Waiver file exists but budget validation ignores it
 
@@ -50,7 +50,7 @@ mv .caws/waivers/WV-ARB-003-COMPLETION.yaml .caws/waivers/WV-0001.yaml
 **Check**:
 
 ```bash
-grep -A5 "waiver_ids:" .caws/working-spec.yaml
+grep -A5 "waiver_ids:" .caws/specs/<spec-id>.yaml
 ```
 
 **Expected Output**:
@@ -63,7 +63,7 @@ waiver_ids:
 **Fix**:
 
 ```yaml
-# Edit .caws/working-spec.yaml
+# Edit .caws/specs/<spec-id>.yaml
 # Add this field (or append to existing array):
 
 id: PROJECT-001
@@ -169,7 +169,7 @@ caws validate --project-root /path/to/project
 
 ---
 
-### Issue 5: Manually Editing change_budget in Working Spec
+### Issue 5: Manually Editing change_budget in Feature Spec
 
 **Symptom**: Changing `change_budget.max_files` or `max_loc` has no effect
 
@@ -178,7 +178,7 @@ caws validate --project-root /path/to/project
 **Incorrect Approach**:
 
 ```yaml
-# .caws/working-spec.yaml
+# .caws/specs/<spec-id>.yaml
 change_budget:
   max_files: 50 # ← Editing this does nothing
   max_loc: 7000 # ← Budget is derived, not read from here
@@ -213,7 +213,7 @@ delta:
   max_files: 25
   max_loc: 4000
 
-# .caws/working-spec.yaml
+# .caws/specs/<spec-id>.yaml
 risk_tier: 2
 waiver_ids:
   - WV-0001
@@ -251,10 +251,10 @@ risk_assessment:
     - Constitutional governance for future changes
 ```
 
-### Step 2: Reference in Working Spec
+### Step 2: Reference in Feature Spec
 
 ```yaml
-# .caws/working-spec.yaml
+# .caws/specs/<spec-id>.yaml
 id: PROJECT-001
 title: 'ARBITER-003 Integration'
 risk_tier: 2
@@ -270,7 +270,7 @@ waiver_ids:
 caws validate
 
 # Should show:
-# ✅ Working spec validation passed
+# ✅ feature spec validation passed
 # Budget: 50 files, 5000 LOC (baseline + waiver)
 ```
 
@@ -293,7 +293,7 @@ git push
 ```
 ❌ Invalid waiver ID format: WV-ARB-003-COMPLETION
    Waiver IDs must be exactly 4 digits: WV-0001 through WV-9999
-   Fix waiver_ids in .caws/working-spec.yaml
+   Fix waiver_ids in .caws/specs/<spec-id>.yaml
 ```
 
 **Fix**: Use 4-digit numeric suffix only (WV-0001, not WV-ARB-003)
@@ -348,7 +348,7 @@ Before committing, verify:
 - [ ] Waiver file exists: `.caws/waivers/WV-XXXX.yaml`
 - [ ] Waiver ID is 4 digits: `id: WV-0001`
 - [ ] Waiver includes budget_limit gate: `gates: [budget_limit]`
-- [ ] Working spec references waiver: `waiver_ids: [WV-0001]`
+- [ ] feature spec references waiver: `waiver_ids: [WV-0001]`
 - [ ] Policy file exists: `.caws/policy.yaml`
 - [ ] Validation passes: `caws validate`
 - [ ] Budget shows effective limit: baseline + delta
@@ -399,7 +399,7 @@ cat .caws/policy.yaml
 # Test budget derivation
 node -e "
 const { deriveBudget } = require('@paths.design/caws-cli/src/budget-derivation');
-const spec = require('./.caws/working-spec.yaml');
+const spec = require('./.caws/specs/<spec-id>.yaml');
 deriveBudget(spec, process.cwd()).then(console.log);
 "
 ```

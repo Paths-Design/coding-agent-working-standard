@@ -2,9 +2,9 @@
 
 This project uses CAWS (Coding Agent Working Standard) for quality-assured development.
 
-## Working Spec
+## Feature Spec
 
-Before making changes, read `.caws/working-spec.yaml`. It defines:
+Before making changes, read the active feature spec under `.caws/specs/<spec-id>.yaml`. It defines:
 
 - **Risk tier**: Quality requirements (T1: 90%+ coverage, T2: 80%+, T3: 70%+)
 - **Scope**: `scope.in` lists files you may edit, `scope.out` is off-limits

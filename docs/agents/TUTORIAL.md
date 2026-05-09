@@ -31,7 +31,7 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 
 ## Step 1: Initialize CAWS
 
-### Create Working Spec
+### Create Feature Spec
 
 ```bash
 # Initialize with interactive wizard
@@ -49,7 +49,7 @@ caws init --interactive
 - Data migration: `No`
 - Rollback SLO: `5m`
 
-**Result**: `.caws/working-spec.yaml` is created with:
+**Result**: `.caws/specs/<spec-id>.yaml` is created with:
 
 ```yaml
 id: PREF-001
@@ -62,9 +62,9 @@ change_budget:
 # ... rest auto-generated
 ```
 
-### Customize Working Spec
+### Customize Feature Spec
 
-Edit `.caws/working-spec.yaml` to add project-specific details:
+Edit `.caws/specs/<spec-id>.yaml` to add project-specific details:
 
 ```yaml
 scope:
@@ -358,10 +358,10 @@ npm test
 
 ```bash
 # Count files changed
-find src/ tests/ -name "*.ts" -newer .caws/working-spec.yaml | wc -l
+find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml | wc -l
 
 # Count lines changed
-find src/ tests/ -name "*.ts" -newer .caws/working-spec.yaml -exec wc -l {} + | tail -1
+find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} + | tail -1
 ```
 
 **Expected**: Within budget (8 files, 200 lines)
@@ -399,9 +399,9 @@ npm run test:coverage
 
 ## Step 6: Update Documentation
 
-### Update Working Spec
+### Update Feature Spec
 
-If scope changed during implementation, update `.caws/working-spec.yaml`:
+If scope changed during implementation, update `.caws/specs/<spec-id>.yaml`:
 
 ```yaml
 # Add any new files to scope.in
@@ -434,7 +434,7 @@ cp .caws/templates/pr.md docs/prs/PREF-001.md
 ## Description
 Implements persistent user preferences with localStorage, including theme and language settings.
 
-## Working Spec
+## Feature Spec
 - **ID**: PREF-001
 - **Risk Tier**: 2
 - **Change Budget**: 8 files, 200 lines
@@ -446,7 +446,7 @@ Implements persistent user preferences with localStorage, including theme and la
 - `src/preferences/validation.ts` (35 lines)
 - `tests/preferences/storage.test.ts` (60 lines)
 - `tests/preferences/validation.test.ts` (40 lines)
-- `.caws/working-spec.yaml` (minor updates)
+- `.caws/specs/<spec-id>.yaml` (minor updates)
 
 ## Testing
 - Unit tests: full coverage
@@ -454,7 +454,7 @@ Implements persistent user preferences with localStorage, including theme and la
 - Manual testing: All acceptance criteria verified
 
 ## Quality Gates
-- Validation: Working spec valid
+- Validation: feature spec valid
 - Coverage: 85% branch coverage
 - Tests: All passing
 - Manual Review: Ready for review
@@ -486,7 +486,7 @@ You've successfully implemented a CAWS-managed feature with:
 
 ### What You Learned
 
-1. **Planning First**: Working spec prevents scope creep
+1. **Planning First**: feature spec prevents scope creep
 2. **Tests as Safety**: TDD catches issues early
 3. **Validation Matters**: Automated checks maintain quality
 4. **Documentation Pays**: Clear PRs speed up reviews
@@ -501,7 +501,7 @@ You've successfully implemented a CAWS-managed feature with:
 
 ### Resources
 
-- **Working Spec**: `.caws/working-spec.yaml`
+- **Feature Spec**: `.caws/specs/<spec-id>.yaml`
 - **Tests**: `tests/preferences/`
 - **Documentation**: `docs/plans/PREF-001.md`
 - **Templates**: `.caws/templates/`

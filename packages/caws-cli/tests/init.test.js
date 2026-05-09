@@ -13,6 +13,21 @@ const yaml = require('js-yaml');
 const { createTemplateRepo, cloneFixture, cleanupTestDir, cleanupTemplate } = require('./helpers/git-fixture');
 const { initProject } = require('../src/commands/init');
 
+/**
+ * Resolve the canonical feature spec path for a freshly-initialized project.
+ * Multi-spec is the only mode: there is no project-level working-spec.yaml.
+ * The spec lives at `.caws/specs/<id>.yaml` per the registry.
+ */
+function resolveCanonicalSpecPath(rootDir) {
+  const registry = fs.readJsonSync(path.join(rootDir, '.caws', 'specs', 'registry.json'));
+  const ids = Object.keys(registry.specs);
+  if (ids.length === 0) {
+    throw new Error('init produced an empty registry — no spec to resolve');
+  }
+  const entry = registry.specs[ids[0]];
+  return path.join(rootDir, '.caws', 'specs', entry.path);
+}
+
 let templateDir;
 let testDir;
 let originalCwd;
@@ -52,9 +67,11 @@ describe('caws init --non-interactive', () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
     expect(fs.existsSync(path.join(testDir, '.caws'))).toBe(true);
-    expect(fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))).toBe(true);
     expect(fs.existsSync(path.join(testDir, '.caws', 'specs'))).toBe(true);
     expect(fs.existsSync(path.join(testDir, '.caws', 'specs', 'registry.json'))).toBe(true);
+    // Multi-spec: feature spec lives under .caws/specs/<id>.yaml; no project-level working-spec.yaml.
+    expect(fs.existsSync(resolveCanonicalSpecPath(testDir))).toBe(true);
+    expect(fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))).toBe(false);
   });
 
   test('creates a policy.yaml file', async () => {
@@ -100,10 +117,10 @@ describe('caws init --non-interactive', () => {
     expect(firstSpec).toHaveProperty('status', 'active');
   });
 
-  test('working-spec.yaml has required fields', async () => {
+  test('feature spec has required fields', async () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
-    const specPath = path.join(testDir, '.caws', 'working-spec.yaml');
+    const specPath = resolveCanonicalSpecPath(testDir);
     const specContent = fs.readFileSync(specPath, 'utf8');
     const spec = yaml.load(specContent);
 
@@ -119,7 +136,7 @@ describe('caws init --non-interactive', () => {
   test('non-interactive defaults produce sensible values', async () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
-    const specPath = path.join(testDir, '.caws', 'working-spec.yaml');
+    const specPath = resolveCanonicalSpecPath(testDir);
     const spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
 
     // Default risk tier is 2, but buildInitialFeatureSpec normalizes it
@@ -134,7 +151,7 @@ describe('caws init --non-interactive', () => {
     expect(spec.scope.out.length).toBeGreaterThan(0);
   });
 
-  test('feature spec YAML file is created alongside working-spec', async () => {
+  test('feature spec YAML file is created in .caws/specs/ and matches the registry', async () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
     // The registry tells us which feature spec files exist
@@ -147,20 +164,19 @@ describe('caws init --non-interactive', () => {
     const featureSpecPath = path.join(testDir, '.caws', 'specs', specEntry.path);
     expect(fs.existsSync(featureSpecPath)).toBe(true);
 
-    // Its content should match working-spec.yaml
+    // The spec id in the file matches the registry key
     const featureSpec = yaml.load(fs.readFileSync(featureSpecPath, 'utf8'));
-    const workingSpec = yaml.load(
-      fs.readFileSync(path.join(testDir, '.caws', 'working-spec.yaml'), 'utf8')
-    );
-    expect(featureSpec.id).toBe(workingSpec.id);
-    expect(featureSpec.title).toBe(workingSpec.title);
+    expect(featureSpec.id).toBe(specIds[0]);
+
+    // Multi-spec only: no project-level working-spec.yaml mirror is written
+    expect(fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))).toBe(false);
   });
 
   test('init is idempotent — running twice does not crash or corrupt files', async () => {
     await initProject('.', { nonInteractive: true, ide: 'none' });
 
     // Verify first init produced valid files
-    expect(fs.existsSync(path.join(testDir, '.caws', 'working-spec.yaml'))).toBe(true);
+    expect(fs.existsSync(resolveCanonicalSpecPath(testDir))).toBe(true);
     expect(fs.existsSync(path.join(testDir, '.caws', 'specs', 'registry.json'))).toBe(true);
 
     // Second init should not throw
@@ -169,8 +185,7 @@ describe('caws init --non-interactive', () => {
     ).resolves.not.toThrow();
 
     // Core files should still exist and be valid
-    const specAfterSecond = path.join(testDir, '.caws', 'working-spec.yaml');
-    expect(fs.existsSync(specAfterSecond)).toBe(true);
+    expect(fs.existsSync(resolveCanonicalSpecPath(testDir))).toBe(true);
 
     const registryAfterSecond = fs.readJsonSync(
       path.join(testDir, '.caws', 'specs', 'registry.json')

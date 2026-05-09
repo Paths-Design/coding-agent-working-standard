@@ -1,6 +1,6 @@
 #!/bin/bash
 # CAWS Spec Validation Hook for Claude Code
-# Validates working-spec.yaml when it's edited
+# Validates per-feature specs under .caws/specs/ when they're edited
 # @author @darianrosebrook
 
 set -euo pipefail

@@ -135,7 +135,7 @@ NODE_ENV=development
 # CI environment
 CI=true
 NODE_ENV=test
-CAWS_SPEC_FILE=.caws/working-spec.yaml
+CAWS_SPEC_ID=<feature-spec-id>
 ```
 
 **For Production Services**:

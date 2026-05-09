@@ -15,12 +15,12 @@ CAWS (Coding Agent Workflow System) is both the framework and a live user of it.
 
 ## Spec workflow
 
-- **Never edit `.caws/working-spec.yaml` directly.** That's the project baseline. Create a feature spec at `.caws/specs/<ID>.yaml` instead:
+- **There is no project-level working spec.** Every spec is per-feature, under `.caws/specs/<ID>.yaml`. Create one with:
   ```bash
   caws specs create <id> --type feature --title "..."
   caws validate --spec-id <id>
   ```
-- **Always pass `--spec-id`** on `caws validate|iterate|evaluate|verify-acs|status` — otherwise commands may target the wrong spec.
+- **Always pass `--spec-id`** on `caws validate|iterate|evaluate|verify-acs|status` — multi-spec is the only mode.
 - Acceptance criteria use Given/When/Then format (see `.caws/specs/EVLOG-002.yaml` for reference shape).
 - `contracts: []` is accepted but discouraged for `mode=feature`.
 

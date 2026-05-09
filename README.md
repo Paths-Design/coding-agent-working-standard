@@ -45,11 +45,11 @@ caws init my-project
 # Navigate to project
 cd my-project
 
-# Create your working specification
-vim .caws/working-spec.yaml
+# Create your first feature spec
+caws specs create my-feature --type feature --title "My feature"
 
-# Validate the specification
-caws validate
+# Validate the spec
+caws validate --spec-id my-feature
 
 # Start development following CAWS workflow
 ```
@@ -58,7 +58,7 @@ caws validate
 
 ### The CAWS Development Workflow
 
-1. **Plan**: Create a validated working specification (`.caws/working-spec.yaml`)
+1. **Plan**: Create a validated per-feature spec (`.caws/specs/<id>.yaml`)
 2. **Contract**: Define API contracts (OpenAPI, TypeScript interfaces)
 3. **Test**: Write tests first (TDD approach)
 4. **Implement**: Code against contracts and tests
@@ -176,9 +176,9 @@ agents:
 
 ### Core Components
 
-#### 1. **Working Specifications** (`.caws/working-spec.yaml`)
+#### 1. **Feature Specifications** (`.caws/specs/<id>.yaml`)
 
-YAML files defining:
+Per-feature YAML files defining:
 
 - Project scope and boundaries
 - Acceptance criteria

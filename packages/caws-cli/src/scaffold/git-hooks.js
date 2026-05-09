@@ -559,12 +559,11 @@ if [ ! -d ".caws" ]; then
   exit 0
 fi
 
-# Run CAWS validation (supports multi-spec projects)
+# Run CAWS validation (per-feature specs under .caws/specs/)
 CAWS_VALIDATION_FAILED=false
 if command -v caws >/dev/null 2>&1; then
   echo "Running CAWS validation..."
 
-  # Multi-spec project: validate each open spec individually
   if [ -d ".caws/specs" ] && command -v node >/dev/null 2>&1; then
     OPEN_SPECS=$(node -e "
       var fs = require('fs'), path = require('path'), dir = '.caws/specs';
@@ -580,7 +579,7 @@ if command -v caws >/dev/null 2>&1; then
     " 2>/dev/null || echo "")
 
     if [ -n "$OPEN_SPECS" ]; then
-      echo "  Multi-spec project detected, validating open specs..."
+      echo "  Validating open specs..."
       while IFS= read -r spec_id; do
         [ -z "$spec_id" ] && continue
         echo "  Validating spec: $spec_id"
@@ -596,14 +595,7 @@ if command -v caws >/dev/null 2>&1; then
       echo "  No open specs found, skipping CAWS validation"
     fi
   else
-    # Single-spec project: validate working-spec directly
-    VALIDATION_OUTPUT=$(caws validate --quiet 2>&1)
-    if [ $? -ne 0 ]; then
-      echo "$VALIDATION_OUTPUT"
-      CAWS_VALIDATION_FAILED=true
-    else
-      echo "CAWS validation passed"
-    fi
+    echo "  .caws/specs/ not found; skipping CAWS validation"
   fi
 
   if [ "$CAWS_VALIDATION_FAILED" = true ]; then
@@ -613,8 +605,8 @@ if command -v caws >/dev/null 2>&1; then
     echo "==================================================="
     echo "Next Steps:"
     echo "   1. Review errors above"
-    echo "   2. Fix issues in .caws/working-spec.yaml or .caws/specs/"
-    echo "   3. Run: caws validate (to verify fixes)"
+    echo "   2. Fix issues in .caws/specs/<spec-id>.yaml"
+    echo "   3. Run: caws validate --spec-id <spec-id> (to verify fixes)"
     echo "   4. Push again: git push"
     echo "==================================================="
     exit 1

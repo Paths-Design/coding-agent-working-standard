@@ -1,6 +1,6 @@
 #!/bin/bash
 # CAWS Scope Guard Hook for Claude Code
-# Validates file edits against scope boundaries from working-spec + feature specs
+# Validates file edits against scope boundaries from per-feature specs under .caws/specs/
 # Specs with terminal status (completed, closed, archived) are skipped
 # Worktree-aware: reads specs from the agent's working directory, not always the main repo
 # @author @darianrosebrook
@@ -131,20 +131,18 @@ if [[ "$WORK_DIR" =~ \/\.caws\/worktrees\/([^/]+)$ ]]; then
   WORKTREE_NAME="${BASH_REMATCH[1]}"
 fi
 
-# Spec/scope resolution: prefer the worktree's own .caws/ if present,
-# otherwise fall back to the main repo's .caws/.
-if [[ -f "$WORK_DIR/.caws/working-spec.yaml" ]]; then
-  SPEC_FILE="$WORK_DIR/.caws/working-spec.yaml"
+# Spec/scope resolution: prefer the worktree's own .caws/specs/ if present,
+# otherwise fall back to the main repo's .caws/specs/.
+if [[ -d "$WORK_DIR/.caws/specs" ]]; then
   SCOPE_FILE="$WORK_DIR/.caws/scope.json"
   SPECS_BASE="$WORK_DIR"
 else
-  SPEC_FILE="$PROJECT_DIR/.caws/working-spec.yaml"
   SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
   SPECS_BASE="$PROJECT_DIR"
 fi
 
 # Check if any spec infrastructure exists
-if [[ ! -f "$SPEC_FILE" ]] && [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
+if [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
   exit 0
 fi
 
@@ -169,8 +167,8 @@ for prefix in "${ALLOW_PREFIXES[@]}"; do
   fi
 done
 
-# ── Lite mode: scope.json (no working-spec.yaml) ─────────────────────
-if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
+# ── Lite mode: scope.json (no .caws/specs/) ─────────────────────
+if [[ ! -d "$SPECS_BASE/.caws/specs" ]] && [[ -f "$SCOPE_FILE" ]]; then
   if command -v node >/dev/null 2>&1; then
     LITE_CHECK=$(node -e "
       var fs = require('fs');
@@ -237,7 +235,7 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
   fi
 fi
 
-# ── Full mode: working-spec.yaml + feature specs ─────────────────────
+# ── Full mode: per-feature specs under .caws/specs/ ─────────────────────
 SPECS_DIR="$SPECS_BASE/.caws/specs"
 
 if command -v node >/dev/null 2>&1; then
@@ -254,21 +252,9 @@ if command -v node >/dev/null 2>&1; then
       // Terminal statuses: specs that are not active — scope no longer enforced
       var TERMINAL = { completed: 1, closed: 1, archived: 1, draft: 1 };
 
-      // Collect all active specs (working-spec + feature specs)
+      // Collect all active per-feature specs under .caws/specs/
       var specs = [];
 
-      // Load working-spec.yaml if present
-      var mainSpec = '$SPEC_FILE';
-      if (fs.existsSync(mainSpec)) {
-        try {
-          var s = yaml.load(fs.readFileSync(mainSpec, 'utf8'));
-          if (s && !TERMINAL[s.status]) {
-            specs.push({ source: 'working-spec', spec: s });
-          }
-        } catch (_) {}
-      }
-
-      // Load feature specs from .caws/specs/
       var specsDir = '$SPECS_DIR';
       if (fs.existsSync(specsDir)) {
         var files = fs.readdirSync(specsDir).filter(function(f) { return f.endsWith('.yaml') || f.endsWith('.yml'); });

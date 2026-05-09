@@ -16,8 +16,7 @@ caws validate            # Validate the current CAWS spec
 
 ```
 .caws/
-  working-spec.yaml      # Compatibility mirror for legacy paths
-  specs/                 # Canonical feature specs
+  specs/                 # Per-feature specs (canonical, the only spec location)
   policy.yaml            # Quality policy overrides (optional)
   waivers.yml            # Active waivers (optional)
 ```

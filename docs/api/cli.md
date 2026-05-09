@@ -158,7 +158,7 @@ Check for scope conflicts between specs.
 
 #### `caws specs migrate`
 
-Migrate from legacy working-spec.yaml to feature-specific specs.
+(Deprecated, no-op in vNext.) Previously migrated a single project-level working spec into per-feature specs. vNext is multi-spec-only; this command has no remaining work to do.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
