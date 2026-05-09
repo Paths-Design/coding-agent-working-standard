@@ -242,8 +242,34 @@ fi
 if [ -d ".caws" ]; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
+  # Detect allowed commits on base branch while worktrees are active.
+  # Exceptions are detected by introspecting the parent git process's args via
+  # \`ps\` (because the commit message file isn't available to pre-commit yet).
+  #   - merge(worktree): <desc>   — merging a completed worktree branch
+  #   - wip(checkpoint): <desc>   — prior-session dirty file cleanup
+  #   - chore(caws): <desc>       — caws spec/worktree authoring on base (e.g.
+  #                                  spec creation, worktree bind commit). These are
+  #                                  zero-blast-radius authoring commits, not
+  #                                  implementation work — required so multi-agent
+  #                                  spec creation is not blocked by a sibling
+  #                                  agent's active worktree (RC defect #7).
+  #   - git merge (MERGE_HEAD)    — git's own merge commit
+  IS_ALLOWED_BASE_COMMIT=false
+  GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo ".git")
+  if [ -f "$GIT_DIR/MERGE_HEAD" ]; then
+    IS_ALLOWED_BASE_COMMIT=true
+  fi
+  if command -v ps >/dev/null 2>&1; then
+    PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null || echo "")
+    case "$PARENT_ARGS" in
+      *merge\\(worktree\\):*|*"merge(worktree):"*) IS_ALLOWED_BASE_COMMIT=true ;;
+      *wip\\(checkpoint\\):*|*"wip(checkpoint):"*) IS_ALLOWED_BASE_COMMIT=true ;;
+      *chore\\(caws\\):*|*"chore(caws):"*)         IS_ALLOWED_BASE_COMMIT=true ;;
+    esac
+  fi
+
   # Guard 1a: Block commits on base branch when parallel worktrees are active (caws parallel)
-  if [ -f ".caws/parallel.json" ] && command -v node >/dev/null 2>&1; then
+  if [ "$IS_ALLOWED_BASE_COMMIT" != true ] && [ -f ".caws/parallel.json" ] && command -v node >/dev/null 2>&1; then
     PARALLEL_BASE=$(node -e "
       try {
         var reg = JSON.parse(require('fs').readFileSync('.caws/parallel.json', 'utf8'));
@@ -264,6 +290,12 @@ if [ -d ".caws" ]; then
         echo "  Active agents are working in isolated worktrees."
         echo "  Committing to the base branch risks interleaved history and merge conflicts."
         echo ""
+        echo "  Allowed commit formats on the base branch:"
+        echo "    merge(worktree): <desc>    — merge a completed worktree branch"
+        echo "    wip(checkpoint): <desc>    — commit prior-session dirty files"
+        echo "    chore(caws): <desc>        — caws spec/worktree authoring"
+        echo "    git merge --no-ff <branch> — git merge commit"
+        echo ""
         echo "  To see parallel status: caws parallel status"
         echo "  To merge agent work:    caws parallel merge"
         echo "  To override (unsafe):   git commit --no-verify"
@@ -273,7 +305,7 @@ if [ -d ".caws" ]; then
   fi
 
   # Guard 1b: Block commits on base branch when ANY active worktrees exist (caws worktree create)
-  if [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
+  if [ "$IS_ALLOWED_BASE_COMMIT" != true ] && [ -f ".caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
     ACTIVE_WORKTREES=$(node -e "
       try {
         var reg = JSON.parse(require('fs').readFileSync('.caws/worktrees.json', 'utf8'));
@@ -292,6 +324,12 @@ if [ -d ".caws" ]; then
       echo "BLOCKED: Committing to '$CURRENT_BRANCH' while $WT_COUNT active worktree(s) exist: $WT_NAMES"
       echo "  You should be working in your worktree, not on the base branch."
       echo "  Committing here risks interleaved history with agents in worktrees."
+      echo ""
+      echo "  Allowed commit formats on the base branch:"
+      echo "    merge(worktree): <desc>    — merge a completed worktree branch"
+      echo "    wip(checkpoint): <desc>    — commit prior-session dirty files"
+      echo "    chore(caws): <desc>        — caws spec/worktree authoring"
+      echo "    git merge --no-ff <branch> — git merge commit"
       echo ""
       echo "  To work in your worktree: cd .caws/worktrees/<name>/"
       echo "  To see worktrees:         caws worktree list"
@@ -783,12 +821,19 @@ if [ "$HAS_ACTIVE_WORKTREES" = true ]; then
     echo "Merge commit to base branch allowed (worktrees active)"
   elif [[ "$COMMIT_MSG" =~ ^wip\\(checkpoint\\): ]]; then
     echo "Checkpoint commit allowed (prior-session cleanup)"
+  elif [[ "$COMMIT_MSG" =~ ^chore\\(caws\\): ]]; then
+    # caws spec/worktree authoring on base branch (RC defect #7).
+    # Zero-blast-radius authoring commits (spec creation, worktree bind),
+    # not implementation work — required so multi-agent spec creation
+    # is not blocked by a sibling agent's active worktree.
+    echo "CAWS authoring commit allowed (chore(caws): on base branch)"
   else
     echo "BLOCKED: Direct commit to '$CURRENT_BRANCH' while worktrees are active."
     echo "  Only these commit types are allowed on the base branch during parallel work:"
     echo ""
     echo "  merge(worktree): <description>     — merge a completed worktree branch"
     echo "  wip(checkpoint): <description>     — commit prior-session dirty files"
+    echo "  chore(caws): <description>         — caws spec/worktree authoring"
     echo "  git merge --no-ff <branch>         — git merge commit"
     echo ""
     echo "  To override (unsafe):   git commit --no-verify"

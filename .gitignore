@@ -542,3 +542,7 @@ bun.lockb
 
 # Archive
 .archive/
+
+# Python bytecode caches (e.g. from running templates/.claude/hooks/test_classify_command.py)
+__pycache__/
+*.pyc
