@@ -7,43 +7,11 @@
 // The kernel does no I/O and never throws on user input. Malformed paths
 // land as `invalid_path` decisions, not exceptions.
 
-import type { Spec } from '../spec/types';
-
-/**
- * Binding state of the worktree the path was authored in.
- *
- * The shell layer constructs this from `.caws/worktrees.json` plus the bound
- * spec's `worktree:` field. The kernel never reads either.
- *
- * Three variants:
- *  - `bound`: registry has `specId` AND spec.worktree points back. Full
- *    governed evaluation runs.
- *  - `one_sided`: exactly one side points to the other. This is corrupt
- *    state — mechanically equivalent to `unbound` for governed writes,
- *    but diagnostically distinct so doctor can prescribe a precise repair
- *    (rebind vs bind).
- *  - `unbound`: no spec is linked to the worktree (or the caller is outside
- *    any worktree). Governed writes fail closed.
- */
-export type BindingState =
-  | {
-      readonly kind: 'bound';
-      readonly spec: Spec;
-      readonly worktreeName: string;
-    }
-  | {
-      readonly kind: 'one_sided';
-      readonly detail: {
-        readonly specHasWorktree: boolean;
-        readonly registryHasSpecId: boolean;
-        readonly specWorktree?: string;
-        readonly registrySpecId?: string;
-        readonly worktreeName?: string;
-      };
-    }
-  | {
-      readonly kind: 'unbound';
-    };
+// BindingState's canonical home is `worktree/types.ts` (worktree owns
+// binding; scope is a consumer). Re-exported here so consumer paths
+// (`@paths.design/caws-kernel/scope`) remain stable.
+export type { BindingState } from '../worktree/types';
+import type { BindingState } from '../worktree/types';
 
 /**
  * The four mutually exclusive outcomes of evaluation.
