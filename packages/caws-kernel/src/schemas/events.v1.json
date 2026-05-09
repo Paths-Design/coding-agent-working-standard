@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events.v1.json",
   "title": "CAWS Event (envelope)",
-  "description": "Common envelope for every event in .caws/events.jsonl. Per-event payload schemas live under events/<event>.v1.json. Events are append-only; the kernel hash chain is computed over canonicalJson(event minus event_hash) with domain separator 'caws.events.v1'.",
+  "description": "Common envelope for every event in .caws/events.jsonl. Per-event payload schemas live under events/<event>.v1.json. Events are append-only; the kernel hash chain is computed over canonicalJson(event minus event_hash) with domain separator 'caws.events.v1' + NUL.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["seq", "ts", "actor", "event", "prev_hash", "event_hash"],
+  "required": ["seq", "ts", "actor", "event", "data", "prev_hash", "event_hash"],
   "properties": {
     "seq": {
       "type": "integer",
@@ -18,9 +18,32 @@
       "description": "ISO-8601 UTC timestamp. Informational only; ordering is by seq. Cross-machine clock skew is tolerated."
     },
     "actor": {
-      "type": "string",
-      "enum": ["cli", "hook", "session", "agent"],
-      "description": "Closed actor enum. Adding a new actor type requires a schema bump."
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["human", "agent", "system", "automation"],
+          "description": "Actor class. 'human': end user typing into a terminal. 'agent': AI agent driving the CLI. 'system': kernel/shell-emitted events with no external actor. 'automation': CI runner, scheduled task, git hook, daemon."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Non-empty actor identifier. Shape is shell-defined (email, agent id, hostname, etc.); the kernel only enforces non-empty."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Session identifier (CLAUDE_SESSION_ID, CURSOR_TRACE_ID, or CAWS-minted capsule id). Optional. The kernel does NOT verify session liveness or agents.json membership; that's a shell-layer concern."
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Platform identifier (e.g. 'claude-code', 'cursor', 'github-actions'). Optional. Used for display formatting like '<sessionId>:<platform>'."
+        }
+      },
+      "description": "Required structured actor. Identity is part of the evidentiary claim every event makes. The kernel enforces shape; the shell decides who the actor is."
     },
     "event": {
       "type": "string",
@@ -49,32 +72,27 @@
         "commit_made",
         "branch_switched"
       ],
-      "description": "Closed event vocabulary. Each event type has a corresponding schema under events/<event>.v1.json describing its data payload and spec_id requirement."
+      "description": "Closed event vocabulary. Each event type has a corresponding schema under events/<event>.v1.json describing its data payload and spec_id requirement. Types without a payload schema accept any object."
     },
     "spec_id": {
       "type": "string",
       "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
-      "description": "Spec identifier when the event is spec-scoped. Required for events in REQUIRES_SPEC_ID class; forbidden for events in NO_SPEC_ID class. The kernel's requiresSpecId(eventType) function is the runtime authority."
-    },
-    "session_id": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Session identifier (CLAUDE_SESSION_ID, CURSOR_TRACE_ID, or CAWS-minted capsule id). Required for actor='session' or actor='agent'."
+      "description": "Spec identifier when the event is spec-scoped. Required for events in REQUIRES_SPEC_ID class; forbidden for events in NO_SPEC_ID class. The kernel's REQUIRES_SPEC_ID/OPTIONAL_SPEC_ID/NO_SPEC_ID constants are the runtime authority. When absent, the field is omitted from the JSON entirely (NOT serialized as null)."
     },
     "data": {
-      "description": "Per-event-type payload. Validated against the event's specific schema (events/<event>.v1.json), NOT against this envelope.",
+      "description": "Per-event-type payload. Validated against the event's specific schema (events/<event>.v1.json) when one exists; otherwise accepts any object. Every event must carry a data field even when empty (use {}).",
       "type": "object"
     },
     "prev_hash": {
-      "type": "string",
-      "pattern": "^(|sha256:[0-9a-f]{64})$",
-      "description": "Hash of the previous event's event_hash. Empty string for genesis (seq=1). Format: 'sha256:' + 64 lowercase hex chars."
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Hash of the previous event's event_hash. null for the genesis event (seq=1). Format when set: 'sha256:' + 64 lowercase hex chars."
     },
     "event_hash": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$",
-      "description": "Hash of canonicalJson(this event minus event_hash) with domain separator 'caws.events.v1\\x00'. Algorithm authority is the kernel evidence module, not this schema."
+      "description": "Hash of canonicalJson(this event minus event_hash) prefixed with the domain separator 'caws.events.v1' + 0x00. Algorithm authority is the kernel evidence module, not this schema."
     }
   },
-  "$comment": "Event vocabulary classes (authority: kernel/evidence/event-classes.ts):\n\nREQUIRES_SPEC_ID: spec_created, spec_validated, spec_updated, spec_closed, spec_archived, spec_deleted, spec_drift_detected, evidence_recorded, ac_recorded, test_recorded, gate_evaluated, waiver_applied, waiver_revoked, worktree_bound\n\nOPTIONAL_SPEC_ID: worktree_created, worktree_merged, worktree_destroyed, claim_taken_over, commit_made\n\nNO_SPEC_ID: session_started, session_ended, branch_switched, doctor_completed\n\nThe class is not encoded in this envelope schema directly because JSON Schema's allOf/if chains for 23 event types would be unreadable; the kernel encodes the classes as a TypeScript Set and validates at append time."
+  "$comment": "Event vocabulary classes (authority: packages/caws-kernel/src/evidence/types.ts):\n\nREQUIRES_SPEC_ID: spec_created, spec_validated, spec_updated, spec_closed, spec_archived, spec_deleted, spec_drift_detected, evidence_recorded, ac_recorded, test_recorded, gate_evaluated, waiver_applied, waiver_revoked, worktree_bound\n\nOPTIONAL_SPEC_ID: worktree_created, worktree_merged, worktree_destroyed, claim_taken_over, commit_made\n\nNO_SPEC_ID: session_started, session_ended, branch_switched, doctor_completed\n\nThe class is not encoded in this envelope schema directly because JSON Schema's allOf/if chains for 23 event types would be unreadable; the kernel encodes the classes as TypeScript Sets and validates at append time."
 }
