@@ -6,7 +6,7 @@ import {
 import type { DoctorInput, TemplateCheck } from '../../src/doctor';
 import type { Spec } from '../../src/spec/types';
 import type { Policy } from '../../src/policy/types';
-import type { ChainedEvent, Hash } from '../../src/evidence';
+import type { ChainedEvent } from '../../src/evidence';
 import { prepareAppend } from '../../src/evidence';
 import { isOk } from '../../src/result';
 import type { WorktreeRegistry } from '../../src/worktree';
@@ -233,6 +233,179 @@ describe('binding integrity', () => {
       .map((f) => f.rule)
       .filter((r) => r.startsWith('doctor.binding.'));
     expect(bindingRules).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2c. spec_not_governable — bidirectional bind to a non-active spec
+// ---------------------------------------------------------------------------
+
+describe('binding — spec_not_governable', () => {
+  it('fires when bidirectional binding exists with a closed spec', () => {
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'closed' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    const f = report.findings.find(
+      (x) => x.rule === DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE
+    );
+    expect(f).toBeDefined();
+    expect(f?.severity).toBe('error');
+    expect(f?.data?.['lifecycle_state']).toBe('closed');
+    expect(f?.data?.['spec_id']).toBe('X-1');
+  });
+
+  it('fires for archived spec with bidirectional binding', () => {
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'archived' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    expect(report.findings.map((f) => f.rule)).toContain(
+      DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE
+    );
+  });
+
+  it('fires for draft spec with bidirectional binding', () => {
+    // Draft is not strictly "non-governable" everywhere in the kernel (the
+    // worktree kernel allows binding drafts), but doctor flags the state
+    // because a non-active spec held bidirectionally is the wrong steady
+    // state for governance. The shell can choose to mute drafts later.
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'draft' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    expect(report.findings.map((f) => f.rule)).toContain(
+      DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE
+    );
+  });
+
+  it('does NOT fire when binding is one-sided (a different rule covers it)', () => {
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'closed' });
+    const registry: WorktreeRegistry = { 'wt-foo': {} }; // no specId
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    const rules = report.findings.map((f) => f.rule);
+    expect(rules).not.toContain(DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE);
+  });
+
+  it('does NOT fire when spec is active', () => {
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'active' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    const rules = report.findings.map((f) => f.rule);
+    expect(rules).not.toContain(DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2d. spec_points_to_foreign_binding — cross-mismatch from spec's view
+// ---------------------------------------------------------------------------
+
+describe('binding — spec_points_to_foreign_binding', () => {
+  it('fires when spec.worktree is held by a different spec in the registry', () => {
+    const specA = makeSpec({ id: 'A-1', worktree: 'wt-foo' });
+    const specOther = makeSpec({ id: 'OTHER-1' }); // exists; not bound
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'OTHER-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [specA, specOther], worktrees: registry })
+    );
+    const f = report.findings.find(
+      (x) => x.rule === DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING
+    );
+    expect(f).toBeDefined();
+    expect(f?.severity).toBe('error');
+    expect(f?.subject).toBe('A-1');
+    expect(f?.data?.['registry_spec_id']).toBe('OTHER-1');
+    expect(f?.data?.['worktree_name']).toBe('wt-foo');
+  });
+
+  it('fires even when the foreign spec is NOT loaded', () => {
+    // The other half (BINDING_REGISTRY_MISSING_SPEC) still fires from the
+    // registry side; the spec side now gets its own rule. Together they
+    // describe both perspectives of the corrupt link.
+    const specA = makeSpec({ id: 'A-1', worktree: 'wt-foo' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'GHOST-99' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [specA], worktrees: registry })
+    );
+    const rules = report.findings.map((f) => f.rule);
+    expect(rules).toContain(DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING);
+    expect(rules).toContain(DOCTOR_RULES.BINDING_REGISTRY_MISSING_SPEC);
+  });
+
+  it('does NOT fire when binding is bidirectional', () => {
+    const specA = makeSpec({ id: 'A-1', worktree: 'wt-foo' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'A-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [specA], worktrees: registry })
+    );
+    expect(report.findings.map((f) => f.rule)).not.toContain(
+      DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2e. Duplicate-finding regression locks
+// ---------------------------------------------------------------------------
+
+describe('binding — duplicate-finding regression locks', () => {
+  function findingsFor(report: ReturnType<typeof inspectProjectState>, rule: string) {
+    return report.findings.filter((f) => f.rule === rule);
+  }
+
+  it('cross-mismatch with foreign spec absent: each rule fires exactly once', () => {
+    const specA = makeSpec({ id: 'A-1', worktree: 'wt-foo' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'GHOST' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [specA], worktrees: registry })
+    );
+    expect(
+      findingsFor(report, DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING)
+    ).toHaveLength(1);
+    expect(
+      findingsFor(report, DOCTOR_RULES.BINDING_REGISTRY_MISSING_SPEC)
+    ).toHaveLength(1);
+  });
+
+  it('cross-mismatch with foreign spec present: rules fire exactly once each', () => {
+    const specA = makeSpec({ id: 'A-1', worktree: 'wt-foo' });
+    const specOther = makeSpec({ id: 'OTHER-1' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'OTHER-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [specA, specOther], worktrees: registry })
+    );
+    // The registry side reports ONE_SIDED against OTHER-1; the spec side
+    // reports SPEC_POINTS_TO_FOREIGN_BINDING against A-1. Each exactly once.
+    expect(findingsFor(report, DOCTOR_RULES.BINDING_ONE_SIDED)).toHaveLength(1);
+    expect(
+      findingsFor(report, DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING)
+    ).toHaveLength(1);
+  });
+
+  it('single one-sided binding (registry-only) fires BINDING_ONE_SIDED exactly once', () => {
+    const spec = makeSpec({ id: 'X-1' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    expect(findingsFor(report, DOCTOR_RULES.BINDING_ONE_SIDED)).toHaveLength(1);
+  });
+
+  it('spec_not_governable + bidirectional bind: SPEC_NOT_GOVERNABLE once, no ONE_SIDED', () => {
+    const spec = makeSpec({ id: 'X-1', worktree: 'wt-foo', lifecycle_state: 'closed' });
+    const registry: WorktreeRegistry = { 'wt-foo': { specId: 'X-1' } };
+    const report = inspectProjectState(
+      baseInput({ specs: [spec], worktrees: registry })
+    );
+    expect(findingsFor(report, DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE)).toHaveLength(1);
+    expect(findingsFor(report, DOCTOR_RULES.BINDING_ONE_SIDED)).toHaveLength(0);
   });
 });
 
@@ -506,6 +679,61 @@ describe('templates — caller-supplied check results', () => {
     expect(f).toBeDefined();
     expect(f?.severity).toBe('warning');
   });
+
+  it('defaults missing severity to error when in errors[]', () => {
+    const t: TemplateCheck = {
+      template_id: 'spec/missing-severity.yaml',
+      errors: [
+        {
+          rule: 'spec.title.too_short',
+          authority: 'kernel/spec',
+          message: 'title is shorter than 10 chars.',
+          // severity intentionally omitted
+        },
+      ],
+    };
+    const report = inspectProjectState(baseInput({ templates: [t] }));
+    const f = report.findings.find((x) => x.rule === DOCTOR_RULES.TEMPLATE_DRIFT);
+    expect(f).toBeDefined();
+    expect(f?.severity).toBe('error');
+  });
+
+  it('defaults missing severity to warning when in warnings[]', () => {
+    const t: TemplateCheck = {
+      template_id: 'spec/missing-warning-sev.yaml',
+      errors: [],
+      warnings: [
+        {
+          rule: 'spec.invariants.too_few',
+          authority: 'kernel/spec',
+          message: 'invariants has only 1 entry.',
+          // severity intentionally omitted
+        },
+      ],
+    };
+    const report = inspectProjectState(baseInput({ templates: [t] }));
+    const f = report.findings.find((x) => x.rule === DOCTOR_RULES.TEMPLATE_WARNING);
+    expect(f).toBeDefined();
+    expect(f?.severity).toBe('warning');
+  });
+
+  it('uses template_id as finding subject when path is absent', () => {
+    const t: TemplateCheck = {
+      template_id: 'spec/no-path.yaml',
+      // no path
+      errors: [
+        {
+          rule: 'spec.acceptance.too_short',
+          authority: 'kernel/spec',
+          message: 'acceptance.then is empty.',
+          severity: 'error',
+        },
+      ],
+    };
+    const report = inspectProjectState(baseInput({ templates: [t] }));
+    const f = report.findings.find((x) => x.rule === DOCTOR_RULES.TEMPLATE_DRIFT);
+    expect(f?.subject).toBe('spec/no-path.yaml');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -539,6 +767,3 @@ describe('summary + clean', () => {
   });
 });
 
-// Sanity import to keep Hash type referenced for the test compiler.
-const _HashSanity: Hash = ('sha256:' + 'a'.repeat(64)) as Hash;
-void _HashSanity;

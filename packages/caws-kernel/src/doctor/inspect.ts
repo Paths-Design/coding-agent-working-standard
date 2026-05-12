@@ -215,6 +215,26 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           }
         )
       );
+    } else if (state.kind === 'bound' && spec.lifecycle_state !== 'active') {
+      // Bidirectional binding to a non-governable spec is contradictory
+      // authority state. The worktree kernel refuses NEW non-governable
+      // binds; doctor surfaces legacy/corrupt instances.
+      findings.push(
+        finding(
+          DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE,
+          'error',
+          `Worktree "${worktreeName}" is bound to spec ${spec.id}, but that spec is in lifecycle_state="${spec.lifecycle_state}" and cannot authorize governed writes.`,
+          {
+            subject: worktreeName,
+            narrowRepair: `Destroy or rebind the worktree; closed/archived/draft specs cannot authorize governed writes. Run \`caws worktree destroy ${worktreeName}\` or \`caws worktree bind ${worktreeName} --spec <active-id>\`.`,
+            data: {
+              worktree_name: worktreeName,
+              spec_id: spec.id,
+              lifecycle_state: spec.lifecycle_state,
+            },
+          }
+        )
+      );
     }
   }
 
@@ -239,9 +259,10 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       );
       continue;
     }
-    // Record exists; if its specId doesn't match, this is one-sided. We may
-    // have already reported it under 2a if the record had a specId; if it
-    // has no specId, this is the spec→registry direction with no return.
+    // Record exists. Three sub-cases:
+    //   (i)  record has no specId          → spec→registry one-sided
+    //   (ii) record.specId === spec.id     → bidirectional, handled in 2a
+    //   (iii) record.specId !== spec.id    → foreign binding from spec's view
     const state = deriveBindingState(spec, registry, worktreeName);
     if (state.kind === 'one_sided' && !record.specId) {
       findings.push(
@@ -256,6 +277,30 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
               spec_id: spec.id,
               worktree_name: worktreeName,
               ...state.detail,
+            },
+          }
+        )
+      );
+    } else if (
+      state.kind === 'one_sided' &&
+      typeof record.specId === 'string' &&
+      record.specId.length > 0 &&
+      record.specId !== spec.id
+    ) {
+      // Spec claims a worktree name that is held by a different spec id.
+      // The repair side depends on intent and is the shell's decision.
+      findings.push(
+        finding(
+          DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING,
+          'error',
+          `Spec ${spec.id} points to worktree "${worktreeName}", but the registry binds that worktree to spec ${record.specId}.`,
+          {
+            subject: spec.id,
+            narrowRepair: `Either clear worktree on spec ${spec.id}, or rebind worktrees.json[${worktreeName}].specId from ${record.specId} to ${spec.id}.`,
+            data: {
+              spec_id: spec.id,
+              worktree_name: worktreeName,
+              registry_spec_id: record.specId,
             },
           }
         )

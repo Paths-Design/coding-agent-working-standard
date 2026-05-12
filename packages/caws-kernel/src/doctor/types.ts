@@ -52,7 +52,13 @@ export interface DoctorFinding {
 // ----------------------------------------------------------------------------
 
 export interface TemplateCheck {
+  /** Stable identifier for the template (e.g. `spec/feature.yaml`). */
   readonly template_id: string;
+  /**
+   * Filesystem-style path to the template, if the shell knows one. When
+   * absent, doctor uses `template_id` as the finding subject — so the
+   * subject of every template-derived finding is always populated.
+   */
   readonly path?: string;
   readonly errors: readonly Diagnostic[];
   readonly warnings?: readonly Diagnostic[];

@@ -17,6 +17,20 @@ export const DOCTOR_RULES = {
   BINDING_REGISTRY_MISSING_SPEC: 'doctor.binding.registry_missing_spec',
   /** A spec has worktree:<name> but no matching registry entry. */
   BINDING_SPEC_MISSING_REGISTRY: 'doctor.binding.spec_missing_registry',
+  /**
+   * Bidirectional binding exists, but the spec's lifecycle_state is not
+   * 'active' (it is draft, closed, or archived). Closed/archived specs
+   * cannot authorize governed writes, so this is contradictory authority
+   * state, not just hygiene.
+   */
+  BINDING_SPEC_NOT_GOVERNABLE: 'doctor.binding.spec_not_governable',
+  /**
+   * A spec claims a worktree name that is held by a *different* spec id
+   * in the registry. The worktree authority is occupied by another spec;
+   * the repair is on the spec side (clear its `worktree:` field) or the
+   * registry side (rebind), depending on intent.
+   */
+  BINDING_SPEC_POINTS_TO_FOREIGN_BINDING: 'doctor.binding.spec_points_to_foreign_binding',
 
   // ---- transition advisories (info — not failures) -------------------------
   TRANSITION_ACTIVE_BINDING_BLOCKS_CLOSE: 'doctor.transition.active_binding_blocks_close',
