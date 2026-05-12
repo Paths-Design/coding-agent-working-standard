@@ -1,0 +1,61 @@
+// Stable rule identifiers for the Node-only store layer.
+//
+// These ids are public contract for shell-side diagnostics. The store is
+// the only place outside the kernel that emits Diagnostics under the
+// `kernel/diagnostics` authority — store-specific authority is reserved
+// for future. Until then, store rule ids carry the `store.*` namespace.
+
+export const STORE_RULES = {
+  // ---- repo root resolution -----------------------------------------------
+  REPO_ROOT_NOT_A_GIT_REPO: 'store.repo_root.not_a_git_repo',
+  REPO_ROOT_GIT_INVOCATION_FAILED: 'store.repo_root.git_invocation_failed',
+  REPO_ROOT_CAWS_DIR_MISSING: 'store.repo_root.caws_dir_missing',
+
+  // ---- file I/O ------------------------------------------------------------
+  /** Distinguishable so callers can decide missing → Ok([]) vs missing → Err. */
+  READ_MISSING_FILE: 'store.read.missing_file',
+  READ_NOT_A_FILE: 'store.read.not_a_file',
+  READ_IO_FAILED: 'store.read.io_failed',
+  /** YAML parse failure. */
+  READ_YAML_INVALID: 'store.read.yaml_invalid',
+  /** JSON parse failure. */
+  READ_JSON_INVALID: 'store.read.json_invalid',
+
+  // ---- atomic write --------------------------------------------------------
+  WRITE_IO_FAILED: 'store.write.io_failed',
+
+  // ---- specs ---------------------------------------------------------------
+  /** A single spec file failed validation; the load itself still succeeds. */
+  SPECS_SPEC_INVALID: 'store.specs.spec_invalid',
+  /** A non-spec file landed in .caws/specs/ (e.g., README.md). Soft skip. */
+  SPECS_NON_YAML_SKIPPED: 'store.specs.non_yaml_skipped',
+  /** Two spec files declared the same spec id. */
+  SPECS_DUPLICATE_ID: 'store.specs.duplicate_id',
+
+  // ---- registries ---------------------------------------------------------
+  /** worktrees.json or agents.json parsed but is not a plain object. */
+  REGISTRY_NOT_OBJECT: 'store.registry.not_object',
+
+  // ---- events -------------------------------------------------------------
+  /** Interior (non-trailing) malformed JSON line in events.jsonl. */
+  EVENTS_INTERIOR_MALFORMED_LINE: 'store.events.interior_malformed_line',
+  /** Trailing partial line (crash-recovery). Tolerated; emitted as warning. */
+  EVENTS_TRAILING_PARTIAL_LINE: 'store.events.trailing_partial_line',
+  /** Event line parsed as JSON but did not pass validateChainedEvent. */
+  EVENTS_INVALID_EVENT_SHAPE: 'store.events.invalid_event_shape',
+  /** Failed to acquire the events.jsonl lock after the bounded retry. */
+  EVENTS_LOCK_CONTENTION: 'store.events.lock_contention',
+  /** prepareAppend rejected the body. Carries the kernel diagnostics. */
+  EVENTS_PREPARE_APPEND_REJECTED: 'store.events.prepare_append_rejected',
+} as const;
+
+export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];
+
+export const STORE_RULE_PREFIXES = [
+  'store.repo_root.',
+  'store.read.',
+  'store.write.',
+  'store.specs.',
+  'store.registry.',
+  'store.events.',
+] as const;

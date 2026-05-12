@@ -13,9 +13,9 @@
     "templates"
   ],
   "scripts": {
-    "build": "mkdir -p dist && cp -r src/* dist/ && cp -r templates dist/ 2>/dev/null || true",
-    "dev": "mkdir -p dist && cp -r src/* dist/ && node dist/index.js",
-    "typecheck": "tsc --emitDeclarationOnly --outDir dist",
+    "build": "node scripts/build-cli.js",
+    "dev": "node scripts/build-cli.js && node dist/index.js",
+    "typecheck": "tsc -p tsconfig.store.test.json",
     "start": "node dist/index.js",
     "test": "node scripts/run-tests.js",
     "test:unit": "npm run build && jest --testPathIgnorePatterns='perf-budgets|integration|e2e|mutation|axe|contract' && npm run test:cleanup",
@@ -56,6 +56,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@paths.design/caws-kernel": "*",
     "chalk": "4.1.2",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
