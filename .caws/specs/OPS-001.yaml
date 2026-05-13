@@ -1,0 +1,43 @@
+id: OPS-001
+type: feature
+title: Allow Claude main checkout edits
+status: closed
+risk_tier: 3
+mode: development
+created_at: '2026-05-12T23:25:46.927Z'
+updated_at: '2026-05-12T23:27:25.085Z'
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .claude/hooks/
+    - .caws/specs/OPS-001.yaml
+  out:
+    - node_modules/
+    - dist/
+    - build/
+invariants:
+  - System maintains data consistency
+acceptance:
+  - id: A1
+    given: Claude is operating from the main checkout
+    when: it uses Write or Edit on a repository file
+    then: the Claude PreToolUse write guard exits successfully instead of blocking for missing or active worktrees
+  - id: A2
+    given: Claude starts or stops a session while worktrees exist
+    when: the session worktree status hooks emit guidance
+    then: the guidance says worktrees are preferred and direct checkpoint edits are allowed
+acceptance_criteria:
+  - id: A1
+    description: Claude Write/Edit hooks no longer block direct edits from the main checkout.
+    status: completed
+  - id: A2
+    description: Worktree guidance remains advisory and dangerous git operations remain guarded.
+    status: completed
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []
