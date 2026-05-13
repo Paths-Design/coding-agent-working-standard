@@ -176,18 +176,14 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
   const record = input.registry[candidate.name];
   const registrySpecId = record?.specId;
   if (typeof registrySpecId !== 'string' || registrySpecId.length === 0) {
-    // Registry knows the worktree but no spec is linked. Pass an empty
-    // spec-shaped object through `deriveBindingState` is not safe; instead
-    // synthesize a one-sided BindingState directly.
+    // Registry knows the worktree but no spec is linked. Neither side
+    // points at the other, so this is `unbound`, NOT `one_sided`.
+    // The repair is "bind this worktree to a spec", not "repair corrupt
+    // asymmetric binding". The downstream renderer keys off the
+    // worktreeName being set to distinguish "tracked worktree without
+    // spec" from "cwd outside any worktree".
     return {
-      binding: {
-        kind: 'one_sided',
-        detail: {
-          specHasWorktree: false,
-          registryHasSpecId: false,
-          worktreeName: candidate.name,
-        },
-      },
+      binding: { kind: 'unbound' },
       worktreeName: candidate.name,
       source,
     };
