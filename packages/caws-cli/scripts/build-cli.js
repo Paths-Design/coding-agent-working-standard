@@ -4,7 +4,7 @@
  *
  * Two outputs land in dist/:
  *   1. JS sources from src/ (copied verbatim, EXCLUDING any *.ts files)
- *   2. TS store layer compiled via `tsc -p tsconfig.store.json`
+ *   2. TS vNext layer (store + shell) compiled via `tsc -p tsconfig.vnext.json`
  *
  * Plus templates/ copied verbatim.
  *
@@ -78,9 +78,9 @@ if (fs.existsSync(templatesDir)) {
   copyDir(templatesDir, path.join(distDir, 'templates'));
 }
 
-// 4. compile TS store layer
+// 4. compile TS vNext layer (store + shell)
 const tscBin = path.resolve(pkgRoot, '..', '..', 'node_modules', '.bin', 'tsc');
-const tscArg = ['-p', 'tsconfig.store.json'];
+const tscArg = ['-p', 'tsconfig.vnext.json'];
 if (fs.existsSync(tscBin)) {
   run(tscBin, tscArg, pkgRoot);
 } else {

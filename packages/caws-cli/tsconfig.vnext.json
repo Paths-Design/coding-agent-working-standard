@@ -18,5 +18,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/store/**/*.ts"]
+  "include": ["src/store/**/*.ts", "src/shell/**/*.ts"]
 }
