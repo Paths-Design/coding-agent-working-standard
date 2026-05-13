@@ -28,3 +28,18 @@ export type {
   ResolveBindingInput,
   ResolvedBinding,
 } from './binding/types';
+
+export {
+  renderDiagnostic,
+  renderDiagnostics,
+  countSeverities,
+} from './render/diagnostic';
+export type { RenderDiagnosticsOptions } from './render/diagnostic';
+export {
+  renderFinding,
+  renderFindings,
+  countFindingSeverities,
+} from './render/finding';
+export type { RenderFindingsOptions } from './render/finding';
+export { renderDecision } from './render/decision';
+export type { RenderDecisionOptions } from './render/decision';
