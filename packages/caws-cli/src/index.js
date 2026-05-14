@@ -36,7 +36,8 @@ const { burnupCommand } = require('./commands/burnup');
 const { testAnalysisCommand } = require('./test-analysis');
 const { provenanceCommand } = require('./commands/provenance');
 const { executeTool } = require('./commands/tool');
-const { statusCommand } = require('./commands/status');
+// Legacy `caws status` replaced by the vNext shell command registered
+// via registerShellCommands() below. See packages/caws-cli/src/shell/.
 const { templatesCommand } = require('./commands/templates');
 const { diagnoseCommand } = require('./commands/diagnose');
 const { evaluateCommand } = require('./commands/evaluate');
@@ -172,14 +173,9 @@ program
   });
 
 // Status command
-program
-  .command('status')
-  .description('Show project health overview')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
-  .option('--visual', 'Enhanced visual output with progress bars', false)
-  .option('--json', 'Output in JSON format for automation', false)
-  .action(statusCommand);
+// `caws status` is registered via registerShellCommands() below
+// (vNext read-only dashboard). The legacy registration was removed in
+// Slice 6b — no env-var flag, no alias.
 
 // Archive command
 program

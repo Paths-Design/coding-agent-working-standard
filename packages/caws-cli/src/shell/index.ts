@@ -62,5 +62,11 @@ export type { ClaimCommandOptions } from './commands/claim';
 export { renderClaimPanel, classifyOwnership } from './render/claim';
 export type { ClaimPanelInput, OwnershipRelation } from './render/claim';
 
+export { runStatusCommand } from './commands/status';
+export type { StatusCommandOptions } from './commands/status';
+
+export { renderStatus } from './render/status';
+export type { StatusRenderInput } from './render/status';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

@@ -20,6 +20,7 @@ import {
   runDoctorCommand,
   runEvidenceRecordCommand,
   runScopeCommand,
+  runStatusCommand,
   type EvidenceKind,
 } from './index';
 
@@ -104,6 +105,22 @@ export function registerShellCommands(
       const code = runScopeCommand({
         path: p,
         mode: 'check',
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // -------------------------------------------------------------------
+  // caws status — read-only dashboard (replaces legacy status)
+  // -------------------------------------------------------------------
+  program
+    .command('status')
+    .description(
+      'Read-only dashboard: project, current context, claim, and doctor findings'
+    )
+    .option('--data', 'Show structured data block on rendered diagnostics')
+    .action((opts: { data?: boolean }) => {
+      const code = runStatusCommand({
         showData: opts.data === true,
       });
       exit(code);

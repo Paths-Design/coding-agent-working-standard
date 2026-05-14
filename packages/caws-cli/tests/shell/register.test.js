@@ -43,6 +43,12 @@ describe('registerShellCommands — surface', () => {
     expect(optionNames).toContain('--takeover');
   });
 
+  it('registers exactly ONE status command (no legacy duplicate)', () => {
+    const program = mkProgramWithShellOnly([]);
+    const statuses = program.commands.filter((c) => c.name() === 'status');
+    expect(statuses).toHaveLength(1);
+  });
+
   it('registers exactly ONE scope command group', () => {
     const program = mkProgramWithShellOnly([]);
     const scopes = program.commands.filter((c) => c.name() === 'scope');
