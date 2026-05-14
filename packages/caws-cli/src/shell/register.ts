@@ -16,6 +16,7 @@
 import type { Command } from 'commander';
 
 import {
+  runClaimCommand,
   runDoctorCommand,
   runEvidenceRecordCommand,
   runScopeCommand,
@@ -103,6 +104,29 @@ export function registerShellCommands(
       const code = runScopeCommand({
         path: p,
         mode: 'check',
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // -------------------------------------------------------------------
+  // caws claim [--takeover]
+  // -------------------------------------------------------------------
+  program
+    .command('claim')
+    .description(
+      'Surface ownership of the current worktree; with --takeover, ' +
+        'acquire ownership from a foreign session (writes prior_owners audit).'
+    )
+    .option(
+      '--takeover',
+      'Forcibly take ownership of a foreign-owned worktree. Required when ' +
+        'the current owner is a different session.'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { takeover?: boolean; data?: boolean }) => {
+      const code = runClaimCommand({
+        takeover: opts.takeover === true,
         showData: opts.data === true,
       });
       exit(code);

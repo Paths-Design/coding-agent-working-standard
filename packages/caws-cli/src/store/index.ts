@@ -31,6 +31,8 @@ export { loadWorktrees } from './worktrees-store';
 export { loadAgents } from './agents-store';
 export { appendEvent, loadEvents } from './events-store';
 
+export { applyRegistryPatch } from './apply-patch';
+
 export {
   composeDoctorSnapshot,
   composeStoreSnapshot,

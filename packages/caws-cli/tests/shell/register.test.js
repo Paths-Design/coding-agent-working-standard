@@ -35,6 +35,14 @@ describe('registerShellCommands — surface', () => {
     expect(names).toContain('doctor');
   });
 
+  it('registers claim as a top-level command with --takeover option', () => {
+    const program = mkProgramWithShellOnly([]);
+    const claim = program.commands.find((c) => c.name() === 'claim');
+    expect(claim).toBeDefined();
+    const optionNames = claim.options.map((o) => o.long ?? o.short);
+    expect(optionNames).toContain('--takeover');
+  });
+
   it('registers exactly ONE scope command group', () => {
     const program = mkProgramWithShellOnly([]);
     const scopes = program.commands.filter((c) => c.name() === 'scope');

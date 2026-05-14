@@ -56,5 +56,11 @@ export type {
   EvidenceRecordOptions,
 } from './commands/evidence';
 
+export { runClaimCommand } from './commands/claim';
+export type { ClaimCommandOptions } from './commands/claim';
+
+export { renderClaimPanel, classifyOwnership } from './render/claim';
+export type { ClaimPanelInput, OwnershipRelation } from './render/claim';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

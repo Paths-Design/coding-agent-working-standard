@@ -23,6 +23,8 @@ export const STORE_RULES = {
 
   // ---- atomic write --------------------------------------------------------
   WRITE_IO_FAILED: 'store.write.io_failed',
+  /** Patch references a registry entry that does not exist (rebind/takeover). */
+  WRITE_PATCH_TARGET_MISSING: 'store.write.patch_target_missing',
 
   // ---- specs ---------------------------------------------------------------
   /** A single spec file failed validation; the load itself still succeeds. */
