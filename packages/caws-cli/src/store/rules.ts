@@ -38,6 +38,20 @@ export const STORE_RULES = {
   /** worktrees.json or agents.json parsed but is not a plain object. */
   REGISTRY_NOT_OBJECT: 'store.registry.not_object',
 
+  // ---- waivers ------------------------------------------------------------
+  /** A single waiver file failed validation; the load itself still succeeds. */
+  WAIVERS_FILE_INVALID: 'store.waivers.file_invalid',
+  /** Non-YAML file in .caws/waivers/. Soft skip. */
+  WAIVERS_NON_YAML_SKIPPED: 'store.waivers.non_yaml_skipped',
+  /** Two waiver files declared the same waiver id. */
+  WAIVERS_DUPLICATE_ID: 'store.waivers.duplicate_id',
+  /** Filename did not match the waiver id. */
+  WAIVERS_FILENAME_MISMATCH: 'store.waivers.filename_mismatch',
+  /** Caller tried to create a waiver with an id that already exists. */
+  WAIVERS_ALREADY_EXISTS: 'store.waivers.already_exists',
+  /** Caller tried to revoke a waiver that does not exist. */
+  WAIVERS_NOT_FOUND: 'store.waivers.not_found',
+
   // ---- events -------------------------------------------------------------
   /** Interior (non-trailing) malformed JSON line in events.jsonl. */
   EVENTS_INTERIOR_MALFORMED_LINE: 'store.events.interior_malformed_line',
@@ -58,6 +72,7 @@ export const STORE_RULE_PREFIXES = [
   'store.read.',
   'store.write.',
   'store.specs.',
+  'store.waivers.',
   'store.registry.',
   'store.events.',
 ] as const;

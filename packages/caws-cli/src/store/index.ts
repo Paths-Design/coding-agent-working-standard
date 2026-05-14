@@ -33,6 +33,9 @@ export { appendEvent, loadEvents } from './events-store';
 
 export { applyRegistryPatch } from './apply-patch';
 
+export { loadWaivers, writeWaiver, markRevoked } from './waivers-store';
+export type { WaiversLoadResult } from './waivers-store';
+
 export {
   composeDoctorSnapshot,
   composeStoreSnapshot,

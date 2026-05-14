@@ -16,6 +16,7 @@ export type Authority =
   | 'kernel/scope'
   | 'kernel/evidence'
   | 'kernel/worktree'
+  | 'kernel/waiver'
   | 'kernel/lifecycle'
   | 'kernel/diagnostics';
 

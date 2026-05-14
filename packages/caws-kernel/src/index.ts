@@ -15,3 +15,4 @@ export * from './worktree';
 export * from './scope';
 export * from './evidence';
 export * from './doctor';
+export * from './waiver';
