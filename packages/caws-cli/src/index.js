@@ -55,7 +55,8 @@ const { sessionCommand } = require('./commands/session');
 const { parallelCommand } = require('./commands/parallel');
 const { verifyAcsCommand } = require('./commands/verify-acs');
 const { sidecarCommand } = require('./commands/sidecar');
-const { scopeCommand } = require('./commands/scope');
+// Legacy scope command replaced by the vNext shell group registered
+// via registerShellCommands() below. See packages/caws-cli/src/shell/.
 
 // Import scaffold functionality
 const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
@@ -416,15 +417,8 @@ agentsCmd
   .description('Show details for a specific agent session, including session-log pointer')
   .action((id) => agentsCommand('show', { id }));
 
-// Scope command group
-const scopeCmd = program
-  .command('scope')
-  .description('Inspect and manage scope boundaries');
-
-scopeCmd
-  .command('show')
-  .description('Show effective scope for the current context')
-  .action(() => scopeCommand('show'));
+// Scope command group is registered via registerShellCommands() below.
+// The legacy no-arg `scope show` has been removed; see src/shell/register.ts.
 
 // Session command group
 const sessionCmd = program
@@ -875,6 +869,11 @@ try {
   const { registerSidecarListeners } = require('./sidecars/listeners');
   registerSidecarListeners();
 } catch { /* sidecars module not available — non-fatal */ }
+
+// Register vNext shell commands (doctor, scope show/check, evidence record).
+// These REPLACE the legacy scope group above (no env-var flag, no alias).
+const { registerShellCommands } = require('./shell');
+registerShellCommands(program);
 
 // Parse and run
 if (require.main === module) {

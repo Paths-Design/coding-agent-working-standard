@@ -55,3 +55,6 @@ export type {
   EvidenceKind,
   EvidenceRecordOptions,
 } from './commands/evidence';
+
+export { registerShellCommands } from './register';
+export type { RegisterShellCommandsOptions } from './register';
