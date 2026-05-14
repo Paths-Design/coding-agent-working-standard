@@ -49,3 +49,9 @@ export type { DoctorCommandOptions } from './commands/doctor';
 
 export { runScopeCommand } from './commands/scope';
 export type { ScopeCommandOptions, ScopeMode } from './commands/scope';
+
+export { runEvidenceRecordCommand } from './commands/evidence';
+export type {
+  EvidenceKind,
+  EvidenceRecordOptions,
+} from './commands/evidence';
