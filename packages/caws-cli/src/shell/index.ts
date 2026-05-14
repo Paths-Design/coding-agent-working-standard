@@ -43,3 +43,6 @@ export {
 export type { RenderFindingsOptions } from './render/finding';
 export { renderDecision } from './render/decision';
 export type { RenderDecisionOptions } from './render/decision';
+
+export { runDoctorCommand } from './commands/doctor';
+export type { DoctorCommandOptions } from './commands/doctor';
