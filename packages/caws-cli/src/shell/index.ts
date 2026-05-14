@@ -46,3 +46,6 @@ export type { RenderDecisionOptions } from './render/decision';
 
 export { runDoctorCommand } from './commands/doctor';
 export type { DoctorCommandOptions } from './commands/doctor';
+
+export { runScopeCommand } from './commands/scope';
+export type { ScopeCommandOptions, ScopeMode } from './commands/scope';
