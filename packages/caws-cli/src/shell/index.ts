@@ -68,5 +68,34 @@ export type { StatusCommandOptions } from './commands/status';
 export { renderStatus } from './render/status';
 export type { StatusRenderInput } from './render/status';
 
+export { runGatesRunCommand } from './commands/gates';
+export type {
+  GatesRunCommandOptions,
+  GatesRunCommandRequest,
+} from './commands/gates';
+
+export { renderGatesRun } from './render/gates';
+export {
+  validateGatesReport,
+} from './gates/gate-result-contract';
+export type {
+  GatesReport,
+  GatesViolation,
+  GatesWarning,
+} from './gates/gate-result-contract';
+export { runQualityGates } from './gates/quality-gates-adapter';
+export type {
+  QualityGatesRunner,
+  QualityGatesRunnerInput,
+  RunQualityGatesOptions,
+  SubprocessResult,
+} from './gates/quality-gates-adapter';
+export { deriveDispositions } from './gates/disposition';
+export type {
+  DispositionResult,
+  GateDisposition,
+  GateOutcome,
+} from './gates/disposition';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

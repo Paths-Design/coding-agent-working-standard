@@ -10,6 +10,7 @@ export const SHELL_RULE_PREFIXES = {
   session: 'shell.session',
   binding: 'shell.binding',
   command: 'shell.command',
+  gates: 'shell.gates',
 } as const;
 
 export const SHELL_RULES = {
@@ -34,6 +35,13 @@ export const SHELL_RULES = {
   COMMAND_PRE_CHAINED_EVENT_REFUSED: 'shell.command.pre_chained_event_refused',
   COMMAND_INVALID_EVIDENCE_TYPE: 'shell.command.invalid_evidence_type',
   COMMAND_MISSING_SPEC_ID: 'shell.command.missing_spec_id',
+
+  // quality-gates subprocess + JSON contract.
+  GATES_SUBPROCESS_NOT_FOUND: 'shell.gates.subprocess_not_found',
+  GATES_SUBPROCESS_FAILED: 'shell.gates.subprocess_failed',
+  GATES_REPORT_NOT_JSON: 'shell.gates.report_not_json',
+  GATES_REPORT_INVALID_SHAPE: 'shell.gates.report_invalid_shape',
+  GATES_POLICY_REQUIRED: 'shell.gates.policy_required',
 } as const;
 
 export type ShellRule = (typeof SHELL_RULES)[keyof typeof SHELL_RULES];

@@ -1,0 +1,29 @@
+type: feature
+status: closed
+risk_tier: 3
+mode: development
+blast_radius:
+  modules: []
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - src/
+    - tests/
+  out:
+    - node_modules/
+    - dist/
+    - build/
+invariants:
+  - System maintains data consistency
+acceptance: []
+acceptance_criteria: []
+non_functional:
+  a11y: []
+  perf: {}
+  security: []
+contracts: []
+id: CLI-GATES-001
+title: 'Slice 6c: caws gates run vNext policy-driven gate runner'
+created_at: '2026-05-14T20:32:20.318Z'
+updated_at: '2026-05-14T20:43:02.495Z'

@@ -45,7 +45,8 @@ const { iterateCommand } = require('./commands/iterate');
 const { waiversCommand } = require('./commands/waivers');
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
-const { gatesCommand } = require('./commands/gates');
+// Legacy `caws gates` and `caws quality-gates` replaced by the vNext
+// shell group registered via registerShellCommands() below.
 const { archiveCommand } = require('./commands/archive');
 const { specsCommand } = require('./commands/specs');
 const { modeCommand } = require('./commands/mode');
@@ -136,41 +137,10 @@ program
   .option('--format <format>', 'Output format (text, json)', 'text')
   .action(validateCommand);
 
-// Gates command group (v2 pipeline)
-const gatesCmd = program
-  .command('gates')
-  .description('Run quality gate checks');
-
-gatesCmd
-  .command('run')
-  .description('Run quality gates against staged files or a specific file')
-  .option('--context <context>', 'Execution context (cli, commit, edit)', 'cli')
-  .option('--spec-id <id>', 'Target spec ID')
-  .option('--file <path>', 'Single file to check (for edit context)')
-  .option('--json', 'Output as JSON', false)
-  .option('--quiet', 'Minimal output', false)
-  .action((options) => gatesCommand(options));
-
-// Quality Gates command (legacy alias — delegates to gates command)
-program
-  .command('quality-gates')
-  .description('Run quality gates (alias for "caws gates run")')
-  .option('--ci', 'CI mode - exit with error code if violations found', false)
-  .option('--json', 'Output machine-readable JSON to stdout', false)
-  .option('--context <context>', 'Execution context: commit, push, ci', 'commit')
-  .option('--all-files', 'Check all tracked files (equivalent to --context=ci)', false)
-  .option('--spec-id <id>', 'Target spec ID')
-  .option('--quiet', 'Minimal output', false)
-  .action(async (options) => {
-    // Map legacy options to new gates command options
-    const gateOpts = {
-      context: options.allFiles ? 'ci' : (options.context || 'cli'),
-      specId: options.specId,
-      json: options.json,
-      quiet: options.quiet,
-    };
-    await gatesCommand(gateOpts);
-  });
+// `caws gates run` is registered via registerShellCommands() below
+// (vNext policy-driven gate runner). The legacy `gates` group and the
+// `quality-gates` alias were removed in Slice 6c — no env-var flag,
+// no compatibility alias.
 
 // Status command
 // `caws status` is registered via registerShellCommands() below

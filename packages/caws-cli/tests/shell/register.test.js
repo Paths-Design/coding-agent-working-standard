@@ -49,6 +49,20 @@ describe('registerShellCommands — surface', () => {
     expect(statuses).toHaveLength(1);
   });
 
+  it('registers exactly ONE gates command group with a `run` subcommand', () => {
+    const program = mkProgramWithShellOnly([]);
+    const gates = program.commands.filter((c) => c.name() === 'gates');
+    expect(gates).toHaveLength(1);
+    const subNames = gates[0].commands.map((c) => c.name()).filter((n) => n !== 'help');
+    expect(subNames).toEqual(['run']);
+  });
+
+  it('does not register legacy `quality-gates` alias', () => {
+    const program = mkProgramWithShellOnly([]);
+    const names = program.commands.map((c) => c.name());
+    expect(names).not.toContain('quality-gates');
+  });
+
   it('registers exactly ONE scope command group', () => {
     const program = mkProgramWithShellOnly([]);
     const scopes = program.commands.filter((c) => c.name() === 'scope');

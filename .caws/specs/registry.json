@@ -24,7 +24,15 @@
       "created_at": "2026-05-14T19:37:41.593Z",
       "updated_at": "2026-05-14T19:44:31.184Z",
       "owner": null
+    },
+    "CLI-GATES-001": {
+      "path": "CLI-GATES-001.yaml",
+      "type": "feature",
+      "status": "closed",
+      "created_at": "2026-05-14T20:32:20.318Z",
+      "updated_at": "2026-05-14T20:43:02.495Z",
+      "owner": null
     }
   },
-  "lastUpdated": "2026-05-14T19:44:31.470Z"
+  "lastUpdated": "2026-05-14T20:43:02.970Z"
 }

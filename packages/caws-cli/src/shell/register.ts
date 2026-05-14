@@ -19,6 +19,7 @@ import {
   runClaimCommand,
   runDoctorCommand,
   runEvidenceRecordCommand,
+  runGatesRunCommand,
   runScopeCommand,
   runStatusCommand,
   type EvidenceKind,
@@ -148,6 +149,41 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  // -------------------------------------------------------------------
+  // caws gates run --spec <id> [--context <ctx>]
+  // (replaces the legacy `gates` group and `quality-gates` alias)
+  // -------------------------------------------------------------------
+  const gatesCmd = program
+    .command('gates')
+    .description('Run quality gates against the current changes (policy-driven)');
+
+  gatesCmd
+    .command('run')
+    .description(
+      'Invoke quality-gates subprocess and apply policy.gates[gate].mode ' +
+        'to decide block/warn/skip. Appends one gate_evaluated event per ' +
+        'policy-declared gate.'
+    )
+    .requiredOption('--spec <id>', 'Spec id this gate run is about')
+    .option(
+      '--context <ctx>',
+      'Subprocess context: cli | commit | ci',
+      'cli'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: { spec: string; context: string; data?: boolean }) => {
+        const code = runGatesRunCommand(
+          { specId: opts.spec },
+          {
+            subprocessArgs: [`--context=${opts.context}`],
+            showData: opts.data === true,
+          }
+        );
+        exit(code);
+      }
+    );
 
   // -------------------------------------------------------------------
   // caws evidence record
