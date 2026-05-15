@@ -19,12 +19,7 @@ if (
 }
 
 // Import configuration and utilities
-const {
-  CLI_VERSION,
-  initializeGlobalSetup,
-  loadProvenanceTools,
-  initializeLanguageSupport,
-} = require('./config');
+const { CLI_VERSION } = require('./config');
 
 // Import error handling
 const { handleCliError, findSimilarCommand } = require('./error-handler');
@@ -37,7 +32,9 @@ const { handleCliError, findSimilarCommand } = require('./error-handler');
 const { validateCommand } = require('./commands/validate');
 const { burnupCommand } = require('./commands/burnup');
 const { testAnalysisCommand } = require('./test-analysis');
-const { provenanceCommand } = require('./commands/provenance');
+// Legacy `caws provenance` removed in slice 8a3 (v11.0.0 cutover).
+// The hash-chained audit trail moves to `.caws/events.jsonl` written
+// only by the vNext store. No compatibility alias.
 const { executeTool } = require('./commands/tool');
 // Legacy `caws status` replaced by the vNext shell command registered
 // via registerShellCommands() below. See packages/caws-cli/src/shell/.
@@ -65,37 +62,19 @@ const { sidecarCommand } = require('./commands/sidecar');
 // Legacy scope command replaced by the vNext shell group registered
 // via registerShellCommands() below. See packages/caws-cli/src/shell/.
 
-// Import scaffold functionality
-const { scaffoldProject, setScaffoldDependencies } = require('./scaffold');
-
-// Import git hooks functionality
-const { scaffoldGitHooks, removeGitHooks, checkGitHooksStatus } = require('./scaffold/git-hooks');
-
-// Import finalization utilities
-const {
-  setFinalizationDependencies,
-} = require('./utils/finalization');
-
-// Import generators
-const { generateWorkingSpec, validateGeneratedSpec } = require('./generators/working-spec');
+// Legacy `caws scaffold` and `caws hooks` removed in slice 8a3
+// (v11.0.0 cutover). Both installed legacy regime artifacts (templates
+// referencing removed commands; git hooks calling `caws validate` /
+// `caws provenance update`). v11 ships only the governed core; users
+// hand-wire any project tooling against vNext surfaces.
+//
+// Legacy `generateWorkingSpec` / `validateGeneratedSpec` (legacy single-
+// spec generator) also removed — these were exported from this module's
+// public API in v10.x; the v11 cutover is a breaking change consistent
+// with A1 (no compatibility for legacy-spec generation).
 
 // Initialize global configuration
 const program = new Command();
-
-// Initialize global state
-const cawsSetup = initializeGlobalSetup();
-const languageSupport = initializeLanguageSupport();
-
-// Set up dependencies for modules that need them
-setScaffoldDependencies({
-  cawsSetup,
-  loadProvenanceTools,
-});
-
-setFinalizationDependencies({
-  languageSupport,
-  loadProvenanceTools,
-});
 
 // Setup CLI program
 program
@@ -108,18 +87,6 @@ program
 // `caws init` is registered via shell.registerShellCommands. No
 // compatibility alias, no feature flag. The unrelated `provenance init`
 // subcommand below is untouched.
-
-// Scaffold command
-program
-  .command('scaffold')
-  .description('Add CAWS components to existing project')
-  .option('-f, --force', 'Overwrite existing files', false)
-  .option('--minimal', 'Only essential components', false)
-  .option('--with-codemods', 'Include codemod scripts', false)
-  .option('--with-oidc', 'Include OIDC trusted publisher setup', false)
-  .option('--with-quality-gates', 'Install quality gates package and scripts', false)
-  .option('--ide <ides>', 'IDE integrations to install (comma-separated: cursor,claude,vscode,intellij,windsurf,copilot,all,none)')
-  .action(scaffoldProject);
 
 // Validate command
 program
@@ -560,122 +527,15 @@ program
     testAnalysisCommand(subcommand, optionArgs, command.opts());
   });
 
-// Provenance command group
-const provenanceCmd = program.command('provenance').description('Manage CAWS provenance tracking');
+// Legacy `caws provenance` group removed in slice 8a3 (v11.0.0 cutover).
+// `.caws/events.jsonl` (vNext store) is the v11 audit chain. Old
+// `.caws/provenance/` is treated as legacy residue.
 
-// Subcommands
-provenanceCmd
-  .command('update')
-  .description('Add new commit to provenance chain')
-  .requiredOption('-c, --commit <hash>', 'Git commit hash')
-  .option('--spec-id <id>', 'Feature-specific spec ID')
-  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
-  .option('-m, --message <msg>', 'Commit message')
-  .option('-a, --author <info>', 'Author information')
-  .option('-q, --quiet', 'Suppress output')
-  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
-  .action(async (options) => {
-    await provenanceCommand('update', options);
-  });
-
-provenanceCmd
-  .command('show')
-  .description('Display current provenance history')
-  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
-  .option('--format <type>', 'Output format: text, json, dashboard', 'text')
-  .action(async (options) => {
-    await provenanceCommand('show', options);
-  });
-
-provenanceCmd
-  .command('verify')
-  .description('Validate provenance chain integrity')
-  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
-  .action(async (options) => {
-    await provenanceCommand('verify', options);
-  });
-
-provenanceCmd
-  .command('analyze-ai')
-  .description('Analyze AI-assisted development patterns')
-  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
-  .action(async (options) => {
-    await provenanceCommand('analyze-ai', options);
-  });
-
-provenanceCmd
-  .command('init')
-  .description('Initialize provenance tracking for the project')
-  .option('--spec-id <id>', 'Feature-specific spec ID')
-  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
-  .option('-o, --output <path>', 'Output path for provenance files', '.caws/provenance')
-  .option('--cursor-api <url>', 'Cursor tracking API endpoint')
-  .option('--cursor-key <key>', 'Cursor API key')
-  .action(async (options) => {
-    await provenanceCommand('init', options);
-  });
-
-// Git hooks command
-const hooksCmd = program
-  .command('hooks')
-  .description('Manage CAWS git hooks for provenance tracking');
-
-hooksCmd
-  .command('install')
-  .description('Install CAWS git hooks')
-  .option('--no-provenance', 'Skip provenance tracking hooks')
-  .option('--no-validation', 'Skip validation hooks')
-  .option('--no-quality-gates', 'Skip quality gate hooks')
-  .option('--force', 'Overwrite existing hooks')
-  .option('--backup', 'Backup existing hooks before replacing')
-  .action(async (options) => {
-    const hookOptions = {
-      provenance: options.provenance !== false,
-      validation: options.validation !== false,
-      qualityGates: options.qualityGates !== false,
-      force: options.force,
-      backup: options.backup,
-    };
-
-    try {
-      const result = await scaffoldGitHooks(process.cwd(), hookOptions);
-      if (result.added > 0) {
-        console.log(`Successfully installed ${result.added} git hooks`);
-        if (result.skipped > 0) {
-          console.log(`Skipped ${result.skipped} existing hooks`);
-        }
-      } else {
-        console.log('All hooks already configured');
-      }
-    } catch (error) {
-      console.error(`Failed to install git hooks: ${error.message}`);
-      process.exit(1);
-    }
-  });
-
-hooksCmd
-  .command('remove')
-  .description('Remove CAWS git hooks')
-  .action(async () => {
-    try {
-      await removeGitHooks(process.cwd());
-    } catch (error) {
-      console.error(`Failed to remove git hooks: ${error.message}`);
-      process.exit(1);
-    }
-  });
-
-hooksCmd
-  .command('status')
-  .description('Check git hooks status')
-  .action(async () => {
-    try {
-      await checkGitHooksStatus(process.cwd());
-    } catch (error) {
-      console.error(`Failed to check git hooks status: ${error.message}`);
-      process.exit(1);
-    }
-  });
+// Legacy `caws hooks` group removed in slice 8a3 (v11.0.0 cutover).
+// Generated hooks called removed commands (`caws validate`, `caws
+// provenance update`); v11 does not ship git-hook installation. Users
+// wire their own hooks against vNext surfaces (`caws doctor`, `caws
+// gates run`) if desired.
 
 // Error handling
 // Custom error event handler for better messages
@@ -687,7 +547,6 @@ program.configureHelp({
 const VALID_COMMANDS = [
   'init',
   'validate',
-  'scaffold',
   'status',
   'archive',
   'specs',
@@ -704,8 +563,6 @@ const VALID_COMMANDS = [
   'quality-monitor',
   'quality-gates',
   'gates',
-  'provenance',
-  'hooks',
   'burnup',
   'tool',
   'worktree',
@@ -865,8 +722,10 @@ if (require.main === module) {
   }
 }
 
-// Export functions for testing
-module.exports = {
-  generateWorkingSpec,
-  validateGeneratedSpec,
-};
+// Public API surface removed in slice 8a3 (v11.0.0 cutover). The
+// legacy `generateWorkingSpec` / `validateGeneratedSpec` helpers were
+// part of v10.x's exported API; v11 ships only the binary entry point
+// and exposes no JS exports from this module. Programmatic consumers
+// should depend on `@paths.design/caws-kernel` (pure logic) or the
+// `dist/shell` / `dist/store` modules directly.
+module.exports = {};
