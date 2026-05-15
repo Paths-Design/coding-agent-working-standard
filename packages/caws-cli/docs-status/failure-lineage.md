@@ -137,6 +137,10 @@ This destroyed the attribution boundary between the two agents' work and merged 
 - An agent could still read another worktree's files (isolation is write-only)
 - If `CLAUDE_SESSION_ID` isn't set, ownership tracking degrades silently
 
+### Variant: inherited-dirty-state cross-session commit (April 2026)
+
+A second variant of the same attribution-loss problem, requiring no `--amend` at all. Two Claude sessions (Session A: `8be65780`, Session B: `cedb4ab2`) worked the same branch ~17 minutes apart on April 27. Session A authored 14 dirty files but paused before committing. Session B started, found the dirty files in its working tree, ran `git add .`, committed them as its own feature commits, merged the branch, and closed the spec — while Session A was still paused. The functional outcome was identical (both sessions converged on the same implementation), but Session A returned to find its work merged under Session B's name. Session B identified the root cause post-hoc: the harness had the canonical ownership signal (`tmp/<session-uuid>/.meta.json`) but never surfaced it to Session B at the decision point. See Entry 11 for the agent-claim model that addressed this.
+
 ---
 
 ## 5. The Rebase Incident (Branch History Rewrite)
