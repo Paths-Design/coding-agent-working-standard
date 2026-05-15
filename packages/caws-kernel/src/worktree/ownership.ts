@@ -73,7 +73,7 @@ export function assertOwnership(
         authority: 'kernel/worktree',
         message: `Worktree "${name}" has no recorded owner.`,
         subject: name,
-        narrowRepair: 'Bind the worktree (`caws worktree bind`) to record an owner.',
+        narrowRepair: 'Run `caws claim` to surface ownership of this worktree (caws claim --takeover acquires it from a foreign session).',
       })
     );
   }

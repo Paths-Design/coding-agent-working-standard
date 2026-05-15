@@ -341,6 +341,182 @@ overlapping state.
 
 ---
 
+## 9. Slice 8a2 — pre-removal invariant audit (results)
+
+Run as part of Slice 8a2. Stance: a finding is any active shipped path
+that can read or write old authority state, or invoke a command marked
+for removal. Dormant code (not imported, not registered, not invoked
+by hooks/templates, not advertised) is acceptable in v11.0.0 and gets
+cleaned in 8e. **Replacement, not continuity.**
+
+### Audit 1 — `events.jsonl` writers outside the event store
+
+The store's `appendEvent` (`packages/caws-cli/src/store/events-store.ts:178`)
+is the canonical writer. A second implementation lives in
+`packages/caws-cli/src/utils/event-log.js` (`appendEvent` async +
+`appendEventSync`). Call sites of the legacy writer:
+
+| Call site | Reachable via v11? | Disposition |
+|---|---|---|
+| `commands/specs.js:576,866,958,1086` | only via removed `specs` group | orphaned by 8a3 |
+| `commands/validate.js:176` | only via removed `validate` | orphaned by 8a3 |
+| `commands/verify-acs.js:373` | only via removed `verify-acs` | orphaned by 8a3 |
+| `commands/evaluate.js:227` | only via removed `evaluate` | orphaned by 8a3 |
+| `commands/gates.js:95` | already dormant (legacy `gates` group unregistered slice 6c) | orphaned by 8a3 file delete |
+| `commands/waivers.js:504` | already dormant (legacy plural unregistered slice 7a.4) | orphaned by 8a3 file delete |
+| `session/session-manager.js:315,482` | only via removed `session` group | orphaned by 8a3 |
+
+**Result: zero blockers. `utils/event-log.js` is fully orphaned by 8a3.**
+Invariant 1 ("events.jsonl ONLY through store appendEvent") will hold
+after 8a3 import removal.
+
+### Audit 2 — `working-spec.yaml` active authority paths
+
+Two categories:
+
+**Acceptable refs** (residue detection, refusal, user-facing rule text):
+`store/init-store.ts:84` (refused-paths list), `store/specs-store.ts:69`
+(loader guard), `store/doctor-snapshot.ts:113` (residue observation),
+`kernel/doctor/inspect.ts:636-640` (rule message), `shell/register.ts:76`
+(comment), kernel rule constants, generated diagnostic messages.
+
+**Active legacy authority** — every site is reachable only via removed
+commands or already-dormant subsystems:
+
+| File | Caller | Disposition |
+|---|---|---|
+| `gates/spec-completeness.js:25` | only `gates/pipeline.js` → only `commands/gates.js` (already dormant) | orphaned by 8a3 |
+| `cicd-optimizer.js:29` | no callers found | already dormant |
+| `test-analysis.js:96` | only via removed `test-analysis` group | orphaned by 8a3 |
+| `worktree/worktree-manager.js:289` | only via removed `worktree`/`specs`/`scope`(legacy)/`parallel` | orphaned by 8a3 |
+| `spec/SpecFileManager.js` | only via removed `validate`/`evaluate`/`iterate`/`burnup` | orphaned by 8a3 |
+| `utils/spec-resolver.js:51` (`LEGACY_SPEC` fallback) | reachable from many removed commands | orphaned by 8a3 |
+| `utils/quality-gates-utils.js:57` | only via removed `gates`/`quality-monitor` | orphaned by 8a3 |
+| `validation/spec-validation.js:584` | only via removed `validate` | orphaned by 8a3 |
+| `commands/status.js:26,507` | already dormant (legacy status not imported) | orphaned (file delete in 8e) |
+| `commands/init.js:605,746` | already dormant (legacy init not imported) | orphaned (file delete in 8e) |
+| `generators/working-spec.js` | imported by `index.js:80` AND **exported via `module.exports` (line 870-871)** as part of caws-cli public API | **8a3 must remove the module.exports block too** (public-surface breaking change consistent with A1) |
+| `utils/finalization.js`, `error-handler.js`, `utils/detection.js`, `budget-derivation.js` | text/observation only (no writes) | acceptable |
+| `session/session-manager.js:123` | only via removed `session` group | orphaned by 8a3 |
+
+`detectCAWSSetup()` runs at startup (`config/index.js:29` ← `index.js:86`)
+and reads `working-spec.yaml` existence as one of many capabilities. It
+**does not write**. Acceptable for v11; cleaned by 8a3 import orphaning.
+
+**Result: zero blockers. All active legacy authority paths are reachable
+only via 8a3-removed commands.** One 8a3 note: `index.js:80` import +
+`module.exports` block at lines 870-871 must be removed (public-API
+breaking change for `generateWorkingSpec`/`validateGeneratedSpec`).
+
+### Audit 3 — kernel purity drift
+
+Grep for `fs`/`path`/`process.env`/`Date.now()`/`new Date(` across
+`packages/caws-kernel/src/**/*.ts`. Hits classified:
+
+- `evidence/validate.ts:274` — string content of an error message. Not
+  executable. Acceptable.
+- `doctor/types.ts:10`, `worktree/types.ts:18`, `worktree/index.ts:4` —
+  comments. Not executable. Acceptable.
+- `policy/derive-budget.ts:152, 160` — `new Date(string)` for ISO
+  parsing. Deterministic input conversion, not clock access. Acceptable.
+- **`policy/derive-budget.ts:150` — `if (now === undefined) return new Date()`.**
+  Wall-clock fallback. **Blocker for invariant 3 ("kernel is pure").**
+
+**Fix landed inline (8a2):**
+- Made `DeriveBudgetOptions.now` required (`Date | string`, no `?`).
+- Removed the wall-clock fallback in `resolveNow`; throws
+  `deriveBudget: \`now\` is required` when called without `now`.
+- Tightened the function signature: `options: DeriveBudgetOptions` (no
+  default `{}`). Tests and callers already supply `now`; verified no
+  call site relied on the implicit fallback.
+- Kernel typecheck + 456/456 kernel tests still pass after the change.
+
+### Audit 4 — hook/scaffold templates and other v11-shipped strings invoking removed commands
+
+Two distinct surfaces:
+
+**A. Kernel/shell user-facing repair strings** — these ship in v11 and
+are emitted to users by v11 commands. Five strings pointed at removed
+commands:
+
+| File | Pre-fix | Post-fix |
+|---|---|---|
+| `shell/commands/claim.ts:121` | "Run \`caws worktree create <name>\` first." | "v11.0.0 does not ship worktree lifecycle commands; create externally and register, or pin to caws-cli@^10.2.x." |
+| `kernel/doctor/inspect.ts:158` | repair points to `caws worktree create` | repair states v11 limitation, points to manual fix or v10 pin |
+| `kernel/doctor/inspect.ts:193` | `caws worktree destroy` | edits .caws/worktrees.json directly, or v10 pin |
+| `kernel/doctor/inspect.ts:231` | `caws worktree destroy/bind` | manual edit or v10 pin |
+| `kernel/worktree/transitions.ts:82` | `caws worktree merge/destroy` | manual edit or v10 pin |
+| `kernel/worktree/ownership.ts:76` | `caws worktree bind` | replaced with `caws claim` (which IS in v11) |
+| `kernel/scope/evaluate.ts:82,96` | `caws worktree bind` | manual edit or v10 pin |
+
+**Fix landed inline (8a2).** All v11-shipped user-facing strings now
+either point to v11 commands or are explicit about v11.0.0 not shipping
+the lifecycle command (and direct users to either the manual procedure
+or the v10 pin).
+
+**B. Templates shipped via `package.json:files` — `templates/` directory.**
+116 invocations of removed commands across 30+ template files
+(`.cursor/hooks/*.sh`, `.claude/hooks/*.sh`, `.cursor/rules/*.mdc`,
+`.github/copilot-instructions.md`, `templates/CLAUDE.md`,
+`templates/agents.md`, etc.). Templates are installed only by `caws
+scaffold` (which is removed in 8a3); without a v11 installer, they are
+unreachable from the v11 CLI surface. **However**, they still ship in
+the npm tarball because `package.json:files` lists `"templates"`.
+
+**Disposition:** flagged for **8b packaging slice** — remove `"templates"`
+from `package.json:files` so v11 doesn't ship templates that reference
+non-existent commands. Not a v11.0.0 cutover blocker but cosmetic
+correctness.
+
+### Audit 5 — docs/help advertising deprecated commands
+
+Top-level docs (`README.md`, `CLAUDE.md`, `AGENTS.md`) and `docs/`
+extensively reference the legacy command surface. None gate runtime
+behavior; they are doc-rot.
+
+| File | Status | Disposition |
+|---|---|---|
+| `README.md` | ships in npm tarball; advertises ~15 removed commands | **8b finding** (rewrite for v11 before publish) |
+| `CLAUDE.md` | repo-only, agent-facing; references removed commands extensively | **8c finding** (rewrite as part of cutover) |
+| `AGENTS.md` | repo-only | 8c finding |
+| `docs/agents/full-guide.md`, `docs/agents/TUTORIAL.md`, `docs/agents/EXAMPLES.md` | extensive legacy refs | 8c / 8e |
+| `docs/guides/hooks-and-agent-workflows.md`, `docs/guides/quality-gates-staged-files.md` | legacy refs | 8c / 8e |
+| `docs/MIGRATION_GUIDE_V3.5.md`, `docs/DEPLOYMENT.md`, `docs/ROLLBACK.md`, `docs/agent-workflow-tools.md` | legacy refs | 8c / 8e |
+| `docs/architecture/caws-vnext-command-surface.md` (this doc) | legitimately mentions removed commands in §3 "removed in v11" | acceptable (doctrine ownership) |
+
+**Result: zero blockers; significant doc-rot deferred to 8b (`README.md`)
+and 8c (`CLAUDE.md`, `AGENTS.md`, `docs/`).**
+
+### Slice 8a2 summary
+
+| Audit | Findings | Blockers fixed in 8a2 | Orphaned by 8a3 | Deferred to 8b/8c/8e |
+|---|---|---|---|---|
+| 1 — events.jsonl writers | 7 call sites + 1 dormant impl | 0 | 7 | 1 file (8e delete) |
+| 2 — working-spec.yaml authority | 16 active sites | 0 | 16 (incl. public exports) | 0 |
+| 3 — kernel purity | 1 wall-clock fallback | **1 (derive-budget.ts)** | 0 | 0 |
+| 4 — v11-shipped strings + templates | 8 string sites + ~30 template files | **8 (claim.ts, doctor/inspect.ts ×3, worktree/transitions.ts, worktree/ownership.ts, scope/evaluate.ts ×2)** | 0 | templates → 8b |
+| 5 — docs/help | extensive doc-rot | 0 | 0 | README → 8b; CLAUDE/docs → 8c/8e |
+| **Total** | | **9 blockers, all fixed** | **23 orphans** | |
+
+Verification after fixes (run from `caws-next` HEAD + 8a2 changes):
+- `cd packages/caws-kernel && npx tsc --noEmit` clean
+- `cd packages/caws-kernel && npx jest` → 456/456 pass
+- `cd packages/caws-cli && npx tsc -p tsconfig.vnext.test.json --noEmit` clean
+- `cd packages/caws-cli && npx jest tests/shell tests/store` → 232/232 pass
+- `npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'` clean
+- `find packages/*/dist -name '*.ts' -not -name '*.d.ts'` empty (no source leak)
+
+8a2 closes with:
+- One kernel signature change (deriveBudget purity tightening — public
+  API breaking but no internal caller relied on the omission).
+- Eight user-facing string updates in v11-shipped repair guidance.
+- Doc-only audit report (this section).
+- No command registrations changed.
+- No command removals.
+- No compatibility aliases introduced.
+
+---
+
 ## 8. References
 
 - `packages/caws-kernel/` — pure logic

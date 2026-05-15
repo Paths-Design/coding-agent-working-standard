@@ -119,7 +119,10 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   if (bound.worktreeName === undefined) {
     err(
       'caws claim: cwd is not inside a CAWS-tracked worktree. ' +
-        'Run `caws worktree create <name>` first.'
+        'v11.0.0 does not ship worktree lifecycle commands; create the ' +
+        'worktree externally (git worktree add) and register it via ' +
+        'a future `caws worktree` command (planned for v11.1). To use ' +
+        'lifecycle commands today, pin to caws-cli@^10.2.x.'
     );
     return 2;
   }

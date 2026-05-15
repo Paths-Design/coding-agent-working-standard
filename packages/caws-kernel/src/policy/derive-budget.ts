@@ -13,8 +13,17 @@ import type {
 } from './types';
 
 export interface DeriveBudgetOptions {
-  /** Time injection for deterministic expiry checks. Defaults to new Date() if omitted. */
-  now?: Date | string;
+  /**
+   * Time injection for deterministic expiry checks. REQUIRED.
+   *
+   * Kernel purity invariant (caws-vnext-command-surface §6.3): the kernel
+   * must not call wall-clock time. Callers always supply `now`. Omitting
+   * `now` throws — there is no implicit `new Date()` fallback.
+   *
+   * String form is parsed as ISO-8601; that's deterministic input
+   * conversion, not clock access.
+   */
+  now: Date | string;
 }
 
 /**
@@ -38,8 +47,8 @@ export interface DeriveBudgetOptions {
 export function deriveBudget(
   policy: Policy,
   spec: { risk_tier: RiskTier },
-  waivers: readonly Waiver[] = [],
-  options: DeriveBudgetOptions = {},
+  waivers: readonly Waiver[],
+  options: DeriveBudgetOptions,
 ): Result<{ budget: EffectiveBudget; trace: BudgetDerivationTrace }> {
   const tierKey = String(spec.risk_tier) as '1' | '2' | '3';
   const baseline = policy.risk_tiers[tierKey];
@@ -147,7 +156,10 @@ function evaluateWaiver(waiver: Waiver, now: Date, minApprovers: number): Waiver
 }
 
 function resolveNow(now: Date | string | undefined): Date {
-  if (now === undefined) return new Date();
+  if (now === undefined) {
+    // Kernel purity invariant: no wall-clock fallback.
+    throw new Error('deriveBudget: `now` is required (Date | ISO string).');
+  }
   if (now instanceof Date) return now;
   const d = new Date(now);
   if (Number.isNaN(d.getTime())) {

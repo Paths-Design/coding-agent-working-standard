@@ -155,7 +155,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree (\`caws worktree create <name> --spec ${spec.id}\`) or close the spec.`,
+            narrowRepair: `Bind a worktree to ${spec.id}, or close the spec. (v11.0.0 does not ship worktree lifecycle commands; create externally and register in worktrees.json, or pin to caws-cli@^10.2.x.)`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
@@ -190,7 +190,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Worktree "${worktreeName}" registry binds spec ${registrySpecId}, but no such spec is loaded.`,
           {
             subject: worktreeName,
-            narrowRepair: `Restore the spec file, or run \`caws worktree destroy ${worktreeName}\`.`,
+            narrowRepair: `Restore the spec file, or remove the worktree entry from .caws/worktrees.json. (v11.0.0 does not ship worktree lifecycle commands; pin to caws-cli@^10.2.x for \`caws worktree destroy ${worktreeName}\`.)`,
             data: { worktree_name: worktreeName, registry_spec_id: registrySpecId },
           }
         )
@@ -228,7 +228,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Worktree "${worktreeName}" is bound to spec ${spec.id}, but that spec is in lifecycle_state="${spec.lifecycle_state}" and cannot authorize governed writes.`,
           {
             subject: worktreeName,
-            narrowRepair: `Destroy or rebind the worktree; closed/archived/draft specs cannot authorize governed writes. Run \`caws worktree destroy ${worktreeName}\` or \`caws worktree bind ${worktreeName} --spec <active-id>\`.`,
+            narrowRepair: `Destroy or rebind the worktree; closed/archived/draft specs cannot authorize governed writes. (v11.0.0 does not ship worktree lifecycle commands; remove the worktree entry from .caws/worktrees.json directly, or pin to caws-cli@^10.2.x.)`,
             data: {
               worktree_name: worktreeName,
               spec_id: spec.id,
