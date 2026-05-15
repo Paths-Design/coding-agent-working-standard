@@ -29,19 +29,25 @@ const { handleCliError, findSimilarCommand } = require('./error-handler');
 // registered via registerShellCommands() below. The legacy file
 // (./commands/init.js) is left on disk; it's no longer referenced
 // here. The `provenance init` subcommand is unrelated and unaffected.
-const { validateCommand } = require('./commands/validate');
-const { burnupCommand } = require('./commands/burnup');
+// Legacy `caws validate`, `caws verify-acs`, `caws evaluate`,
+// `caws iterate`, `caws diagnose`, `caws burnup` removed in slice
+// 8a3.3 (v11.0.0 cutover). All authority-conflict commands:
+//   - validate / verify-acs / evaluate use legacy spec-resolver
+//     (working-spec.yaml fallback) and write via legacy appendEvent.
+//   - diagnose advertises removed commands ("caws validate, caws
+//     quality-gates, caws provenance") as "core" in its fix guidance.
+//   - iterate / burnup are advisory but pull through the same legacy
+//     spec-resolver chain.
+// Spec health surfaces in v11 via `caws doctor`; gate evaluation via
+// `caws gates run`. v11.1 will add explicit validation flow.
 const { testAnalysisCommand } = require('./test-analysis');
-// Legacy `caws provenance` removed in slice 8a3 (v11.0.0 cutover).
+// Legacy `caws provenance` removed in slice 8a3.1 (v11.0.0 cutover).
 // The hash-chained audit trail moves to `.caws/events.jsonl` written
 // only by the vNext store. No compatibility alias.
 const { executeTool } = require('./commands/tool');
 // Legacy `caws status` replaced by the vNext shell command registered
 // via registerShellCommands() below. See packages/caws-cli/src/shell/.
 const { templatesCommand } = require('./commands/templates');
-const { diagnoseCommand } = require('./commands/diagnose');
-const { evaluateCommand } = require('./commands/evaluate');
-const { iterateCommand } = require('./commands/iterate');
 // Legacy `caws waivers` replaced by the vNext shell group `caws waiver`
 // registered via registerShellCommands() below. The legacy file is no
 // longer referenced from this entry point.
@@ -62,7 +68,6 @@ const { modeCommand } = require('./commands/mode');
 const { tutorialCommand } = require('./commands/tutorial');
 const { planCommand } = require('./commands/plan');
 const { sessionCommand } = require('./commands/session');
-const { verifyAcsCommand } = require('./commands/verify-acs');
 const { sidecarCommand } = require('./commands/sidecar');
 // Legacy scope command replaced by the vNext shell group registered
 // via registerShellCommands() below. See packages/caws-cli/src/shell/.
@@ -93,19 +98,10 @@ program
 // compatibility alias, no feature flag. The unrelated `provenance init`
 // subcommand below is untouched.
 
-// Validate command
-program
-  .command('validate')
-  .alias('verify')
-  .description('Validate CAWS spec with suggestions')
-  .argument('[spec-file]', 'Path to spec file (optional, uses spec resolution)')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth, FEAT-001)')
-  .option('-i, --interactive', 'Interactive spec selection when multiple specs exist', false)
-  .option('-q, --quiet', 'Suppress suggestions and warnings', false)
-  .option('--auto-fix', 'Automatically fix safe validation issues', false)
-  .option('--dry-run', 'Preview auto-fixes without applying them', false)
-  .option('--format <format>', 'Output format (text, json)', 'text')
-  .action(validateCommand);
+// Legacy `caws validate` (and `verify` alias) removed in slice 8a3.3.
+// Used legacy spec-resolver (working-spec.yaml fallback) and wrote
+// gate_evaluated events via legacy appendEvent on a parallel chain.
+// Spec health surfaces in v11 via `caws doctor`.
 
 // `caws gates run` is registered via registerShellCommands() below
 // (vNext policy-driven gate runner). The legacy `gates` group and the
@@ -287,48 +283,10 @@ program
   .option('-n, --name <template>', 'Template name (for info subcommand)')
   .action(templatesCommand);
 
-// Diagnose command
-program
-  .command('diagnose')
-  .description('Run health checks and suggest fixes')
-  .option('--spec-id <id>', 'Feature-specific spec ID')
-  .option('--fix', 'Apply automatic fixes', false)
-  .action(diagnoseCommand);
-
-// Verify Acceptance Criteria command
-program
-  .command('verify-acs')
-  .description('Verify acceptance criteria in specs are backed by test evidence')
-  .option('--spec-id <id>', 'Verify only this spec')
-  .option('--run', 'Actually run tests (default: collect-only)', false)
-  .option('--runner <runner>', 'Force test runner (pytest, jest, vitest, cargo, go)')
-  .option('--format <format>', 'Output format (text, json)', 'text')
-  .action(verifyAcsCommand);
-
-// Evaluate command
-program
-  .command('evaluate [spec-file]')
-  .description('Evaluate work against CAWS quality standards')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action(evaluateCommand);
-
-// Iterate command
-program
-  .command('iterate [spec-file]')
-  .description('Get iterative development guidance')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .option('--current-state <json>', 'Current implementation state as JSON', '{}')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action(iterateCommand);
-
-// Burnup command
-program
-  .command('burnup [spec-file]')
-  .description('Generate budget burn-up report for scope visibility')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action(burnupCommand);
+// Legacy `caws diagnose`, `caws verify-acs`, `caws evaluate`,
+// `caws iterate`, `caws burnup` removed in slice 8a3.3.
+// All authority-conflict commands using legacy spec-resolver / event
+// log. v11 spec health surfaces via `caws doctor`.
 
 // Legacy plural `waivers` command group was removed in slice 7a.4.
 // The vNext singular `caws waiver` group (create | list | show | revoke)
@@ -394,25 +352,19 @@ program.configureHelp({
 
 const VALID_COMMANDS = [
   'init',
-  'validate',
   'status',
   'sidecar',
   'mode',
   'tutorial',
   'plan',
   'templates',
-  'diagnose',
-  'evaluate',
-  'iterate',
   'waiver',
   'workflow',
   'quality-monitor',
   'quality-gates',
   'gates',
-  'burnup',
   'tool',
   'session',
-  'verify-acs',
   'scope',
 ];
 
