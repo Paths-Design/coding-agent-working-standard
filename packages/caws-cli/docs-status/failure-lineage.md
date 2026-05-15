@@ -261,6 +261,12 @@ Claude Haiku was particularly bad at scope discipline — it would answer its ow
 - Glob-to-regex conversion is incomplete (`**`, `[abc]`, `{a,b}` not supported)
 - `scope.in` patterns don't handle path normalization (relative vs absolute)
 
+### Variant: union-mode cross-spec interference (May 2026)
+
+Once feature specs landed, scope enforcement defaulted to union mode: any active spec's `scope.out` could block an edit, even if the file was in the editing agent's own `scope.in`. The failure mode is "Agent A can't edit its own file because Agent B's `scope.out` accidentally covers it" — distinct from the two-agents-same-file collision the original entry addressed. This was particularly painful when an unbound worktree (no `specId` in `worktrees.json`) inherited governance from every active spec at once, producing confusing blocks like "spec X blocks me even though I'm not working on X."
+
+The vNext kernel rewrite replaced union mode with **authoritative binding**: when a worktree is bound to a spec, only that spec's scope is consulted; other agents' specs cannot block the edit. Union mode is retained as fallback when no binding exists, and `caws scope show` now reports which mode is active so agents can self-diagnose. See N12 below for the related "unbound = no authority" rule that closes the symmetric escape hatch.
+
 ---
 
 ## 9. Audit Logging (Failure Forensics)
@@ -404,3 +410,130 @@ The ownership error message included instructions for bypassing the guard — ef
 | Force-override warning | `worktree-manager.js` | Loud red warning when `--force` is used on another's worktree |
 | Rule update | `worktree-isolation.md` | "Never touch a worktree you did not create. Period." |
 | Error message fix | `worktree-manager.js` | Changed from "Use --force to override" to "Do NOT destroy worktrees you did not create" |
+
+### Extension: agent claim model (April 2026, CAWSFIX-31/32)
+
+The March entry above documented force-destroy. The April 27 session-collision incident (see Entry 4 variant) exposed that ownership checks weren't being consulted at the *decision point* — Session B never saw who owned the worktree before committing to its branch. CAWSFIX-31/32 extended the ownership model:
+
+| Guard | File | Purpose |
+|-------|------|---------|
+| Session-id claim | `worktree-manager.js` | `worktrees.json:owner` records session id + platform as `<sessionId>:<platform>`; heartbeat refreshed on every lifecycle CLI call |
+| Foreign-claim soft-block | `worktree-manager.js` | `bind`, `merge`, `claim` refuse to mutate a worktree owned by a different session id without `--takeover` |
+| Session-log surfacing | `worktree-manager.js` | Soft-block message includes pointer to claimer's `tmp/<sessionId>/` directory (turn count, last-turn timestamp) so the new agent can read context before deciding |
+| Durable handoff audit | `worktree-manager.js` | `--takeover` writes `prior_owners: [{sessionId, platform, lastSeen, takenOver_at}]` on the worktree entry |
+| TTL-based silent-allow rejected | Design decision | A stale heartbeat is NOT authorization to take over — paused sessions are not ended sessions. Session-id equality is the only gating signal. |
+
+### What this still doesn't catch
+
+- File reads across worktrees are still unguarded (only writes and lifecycle ops check ownership)
+- The soft-block depends on `session-log.sh` being active to populate `tmp/<sessionId>/`; without it, the "go read the claimer's context" affordance degrades to just the session id
+
+---
+
+## Entry 12: Unbound Worktree = Silent Authority Escape (May 2026)
+
+**Severity:** High
+**Era:** vNext kernel design (Slice 2)
+**Agent:** N/A — identified as latent failure mode during architecture review
+
+### What happened
+
+During the vNext rewrite, an early proposal was to fix union-mode cross-spec interference (see Entry 8 variant) by treating unbound worktrees as "no scope enforcement at all" — i.e., if a worktree has no `specId` binding in `worktrees.json`, just let edits through. This was flagged as a *new* failure mode being introduced: an agent could now escape governance entirely by simply working in an unbound worktree. The fix for one footgun would have created a worse one.
+
+### What we built
+
+| Guard | File | Mechanism |
+|-------|------|-----------|
+| "No bound spec, no authority" rule | vNext authority evaluator | Unbound worktrees fail closed on governed writes; the admission diagnostic reads "no bound spec, no authority" |
+| Read-only commands still permitted | vNext authority evaluator | `scope show`, `doctor`, `worktree bind`, `spec create`, bootstrap remain runnable so the agent can self-recover |
+| Binding-state diagnostics | `caws scope show` | Reports `Unbound`, `OneSidedBinding(...)`, or `Bound(...)` so agents can distinguish "not bound at all" from "binding is half-wired" |
+| Rule in CLAUDE.md | Template `CLAUDE.md` | "No bound spec, no authority" listed alongside "Stay in scope" |
+
+### What it doesn't catch
+
+- The fail-closed rule is only enforced at the new vNext kernel admission surface — legacy CLI surfaces (pre-kernel) were not retroactively hardened. An agent running an older CAWS CLI against a project that hasn't migrated will still fall back to union mode.
+- "One-sided binding" (spec says `worktree: foo` but `worktrees.json` doesn't map `foo` to that spec, or vice versa) is reported distinctly from "unbound" — both states fail closed, but the diagnostic is different so the user knows which side to fix.
+
+---
+
+## Entry 13: `working-spec.yaml` Baseline Clobber on Worktree Create (April 2026)
+
+**Severity:** Medium-High
+**Era:** CAWS 10.x worktree auto-sync
+**Agent:** Claude Code in the eded4b6b session (April 23)
+
+### What happened
+
+When `caws worktree create` was called, `materializeWorktreeSpec` would write the new worktree's feature spec content into `.caws/working-spec.yaml` inside the new worktree — fully replacing the project's baseline spec content with a copy of the feature spec. In the reported incident the PTRUTH-001 project baseline was overwritten with WCOMP-TRI-01 feature content. The damage was caught by `git checkout --` before staging, but only because the user noticed the unexpected diff.
+
+The root cause was that the auto-sync logic was trying to keep the legacy compatibility mirror (`working-spec.yaml`) and the canonical feature spec (`specs/<id>.yaml`) in sync — but in the wrong direction. The feature spec is what the new worktree owns; the baseline is shared state.
+
+### What we built
+
+| Guard | File | Mechanism |
+|-------|------|-----------|
+| `materializeWorktreeSpec` no longer touches baseline | `worktree-manager.js` (CAWSFIX-24) | Feature spec lands only at `.caws/specs/<id>.yaml`; baseline is left untouched |
+| Regression test asserts clean tree | worktree-manager tests | `git status --porcelain -- .caws/working-spec.yaml` returns empty after `caws worktree create` |
+| Idempotent YAML writes | `worktree-manager.js` (CAWSFIX-24) | Re-running create on an existing spec produces no diff (was previously rewriting timestamps and reflowing comments) |
+
+### What it doesn't catch
+
+- The parallel-manager path that calls `materializeWorktreeSpec` was fixed, but the parallel-manager test still uses a stale fixture that doesn't include the `git status --porcelain` assertion
+- The fix only addresses writes to `working-spec.yaml`; other shared `.caws/` files (`registry.json`, `events.jsonl`) have their own coordination patterns
+
+---
+
+## Entry 14: `caws specs close` Destructive YAML Overwrite (April 2026)
+
+**Severity:** Medium
+**Era:** CAWS 10.x specs CLI
+**Agent:** Claude Code in the 0473ff15 session (April 19)
+
+### What happened
+
+After merging worktree branches, the agent observed that `caws specs close <id>` was destructive: instead of producing a clean one-line diff (`status: active → closed`), it deleted the `id`, `title`, `created_at`, `updated_at` fields, collapsed YAML invariants, and removed the acceptance criteria structure. The note in the session reads: *"That's actively worse than leaving them active."*
+
+A related symptom: `caws specs close` would fail with "Could not close spec" when run cross-session (i.e., the current session id didn't match the session that originally created the spec), with no actionable explanation. Agents responding to that opaque error fell back to hand-editing the YAML directly — which itself bypasses the CLI's status-flip + registry update + hash-chained event log.
+
+### What we built
+
+| Guard | File | Mechanism |
+|-------|------|-----------|
+| Comment-preserving line replace | `specs.js` (`closeSpec`, CAWSFIX-15) | Close now produces a 2-line diff (`status:` + `updated_at:`) instead of a YAML reshape |
+| Same mechanism for archive | `specs.js` (`archiveSpec`) | `caws specs archive` shares the line-replace path so manually-archived specs remain interpretable |
+| `.caws/agents.json` gitignored | Template `.gitignore` (CAWSFIX-15) | Per-CLI-invocation session state no longer pollutes commits or causes "spec is owned by other session" errors when crossing sessions |
+
+### What it doesn't catch
+
+- The cross-session close error (initially tracked as D11) was not fully closed in the same session — the session notes said "still open at end of session." Whether CAWSFIX-24's `autoCloseBoundSpec` path fully resolves it is not explicitly confirmed in CHANGELOG; if you hit this in a fresh session, prefer `caws specs close` via the merge path (auto-close) over standalone invocation.
+- Hand-editing YAML to flip status still bypasses the registry update and `events.jsonl` audit. The CLI is the canonical path; the lineage rule "spec lifecycle goes through the CLI, never `mv`/`git rm`" exists for this reason (see project CLAUDE.md).
+
+---
+
+## Entry 15: Stale Spec Registry After Merge (April 2026)
+
+**Severity:** Medium
+**Era:** CAWS 10.x worktree merge flow
+**Agent:** Claude Code in the 0473ff15 session (April 19)
+
+### What happened
+
+After parallel worktree merges completed, `caws specs list` showed 7 specs as `status: active` when all 7 were actually merged and done. Some had been merged weeks earlier. The merge flow (`caws worktree merge <name>` and the underlying `mergeWorktree`) was not closing the spec bound to the merged worktree — it just merged the branch and destroyed the worktree, leaving the spec in `active`.
+
+This compounded with Entry 14: the workaround for destructive `caws specs close` was to not call it, which reproduced Entry 15. Together they were producing a steadily-growing list of "phantom active" specs that no agent was actually working on.
+
+### What we built
+
+| Guard | File | Mechanism |
+|-------|------|-----------|
+| `autoCloseBoundSpec` on merge | `worktree-manager.js` (CAWSFIX-14) | `mergeWorktree` calls `autoCloseBoundSpec` after a successful merge; status flip is committed as `chore(caws): close <id> spec post-merge` |
+| Clean main post-merge | `worktree-manager.js` (CAWSFIX-14) | `git status --porcelain` is empty after merge; spec reads `status: closed` |
+| Regression test | worktree-manager tests | Asserts spec status flips and the close commit lands on main |
+
+### What it doesn't catch
+
+- Specs created by the parallel-manager flow that don't go through `mergeWorktree` may still not auto-close
+- Specs that were manually merged (`git merge --no-ff <branch>` without `caws worktree merge`) won't trigger auto-close; the agent must call `caws specs close <id>` afterward
+- The auto-close commit is unsigned; if the project requires signed commits on main, the commit-msg hook needs to allow this format or the auto-close will fail loudly
+
+---

@@ -18,8 +18,8 @@ governs:
 
 # CAWS vNext command surface (v11.0.0)
 
-**Status:** active (Slice 8a3 removals complete; awaiting 8a4 audit)
-**Branch:** `caws-next` (post-8a3.5)
+**Status:** active (Slice 8a4 audit complete; 4 blockers carried into 8b)
+**Branch:** `caws-next` (post-8a4)
 **Authors:** vNext rewrite team
 **Last updated:** 2026-05-15
 
@@ -514,6 +514,210 @@ Verification after fixes (run from `caws-next` HEAD + 8a2 changes):
 - No command registrations changed.
 - No command removals.
 - No compatibility aliases introduced.
+
+---
+
+## 10. Slice 8a4 — post-removal invariant audit (results)
+
+Run after the 8a3 staged removals to prove that what was removed from
+the registered surface is also severed from startup imports, package
+reachability, generated-hook reachability, and user-facing advertising.
+Stance unchanged: replacement, not continuity.
+
+### Audit 1 — `VALID_COMMANDS` matches registered commands
+
+```
+Registered (from `node dist/index.js --help`, excluding `help`):
+  claim, doctor, evidence, gates, init, scope, status, waiver
+
+VALID_COMMANDS (from src/index.js):
+  claim, doctor, evidence, gates, init, scope, status, waiver
+
+diff: SAME
+```
+
+**Pass.**
+
+### Audit 2 — no dangling startup imports in `src/index.js`
+
+`grep -E '^const .* = require|^import' src/index.js` produces exactly
+five imports, all core entrypoint:
+
+```
+require('commander')          // CLI framework
+require('chalk')               // color output
+require('./config')            // CLI_VERSION
+require('./error-handler')     // handleCliError, findSimilarCommand
+require('./shell')             // registerShellCommands
+```
+
+No imports of `./commands/*`, `./scaffold`, `./scaffold/git-hooks`,
+`./generators/working-spec`, `./sidecars/listeners`, `./test-analysis`,
+`./worktree/*`, `./parallel/*`. **Pass.**
+
+### Audit 3 — built `--help` shows only v11 surface
+
+Top-level `node dist/index.js --help` shows exactly the 8 vNext groups
+plus Commander's built-in `help` row. No legacy aliases.
+
+Per-group `--help` (init, doctor, scope, status, claim, gates, evidence,
+waiver) was scanned for any text invoking removed commands; **zero hits**.
+The v11-shipped repair-string fixes from 8a2 hold under audit 3 — no
+help text directs users to a removed command. **Pass.**
+
+### Audit 4 — template/scaffold/legacy-source reachability + tarball
+
+`npm pack --dry-run` against `packages/caws-cli` shows **427 files /
+550 kB** in the v11 candidate tarball. The package boundary contradicts
+the v11 doctrine in three ways:
+
+| Artifact in tarball | Reachable from v11 surface | Disposition |
+|---|---|---|
+| `dist/templates/` (~150 files: `.cursor/hooks/*.sh`, `.claude/hooks/*.sh`, `.cursor/rules/*.mdc`, `.github/copilot-instructions.md`, `templates/CLAUDE.md`, `templates/agents.md`, schemas, etc. — 116 invocations of removed commands) | **NO** (no v11 command installs them; `caws scaffold` and `caws hooks` are unregistered) | **8b BLOCKER** |
+| `dist/commands/*.js` (26 legacy command source files: agents, archive, burnup, diagnose, evaluate, gates, init, iterate, mode, parallel, plan, provenance, quality-monitor, scope, session, sidecar, specs, status, templates, tool, tutorial, validate, verify-acs, waivers, workflow, worktree) | **NO via CLI surface**; YES via programmatic `require('@paths.design/caws-cli/dist/commands/<name>')` | **8b BLOCKER** |
+| `dist/scaffold/`, `dist/sidecars/`, `dist/session/`, `dist/parallel/`, `dist/worktree/`, `dist/spec/`, `dist/validation/`, `dist/policy/`, `dist/utils/event-log.js`, `dist/utils/spec-resolver.js`, etc. | **NO via CLI surface**; YES via programmatic require | **8b BLOCKER** |
+
+**Root cause** — two independent contributors:
+
+1. `package.json:files = ["dist", "README.md", "templates"]` ships the
+   entire `dist/` tree (and explicitly the templates root) without
+   any whitelist of which `dist/` subtrees are part of the v11 API.
+2. `scripts/build-cli.js` does `copyJsTree(src, dist)` (recursive copy
+   of every `.js` file from `src/` to `dist/`) and `copyDir(templates,
+   dist/templates)`. Under v11, the build should only emit:
+   - `dist/index.js`, `dist/config/`, `dist/error-handler.js`
+   - `dist/shell/` (vNext shell, TS-compiled)
+   - `dist/store/` (vNext store, TS-compiled)
+   - whatever `dist/policy/` files are still consumed by `dist/store/`
+     or `dist/shell/` at runtime
+   - no `dist/templates/`, no `dist/commands/`, no `dist/scaffold/`, no
+     `dist/sidecars/`, no `dist/session/`, no `dist/parallel/`, no
+     `dist/worktree/`, no `dist/spec/`, no `dist/validation/`, no
+     `dist/utils/event-log.js`, no `dist/utils/spec-resolver.js`, etc.
+
+**Recorded classification** (per audit-4 protocol):
+
+```
+templates/:
+  reachable from v11 command surface: NO
+  included in npm tarball today: YES (via files=["dist","templates"]
+                                       and scripts/build-cli.js copyDir)
+  disposition: REMOVE FROM PACKAGE FILES IN 8B
+               (drop "templates" from files; remove copyDir step from
+                build-cli.js; ensure dist/templates/ is not produced)
+
+dist/commands/*.js (26 legacy handlers):
+  reachable from v11 command surface: NO (no import from index.js)
+  reachable from package programmatic API: YES (path is stable)
+  included in npm tarball today: YES
+  disposition: REMOVE FROM TARBALL IN 8B
+               (build-cli.js copyJsTree must exclude src/commands/*.js
+                or, preferably, switch to an opt-in whitelist of which
+                src/ subtrees ship)
+
+dist/{scaffold,sidecars,session,parallel,worktree,spec,validation,
+      policy,utils/event-log.js,utils/spec-resolver.js, ...}:
+  reachable from v11 command surface: NO
+  reachable from package programmatic API: YES
+  included in npm tarball today: YES
+  disposition: REMOVE FROM TARBALL IN 8B (same build-cli.js change)
+```
+
+**8a4 verdict on Audit 4:** no v11 command-surface blocker (commands are
+not registered, not imported, not advertised). **Three independent 8b
+packaging blockers identified.** Cutover (8d) cannot proceed until 8b
+closes the package-boundary contradiction.
+
+### Audit 5 — docs/help advertising removed commands
+
+| File | In npm tarball | Removed-command refs | Disposition |
+|---|---|---|---|
+| `packages/caws-cli/README.md` | **YES** (via `files=["dist","README.md","templates"]`) | 22 | **8b BLOCKER** — rewrite for v11 before npm publish |
+| `README.md` (repo root) | NO | 21 | 8c — repo-facing |
+| `AGENTS.md` | NO | 88 | 8c — agent-facing |
+| `CLAUDE.md` | NO | 17 | 8c — agent-facing |
+
+The package README ships and advertises `caws specs create`,
+`caws validate`, `caws scaffold`, `caws provenance`, `caws hooks`,
+`caws waivers`, plus `working-spec.yaml` workflow — none of which exist
+in v11. **8b blocker.**
+
+The repo-facing docs (`README.md`, `AGENTS.md`, `CLAUDE.md`) are
+agent/developer guidance and are not shipped in the tarball; classified
+as 8c work alongside the docs/agents/ and docs/guides/ rewrites
+identified in 8a2.
+
+`package.json:description` is generic ("Coding Agent Workflow System
+command-line tools for spec management, quality gates, and AI-assisted
+development") and does not advertise specific removed commands.
+Acceptable as-is, though "spec management" is misleading under A1
+(v11.0.0 has no spec lifecycle command); minor 8b polish.
+
+### Audit 6 — no v11 path reaches old authority modules
+
+```
+grep -rEn "utils/event-log|working-spec\.yaml|spec-resolver|\
+provenance/chain\.json" packages/caws-cli/src/index.js \
+packages/caws-cli/src/shell packages/caws-cli/src/store \
+packages/caws-kernel/src
+```
+
+Every hit is one of:
+- residue detection (`init-store.ts:84` refused-paths list,
+  `doctor-snapshot.ts:113` isFile probe, `specs-store.ts:69-70` loader
+  guard)
+- doctor rule message (`kernel/doctor/inspect.ts:636-640`)
+- doctrine comments (`init-store.ts:14,17`, `specs-store.ts:8`,
+  `register.ts:76`, `rules.ts:68`, `kernel/doctor/rules.ts:93`)
+
+**Pass.** No v11 shell/store/kernel path reads or writes legacy
+event-log, falls back to spec-resolver, or touches provenance/chain.json.
+
+### Audit 7 — full verification
+
+```
+npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'        clean
+npx tsc -p tsconfig.vnext.test.json --noEmit               clean
+npx jest tests/shell tests/store                           232/232 pass
+cd packages/caws-kernel && npx jest                        456/456 pass
+find packages/*/dist -name '*.ts' -not -name '*.d.ts'      empty
+```
+
+**Pass.**
+
+### Slice 8a4 summary
+
+| Audit | Result | Blockers fixed in 8a4 | Carried into 8b | Carried into 8c |
+|---|---|---|---|---|
+| 1 — VALID_COMMANDS == registered | pass | 0 | 0 | 0 |
+| 2 — no dangling imports | pass | 0 | 0 | 0 |
+| 3 — `--help` shows only v11 | pass | 0 | 0 | 0 |
+| 4 — template/scaffold/legacy-source tarball | classified | 0 | **3** (`templates/`, `dist/commands/*`, other dormant `dist/` subtrees) | 0 |
+| 5 — docs advertising removed commands | classified | 0 | **1** (`packages/caws-cli/README.md` rewrite) | 3 (root README, AGENTS.md, CLAUDE.md, plus `docs/`) |
+| 6 — no v11 → legacy authority reach | pass | 0 | 0 | 0 |
+| 7 — verification gates | pass | 0 | 0 | 0 |
+| **Total** | | **0** | **4** | **3+** |
+
+**Audit-only slice closes with zero new code changes.** Two doc-only
+sideband commits during this slice updated
+`packages/caws-cli/docs-status/failure-lineage.md` (worked-around
+session-attribution incidents — documented part of why CAWS exists,
+not part of the command-surface removal); they were committed as
+`wip(docs)` and pushed alongside this audit.
+
+**Cutover gating** — 8b cannot publish v11.0.0 until the four 8b
+blockers identified above are resolved:
+
+1. Drop `templates` from `package.json:files`.
+2. Rewrite `scripts/build-cli.js` to opt-in whitelist what `dist/`
+   ships (no `dist/commands/`, no `dist/scaffold/`, etc.).
+3. Rewrite `packages/caws-cli/README.md` for the v11 surface.
+4. (Soft) Refresh `package.json:description` away from "spec
+   management" wording.
+
+8c work (root `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/agents/`,
+`docs/guides/`) is repo-internal and does not gate the npm publish,
+but should land alongside cutover for coherence.
 
 ---
 
