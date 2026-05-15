@@ -126,6 +126,49 @@ export interface DoctorInput {
    * as hygiene warning. Default 25. Kernel never truncates.
    */
   readonly priorOwnersGrowthThreshold?: number;
+
+  // ---------------------------------------------------------------------
+  // Slice 7c.1 — vNext-shape facts the shell observes for us.
+  //
+  // Doctor never reads files. The store stats the canonical paths and
+  // hands the booleans across; doctor classifies them as findings in
+  // 7c.2. All three are optional so callers that don't construct
+  // these (older tests, ad-hoc kernel consumers) stay valid.
+  // ---------------------------------------------------------------------
+
+  /**
+   * Presence of legacy single-spec / pre-vNext artifacts inside `.caws/`.
+   * 7c.2 will surface these as `doctor.init.legacy_*_present` errors.
+   */
+  readonly initResidue?: {
+    readonly workingSpecYaml: boolean;
+    readonly workingSpecSchemaJson: boolean;
+  };
+
+  /**
+   * Existence facts for the canonical vNext layout. 7c.2 will surface
+   * absences as `doctor.init.*_missing`. `eventsJsonlExists` is reported
+   * but intentionally NEVER required — the first append creates it under
+   * lock, and a missing file is valid until then.
+   */
+  readonly filesystem?: {
+    readonly cawsDirExists: boolean;
+    readonly specsDirExists: boolean;
+    readonly waiversDirExists: boolean;
+    readonly policyYamlExists: boolean;
+    readonly worktreesJsonExists: boolean;
+    readonly agentsJsonExists: boolean;
+    readonly eventsJsonlExists: boolean;
+  };
+
+  /**
+   * Diagnostics from registry-load failures (worktrees.json /
+   * agents.json that parsed as something other than a plain object).
+   * 7c.2 will surface these as registry-malformed warnings without
+   * conflating them with "registry file missing" (which is valid until
+   * first write).
+   */
+  readonly registryDiagnostics?: readonly Diagnostic[];
 }
 
 // ----------------------------------------------------------------------------

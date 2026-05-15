@@ -94,4 +94,46 @@ export interface StoreSnapshot {
   readonly waivers: readonly Waiver[];
   /** Per-file load diagnostics from loadWaivers (slice 7a.5). */
   readonly waiverDiagnostics: readonly Diagnostic[];
+
+  // -------------------------------------------------------------------
+  // Slice 7c.1 — vNext-shape facts the kernel cannot derive itself.
+  //
+  // The store is the only place that may stat the filesystem. Doctor
+  // (kernel) consumes the booleans below; it never reads files. New
+  // doctor rules in 7c.2 will fire off these surfaces.
+  // -------------------------------------------------------------------
+
+  /**
+   * Presence of legacy single-spec / pre-vNext artifacts inside `.caws/`.
+   * Doctor surfaces these as errors — vNext init refuses to bootstrap
+   * over them, and live projects should retire them.
+   */
+  readonly initResidue: {
+    readonly workingSpecYaml: boolean;
+    readonly workingSpecSchemaJson: boolean;
+  };
+
+  /**
+   * Existence facts for each canonical vNext path. Doctor needs these
+   * to surface "canonical layout drift" (e.g. specs/ dir missing on a
+   * live project). `eventsJsonlExists` is reported but never required:
+   * the first append creates it under lock.
+   */
+  readonly filesystem: {
+    readonly cawsDirExists: boolean;
+    readonly specsDirExists: boolean;
+    readonly waiversDirExists: boolean;
+    readonly policyYamlExists: boolean;
+    readonly worktreesJsonExists: boolean;
+    readonly agentsJsonExists: boolean;
+    readonly eventsJsonlExists: boolean;
+  };
+
+  /**
+   * Diagnostics from worktrees.json / agents.json load failures that
+   * the previous shape silently swallowed (the snapshot fell back to
+   * `{}` on Err). Doctor needs to see these to flag "registry file is
+   * malformed" without treating registry absence as drift.
+   */
+  readonly registryDiagnostics: readonly Diagnostic[];
 }

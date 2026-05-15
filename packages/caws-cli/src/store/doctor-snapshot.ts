@@ -18,8 +18,12 @@
 //     Slice 5b — they're tied to identity resolution which is a Slice
 //     5c concern.
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import {
   isOk,
+  type Diagnostic,
   type DoctorInput,
   type TemplateCheck,
 } from '@paths.design/caws-kernel';
@@ -49,6 +53,16 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   const eventsResult = loadEvents(cawsDir);
   const waiversResult = loadWaivers(cawsDir);
 
+  // Slice 7c.1 — observe vNext-shape facts the kernel cannot derive.
+  // The store is the only place that may stat the filesystem; doctor
+  // consumes the booleans below without any I/O of its own.
+  const initResidue = observeInitResidue(cawsDir);
+  const filesystem = observeFilesystem(cawsDir);
+  const registryDiagnostics = collectRegistryDiagnostics(
+    worktreesResult,
+    agentsResult
+  );
+
   return {
     repoRoot,
     cawsDir,
@@ -63,7 +77,66 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     eventWarnings: isOk(eventsResult) ? eventsResult.value.warnings : eventsResult.errors,
     waivers: waiversResult.waivers,
     waiverDiagnostics: waiversResult.diagnostics,
+    initResidue,
+    filesystem,
+    registryDiagnostics,
   };
+}
+
+// ----------------------------------------------------------------------------
+// 7c.1 helpers — file-existence observation
+//
+// These intentionally do NOT distinguish "not a file vs not a directory" —
+// doctor's rules in 7c.2 only need "is this canonical surface present?".
+// Distinguishing kind would expand the input shape with information no
+// rule yet consumes.
+// ----------------------------------------------------------------------------
+
+function isFile(p: string): boolean {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDir(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
+  return {
+    workingSpecYaml: isFile(path.join(cawsDir, 'working-spec.yaml')),
+    workingSpecSchemaJson: isFile(
+      path.join(cawsDir, 'working-spec.schema.json')
+    ),
+  };
+}
+
+function observeFilesystem(cawsDir: string): StoreSnapshot['filesystem'] {
+  return {
+    cawsDirExists: isDir(cawsDir),
+    specsDirExists: isDir(path.join(cawsDir, 'specs')),
+    waiversDirExists: isDir(path.join(cawsDir, 'waivers')),
+    policyYamlExists: isFile(path.join(cawsDir, 'policy.yaml')),
+    worktreesJsonExists: isFile(path.join(cawsDir, 'worktrees.json')),
+    agentsJsonExists: isFile(path.join(cawsDir, 'agents.json')),
+    eventsJsonlExists: isFile(path.join(cawsDir, 'events.jsonl')),
+  };
+}
+
+function collectRegistryDiagnostics(
+  worktreesResult: ReturnType<typeof loadWorktrees>,
+  agentsResult: ReturnType<typeof loadAgents>
+): readonly Diagnostic[] {
+  const out: Diagnostic[] = [];
+  if (!isOk(worktreesResult)) out.push(...worktreesResult.errors);
+  if (!isOk(agentsResult)) out.push(...agentsResult.errors);
+  return out;
 }
 
 // ----------------------------------------------------------------------------
@@ -96,6 +169,9 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     ...(options.templates !== undefined ? { templates: options.templates } : {}),
     waivers: snapshot.waivers,
     waiverDiagnostics: snapshot.waiverDiagnostics,
+    initResidue: snapshot.initResidue,
+    filesystem: snapshot.filesystem,
+    registryDiagnostics: snapshot.registryDiagnostics,
     now: options.now,
     ...(options.staleAgentTtlMs !== undefined
       ? { staleAgentTtlMs: options.staleAgentTtlMs }
