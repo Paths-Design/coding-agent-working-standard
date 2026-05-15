@@ -22,6 +22,10 @@ import {
   runGatesRunCommand,
   runScopeCommand,
   runStatusCommand,
+  runWaiverCreateCommand,
+  runWaiverListCommand,
+  runWaiverRevokeCommand,
+  runWaiverShowCommand,
   type EvidenceKind,
 } from './index';
 
@@ -236,4 +240,134 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // -------------------------------------------------------------------
+  // caws waiver create / list / show / revoke
+  //
+  // Singular `waiver` is the vNext authority surface. The legacy plural
+  // `waivers` group is removed in src/index.js as part of slice 7a.4 —
+  // no compatibility alias, no feature flag.
+  // -------------------------------------------------------------------
+  const waiverCmd = program
+    .command('waiver')
+    .description(
+      'Manage CAWS waivers (bounded exception records that suppress matching gate violations)'
+    );
+
+  waiverCmd
+    .command('create <id>')
+    .description(
+      'Create a new active waiver. Validates against the kernel before writing.'
+    )
+    .requiredOption('--title <title>', 'Short waiver title (≥5 chars)')
+    .requiredOption(
+      '--gate <gate>',
+      'Gate id this waiver covers; repeat for multiple gates',
+      collectMulti,
+      [] as string[]
+    )
+    .requiredOption('--reason <reason>', 'Justification for the waiver')
+    .requiredOption('--approved-by <id>', 'Approver identity')
+    .requiredOption(
+      '--expires-at <iso>',
+      'Expiry as an ISO-8601 datetime with timezone'
+    )
+    .option(
+      '--spec <id>',
+      'Optional spec id this waiver is scoped to (omit for project-wide)'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        id: string,
+        opts: {
+          title: string;
+          gate: string[];
+          reason: string;
+          approvedBy: string;
+          expiresAt: string;
+          spec?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runWaiverCreateCommand({
+          id,
+          title: opts.title,
+          gates: opts.gate,
+          reason: opts.reason,
+          approvedBy: opts.approvedBy,
+          expiresAt: opts.expiresAt,
+          ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  waiverCmd
+    .command('list')
+    .description(
+      'List waivers. By default excludes revoked and expired records.'
+    )
+    .option('--include-revoked', 'Include revoked waivers')
+    .option('--include-expired', 'Include expired waivers')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        includeRevoked?: boolean;
+        includeExpired?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runWaiverListCommand({
+          includeRevoked: opts.includeRevoked === true,
+          includeExpired: opts.includeExpired === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  waiverCmd
+    .command('show <id>')
+    .description('Show a waiver, including its derived effectiveness at now.')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((id: string, opts: { data?: boolean }) => {
+      const code = runWaiverShowCommand({
+        id,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  waiverCmd
+    .command('revoke <id>')
+    .description(
+      'Revoke a waiver. Writes a revocation record; refuses double-revoke.'
+    )
+    .option('--revoked-by <id>', 'Identity recorded in revocation.revoked_by')
+    .option(
+      '--reason <reason>',
+      'Reason recorded in revocation.reason (recommended for audit)'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        id: string,
+        opts: { revokedBy?: string; reason?: string; data?: boolean }
+      ) => {
+        const code = runWaiverRevokeCommand({
+          id,
+          ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+}
+
+/** Commander value collector for repeatable string options. */
+function collectMulti(value: string, prev: string[]): string[] {
+  prev.push(value);
+  return prev;
 }

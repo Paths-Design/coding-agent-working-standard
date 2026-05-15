@@ -11,6 +11,7 @@ export const SHELL_RULE_PREFIXES = {
   binding: 'shell.binding',
   command: 'shell.command',
   gates: 'shell.gates',
+  waiver: 'shell.waiver',
 } as const;
 
 export const SHELL_RULES = {
@@ -42,6 +43,14 @@ export const SHELL_RULES = {
   GATES_REPORT_NOT_JSON: 'shell.gates.report_not_json',
   GATES_REPORT_INVALID_SHAPE: 'shell.gates.report_invalid_shape',
   GATES_POLICY_REQUIRED: 'shell.gates.policy_required',
+
+  // waiver command surface.
+  WAIVER_MISSING_ID: 'shell.waiver.missing_id',
+  WAIVER_NOT_FOUND: 'shell.waiver.not_found',
+  WAIVER_DUPLICATE: 'shell.waiver.duplicate',
+  WAIVER_INVALID_INPUT: 'shell.waiver.invalid_input',
+  WAIVER_ALREADY_REVOKED: 'shell.waiver.already_revoked',
+  WAIVER_WRITE_FAILED: 'shell.waiver.write_failed',
 } as const;
 
 export type ShellRule = (typeof SHELL_RULES)[keyof typeof SHELL_RULES];

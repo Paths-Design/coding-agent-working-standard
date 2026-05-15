@@ -104,5 +104,27 @@ export type {
   WaiverEvidence,
 } from './gates/waiver-filter';
 
+export {
+  runWaiverCreateCommand,
+  runWaiverListCommand,
+  runWaiverShowCommand,
+  runWaiverRevokeCommand,
+} from './commands/waiver';
+export type {
+  WaiverCreateOptions,
+  WaiverListOptions,
+  WaiverShowOptions,
+  WaiverRevokeOptions,
+} from './commands/waiver';
+
+export {
+  renderWaiverSummary,
+  renderWaiverDetail,
+} from './render/waiver';
+export type {
+  RenderWaiverSummaryInput,
+  RenderWaiverDetailInput,
+} from './render/waiver';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

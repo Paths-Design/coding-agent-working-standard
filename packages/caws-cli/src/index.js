@@ -42,7 +42,9 @@ const { templatesCommand } = require('./commands/templates');
 const { diagnoseCommand } = require('./commands/diagnose');
 const { evaluateCommand } = require('./commands/evaluate');
 const { iterateCommand } = require('./commands/iterate');
-const { waiversCommand } = require('./commands/waivers');
+// Legacy `caws waivers` replaced by the vNext shell group `caws waiver`
+// registered via registerShellCommands() below. The legacy file is no
+// longer referenced from this entry point.
 const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
 // Legacy `caws gates` and `caws quality-gates` replaced by the vNext
@@ -517,55 +519,9 @@ program
   .option('-v, --verbose', 'Show detailed error information', false)
   .action(burnupCommand);
 
-// Waivers command group
-const waiversCmd = program.command('waivers').description('Manage CAWS quality gate waivers');
-
-// Waivers subcommands
-waiversCmd
-  .command('create')
-  .description('Create a new quality gate waiver')
-  .requiredOption('--title <title>', 'Waiver title')
-  .requiredOption(
-    '--reason <reason>',
-    'Reason for waiver (emergency_hotfix, legacy_integration, etc.)'
-  )
-  .requiredOption('--description <description>', 'Detailed description')
-  .requiredOption('--gates <gates>', 'Comma-separated list of gates to waive')
-  .requiredOption('--expires-at <date>', 'Expiration date (ISO 8601)')
-  .requiredOption('--approved-by <approver>', 'Approver name')
-  .requiredOption('--impact-level <level>', 'Impact level (low, medium, high, critical)')
-  .requiredOption('--mitigation-plan <plan>', 'Risk mitigation plan')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action((options) => waiversCommand('create', options));
-
-waiversCmd
-  .command('list')
-  .description('List all waivers')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action((options) => waiversCommand('list', options));
-
-waiversCmd
-  .command('show <id>')
-  .description('Show waiver details')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action((id, options) => waiversCommand('show', { ...options, id }));
-
-waiversCmd
-  .command('revoke <id>')
-  .description('Revoke a waiver')
-  .option('--revoked-by <name>', 'Person revoking the waiver')
-  .option('--reason <reason>', 'Revocation reason')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action((id, options) => waiversCommand('revoke', { ...options, id }));
-
-waiversCmd
-  .command('prune')
-  .description('Prune expired waivers (dry-run by default; use --apply to persist)')
-  .option('--expired', 'Prune active waivers whose expires_at is in the past')
-  .option('--apply', 'Actually transition status (default: dry run)')
-  .option('--json', 'Emit machine-readable JSON output')
-  .option('-v, --verbose', 'Show detailed error information', false)
-  .action((options) => waiversCommand('prune', options));
+// Legacy plural `waivers` command group was removed in slice 7a.4.
+// The vNext singular `caws waiver` group (create | list | show | revoke)
+// is registered via shell.registerShellCommands. No compatibility alias.
 
 // Workflow command group
 program
@@ -747,7 +703,7 @@ const VALID_COMMANDS = [
   'diagnose',
   'evaluate',
   'iterate',
-  'waivers',
+  'waiver',
   'workflow',
   'quality-monitor',
   'quality-gates',
