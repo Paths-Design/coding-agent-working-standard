@@ -247,6 +247,55 @@ describe('caws init — legacy residue refusal', () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/working-spec\.schema\.json/);
   });
+
+  // ----------------------------------------------------------------
+  // Slice 7c.1a — consistency fix
+  //
+  // findLegacyResidue must use isFile semantics so it agrees with
+  // observeInitResidue in doctor-snapshot.ts. A *directory* at the
+  // legacy path is a different problem (not yet a separately-modeled
+  // rule) and must not block init when 7c.2 doctor would also stay
+  // silent on it.
+  // ----------------------------------------------------------------
+  it('7c.1a: a DIRECTORY at .caws/working-spec.yaml does NOT trigger INIT_LEGACY_RESIDUE', () => {
+    repo = mkBareGitRepo('caws-7c1a-dir-residue-');
+    fs.mkdirSync(path.join(repo, '.caws/working-spec.yaml'), {
+      recursive: true,
+    });
+    const r = capture(runInitCommand, { cwd: repo });
+    // Init must succeed; it sees no FILE residue.
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toMatch(/store\.init\.legacy_residue/);
+    // Side-effect check: canonical layout was created.
+    expect(
+      fs.statSync(path.join(repo, '.caws/specs')).isDirectory()
+    ).toBe(true);
+    expect(
+      fs.statSync(path.join(repo, '.caws/policy.yaml')).isFile()
+    ).toBe(true);
+  });
+
+  it('7c.1a: a DIRECTORY at .caws/working-spec.schema.json does NOT trigger INIT_LEGACY_RESIDUE', () => {
+    repo = mkBareGitRepo('caws-7c1a-dir-schema-');
+    fs.mkdirSync(path.join(repo, '.caws/working-spec.schema.json'), {
+      recursive: true,
+    });
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toMatch(/store\.init\.legacy_residue/);
+  });
+
+  it('7c.1a: a real FILE at .caws/working-spec.yaml STILL triggers INIT_LEGACY_RESIDUE (regression guard)', () => {
+    repo = mkBareGitRepo('caws-7c1a-file-still-blocks-');
+    fs.mkdirSync(path.join(repo, '.caws'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, '.caws/working-spec.yaml'),
+      'id: LEGACY-1\n'
+    );
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/store\.init\.legacy_residue/);
+  });
 });
 
 // ============================================================

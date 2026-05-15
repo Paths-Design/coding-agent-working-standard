@@ -171,9 +171,20 @@ function existsCanonical(repoRoot: string): {
 }
 
 function findLegacyResidue(repoRoot: string): string[] {
+  // Use isFile semantics — must match observeInitResidue in
+  // doctor-snapshot.ts. A *file* at one of the legacy paths is
+  // residue; a *directory* at the same path is a different problem
+  // (not yet a separately-modeled rule) and must not be conflated
+  // with file-residue. Otherwise init refuses while doctor stays
+  // silent on the same project state.
   const found: string[] = [];
   for (const rel of LEGACY_PATHS) {
-    if (fs.existsSync(abs(repoRoot, rel))) found.push(abs(repoRoot, rel));
+    const p = abs(repoRoot, rel);
+    try {
+      if (fs.statSync(p).isFile()) found.push(p);
+    } catch {
+      // ENOENT or similar — not residue.
+    }
   }
   return found;
 }
