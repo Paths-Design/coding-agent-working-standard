@@ -59,6 +59,34 @@ export const DOCTOR_RULES = {
   // ---- templates (caller-supplied; severity preserved) ---------------------
   TEMPLATE_DRIFT: 'doctor.template.drift',
   TEMPLATE_WARNING: 'doctor.template.warning',
+
+  // ---- waivers --------------------------------------------------------------
+  /**
+   * A waiver has stored status='active' but expires_at <= now.
+   * Severity: warning. Expired waivers are inert (the runtime applicability
+   * check rejects them), so this is operational hygiene, not a corruption.
+   */
+  WAIVER_EXPIRED_ACTIVE: 'doctor.waiver.expired_active',
+  /**
+   * A waiver names a gate that is not present in `policy.gates`.
+   * Severity: error when policy is loaded (policy cannot govern this gate,
+   * so the waiver is structurally pointing at nothing). Severity: warning
+   * when no policy is loaded (we cannot compare authoritatively).
+   */
+  WAIVER_UNKNOWN_GATE: 'doctor.waiver.unknown_gate',
+  /**
+   * A waiver file failed to parse or validate. Doctor passes through the
+   * incoming diagnostic's severity unchanged so loader semantics
+   * (error vs info) survive.
+   */
+  WAIVER_MALFORMED_LOADED: 'doctor.waiver.malformed_loaded',
+  /**
+   * A `gate_evaluated` event credits a waiver_id whose current waiver
+   * record is `status: revoked`. Severity: warning. Auditors should know
+   * that a previously-applied suppression is no longer authorized; the
+   * historical event itself stays untouched (events are append-only).
+   */
+  WAIVER_REVOKED_REFERENCED: 'doctor.waiver.revoked_referenced',
 } as const;
 
 export type DoctorRule = (typeof DOCTOR_RULES)[keyof typeof DOCTOR_RULES];
@@ -72,4 +100,5 @@ export const DOCTOR_RULE_PREFIXES = [
   'doctor.event.',
   'doctor.policy.',
   'doctor.template.',
+  'doctor.waiver.',
 ] as const;

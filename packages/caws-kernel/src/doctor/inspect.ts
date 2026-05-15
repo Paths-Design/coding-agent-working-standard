@@ -441,6 +441,173 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // 8. Waivers (slice 7a.5).
+  //
+  // Three locally-derivable rules + one event-cross-reference rule. The
+  // store owns I/O; doctor never calls loadWaivers — it consumes the
+  // already-loaded `waivers` and the per-file `waiverDiagnostics` it
+  // received in the input.
+  //
+  //   doctor.waiver.expired_active     — active+past-expiry, warning.
+  //   doctor.waiver.unknown_gate       — gate not in policy.gates,
+  //                                      error if policy loaded, else warning.
+  //   doctor.waiver.malformed_loaded   — passthrough of waiverDiagnostics,
+  //                                      severity inherited from the diag.
+  //   doctor.waiver.revoked_referenced — gate_evaluated.data.waiver_ids
+  //                                      contains an id whose current
+  //                                      record is status='revoked'.
+  // -------------------------------------------------------------------------
+
+  if (input.waivers && input.waivers.length > 0) {
+    const policyGateIds: Set<string> | undefined = input.policy
+      ? new Set(Object.keys(input.policy.gates))
+      : undefined;
+
+    for (const w of input.waivers) {
+      // 8a. expired_active — stored status is 'active' but the wall clock
+      //     has passed expires_at.
+      if (w.status === 'active') {
+        const expMs = Date.parse(w.expires_at);
+        if (Number.isFinite(expMs) && expMs <= now.getTime()) {
+          findings.push(
+            finding(
+              DOCTOR_RULES.WAIVER_EXPIRED_ACTIVE,
+              'warning',
+              `Waiver ${w.id} has status=active but expires_at (${w.expires_at}) is in the past — it is inert at runtime but should be revoked or replaced.`,
+              {
+                subject: w.id,
+                narrowRepair: `\`caws waiver revoke ${w.id} --reason expired\` or replace it with a fresh waiver.`,
+                data: {
+                  waiver_id: w.id,
+                  expires_at: w.expires_at,
+                  now: now.toISOString(),
+                },
+              }
+            )
+          );
+        }
+      }
+
+      // 8b. unknown_gate — at least one gate the waiver names is not in
+      //     policy.gates. We emit one finding per (waiver, unknown gate)
+      //     pair so the repair is actionable.
+      if (policyGateIds !== undefined) {
+        for (const g of w.gates) {
+          if (!policyGateIds.has(g)) {
+            findings.push(
+              finding(
+                DOCTOR_RULES.WAIVER_UNKNOWN_GATE,
+                'error',
+                `Waiver ${w.id} references gate "${g}" which is not declared in policy.gates.`,
+                {
+                  subject: w.id,
+                  narrowRepair: `Either remove "${g}" from this waiver, or add a gate config for it in .caws/policy.yaml.`,
+                  data: { waiver_id: w.id, gate: g, policy_loaded: true },
+                }
+              )
+            );
+          }
+        }
+      } else {
+        // No policy loaded → we can't authoritatively compare. Emit a
+        // single warning per waiver naming all its gates so the operator
+        // knows doctor could not verify them.
+        findings.push(
+          finding(
+            DOCTOR_RULES.WAIVER_UNKNOWN_GATE,
+            'warning',
+            `Waiver ${w.id} names gates [${w.gates.join(', ')}] but no policy is loaded — gate-membership cannot be verified.`,
+            {
+              subject: w.id,
+              narrowRepair:
+                'Load .caws/policy.yaml so doctor can verify the waiver gate references.',
+              data: { waiver_id: w.id, gates: w.gates.slice(), policy_loaded: false },
+            }
+          )
+        );
+      }
+    }
+  }
+
+  // 8c. malformed_loaded — passthrough of per-file load diagnostics. Severity
+  //     is inherited from the source diagnostic (the loader knows whether a
+  //     given diagnostic is fatal or informational).
+  if (input.waiverDiagnostics && input.waiverDiagnostics.length > 0) {
+    for (const d of input.waiverDiagnostics) {
+      const severity: FindingSeverity = d.severity ?? 'error';
+      findings.push(
+        finding(
+          DOCTOR_RULES.WAIVER_MALFORMED_LOADED,
+          severity,
+          d.message,
+          {
+            ...(d.subject !== undefined ? { subject: d.subject } : {}),
+            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+            data: {
+              source_rule: d.rule,
+              source_authority: d.authority,
+              ...(d.data ?? {}),
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // 8d. revoked_referenced — walk gate_evaluated events for waiver_ids
+  //     that point at currently-revoked waivers. Skipped silently when
+  //     either side is absent: with no events we have nothing to cross-
+  //     reference; with no waivers we can't classify any reference.
+  if (
+    input.events !== undefined &&
+    input.events.length > 0 &&
+    input.waivers !== undefined &&
+    input.waivers.length > 0
+  ) {
+    const revokedById = new Map<string, (typeof input.waivers)[number]>();
+    for (const w of input.waivers) {
+      if (w.status === 'revoked') revokedById.set(w.id, w);
+    }
+    if (revokedById.size > 0) {
+      // Dedupe per (waiver_id, event_seq) pair so multiple identical
+      // events don't produce duplicate findings, but keep one finding
+      // per distinct waiver_id (the operator should see every revoked
+      // reference, not just the first).
+      const seenWaiverIds = new Set<string>();
+      for (const ev of input.events) {
+        if (ev.event !== 'gate_evaluated') continue;
+        const data = ev.data as { waiver_ids?: unknown };
+        const ids = data.waiver_ids;
+        if (!Array.isArray(ids)) continue;
+        for (const id of ids) {
+          if (typeof id !== 'string') continue;
+          if (!revokedById.has(id)) continue;
+          if (seenWaiverIds.has(id)) continue;
+          seenWaiverIds.add(id);
+          const revoked = revokedById.get(id)!;
+          findings.push(
+            finding(
+              DOCTOR_RULES.WAIVER_REVOKED_REFERENCED,
+              'warning',
+              `Waiver ${id} is currently revoked but was credited by at least one gate_evaluated event (seq ${ev.seq}).`,
+              {
+                subject: id,
+                narrowRepair:
+                  'No file repair — events are append-only. Audit whether the suppression remains acceptable historically.',
+                data: {
+                  waiver_id: id,
+                  first_event_seq: ev.seq,
+                  revoked_at: revoked.revocation?.revoked_at,
+                },
+              }
+            )
+          );
+        }
+      }
+    }
+  }
+
   return summarize(findings);
 }
 

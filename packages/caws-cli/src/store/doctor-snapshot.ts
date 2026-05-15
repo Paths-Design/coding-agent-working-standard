@@ -28,6 +28,7 @@ import { loadEvents } from './events-store';
 import { loadPolicy } from './policy-store';
 import { loadSpecs } from './specs-store';
 import type { StoreSnapshot } from './types';
+import { loadWaivers } from './waivers-store';
 import { loadWorktrees } from './worktrees-store';
 
 // ----------------------------------------------------------------------------
@@ -46,6 +47,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   const worktreesResult = loadWorktrees(cawsDir);
   const agentsResult = loadAgents(cawsDir);
   const eventsResult = loadEvents(cawsDir);
+  const waiversResult = loadWaivers(cawsDir);
 
   return {
     repoRoot,
@@ -59,6 +61,8 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     agents: isOk(agentsResult) ? agentsResult.value : {},
     events: isOk(eventsResult) ? eventsResult.value.events : [],
     eventWarnings: isOk(eventsResult) ? eventsResult.value.warnings : eventsResult.errors,
+    waivers: waiversResult.waivers,
+    waiverDiagnostics: waiversResult.diagnostics,
   };
 }
 
@@ -90,6 +94,8 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     agents: snapshot.agents,
     events: snapshot.events,
     ...(options.templates !== undefined ? { templates: options.templates } : {}),
+    waivers: snapshot.waivers,
+    waiverDiagnostics: snapshot.waiverDiagnostics,
     now: options.now,
     ...(options.staleAgentTtlMs !== undefined
       ? { staleAgentTtlMs: options.staleAgentTtlMs }

@@ -16,6 +16,7 @@ import type {
   Diagnostic,
   Policy,
   Spec,
+  Waiver,
   WorktreeRegistry,
 } from '@paths.design/caws-kernel';
 
@@ -89,4 +90,8 @@ export interface StoreSnapshot {
   readonly agents: AgentRegistry;
   readonly events: readonly ChainedEvent[];
   readonly eventWarnings: readonly Diagnostic[];
+  /** Waivers that parsed AND validated (slice 7a.5). */
+  readonly waivers: readonly Waiver[];
+  /** Per-file load diagnostics from loadWaivers (slice 7a.5). */
+  readonly waiverDiagnostics: readonly Diagnostic[];
 }

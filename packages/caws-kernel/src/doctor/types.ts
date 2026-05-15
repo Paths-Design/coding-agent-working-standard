@@ -17,6 +17,7 @@ import type { Diagnostic, Severity } from '../diagnostics/types';
 import type { ChainedEvent } from '../evidence/types';
 import type { Policy } from '../policy/types';
 import type { Spec } from '../spec/types';
+import type { Waiver } from '../waiver/types';
 import type { AgentRegistry, WorktreeRegistry } from '../worktree/types';
 
 // ----------------------------------------------------------------------------
@@ -89,6 +90,24 @@ export interface DoctorInput {
 
   /** Template validation results from the shell. */
   readonly templates?: readonly TemplateCheck[];
+
+  /**
+   * Waivers the shell has loaded and validated. Doctor consumes them to
+   * surface stale-active expiry, references to unknown policy gates, and
+   * (when events are available) `gate_evaluated` waiver_ids that point
+   * at currently-revoked waivers. The store owns I/O — doctor never
+   * calls `loadWaivers`.
+   */
+  readonly waivers?: readonly Waiver[];
+
+  /**
+   * Per-file load diagnostics produced by the shell when reading
+   * `.caws/waivers/`. Doctor passes these through as
+   * `doctor.waiver.malformed_loaded` findings, preserving the
+   * incoming severity. A malformed sibling MUST NOT cause valid
+   * waivers to disappear from `waivers` above.
+   */
+  readonly waiverDiagnostics?: readonly Diagnostic[];
 
   /** Injected current time. */
   readonly now: Date;
