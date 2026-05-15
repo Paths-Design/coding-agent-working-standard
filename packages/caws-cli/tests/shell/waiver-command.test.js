@@ -403,8 +403,13 @@ describe('caws waiver — registration surface', () => {
     expect(help).not.toMatch(/\bprune\b/);
   });
 
-  it('sidecar waiver-draft remains registered (we do not touch it)', () => {
-    const help = runHelp(['sidecar', '--help']);
-    expect(help).toMatch(/waiver-draft/);
+  // Slice 7a.4 originally guarded that `sidecar waiver-draft` survived
+  // the legacy plural `waivers` removal. Under v11.0.0 cutover (slice
+  // 8a3.4), the entire `caws sidecar` group is removed — A1 keeps the
+  // surface narrow and `sidecar` is not part of the governed core. The
+  // assertion is now inverted: `sidecar` must be absent from --help.
+  it('sidecar group is removed from the v11 surface (A1)', () => {
+    const help = runHelp(['--help']);
+    expect(help).not.toMatch(/^\s*sidecar\b/m);
   });
 });
