@@ -1,0 +1,317 @@
+---
+doc_id: caws-vnext-command-surface
+authority: architecture
+status: draft
+title: CAWS vNext command surface (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+governs:
+  modules:
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/shell/
+    - packages/caws-cli/src/store/
+    - packages/caws-cli/src/commands/
+    - packages/caws-kernel/src/
+  schemas:
+    - packages/caws-kernel/src/schemas/events/
+---
+
+# CAWS vNext command surface (v11.0.0)
+
+**Status:** draft, awaiting Slice 8a0 review
+**Branch:** `caws-next` @ `52d6165`
+**Authors:** vNext rewrite team
+**Last updated:** 2026-05-15
+
+This document is the doctrine source for the v11.0.0 cutover. It captures
+the cutover posture, the command surface that ships in v11, the legacy
+commands that are removed, and the architectural invariants the rewrite
+established.
+
+If a future change conflicts with anything below, fix the change or revise
+this doc — do not silently regress an invariant.
+
+---
+
+## 1. Cutover posture
+
+**A1 chosen.**
+
+> v11.0.0 is the governed core.
+> v11.0.0 deliberately excludes spec/worktree lifecycle.
+> Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
+> vNext lifecycle returns in v11.1.
+
+### Why A1
+
+The vNext rewrite established a coherent kernel/store/shell substrate
+across slices 1–7c, including:
+
+- pure kernel (no fs/path/env/clock) for spec/policy/doctor/waiver logic
+- store layer that owns all I/O, atomic writes, hash-chained event log
+- shell commands that compose store snapshots into observability and
+  governance surfaces (`init`, `doctor`, `status`, `scope`, `claim`,
+  `gates`, `waiver`, `evidence`)
+
+It did **not** rewrite the legacy spec or worktree lifecycle commands
+(`specs create/close/archive/migrate`, `worktree create/destroy/merge`).
+Those remain on the legacy code path.
+
+The two viable cutover postures were:
+
+- **A1** — ship the governed core as v11.0.0; defer lifecycle to v11.1.
+- **A2** — block cutover until vNext spec/worktree lifecycle exists.
+- **C** — keep legacy lifecycle alongside vNext (mixed-regime).
+
+A1 is chosen because:
+
+- A2 indefinitely delays cutover and lets `caws-next` rot
+- C re-introduces the exact mixed-regime hazard the rewrite was meant to
+  eliminate (two authority paths writing to overlapping state files)
+- A1 is honest about the scope of v11.0.0: it is a strong governance
+  core, not yet a complete lifecycle replacement
+
+### v11.1 plan (out of scope for v11.0.0)
+
+vNext spec lifecycle (`spec create/close/archive`) and worktree lifecycle
+(`worktree create/destroy/merge`) will be reintroduced as vNext shell
+commands in v11.1. Until then, projects that need those commands should
+pin to `caws-cli@^10.2.x`.
+
+---
+
+## 2. v11.0.0 command surface (kept)
+
+These eight command groups are the canonical authority surface for
+v11.0.0. Every one is implemented in `packages/caws-cli/src/shell/`,
+composed atop `packages/caws-cli/src/store/` and
+`packages/caws-kernel/`.
+
+| Command | Purpose |
+|---|---|
+| `caws init` | Bootstrap canonical vNext `.caws/` state. Idempotent. Refuses legacy residue. No `--force`. |
+| `caws doctor` | Drift detection over `.caws/` state; exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
+| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always observability — never mutates. |
+| `caws scope show <path>` | Explain the scope decision for `<path>`; always exits 0. |
+| `caws scope check <path>` | Enforce the scope decision for `<path>`; exits 0 on admit, 1 otherwise. |
+| `caws claim [--takeover]` | Surface or take ownership of the current worktree; writes `prior_owners` audit on takeover. |
+| `caws gates run --spec <id>` | Run quality gates against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
+| `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
+| `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+
+### Help banner (built CLI)
+
+```
+$ caws --help
+Commands:
+  init      Bootstrap the canonical vNext .caws/ project state...
+  doctor    Run drift detection against the current .caws/ state
+  scope     Evaluate file paths against the bound spec scope
+  status    Read-only dashboard...
+  claim     Surface ownership of the current worktree...
+  gates     Run quality gates against the current changes (policy-driven)
+  evidence  Record typed evidence events into .caws/events.jsonl
+  waiver    Manage CAWS waivers...
+```
+
+Exactly these eight groups, plus the auto-generated `help`.
+
+---
+
+## 3. Removed in v11
+
+The legacy command surface registered in `packages/caws-cli/src/index.js`
+ships in v10.2.x but is **removed in v11.0.0**. This section catalogs
+every removed group, the reason category, and what (if anything) replaces
+it.
+
+Reason categories:
+
+- **AC** — *authority conflict.* The legacy command writes to overlapping
+  state, calls `appendEvent` on a parallel chain, or interprets specs
+  through the legacy `spec-resolver` (which falls back to
+  `working-spec.yaml`). Mixed-regime hazard.
+- **LG** — *unsupported lifecycle gap under A1.* The command is part of
+  the spec or worktree lifecycle; v11.0.0 explicitly does not ship a
+  vNext replacement. Returns in v11.1.
+- **PNC** — *peripheral / non-core.* The command is not part of the v11
+  authority surface and is not depended on by the governed core.
+- **PE** — *legacy provenance/evidence conflict.* The command writes to
+  `.caws/provenance/`, which is superseded by `.caws/events.jsonl`.
+- **SH** — *old scaffold/hook risk.* The command installs or generates
+  legacy regime artifacts (git hooks that call removed commands, scaffold
+  templates that write `working-spec.yaml`, etc.).
+
+| Command | Handler | Mutates? | State touched | Reason | Replacement |
+|---|---|---|---|---|---|
+| `scaffold` | `src/scaffold/index.js` (793 LOC) | yes | `.caws/`, `.git/hooks/`, IDE configs, gitignore | **SH** | `caws init` (governed core only) |
+| `validate \| verify` | `src/commands/validate.js` (357 LOC) | yes (`appendEvent` on legacy log) | `working-spec.yaml` fallback via `spec-resolver`; legacy `events.jsonl` writer | **AC** | `caws doctor` covers spec health; v11.1 will re-add explicit validation |
+| `archive <change-id>` | `src/commands/archive.js` (500 LOC) | yes | `.caws/provenance/chain.json`, `working-spec.yaml` | **PE + LG** | (none in v11.0; provenance superseded by events.jsonl) |
+| `specs list/create/show/update/delete/close/archive/conflicts/migrate/types` | `src/commands/specs.js` (1656 LOC) | yes (`appendEvent` on legacy log) | `.caws/specs/<id>.yaml`, `.caws/specs/registry.json`, legacy `working-spec.yaml` (migrate) | **LG + AC** | v11.1 vNext spec lifecycle; for v11.0 use direct YAML edits + `caws doctor` |
+| `sidecar drift/gaps/waiver-draft/provenance` | `src/commands/sidecar.js` (74 LOC) | no (read + advisory) | reads via `sidecars/` subsystem | **PNC** | (none; advisory only) |
+| `mode current/set/compare/recommend/details` | `src/commands/mode.js` (269 LOC) | yes | `.caws/mode.yaml` (separate state file) | **PNC + AC** | (none; complexity tier metadata not in v11) |
+| `tutorial [type]` | `src/commands/tutorial.js` (480 LOC) | no | none | **PNC** | (none) |
+| `plan <action>` | `src/commands/plan.js` (438 LOC) | yes (writes plan markdown to `--output`) | user-specified path | **PNC** | (none) |
+| `worktree create/list/destroy/merge/prune/repair/bind/claim` | `src/commands/worktree.js` (502 LOC) | yes | `.caws/worktrees.json`, git worktrees | **LG** | v11.1 vNext worktree lifecycle; `caws claim` handles ownership |
+| `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | inspect; **PNC** | retained data is in registry; `caws status` shows partial info |
+| `session start/checkpoint/end/list/show/briefing` | `src/commands/session.js` (312 LOC) | yes | `.caws/sessions/`, `.caws/sessions.json` (separate state) | **PNC + AC** | v11 doctor does not observe sessions; re-add later if needed |
+| `parallel setup/status/merge/teardown` | `src/commands/parallel.js` (242 LOC) | yes | `.caws/parallel/...` (separate state); creates worktrees | **LG** | v11.1 lifecycle work |
+| `templates [subcommand]` | `src/commands/templates.js` (237 LOC) | no | reads `templates/` | **PNC** | (none) |
+| `diagnose [--fix]` | `src/commands/diagnose.js` (525 LOC) | yes (`--fix`) | various; advertises legacy commands as "core" | **AC** | `caws doctor` is the v11 diagnostic surface |
+| `verify-acs` | `src/commands/verify-acs.js` (443 LOC) | yes (`appendEvent` on legacy log) | spec-resolver legacy fallback; legacy `events.jsonl` writer | **AC** | (none in v11.0; planned for v11.1 alongside spec lifecycle) |
+| `evaluate [spec-file]` | `src/commands/evaluate.js` (314 LOC) | yes (`appendEvent` on legacy log) | spec-resolver legacy fallback; legacy `events.jsonl` writer | **AC** | (none in v11.0) |
+| `iterate [spec-file]` | `src/commands/iterate.js` (417 LOC) | no (read + advisory) | spec-resolver legacy fallback | **AC** | (none in v11.0) |
+| `burnup [spec-file]` | `src/commands/burnup.js` (198 LOC) | yes (writes report) | spec-resolver legacy fallback | **AC** | (none in v11.0) |
+| `workflow <type>` | `src/commands/workflow.js` (243 LOC) | no (advisory; advertises `caws provenance update`) | spec-resolver | **AC + PNC** | (none) |
+| `quality-monitor <action>` | `src/commands/quality-monitor.js` (284 LOC) | varies | spec-resolver | **PNC** | `caws gates run` is the v11 gate surface |
+| `tool <tool-id>` | `src/commands/tool.js` (136 LOC) | varies (executes registered tools) | none directly | **PNC** | (none) |
+| `test-analysis <subcommand>` | `src/test-analysis.js` (~?) | reads | `working-spec.yaml` ref | **AC + PNC** | (none) |
+| `provenance update/show/verify/analyze-ai/init` | `src/commands/provenance.js` (1143 LOC) | yes | `.caws/provenance/chain.json` (separate hash chain), legacy `working-spec.yaml` fallback | **PE + AC** | `.caws/events.jsonl` is the v11 audit chain |
+| `hooks install/remove/status` | `src/scaffold/git-hooks.js` (965 LOC) + index.js inline | yes | `.git/hooks/{pre-commit,post-commit,pre-push,commit-msg}` — generated hooks call `caws validate` and `caws provenance update` | **SH** | (none in v11.0; users wire their own hooks against `caws gates run` if desired) |
+
+### Removal counts
+
+- 23 legacy command groups removed
+- 8 vNext command groups remain
+- ~10,650 LOC of legacy handler code (kept on disk for archaeology in v11.0; deleted in v11.1 per Slice 8e)
+
+---
+
+## 4. State files
+
+### Owned by v11
+
+| File | Owner | Notes |
+|---|---|---|
+| `.caws/specs/<id>.yaml` | store + doctor + scope | Multi-spec authority. No project-level `working-spec.yaml`. |
+| `.caws/specs/registry.json` | store | Index over `specs/`. Optional; doctor handles missing/malformed. |
+| `.caws/policy.yaml` | store | Single source of truth for gate `mode` (block/warn/skip). |
+| `.caws/waivers/<id>.yaml` | store + waiver command | Waivers filter violations; never mutate gate mode. |
+| `.caws/worktrees.json` | store + claim | Worktree registry; v11 commands read but do not create new worktrees. |
+| `.caws/agents.json` | store | Agent session registry. |
+| `.caws/events.jsonl` | **store ONLY** (`appendEvent` in `events-store.ts`) | Hash-chained, append-only. First `appendEvent` creates the file under lock. Never required at rest. |
+
+### Refused by v11 (legacy residue)
+
+| File | Detection | Action |
+|---|---|---|
+| `.caws/working-spec.yaml` | `init-store.findLegacyResidue` and `doctor-snapshot.observeInitResidue` (both via `fs.statSync().isFile()`) | `caws init` refuses with `INIT_LEGACY_RESIDUE`; `caws doctor` emits `doctor.init.legacy_working_spec_present` (error). |
+| `.caws/working-spec.schema.json` | same | `caws doctor` emits `doctor.init.legacy_working_spec_schema_present` (error). |
+| `.caws/provenance/` | (not yet a doctor rule) | Superseded by `events.jsonl`. Future: doctor rule to flag presence. |
+| `.caws/sessions/`, `.caws/sessions.json` | (no v11 awareness) | Created only by removed `session` command. Inert in v11. |
+| `.caws/parallel/...` | (no v11 awareness) | Created only by removed `parallel` command. Inert in v11. |
+| `.caws/mode.yaml` | (no v11 awareness) | Created only by removed `mode` command. Inert in v11. |
+| `.caws/quality-gates-report.json` | (no v11 awareness) | Cache file; can be deleted manually. |
+
+---
+
+## 5. Exit-code conventions
+
+| Code | Meaning |
+|---|---|
+| `0` | Success / observation. The command did what was asked, or surfaced state without mutating. |
+| `1` | Domain failure. A gate failed, doctor found drift, validation rejected input, scope refused admit. The command worked correctly and reported the failure. |
+| `2` | Composition failure. Could not establish preconditions: not in a git repo, cannot read `.caws/`, missing required tooling. |
+
+Doctor specifically: exit 0 when clean, 1 when findings or load errors are
+present, 2 on hard composition failure (e.g., not a git repo).
+
+Status specifically: always exits 0. Status is observability — it does
+not gate other operations.
+
+Scope: `show` always 0; `check` 0 on admit, 1 on refuse, 2 on composition
+failure.
+
+---
+
+## 6. Architectural invariants
+
+These are non-negotiable for v11. A change that violates one of these is
+either a regression to fix, or a deliberate doctrine shift requiring an
+update to this document.
+
+1. **`events.jsonl` is written ONLY through `appendEvent` in
+   `packages/caws-cli/src/store/events-store.ts`.** That function
+   acquires `events.jsonl.lock`, computes the hash chain, validates the
+   event against its JSON Schema, and writes atomically. No other code
+   in v11 writes to that file.
+
+2. **`policy.yaml` owns gate `mode` (`block` / `warn` / `skip`).**
+   Waivers filter violations *out of* the disposition calculation; they
+   do not change the gate's policy mode. Removing all waiver matches
+   does not magically downgrade a `block` gate to `warn`.
+
+3. **Doctor is pure.** `packages/caws-kernel/src/doctor/` has no
+   `fs`/`path`/`process.env`/`Date.now()`/`new Date()` access in
+   executable code. Time enters via the injected `now: Date` field on
+   `DoctorInput`; everything else is constructed by the store.
+
+4. **Missing != malformed.** Registry diagnostics distinguish a missing
+   file (no diagnostic, treated as empty) from a malformed file (warning
+   or error diagnostic carrying the cause). The same distinction applies
+   to specs and waivers.
+
+5. **`events.jsonl` is never required at rest.** The first call to
+   `appendEvent` creates it. Doctor and status do not require its
+   existence; they only require its hash chain to verify when present.
+
+6. **Init is non-destructive.** `caws init` is idempotent; it never
+   overwrites existing files except to add missing canonical layout
+   pieces. It never creates `events.jsonl`. It refuses if legacy residue
+   is detected.
+
+7. **Status is observability.** `caws status` never mutates. Running it
+   any number of times produces no `.caws/` byte changes (mutation-
+   negative test in `tests/shell/doctor-status-7c3.test.js`).
+
+---
+
+## 7. Migration guidance for legacy users
+
+Projects upgrading from `caws-cli@10.2.x` to `caws-cli@11.0.0` should:
+
+### Mandatory
+
+1. **Migrate from `working-spec.yaml` to per-feature specs.** Move the
+   contents of `.caws/working-spec.yaml` into `.caws/specs/<id>.yaml`
+   files. v11's `caws init` and `caws doctor` refuse to run alongside
+   `working-spec.yaml`. (The legacy `caws specs migrate` command is
+   removed in v11; perform the migration on v10.2.x first, or do it
+   manually.)
+2. **Delete `.caws/working-spec.schema.json`** if present. Schemas are
+   now bundled in the kernel.
+3. **Remove `.caws/provenance/`.** The hash-chained audit trail moves to
+   `.caws/events.jsonl`. Old provenance data is not migrated; archive it
+   if you need historical access.
+
+### Recommended
+
+4. **Replace generated git hooks.** v10.2.x `caws hooks install` wrote
+   `.git/hooks/{pre-commit,post-commit,pre-push,commit-msg}` that call
+   removed commands (`caws validate`, `caws provenance update`). Either
+   remove those hooks or rewrite them to call v11 surfaces (`caws
+   doctor`, `caws gates run`, etc.).
+5. **Audit `caws scaffold` artifacts.** Templates and IDE integrations
+   installed by `caws scaffold` may reference removed commands. Check
+   `.cursorrules`, `.claude/`, etc.
+
+### If you need spec or worktree lifecycle commands in v11.0
+
+Pin to `caws-cli@^10.2.x` until v11.1 ships vNext lifecycle commands.
+The two CLIs cannot coexist in the same project — they write to
+overlapping state.
+
+---
+
+## 8. References
+
+- `packages/caws-kernel/` — pure logic
+- `packages/caws-cli/src/store/` — I/O and snapshot composition
+- `packages/caws-cli/src/shell/` — vNext command surface
+- `packages/caws-cli/src/commands/` — legacy handlers (kept on disk for
+  v11.0; deleted in v11.1 per Slice 8e)
+- `packages/caws-cli/src/index.js` — registration; subject to Slice 8a3
+  removals
+- `.caws/events.jsonl` schema: `packages/caws-kernel/src/schemas/events/`
+- Slice closure notes: see commits `52d6165`, `2ed4a6f`, `4286c20`,
+  `157df5a`, `7dfd865`, `8f8ac56`, `2ed7435`, `8f33580`
