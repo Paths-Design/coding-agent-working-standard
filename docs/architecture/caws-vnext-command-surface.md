@@ -18,8 +18,8 @@ governs:
 
 # CAWS vNext command surface (v11.0.0)
 
-**Status:** draft, awaiting Slice 8a0 review
-**Branch:** `caws-next` @ `52d6165`
+**Status:** active (Slice 8a3 removals complete; awaiting 8a4 audit)
+**Branch:** `caws-next` (post-8a3.5)
 **Authors:** vNext rewrite team
 **Last updated:** 2026-05-15
 

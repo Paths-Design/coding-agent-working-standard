@@ -24,124 +24,50 @@ const { CLI_VERSION } = require('./config');
 // Import error handling
 const { handleCliError, findSimilarCommand } = require('./error-handler');
 
-// Import command handlers
-// Legacy top-level `caws init` replaced by the vNext shell command
-// registered via registerShellCommands() below. The legacy file
-// (./commands/init.js) is left on disk; it's no longer referenced
-// here. The `provenance init` subcommand is unrelated and unaffected.
-// Legacy `caws validate`, `caws verify-acs`, `caws evaluate`,
-// `caws iterate`, `caws diagnose`, `caws burnup` removed in slice
-// 8a3.3 (v11.0.0 cutover). All authority-conflict commands:
-//   - validate / verify-acs / evaluate use legacy spec-resolver
-//     (working-spec.yaml fallback) and write via legacy appendEvent.
-//   - diagnose advertises removed commands ("caws validate, caws
-//     quality-gates, caws provenance") as "core" in its fix guidance.
-//   - iterate / burnup are advisory but pull through the same legacy
-//     spec-resolver chain.
-// Spec health surfaces in v11 via `caws doctor`; gate evaluation via
-// `caws gates run`. v11.1 will add explicit validation flow.
-// Legacy `caws provenance` removed in slice 8a3.1 (v11.0.0 cutover).
-// The hash-chained audit trail moves to `.caws/events.jsonl` written
-// only by the vNext store. No compatibility alias.
+// v11.0.0 entrypoint. The CLI surface is registered exclusively
+// through `registerShellCommands(program)` further down. All legacy
+// command groups, imports, public exports, and startup side effects
+// were removed in slices 8a3.1–8a3.5. See
+// docs/architecture/caws-vnext-command-surface.md for the doctrine,
+// removal table, and the canonical v11 surface.
 //
-// Legacy peripherals (`caws sidecar`, `mode`, `tutorial`, `plan`,
-// `templates`, `workflow`, `quality-monitor`, `tool`, `test-analysis`,
-// `agents`, `session`) removed in slice 8a3.4 — none are part of the
-// governed core under A1.
-//
-// Legacy `caws status` replaced by the vNext shell command registered
-// via registerShellCommands() below. See packages/caws-cli/src/shell/.
-// Legacy `caws waivers` replaced by the vNext shell group `caws waiver`
-// registered via registerShellCommands() below. The legacy file is no
-// longer referenced from this entry point.
-// Legacy `caws gates` and `caws quality-gates` replaced by the vNext
-// shell group registered via registerShellCommands() below.
-// Legacy `caws archive`, `caws specs`, `caws worktree`, `caws parallel`
-// removed in slice 8a3.2 (v11.0.0 cutover). Reason categories:
-//   - archive: PE+LG (writes .caws/provenance/chain.json; lifecycle gap)
-//   - specs:   LG+AC (lifecycle gap; appendEvent on legacy log; legacy
-//              spec-resolver fallback to working-spec.yaml)
-//   - worktree: LG (lifecycle gap; binding overlap with vNext claim)
-//   - parallel: LG (lifecycle gap; orchestrates multiple worktrees)
-// vNext lifecycle returns in v11.1; pin to caws-cli@^10.2.x for the
-// legacy lifecycle CLI.
-// Legacy scope command replaced by the vNext shell group registered
-// via registerShellCommands() below. See packages/caws-cli/src/shell/.
-
-// Legacy `caws scaffold` and `caws hooks` removed in slice 8a3
-// (v11.0.0 cutover). Both installed legacy regime artifacts (templates
-// referencing removed commands; git hooks calling `caws validate` /
-// `caws provenance update`). v11 ships only the governed core; users
-// hand-wire any project tooling against vNext surfaces.
-//
-// Legacy `generateWorkingSpec` / `validateGeneratedSpec` (legacy single-
-// spec generator) also removed — these were exported from this module's
-// public API in v10.x; the v11 cutover is a breaking change consistent
-// with A1 (no compatibility for legacy-spec generation).
+// What v11 ships: init, doctor, status, scope, claim, gates,
+// evidence, waiver. Nothing else.
 
 // Initialize global configuration
 const program = new Command();
 
-// Setup CLI program
 program
   .name('caws')
   .description('CAWS - Coding Agent Workflow System CLI')
   .version(CLI_VERSION)
-  .showHelpAfterError(false); // We'll show better suggestions instead
+  .showHelpAfterError(false);
 
-// Legacy top-level `caws init` was removed in slice 7b. The vNext
-// `caws init` is registered via shell.registerShellCommands. No
-// compatibility alias, no feature flag. The unrelated `provenance init`
-// subcommand below is untouched.
-
-// Legacy `caws validate` (and `verify` alias) removed in slice 8a3.3.
-// Used legacy spec-resolver (working-spec.yaml fallback) and wrote
-// gate_evaluated events via legacy appendEvent on a parallel chain.
-// Spec health surfaces in v11 via `caws doctor`.
-
-// `caws gates run` is registered via registerShellCommands() below
-// (vNext policy-driven gate runner). The legacy `gates` group and the
-// `quality-gates` alias were removed in Slice 6c — no env-var flag,
-// no compatibility alias.
-
-// Status command
-// `caws status` is registered via registerShellCommands() below
-// (vNext read-only dashboard). The legacy registration was removed in
-// Slice 6b — no env-var flag, no alias.
-
-// Legacy `caws archive` and `caws specs` removed in slice 8a3.2.
-// archive: writes .caws/provenance/chain.json (PE conflict).
-// specs: appendEvent on legacy log; spec-resolver legacy fallback.
-// vNext lifecycle returns in v11.1.
-
-// Legacy peripherals removed in slice 8a3.4 (v11.0.0 cutover):
-//   sidecar, mode, tutorial, plan, agents, session, templates,
-//   workflow, quality-monitor, tool, test-analysis
-// None are part of the governed core under A1. Where overlap with
-// vNext exists (e.g. `agents` overlaps with `caws status`/`caws claim`
-// panels), use the vNext surface. Source files left on disk for
-// archaeology; deleted in 8e.
-
-// Legacy `caws hooks` group removed in slice 8a3 (v11.0.0 cutover).
-// Generated hooks called removed commands (`caws validate`, `caws
-// provenance update`); v11 does not ship git-hook installation. Users
-// wire their own hooks against vNext surfaces (`caws doctor`, `caws
-// gates run`) if desired.
-
-// Error handling
-// Custom error event handler for better messages
 program.configureHelp({
-  // Override error display
-  showError: () => {}, // Suppress default error display
+  showError: () => {},
 });
 
+// v11.0.0 surface: exactly the 8 vNext command groups registered by
+// `registerShellCommands(program)`. Used by `findSimilarCommand` for
+// unknown-command suggestions. Must match `node dist/index.js --help`
+// output (excluding Commander's auto-generated `help` row).
+//
+// Slice 8a3.5 reconciliation: dropped 24 legacy entries removed in
+// 8a3.1–8a3.4 plus the stale `'quality-gates'` alias (alias was
+// removed in slice 6c but the suggester entry was never cleaned).
+// Added the 5 vNext groups that were missing from the suggester:
+// 'agents' (now removed), 'claim', 'doctor', 'evidence',
+// 'test-analysis' (now removed). Final list is exactly the 8 vNext
+// groups currently registered.
 const VALID_COMMANDS = [
+  'claim',
+  'doctor',
+  'evidence',
+  'gates',
   'init',
+  'scope',
   'status',
   'waiver',
-  'quality-gates',
-  'gates',
-  'scope',
 ];
 
 program.exitOverride((err) => {
@@ -184,12 +110,6 @@ program.exitOverride((err) => {
 
     console.error(chalk.red(`\nUnknown option: ${option}`));
     console.error(chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`));
-
-    // Provide specific suggestions for common mistakes
-    if (option === '--suggestions' || option === '--suggest') {
-      console.error(chalk.yellow('Note: Validation includes suggestions by default'));
-      console.error(chalk.yellow('   Just run: caws validate'));
-    }
 
     console.error(
       chalk.blue(
@@ -269,12 +189,6 @@ if (require.main === module) {
       console.error(
         chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`)
       );
-
-      // Provide specific suggestions for common mistakes
-      if (option === '--suggestions' || option === '--suggest') {
-        console.error(chalk.yellow('Note: Validation includes suggestions by default'));
-        console.error(chalk.yellow('   Just run: caws validate'));
-      }
 
       console.error(
         chalk.blue(
