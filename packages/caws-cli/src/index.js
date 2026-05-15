@@ -49,14 +49,19 @@ const { workflowCommand } = require('./commands/workflow');
 const { qualityMonitorCommand } = require('./commands/quality-monitor');
 // Legacy `caws gates` and `caws quality-gates` replaced by the vNext
 // shell group registered via registerShellCommands() below.
-const { archiveCommand } = require('./commands/archive');
-const { specsCommand } = require('./commands/specs');
+// Legacy `caws archive`, `caws specs`, `caws worktree`, `caws parallel`
+// removed in slice 8a3.2 (v11.0.0 cutover). Reason categories:
+//   - archive: PE+LG (writes .caws/provenance/chain.json; lifecycle gap)
+//   - specs:   LG+AC (lifecycle gap; appendEvent on legacy log; legacy
+//              spec-resolver fallback to working-spec.yaml)
+//   - worktree: LG (lifecycle gap; binding overlap with vNext claim)
+//   - parallel: LG (lifecycle gap; orchestrates multiple worktrees)
+// vNext lifecycle returns in v11.1; pin to caws-cli@^10.2.x for the
+// legacy lifecycle CLI.
 const { modeCommand } = require('./commands/mode');
 const { tutorialCommand } = require('./commands/tutorial');
 const { planCommand } = require('./commands/plan');
-const { worktreeCommand } = require('./commands/worktree');
 const { sessionCommand } = require('./commands/session');
-const { parallelCommand } = require('./commands/parallel');
 const { verifyAcsCommand } = require('./commands/verify-acs');
 const { sidecarCommand } = require('./commands/sidecar');
 // Legacy scope command replaced by the vNext shell group registered
@@ -112,82 +117,10 @@ program
 // (vNext read-only dashboard). The legacy registration was removed in
 // Slice 6b — no env-var flag, no alias.
 
-// Archive command
-program
-  .command('archive <change-id>')
-  .description('Archive completed change')
-  .option('--spec-id <id>', 'Feature-specific spec ID (e.g., user-auth)')
-  .option('-s, --spec <path>', 'Path to spec file (explicit override)')
-  .option('-f, --force', 'Force archive even if criteria not met', false)
-  .option('--dry-run', 'Preview archive without performing it', false)
-  .action(archiveCommand);
-
-// Specs command group
-const specsCmd = program.command('specs').description('Manage multiple CAWS spec files');
-
-// Specs subcommands
-specsCmd
-  .command('list')
-  .description('List all available specs')
-  .action(() => specsCommand('list', {}));
-
-specsCmd
-  .command('create <id>')
-  .description('Create a new spec (with conflict resolution)')
-  .option('-t, --type <type>', 'Spec type (feature, fix, refactor, chore, docs)', 'feature')
-  .option('--title <title>', 'Spec title')
-  .option('--tier <tier>', 'Risk tier (T1, T2, T3)', 'T3')
-  .option('--mode <mode>', 'Development mode', 'development')
-  .option('-f, --force', 'Override existing specs without confirmation', false)
-  .option('-i, --interactive', 'Ask for confirmation on conflicts', false)
-  .action((id, options) => specsCommand('create', { id, ...options }));
-
-specsCmd
-  .command('show <id>')
-  .description('Show detailed spec information')
-  .action((id) => specsCommand('show', { id }));
-
-specsCmd
-  .command('update <id>')
-  .description('Update spec properties')
-  .option('-s, --status <status>', 'Spec status (draft, active, in_progress, completed, closed, archived)')
-  .option('--title <title>', 'Spec title')
-  .option('--description <desc>', 'Spec description')
-  .action((id, options) => specsCommand('update', { id, ...options }));
-
-specsCmd
-  .command('delete <id>')
-  .description('Delete a spec')
-  .action((id) => specsCommand('delete', { id }));
-
-specsCmd
-  .command('close <id>')
-  .description('Close a completed spec (removes scope enforcement)')
-  .action((id) => specsCommand('close', { id }));
-
-specsCmd
-  .command('archive <id>')
-  .description('Archive a spec — move to .caws/specs/.archive/ and flip status to archived')
-  .action((id) => specsCommand('archive', { id }));
-
-specsCmd
-  .command('conflicts')
-  .description('Check for scope conflicts between specs')
-  .action(() => specsCommand('conflicts', {}));
-
-specsCmd
-  .command('migrate')
-  .description('Migrate from legacy working-spec.yaml to feature-specific specs')
-  .option('-i, --interactive', 'Interactive feature selection', false)
-  .option('-f, --features <features>', 'Comma-separated list of features to migrate', (value) =>
-    value.split(',')
-  )
-  .action((options) => specsCommand('migrate', options));
-
-specsCmd
-  .command('types')
-  .description('Show available spec types')
-  .action(() => specsCommand('types', {}));
+// Legacy `caws archive` and `caws specs` removed in slice 8a3.2.
+// archive: writes .caws/provenance/chain.json (PE conflict).
+// specs: appendEvent on legacy log; spec-resolver legacy fallback.
+// vNext lifecycle returns in v11.1.
 
 // Sidecar command group
 const sidecarCmd = program.command('sidecar').description('Advisory analysis tools (drift, gaps, waivers, provenance)');
@@ -270,67 +203,9 @@ program
   .option('--output <path>', 'Output file path for the plan')
   .action((action, options) => planCommand(action, options));
 
-// Worktree command group
-const worktreeCmd = program
-  .command('worktree')
-  .description('Manage git worktrees for agent scope isolation');
-
-worktreeCmd
-  .command('create <name>')
-  .description('Create a new isolated worktree')
-  .option('--scope <patterns>', 'Sparse checkout patterns (comma-separated, e.g., "src/auth/**")')
-  .option('--base-branch <branch>', 'Base branch to create from')
-  .option('--spec-id <id>', 'Associated spec ID')
-  .action((name, options) => worktreeCommand('create', { name, ...options }));
-
-worktreeCmd
-  .command('list')
-  .description('List all managed worktrees')
-  .action(() => worktreeCommand('list'));
-
-worktreeCmd
-  .command('destroy <name>')
-  .description('Destroy a worktree')
-  .option('--delete-branch', 'Also delete the associated branch', false)
-  .option('--force', 'Force removal even if worktree is dirty', false)
-  .action((name, options) => worktreeCommand('destroy', { name, ...options }));
-
-worktreeCmd
-  .command('merge <name>')
-  .description('Merge a worktree branch back to base (destroy + merge + cleanup)')
-  .option('--dry-run', 'Preview conflicts without merging', false)
-  .option('--message <msg>', 'Custom merge commit message')
-  .option('--no-delete-branch', 'Keep the branch after merging')
-  .option('--takeover', 'Force takeover of a foreign worktree claim (writes prior_owners audit)', false)
-  .action((name, options) => worktreeCommand('merge', { name, ...options }));
-
-worktreeCmd
-  .command('prune')
-  .description('Clean up stale worktree entries')
-  .option('--max-age <days>', 'Remove entries older than N days', '30')
-  .option('--force', 'Allow pruning entries owned by other sessions', false)
-  .action((options) => worktreeCommand('prune', options));
-
-worktreeCmd
-  .command('repair')
-  .description('Reconcile registry with git and filesystem state')
-  .option('--dry-run', 'Report only, do not persist changes', false)
-  .option('--prune', 'Remove destroyed, stale-merged, and missing entries', false)
-  .option('--force', 'Allow pruning entries owned by other sessions', false)
-  .action((options) => worktreeCommand('repair', options));
-
-worktreeCmd
-  .command('bind <spec-id>')
-  .description('Bind a spec to this worktree (fixes mutual reference)')
-  .option('--name <name>', 'Worktree name (auto-detected from cwd if omitted)')
-  .option('--takeover', 'Force takeover of a foreign worktree claim (writes prior_owners audit)', false)
-  .action((specId, options) => worktreeCommand('bind', { specId, ...options }));
-
-worktreeCmd
-  .command('claim <name>')
-  .description('Claim worktree session ownership (read-only without --takeover)')
-  .option('--takeover', 'Force takeover of a foreign claim (writes prior_owners audit)', false)
-  .action((name, options) => worktreeCommand('claim', { name, ...options }));
+// Legacy `caws worktree` group removed in slice 8a3.2.
+// Lifecycle gap; binding overlap with vNext `caws claim`. v11.1 will
+// reintroduce vNext worktree lifecycle.
 
 // Agents command group
 const { agentsCommand } = require('./commands/agents');
@@ -401,36 +276,9 @@ sessionCmd
   .description('Show session briefing for hooks/startup')
   .action(() => sessionCommand('briefing'));
 
-// Parallel command group
-const parallelCmd = program
-  .command('parallel')
-  .description('Orchestrate parallel multi-agent workspaces');
-
-parallelCmd
-  .command('setup <plan-file>')
-  .description('Create worktrees and sessions from a plan file')
-  .option('--base-branch <branch>', 'Base branch for all worktrees')
-  .action((planFile, options) => parallelCommand('setup', { planFile, ...options }));
-
-parallelCmd
-  .command('status')
-  .description('Show all active parallel worktrees and sessions')
-  .action(() => parallelCommand('status'));
-
-parallelCmd
-  .command('merge')
-  .description('Merge all parallel branches back to base')
-  .option('--strategy <strategy>', 'Merge strategy: merge or squash', 'merge')
-  .option('--dry-run', 'Preview merge without executing', false)
-  .option('--force', 'Force merge even with detected conflicts', false)
-  .action((options) => parallelCommand('merge', options));
-
-parallelCmd
-  .command('teardown')
-  .description('Destroy all parallel worktrees')
-  .option('--delete-branches', 'Also delete associated branches', false)
-  .option('--force', 'Force removal even if worktrees are dirty', false)
-  .action((options) => parallelCommand('teardown', options));
+// Legacy `caws parallel` group removed in slice 8a3.2.
+// Lifecycle gap; orchestrates worktrees + sessions which are also
+// removed. v11.1 may reintroduce vNext multi-agent orchestration.
 
 // Templates command
 program
@@ -548,8 +396,6 @@ const VALID_COMMANDS = [
   'init',
   'validate',
   'status',
-  'archive',
-  'specs',
   'sidecar',
   'mode',
   'tutorial',
@@ -565,9 +411,7 @@ const VALID_COMMANDS = [
   'gates',
   'burnup',
   'tool',
-  'worktree',
   'session',
-  'parallel',
   'verify-acs',
   'scope',
 ];
