@@ -27,6 +27,7 @@ import {
 import {
   appendEvent,
   composeStoreSnapshot,
+  loadWaivers,
   resolveRepoRoot,
 } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -42,6 +43,10 @@ import {
   runQualityGates,
   type QualityGatesRunner,
 } from '../gates/quality-gates-adapter';
+import {
+  filterWaivedViolations,
+  type WaiverEvidence,
+} from '../gates/waiver-filter';
 
 export interface GatesRunCommandOptions {
   readonly cwd?: string;
@@ -64,6 +69,7 @@ function dispositionToEventBody(args: {
   ts: string;
   actor: Actor;
   specId: string;
+  waiverEvidence?: WaiverEvidence;
 }): EventBody {
   const violations = args.disposition.violations
     .slice(0, MAX_EVENT_VIOLATIONS)
@@ -78,6 +84,9 @@ function dispositionToEventBody(args: {
       ...(v.message !== undefined ? { details: v.message } : {}),
     }));
 
+  const ev = args.waiverEvidence;
+  const waivedCount = ev?.waived_count ?? 0;
+
   return {
     event: 'gate_evaluated',
     ts: args.ts,
@@ -88,6 +97,10 @@ function dispositionToEventBody(args: {
       mode: args.disposition.mode,
       result: args.disposition.outcome === 'skipped' ? 'skipped' : args.disposition.outcome,
       violations,
+      waived_count: waivedCount,
+      ...(ev !== undefined && ev.waiver_ids.length > 0
+        ? { waiver_ids: ev.waiver_ids.slice() }
+        : {}),
     },
   } as unknown as EventBody;
 }
@@ -177,8 +190,28 @@ export function runGatesRunCommand(
   }
   const report = reportResult.value;
 
-  // 6. Policy-driven disposition
-  const dispositionResult = deriveDispositions(report, policy);
+  // 6a. Load + apply waivers BEFORE disposition.
+  //     Waivers do NOT mutate policy.gates[gate].mode. They remove
+  //     authorized-exception violations from the report so blocking is
+  //     computed only from unwaived violations. Malformed waiver files
+  //     produce diagnostics but never discard valid waivers.
+  const waiversLoad = loadWaivers(cawsDir);
+  if (waiversLoad.diagnostics.length > 0) {
+    err(renderDiagnostics(waiversLoad.diagnostics, { showData }));
+  }
+  const waiverFilter = filterWaivedViolations({
+    report,
+    waivers: waiversLoad.waivers,
+    specId: request.specId,
+    now: nowFn(),
+    policyGateIds: Object.keys(policy.gates),
+  });
+
+  // 6b. Policy-driven disposition on UNWAIVED violations only.
+  const dispositionResult = deriveDispositions(
+    waiverFilter.reportForDisposition,
+    policy
+  );
 
   // 7. Append one gate_evaluated event per policy-declared gate.
   //    Failure to append is a hard error: evidence integrity matters.
@@ -189,6 +222,9 @@ export function runGatesRunCommand(
       ts,
       actor,
       specId: request.specId,
+      ...(waiverFilter.waivedByGate[d.gate_id] !== undefined
+        ? { waiverEvidence: waiverFilter.waivedByGate[d.gate_id] }
+        : {}),
     });
     const append = appendEvent(cawsDir, body);
     if (!append.ok) {

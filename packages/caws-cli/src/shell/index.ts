@@ -97,5 +97,12 @@ export type {
   GateOutcome,
 } from './gates/disposition';
 
+export { filterWaivedViolations } from './gates/waiver-filter';
+export type {
+  WaiverFilterInput,
+  WaiverFilterResult,
+  WaiverEvidence,
+} from './gates/waiver-filter';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

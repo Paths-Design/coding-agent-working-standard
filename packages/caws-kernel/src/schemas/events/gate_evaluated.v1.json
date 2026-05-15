@@ -47,6 +47,18 @@
     "duration_ms": {
       "type": "integer",
       "minimum": 0
+    },
+    "waived_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of subprocess-reported violations on this gate that an effective waiver suppressed before disposition. 0 when no waivers applied. Always present so downstream consumers can rely on its existence."
+    },
+    "waiver_ids": {
+      "type": "array",
+      "description": "Stable ids of the waivers credited with the suppression on this gate, deduped + sorted. Omitted when waived_count is 0.",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
     }
   }
 }
