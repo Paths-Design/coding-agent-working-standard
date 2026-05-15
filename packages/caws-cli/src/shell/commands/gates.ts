@@ -115,6 +115,7 @@ export function runGatesRunCommand(
 ): number {
   const cwd = opts.cwd ?? process.cwd();
   const nowFn = opts.now ?? (() => new Date());
+  const now = nowFn();
   const env = opts.env ?? process.env;
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
@@ -203,7 +204,7 @@ export function runGatesRunCommand(
     report,
     waivers: waiversLoad.waivers,
     specId: request.specId,
-    now: nowFn(),
+    now,
     policyGateIds: Object.keys(policy.gates),
   });
 
@@ -215,7 +216,7 @@ export function runGatesRunCommand(
 
   // 7. Append one gate_evaluated event per policy-declared gate.
   //    Failure to append is a hard error: evidence integrity matters.
-  const ts = nowFn().toISOString();
+  const ts = now.toISOString();
   for (const d of dispositionResult.dispositions) {
     const body = dispositionToEventBody({
       disposition: d,

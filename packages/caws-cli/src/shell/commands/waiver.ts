@@ -48,6 +48,7 @@ import {
   loadWaivers,
   markRevoked,
   resolveRepoRoot,
+  STORE_RULES,
   writeWaiver,
 } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -126,6 +127,7 @@ export interface WaiverCreateOptions extends WaiverCommandBase {
 
 export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const now = nowFn();
   const ctx = resolveCaws(cwd, err, showData, 'waiver create');
   if (ctx === null) return 2;
 
@@ -138,7 +140,7 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
     gates: opts.gates,
     reason: opts.reason,
     approved_by: opts.approvedBy,
-    created_at: nowFn().toISOString(),
+    created_at: now.toISOString(),
     expires_at: opts.expiresAt,
   };
   if (opts.specId !== undefined) {
@@ -159,7 +161,7 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
     // duplicate is a user-correctable domain error (1), I/O is a hard
     // store failure (2).
     const isDuplicate = write.errors.some(
-      (d) => d.rule === 'store.waivers.already_exists'
+      (d) => d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS
     );
     err(
       isDuplicate
@@ -173,8 +175,8 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
   out(
     renderWaiverDetail({
       waiver: validated.value,
-      effectiveness: waiverEffectiveness(validated.value, nowFn()),
-      now: nowFn(),
+      effectiveness: waiverEffectiveness(validated.value, now),
+      now,
     })
   );
   return 0;
@@ -255,6 +257,7 @@ export interface WaiverShowOptions extends WaiverCommandBase {
 
 export function runWaiverShowCommand(opts: WaiverShowOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const now = nowFn();
   if (typeof opts.id !== 'string' || opts.id.length === 0) {
     err('caws waiver show: id is required.');
     err(`(rule: ${SHELL_RULES.WAIVER_MISSING_ID})`);
@@ -281,8 +284,8 @@ export function runWaiverShowCommand(opts: WaiverShowOptions): number {
   out(
     renderWaiverDetail({
       waiver: found,
-      effectiveness: waiverEffectiveness(found, nowFn()),
-      now: nowFn(),
+      effectiveness: waiverEffectiveness(found, now),
+      now,
     })
   );
   return 0;
@@ -302,6 +305,7 @@ export interface WaiverRevokeOptions extends WaiverCommandBase {
 
 export function runWaiverRevokeCommand(opts: WaiverRevokeOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const now = nowFn();
   if (typeof opts.id !== 'string' || opts.id.length === 0) {
     err('caws waiver revoke: id is required.');
     err(`(rule: ${SHELL_RULES.WAIVER_MISSING_ID})`);
@@ -311,19 +315,19 @@ export function runWaiverRevokeCommand(opts: WaiverRevokeOptions): number {
   if (ctx === null) return 2;
 
   const result = markRevoked(ctx.cawsDir, opts.id, {
-    now: nowFn(),
+    now,
     ...(opts.revokedBy !== undefined ? { revoked_by: opts.revokedBy } : {}),
     ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
   });
   if (!isOk(result)) {
-    // markRevoked uses 'store.waivers.not_found' for missing files and
-    // 'store.waivers.already_exists' for "already revoked" (semantics
+    // markRevoked uses STORE_RULES.WAIVERS_NOT_FOUND for missing files and
+    // STORE_RULES.WAIVERS_ALREADY_EXISTS for "already revoked" (semantics
     // overload acknowledged in the store comment). Both are domain
     // errors → exit 1. Other failures (I/O, validation) are exit 2.
     const isDomain = result.errors.some(
       (d) =>
-        d.rule === 'store.waivers.not_found' ||
-        d.rule === 'store.waivers.already_exists'
+        d.rule === STORE_RULES.WAIVERS_NOT_FOUND ||
+        d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS
     );
     err(
       isDomain
@@ -336,8 +340,8 @@ export function runWaiverRevokeCommand(opts: WaiverRevokeOptions): number {
   out(
     renderWaiverDetail({
       waiver: result.value,
-      effectiveness: waiverEffectiveness(result.value, nowFn()),
-      now: nowFn(),
+      effectiveness: waiverEffectiveness(result.value, now),
+      now,
     })
   );
   return 0;

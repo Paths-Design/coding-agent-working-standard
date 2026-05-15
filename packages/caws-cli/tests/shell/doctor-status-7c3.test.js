@@ -124,7 +124,7 @@ describe('7c.3 / 2: legacy residue', () => {
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/doctor\.init\.legacy_working_spec_present/);
     // Severity rendered correctly.
-    expect(r.stdout).toMatch(/\[ERROR  \]\s+doctor\.init\.legacy_working_spec_present/);
+    expect(r.stdout).toMatch(/\[ERROR {2}\]\s+doctor\.init\.legacy_working_spec_present/);
     // Subject and repair both shown.
     expect(r.stdout).toMatch(/subject:\s+\.caws\/working-spec\.yaml/);
     expect(r.stdout).toMatch(/repair:\s+Move the file aside/);
@@ -148,7 +148,7 @@ describe('7c.3 / 3: registry malformed', () => {
     const r = cap(runDoctorCommand, { cwd: repo });
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/doctor\.registry\.malformed_loaded/);
-    expect(r.stdout).toMatch(/\[ERROR  \]\s+doctor\.registry\.malformed_loaded/);
+    expect(r.stdout).toMatch(/\[ERROR {2}\]\s+doctor\.registry\.malformed_loaded/);
     expect(r.stdout).toMatch(/worktrees\.json is not a JSON object/);
     // Note: this is a finding, NOT a "Store load diagnostics" entry.
     // The store's REGISTRY_NOT_OBJECT diagnostic flows through the
@@ -197,7 +197,7 @@ non_governed_zones_force: true
     const r = cap(runDoctorCommand, { cwd: repo });
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/doctor\.policy\.non_governed_zone_broad/);
-    expect(r.stdout).toMatch(/\[ERROR  \]\s+doctor\.policy\.non_governed_zone_broad/);
+    expect(r.stdout).toMatch(/\[ERROR {2}\]\s+doctor\.policy\.non_governed_zone_broad/);
     expect(r.stdout).toMatch(/non_governed_zones_force=true/);
   });
 });
@@ -246,7 +246,7 @@ gates:
     expect(r.code).toBe(0); // warnings do not fail doctor
     expect(r.stdout).toMatch(/doctor\.init\.waivers_dir_missing/);
     expect(r.stdout).toMatch(/doctor\.init\.agents_registry_missing/);
-    expect(r.stdout).toMatch(/\[WARN   \]\s+doctor\.init\.waivers_dir_missing/);
+    expect(r.stdout).toMatch(/\[WARN {3}\]\s+doctor\.init\.waivers_dir_missing/);
     expect(r.stdout).toMatch(/Summary:\s+findings 0E\/2W/);
   });
 });

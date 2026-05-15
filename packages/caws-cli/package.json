@@ -27,10 +27,10 @@
     "perf:budgets": "npm run build && jest --testPathPatterns=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
     "test:cleanup": "node scripts/cleanup-tests.js",
-    "lint": "npx eslint src/**/*.js tests/**/*.js",
-    "lint:fix": "npx eslint src/**/*.js tests/**/*.js --fix",
-    "lint:staged": "npx eslint src/**/*.js tests/**/*.js",
-    "format": "prettier --write src/**/*.js tests/**/*.js",
+    "lint": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
+    "lint:fix": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}' --fix",
+    "lint:staged": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
+    "format": "prettier --write 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node dist/index.js validate",
     "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
@@ -57,11 +57,11 @@
   },
   "dependencies": {
     "@paths.design/caws-kernel": "*",
+    "ajv": "8.17.1",
     "chalk": "4.1.2",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
     "inquirer": "8.2.7",
-    "ajv": "8.17.1",
     "js-yaml": "4.1.0",
     "micromatch": "4.0.8",
     "minimatch": "^10.0.1"
@@ -83,7 +83,8 @@
     "lint-staged": "15.5.2",
     "prettier": "^3.0.0",
     "semantic-release": "25.0.0-beta.6",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "8.46.4"
   },
   "engines": {
     "node": ">=18.0.0"
