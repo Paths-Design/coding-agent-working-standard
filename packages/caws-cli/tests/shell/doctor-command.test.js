@@ -115,6 +115,13 @@ describe('runDoctorCommand — happy and unhappy paths', () => {
         path.join(repoRoot, '.caws', 'policy.yaml'),
         VALID_POLICY
       );
+      // Slice 7c.2 layout-missing rules require the full canonical
+      // vNext layout to declare a project clean. mkTempGitRepo only
+      // seeds .caws/specs/; add waivers/ + worktrees/agents registries
+      // here so this "clean minimal state" test really IS canonical.
+      fs.mkdirSync(path.join(repoRoot, '.caws', 'waivers'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, '.caws', 'worktrees.json'), '{}');
+      fs.writeFileSync(path.join(repoRoot, '.caws', 'agents.json'), '{}');
       const r = captureRun(repoRoot);
       expect(r.code).toBe(0);
       expect(r.stdout).toMatch(/Doctor findings:\s*\n\s*\(none\)/);

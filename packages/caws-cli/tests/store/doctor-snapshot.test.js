@@ -120,6 +120,12 @@ describe('composeDoctorSnapshot → inspectProjectState (end-to-end)', () => {
   it('hands a valid snapshot to the kernel and produces a clean DoctorReport', () => {
     cawsDir = mkTempCawsDir();
     fs.mkdirSync(path.join(cawsDir, 'specs'), { recursive: true });
+    // Slice 7c.2 layout-missing rules require waivers/ and agents.json
+    // to be present to declare the project canonically initialized.
+    // Without these, doctor would emit waivers_dir_missing and
+    // agents_registry_missing warnings (correctly — doctor is doing its
+    // job; this test wasn't covering the full canonical layout).
+    fs.mkdirSync(path.join(cawsDir, 'waivers'), { recursive: true });
     fs.writeFileSync(
       path.join(cawsDir, 'specs', 'FOO-1.yaml'),
       VALID_SPEC('FOO-1') + 'worktree: wt-foo\n'
@@ -129,6 +135,7 @@ describe('composeDoctorSnapshot → inspectProjectState (end-to-end)', () => {
       path.join(cawsDir, 'worktrees.json'),
       JSON.stringify({ 'wt-foo': { specId: 'FOO-1' } })
     );
+    fs.writeFileSync(path.join(cawsDir, 'agents.json'), '{}');
 
     const { snapshot, doctorInput } = composeDoctorSnapshot({
       repoRoot: cawsDir,

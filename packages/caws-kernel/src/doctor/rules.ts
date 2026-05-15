@@ -87,6 +87,79 @@ export const DOCTOR_RULES = {
    * historical event itself stays untouched (events are append-only).
    */
   WAIVER_REVOKED_REFERENCED: 'doctor.waiver.revoked_referenced',
+
+  // ---- init layout (slice 7c.2) -------------------------------------------
+  /**
+   * `.caws/working-spec.yaml` is present. The vNext model is multi-spec
+   * under `.caws/specs/`; the legacy single-spec entry point is a hard
+   * authority contradiction. Severity: error.
+   */
+  INIT_LEGACY_WORKING_SPEC_PRESENT: 'doctor.init.legacy_working_spec_present',
+  /** `.caws/working-spec.schema.json` legacy artifact present. Error. */
+  INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT:
+    'doctor.init.legacy_working_spec_schema_present',
+  /**
+   * `.caws/specs/` directory absent on a project that otherwise looks
+   * initialized. Stores default to "no specs" so this is operational
+   * drift, not corruption. Severity: warning.
+   */
+  INIT_SPECS_DIR_MISSING: 'doctor.init.specs_dir_missing',
+  /** `.caws/waivers/` directory absent. Same shape as specs_dir_missing. */
+  INIT_WAIVERS_DIR_MISSING: 'doctor.init.waivers_dir_missing',
+  /**
+   * `.caws/worktrees.json` absent. The store treats absence as `{}`,
+   * but doctor should flag drift on a project that has been initialized.
+   */
+  INIT_WORKTREES_REGISTRY_MISSING: 'doctor.init.worktrees_registry_missing',
+  /** `.caws/agents.json` absent. Same shape as worktrees_registry_missing. */
+  INIT_AGENTS_REGISTRY_MISSING: 'doctor.init.agents_registry_missing',
+  // No rule for events.jsonl missing — first append creates it under
+  // lock and a missing file is valid until then.
+
+  // ---- registry hygiene (slice 7c.2) -------------------------------------
+  /**
+   * worktrees.json or agents.json parsed as something other than a plain
+   * object. Severity is inherited from the source diagnostic so the
+   * loader's intent (always error today) survives.
+   */
+  REGISTRY_MALFORMED_LOADED: 'doctor.registry.malformed_loaded',
+
+  // ---- policy posture (slice 7c.2) ---------------------------------------
+  /**
+   * A critical gate (budget_limit, spec_completeness, scope_boundary) is
+   * disabled OR not in block mode. Doctor reports this as posture risk;
+   * policy validation already emits its own semantic warning. The two
+   * audiences are different (operator vs. config validator) and the
+   * doctor finding is what shows up in `caws status`.
+   */
+  POLICY_CRITICAL_GATE_NOT_BLOCKING: 'doctor.policy.critical_gate_not_blocking',
+  /**
+   * `policy.non_governed_zones` contains a dangerously broad pattern
+   * (e.g. "*", "**", ".", "/"). Severity: warning by default; error if
+   * `non_governed_zones_force === true` (the team has explicitly armed
+   * the dangerous pattern, which removes any "off by default" safety net).
+   */
+  POLICY_NON_GOVERNED_ZONE_BROAD: 'doctor.policy.non_governed_zone_broad',
+  /**
+   * `policy.root_passthrough` lists a high-blast-radius root file
+   * (e.g. package.json, tsconfig.json). Severity: warning.
+   */
+  POLICY_ROOT_PASSTHROUGH_RISKY: 'doctor.policy.root_passthrough_risky',
+
+  // ---- waiver posture (slice 7c.2) ---------------------------------------
+  /**
+   * The number of *currently effective* waivers covering a given gate
+   * exceeds `policy.waivers.max_active_waivers_per_gate`. Counts only
+   * effective waivers (active && not expired); revoked/expired records
+   * cannot affect gates and would be noise in this count. Severity: warning.
+   */
+  WAIVER_TOO_MANY_ACTIVE_FOR_GATE: 'doctor.waiver.too_many_active_for_gate',
+  /**
+   * An effective waiver expires within a policy-defined window. Skipped
+   * entirely if no threshold is configured — doctor will not invent a
+   * default that surprises the operator. Severity: info.
+   */
+  WAIVER_EXPIRES_SOON: 'doctor.waiver.expires_soon',
 } as const;
 
 export type DoctorRule = (typeof DOCTOR_RULES)[keyof typeof DOCTOR_RULES];
@@ -101,4 +174,6 @@ export const DOCTOR_RULE_PREFIXES = [
   'doctor.policy.',
   'doctor.template.',
   'doctor.waiver.',
+  'doctor.init.',
+  'doctor.registry.',
 ] as const;

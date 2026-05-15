@@ -285,14 +285,17 @@ describe('composeDoctorSnapshot projects new fields onto DoctorInput', () => {
 });
 
 // ============================================================
-// 7c.1 boundary — input present, no new doctor rules yet
+// 7c.2 boundary flip — the input surface now produces rules
+//
+// Before 7c.2, this test asserted that no doctor.init.* / doctor.registry.*
+// finding fired (input plumbing only). Now that 7c.2 implements the
+// rules, a project with full residue + malformed registry MUST produce
+// the expected set of findings — with the right severities. This is the
+// integration assertion that the snapshot facts and kernel rules are
+// wired together correctly.
 // ============================================================
-describe('7c.1 boundary: no doctor.init.* / doctor.registry.* findings yet', () => {
-  it('extending DoctorInput alone does NOT cause any new finding to fire', () => {
-    // This test pins the slice boundary. 7c.2 will add the rules and
-    // flip these assertions; until then, a project with full residue
-    // and a malformed registry must produce zero doctor.init.* /
-    // doctor.registry.* findings via the kernel.
+describe('7c.2: snapshot facts produce the expected doctor.init.* / doctor.registry.* findings', () => {
+  it('full residue + malformed registry → legacy errors + registry-malformed error', () => {
     const { repoRoot, cawsDir } = mkTempCawsDir();
     try {
       fs.mkdirSync(cawsDir, { recursive: true });
@@ -318,7 +321,64 @@ describe('7c.1 boundary: no doctor.init.* / doctor.registry.* findings yet', () 
       const newFindings = report.findings.filter((f) =>
         newRulePrefixes.some((p) => f.rule.startsWith(p))
       );
-      expect(newFindings).toEqual([]);
+      // Each rule fires exactly once for the conditions we set up.
+      const ruleIds = newFindings.map((f) => f.rule).sort();
+      expect(ruleIds).toContain('doctor.init.legacy_working_spec_present');
+      expect(ruleIds).toContain('doctor.init.legacy_working_spec_schema_present');
+      expect(ruleIds).toContain('doctor.registry.malformed_loaded');
+
+      // Severities. Both legacy rules + the malformed registry one are errors.
+      const legacy = newFindings.find(
+        (f) => f.rule === 'doctor.init.legacy_working_spec_present'
+      );
+      expect(legacy.severity).toBe('error');
+      const malformed = newFindings.find(
+        (f) => f.rule === 'doctor.registry.malformed_loaded'
+      );
+      expect(malformed.severity).toBe('error');
+
+      // Layout-missing rules: this test set up the dirs missing too,
+      // so specs/waivers/agents.json should ALL be flagged as warning.
+      const layoutMissing = newFindings
+        .filter((f) => f.rule.endsWith('_dir_missing') || f.rule.endsWith('_registry_missing'))
+        .map((f) => f.rule)
+        .sort();
+      expect(layoutMissing).toEqual([
+        'doctor.init.agents_registry_missing',
+        'doctor.init.specs_dir_missing',
+        'doctor.init.waivers_dir_missing',
+        // worktrees_registry_missing does NOT fire — the file IS present
+        // (it's malformed). Missing != malformed; that's the contract.
+      ]);
+
+      // events.jsonl is intentionally not flagged.
+      expect(report.findings.some((f) => f.rule.includes('events_jsonl'))).toBe(false);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uninitialized repo (no .caws) does NOT fire layout-missing rules', () => {
+    // If .caws/ itself is absent, doctor.policy.missing is the right
+    // finding — we don't pile on with "specs dir missing" on a project
+    // that hasn't been initialized at all.
+    const { repoRoot, cawsDir } = mkTempCawsDir();
+    try {
+      // Deliberately do NOT create cawsDir.
+      const { doctorInput } = composeDoctorSnapshot({
+        repoRoot,
+        cawsDir,
+        now: NOW,
+      });
+      const report = inspectProjectState(doctorInput);
+      const layoutMissing = report.findings.filter(
+        (f) =>
+          f.rule.startsWith('doctor.init.') &&
+          (f.rule.endsWith('_dir_missing') || f.rule.endsWith('_registry_missing'))
+      );
+      expect(layoutMissing).toEqual([]);
+      // policy.missing should still be the primary finding here.
+      expect(report.findings.some((f) => f.rule === 'doctor.policy.missing')).toBe(true);
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
