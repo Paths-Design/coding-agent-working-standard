@@ -116,6 +116,20 @@ Commands:
 
 Exactly these eight groups, plus the auto-generated `help`.
 
+### Count reconciliation (against `caws-next` @ `52d6165`)
+
+| Source | Count | Notes |
+|---|---|---|
+| `node dist/index.js --help` rows (excluding Commander's auto-generated `help`) | 32 | 8 vNext + 24 legacy |
+| `node dist/index.js --help` rows (including `help`) | 33 | adds Commander's built-in row |
+| `VALID_COMMANDS` entries in `src/index.js` | 28 | suggester list for unknown-command fallback |
+| `VALID_COMMANDS` entries with no current registration | 1 | `quality-gates` (alias removed in slice 6c, never cleaned from suggester) — **stale** |
+| Currently-registered commands missing from `VALID_COMMANDS` | 5 | `agents`, `claim`, `doctor`, `evidence`, `test-analysis` (drift; suggester does not learn them) |
+
+The `VALID_COMMANDS` discrepancy is an existing drift, not a v11 regression.
+8a3 will rewrite `VALID_COMMANDS` to match exactly the post-removal v11 surface;
+8a4 audit 1 will assert the equality.
+
 ---
 
 ## 3. Removed in v11
@@ -153,7 +167,7 @@ Reason categories:
 | `tutorial [type]` | `src/commands/tutorial.js` (480 LOC) | no | none | **PNC** | (none) |
 | `plan <action>` | `src/commands/plan.js` (438 LOC) | yes (writes plan markdown to `--output`) | user-specified path | **PNC** | (none) |
 | `worktree create/list/destroy/merge/prune/repair/bind/claim` | `src/commands/worktree.js` (502 LOC) | yes | `.caws/worktrees.json`, git worktrees | **LG** | v11.1 vNext worktree lifecycle; `caws claim` handles ownership |
-| `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | inspect; **PNC** | retained data is in registry; `caws status` shows partial info |
+| `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | **PNC** (overlaps with vNext `status`/claim panel) | `caws status` shows partial info; richer inspector deferred to v11.1+ as `status --agents` or `claim show` |
 | `session start/checkpoint/end/list/show/briefing` | `src/commands/session.js` (312 LOC) | yes | `.caws/sessions/`, `.caws/sessions.json` (separate state) | **PNC + AC** | v11 doctor does not observe sessions; re-add later if needed |
 | `parallel setup/status/merge/teardown` | `src/commands/parallel.js` (242 LOC) | yes | `.caws/parallel/...` (separate state); creates worktrees | **LG** | v11.1 lifecycle work |
 | `templates [subcommand]` | `src/commands/templates.js` (237 LOC) | no | reads `templates/` | **PNC** | (none) |
@@ -169,11 +183,35 @@ Reason categories:
 | `provenance update/show/verify/analyze-ai/init` | `src/commands/provenance.js` (1143 LOC) | yes | `.caws/provenance/chain.json` (separate hash chain), legacy `working-spec.yaml` fallback | **PE + AC** | `.caws/events.jsonl` is the v11 audit chain |
 | `hooks install/remove/status` | `src/scaffold/git-hooks.js` (965 LOC) + index.js inline | yes | `.git/hooks/{pre-commit,post-commit,pre-push,commit-msg}` — generated hooks call `caws validate` and `caws provenance update` | **SH** | (none in v11.0; users wire their own hooks against `caws gates run` if desired) |
 
+### 3.5 Non-command shipped code that touches legacy state
+
+These are not command groups but ship in v11 and reach legacy artifacts.
+They are tracked here so 8a2 can decide reachability rather than guessing.
+
+| File | Concern | 8a2 audit question |
+|---|---|---|
+| `src/gates/spec-completeness.js` | Reads `.caws/working-spec.yaml` as the spec source for the `spec_completeness` gate | Is this gate reachable from the v11 surface (`caws gates run`) or only from removed commands like `caws validate` / `caws quality-gates`? |
+| `src/cicd-optimizer.js` | Defaults `specPath` to `.caws/working-spec.yaml` | Is this code reachable from any v11-registered command? |
+| `src/budget-derivation.js` | Mentions `.caws/working-spec.yaml` in error guidance | Same reachability question. |
+| `src/spec/SpecFileManager.js` | Manages `working-spec.yaml` lifecycle | Reachability — likely only used by removed `validate`/`evaluate`/`iterate`/`burnup`. |
+| `src/utils/spec-resolver.js` | Defines `LEGACY_SPEC = '.caws/working-spec.yaml'` and falls back to it | Reachable from any v11 surface? Vendored types/utils that the removal pass should orphan. |
+| `src/worktree/worktree-manager.js` | Writes/reads `.caws/worktrees.json`; references `working-spec.yaml` | `caws claim` uses parts of this; precise reachability boundary required. |
+| `src/utils/event-log.js` | Parallel `appendEvent` writer to `.caws/events.jsonl` (NOT the store) | Reachable only from removed commands? **Invariant 1 violator** if any v11 path reaches it. |
+| `src/sidecars/listeners.js` | Registered at startup (`index.js:786-789`) | Side-effect surface; should be removed alongside `sidecar` command. |
+| `src/scaffold/git-hooks.js` | Generates hooks calling `caws validate` and `caws provenance update` | Removed in 8a3 alongside `hooks` command. |
+
+8a2 audit 3 (kernel purity) is unaffected by these — the kernel is clean
+already. These are CLI-side concerns. The audit will tell us which files
+are dead code in v11 (safe to leave dormant; cleaned in 8e) vs which are
+still reachable from the v11 surface (must be addressed in 8a3 or
+escalated).
+
 ### Removal counts
 
-- 23 legacy command groups removed
+- 24 legacy command groups removed (matches the table above; matches `--help` minus the 8 vNext groups)
 - 8 vNext command groups remain
 - ~10,650 LOC of legacy handler code (kept on disk for archaeology in v11.0; deleted in v11.1 per Slice 8e)
+- `VALID_COMMANDS` rewritten to match the v11 surface exactly (drops 24 legacy entries plus the stale `quality-gates` alias; adds the 5 currently-missing vNext entries `agents`, `claim`, `doctor`, `evidence`, `test-analysis` — minus any of those that are themselves removed; `agents` and `test-analysis` are removed under A1, so the final `VALID_COMMANDS` is exactly the 8 vNext groups)
 
 ---
 
