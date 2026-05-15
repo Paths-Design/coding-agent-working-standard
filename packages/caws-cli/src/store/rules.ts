@@ -63,6 +63,12 @@ export const STORE_RULES = {
   EVENTS_LOCK_CONTENTION: 'store.events.lock_contention',
   /** prepareAppend rejected the body. Carries the kernel diagnostics. */
   EVENTS_PREPARE_APPEND_REJECTED: 'store.events.prepare_append_rejected',
+
+  // ---- init (slice 7b) ----------------------------------------------------
+  /** A legacy file (e.g., working-spec.yaml) blocks vNext init. */
+  INIT_LEGACY_RESIDUE: 'store.init.legacy_residue',
+  /** init seeded a default policy that did not pass kernel validation. */
+  INIT_DEFAULT_POLICY_INVALID: 'store.init.default_policy_invalid',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];
@@ -75,4 +81,5 @@ export const STORE_RULE_PREFIXES = [
   'store.waivers.',
   'store.registry.',
   'store.events.',
+  'store.init.',
 ] as const;

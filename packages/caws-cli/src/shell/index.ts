@@ -126,5 +126,11 @@ export type {
   RenderWaiverDetailInput,
 } from './render/waiver';
 
+export { runInitCommand } from './commands/init';
+export type { InitCommandOptions } from './commands/init';
+
+export { renderInit } from './render/init';
+export type { RenderInitInput } from './render/init';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

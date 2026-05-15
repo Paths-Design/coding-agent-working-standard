@@ -20,6 +20,7 @@ import {
   runDoctorCommand,
   runEvidenceRecordCommand,
   runGatesRunCommand,
+  runInitCommand,
   runScopeCommand,
   runStatusCommand,
   runWaiverCreateCommand,
@@ -66,6 +67,27 @@ export function registerShellCommands(
   options: RegisterShellCommandsOptions = {}
 ): void {
   const exit = options.exit ?? ((code: number) => process.exit(code));
+
+  // -------------------------------------------------------------------
+  // caws init
+  //
+  // Creates the canonical vNext .caws/ shape (specs/, waivers/,
+  // policy.yaml, worktrees.json, agents.json). Idempotent. Refuses to
+  // overwrite legacy state (working-spec.yaml et al.). No --force.
+  // Replaces the legacy `caws init` registration removed from
+  // src/index.js as part of slice 7b.
+  // -------------------------------------------------------------------
+  program
+    .command('init')
+    .description(
+      'Bootstrap the canonical vNext .caws/ project state (idempotent; ' +
+        'refuses to overwrite legacy single-spec layout).'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { data?: boolean }) => {
+      const code = runInitCommand({ showData: opts.data === true });
+      exit(code);
+    });
 
   // -------------------------------------------------------------------
   // caws doctor

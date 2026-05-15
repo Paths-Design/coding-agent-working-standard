@@ -36,6 +36,9 @@ export { applyRegistryPatch } from './apply-patch';
 export { loadWaivers, writeWaiver, markRevoked } from './waivers-store';
 export type { WaiversLoadResult } from './waivers-store';
 
+export { initProject, DEFAULT_POLICY_YAML } from './init-store';
+export type { InitOutcome, InitProjectResult } from './init-store';
+
 export {
   composeDoctorSnapshot,
   composeStoreSnapshot,

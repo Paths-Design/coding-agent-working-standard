@@ -30,7 +30,10 @@ const {
 const { handleCliError, findSimilarCommand } = require('./error-handler');
 
 // Import command handlers
-const { initProject } = require('./commands/init');
+// Legacy top-level `caws init` replaced by the vNext shell command
+// registered via registerShellCommands() below. The legacy file
+// (./commands/init.js) is left on disk; it's no longer referenced
+// here. The `provenance init` subcommand is unrelated and unaffected.
 const { validateCommand } = require('./commands/validate');
 const { burnupCommand } = require('./commands/burnup');
 const { testAnalysisCommand } = require('./test-analysis');
@@ -101,17 +104,10 @@ program
   .version(CLI_VERSION)
   .showHelpAfterError(false); // We'll show better suggestions instead
 
-// Init command
-program
-  .command('init')
-  .description('Initialize a new project with CAWS')
-  .argument('[project-name]', 'Name of the project to create (use "." for current directory)')
-  .option('-i, --interactive', 'Run interactive setup wizard', true)
-  .option('--non-interactive', 'Skip interactive prompts (use defaults)', false)
-  .option('--template <template>', 'Use specific project template')
-  .option('--mode <mode>', 'CAWS mode (lite, simple, standard, enterprise)')
-  .option('--ide <ides>', 'IDE integrations to install (comma-separated: cursor,claude,vscode,intellij,windsurf,copilot,all,none)')
-  .action(initProject);
+// Legacy top-level `caws init` was removed in slice 7b. The vNext
+// `caws init` is registered via shell.registerShellCommands. No
+// compatibility alias, no feature flag. The unrelated `provenance init`
+// subcommand below is untouched.
 
 // Scaffold command
 program
