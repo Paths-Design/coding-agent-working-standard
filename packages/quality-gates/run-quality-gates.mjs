@@ -98,7 +98,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path, { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { checkFunctionalDuplication } from './check-functional-duplication.mjs';
 import { checkNamingViolations, checkSymbolNaming, checkFileSprawl } from './check-naming.mjs';
 import { checkPlaceholders } from './check-placeholders.mjs';
@@ -1025,33 +1025,38 @@ class QualityGateRunner {
           console.log('  • Or use --context=push: caws quality-gates --context=push');
         }
 
+        // QG-001: build the minimal report once and emit it via both sinks
+        // (stdout in --json mode, disk for the docs-status artifact).
+        // The two payloads must be equal — same object, single source of truth.
+        const minimalReport = {
+          timestamp: new Date().toISOString(),
+          context: this.context,
+          files_scoped: 0,
+          warnings: [],
+          violations: [],
+          waivers: { active: 0, applied: 0, details: [] },
+          performance: {
+            total_execution_time_ms: Date.now() - this.startTime,
+            gate_timings: {},
+          },
+          message: 'No files staged - gates skipped',
+        };
+        const serialized = JSON.stringify(minimalReport, null, 2);
+
         // Write minimal report for consistency
         try {
-          const root = process.cwd();
           const outDir = 'docs-status';
           const reportPath = `${outDir}/quality-gates-report.json`;
           fs.mkdirSync(outDir, { recursive: true });
-          fs.writeFileSync(
-            reportPath,
-            JSON.stringify(
-              {
-                timestamp: new Date().toISOString(),
-                context: this.context,
-                files_scoped: 0,
-                warnings: [],
-                violations: [],
-                waivers: { active: 0, applied: 0, details: [] },
-                performance: {
-                  total_execution_time_ms: Date.now() - this.startTime,
-                  gate_timings: {},
-                },
-                message: 'No files staged - gates skipped',
-              },
-              null,
-              2
-            )
-          );
+          fs.writeFileSync(reportPath, serialized);
         } catch {}
+
+        // QG-001: emit the same payload to stdout in --json mode so the
+        // caws-cli adapter does not trip GATES_SUBPROCESS_FAILED on empty
+        // stdout. Previously this branch exited with no stdout in JSON mode.
+        if (JSON_MODE) {
+          console.log(serialized);
+        }
 
         // Cleanup and exit gracefully
         this.clearAllTimeouts();
@@ -2284,7 +2289,9 @@ class QualityGateRunner {
  * @returns {Promise<void>} Resolves when gates complete (or process exits)
  */
 async function main() {
-  console.log('Quality gates starting...');
+  if (!JSON_MODE && !QUIET_MODE) {
+    console.log('Quality gates starting...');
+  }
   // Handle help flag
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`
@@ -2352,11 +2359,33 @@ EXIT CODES:
   await runner.runAllGates();
 }
 
-if (
-  process.argv[1] &&
-  (process.argv[1].endsWith('run-quality-gates.mjs') ||
-    process.argv[1].includes('run-quality-gates.mjs'))
-) {
+// QG-001 (entry-guard): detect "invoked as a script" reliably across all
+// invocation paths — direct `node run-quality-gates.mjs`, the npm bin shim
+// (`node_modules/.bin/caws-quality-gates` symlink), and packaging tools that
+// resolve through symlinks. The prior substring check on argv[1] silently
+// failed for the bin shim because argv[1] is the symlink path, not the
+// resolved target — so main() never ran and the binary exited with 0 stdout
+// bytes. Use ESM module-vs-script semantics instead: compare import.meta.url
+// against argv[1] as a file URL, and follow realpath so symlinked invocations
+// also match.
+let invokedAsScript = false;
+try {
+  if (process.argv[1]) {
+    const argvUrl = pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    const selfUrl = pathToFileURL(fs.realpathSync(fileURLToPath(import.meta.url))).href;
+    invokedAsScript = argvUrl === selfUrl;
+  }
+} catch {
+  // realpath can fail on Windows or under unusual fs conditions; fall back
+  // to the legacy substring check so we never regress for users whose
+  // invocation already worked.
+  invokedAsScript =
+    !!process.argv[1] &&
+    (process.argv[1].endsWith('run-quality-gates.mjs') ||
+      process.argv[1].includes('run-quality-gates.mjs'));
+}
+
+if (invokedAsScript) {
   main().catch((error) => {
     console.error('Quality gates crashed:', error);
     process.exit(1);
