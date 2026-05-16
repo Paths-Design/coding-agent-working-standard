@@ -9,13 +9,18 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: reset-danger-latch.sh [--current | --session <id> | --all] --reason <text>
+Usage: reset-danger-latch.sh (--current | --session <id>) --reason <text>
 
 Options:
   --current       Reset the current CLAUDE_SESSION_ID/HOOK_SESSION_ID latch.
   --session <id>  Reset a specific session latch.
-  --all           Reset all danger latches for this project.
   --reason <text> Required audit reason.
+
+Note: there is intentionally no `--all` flag. Multi-session global reset is
+a human maintenance operation, not part of the installed hook surface. To
+clear every latch in a project, remove the files under
+`.claude/hooks/state/` from a human terminal and record the reason in
+`.claude/logs/danger-latch-resets.log`.
 EOF
 }
 
@@ -38,8 +43,10 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --all)
-      MODE="all"
-      shift
+      echo "--all is no longer supported. Reset latches one at a time with --current or --session <id>." >&2
+      echo "If you need to clear every latch, remove .claude/hooks/state/danger-latch-*.json" >&2
+      echo "manually from a human terminal and log the reason in .claude/logs/danger-latch-resets.log." >&2
+      exit 2
       ;;
     --reason)
       REASON="${2:-}"
@@ -91,11 +98,6 @@ case "$MODE" in
       exit 2
     fi
     targets+=("$STATE_DIR/danger-latch-$(safe_session "$SESSION_ID").json")
-    ;;
-  all)
-    while IFS= read -r file; do
-      targets+=("$file")
-    done < <(find "$STATE_DIR" -maxdepth 1 -type f -name 'danger-latch-*.json' 2>/dev/null | sort)
     ;;
 esac
 

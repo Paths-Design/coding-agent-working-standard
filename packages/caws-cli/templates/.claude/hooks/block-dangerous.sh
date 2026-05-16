@@ -132,143 +132,21 @@ case "$DECISION" in
     emit_ask_json "$FULL_REASON"
     exit 0
     ;;
+  *)
+    # Unknown decision value -- malformed classifier output. Do NOT fall
+    # through to the weaker regex fallback; ask+latch instead so a
+    # corrupted classifier cannot silently downgrade safety.
+    FULL_REASON="command classifier returned an unrecognized decision '$DECISION'. This is a human-review boundary. Command was: $COMMAND"
+    record_danger_latch "$LATCH_FILE" "ask" "classifier unknown decision: $DECISION" "$COMMAND"
+    emit_ask_json "$FULL_REASON"
+    exit 0
+    ;;
 esac
 
-# --- Fallback: bash pattern matching (less precise, no heredoc/quote awareness) ---
+# Every classifier outcome (allow/deny/ask/unknown) exits inside the case
+# above. There is no flat-regex fallback; if classify_command.py cannot run,
+# the early-exit at the top of this script ask-latches the command. That
+# keeps the dangerous-command decision in a single semantic layer.
 
-DANGEROUS_PATTERNS=(
-  # Destructive file operations
-  'rm -rf /'
-  'rm -rf ~'
-  'rm -rf \*'
-  'rm -rf \.'
-  'rm -rf /\*'
-  'dd if=/dev/zero'
-  'dd if=/dev/random'
-  'mkfs\.'
-  'fdisk'
-  '> /dev/sd'
-
-  # Fork bombs and resource exhaustion
-  ':\(\)\{:\|:\&\};:'
-  'while true.*fork'
-
-  # Credential/secret exposure
-  'cat.*\.env'
-  'cat.*/etc/passwd'
-  'cat.*/etc/shadow'
-  'cat.*id_rsa'
-  'cat.*\.ssh/'
-  'cat.*credentials'
-  'cat.*\.aws/'
-
-  # Network exfiltration
-  'curl.*\|.*sh'
-  'wget.*\|.*sh'
-  'curl.*\|.*bash'
-  'wget.*\|.*bash'
-
-  # Permission escalation
-  'chmod 777'
-  'chmod -R 777'
-  'chmod.*\+s'
-
-  # History manipulation
-  'history -c'
-  'rm.*\.bash_history'
-  'rm.*\.zsh_history'
-
-  # System modification
-  'shutdown'
-  'reboot'
-  'init 0'
-  'init 6'
-
-  # Git destructive operations
-  'git init'
-  'git reset --hard'
-  'git push --force'
-  'git push -f '
-  'git push --force-with-lease'
-  'git clean -f'
-  'git checkout \.'
-  'git restore \.'
-  '(^|&&|\|\||;|\|)\s*git rebase'
-  '(^|&&|\|\||;|\|)\s*git cherry-pick'
-
-  # Virtual environment creation (prevents venv sprawl)
-  'python -m venv'
-  'python3 -m venv'
-  'virtualenv '
-  'conda create'
-)
-
-# Check command against dangerous patterns
-for pattern in "${DANGEROUS_PATTERNS[@]}"; do
-  if printf '%s\n' "$COMMAND" | grep -qiE "$pattern"; then
-    # Allow git rebase/cherry-pick only when no worktrees are active
-    if [[ "$pattern" == *"git rebase"* ]] || [[ "$pattern" == *"git cherry-pick"* ]]; then
-      PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-      if command -v git >/dev/null 2>&1; then
-        GIT_COMMON=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-        if [[ -n "$GIT_COMMON" ]] && [[ "$GIT_COMMON" != ".git" ]]; then
-          CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON/.." 2>/dev/null && pwd || echo "")
-          if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-            PROJECT_DIR="$CANDIDATE"
-          fi
-        fi
-      fi
-      WT_FILE="$PROJECT_DIR/.caws/worktrees.json"
-      if [[ -f "$WT_FILE" ]] && command -v node >/dev/null 2>&1; then
-        ACTIVE_COUNT=$(node -e "
-          try {
-            var r = JSON.parse(require('fs').readFileSync('$WT_FILE','utf8'));
-            var registry = r.worktrees && typeof r.worktrees === 'object' ? r.worktrees : r;
-            var c = Object.values(registry).filter(function(w){
-              return w && typeof w === 'object' && (w.status === 'active' || w.specId || w.spec_id);
-            }).length;
-            console.log(c);
-          } catch(e) { console.log(0); }
-        " 2>/dev/null || echo "0")
-        if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
-          GIT_SUBCMD="git operation"
-          [[ "$pattern" == *"git rebase"* ]] && GIT_SUBCMD="git rebase"
-          [[ "$pattern" == *"git cherry-pick"* ]] && GIT_SUBCMD="git cherry-pick"
-          REASON="$GIT_SUBCMD is forbidden while $ACTIVE_COUNT worktree(s) are active. This can replay or rewrite commits across worktree boundaries. This is a human-review boundary, not a retryable syntax error. Command was: $COMMAND"
-          record_danger_latch "$LATCH_FILE" "deny" "$GIT_SUBCMD active-worktrees" "$COMMAND"
-          emit_block_json "$REASON"
-          exit 0
-        fi
-      fi
-      continue
-    fi
-
-    # Allow venv commands if target matches designated venv path from scope.json
-    if printf '%s\n' "$pattern" | grep -qE '(python.*venv|virtualenv|conda create)'; then
-      PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-      SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
-      if [[ -f "$SCOPE_FILE" ]] && command -v node >/dev/null 2>&1; then
-        DESIGNATED_VENV=$(node -e "try { const s = JSON.parse(require('fs').readFileSync('$SCOPE_FILE','utf8')); console.log(s.designatedVenvPath || ''); } catch(e) { console.log(''); }" 2>/dev/null || echo "")
-        if [[ -n "$DESIGNATED_VENV" ]] && printf '%s\n' "$COMMAND" | grep -qF "$DESIGNATED_VENV"; then
-          continue
-        fi
-      fi
-    fi
-
-    REASON="Command matches dangerous pattern: $pattern. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
-    record_danger_latch "$LATCH_FILE" "deny" "$pattern" "$COMMAND"
-    emit_block_json "$REASON"
-    exit 0
-  fi
-done
-
-# Check for sudo without specific allowed commands
-if printf '%s\n' "$COMMAND" | grep -qE '^sudo\s' && ! printf '%s\n' "$COMMAND" | grep -qE 'sudo (npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)'; then
-  REASON="sudo commands require explicit approval. If this command is safe, run it manually in your terminal. Command was: $COMMAND"
-  record_danger_latch "$LATCH_FILE" "deny" "sudo" "$COMMAND"
-  emit_block_json "$REASON"
-  exit 0
-fi
-
-# Allow the command
+# shellcheck disable=SC2317  # Defense-in-depth tail; unreachable on a healthy classifier.
 exit 0

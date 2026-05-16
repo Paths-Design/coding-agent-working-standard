@@ -109,6 +109,44 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# Second invocation with the SAME nonce: token must be consumed,
+# so this attempt should ask (and latch).
+SECOND_TRUSTED_PROJECT="$(mktemp -d)"
+SECOND_TRUSTED_OUTPUT=$(cd "$SECOND_TRUSTED_PROJECT" && printf '%s' "$TRUSTED_INPUT" | \
+  CLAUDE_PROJECT_DIR="$SECOND_TRUSTED_PROJECT" \
+  CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT=1 \
+  CAWS_TRUSTED_HOOK_NONCE="$TRUSTED_NONCE" \
+  bash "$HOOK" 2>/dev/null) || true
+SECOND_TRUSTED_DECISION=$(printf '%s' "$SECOND_TRUSTED_OUTPUT" | jq -r '.hookSpecificOutput.permissionDecision // .decision // "missing"')
+if [[ "$SECOND_TRUSTED_DECISION" == "ask" ]]; then
+  echo "  [PASS] trusted token is one-shot (second invocation asks)"
+  PASS=$((PASS + 1))
+else
+  echo "  [FAIL] trusted token reused: second invocation should ask, got: $SECOND_TRUSTED_DECISION"
+  FAIL=$((FAIL + 1))
+fi
+
+# Token consumed in the original project too — re-running git init there
+# should now ask, not allow.
+TRUSTED_INPUT_RETRY=$(jq -n '{
+  session_id: "smoke-trusted-retry",
+  tool_name: "Bash",
+  tool_input: { command: "git --bare init" }
+}')
+TRUSTED_RETRY_OUTPUT=$(cd "$TRUSTED_PROJECT" && printf '%s' "$TRUSTED_INPUT_RETRY" | \
+  CLAUDE_PROJECT_DIR="$TRUSTED_PROJECT" \
+  CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT=1 \
+  CAWS_TRUSTED_HOOK_NONCE="$TRUSTED_NONCE" \
+  bash "$HOOK" 2>/dev/null) || true
+TRUSTED_RETRY_DECISION=$(printf '%s' "$TRUSTED_RETRY_OUTPUT" | jq -r '.hookSpecificOutput.permissionDecision // .decision // "missing"')
+if [[ "$TRUSTED_RETRY_DECISION" == "ask" ]]; then
+  echo "  [PASS] trusted token is one-shot (retry in same project asks)"
+  PASS=$((PASS + 1))
+else
+  echo "  [FAIL] trusted token retry: expected ask, got: $TRUSTED_RETRY_DECISION"
+  FAIL=$((FAIL + 1))
+fi
+
 # Latch behavior: first dangerous command asks, second Bash command blocks.
 LATCH_PROJECT="$(mktemp -d)"
 LATCH_SESSION="smoke-latch"

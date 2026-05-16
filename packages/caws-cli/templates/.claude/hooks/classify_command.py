@@ -472,19 +472,33 @@ def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, 
     return classify_command(nested[0], repo_root, home, cwd, caws_worktree)
 
 
-def classify_git_semantics(segment: str, caws_worktree: bool) -> tuple[str, str] | None:
-    """Classify Git operations by executable/subcommand semantics."""
-    if has_git_init_alias_config(segment):
-        if caws_worktree:
+def classify_git_semantics(
+    segment: str,
+    caws_worktree: bool,
+    repo_root: Path | None = None,
+) -> tuple[str, str] | None:
+    """Classify Git operations by executable/subcommand semantics.
+
+    When `caws_worktree` is true (a trusted git-init context exists) and
+    the segment is a git-init variant, the trusted token is consumed
+    here. If consumption fails (the token was removed by a concurrent
+    classifier run, or another git-init segment in the same command
+    already consumed it), the segment falls back to `ask` so the human
+    review boundary still engages.
+    """
+    is_init_alias = has_git_init_alias_config(segment)
+    subcommand = detect_git_subcommand(segment) if not is_init_alias else None
+
+    if is_init_alias:
+        if caws_worktree and repo_root is not None and consume_trusted_git_init_context(repo_root):
             return "allow", ""
         return "ask", "git alias routes to init and requires human approval"
 
-    subcommand = detect_git_subcommand(segment)
     if subcommand is None:
         return None
 
     if subcommand == "init":
-        if caws_worktree:
+        if caws_worktree and repo_root is not None and consume_trusted_git_init_context(repo_root):
             return "allow", ""
         return "ask", "git init requires human approval; do not retry by wrapping, reordering, aliasing, or indirect invocation"
 
@@ -497,17 +511,41 @@ def classify_git_semantics(segment: str, caws_worktree: bool) -> tuple[str, str]
     return None
 
 
-def has_trusted_git_init_context(repo_root: Path) -> bool:
-    """Return true when dispatch created a one-shot git-init allow token."""
-    if os.environ.get("CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT", "0") != "1":
-        return False
+def _trusted_git_init_token_path(repo_root: Path) -> Path | None:
+    """Return the trusted git-init allow-token path if the env signals it.
 
+    Validation only — does not check disk presence and does not consume.
+    """
+    if os.environ.get("CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT", "0") != "1":
+        return None
     nonce = os.environ.get("CAWS_TRUSTED_HOOK_NONCE", "")
     if not re.match(r"^[A-Za-z0-9._-]{8,128}$", nonce):
-        return False
+        return None
+    return repo_root / ".claude" / "hooks" / "state" / f"allow-git-init-{nonce}"
 
-    token = repo_root / ".claude" / "hooks" / "state" / f"allow-git-init-{nonce}"
-    return token.is_file()
+
+def has_trusted_git_init_context(repo_root: Path) -> bool:
+    """Return true when dispatch created a one-shot git-init allow token."""
+    token = _trusted_git_init_token_path(repo_root)
+    return token is not None and token.is_file()
+
+
+def consume_trusted_git_init_context(repo_root: Path) -> bool:
+    """Atomically consume the trusted git-init allow token.
+
+    Returns true if a valid token existed and was removed. The token is
+    one-shot: a subsequent git-init in the same dispatch will be subject
+    to normal classification (which means `ask`). Dispatch must mint a
+    fresh nonce + token for each authorized lifecycle operation.
+    """
+    token = _trusted_git_init_token_path(repo_root)
+    if token is None or not token.is_file():
+        return False
+    try:
+        token.unlink()
+    except OSError:
+        return False
+    return True
 
 
 def extract_command_word(segment: str) -> str:
@@ -685,12 +723,131 @@ def classify_find_delete(segment: str) -> tuple[str, str] | None:
     return "ask", f"find with delete action"
 
 
+def extract_command_substitutions(raw: str) -> list[str]:
+    """Return the bodies of every $(...) and `...` substitution in raw.
+
+    Bash executes command substitutions even when they appear inside double
+    quotes; only single-quoted regions suppress them. Callers should pass
+    each body back through the classifier so a nested `$(rm -rf /)` or
+    `$(git reset --hard)` is not treated as inert text.
+
+    Single-quoted regions, escaped `\\$` and `\\``, and heredoc bodies are
+    skipped. Nested `$(...)` is supported by balancing parentheses.
+    """
+    bodies: list[str] = []
+    i = 0
+    in_single = False
+    in_heredoc: str | None = None
+
+    while i < len(raw):
+        ch = raw[i]
+
+        # Heredoc tracking: bodies are inert as far as substitutions go
+        # (heredoc expansion is its own surface; classify_command will see
+        # the raw text and apply the same rules).
+        if in_heredoc is not None:
+            nl = raw.find('\n', i)
+            if nl < 0:
+                break
+            line = raw[i:nl]
+            i = nl + 1
+            if line.strip() == in_heredoc:
+                in_heredoc = None
+            continue
+
+        if not in_single and raw[i:i+2] == "<<":
+            j = i + 2
+            while j < len(raw) and raw[j] in (' ', '\t'):
+                j += 1
+            if j < len(raw) and raw[j] in ("'", '"'):
+                j += 1
+            k = j
+            while k < len(raw) and raw[k] not in (' ', '\t', '\n', "'", '"', ')'):
+                k += 1
+            if k > j:
+                in_heredoc = raw[j:k]
+                nl = raw.find('\n', i)
+                i = nl + 1 if nl >= 0 else len(raw)
+                continue
+
+        # Escape: `\$`, `\``, and `\\` suppress substitution recognition.
+        if ch == '\\' and i + 1 < len(raw):
+            i += 2
+            continue
+
+        # Single quotes suppress everything inside; toggle and skip.
+        if ch == "'":
+            in_single = not in_single
+            i += 1
+            continue
+
+        if in_single:
+            i += 1
+            continue
+
+        # $(...) substitution — find the matching close paren, respecting
+        # nesting and quoted regions inside the body.
+        if ch == '$' and i + 1 < len(raw) and raw[i+1] == '(':
+            depth = 1
+            j = i + 2
+            inner_single = False
+            inner_double = False
+            while j < len(raw) and depth > 0:
+                c = raw[j]
+                if c == '\\' and j + 1 < len(raw):
+                    j += 2
+                    continue
+                if not inner_double and c == "'":
+                    inner_single = not inner_single
+                elif not inner_single and c == '"':
+                    inner_double = not inner_double
+                elif not inner_single and not inner_double:
+                    if c == '(':
+                        depth += 1
+                    elif c == ')':
+                        depth -= 1
+                        if depth == 0:
+                            bodies.append(raw[i+2:j])
+                            j += 1
+                            break
+                j += 1
+            i = j
+            continue
+
+        # Backtick substitution. Bash does not support nesting inside the
+        # same backtick pair (you need `\``), so a simple scan to the next
+        # unescaped backtick is sufficient.
+        if ch == '`':
+            j = i + 1
+            while j < len(raw):
+                c = raw[j]
+                if c == '\\' and j + 1 < len(raw):
+                    j += 2
+                    continue
+                if c == '`':
+                    bodies.append(raw[i+1:j])
+                    j += 1
+                    break
+                j += 1
+            i = j
+            continue
+
+        i += 1
+
+    return bodies
+
+
 def strip_quoted_regions(raw: str) -> str:
     """Remove content inside single/double quotes and heredocs.
 
     Returns only the executable shell surface — quoted literals, heredoc
     bodies, and $(...) subshell content embedded in quotes are replaced
     with whitespace so that regex patterns only match actual commands.
+
+    Note: command substitutions inside double quotes execute in Bash. This
+    helper still blanks them so the surrounding command's literal pattern
+    matching is not confused; callers handle substitutions separately via
+    extract_command_substitutions().
     """
     result: list[str] = []
     i = 0
@@ -805,6 +962,19 @@ def classify_command(
         if re.search(pattern, executable_surface, re.IGNORECASE):
             escalate("deny", desc)
 
+    # --- Recursively classify command substitutions ---
+    # Bash executes `$(...)` and backtick substitutions even inside double
+    # quotes; single-quoted bodies are skipped by extract_command_substitutions.
+    # Each extracted body is classified as if it were an independent command.
+    for body in extract_command_substitutions(raw_command):
+        if not body.strip():
+            continue
+        sub_decision, sub_reason = classify_command(
+            body, repo_root, home, cwd, caws_worktree,
+        )
+        if sub_decision != "allow":
+            escalate(sub_decision, f"command substitution: {sub_reason}")
+
     segments = segment_command(raw_command)
 
     for segment in segments:
@@ -813,7 +983,7 @@ def classify_command(
             escalate(*nested_result)
             continue
 
-        git_result = classify_git_semantics(segment, caws_worktree)
+        git_result = classify_git_semantics(segment, caws_worktree, repo_root)
         if git_result:
             escalate(*git_result)
 

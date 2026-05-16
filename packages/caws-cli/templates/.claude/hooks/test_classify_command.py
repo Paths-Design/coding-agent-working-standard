@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Tests for classify_command.py"""
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 # Import the classifier from the same directory
@@ -9,7 +11,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from classify_command import (
     classify_command,
     classify_rm_target,
+    consume_trusted_git_init_context,
     detect_git_subcommand,
+    extract_command_substitutions,
+    has_trusted_git_init_context,
     segment_command,
     is_recursive_rm,
     strip_quoted_regions,
@@ -235,14 +240,60 @@ def main() -> int:
         if not test(f"safe git/init mention: {cmd}", d, "allow"):
             failures += 1
 
-    # Allow: git init in worktree context
-    d, _ = classify_command("git init", REPO, HOME, CWD, caws_worktree=True)
-    if not test("git init (worktree)", d, "allow"):
-        failures += 1
+    # Note: `caws_worktree=True` alone no longer grants allow — the
+    # classifier now requires a real one-shot trusted token (see the
+    # trusted-token block below). The legacy "git init (worktree)"
+    # assertion was removed; equivalent coverage lives in the trusted-
+    # token tests, which also verify consume-on-allow semantics.
 
     assert detect_git_subcommand("git --bare init") == "init"
     assert detect_git_subcommand("command /usr/bin/git -C /tmp/foo init") == "init"
     assert detect_git_subcommand("git status") == "status"
+
+    # --- Trusted git-init token is one-shot ---
+    # Create a real on-disk token, classify git init twice. The first call
+    # must allow and consume; the second must fall back to ask.
+    with tempfile.TemporaryDirectory() as tmp:
+        token_root = Path(tmp)
+        state_dir = token_root / ".claude" / "hooks" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        nonce = "test-nonce-abc123"
+        token = state_dir / f"allow-git-init-{nonce}"
+        token.touch()
+
+        saved_env = {
+            "CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT": os.environ.get("CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT"),
+            "CAWS_TRUSTED_HOOK_NONCE": os.environ.get("CAWS_TRUSTED_HOOK_NONCE"),
+        }
+        os.environ["CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT"] = "1"
+        os.environ["CAWS_TRUSTED_HOOK_NONCE"] = nonce
+
+        try:
+            assert has_trusted_git_init_context(token_root), "token should be visible before first classify"
+            d, _ = classify_command("git init", token_root, HOME, CWD, caws_worktree=True)
+            if not test("trusted git init (first call, token consumed)", d, "allow"):
+                failures += 1
+            assert not token.is_file(), "token must be consumed after first allow"
+            assert not has_trusted_git_init_context(token_root), "context must be gone after consume"
+
+            d, _ = classify_command("git init", token_root, HOME, CWD, caws_worktree=True)
+            if not test("trusted git init (second call, no token left)", d, "ask"):
+                failures += 1
+
+            # consume returns false when token absent
+            assert consume_trusted_git_init_context(token_root) is False
+        finally:
+            for k, v in saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    # extract_command_substitutions returns nested bodies recursively.
+    assert extract_command_substitutions('echo "$(rm -rf /)"') == ["rm -rf /"]
+    assert extract_command_substitutions("echo '$(rm -rf /)'") == []
+    assert extract_command_substitutions('echo "`git reset --hard`"') == ["git reset --hard"]
+    print("  [PASS] extract_command_substitutions tests")
 
     # Chained: safe && dangerous = deny
     d, _ = classify_command("echo hello && rm -rf /", REPO, HOME, CWD)
@@ -349,18 +400,58 @@ def main() -> int:
     print("\n=== Adversarial edge cases ===")
     # ================================================================
 
-    # Command substitution in quotes: $(...) content is inside quotes
+    # Command substitution executes even inside double quotes. The
+    # nested git reset must be classified, not treated as inert text.
     d, _ = classify_command(
         'FOO="$(git reset --hard)"', REPO, HOME, CWD
     )
-    if not test("command subst in double quotes", d, "allow"):
+    if not test("command subst in double quotes (ask)", d, "ask"):
         failures += 1
 
-    # Backtick command substitution in quotes
+    d, _ = classify_command(
+        'echo "$(git reset --hard)"', REPO, HOME, CWD
+    )
+    if not test("echo with $(...) substitution (ask)", d, "ask"):
+        failures += 1
+
     d, _ = classify_command(
         'FOO="`git reset --hard`"', REPO, HOME, CWD
     )
-    if not test("backtick subst in double quotes", d, "allow"):
+    if not test("backtick subst in double quotes (ask)", d, "ask"):
+        failures += 1
+
+    d, _ = classify_command(
+        'echo "`git reset --hard`"', REPO, HOME, CWD
+    )
+    if not test("echo with backtick substitution (ask)", d, "ask"):
+        failures += 1
+
+    # Nested $(...) inside $(...) — both bodies must be inspected.
+    d, _ = classify_command(
+        'echo "$(echo $(git reset --hard))"', REPO, HOME, CWD
+    )
+    if not test("nested $(...) substitution (ask)", d, "ask"):
+        failures += 1
+
+    # Deny pattern via substitution.
+    d, _ = classify_command(
+        'echo "$(rm -rf /)"', REPO, HOME, CWD
+    )
+    if not test("rm -rf / inside substitution (deny)", d, "deny"):
+        failures += 1
+
+    # Single-quoted substitution stays inert (single quotes suppress
+    # substitution in Bash).
+    d, _ = classify_command(
+        "echo '$(git reset --hard)'", REPO, HOME, CWD
+    )
+    if not test("single-quoted $(...) stays inert", d, "allow"):
+        failures += 1
+
+    d, _ = classify_command(
+        "echo '`git reset --hard`'", REPO, HOME, CWD
+    )
+    if not test("single-quoted backtick stays inert", d, "allow"):
         failures += 1
 
     # Escaped quotes should not end the quoted region
