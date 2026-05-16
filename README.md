@@ -1,339 +1,173 @@
-# CAWS - Coding Agent Workflow System
+# CAWS — Coding Agent Workflow System
 
-**Engineering-grade operating system for AI-assisted development**
+**A deterministic substrate for project state, scope, claims, gates, waivers, and audit evidence.**
 
-CAWS is a comprehensive framework that transforms how AI agents and human developers collaborate on software projects. It enforces quality, reliability, and maintainability through automated validation, provenance tracking, and contract-first development.
+CAWS is a kernel/store/shell architecture that gives coding agents and humans a shared, observable, auditable view of a project's quality state. The CLI is the governance surface; the kernel is pure governance primitives; the store owns all I/O; `.caws/` is the state directory.
 
-## What CAWS Is For
+This repository is the source for the `@paths.design/caws-cli` and `@paths.design/caws-kernel` npm packages. CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
 
-CAWS is designed for organizations and teams that want:
+## Status: v11.0.0 cutover in progress
 
-- **Predictable AI Agent Behavior**: Standardized workflows that agents follow reliably
-- **Quality Assurance**: Automated gates prevent bugs and ensure maintainability
-- **Explainable Development**: Full provenance tracking shows what happened and why
-- **Contract-First APIs**: API contracts defined before implementation
-- **Risk-Based Rigor**: Different quality requirements based on project risk
+The repo is mid-cutover from the legacy v10.x CLI to the **v11.0.0 vNext rewrite** on the `caws-next` branch. v11.0.0 is the **governed core** (A1 posture). It deliberately excludes spec/worktree lifecycle commands; those return in v11.1.
 
-## Quick Start
+**Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — Slice 8c.1 swept the high-traffic surface, but historical context in deeper docs may still describe v10 behavior.
+
+If your project depends on the legacy spec or worktree lifecycle commands (`specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `agents`, etc.), **pin to `caws-cli@^10.2.x`** until v11.1 ships. The two CLIs cannot coexist on the same project — they write to overlapping state.
+
+## What v11 ships
+
+Eight command groups. Nothing else.
+
+| Command | Purpose |
+|---|---|
+| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. |
+| `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
+| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
+| `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
+| `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 admit / 1 refuse. |
+| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. |
+| `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
+| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
+| `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+
+Run `caws <group> --help` for full options.
+
+## Quick start
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
-- npm >= 10.0.0
-- Git (for provenance tracking)
+- Node.js >= 18
+- Git
 
-### Installation
+### Install (post-cutover)
 
 ```bash
-# Install globally for CLI usage
-npm install -g @paths.design/caws-cli
-
-# Verify installation
+npm install -g @paths.design/caws-cli@^11.0.0
 caws --version
 ```
 
-### Release Notes
-
-See [CHANGELOG.md](./CHANGELOG.md) for release notes. For the installed CLI version, run `caws --version`.
-
-### Your First CAWS Project
+### Bootstrap a project
 
 ```bash
-# Initialize a new project with CAWS
-caws init my-project
-
-# Navigate to project
-cd my-project
-
-# Create your first feature spec
-caws specs create my-feature --type feature --title "My feature"
-
-# Validate the spec
-caws validate --spec-id my-feature
-
-# Start development following CAWS workflow
+git init my-project && cd my-project
+caws init
 ```
 
-## How CAWS Works
+`caws init` creates the canonical vNext layout:
 
-### The CAWS Development Workflow
+```
+.caws/
+  specs/                  # per-feature specs (.caws/specs/<id>.yaml)
+  waivers/                # waiver records (.caws/waivers/<id>.yaml)
+  policy.yaml             # gate block/warn/skip policy
+  worktrees.json          # worktree registry
+  agents.json             # agent session registry
+  # events.jsonl is created on first append; never required at rest.
+```
 
-1. **Plan**: Create a validated per-feature spec (`.caws/specs/<id>.yaml`)
-2. **Contract**: Define API contracts (OpenAPI, TypeScript interfaces)
-3. **Test**: Write tests first (TDD approach)
-4. **Implement**: Code against contracts and tests
-5. **Verify**: Run quality gates and validation
-6. **Document**: Track provenance and update docs
+It refuses to run if legacy `.caws/working-spec.yaml` is present. Migrate that file into per-feature `.caws/specs/<id>.yaml` first (or do the migration on `caws-cli@10.2.x` before upgrading).
 
-### Risk-Based Quality Tiers
+### Author a spec
 
-| Tier      | Use Case                    | Coverage | Mutation | Contracts | Review   |
-| --------- | --------------------------- | -------- | -------- | --------- | -------- |
-| **T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
-| **T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
-| **T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
+v11 does not ship a spec generator. Author the YAML directly in `.caws/specs/<id>.yaml` — see existing specs in this repo's `.caws/specs/` for the shape. Acceptance criteria use Given/When/Then format.
 
-### Key Components
-
-- **Working Specifications**: YAML files defining project scope, requirements, and contracts
-- **Quality Gates**: Automated validation of tests, coverage, linting, and security
-- **Provenance Tracking**: Complete audit trail of all changes and AI assistance
-- **Contract Validation**: API contracts tested before and during implementation
-- **MCP Server**: Model Context Protocol server for AI agent integration
-
-## CLI Commands
-
-### Project Management
+### Daily commands
 
 ```bash
-caws init [project-name]          # Initialize new CAWS project
-caws scaffold                     # Add CAWS to existing project
-caws validate                     # Validate working specification
-caws status                       # Show project health and status
+caws doctor                              # health check
+caws status                              # dashboard
+caws scope show src/foo.ts               # what scope says about a file
+caws gates run --spec FEAT-1             # run policy-driven gates
+caws waiver create FOO-1 \
+  --gate budget_limit \
+  --reason "..." \
+  --approved-by "team-lead" \
+  --expires-at "2026-12-01T00:00:00Z"
+caws evidence record \
+  --type test --spec FEAT-1 \
+  --data '{"name":"unit","status":"pass"}'
 ```
 
-### Development Workflow
+## Architecture (v11)
 
-```bash
-caws iterate                      # Get iterative development guidance
-caws evaluate                     # Evaluate current implementation
-caws progress update              # Update acceptance criteria progress
-```
+Three layers:
 
-### Quality & Testing
+1. **Kernel** (`@paths.design/caws-kernel`) — pure TypeScript. Spec parsing, policy validation, scope evaluation, doctor inspection, waiver effectiveness, hash-chained event verification. No `fs`, `path`, `process.env`, `Date.now()`, or `new Date()` in executable code; all time is injected.
+2. **Store** — Node I/O. Atomic writes via `writeFileAtomic`, hash-chained `events.jsonl` via lock + `prepareAppend`, snapshot composition for the doctor, legacy `working-spec.yaml` residue detection.
+3. **Shell** — Commander commands and renderers. Composes store snapshots, calls kernel functions, prints diagnostics.
 
-```bash
-caws diagnose                     # Run health checks and diagnostics
-caws test-analysis assess-budget  # Predict test budget needs
-```
+### Architectural invariants
 
-### Provenance & Compliance
+1. `events.jsonl` is written ONLY through the store's `appendEvent`.
+2. `policy.yaml` owns gate `mode` (block/warn/skip). Waivers filter violations out of the disposition; they do not change gate mode.
+3. Doctor is pure (kernel-side). The store composes the snapshot; doctor inspects it.
+4. Missing != malformed. Diagnostics distinguish absence from corruption.
+5. `events.jsonl` is never required at rest. The first `appendEvent` creates it.
+6. `caws init` is idempotent and non-destructive. It refuses legacy residue. There is no `--force`.
+7. `caws status` is observability. Running it any number of times produces no `.caws/` byte changes.
 
-```bash
-caws provenance init              # Initialize provenance tracking
-caws provenance show              # Display provenance dashboard
-caws provenance analyze-ai        # Analyze AI effectiveness
-caws hooks install                # Install automatic git hooks
-```
+### Exit codes
 
-### Quality Gates
+- `0` — success / observation
+- `1` — domain failure (gate failed, doctor finding, scope refused)
+- `2` — composition failure (not a git repo, can't read `.caws/`, missing required tooling)
 
-```bash
-caws waivers create               # Create quality gate waivers
-caws waivers list                 # List active waivers
-caws workflow guidance            # Get workflow-specific guidance
-```
-
-### Parallel Orchestration
-
-```bash
-caws parallel setup <plan-file> [--base-branch <branch>]
-                                  # Create parallel git worktrees for multiple agents from a plan file
-caws parallel status              # Show status of all active parallel worktrees, agents, and file-level conflicts
-caws parallel merge [--strategy <strategy>] [--dry-run] [--force]
-                                  # Merge all agent branches back to the base branch
-caws parallel teardown [--delete-branches] [--force]
-                                  # Remove parallel worktrees and optionally delete their branches
-```
-
-The `parallel` command coordinates multi-agent development using git worktrees. Each agent works in an isolated worktree on its own branch. A plan file (YAML or JSON) declares the agents, their scope, and the merge strategy.
-
-Example plan file:
-
-```yaml
-baseBranch: main
-mergeStrategy: sequential
-agents:
-  - name: agent-auth
-    scope: src/auth/**
-  - name: agent-api
-    scope: src/api/**
-```
-
-## Documentation & Examples
-
-### Comprehensive Guides
-
-- **[Agent Workflow Guide](docs/agents/full-guide.md)** - Complete guide for AI agents
-- **[Agent Integration Guide](docs/guides/agent-integration-guide.md)** - Technical integration details
-- **[Agent Workflow Extensions](docs/guides/agent-workflow-extensions.md)** - Advanced agent features
-- **[CAWS and Claude Code Cross-Analysis](docs/internal/claude-code-cross-analysis.md)** - How CAWS compares to Claude Code's harness patterns
-- **[Claude Code-Informed Runtime Recommendations](docs/internal/claude-code-runtime-recommendations-for-caws.md)** - CAWS-specific recommendations from Claude Code learnings
-- **[Claude Code Implementation Learnings for CAWS](docs/internal/claude-code-implementation-learnings-for-caws.md)** - Deeper feature-by-feature lessons applicable to CAWS
-
-### Examples & Templates
-
-- **[Demo Project](packages/caws-cli/demo-project/)** - Complete working example
-- **[Template Project](packages/caws-cli/templates/)** - Project scaffolding templates
-
-### Quality Assurance
-
-- **[Benchmarking Framework](docs/internal/CAWS_AGENT_BENCHMARKING_FRAMEWORK.md)** - Agent effectiveness testing
-- **[Specification Audit](docs/internal/SPEC_ALIGNMENT_AUDIT.md)** - Current implementation status
-- **[Validation Summary](docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Compliance verification
-
-## Architecture Overview
-
-### Core Components
-
-#### 1. **Feature Specifications** (`.caws/specs/<id>.yaml`)
-
-Per-feature YAML files defining:
-
-- Project scope and boundaries
-- Acceptance criteria
-- API contracts references
-- Risk tier and quality requirements
-- Performance budgets and SLAs
-
-#### 2. **Quality Gates**
-
-Automated validation including:
-
-- **Test Coverage**: Branch and statement coverage requirements
-- **Mutation Testing**: Test suite strength validation
-- **Contract Testing**: API contract compliance
-- **Static Analysis**: Linting, type checking, security scanning
-
-#### 3. **Provenance Tracking**
-
-Complete audit trail with:
-
-- AI vs human contribution tracking
-- Commit-to-spec linkage
-- Quality metrics over time
-- Automated git hooks
-
-#### 4. **Contract-First Development**
-
-API contracts defined before implementation:
-
-- OpenAPI specifications
-- TypeScript interface definitions
-- JSON Schema validation
-- Automated contract testing
-
-### Data Flow
-
-```
-Working Spec → Contract Generation → Test Writing → Implementation → Quality Gates → Provenance Tracking
-     ↓              ↓                      ↓             ↓              ↓              ↓
-   Validate      Generate Types          TDD         Code Against     Automated       Audit Trail
-   Schema        From Contracts         Approach     Contracts       Validation       & Analytics
-```
-
-## For AI Agents
-
-### Your Development Contract
-
-When working on a CAWS project, you must:
-
-1. **Always validate first**: Run `caws validate` before starting work
-2. **Follow the risk tier**: Meet coverage, mutation, and contract requirements
-3. **Create contracts first**: Define APIs before implementation
-4. **Write tests first**: TDD approach with comprehensive edge cases
-5. **Track provenance**: All changes are attributable and auditable
-6. **Stay in scope**: Respect `scope.in` and `scope.out` boundaries
-
-### Agent Success Metrics
-
-- **Independence**: Can work autonomously without constant human intervention
-- **Quality Compliance**: Meets all tier requirements on first attempt
-- **Contract Adherence**: APIs match specifications exactly
-- **Test Coverage**: Comprehensive test suites that catch mutations
-- **Documentation**: Clear, accurate documentation updates
-
-See the **[Agent Workflow Guide](docs/agents/full-guide.md)** for detailed instructions.
-
-## Packages
-
-### Core Packages
-
-| Package                   | Description                                 | Status                  |
-| ------------------------- | ------------------------------------------- | ----------------------- |
-| **caws-cli**              | Command-line interface for CAWS operations  | Stable (v3.4.0)      |
-### Development Packages
-
-| Package                | Description                          | Status    |
-| ---------------------- | ------------------------------------ | --------- |
-| **caws-test-project**  | Reference implementation and testing | Stable |
-| **caws-cli/templates** | Project templates and scaffolding    | Stable |
-
-## Development
-
-### Building
-
-```bash
-# Install dependencies
-npm install
-
-# Build all packages
-npm run build
-
-# Run tests
-npm run test
-
-# Lint all packages
-npm run lint
-```
-
-### Monorepo Structure
+## Repository layout
 
 ```
 caws/
 ├── packages/
-│   ├── caws-cli/                 # Main CLI tool
-│   │   ├── src/                  # CLI source code
-│   │   ├── templates/            # Project templates
-│   │   └── demo-project/         # Working example
-├── docs/                         # Documentation
-│   ├── agents/                   # Agent guides
-│   ├── guides/                   # Integration guides
-│   └── internal/                 # Internal docs
-└── scripts/                      # Build and utility scripts
+│   ├── caws-cli/                 # CLI (governance surface)
+│   │   ├── src/
+│   │   │   ├── shell/            # vNext command implementations (TS)
+│   │   │   ├── store/            # vNext I/O layer (TS)
+│   │   │   └── ...               # legacy v10 sources (orphaned post-8a3, deleted in 8e)
+│   │   └── README.md             # v11-honest package README
+│   └── caws-kernel/              # Pure governance primitives (TS, no I/O)
+├── docs/
+│   ├── architecture/
+│   │   └── caws-vnext-command-surface.md   # ← doctrine source
+│   ├── agents/                   # agent guides
+│   └── guides/                   # integration / workflow guides
+├── .caws/                        # this repo's own CAWS state (self-hosting)
+├── AGENTS.md                     # agent quickstart
+└── CLAUDE.md                     # Claude Code project instructions
 ```
 
-## Contributing
+## Documentation
 
-We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details.
+Authoritative for v11:
 
-### Development Workflow
+- **[`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md)** — doctrine source. Posture, kept commands, removed commands, invariants.
+- **[`packages/caws-cli/README.md`](packages/caws-cli/README.md)** — v11 CLI reference.
+- **[`AGENTS.md`](AGENTS.md)** — agent quickstart for working on this repo.
+- **[`CLAUDE.md`](CLAUDE.md)** — Claude Code project guidance.
 
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Implement** your changes following CAWS principles
-4. **Test** thoroughly (we use CAWS ourselves!)
-5. **Submit** a pull request
+Cleanup status (Slice 8c.1):
 
-### Code Quality
+- Files swept and rewritten v11-honest: this README, `AGENTS.md`, `CLAUDE.md`, `packages/caws-cli/README.md`, the doctrine doc.
+- Files swept for active v10 instructions removed: `docs/agents/`, `docs/guides/`, `docs/api/cli.md`, `docs/agent-workflow-tools.md`.
+- Files explicitly historical (allowed to retain v10 references): `docs/MIGRATION_GUIDE_V3.5.md`, `docs/ROLLBACK.md`, `docs/DEPLOYMENT.md`, `packages/caws-cli/docs-status/failure-lineage.md`, anything under `docs/internal/`.
 
-This project uses CAWS for its own development. All contributions must:
+If you find a doc that still teaches removed commands as current workflow, file an issue or PR — it's a 8c.1 escapee.
 
-- Pass CAWS validation (`caws validate`)
-- Meet Tier 1 quality standards (90% coverage, 70% mutation)
-- Include comprehensive contract definitions
-- Follow the established patterns and conventions
+## Development
+
+```bash
+npm install
+npm run build
+cd packages/caws-cli && npx jest      # CLI shell + store tests
+cd packages/caws-kernel && npm test   # kernel tests
+```
+
+This project uses CAWS for its own development — see [`AGENTS.md`](AGENTS.md) and the doctrine doc for contributor workflow.
 
 ## License
 
-**MIT License** - see [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
-## Acknowledgments
+## Support
 
-- **Model Context Protocol** for the standardized agent interface
-- **OpenAPI Initiative** for API contract standards
-- **Jest** and **Stryker** communities for testing frameworks
-- **VS Code** team for the extension platform
-
----
-
-## Support & Community
-
-- **Documentation**: [Full Agent Guide](docs/agents/full-guide.md)
-- **Issues**: [GitHub Issues](https://github.com/Paths-Design/coding-agent-working-standard/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
-- **Email**: hello@paths.design
-
----
-
-**CAWS** - Making AI-human collaboration reliable, explainable, and high-quality.
+- **Issues:** https://github.com/Paths-Design/coding-agent-working-standard/issues
+- **Discussions:** https://github.com/Paths-Design/coding-agent-working-standard/discussions
+- **Email:** hello@paths.design

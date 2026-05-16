@@ -1,3 +1,12 @@
+---
+doc_id: caws-schema
+authority: reference
+status: active
+title: CAWS Schema Specifications (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
 # CAWS Schema Specifications
 
 ## Overview

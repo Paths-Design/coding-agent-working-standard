@@ -1,3 +1,12 @@
+---
+doc_id: caws-deployment
+authority: reference
+status: active
+title: CAWS Production Deployment Guide
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
 # CAWS Production Deployment Guide
 
 **Author**: @darianrosebrook  
@@ -43,7 +52,7 @@ graph TB
 | ----------- | ----------- | --------------------------------- |
 | **Node.js** | >= 22.14.0  | Specified in package.json engines |
 | **npm**     | >= 10.0.0   | For package management            |
-| **Git**     | >= 2.30.0   | For provenance tracking           |
+| **Git**     | >= 2.30.0   | Required by CAWS for repo state           |
 | **Storage** | 100 MB      | For CLI and dependencies          |
 | **Memory**  | 512 MB      | Minimum for CLI operations        |
 
@@ -253,10 +262,11 @@ docker run --rm -it node:22-alpine sh -c "npm install -g @paths.design/caws-cli 
 # 3. Verify provenance (if enabled)
 npm audit signatures
 
-# 4. Run smoke tests
-caws validate --help
+# 4. Run smoke tests (v11 surface)
+caws --help
+caws doctor --help
 caws status --help
-caws diagnose --help
+caws gates --help
 ```
 
 ### Health Check Script
@@ -283,11 +293,12 @@ echo "✅ CAWS version: $VERSION"
 # Check basic commands
 caws --help > /dev/null && echo "✅ CLI responding"
 
-# Check in a test project
+# Check in a test project (v11)
 mkdir -p /tmp/caws-test
 cd /tmp/caws-test
-caws init . --minimal > /dev/null 2>&1 || true
-caws validate && echo "✅ Validation working"
+git init > /dev/null 2>&1
+caws init > /dev/null 2>&1 || true
+caws doctor && echo "✅ Doctor working"
 
 # Cleanup
 rm -rf /tmp/caws-test

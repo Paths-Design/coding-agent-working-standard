@@ -1,3 +1,12 @@
+---
+doc_id: caws-rollback
+authority: reference
+status: active
+title: CAWS Rollback & Incident Response
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
 # CAWS Rollback & Incident Response
 
 **Author**: @darianrosebrook  
@@ -273,8 +282,8 @@ git push origin main
 # === ASSESS (0-30 minutes) ===
 
 # 1. Reproduce issue
-npm install -g @paths.design/caws-cli@3.4.1
-caws validate test-project
+npm install -g @paths.design/caws-cli@<bad-version>
+cd test-project && caws doctor
 
 # 2. Check error reports
 gh issue list --label "bug" --label "priority:high"
@@ -307,7 +316,7 @@ gh pr create --title "fix: resolve validation failure" \
 
 # 8. Verify fix
 npm install -g @paths.design/caws-cli@latest
-caws validate test-project
+cd test-project && caws doctor
 
 # === COMMUNICATE ===
 
@@ -374,7 +383,7 @@ echo "Testing fresh install..."
 docker run --rm node:22-alpine sh -c "
   npm install -g @paths.design/caws-cli@$LATEST
   caws --version
-  caws validate --help
+  caws --help
 "
 
 # 3. Run smoke tests

@@ -1,6 +1,17 @@
-# CAWS Tutorial - Step-by-Step Guide
+---
+doc_id: agents-tutorial
+authority: reference
+status: active
+title: CAWS Tutorial — Step-by-Step Guide (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-**Hands-on tutorial for implementing CAWS in your project**
+# CAWS Tutorial — Step-by-Step Guide
+
+**Hands-on tutorial for implementing CAWS v11.0.0 in your project**
+
+> **v11 surface only.** This tutorial uses the v11 commands: `init`, `doctor`, `status`, `scope`, `gates`, `evidence`, `waiver`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
@@ -31,23 +42,34 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 
 ## Step 1: Initialize CAWS
 
-### Create Feature Spec
+### Initialize CAWS state
 
 ```bash
-# Initialize with interactive wizard
-caws init --interactive
+# v11: idempotent, no-arg, no wizard
+caws init
 ```
 
-**Wizard Responses**:
-- Project type: `application`
-- Title: `Add User Preferences Storage`
-- Risk tier: `2` (Standard feature)
-- Mode: `feature`
-- Max files: `8` (reasonable for this feature)
-- Max lines: `200` (focused implementation)
-- Modules: `ui, storage, types`
-- Data migration: `No`
-- Rollback SLO: `5m`
+This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`, `agents.json`. (v11 does not ship an interactive wizard or templates; author the spec by hand in the next step.)
+
+### Create the feature spec
+
+Create `.caws/specs/user-preferences.yaml` with these fields:
+
+```yaml
+id: FEAT-PREFS
+title: Add User Preferences Storage
+risk_tier: T2
+mode: feature
+change_budget:
+  max_files: 8
+  max_loc: 200
+blast_radius:
+  modules: [ui, storage, types]
+  data_migration: false
+operational_rollback_slo: 5m
+```
+
+(See [`docs/api/schema.md`](../api/schema.md) for the full schema.)
 
 **Result**: `.caws/specs/<spec-id>.yaml` is created with:
 
@@ -97,13 +119,13 @@ non_functional:
   security: ["input validation", "XSS prevention"]
 ```
 
-### Validate Spec
+### Verify spec / drift
 
 ```bash
-caws validate --suggestions
+caws doctor
 ```
 
-**Expected**: Valid spec
+**Expected**: exit 0 (no findings).
 
 ---
 
@@ -366,13 +388,13 @@ find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} +
 
 **Expected**: Within budget (8 files, 200 lines)
 
-### Run Validation
+### Run quality gates
 
 ```bash
-caws validate --quiet
+caws gates run --spec FEAT-PREFS
 ```
 
-**Expected**: No validation errors
+**Expected**: exit 0 (all blocking gates pass).
 
 ### Check Coverage
 

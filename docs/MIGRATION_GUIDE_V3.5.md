@@ -1,6 +1,24 @@
+---
+doc_id: migration-guide-v3-5
+authority: reference
+status: superseded
+superseded_by: caws-vnext-command-surface
+title: CAWS Migration Guide v3.4 → v3.5 (HISTORICAL)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
 # CAWS Migration Guide: v3.4 → v3.5
 
-**Agent-Agency Enhancements Edition**
+> **HISTORICAL — superseded by v11.0.0.** This document describes the v3.4→v3.5 migration path that was current circa October 2025. Both v3.4 and v3.5 are pre-vNext. The v11.0.0 cutover (current) is a ground-up rewrite around a pure kernel/store/shell architecture and is not described here.
+>
+> If you are migrating *to v11*, see the [`README.md`](../README.md) and [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md) instead.
+>
+> Commands described below (`caws validate`, `caws waivers create`, etc.) are v3-era surfaces and are removed in v11. The body is preserved for users still on v3.x.
+
+---
+
+**Agent-Agency Enhancements Edition (v3 era)**
 
 This guide helps you migrate existing CAWS projects to take advantage of new features from agent-agency integration.
 

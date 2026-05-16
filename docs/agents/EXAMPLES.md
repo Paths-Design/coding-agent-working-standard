@@ -1,4 +1,13 @@
-# CAWS Examples - Real Feature Specs
+---
+doc_id: agents-examples
+authority: reference
+status: active
+title: CAWS Examples — Real Feature Specs (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
+# CAWS Examples — Real Feature Specs
 
 **Example working specifications from real projects**
 
@@ -716,13 +725,13 @@ ai_assessment:
 1. **Find Similar Project**: Look for examples matching your project type and risk level
 2. **Copy Structure**: Use the YAML structure as a starting point
 3. **Customize Values**: Update IDs, titles, scopes, and budgets for your specific case
-4. **Validate Early**: Run `caws validate --suggestions` to catch issues
+4. **Verify early**: Run `caws doctor` and `caws gates run --spec <id>` to catch issues (v11 has no `caws validate`)
 5. **Iterate**: Refine based on your project's specific requirements
 
 These examples show how CAWS scales from simple fixes to complex monorepo changes while maintaining consistent quality and safety standards.
 
 ---
 
-**Examples Version**: 1.0  
-**CAWS Version**: 3.1.0  
-**Last Updated**: October 2, 2025
+**Examples Version**: 11.0  
+**CAWS Version**: 11.0.0  
+**Last Updated**: 2026-05-15
