@@ -184,6 +184,92 @@ else
 fi
 
 echo ""
+echo "=== reset-danger-latch.sh ergonomics ==="
+
+# These tests intentionally invoke reset-danger-latch.sh with cases that
+# exit non-zero (exit 2 is the expected outcome for several scenarios).
+# `set -e` would kill the test runner the first time a sub-bash returns
+# non-zero, so disable it for this block.
+set +e
+
+RESET_SCRIPT="$SCRIPT_DIR/reset-danger-latch.sh"
+
+reset_test() {
+  local name="$1"
+  local expected_exit="$2"
+  local actual_exit="$3"
+  local expected_pattern="$4"
+  local actual_output="$5"
+
+  if [[ "$actual_exit" != "$expected_exit" ]]; then
+    echo "  [FAIL] $name: expected exit $expected_exit, got $actual_exit"
+    echo "         output: $actual_output"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if [[ -n "$expected_pattern" ]] && ! printf '%s' "$actual_output" | grep -qE -- "$expected_pattern"; then
+    echo "  [FAIL] $name: output did not match /$expected_pattern/"
+    echo "         output: $actual_output"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  echo "  [PASS] $name"
+  PASS=$((PASS + 1))
+}
+
+# Case A: --current with no session env and no latches present
+T_A=$(mktemp -d)
+mkdir -p "$T_A/.claude/hooks/state" "$T_A/.claude/logs"
+A_OUT=$(CLAUDE_PROJECT_DIR="$T_A" CLAUDE_SESSION_ID="" HOOK_SESSION_ID="" \
+  bash "$RESET_SCRIPT" --current --reason "smoke A" 2>&1); A_EXIT=$?
+reset_test "reset --current with no env+no latch -> exit 2" "2" "$A_EXIT" "No danger latch files found" "$A_OUT"
+
+# Case B: --current with no session env and exactly one latch present
+T_B=$(mktemp -d)
+mkdir -p "$T_B/.claude/hooks/state" "$T_B/.claude/logs"
+echo '{}' > "$T_B/.claude/hooks/state/danger-latch-solo.json"
+B_OUT=$(CLAUDE_PROJECT_DIR="$T_B" CLAUDE_SESSION_ID="" HOOK_SESSION_ID="" \
+  bash "$RESET_SCRIPT" --current --reason "smoke B" 2>&1); B_EXIT=$?
+reset_test "reset --current with no env+one latch -> exit 0" "0" "$B_EXIT" "Reset 1 danger latch" "$B_OUT"
+if [[ -f "$T_B/.claude/hooks/state/danger-latch-solo.json" ]]; then
+  echo "  [FAIL] reset --current did not unlink the inferred latch"
+  FAIL=$((FAIL + 1))
+fi
+
+# Case C: --current with no session env and multiple latches present
+T_C=$(mktemp -d)
+mkdir -p "$T_C/.claude/hooks/state" "$T_C/.claude/logs"
+echo '{}' > "$T_C/.claude/hooks/state/danger-latch-one.json"
+echo '{}' > "$T_C/.claude/hooks/state/danger-latch-two.json"
+C_OUT=$(CLAUDE_PROJECT_DIR="$T_C" CLAUDE_SESSION_ID="" HOOK_SESSION_ID="" \
+  bash "$RESET_SCRIPT" --current --reason "smoke C" 2>&1); C_EXIT=$?
+reset_test "reset --current with no env+multi-latch -> exit 2 listing both" "2" "$C_EXIT" "Multiple latches found" "$C_OUT"
+# Both latches must still be present.
+if [[ ! -f "$T_C/.claude/hooks/state/danger-latch-one.json" ]] || [[ ! -f "$T_C/.claude/hooks/state/danger-latch-two.json" ]]; then
+  echo "  [FAIL] reset --current with multi-latch must not delete anything"
+  FAIL=$((FAIL + 1))
+fi
+
+# Case D: --session with id that does not match any latch
+T_D=$(mktemp -d)
+mkdir -p "$T_D/.claude/hooks/state" "$T_D/.claude/logs"
+D_OUT=$(CLAUDE_PROJECT_DIR="$T_D" \
+  bash "$RESET_SCRIPT" --session "no-such-session" --reason "smoke D" 2>&1); D_EXIT=$?
+reset_test "reset --session for nonexistent latch -> exit 2 with diagnostic" "2" "$D_EXIT" "No danger latch matched" "$D_OUT"
+
+# Case E: --current WITH session env id (legacy/normal path) still works
+T_E=$(mktemp -d)
+mkdir -p "$T_E/.claude/hooks/state" "$T_E/.claude/logs"
+echo '{}' > "$T_E/.claude/hooks/state/danger-latch-explicit.json"
+E_OUT=$(CLAUDE_PROJECT_DIR="$T_E" CLAUDE_SESSION_ID="explicit" \
+  bash "$RESET_SCRIPT" --current --reason "smoke E" 2>&1); E_EXIT=$?
+reset_test "reset --current WITH session env -> exit 0" "0" "$E_EXIT" "Reset 1 danger latch" "$E_OUT"
+
+# Case F: --all is still rejected
+F_OUT=$(bash "$RESET_SCRIPT" --all --reason "smoke F" 2>&1); F_EXIT=$?
+reset_test "reset --all -> exit 2 (still rejected)" "2" "$F_EXIT" "--all is no longer supported" "$F_OUT"
+
+echo ""
 echo "=========================================="
 echo "Results: $PASS passed, $FAIL failed"
 if [[ "$FAIL" -gt 0 ]]; then
