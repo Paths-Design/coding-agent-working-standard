@@ -13,6 +13,7 @@
 // The runner is pluggable so tests can inject canned JSON without spawning
 // real subprocesses. Production uses a default child_process runner.
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 
@@ -20,6 +21,56 @@ import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel
 
 import { SHELL_RULES } from '../rules';
 import { validateGatesReport, type GatesReport } from './gate-result-contract';
+
+const BIN_NAME = 'caws-quality-gates';
+
+/**
+ * Pure resolver: given the CLI install directory and the consumer project
+ * cwd, decide which on-disk path to spawn. Walks up from each starting
+ * point looking for `node_modules/.bin/<BIN_NAME>`.
+ *
+ * Resolution order (documented per CLI-GATES-003 A4):
+ *   1. CLI-install-local — walk up from cliDir. This wins when caws-cli is
+ *      installed globally or in a separate sandbox: caws-quality-gates
+ *      ships as a runtime dep of caws-cli, so it lives beside the caws
+ *      binary, not beside the consumer project.
+ *   2. Project-local — walk up from projectCwd. Preserves the prior
+ *      behavior for the project-local install pattern (CLI-GATES-002 A1).
+ *
+ * The CLI-install-local check wins when both exist. That ordering is by
+ * design: a global caws install was a deliberate choice to use one CLI
+ * version everywhere, and we want that single subprocess version too —
+ * not whatever happens to be in the consumer's node_modules from an older
+ * project-local install.
+ *
+ * Returns the resolved path on success, or { tried: string[] } so the
+ * adapter can surface both attempted paths in the GATES_SUBPROCESS_NOT_FOUND
+ * diagnostic.
+ */
+export function resolveQualityGatesBin(
+  cliDir: string,
+  projectCwd: string,
+  fsCheck: (p: string) => boolean = fs.existsSync
+): { resolved: string; source: 'cli-local' | 'project-local' } | { tried: string[] } {
+  const tried: string[] = [];
+  for (const [source, start] of [
+    ['cli-local', cliDir],
+    ['project-local', projectCwd],
+  ] as const) {
+    let dir = path.resolve(start);
+    while (true) {
+      const candidate = path.join(dir, 'node_modules', '.bin', BIN_NAME);
+      tried.push(candidate);
+      if (fsCheck(candidate)) {
+        return { resolved: candidate, source };
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return { tried };
+}
 
 export interface SubprocessResult {
   /** Exit code of the subprocess. */
@@ -51,16 +102,29 @@ function diag(rule: string, message: string, data?: Record<string, unknown>): Di
 }
 
 function defaultRunner(input: QualityGatesRunnerInput): SubprocessResult {
-  // Resolve the subprocess via node_modules/.bin in the repo, falling back
-  // to PATH lookup. Tests should override this entirely.
-  const bin = path.resolve(
-    input.cwd,
-    'node_modules',
-    '.bin',
-    'caws-quality-gates'
-  );
+  // CLI-GATES-003: resolve the subprocess from the installed CLI package
+  // location first (covers global / sandboxed install), then fall back to
+  // the consumer project (covers project-local install — CLI-GATES-002 A1).
+  // No PATH fallback — explicit failure beats a hijacked binary.
+  //
+  // Spawn cwd stays as input.cwd (CLI-GATES-003 A3): the analyzed files
+  // come from the consumer project, never from the CLI's install dir.
+  const resolution = resolveQualityGatesBin(__dirname, input.cwd);
+  if ('tried' in resolution) {
+    return {
+      status: null,
+      stdout: '',
+      stderr: '',
+      error: Object.assign(
+        new Error(
+          `caws-quality-gates not found. Tried ${resolution.tried.length} location(s): ${resolution.tried.join(', ')}`
+        ),
+        { code: 'ENOENT' }
+      ),
+    };
+  }
   const r: SpawnSyncReturns<string> = spawnSync(
-    bin,
+    resolution.resolved,
     ['--json', ...input.args],
     { cwd: input.cwd, encoding: 'utf8' }
   );

@@ -83,7 +83,7 @@ export type {
   GatesViolation,
   GatesWarning,
 } from './gates/gate-result-contract';
-export { runQualityGates } from './gates/quality-gates-adapter';
+export { runQualityGates, resolveQualityGatesBin } from './gates/quality-gates-adapter';
 export type {
   QualityGatesRunner,
   QualityGatesRunnerInput,
