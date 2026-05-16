@@ -482,6 +482,15 @@ test-caws-project/
 **/*.working-spec.bak
 
 
+# Claude hook runtime state (dangerous-command latches, strike counters).
+# Per-session telemetry, must not be committed.
+.claude/hooks/state/
+**/.claude/hooks/state/
+.claude/logs/danger-latch-resets.log
+**/.claude/logs/danger-latch-resets.log
+.claude/logs/guard-strikes-*.json
+**/.claude/logs/guard-strikes-*.json
+
 # CAWS logs
 caws-debug.log*
 **/caws.log

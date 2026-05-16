@@ -75,6 +75,9 @@ INPUT=$(cat)
 # Extract tool info
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
+# Fallback to "unknown" when no session id is available so the latch still
+# engages. Multiple concurrent sessions without an id will share the "unknown"
+# latch -- safer than not latching at all.
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // env.CLAUDE_SESSION_ID // env.HOOK_SESSION_ID // "unknown"')
 
 # Only check Bash tool
@@ -89,7 +92,7 @@ if [[ -f "$LATCH_FILE" ]]; then
   exit 0
 fi
 
-# --- Try Python classifier first (preferred) ---
+# --- Python classifier (preferred path) ---
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
 if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
   REASON="command classifier unavailable; dangerous-command safety cannot verify Bash semantics. This is a human-review boundary. Command was: $COMMAND"
@@ -98,40 +101,38 @@ if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
   exit 0
 fi
 
-if [[ -f "$CLASSIFIER" ]] && command -v python3 >/dev/null 2>&1; then
-  REPO_ROOT="${CLAUDE_PROJECT_DIR:-.}"
-  CLASSIFIER_STDERR=$(mktemp)
-  RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
-    --repo-root "$REPO_ROOT" \
-    --home "$HOME" \
-    --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
-    DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
-    rm -f "$CLASSIFIER_STDERR"
-    RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\"}"
-  }
+REPO_ROOT="${CLAUDE_PROJECT_DIR:-.}"
+CLASSIFIER_STDERR=$(mktemp)
+RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
+  --repo-root "$REPO_ROOT" \
+  --home "$HOME" \
+  --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
+  DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
   rm -f "$CLASSIFIER_STDERR"
+  RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\"}"
+}
+rm -f "$CLASSIFIER_STDERR"
 
-  DECISION=$(printf '%s' "$RESULT" | jq -r '.decision // "ask"')
-  REASON=$(printf '%s' "$RESULT" | jq -r '.reason // "unknown"')
+DECISION=$(printf '%s' "$RESULT" | jq -r '.decision // "ask"')
+REASON=$(printf '%s' "$RESULT" | jq -r '.reason // "unknown"')
 
-  case "$DECISION" in
-    allow)
-      exit 0
-      ;;
-    deny)
-      FULL_REASON="$REASON. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
-      record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
-      emit_block_json "$FULL_REASON"
-      exit 0
-      ;;
-    ask)
-      FULL_REASON="$REASON. This may alter destructive or authority-bearing state. Do not retry by alternate syntax if permission is not granted. Command was: $COMMAND"
-      record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
-      emit_ask_json "$FULL_REASON"
-      exit 0
-      ;;
-  esac
-fi
+case "$DECISION" in
+  allow)
+    exit 0
+    ;;
+  deny)
+    FULL_REASON="$REASON. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
+    record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
+    emit_block_json "$FULL_REASON"
+    exit 0
+    ;;
+  ask)
+    FULL_REASON="$REASON. This may alter destructive or authority-bearing state. Do not retry by alternate syntax if permission is not granted. Command was: $COMMAND"
+    record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
+    emit_ask_json "$FULL_REASON"
+    exit 0
+    ;;
+esac
 
 # --- Fallback: bash pattern matching (less precise, no heredoc/quote awareness) ---
 

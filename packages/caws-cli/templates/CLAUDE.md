@@ -193,3 +193,15 @@ This project has Claude Code hooks configured in `.claude/settings.json`:
 - **Session**: Audit logging for provenance tracking
 
 See `.claude/README.md` for hook details.
+
+### Dangerous-command latch
+
+`block-dangerous.sh` is a human-review boundary, not a syntax check. When it returns `block` or `ask`:
+
+1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
+2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch.
+3. To clear, ask the user to run:
+   ```bash
+   bash .claude/hooks/reset-danger-latch.sh --current --reason "<why this is safe>"
+   ```
+4. If you need a fresh git repo for legitimate test setup, ask the user to do it in their terminal (via `! <command>` in Claude Code) rather than searching for a phrasing that bypasses the matcher.

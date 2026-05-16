@@ -176,6 +176,7 @@ caws waiver revoke FEAT-1-w
 - **Architecture decisions** — when the design affects multiple components or governed paths.
 - **Waivers on T1 gates** — emergency only; document mitigation plan.
 - **`caws claim --takeover`** — never without explicit authorization.
+- **A dangerous-command hook fires** — `block-dangerous.sh` returning `block` or `ask` is a human-review boundary, not a syntax problem to solve. Do not rephrase, wrap, reorder, or alias the command. Stop and ask. The hook also engages a per-session latch that blocks all subsequent Bash until the user runs `reset-danger-latch.sh`. Read [`packages/caws-cli/docs-status/failure-lineage.md`](packages/caws-cli/docs-status/failure-lineage.md) Entry 17 for why this rule exists.
 
 ## Resources
 
