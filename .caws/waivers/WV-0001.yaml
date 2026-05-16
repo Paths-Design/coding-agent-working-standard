@@ -1,20 +1,33 @@
+# Migrated to v11 shape under HOST-GOV-001.
+# Original v10 fields preserved verbatim below the v11 envelope for audit.
 id: WV-0001
+title: "Policy separation architecture budget waiver (ARCH-0001)"
+status: revoked
+gates:
+  - budget_limit
+reason: architectural_refactor
+approved_by: darianrosebrook
+created_at: '2025-01-07T00:00:00Z'
+expires_at: '2025-12-31T23:59:59Z'
+revocation:
+  revoked_at: '2026-05-16T19:00:00Z'
+  revoked_by: darianrosebrook
+  reason: "Original commitment fulfilled prior to expires_at; migrated to v11 shape with status=revoked to reflect historical truth. The policy separation work landed and the temporary budget exception is no longer in effect."
+
+# --- Original v10 fields preserved for audit ---
 applies_to: ARCH-0001
-gates: [budget_limit]
 delta:
   max_files: 50
   max_loc: 5000
 reason_code: architectural_refactor
 description: "Implementing policy separation architecture to prevent silent budget bypass. This change restructures CAWS governance to make quality gates truly enforceable by separating policy from work specifications and requiring waivers for exceptions."
 mitigation: "Complete migration to policy.yaml structure with schema validation and CODEOWNERS protection. Implement CI checks for path discipline and dual-control requirements."
-expires_at: 2025-12-31T23:59:59Z
-risk_owner: "darianrosebrook"
+risk_owner: darianrosebrook
 approvers:
-  - handle: "darianrosebrook"
-    approved_at: "2025-01-07T00:00:00Z"
-status: active
+  - handle: darianrosebrook
+    approved_at: '2025-01-07T00:00:00Z'
 metadata:
   related_pr: null
   related_issue: null
-  environment: "development"
-  urgency: "high"
+  environment: development
+  urgency: high
