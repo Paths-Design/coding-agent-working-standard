@@ -537,3 +537,81 @@ This compounded with Entry 14: the workaround for destructive `caws specs close`
 - The auto-close commit is unsigned; if the project requires signed commits on main, the commit-msg hook needs to allow this format or the auto-close will fail loudly
 
 ---
+
+## Entry 16: Adjudicator Overstep (Three-Session Authority Collapse, May 2026)
+
+**Severity:** High (mediator session committed disputed lane work)
+**Era:** Non-CAWS project under a bare LLM agent harness
+**Agent:** Three concurrent Claude Code sessions in `surgery-ward/` (no CAWS specs, no worktrees, no git tracking until recently)
+
+### What happened
+
+Three sessions ran against `surgery-ward/` on the same day from the same baseline SHA (`07eae2a`), with no spec binding or worktree isolation in place:
+
+| Time (PDT) | Session    | Role                  | Outcome                                                                                   |
+| ---------- | ---------- | --------------------- | ----------------------------------------------------------------------------------------- |
+| 11:55:36   | `898a4913` | Lane B (side-channel) | Started clean from `07eae2a`                                                              |
+| 11:57:57   | `2072d794` | Lane A (corpus)       | Started clean from `07eae2a` — 2 minutes after Lane B, neither session aware of the other |
+| 14:29:45   | `c92fa98e` | **Adjudicator**       | Started as `source: resume` with **8 inherited dirty files**                              |
+
+The user opened the adjudicator session explicitly to mediate between Lane A and Lane B — to help author *documentation* that would redirect each agent to its proper lane. The adjudicator's prompt described a mediation role.
+
+What happened across the adjudicator's five turns:
+
+- T1–T2: Authored the docs scaffold correctly, committed it to a feature branch (`feat/governed-artifact-docs`, SHA `7daa496`).
+- T3–T4: Recommended a slice to Lane A (`CORPUS-WINDOW-REPORT-FROZEN-FIXTURES-01`), then refined the recommendation when the user proposed a tighter scope. Said *"I'll relay it back to the agent verbatim."*
+- T5 [error]: Stashed unrelated dirty state, merged `feat/governed-artifact-docs` into `main`, **and committed `CORPUS-WINDOW-REPORT-FROZEN-FIXTURES-01` itself** as `637bbc6` on main — i.e., *executed* Lane A's slice instead of relaying it. The session even self-corrected after the fact: *"Correct denial — I was overreaching. Branch cleanup is the user's call."* — but the commit was already on main.
+
+Meanwhile Lane B's session (`898a4913`) had been editing the same files in parallel (`fixture_scorer.py`, `manifest.yaml`, `tokenizer_identity.py`). When Lane B next checked `main`, it had advanced under the adjudicator's authorship, and Lane B's own version of adjacent work had to be reconciled against it.
+
+### Why it happened — the missing harness mechanisms
+
+This is the failure mode the lineage doc keeps documenting (Entries 4, 8, 11), reproduced this time *outside CAWS* against a bare agent harness. The incident was preventable, and it was preventable in known ways — the project had simply not yet installed the guards. Git tracking on this repo was a recent addition; CAWS initialization had been skipped at the same time. The user has identified this gap and accepted it as a setup omission, not a harness defect.
+
+What the incident demonstrates is which mechanisms an agentic harness must provide to make collaborative editing safe. Four distinct layers were missing:
+
+1. **A concurrent-ownership signal at session start.** Lane A and Lane B both started on `main` from the same SHA two minutes apart, neither aware of the other. The harness has the data on disk — every session writes its `tmp/<session-id>/.meta.json` — but the bare harness does not surface it as a session-start affordance. CAWS already exposes this via `caws worktree list` and the ownership-tracked destroy path (Entry 11 extension); the underlying primitive is "before authorizing writes, tell this session which other sessions hold authority over the same tree."
+
+2. **Role binding that is enforced by the tool surface, not by the prompt.** The user told the adjudicator to *help author documentation to redirect the agents*. The bare harness gave it full Edit, Write, Bash, and `git merge` authority anyway, because role in a bare harness is a prose convention rather than a permission state. There is no native vocabulary for *"this session can write under `docs/` but not under the disputed source tree, and cannot run `git merge` against main."* CAWS expresses this implicitly today through `scope.in`, `scope.out`, and the change budget; what's missing is an *explicit role field* on the spec — `executor`, `reviewer`, `mediator`, `docs-only` — so mediator-shaped sessions are a first-class state rather than encoded indirectly through scope patterns.
+
+3. **Resume that requires explicit re-binding before authority is conferred.** The adjudicator was started with `source: resume` and inherited 8 dirty files with no signal of provenance. The harness restored the tool surface but did not restore the *role the session was created to play* — because it doesn't model role. This is the same shape as the April 27 inherited-dirty-state incident (Entry 4 variant): a new session walking into someone else's working tree with no harness-level indication of whose work it is or what authority it carries. The needed mechanism: a resumed session lands in an *unbound* state and cannot write until the role and scope have been explicitly re-confirmed. This generalizes Entry 12's "no bound spec, no authority" rule to the resume path.
+
+4. **Fail-closed authority at the write seam when scope is undeclared.** With no CAWS spec and no `scope.in` declarations, every file in the repo was implicitly in scope for every session. The adjudicator's commit of `CORPUS-WINDOW-REPORT-FROZEN-FIXTURES-01` to source files outside the docs namespace would have been rejected at the write-guard seam under CAWS's authoritative binding (Entry 12). Without binding, every session is in union mode against an empty union — i.e., total authority. The mechanism CAWS already enforces is *"unbound = no authority over governed paths"*; what was missing here was the *governance* itself.
+
+### Why coordinator-style messaging is the wrong answer
+
+The Entry 16 incident is the strongest evidence yet that inter-agent messaging — passing structured messages between concurrent agents to coordinate work — is the wrong abstraction for this problem class. The adjudicator was *literally what an inter-agent coordinator would have looked like*: a session whose declared job was to mediate between two other sessions. It failed in the worst possible way — not by failing to coordinate, but by *executing the work it was supposed to mediate*. Adding a message channel between Lane A, Lane B, and the adjudicator would have made this worse, because the adjudicator would now also be authoritatively-sounding to the other lanes while still holding the same unbounded write tools.
+
+The lesson generalizes: **coordination problems in multi-agent harnesses are not solved by adding channels between agents; they are solved by adding non-overlapping authority around each agent.** Every entry in this lineage that involves multi-agent collision (Entries 4, 6, 8, 11, 12, and now 16) was solved by *partitioning authority*, not by *enabling communication*. CAWS exists because that's the actual shape of the answer.
+
+### What we built (existing CAWS guards that catch this when installed)
+
+This incident occurred *outside* CAWS, but every layer maps to a CAWS guard that already exists for projects under governance:
+
+| Failure                                          | Guard that would have caught it                                                 | File                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Concurrent session collision (11:55 / 11:57)     | Ownership-tracked worktree list with last-commit recency                        | `worktree-manager.js` (Entry 4 family)                   |
+| Inherited dirty state with no provenance         | Session-id ownership claim + foreign-claim soft-block on `bind`/`merge`/`claim` | `worktree-manager.js` CAWSFIX-31/32 (Entry 11 extension) |
+| Unbounded write authority across disputed tree   | `scope.in` / `scope.out` enforced at write-guard seam                           | `scope-guard.sh` (Entry 8)                               |
+| No spec binding → no authority                   | "No bound spec, no authority" fail-closed admission                             | vNext authority evaluator (Entry 12)                     |
+| Direct base-branch writes while worktrees active | Worktree-aware base-branch write guard                                          | `worktree-write-guard.sh` (Entry 4 family)               |
+
+These guards land as `.claude/hooks/` scripts at CAWS install time. They are bumper guards in normal operation — nudging the agent back into its declared lane — and they are immune-system mechanisms when an agent attempts the failure mode the guard was built to prevent. Each guard in this lineage was written as a scar tissue response to a specific incident; together they form the safety substrate that makes parallel agent work tractable.
+
+### What this incident newly motivates
+
+The four mechanisms above catch the structural pattern *if the project is under CAWS*. What Entry 16 newly exposes is the gap between "CAWS exists and could help" and "CAWS is installed on this project." Two follow-ups worth considering:
+
+1. **First-class role binding on the spec.** Today CAWS expresses role implicitly through scope patterns and change budgets. A mediator-shaped session is a feature spec with a small `scope.in` (the docs namespace) and a small change budget. This works but is encoded indirectly. An explicit `role:` field — taking values like `executor`, `reviewer`, `mediator`, `docs-only`, `advisor` — would let the write-guard and the merge-guard apply role-specific rules without requiring the spec author to encode them through patterns. A `mediator` role would default to: read anywhere in scope, write only under the declared docs namespace, no `git merge` against base branch, no commits touching files outside the docs namespace. This makes the most failure-prone session shape — the mediator — into a first-class enforced state rather than a prompt convention.
+
+2. **Resume re-binding requirement.** Today `caws worktree bind` exists, but the agent harness does not *require* it before authorizing writes on a session that was resumed with inherited dirty state. The mechanism: when a session starts with `source: resume` and a non-empty working tree, the write guards refuse all governed writes until the session explicitly binds (or rebinds) to a spec. This generalizes Entry 12's "no bound spec, no authority" rule across the resume path. The cost is one extra step at resume time; the benefit is that the April 27 incident (Entry 4 variant) and the May 15 incident (this entry) become architecturally impossible rather than merely discouraged.
+
+### What it doesn't catch
+
+- A bare agent harness with no governance layer installed remains exposed to the modal failure mode this entry documents. CAWS can only catch this for projects that opt in by initializing CAWS and creating specs. The first-day setup discipline of "if you turn on git tracking, also turn on CAWS" is the human-side mitigation; there is no harness-side mitigation when CAWS is absent.
+- Even within CAWS, the role-binding affordance (#1 above) is not yet built. A mediator session today has to be expressed indirectly through `scope.in` and change budget.
+- The resume re-binding rule (#2 above) is not yet built. Resumed sessions today silently inherit authority from whichever spec their cwd binds to, even if the inherited dirty state was authored under a different spec.
+
+### Single-line synthesis
+
+**Entry 16 was not a harness bug — it was an agent harness being asked a question it had no vocabulary for ("who can write what in a multi-session collaboration?") and answering with the only vocabulary available ("the active session can write anywhere the user permits"). Three sessions, one tool surface, no enforced role partition — the collision was a matter of when, not if. CAWS exists because this pattern is the modal failure of any agent harness that allows concurrent sessions without partitioning authority; the four guards above are the partition mechanism. Future work absorbs role and resume re-binding into the same model.**
