@@ -1,7 +1,7 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "10.2.0",
-  "description": "CAWS CLI - Coding Agent Workflow System command-line tools for spec management, quality gates, and AI-assisted development",
+  "version": "11.0.0",
+  "description": "CAWS CLI - the governed core for CAWS project state, scope, claims, gates, waivers, and evidence (v11.0.0). vNext kernel/store/shell architecture.",
   "main": "dist/index.js",
   "bin": {
     "caws": "dist/index.js"
@@ -9,8 +9,7 @@
   "preferGlobal": true,
   "files": [
     "dist",
-    "README.md",
-    "templates"
+    "README.md"
   ],
   "scripts": {
     "build": "node scripts/build-cli.js",
@@ -56,7 +55,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@paths.design/caws-kernel": "*",
+    "@paths.design/caws-kernel": "^1.0.0",
     "ajv": "8.17.1",
     "chalk": "4.1.2",
     "commander": "^11.0.0",
