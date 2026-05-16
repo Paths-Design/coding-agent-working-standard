@@ -1,3 +1,9 @@
+# Unreleased
+
+### Features
+
+* **claude-hooks:** add dangerous-command session latch, semantic `git init` detection, trusted nonce escape, and latch reset audit path for installed Claude hooks
+
 # [10.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.1.0...v10.2.0) (2026-04-28)
 
 

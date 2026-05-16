@@ -16,20 +16,88 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+danger_state_dir() {
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local state_dir="$project_dir/.claude/hooks/state"
+  mkdir -p "$state_dir"
+  printf '%s\n' "$state_dir"
+}
+
+danger_latch_file() {
+  local session_id="$1"
+  local safe_session
+  safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
+  printf '%s/danger-latch-%s.json\n' "$(danger_state_dir)" "$safe_session"
+}
+
+emit_block_json() {
+  local reason="$1"
+  jq -n --arg msg "$reason" '{ decision: "block", reason: $msg }'
+}
+
+emit_ask_json() {
+  local reason="$1"
+  jq -n --arg msg "$reason" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "ask",
+      permissionDecisionReason: $msg
+    }
+  }'
+}
+
+record_danger_latch() {
+  local file="$1"
+  local decision="$2"
+  local reason="$3"
+  local command="$4"
+
+  mkdir -p "$(dirname "$file")"
+  jq -n \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg hook "block-dangerous.sh" \
+    --arg decision "$decision" \
+    --arg reason "$reason" \
+    --arg command "$command" \
+    '{
+      ts: $ts,
+      hook: $hook,
+      decision: $decision,
+      reason: $reason,
+      command: $command,
+      message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
+    }' > "$file"
+}
+
 # Read JSON input from Claude Code
 INPUT=$(cat)
 
 # Extract tool info
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // env.CLAUDE_SESSION_ID // env.HOOK_SESSION_ID // "unknown"')
 
 # Only check Bash tool
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
+LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
+if [[ -f "$LATCH_FILE" ]]; then
+  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
+  emit_block_json "$REASON"
+  exit 0
+fi
+
 # --- Try Python classifier first (preferred) ---
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
+if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
+  REASON="command classifier unavailable; dangerous-command safety cannot verify Bash semantics. This is a human-review boundary. Command was: $COMMAND"
+  record_danger_latch "$LATCH_FILE" "ask" "classifier unavailable" "$COMMAND"
+  emit_ask_json "$REASON"
+  exit 0
+fi
+
 if [[ -f "$CLASSIFIER" ]] && command -v python3 >/dev/null 2>&1; then
   REPO_ROOT="${CLAUDE_PROJECT_DIR:-.}"
   CLASSIFIER_STDERR=$(mktemp)
@@ -51,14 +119,16 @@ if [[ -f "$CLASSIFIER" ]] && command -v python3 >/dev/null 2>&1; then
       exit 0
       ;;
     deny)
-      echo "BLOCKED: $REASON" >&2
-      echo "Command was: $COMMAND" >&2
-      exit 2
+      FULL_REASON="$REASON. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
+      record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
+      emit_block_json "$FULL_REASON"
+      exit 0
       ;;
     ask)
-      echo "WARNING: $REASON" >&2
-      echo "Command was: $COMMAND" >&2
-      exit 1
+      FULL_REASON="$REASON. This may alter destructive or authority-bearing state. Do not retry by alternate syntax if permission is not granted. Command was: $COMMAND"
+      record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
+      emit_ask_json "$FULL_REASON"
+      exit 0
       ;;
   esac
 fi
@@ -134,12 +204,7 @@ DANGEROUS_PATTERNS=(
 
 # Check command against dangerous patterns
 for pattern in "${DANGEROUS_PATTERNS[@]}"; do
-  if echo "$COMMAND" | grep -qiE "$pattern"; then
-    # Allow git init in worktree context
-    if [[ "$pattern" == "git init" ]] && [[ "${CAWS_WORKTREE_CONTEXT:-0}" == "1" ]]; then
-      continue
-    fi
-
+  if printf '%s\n' "$COMMAND" | grep -qiE "$pattern"; then
     # Allow git rebase/cherry-pick only when no worktrees are active
     if [[ "$pattern" == *"git rebase"* ]] || [[ "$pattern" == *"git cherry-pick"* ]]; then
       PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
@@ -157,7 +222,10 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
         ACTIVE_COUNT=$(node -e "
           try {
             var r = JSON.parse(require('fs').readFileSync('$WT_FILE','utf8'));
-            var c = Object.values(r.worktrees||{}).filter(function(w){return w.status==='active';}).length;
+            var registry = r.worktrees && typeof r.worktrees === 'object' ? r.worktrees : r;
+            var c = Object.values(registry).filter(function(w){
+              return w && typeof w === 'object' && (w.status === 'active' || w.specId || w.spec_id);
+            }).length;
             console.log(c);
           } catch(e) { console.log(0); }
         " 2>/dev/null || echo "0")
@@ -165,38 +233,40 @@ for pattern in "${DANGEROUS_PATTERNS[@]}"; do
           GIT_SUBCMD="git operation"
           [[ "$pattern" == *"git rebase"* ]] && GIT_SUBCMD="git rebase"
           [[ "$pattern" == *"git cherry-pick"* ]] && GIT_SUBCMD="git cherry-pick"
-          echo "BLOCKED: $GIT_SUBCMD is forbidden while $ACTIVE_COUNT worktree(s) are active." >&2
-          echo "This can replay or rewrite commits across worktree boundaries." >&2
-          echo "Command was: $COMMAND" >&2
-          exit 2
+          REASON="$GIT_SUBCMD is forbidden while $ACTIVE_COUNT worktree(s) are active. This can replay or rewrite commits across worktree boundaries. This is a human-review boundary, not a retryable syntax error. Command was: $COMMAND"
+          record_danger_latch "$LATCH_FILE" "deny" "$GIT_SUBCMD active-worktrees" "$COMMAND"
+          emit_block_json "$REASON"
+          exit 0
         fi
       fi
       continue
     fi
 
     # Allow venv commands if target matches designated venv path from scope.json
-    if echo "$pattern" | grep -qE '(python.*venv|virtualenv|conda create)'; then
+    if printf '%s\n' "$pattern" | grep -qE '(python.*venv|virtualenv|conda create)'; then
       PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
       SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
       if [[ -f "$SCOPE_FILE" ]] && command -v node >/dev/null 2>&1; then
         DESIGNATED_VENV=$(node -e "try { const s = JSON.parse(require('fs').readFileSync('$SCOPE_FILE','utf8')); console.log(s.designatedVenvPath || ''); } catch(e) { console.log(''); }" 2>/dev/null || echo "")
-        if [[ -n "$DESIGNATED_VENV" ]] && echo "$COMMAND" | grep -qF "$DESIGNATED_VENV"; then
+        if [[ -n "$DESIGNATED_VENV" ]] && printf '%s\n' "$COMMAND" | grep -qF "$DESIGNATED_VENV"; then
           continue
         fi
       fi
     fi
 
-    echo "BLOCKED: Command matches dangerous pattern: $pattern" >&2
-    echo "Command was: $COMMAND" >&2
-    exit 2
+    REASON="Command matches dangerous pattern: $pattern. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
+    record_danger_latch "$LATCH_FILE" "deny" "$pattern" "$COMMAND"
+    emit_block_json "$REASON"
+    exit 0
   fi
 done
 
 # Check for sudo without specific allowed commands
-if echo "$COMMAND" | grep -qE '^sudo\s' && ! echo "$COMMAND" | grep -qE 'sudo (npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)'; then
-  echo "BLOCKED: sudo commands require explicit approval" >&2
-  echo "If this command is safe, please run it manually in your terminal" >&2
-  exit 2
+if printf '%s\n' "$COMMAND" | grep -qE '^sudo\s' && ! printf '%s\n' "$COMMAND" | grep -qE 'sudo (npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)'; then
+  REASON="sudo commands require explicit approval. If this command is safe, run it manually in your terminal. Command was: $COMMAND"
+  record_danger_latch "$LATCH_FILE" "deny" "sudo" "$COMMAND"
+  emit_block_json "$REASON"
+  exit 0
 fi
 
 # Allow the command

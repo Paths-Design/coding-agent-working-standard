@@ -28,7 +28,7 @@ case "$HOOK_FILE_PATH" in
   */.claude/hooks/*)
     echo "BLOCKED: $HOOK_FILE_PATH is protected." >&2
     echo "Ask the user for permission before editing Claude hook scripts." >&2
-    exit 1
+    exit 2
     ;;
   */.claude/logs/guard-strikes-*.json)
     echo "BLOCKED: $HOOK_FILE_PATH is protected guard state." >&2
@@ -37,6 +37,11 @@ case "$HOOK_FILE_PATH" in
     echo "  bash .claude/hooks/reset-strikes.sh --current" >&2
     echo "(or --session <uuid> / --worktree <name> / --all --confirm; resets are logged)." >&2
     echo "Otherwise switch into the correct worktree, update the active CAWS spec scope, or ask the user for direction." >&2
+    exit 2
+    ;;
+  */.claude/hooks/state/*|*/.claude/logs/danger-latch-resets.log)
+    echo "BLOCKED: $HOOK_FILE_PATH is protected dangerous-command guard state." >&2
+    echo "Use reset-danger-latch.sh with a reason instead of editing latch state by hand." >&2
     exit 2
     ;;
 esac

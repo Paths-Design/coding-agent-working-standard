@@ -7,8 +7,8 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
+TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
 
 case "$TOOL_NAME" in
   Write|Edit) ;;
@@ -26,12 +26,17 @@ case "$FILE_PATH" in
   */.claude/hooks/*)
     echo "BLOCKED: $FILE_PATH is protected." >&2
     echo "Ask the user for permission before editing Claude hook scripts." >&2
-    exit 1
+    exit 2
     ;;
   */.claude/logs/guard-strikes-*.json)
     echo "BLOCKED: $FILE_PATH is protected guard state." >&2
     echo "Do not reset or edit strike counters to bypass enforcement." >&2
     echo "Switch into the correct worktree, update the active CAWS spec scope, or ask the user for direction instead." >&2
+    exit 2
+    ;;
+  */.claude/hooks/state/*|*/.claude/logs/danger-latch-resets.log)
+    echo "BLOCKED: $FILE_PATH is protected dangerous-command guard state." >&2
+    echo "Use reset-danger-latch.sh with a reason instead of editing latch state by hand." >&2
     exit 2
     ;;
 esac

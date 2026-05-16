@@ -21,6 +21,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
+from typing import Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -94,13 +95,44 @@ CONFIRM_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\bpython3?\s+-m\s+venv\b", "virtual environment creation"),
     (r"\bvirtualenv\s", "virtual environment creation"),
     (r"\bconda\s+create\b", "conda environment creation"),
-    # git init (unless CAWS worktree context)
-    (r"\bgit\s+init\b", "git init"),
     # Credential file reads
     (r"\bcat\b.*\.(env|ssh/|aws/)", "credential file read"),
     (r"\bcat\b.*/etc/(passwd|shadow)\b", "system credential read"),
     (r"\bcat\b.*(id_rsa|credentials)\b", "credential file read"),
 ]
+
+GIT_GLOBAL_OPTIONS_WITH_VALUE: set[str] = {
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--exec-path",
+}
+
+GIT_GLOBAL_OPTIONS_NO_VALUE: set[str] = {
+    "--bare",
+    "--no-pager",
+    "--paginate",
+    "--no-replace-objects",
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
+}
+
+COMMAND_WRAPPERS: set[str] = {
+    "builtin",
+    "command",
+    "nohup",
+}
+
+SHELL_C_WRAPPERS: set[str] = {
+    "bash",
+    "dash",
+    "sh",
+    "zsh",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +263,251 @@ def strip_quotes(s: str) -> str:
         if (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'"):
             return s[1:-1]
     return s
+
+
+def command_basename(token: str) -> str:
+    """Return the executable basename for a command token."""
+    return Path(token).name
+
+
+def is_assignment_token(token: str) -> bool:
+    """Return true for shell-style NAME=value assignment tokens."""
+    return re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", token) is not None
+
+
+def skip_env_prefix(tokens: Sequence[str], index: int) -> tuple[int, list[str] | None]:
+    """Skip env options and assignments after an env wrapper."""
+    i = index
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "--":
+            return i + 1, None
+        if is_assignment_token(tok):
+            i += 1
+            continue
+        if tok in ("-i", "-0", "--ignore-environment", "--null"):
+            i += 1
+            continue
+        if tok in ("-u", "--unset", "-C", "--chdir", "-S", "--split-string"):
+            if tok in ("-S", "--split-string") and i + 1 < len(tokens):
+                return i, [" ".join(tokens[i + 1:])]
+            i += 2
+            continue
+        if tok.startswith("--split-string="):
+            nested = tok.split("=", 1)[1]
+            if i + 1 < len(tokens):
+                nested = " ".join([nested, *tokens[i + 1:]])
+            return i, [nested]
+        if tok.startswith("--unset=") or tok.startswith("--chdir=") or tok.startswith("--split-string="):
+            i += 1
+            continue
+        return i, None
+    return i, None
+
+
+def normalize_command_tokens(tokens: Sequence[str]) -> tuple[int, list[str] | None]:
+    """Strip variable assignments and simple command wrappers.
+
+    Returns the index of the real command. If the command is a shell -c wrapper,
+    returns a nested command string list so the caller can classify it
+    recursively.
+    """
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        base = command_basename(tok)
+
+        if is_assignment_token(tok):
+            i += 1
+            continue
+
+        if base == "env":
+            i, nested = skip_env_prefix(tokens, i + 1)
+            if nested is not None:
+                return i, nested
+            continue
+
+        if base == "time":
+            i += 1
+            while i < len(tokens) and tokens[i].startswith("-"):
+                if tokens[i] in ("-f", "-o"):
+                    i += 2
+                else:
+                    i += 1
+            continue
+
+        if base in COMMAND_WRAPPERS:
+            i += 1
+            continue
+
+        if base in SHELL_C_WRAPPERS:
+            j = i + 1
+            while j < len(tokens):
+                arg = tokens[j]
+                if arg == "--":
+                    j += 1
+                    continue
+                if arg.startswith("-") and "c" in arg[1:]:
+                    if j + 1 < len(tokens):
+                        return i, [tokens[j + 1]]
+                    return i, [""]
+                if not arg.startswith("-"):
+                    break
+                j += 1
+
+        return i, None
+
+    return i, None
+
+
+def detect_git_subcommand(segment: str) -> str | None:
+    """Detect the semantic Git subcommand for one executable segment.
+
+    This recognizes wrappers such as env/command/nohup/time, absolute Git
+    executable paths, and Git global options before the real subcommand.
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+
+    if not tokens:
+        return None
+
+    start, nested = normalize_command_tokens(tokens)
+    if nested is not None:
+        return None
+    if start >= len(tokens) or command_basename(tokens[start]) != "git":
+        return None
+
+    i = start + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "--":
+            i += 1
+            break
+        if tok in GIT_GLOBAL_OPTIONS_WITH_VALUE:
+            i += 2
+            continue
+        if any(tok.startswith(f"{opt}=") for opt in GIT_GLOBAL_OPTIONS_WITH_VALUE if opt.startswith("--")):
+            i += 1
+            continue
+        if tok in GIT_GLOBAL_OPTIONS_NO_VALUE:
+            i += 1
+            continue
+        if tok.startswith("-"):
+            # Unknown global option. If it has an inline value, skip it;
+            # otherwise stop so we do not accidentally skip a subcommand.
+            if "=" in tok:
+                i += 1
+                continue
+            break
+        return tok
+
+    if i < len(tokens) and not tokens[i].startswith("-"):
+        return tokens[i]
+    return None
+
+
+def git_alias_value_invokes_init(value: str) -> bool:
+    """Return true when a `git -c alias.*=...` value routes to init."""
+    stripped = value.strip()
+    if not stripped:
+        return False
+    if stripped == "init" or stripped.startswith("init "):
+        return True
+    if stripped.startswith("!"):
+        nested = stripped[1:].strip()
+        return detect_git_subcommand(nested) == "init" or nested == "init" or nested.startswith("init ")
+    return False
+
+
+def has_git_init_alias_config(segment: str) -> bool:
+    """Detect inline Git alias definitions that route an alias to init."""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return False
+
+    if not tokens:
+        return False
+
+    start, nested = normalize_command_tokens(tokens)
+    if nested is not None or start >= len(tokens) or command_basename(tokens[start]) != "git":
+        return False
+
+    i = start + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        config_value = None
+        if tok == "-c" and i + 1 < len(tokens):
+            config_value = tokens[i + 1]
+            i += 2
+        elif tok.startswith("-c") and len(tok) > 2:
+            config_value = tok[2:]
+            i += 1
+        else:
+            i += 1
+
+        if not config_value or "=" not in config_value:
+            continue
+        key, value = config_value.split("=", 1)
+        if key.startswith("alias.") and git_alias_value_invokes_init(value):
+            return True
+
+    return False
+
+
+def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool) -> tuple[str, str] | None:
+    """Recursively classify sh/bash/zsh -c strings."""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+
+    _, nested = normalize_command_tokens(tokens)
+    if not nested:
+        return None
+
+    return classify_command(nested[0], repo_root, home, cwd, caws_worktree)
+
+
+def classify_git_semantics(segment: str, caws_worktree: bool) -> tuple[str, str] | None:
+    """Classify Git operations by executable/subcommand semantics."""
+    if has_git_init_alias_config(segment):
+        if caws_worktree:
+            return "allow", ""
+        return "ask", "git alias routes to init and requires human approval"
+
+    subcommand = detect_git_subcommand(segment)
+    if subcommand is None:
+        return None
+
+    if subcommand == "init":
+        if caws_worktree:
+            return "allow", ""
+        return "ask", "git init requires human approval; do not retry by wrapping, reordering, aliasing, or indirect invocation"
+
+    if subcommand == "rebase":
+        return "ask", "git rebase rewrites branch history"
+
+    if subcommand == "cherry-pick":
+        return "ask", "git cherry-pick replays commits across branches"
+
+    return None
+
+
+def has_trusted_git_init_context(repo_root: Path) -> bool:
+    """Return true when dispatch created a one-shot git-init allow token."""
+    if os.environ.get("CAWS_TRUSTED_WORKTREE_CREATE_CONTEXT", "0") != "1":
+        return False
+
+    nonce = os.environ.get("CAWS_TRUSTED_HOOK_NONCE", "")
+    if not re.match(r"^[A-Za-z0-9._-]{8,128}$", nonce):
+        return False
+
+    token = repo_root / ".claude" / "hooks" / "state" / f"allow-git-init-{nonce}"
+    return token.is_file()
 
 
 def extract_command_word(segment: str) -> str:
@@ -531,6 +808,15 @@ def classify_command(
     segments = segment_command(raw_command)
 
     for segment in segments:
+        nested_result = classify_nested_shell(segment, repo_root, home, cwd, caws_worktree)
+        if nested_result:
+            escalate(*nested_result)
+            continue
+
+        git_result = classify_git_semantics(segment, caws_worktree)
+        if git_result:
+            escalate(*git_result)
+
         # Strip quoted regions for pattern matching so that e.g.
         # echo "git reset --hard" does not trigger the git pattern.
         # The original segment is still used for rm/find parsing
@@ -589,7 +875,7 @@ def main() -> None:
     repo_root = Path(args.repo_root).resolve(strict=False)
     home = Path(args.home).resolve(strict=False)
     cwd = Path(args.cwd).resolve(strict=False)
-    caws_worktree = os.environ.get("CAWS_WORKTREE_CONTEXT", "0") == "1"
+    caws_worktree = has_trusted_git_init_context(repo_root)
 
     decision, reason = classify_command(
         raw_command, repo_root, home, cwd, caws_worktree,

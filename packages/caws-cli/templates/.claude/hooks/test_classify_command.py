@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from classify_command import (
     classify_command,
     classify_rm_target,
+    detect_git_subcommand,
     segment_command,
     is_recursive_rm,
     strip_quoted_regions,
@@ -194,10 +195,54 @@ def main() -> int:
     if not test("git init", d, "ask"):
         failures += 1
 
+    # Ask: semantic git init variants
+    git_init_variants = [
+        "git init -b main",
+        "git init --initial-branch=main",
+        "command git init",
+        "env FOO=bar git init",
+        'env -S "git --bare init"',
+        "/usr/bin/git init",
+        "git --bare init",
+        "git --bare init --initial-branch=main",
+        "git -C /tmp/foo init",
+        "git -c init.defaultBranch=main init",
+        "git --git-dir /tmp/foo/.git init",
+        "git --git-dir=/tmp/foo/.git init",
+        "git --work-tree /tmp/foo init",
+        "bash -lc 'git init'",
+        "bash -lc 'git --bare init'",
+        'bash -lc "env -S git --bare init"',
+        'sh -c "git -C /tmp/foo init"',
+        "git -c alias.x=init x",
+        'git -c alias.x="!git init" x',
+    ]
+    for cmd in git_init_variants:
+        d, _ = classify_command(cmd, REPO, HOME, CWD)
+        if not test(f"git init variant: {cmd}", d, "ask"):
+            failures += 1
+
+    # Allow: non-init git and inert mentions
+    git_safe_variants = [
+        "git status",
+        "git log --grep=init",
+        "git config init.defaultBranch main",
+        'grep "git init" docs/file.md',
+        'echo "git init"',
+    ]
+    for cmd in git_safe_variants:
+        d, _ = classify_command(cmd, REPO, HOME, CWD)
+        if not test(f"safe git/init mention: {cmd}", d, "allow"):
+            failures += 1
+
     # Allow: git init in worktree context
     d, _ = classify_command("git init", REPO, HOME, CWD, caws_worktree=True)
     if not test("git init (worktree)", d, "allow"):
         failures += 1
+
+    assert detect_git_subcommand("git --bare init") == "init"
+    assert detect_git_subcommand("command /usr/bin/git -C /tmp/foo init") == "init"
+    assert detect_git_subcommand("git status") == "status"
 
     # Chained: safe && dangerous = deny
     d, _ = classify_command("echo hello && rm -rf /", REPO, HOME, CWD)

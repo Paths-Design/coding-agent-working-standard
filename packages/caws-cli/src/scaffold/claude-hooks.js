@@ -94,6 +94,7 @@ async function scaffoldClaudeHooks(projectDir, levels = ['safety', 'quality', 's
     // Copy supporting scripts (not hooks themselves, but used by hooks)
     const supportingScripts = [
       'classify_command.py',
+      'reset-danger-latch.sh',
       'test_classify_command.py',
       'test_wrapper_smoke.sh',
     ];

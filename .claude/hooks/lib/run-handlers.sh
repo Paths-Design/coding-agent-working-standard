@@ -66,6 +66,17 @@ _rh_ms_now() {
   fi
 }
 
+_rh_stdout_priority() {
+  local payload="$1"
+  local decision
+  decision=$(printf '%s' "$payload" | jq -r '.decision // .hookSpecificOutput.permissionDecision // ""' 2>/dev/null || true)
+  case "$decision" in
+    block) printf '3\n' ;;
+    ask) printf '2\n' ;;
+    *) printf '1\n' ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # run_handlers [--short-circuit-on-block] <handler-entry>...
 # ---------------------------------------------------------------------------
@@ -93,6 +104,7 @@ run_handlers() {
 
   local max_exit=0
   local last_stdout=""
+  local last_stdout_priority=0
 
   # Snapshot the outer $@ into an array so `set --` inside the loop can safely
   # clobber positional params without breaking iteration. Using "$@" directly
@@ -158,9 +170,20 @@ run_handlers() {
       exit_code=0
     fi
 
-    # Accumulate stdout (last non-empty wins).
+    # Accumulate stdout. Structured block/ask decisions outrank lower-priority
+    # hook context so a later handler cannot accidentally erase a safety
+    # boundary emitted by an earlier handler.
     if [[ -n "$stdout_buf" ]]; then
-      last_stdout="$stdout_buf"
+      local stdout_priority
+      stdout_priority=$(_rh_stdout_priority "$stdout_buf")
+      if [[ "$stdout_priority" -eq 3 ]]; then
+        printf '%s\n' "$stdout_buf"
+        return 2
+      fi
+      if [[ "$stdout_priority" -ge "$last_stdout_priority" ]]; then
+        last_stdout="$stdout_buf"
+        last_stdout_priority="$stdout_priority"
+      fi
     fi
 
     # Short-circuit on blocking exit (exit 2), unless dry-run zeroed it.
