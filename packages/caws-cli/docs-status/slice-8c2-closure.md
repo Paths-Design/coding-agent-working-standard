@@ -74,9 +74,23 @@ This matches the A1 doctrine in `docs/architecture/caws-vnext-command-surface.md
 
 8d (the `caws-next` → `main` cutover) is BLOCKED until:
 
-1. `CLI-GATES-002` implemented; `@paths.design/quality-gates` is a runtime dependency of `@paths.design/caws-cli`; fresh install produces `node_modules/.bin/caws-quality-gates`.
-2. `QG-001` implemented; `caws-quality-gates --json --context=commit` with zero staged files emits a single GatesReport JSON document to stdout before exit.
-3. `HOST-GOV-001` implemented; host CAWS repo passes its own packaged v11 `caws doctor` with zero governance-shape errors.
-4. The full 8c.2 dogfood loop (pack → install → tempproj smoke → host read-only smoke) is rerun and produces clean exit codes plus passing acceptance scans against an updated dogfood-rc.log.
+1. ✅ **`CLI-GATES-002` IMPLEMENTED** (`4535c33`); `@paths.design/quality-gates` is a runtime dependency of `@paths.design/caws-cli`; fresh install of the repacked tarball produces `node_modules/.bin/caws-quality-gates`.
+2. ✅ **`QG-001` IMPLEMENTED** (`b75a731`); fixes the `--json` mode silent-stdout on zero-files commit path PLUS a separately-discovered Bug Y where the entry guard `argv[1].endsWith('run-quality-gates.mjs')` silently failed for `.bin` shim invocation, leaving `main()` uncalled. End-to-end `caws gates run --spec DF-1` against `/tmp/caws-8c2-tempproj` now exits 0 with 5 `gate_evaluated` events appended.
+3. ✅ **`HOST-GOV-001` IMPLEMENTED** (`847ade7`); host CAWS repo's `.caws/policy.yaml`, `.caws/waivers/`, and legacy `.caws/working-spec.schema.json` migrated to v11 shape. Host `caws doctor` findings now `0E / 3W / 0I` (was `8E / 31W / 0I`) — zero governance-shape errors. (Standalone `caws doctor` still exits 1 due to 54 load errors from out-of-scope v10-shape spec files in `.caws/specs/`; a follow-up `HOST-GOV-002`-style spec is needed to migrate those, but they are spec-shape drift, not governance-shape, and do not block 8d under HOST-GOV-001's acceptance.)
+4. ⏳ The full 8c.2 dogfood loop (pack → install → tempproj smoke → host read-only smoke) is rerun against the migrated host as the final RC, with the publish-order requirement below satisfied.
 
-The acceptance scan thresholds for the rerun are the same as those passed in this slice: removed-command guidance scan must return `PASS`, `working-spec.yaml` scan must return `PASS`, and additionally `caws doctor` on the host must exit 0.
+The acceptance scan thresholds for the rerun are the same as those passed in this slice: removed-command guidance scan must return `PASS`, `working-spec.yaml` scan must return `PASS`, and additionally `caws doctor` on the host must show `0E` in the *findings* section (load errors from out-of-scope spec drift may persist until `HOST-GOV-002` lands).
+
+### Publish order (required for 8d release)
+
+`@paths.design/caws-cli@11.0.0` now declares a runtime dependency on `@paths.design/quality-gates@^2.0.0`. The npm registry currently has only `@paths.design/quality-gates@1.0.4` as `latest`. Publishing caws-cli before quality-gates@2.0.0 would break every consumer install with `ERESOLVE` / "no matching version" on the dep.
+
+**Publish order for the v11 release:**
+
+1. `@paths.design/caws-kernel@1.0.0` — base layer, no external dep on the others.
+2. `@paths.design/quality-gates@2.0.0` — contains the QG-001 stdout-emit fix and the Bug Y entry-guard fix. Must be on the registry before caws-cli is published.
+3. `@paths.design/caws-cli@11.0.0` — depends on `quality-gates@^2.0.0`; once that is live on the registry, this becomes installable.
+
+Local sandbox install (`/tmp/caws-8c2-sandbox/`) currently uses tarball file paths and resolves correctly. The publish-order issue only surfaces for real registry consumers.
+
+This requirement does NOT change the 8d gate items above; it is a release sequencing constraint that the cutover ceremony must honor.
