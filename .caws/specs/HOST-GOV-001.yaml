@@ -1,0 +1,65 @@
+id: HOST-GOV-001
+title: Migrate host CAWS repo .caws/ governance state to v11 shape
+risk_tier: 2
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-05-16T00:00:00.000Z'
+updated_at: '2026-05-16T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .caws/policy.yaml
+    - .caws/waivers
+    - .caws/working-spec.schema.json
+  data_migration: true
+operational_rollback_slo: 1h
+scope:
+  in:
+    - .caws/policy.yaml
+    - .caws/waivers/
+    - .caws/working-spec.schema.json
+  out:
+    - .caws/specs/
+    - .caws/events.jsonl
+    - .caws/worktrees.json
+    - .caws/policy.yaml.backup
+invariants:
+  - The host CAWS repo passes its own packaged v11 caws doctor with zero error findings caused by governance-shape drift.
+  - The migration does not append to .caws/events.jsonl except via events produced by caws commands the migration itself invokes.
+  - No waiver content is lost during migration; v10-shape waivers are translated, not deleted, with audit trail preserved.
+acceptance:
+  - id: A1
+    given: The host .caws/policy.yaml currently contains v10-shape fields (risk_tiers.*.label, edit_rules.min_approvers_for_budget_raise).
+    when: The migration rewrites policy.yaml into v11 shape.
+    then: risk_tiers.*.label is removed or converted to description, min_approvers_for_budget_raise is moved out of edit_rules to the waivers policy surface, and packaged v11 caws doctor no longer emits policy.schema.tier.label_forbidden or policy.schema.edit_rules.approvers_misplaced.
+  - id: A2
+    given: The host .caws/waivers/ currently contains an active-waivers.yaml aggregator, a waiver-audit.log file, and per-waiver YAMLs missing title or with malformed expires_at.
+    when: The migration retires the aggregator, relocates the audit log outside .caws/waivers/, and rewrites each per-waiver file to v11 shape (id, title>=5 chars, status active|revoked, gates, created_at, expires_at with timezone).
+    then: caws waiver list emits no waiver.schema.* or store.waivers.non_yaml_skipped diagnostics, and caws doctor reports no doctor.waiver.malformed_loaded errors.
+  - id: A3
+    given: The host .caws/ contains a stale working-spec.schema.json file from the v10 single-spec era.
+    when: The migration removes or archives that file.
+    then: caws doctor no longer emits doctor.init.legacy_working_spec_schema_present.
+  - id: A4
+    given: All three atoms (A1, A2, A3) are complete.
+    when: caws doctor and caws status are run from the host repo root using the packaged v11 binary.
+    then: caws doctor exits 0 with no governance-drift error findings, and caws status renders without policy MISSING and without doctor 8E/31W summary.
+  - id: A5
+    given: All three atoms are complete.
+    when: caws scope show and caws scope check are invoked against an in-scope path.
+    then: They do not fail with exit 2 due to policy load errors. (They may still fail for other reasons if scope is not bound, which is the intentional v11.0 A1-posture worktree gap.)
+non_functional:
+  security:
+    - The migration must preserve the cryptographic integrity of any existing .caws/events.jsonl hash chain; the chain is not rewritten or truncated.
+contracts:
+  - name: v11 policy schema conformance
+    type: schema
+    path: packages/caws-kernel/src/schemas/policy
+    description: The migrated .caws/policy.yaml validates against the v11 policy kernel schema.
+  - name: v11 waiver schema conformance
+    type: schema
+    path: packages/caws-kernel/src/schemas/waivers
+    description: Each migrated .caws/waivers/WV-*.yaml validates against the v11 waiver kernel schema (id regex, title>=5, status enum, ISO-8601 expires_at).
+  - name: Doctor clean-slate behavior on host
+    type: behavior
+    path: packages/caws-cli/src/shell/commands/doctor.ts
+    description: After migration the host caws doctor invocation returns no governance-shape error findings, matching the same standard a freshly caws-init'd v11 project meets.

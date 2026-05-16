@@ -1,0 +1,51 @@
+id: CLI-GATES-002
+title: caws-cli package must resolve and install caws-quality-gates for v11 gates run
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-16T00:00:00.000Z'
+updated_at: '2026-05-16T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/src/shell/gates/quality-gates-adapter.ts
+    - packages/caws-cli/tests/packaging
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/src/shell/gates/
+    - packages/caws-cli/tests/packaging/
+    - packages/caws-cli/tests/shell/gates/
+  out:
+    - packages/quality-gates/
+    - packages/caws-kernel/
+invariants:
+  - The published @paths.design/caws-cli tarball declares every runtime subprocess dependency it spawns.
+  - caws gates run does not silently fall back to PATH for caws-quality-gates resolution.
+acceptance:
+  - id: A1
+    given: A clean global or project-local install of @paths.design/caws-cli@11.x from the published tarball.
+    when: The consumer's node_modules is inspected after install.
+    then: node_modules/.bin/caws-quality-gates exists as an executable symlink resolving into @paths.design/quality-gates.
+  - id: A2
+    given: A v11-shape .caws/ project with at least one spec and the caws-cli installed per A1.
+    when: caws gates run --spec <id> is invoked from the project root.
+    then: The command does not produce SHELL_RULES.GATES_SUBPROCESS_NOT_FOUND. (It may still fail other contracts; this spec only covers resolution.)
+  - id: A3
+    given: The packaged tarball at packages/caws-cli/paths.design-caws-cli-11.0.0.tgz (or its successor).
+    when: Its package metadata is inspected.
+    then: dependencies declares @paths.design/quality-gates at a version range compatible with the kernel's expected subprocess contract.
+non_functional:
+  security:
+    - quality-gates resolution must use node_modules path resolution, not PATH lookup, to avoid invoking an unrelated binary that happens to be named caws-quality-gates.
+contracts:
+  - name: caws-cli runtime dependency declaration
+    type: behavior
+    path: packages/caws-cli/package.json
+    description: The dependencies map must include @paths.design/quality-gates so the bin symlink is created at install time.
+  - name: quality-gates subprocess spawn contract
+    type: behavior
+    path: packages/caws-cli/src/shell/gates/quality-gates-adapter.ts
+    description: defaultRunner resolves caws-quality-gates from node_modules/.bin in the consumer cwd and surfaces ENOENT as GATES_SUBPROCESS_NOT_FOUND. No PATH fallback.
