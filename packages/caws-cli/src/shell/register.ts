@@ -81,13 +81,55 @@ export function registerShellCommands(
     .command('init')
     .description(
       'Bootstrap the canonical vNext .caws/ project state (idempotent; ' +
-        'refuses to overwrite legacy single-spec layout).'
+        'refuses to overwrite legacy single-spec layout). With ' +
+        '--agent-surface, also installs the corresponding hook pack.'
     )
     .option('--data', 'Show structured data block on diagnostics')
-    .action((opts: { data?: boolean }) => {
-      const code = runInitCommand({ showData: opts.data === true });
-      exit(code);
-    });
+    .option(
+      '--agent-surface <name>',
+      'Install a hook pack for an agent harness ' +
+        '(claude-code | cursor | windsurf | none). When omitted, init ' +
+        'attempts filesystem detection and skips hook install when ' +
+        'ambiguous.'
+    )
+    .option(
+      '--overwrite',
+      'For hook-pack install: replace drifted or unmanaged files at ' +
+        'managed pack paths. CAUTION: local edits to those files will ' +
+        'be lost.'
+    )
+    .option(
+      '--adopt',
+      'For hook-pack install: leave drifted or unmanaged files in place ' +
+        'without enforcing pack contents. CAUTION: pack drift is no ' +
+        'longer tracked for those paths.'
+    )
+    .action(
+      (opts: {
+        data?: boolean;
+        agentSurface?: string;
+        overwrite?: boolean;
+        adopt?: boolean;
+      }) => {
+        // Commander hands back the raw string for agentSurface; the
+        // runInitCommand validator rejects unknown values with exit 2.
+        const runOpts: Parameters<typeof runInitCommand>[0] = {
+          showData: opts.data === true,
+        };
+        if (opts.agentSurface !== undefined) {
+          (runOpts as { agentSurface?: string }).agentSurface =
+            opts.agentSurface;
+        }
+        if (opts.overwrite !== undefined) {
+          (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
+        }
+        if (opts.adopt !== undefined) {
+          (runOpts as { adopt?: boolean }).adopt = opts.adopt;
+        }
+        const code = runInitCommand(runOpts);
+        exit(code);
+      }
+    );
 
   // -------------------------------------------------------------------
   // caws doctor
