@@ -335,8 +335,15 @@ module.exports = { runCodemod };`
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       const output = execSync(`node "${cliPath}" --help`, { encoding: 'utf8' });
       expect(output).toContain('CAWS - Coding Agent Working Standard CLI');
+      // v11 canonical command surface (8 groups). See CLI-CONTRACT-001.
       expect(output).toContain('init');
-      expect(output).toContain('scaffold');
+      expect(output).toContain('doctor');
+      expect(output).toContain('status');
+      expect(output).toContain('scope');
+      expect(output).toContain('claim');
+      expect(output).toContain('gates');
+      expect(output).toContain('evidence');
+      expect(output).toContain('waiver');
       expect(output).toContain('version');
     });
 

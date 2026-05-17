@@ -1,0 +1,52 @@
+id: CLI-CONTRACT-001
+title: Re-green caws --help contract tests after v11 surface trim
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-17T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/contract/schema-contract.test.js
+    - packages/caws-cli/tests/index.test.js
+    - packages/caws-cli/tests/contract/cli-contract.test.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/tests/contract/schema-contract.test.js
+    - packages/caws-cli/tests/index.test.js
+    - packages/caws-cli/tests/contract/cli-contract.test.js
+  out:
+    - .caws/events.jsonl
+    - .caws/policy.yaml
+    - packages/caws-cli/src/
+invariants:
+  - The caws --help contract tests assert the eight v11 command groups and no removed commands.
+  - The CLI banner string "CAWS - Coding Agent Working Standard CLI" is locked by an explicit assertion.
+  - No test asserts behavior of commands removed in the v11 cutover (scaffold, provenance, validate, evaluate, iterate, etc.).
+acceptance:
+  - id: A1
+    given: A developer runs the focused help-contract test suite on the v11 caws-cli build.
+    when: jest executes tests/contract/schema-contract.test.js and tests/index.test.js.
+    then: Both assert the eight v11 command groups in --help output and pass.
+  - id: A2
+    given: A developer inspects the help-contract tests.
+    when: The CLI Output Contract block is read.
+    then: It contains an explicit assertion that --help output includes "CAWS - Coding Agent Working Standard CLI".
+  - id: A3
+    given: The legacy scaffold command was removed in slice 8a3.1.
+    when: jest executes the contract test files in scope.
+    then: No test asserts that scaffold appears in --help output and the scaffold test block in cli-contract.test.js is removed.
+  - id: A4
+    given: The legacy provenance command was removed in the v11 cutover.
+    when: jest executes cli-contract.test.js.
+    then: No test invokes or asserts behavior of the provenance command.
+non_functional:
+  reliability:
+    - Help-contract assertions must remain stable across minor version bumps that do not change the canonical command surface.
+contracts:
+  - name: caws --help canonical surface
+    type: behavior
+    path: packages/caws-cli/src/index.js
+    description: caws --help prints the eight v11 command groups and the Working Standard banner.

@@ -196,32 +196,7 @@ describe('CLI Interface Contracts', () => {
       expect(fs.existsSync(registryPath)).toBe(true);
     });
 
-    test('scaffold command should create valid tool structure', () => {
-      // Create a basic project first
-      try {
-        runNode(['init', testProjectName, '--non-interactive'], {
-          encoding: 'utf8',
-          stdio: 'pipe',
-          cwd: testTempDir,
-        });
-      } catch (error) {
-        // CLI may "fail" due to stderr warnings but still create files
-      }
-
-      // Contract: scaffold should run without errors
-      runNode(['scaffold'], {
-        encoding: 'utf8',
-        stdio: 'pipe',
-        cwd: path.join(testTempDir, testProjectName),
-      });
-
-      // Contract: .agent directory should exist (created during init)
-      expect(fs.existsSync(path.join(testTempDir, testProjectName, '.agent'))).toBe(true);
-
-      // Contract: IDE integrations should be enhanced (scaffold adds these)
-      // Note: apps/tools/caws structure requires templates which aren't available in test env
-      // This is expected behavior - scaffold gracefully handles missing templates
-    });
+    // scaffold command removed in v11 (slice 8a3.1). See CLI-CONTRACT-001.
 
     test('CLI should handle invalid arguments gracefully', () => {
       // Contract: CLI should provide helpful error messages for invalid input
@@ -410,99 +385,5 @@ describe('CLI Interface Contracts', () => {
     });
   });
 
-  describe('Provenance Command Contracts', () => {
-    test('provenance init should create provenance directory', () => {
-      // Contract: init should create .caws/provenance directory and config
-      const projectDir = path.join(testTempDir, 'provenance-test-init');
-      fs.ensureDirSync(projectDir);
-
-      // Initialize git repo first
-      try {
-        runGit(['init', '--quiet'], projectDir);
-        runGit(['config', 'user.email', 'test@example.com'], projectDir);
-        runGit(['config', 'user.name', 'Test User'], projectDir);
-      } catch (_error) {
-        console.log('Git initialization failed in test environment - skipping provenance init test');
-        expect(true).toBe(true);
-        return;
-      }
-
-      // Initialize CAWS project
-      runNode(['init', '.', '--non-interactive'], { cwd: projectDir, stdio: 'pipe' });
-
-      // Test provenance init
-      runNode(['provenance', 'init'], { cwd: projectDir, stdio: 'pipe' });
-
-      // Contract: Should create provenance directory
-      expect(fs.existsSync(path.join(projectDir, '.caws/provenance'))).toBe(true);
-      expect(fs.existsSync(path.join(projectDir, '.caws/provenance/chain.json'))).toBe(true);
-      expect(fs.existsSync(path.join(projectDir, '.caws/provenance/config.json'))).toBe(true);
-
-      // Contract: Chain should be initialized as empty array
-      const chain = JSON.parse(
-        fs.readFileSync(path.join(projectDir, '.caws/provenance/chain.json'), 'utf8')
-      );
-      expect(Array.isArray(chain)).toBe(true);
-      expect(chain.length).toBe(0);
-    });
-
-    test('provenance show should handle empty chain gracefully', () => {
-      // Contract: show command should not crash on empty provenance
-      const projectDir = path.join(testTempDir, 'provenance-show');
-      fs.ensureDirSync(projectDir);
-      try {
-        runGit(['init', '--quiet'], projectDir);
-        runGit(['config', 'user.email', 'test@example.com'], projectDir);
-        runGit(['config', 'user.name', 'Test User'], projectDir);
-      } catch (_error) {
-        console.log('Git initialization failed in test environment - skipping provenance show test');
-        expect(true).toBe(true);
-        return;
-      }
-      runNode(['init', '.', '--non-interactive'], { cwd: projectDir, stdio: 'pipe' });
-
-      const output = runNode(['provenance', 'show'], {
-        cwd: projectDir,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-
-      // Contract: Should contain user-friendly message
-      expect(output).toContain('No provenance data found');
-    });
-
-    test('hooks install should create git hooks', () => {
-      // Contract: hooks install should create executable git hooks
-      // Create a test project directory for this test
-      const hooksTestDir = path.join(testTempDir, 'hooks-test');
-      fs.ensureDirSync(hooksTestDir);
-
-      // Initialize git repo
-      try {
-        runGit(['init', '--quiet'], hooksTestDir);
-        runGit(['config', 'user.email', 'test@example.com'], hooksTestDir);
-        runGit(['config', 'user.name', 'Test User'], hooksTestDir);
-      } catch (_error) {
-        console.log('Git initialization failed in test environment - skipping hooks install test');
-        expect(true).toBe(true);
-        return;
-      }
-
-      // Initialize CAWS project
-      runNode(['init', '.', '--non-interactive'], { cwd: hooksTestDir, stdio: 'pipe' });
-
-      // Test hooks install
-      runNode(['hooks', 'install', '--force'], { cwd: hooksTestDir, stdio: 'pipe' });
-
-      // Contract: Should create hook files
-      expect(fs.existsSync(path.join(hooksTestDir, '.git/hooks/pre-commit'))).toBe(true);
-      expect(fs.existsSync(path.join(hooksTestDir, '.git/hooks/post-commit'))).toBe(true);
-      expect(fs.existsSync(path.join(hooksTestDir, '.git/hooks/pre-push'))).toBe(true);
-      expect(fs.existsSync(path.join(hooksTestDir, '.git/hooks/commit-msg'))).toBe(true);
-
-      // Contract: Hooks should be executable
-      const preCommitStats = fs.statSync(path.join(hooksTestDir, '.git/hooks/pre-commit'));
-      expect(preCommitStats.mode & 0o111).toBeTruthy(); // executable bit set
-    });
-  });
+  // Provenance and hooks command groups removed in v11. See CLI-CONTRACT-001.
 });

@@ -681,8 +681,15 @@ describe('Schema Validation Contracts', () => {
       // Contract: Help should contain expected sections
       expect(helpOutput).toContain('CAWS - Coding Agent Working Standard CLI');
       expect(helpOutput).toContain('Commands:');
+      // v11 canonical command surface (8 groups). See CLI-CONTRACT-001.
       expect(helpOutput).toContain('init');
-      expect(helpOutput).toContain('scaffold');
+      expect(helpOutput).toContain('doctor');
+      expect(helpOutput).toContain('status');
+      expect(helpOutput).toContain('scope');
+      expect(helpOutput).toContain('claim');
+      expect(helpOutput).toContain('gates');
+      expect(helpOutput).toContain('evidence');
+      expect(helpOutput).toContain('waiver');
       expect(helpOutput).toContain('Options:');
       expect(helpOutput).toContain('--help');
       expect(helpOutput).toContain('--version');
