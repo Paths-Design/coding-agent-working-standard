@@ -1,6 +1,6 @@
 #!/bin/bash
 # CAWS Scope Guard Hook for Claude Code
-# Validates file edits against scope boundaries from working-spec + feature specs
+# Validates file edits against scope boundaries from per-feature specs under .caws/specs/
 # Specs with terminal status (completed, closed, archived) are skipped
 # @author @darianrosebrook
 
@@ -23,11 +23,10 @@ if [[ -z "$FILE_PATH" ]]; then
 fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-SPEC_FILE="$PROJECT_DIR/.caws/working-spec.yaml"
 SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
 
 # Check if any spec infrastructure exists
-if [[ ! -f "$SPEC_FILE" ]] && [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$PROJECT_DIR/.caws/specs" ]]; then
+if [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$PROJECT_DIR/.caws/specs" ]]; then
   exit 0
 fi
 
@@ -38,8 +37,8 @@ else
   REL_PATH="$FILE_PATH"
 fi
 
-# Lite mode: check scope.json if no working-spec.yaml
-if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
+# Lite mode: check scope.json if .caws/specs/ is missing/empty
+if [[ ! -d "$PROJECT_DIR/.caws/specs" ]] && [[ -f "$SCOPE_FILE" ]]; then
   if command -v node >/dev/null 2>&1; then
     LITE_CHECK=$(node -e "
       const fs = require('fs');
@@ -259,17 +258,7 @@ if command -v node >/dev/null 2>&1; then
         // Authoritative: only the bound spec matters
         specs.push(authoritativeSpec);
       } else {
-        // Union: load all active specs
-        const mainSpec = '$SPEC_FILE';
-        if (fs.existsSync(mainSpec)) {
-          try {
-            const s = yaml.load(fs.readFileSync(mainSpec, 'utf8'));
-            if (s && !TERMINAL.has(s.status)) {
-              specs.push({ source: 'working-spec', spec: s });
-            }
-          } catch (_) {}
-        }
-
+        // Union: load all active per-feature specs under .caws/specs/
         const specsDir = '$SPECS_DIR';
         if (fs.existsSync(specsDir)) {
           for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {

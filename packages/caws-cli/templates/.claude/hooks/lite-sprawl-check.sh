@@ -24,7 +24,7 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
 
-# Only active in lite mode (scope.json present, no working-spec.yaml)
+# Only active in lite mode (scope.json present)
 if [[ ! -f "$SCOPE_FILE" ]]; then
   exit 0
 fi

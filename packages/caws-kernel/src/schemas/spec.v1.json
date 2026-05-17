@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/spec.v1.json",
+  "title": "CAWS Spec",
+  "description": "Strict spec schema for CAWS vNext. Authority for spec shape, lifecycle, and forbidden surfaces. Rejects: change_budget, acceptance_criteria, mode:development, scope.include, scope.exclude, unknown top-level fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "risk_tier",
+    "mode",
+    "lifecycle_state",
+    "blast_radius",
+    "scope",
+    "invariants",
+    "acceptance",
+    "non_functional",
+    "contracts"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Spec identifier. Uppercase prefix segments, numeric final segment, optional lowercase suffix.",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "risk_tier": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "Tier 1 most strict, Tier 3 least. String forms ('T1', '1') are NOT accepted; coerce upstream."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["feature", "refactor", "fix", "doc", "chore"],
+      "description": "Closed vocabulary. 'development' is rejected — choose a real mode."
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "active", "closed", "archived"],
+      "description": "Primary lifecycle axis. Archive is a state, not just a directory."
+    },
+    "resolution": {
+      "type": "string",
+      "enum": ["completed", "superseded", "abandoned"],
+      "description": "Only set after closure (lifecycle_state in {closed, archived})."
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Operational metadata for active specs. NOT a lifecycle state. Blocked specs still enforce scope.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": { "type": "string", "minLength": 1 },
+          "waiting_on": { "type": "string" },
+          "since": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "When resolution=superseded, the spec id this one supersedes."
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "When this spec is itself superseded by another."
+    },
+    "worktree": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Bidirectional binding: when set, worktrees.json[worktree].specId must equal this spec's id."
+    },
+    "operational_rollback_slo": {
+      "type": "string",
+      "description": "Time budget for operational rollback (e.g. '5m', '1h'). Required for Tier 1 in semantic check."
+    },
+    "blast_radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modules"],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "data_migration": { "type": "boolean" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Authoritative scope. 'in' is required and non-empty. 'out' rejects glob patterns. 'include'/'exclude' aliases are NOT accepted.",
+      "required": ["in"],
+      "properties": {
+        "in": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "out": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": { "pattern": "[*?]" },
+            "description": "Directory paths only. Glob patterns (*, ?) rejected."
+          }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "acceptance": {
+      "type": "array",
+      "description": "Acceptance criteria in given/when/then form. Canonical key. 'acceptance_criteria' alias is rejected.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "given", "when", "then"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^A\\d+$" },
+          "given": { "type": "string", "minLength": 1 },
+          "when": { "type": "string", "minLength": 1 },
+          "then": { "type": "string", "minLength": 1 },
+          "test_command": { "type": "string" },
+          "test_nodeids": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "string" },
+          "narrative": { "type": "string" }
+        }
+      }
+    },
+    "non_functional": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "performance": { "type": "array", "items": { "type": "string" } },
+        "security": { "type": "array", "items": { "type": "string" } },
+        "accessibility": { "type": "array", "items": { "type": "string" } },
+        "reliability": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "description": "Tier 1+2 require non-empty contracts (semantic check). Empty array is structurally valid for tier 3.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": {
+            "type": "string",
+            "enum": ["api", "schema", "contract-test", "behavior"]
+          },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "observability": {
+      "type": "array",
+      "description": "Tier 1 required (semantic check).",
+      "items": { "type": "string" }
+    },
+    "rollback": {
+      "type": "array",
+      "description": "Tier 1 required non-empty (semantic check).",
+      "items": { "type": "string" }
+    },
+    "experimental_mode": {
+      "type": "object",
+      "description": "Tier 3 only. Semantic check rejects on Tier 1 or 2.",
+      "additionalProperties": false,
+      "required": ["enabled", "rationale", "expires_at"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "rationale": { "type": "string", "minLength": 1 },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "owner": { "type": "string" },
+    "closure_notes": { "type": "string" }
+  }
+}

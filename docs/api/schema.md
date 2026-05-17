@@ -1,19 +1,30 @@
+---
+doc_id: caws-schema
+authority: reference
+status: active
+title: CAWS Schema Specifications (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
 # CAWS Schema Specifications
 
 ## Overview
 
 CAWS uses JSON Schema for validation and TypeScript interfaces for type safety. This document provides complete specifications for all CAWS schemas and data structures.
 
-## Working Specification Schema
+## Feature Specification Schema
 
-The working specification defines the complete project requirements and constraints.
+> **Note:** vNext is multi-spec only. The schema below documents the legacy single-file `working-spec.yaml` shape; per-feature specs in `.caws/specs/<id>.yaml` use the same schema. The kernel's canonical version lives at `packages/caws-kernel/src/schemas/spec.v1.json`.
+
+The feature specification defines a single feature's requirements and constraints.
 
 ### JSON Schema
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Working Spec",
+  "title": "CAWS Feature Spec",
   "type": "object",
   "required": [
     "id",
@@ -881,10 +892,10 @@ All schemas are validated using:
 ### Runtime Validation
 ```typescript
 import Ajv from 'ajv';
-import { workingSpecSchema } from './schemas/working-spec.schema.json';
+import featureSpecSchema from './schemas/working-spec.schema.json';
 
 const ajv = new Ajv();
-const validate = ajv.compile(workingSpecSchema);
+const validate = ajv.compile(featureSpecSchema);
 
 const isValid = validate(workingSpec);
 if (!isValid) {

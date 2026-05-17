@@ -1,4 +1,15 @@
-# CAWS Quality Gates - Staged Files Analysis
+---
+doc_id: quality-gates-staged-files
+authority: reference
+status: active
+title: CAWS Quality Gates — Staged Files Analysis (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
+
+# CAWS Quality Gates — Staged Files Analysis
+
+> **v11 note.** The `caws scaffold` and `caws quality-gates` commands referenced below are removed in v11. Use `caws gates run --spec <id>` for v11 quality-gate evaluation, and set up git hooks externally (`husky`, `pre-commit`, hand-rolled). The conceptual content of this guide (staged-file analysis, god-object detection, TODO scanning, tier integration) still applies; the surface invocation has changed.
 
 ## Overview
 
@@ -80,18 +91,19 @@ caws quality-gates --languages rust,typescript
 caws quality-gates --no-todos --no-god-objects
 ```
 
-### Git Hooks (Automatic)
+### Git Hooks (manual setup in v11)
 
-Quality gates are automatically integrated into git hooks when you run:
+v11 does not auto-install git hooks. Set up your own pre-commit hook (using `husky`, `pre-commit`, or a hand-rolled script under `.git/hooks/pre-commit`) that calls `caws gates run`:
 
 ```bash
-caws scaffold
+#!/bin/bash
+# .git/hooks/pre-commit
+set -e
+caws doctor
+caws gates run --spec "$(git config caws.activeSpec || echo current)"
 ```
 
-This creates a pre-commit hook that runs:
-1. Quality gates on staged files
-2. Hidden TODO analysis on staged files
-3. Blocks commits with violations
+The hook should run quality gates on staged files, surface TODO/god-object findings via `caws doctor`, and block commits with blocking-gate violations.
 
 ### Manual Script Execution
 
@@ -281,7 +293,7 @@ The quality gates support your engineering-grade TODO template:
 
 ## Integration with CAWS
 
-### Working Spec Integration
+### Feature Spec Integration
 
 Quality gates automatically read your CAWS working spec to determine:
 - Risk tier requirements
@@ -297,14 +309,14 @@ All quality gate runs are tracked in CAWS provenance:
 
 ### Scaffolding
 
-Quality gates are automatically scaffolded into new CAWS projects:
+In v11, quality gates are part of the core; no separate scaffolding is required.
 
 ```bash
-# Initialize new project
-caws init my-project
+# Initialize a new project (no-arg in v11)
+caws init
 
-# Scaffold quality gates into existing project
-caws scaffold
+# Run gates against a spec
+caws gates run --spec <id>
 ```
 
 ## Benefits
@@ -340,8 +352,8 @@ ls -la .caws/
 # Check git hooks
 ls -la .git/hooks/
 
-# Re-scaffold if needed
-caws scaffold --force
+# Re-initialize if .caws/ is missing (idempotent in v11)
+caws init
 ```
 
 ### False Positives

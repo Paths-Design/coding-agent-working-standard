@@ -1,390 +1,202 @@
-# CAWS Multi-Agent Workflow Guide
+---
+doc_id: multi-agent-workflow-guide
+authority: reference
+status: active
+title: Multi-agent workflow (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-**Critical: Each agent MUST work on their own feature-specific spec to avoid conflicts**
+# Multi-agent workflow (v11.0.0)
 
-## The Problem (Anti-Pattern)
+**Each agent works on its own per-feature spec, in its own git worktree, with non-overlapping scope.**
 
-**WRONG**: Multiple agents working on `.caws/working-spec.yaml`
+This guide describes the v11.0.0 multi-agent pattern. For worktree mechanics, see [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see [`docs/api/cli.md`](../api/cli.md).
 
-- Agent A working on user authentication
-- Agent B working on payment system
-- Both modify `.caws/working-spec.yaml`
-- **Result**: Agents overwrite each other's work, conflicts, chaos
+> **v11 posture (A1).** v11.0.0 ships eight command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`). It does not ship `caws specs create | list | conflicts`, `caws worktree create | merge`, `caws parallel setup | merge | teardown`, or `caws validate | iterate | evaluate | diagnose`. Author specs by editing YAML directly; create worktrees with `git worktree`; surface ownership with `caws claim`. Lifecycle automation returns in v11.1.
 
-## The Solution (Correct Pattern)
+## The pattern
 
-**CORRECT**: Each agent works on their own feature spec in `.caws/specs/`
+| Concern | Mechanism |
+|---|---|
+| One feature = one spec | `.caws/specs/<id>.yaml` (one file per feature, edited by hand) |
+| Scope boundaries | Spec's `scope.in` / `scope.out`; enforced by `caws scope check <path>` |
+| Worktree isolation | `git worktree add` (host-side) + `caws claim` (inside worktree) |
+| Ownership audit | `.caws/worktrees.json:owner` (session id), `prior_owners` audit on `--takeover` |
+| Per-spec gates | `caws gates run --spec <id>` |
+| Per-spec evidence | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
+| Per-spec waivers | `caws waiver create <id>-w --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>` |
 
-- Agent A works on `.caws/specs/user-auth.yaml`
-- Agent B works on `.caws/specs/payment-system.yaml`
-- **Result**: Parallel development, no conflicts, clear boundaries
+## Anti-pattern (do not do this)
 
-## Architecture: Feature-Specific Specs
+Multiple agents editing the same spec file (e.g. a project-level `working-spec.yaml`, or two agents both editing `.caws/specs/shared.yaml`). They will overwrite each other and produce non-deterministic gate evaluations.
 
-### Directory Structure
+v11 has no project-level working spec. `caws init` refuses legacy `.caws/working-spec.yaml`.
 
-```
-.caws/
-  ├── specs/                         # Feature-specific specs (NEW, PREFERRED)
-  │   ├── registry.json              # Spec registry
-  │   ├── user-auth.yaml             # Agent A's feature
-  │   ├── payment-system.yaml        # Agent B's feature
-  │   └── dashboard-ui.yaml          # Agent C's feature
-  └── working-spec.yaml              # Legacy single-spec (DEPRECATED)
-```
+## End-to-end multi-agent workflow
 
-### Spec Resolution Priority
+### Step 1 — author one spec per agent
 
-CAWS uses this resolution order:
-
-1. **Feature spec** (via `--spec-id`): `.caws/specs/<spec-id>.yaml` ← **PREFERRED**
-2. **Explicit path** (via spec-file arg): Custom path
-3. **Auto-detect**: If only 1 spec exists, use it
-4. **Legacy fallback**: `.caws/working-spec.yaml` ← **DEPRECATED**
-
-## Multi-Agent Workflow
-
-### Step 1: Create Feature-Specific Specs
-
-**Each agent creates their own spec:**
+The host (or first agent) authors per-feature YAML files. v11 has no spec generator; create the files directly.
 
 ```bash
-# Agent A: User Authentication
-caws specs create user-auth --type feature --title "User Authentication System"
-
-# Agent B: Payment System
-caws specs create payment-system --type feature --title "Payment Processing"
-
-# Agent C: Dashboard UI
-caws specs create dashboard-ui --type feature --title "Admin Dashboard"
+$EDITOR .caws/specs/user-auth.yaml
+$EDITOR .caws/specs/payment-system.yaml
+$EDITOR .caws/specs/dashboard-ui.yaml
 ```
 
-### Step 2: Work on Your Feature Spec
+Each spec must define non-overlapping `scope.in` and explicitly exclude the other features in `scope.out` (defensive — prevents accidental cross-feature edits even if `scope.in` is too broad).
 
-**Each agent specifies their spec ID in all commands:**
+Example (`user-auth.yaml`):
 
-```bash
-# Agent A works on user-auth
-caws validate --spec-id user-auth
-caws status --spec-id user-auth
-caws iterate --spec-id user-auth
-caws evaluate --spec-id user-auth
-
-# Agent B works on payment-system
-caws validate --spec-id payment-system
-caws status --spec-id payment-system
-
-# Agent C works on dashboard-ui
-caws validate --spec-id dashboard-ui
-caws status --spec-id dashboard-ui
-```
-
-### Step 3: Track Progress Independently
-
-Each agent's progress is isolated:
-
-```bash
-# Agent A updates their acceptance criteria
-caws progress update --spec-id user-auth --criterion-id A1 --status completed
-
-# Agent B updates theirs (no conflict with Agent A)
-caws progress update --spec-id payment-system --criterion-id A1 --status in_progress
-```
-
-### Step 4: Archive Completed Features
-
-When a feature is complete:
-
-```bash
-# Agent A completes user-auth
-caws archive FEAT-001 --spec-id user-auth
-
-# Agent B still working on payment-system (no conflict)
-caws status --spec-id payment-system
-```
-
-## Complete Example: 3 Agents, 3 Features
-
-### Agent A: User Authentication
-
-```bash
-# Create spec
-caws specs create user-auth --type feature --title "User Authentication"
-
-# Edit spec
-# File: .caws/specs/user-auth.yaml
+```yaml
 id: FEAT-001
-title: "User Authentication System"
-risk_tier: T1  # High security
+title: User Authentication System
+risk_tier: T1
 mode: feature
 scope:
   in:
-    - "src/auth/"
-    - "tests/auth/"
+    - src/auth/**
+    - tests/auth/**
   out:
-    - "src/payments/"  # Don't touch Agent B's work
-    - "src/dashboard/" # Don't touch Agent C's work
+    - src/payments/**
+    - src/dashboard/**
 acceptance:
   - id: A1
-    given: "User submits valid credentials"
-    when: "Authentication is requested"
-    then: "JWT token is issued"
+    given: User submits valid credentials
+    when: Authentication is requested
+    then: JWT token is issued
   - id: A2
-    given: "Invalid credentials"
-    when: "Authentication is requested"
-    then: "401 Unauthorized error returned"
-
-# Validate
-caws validate --spec-id user-auth
-
-# Check status
-caws status --spec-id user-auth
-
-# Update progress
-caws progress update --spec-id user-auth --criterion-id A1 --status completed
-
-# Get guidance
-caws iterate --spec-id user-auth --current-state "Implemented JWT generation"
+    given: Invalid credentials
+    when: Authentication is requested
+    then: 401 Unauthorized error returned
 ```
 
-### Agent B: Payment System
+### Step 2 — host creates worktrees
 
 ```bash
-# Create spec
-caws specs create payment-system --type feature --title "Payment Processing"
-
-# Edit spec
-# File: .caws/specs/payment-system.yaml
-id: FEAT-002
-title: "Payment Processing System"
-risk_tier: T1  # High security + financial
-mode: feature
-scope:
-  in:
-    - "src/payments/"
-    - "tests/payments/"
-  out:
-    - "src/auth/"      # Don't touch Agent A's work
-    - "src/dashboard/" # Don't touch Agent C's work
-acceptance:
-  - id: A1
-    given: "Valid payment method"
-    when: "User initiates payment"
-    then: "Payment is processed successfully"
-  - id: A2
-    given: "Insufficient funds"
-    when: "Payment is attempted"
-    then: "422 Unprocessable Entity error returned"
-
-# All commands use --spec-id payment-system
-caws validate --spec-id payment-system
-caws status --spec-id payment-system
-caws iterate --spec-id payment-system
+git worktree add ../proj-auth -b agent-auth
+git worktree add ../proj-payments -b agent-payments
+git worktree add ../proj-dashboard -b agent-dashboard
 ```
 
-### Agent C: Dashboard UI
+### Step 3 — each agent claims its worktree
+
+Inside its assigned worktree, each agent surfaces ownership:
 
 ```bash
-# Create spec
-caws specs create dashboard-ui --type feature --title "Admin Dashboard"
-
-# Edit spec
-# File: .caws/specs/dashboard-ui.yaml
-id: FEAT-003
-title: "Admin Dashboard UI"
-risk_tier: T2  # Standard
-mode: feature
-scope:
-  in:
-    - "src/dashboard/"
-    - "tests/dashboard/"
-  out:
-    - "src/auth/"     # Don't touch Agent A's work
-    - "src/payments/" # Don't touch Agent B's work
-acceptance:
-  - id: A1
-    given: "Admin is authenticated"
-    when: "Dashboard is loaded"
-    then: "User metrics are displayed"
-
-# All commands use --spec-id dashboard-ui
-caws validate --spec-id dashboard-ui
-caws status --spec-id dashboard-ui
+cd ../proj-auth
+caws claim
+# Records this session as the worktree owner in .caws/worktrees.json
 ```
 
-## Listing All Specs
+If `caws claim` reports a foreign owner, do not take over without explicit user authorization (see [`worktree-isolation.md`](worktree-isolation.md#ownership-and-the-foreign-claim-soft-block)).
 
-View all active feature specs:
+### Step 4 — work within scope
+
+Before editing each file, verify it's in your spec's scope:
 
 ```bash
-caws specs list
+caws scope show src/auth/login.ts        # explain
+caws scope check src/auth/login.ts       # exit 0 admit / 1 refuse
 ```
 
-Output:
+Implement, run your project's test suite as usual.
 
-```
-📋 CAWS Specs
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-ID              Type      Status      Title
-─────────────────────────────────────────────────
-user-auth       feature   active      User Authentication System
-payment-system  feature   in_progress Payment Processing
-dashboard-ui    feature   draft       Admin Dashboard UI
-```
-
-## Migration from Legacy Single-Spec
-
-### If You're Using `.caws/working-spec.yaml`:
-
-**Step 1: Identify features in your working spec**
-
-Read your `.caws/working-spec.yaml` and identify distinct features.
-
-**Step 2: Split into feature-specific specs**
+### Step 5 — record evidence as ACs close
 
 ```bash
-# For each feature, create a new spec
-caws specs create <feature-id> --type feature --title "<Feature Title>"
+caws evidence record --type test --spec user-auth \
+  --data '{"name":"login_happy_path","status":"pass"}'
+
+caws evidence record --type ac --spec user-auth \
+  --data '{"id":"A1","status":"satisfied"}'
 ```
 
-**Step 3: Copy relevant sections**
+Both append hash-chained events to `.caws/events.jsonl` via the store.
 
-Copy the relevant acceptance criteria, scope, and contracts from `working-spec.yaml` to each feature spec.
-
-**Step 4: Update agent instructions**
-
-Tell each agent to use `--spec-id <their-feature-id>` in all commands.
-
-**Step 5: Archive legacy spec (optional)**
+### Step 6 — run gates per spec
 
 ```bash
-mv .caws/working-spec.yaml .caws/working-spec.yaml.legacy
+caws gates run --spec user-auth
 ```
 
-## Common Pitfalls & Solutions
+Each spec evaluates its own gates against the current diff. If a blocking gate fails:
 
-### Pitfall 1: Forgetting `--spec-id`
+- Fix the issue, re-run, OR
+- Open a waiver: `caws waiver create user-auth-w --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>`. Subsequent runs filter that violation out of the disposition.
 
-**Problem**:
+### Step 7 — verify and merge
 
 ```bash
-caws validate  # Which spec? Multiple exist!
+caws doctor                              # surface drift
+caws status                              # observability snapshot
 ```
 
-**Solution**:
+When the spec is complete, the host merges the agent branch back to base:
 
 ```bash
-caws validate --spec-id user-auth  # Explicit
+# From the main worktree
+git checkout main
+git merge --no-ff agent-auth
+git worktree remove ../proj-auth
+git branch -d agent-auth
 ```
 
-### Pitfall 2: Overlapping Scopes
+## Detecting scope conflicts (manual in v11)
 
-**Problem**:
+v11 does not ship `caws specs conflicts`. To check whether two specs have overlapping `scope.in` patterns, read the YAML directly. A defensive `scope.out` per spec — listing the other features' directories — catches accidents at `caws scope check` time.
 
-```yaml
-# user-auth.yaml
-scope:
-  in: ["src/"]  # Too broad!
+In v11.1 a vNext `caws specs conflicts` returns.
 
-# payment-system.yaml
-scope:
-  in: ["src/"]  # Conflict with user-auth!
-```
+## Listing specs (manual in v11)
 
-**Solution**:
-
-```yaml
-# user-auth.yaml
-scope:
-  in: ["src/auth/", "tests/auth/"]
-  out: ["src/payments/", "src/dashboard/"]
-
-# payment-system.yaml
-scope:
-  in: ["src/payments/", "tests/payments/"]
-  out: ["src/auth/", "src/dashboard/"]
-```
-
-### Pitfall 3: Using Legacy Working Spec
-
-**Problem**:
+v11 does not ship `caws specs list`. List by directory:
 
 ```bash
-# Multiple agents all editing .caws/working-spec.yaml
-caws validate  # Defaults to legacy spec, conflicts!
+ls .caws/specs/
 ```
 
-**Solution**:
+Each YAML's `id`, `title`, `status`, and `risk_tier` fields describe it.
 
-```bash
-# Each agent has their own spec
-caws validate --spec-id user-auth
-caws validate --spec-id payment-system
-```
+## Common pitfalls
 
-## Best Practices
+**Pitfall: agents edit the same spec file.**
+Each feature gets its own `.caws/specs/<id>.yaml`. Don't share.
 
-### 1. One Feature = One Spec
+**Pitfall: overlapping `scope.in`.**
+Use narrow `scope.in` and explicit `scope.out` listing other agents' directories. Verify with `caws scope show <path>` before starting work.
 
-- Each feature gets its own spec file
-- Clear ownership and boundaries
-- No conflicts between agents
+**Pitfall: `caws claim` refuses with a foreign-owner message.**
+Read the prior session's log under `tmp/<sessionId>/` first. `--takeover` only with explicit user authorization; it writes a durable `prior_owners` audit.
 
-### 2. Always Use `--spec-id`
+**Pitfall: agents commit to the base branch.**
+Each agent must `cd` into its worktree before working. The pre-commit hook in this repo blocks direct base-branch commits while worktrees are active; only `merge(worktree):` and `wip(checkpoint):` formats are allowed.
 
-- Explicit is better than implicit
-- Prevents accidental conflicts
-- Makes intent clear
+**Pitfall: trying `caws specs create` / `caws validate` / `caws iterate`.**
+These are removed in v11. Author the YAML directly; validate via `caws doctor` and `caws gates run`.
 
-### 3. Non-Overlapping Scopes
+## Cross-feature coordination
 
-- Define clear `scope.in` boundaries
-- Explicitly exclude other features in `scope.out`
-- Prevents accidental modifications
+When two features need to interact (e.g., the dashboard consumes the auth API):
 
-### 4. Coordinate Cross-Feature Changes
-
-If two features need to interact:
-
-1. Define contracts first (API, types)
-2. One agent owns the contract
-3. Other agent consumes the contract
-4. No direct file modifications across scopes
+1. Define the contract first — write the OpenAPI / TypeScript interface in a file owned by exactly one of the specs.
+2. The contract owner publishes; the consumer's spec lists the contract under `contracts:` and treats it as read-only.
+3. Don't modify files across `scope.in` boundaries. If you must, the right answer is usually a third spec that owns the shared layer.
 
 ## Summary
 
-### Key Takeaways
+1. **One feature = one spec** under `.caws/specs/<id>.yaml`. Author by hand.
+2. **One agent = one worktree** via `git worktree add`. Surface ownership with `caws claim`.
+3. **Non-overlapping `scope.in`**, defensive `scope.out`. Verify with `caws scope check`.
+4. **Per-spec gates and evidence:** `caws gates run --spec <id>`, `caws evidence record --spec <id>`.
+5. **Waivers, not policy edits**, when a gate legitimately needs to pass.
+6. **Manual `git worktree` merge** for now; lifecycle automation returns in v11.1.
 
-1. **Feature-specific specs** (`.caws/specs/<id>.yaml`) are the PRIMARY pattern
-2. **Legacy working-spec.yaml** is DEPRECATED for multi-agent workflows
-3. **Always use `--spec-id`** when multiple specs exist
-4. **Non-overlapping scopes** prevent conflicts
-5. **Each agent owns their feature** completely
+## See also
 
-### Quick Reference
-
-```bash
-# Create feature spec
-caws specs create <feature-id>
-
-# Always use --spec-id
-caws validate --spec-id <feature-id>
-caws status --spec-id <feature-id>
-caws iterate --spec-id <feature-id>
-caws evaluate --spec-id <feature-id>
-caws diagnose --spec-id <feature-id>
-
-# List all specs
-caws specs list
-
-# View specific spec
-caws specs show <feature-id>
-```
-
----
-
-**Remember**: The multi-spec system exists specifically to enable parallel multi-agent development. Use it! Each agent working on their own spec = no conflicts, happy agents.
-
-
-
+- [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md) — doctrine source
+- [`docs/guides/worktree-isolation.md`](worktree-isolation.md) — worktree mechanics
+- [`docs/api/cli.md`](../api/cli.md) — full v11 CLI reference
+- [`AGENTS.md`](../../AGENTS.md) — agent quickstart
+- [`docs/guides/waiver-troubleshooting.md`](waiver-troubleshooting.md) — waiver patterns

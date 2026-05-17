@@ -29,8 +29,8 @@ fi
 # Determine project directory
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
-# Check if we're in a CAWS project
-if [[ ! -f "$PROJECT_DIR/.caws/working-spec.yaml" ]]; then
+# Check if we're in a CAWS project (per-feature specs under .caws/specs/)
+if [[ ! -d "$PROJECT_DIR/.caws/specs" ]]; then
   exit 0
 fi
 

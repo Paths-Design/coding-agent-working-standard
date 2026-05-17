@@ -7,7 +7,7 @@
 - **refactor**: behavior-preserving, API stable. In-place codemods only.
 - **fix**: reproduce with a failing test, then make it green. Scope minimal.
 
-> Set `mode` in `.caws/working-spec.yaml`. CI enforces mode rules.
+> Set `mode` in `.caws/specs/<spec-id>.yaml`. CI enforces mode rules.
 
 ## 1) Quick Start
 
@@ -16,7 +16,7 @@
 npm run caws:start FEAT-1234 feature "Apply coupon at checkout"
 
 # edit spec & plan
-code .caws/working-spec.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md
+code .caws/specs/<spec-id>.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md
 
 # validate spec + policies locally
 npm run caws:validate
@@ -29,7 +29,7 @@ npm run caws:verify
 
 ```
 .caws/
-  working-spec.yaml
+  <spec-id>.yaml
   specs/FEAT-1234.yaml              # optional feature-specific spec
 docs/FEAT-1234/
   feature.plan.md
@@ -38,7 +38,7 @@ docs/FEAT-1234/
 ```
 
 **When to split a feature spec?**
-Single domain → `specs/FEAT-…yaml`. Cross-cutting or architectural → update `working-spec.yaml`.
+Single domain → `specs/FEAT-…yaml`. Cross-cutting or architectural → update `<spec-id>.yaml`.
 
 ## 3) Checklists (copy into PR)
 

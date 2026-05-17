@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/doctor_completed.v1.json",
+  "title": "doctor_completed event payload",
+  "$comment": "Class: NO_SPEC_ID. Doctor runs at repo level, not spec level. Records a single doctor invocation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["passed", "checks_run", "drift_count"],
+  "properties": {
+    "passed": { "type": "boolean" },
+    "checks_run": { "type": "integer", "minimum": 0 },
+    "drift_count": { "type": "integer", "minimum": 0 },
+    "checks": {
+      "type": "array",
+      "description": "Per-check results.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check_id", "result"],
+        "properties": {
+          "check_id": { "type": "string", "minLength": 1 },
+          "result": {
+            "type": "string",
+            "enum": ["ok", "drift", "skip"]
+          },
+          "subject_count": { "type": "integer", "minimum": 0 },
+          "summary": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -222,12 +222,14 @@ if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
     exit 0
   fi
 
-  # Warn (but don't block) commits on base branch — the pre-commit + commit-msg hooks handle blocking
+  # Warn (but don't block) commits on the base branch. Worktrees remain the
+  # preferred isolation model, but Claude may commit logical checkpoints from
+  # the checkout it is already using.
   if echo "$COMMAND" | grep -qE 'git\s+commit\b' && ! echo "$COMMAND" | grep -qE '--amend'; then
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
-        "additionalContext": "NOTE: committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. The commit-msg hook permits four commit categories: (1) merge(worktree): <description> for completed-worktree merges; (2) wip(checkpoint): <description> for prior-session dirty-file cleanup; (3) git merge --no-ff merge commits (detected via MERGE_HEAD); (4) doc/config-only commits (all staged files under docs/, .claude/, or .caws/). Commits outside those categories are blocked. See .claude/rules/worktree-isolation.md and .githooks/commit-msg for details."
+        "additionalContext": "NOTE: committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by Claude hooks. Avoid --amend and force-push while worktrees are active."
       }
     }'
     exit 0

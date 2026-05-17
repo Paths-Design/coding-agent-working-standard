@@ -41,12 +41,12 @@ if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>
   NAMES=$(echo "$ACTIVE_INFO" | cut -d: -f2)
 
   if [[ "$COUNT" -eq 0 ]] 2>/dev/null; then
-    echo "REMINDER: Working on Main without a worktree is now forbidden. Start a new caws worktree. If your work is complete, run: caws worktree destroy <name> --delete-branch" >&2
+    echo "REMINDER: Worktrees are preferred for isolated feature work, but direct checkpoint edits on the main checkout are allowed. If your worktree work is complete, run: caws worktree destroy <name> --delete-branch" >&2
     exit 0
   fi
 
   if [[ "$COUNT" -gt 0 ]] 2>/dev/null; then
-    echo "REMINDER: $COUNT active worktree(s) remain: $NAMES. Other agents cannot commit to the base branch until all worktrees are destroyed. If your work is complete, run: caws worktree destroy <name> --delete-branch" >&2
+    echo "REMINDER: $COUNT active worktree(s) remain: $NAMES. Prefer worktrees for isolated feature work; direct checkpoint edits on the main checkout are allowed. If your worktree work is complete, run: caws worktree destroy <name> --delete-branch" >&2
     exit 0
   fi
   

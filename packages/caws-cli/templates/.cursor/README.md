@@ -39,7 +39,7 @@ The `hooks.json` file defines when each hook runs:
 - **Trigger**: `beforeReadFile`, `beforeSubmitPrompt`
 - **Purpose**: Prevents access to files outside CAWS-defined scope
 - **Blocks**: Yes (for out-of-scope file access)
-- **Requires**: `.caws/working-spec.yaml`
+- **Requires**: `.caws/specs/` with at least one active feature spec
 
 ### General Security Hooks
 

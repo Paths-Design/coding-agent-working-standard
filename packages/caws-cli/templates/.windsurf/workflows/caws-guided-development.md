@@ -14,7 +14,7 @@
 caws init feature-name --interactive
 
 # Define acceptance criteria, scope, and risk assessment
-# Working spec: .caws/working-spec.yaml
+# Feature spec: .caws/specs/<spec-id>.yaml
 ```
 
 ### 2. Plan Implementation Strategy

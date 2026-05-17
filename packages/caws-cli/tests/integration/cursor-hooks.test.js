@@ -177,13 +177,13 @@ describe('Cursor Hooks Integration', () => {
       expect(content).toContain('Naming violation');
     });
 
-    test('validate-spec.sh should check working-spec.yaml', () => {
+    test('validate-spec.sh should validate per-feature specs', () => {
       const validateScript = path.join(__dirname, '../../templates/.cursor/hooks/validate-spec.sh');
 
       expect(fs.existsSync(validateScript)).toBe(true);
 
       const content = fs.readFileSync(validateScript, 'utf8');
-      expect(content).toContain('working-spec.yaml');
+      expect(content).toContain('.caws/specs/');
       expect(content).toContain('caws validate');
     });
 
@@ -204,7 +204,7 @@ describe('Cursor Hooks Integration', () => {
       expect(fs.existsSync(scopeScript)).toBe(true);
 
       const content = fs.readFileSync(scopeScript, 'utf8');
-      expect(content).toContain('working-spec.yaml');
+      expect(content).toContain('.caws/specs');
       expect(content).toContain('scope-guard.js');
       expect(content).toContain('attachments');
     });

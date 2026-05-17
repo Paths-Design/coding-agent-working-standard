@@ -1,436 +1,222 @@
-# Agent Integration Guide
+---
+doc_id: agent-integration-guide
+authority: reference
+status: active
+title: Agent integration guide (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-This guide explains how agents can use CAWS (Coding Agent Workflow System) as a quality bar for their iterative development work.
+# Agent integration guide (v11.0.0)
 
-## Overview
+This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11.0.0 as a quality and audit substrate.
 
-CAWS provides agents with:
+> **v11 posture (A1).** v11.0.0 ships eight command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`. The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
+>
+> Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md).
 
-1. **Structured Quality Evaluation** - Machine-readable assessment of work quality
-2. **Iterative Development Guidance** - Context-aware next steps and recommendations
-3. **Risk-Appropriate Standards** - Tiered quality requirements based on project risk
-4. **Contract Validation** - API and interface compliance checking
-5. **Provenance Tracking** - Complete audit trail of agent decisions
+## What CAWS v11 gives an agent
 
-## Getting Started
+| Capability | Surface |
+|---|---|
+| Drift detection on `.caws/` state | `caws doctor` (exit 0/1/2) |
+| Read-only project dashboard | `caws status` |
+| Scope decision (explain) | `caws scope show <path>` |
+| Scope decision (enforce) | `caws scope check <path>` (exit 0/1) |
+| Worktree ownership | `caws claim` (read), `caws claim --takeover` (write + audit) |
+| Policy-driven quality gates | `caws gates run --spec <id>` (exit 0/1) |
+| Hash-chained evidence | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
+| Bypass with audit | `caws waiver create / list / show / revoke` |
 
-### Prerequisites
-- CAWS CLI installed (`npm install -g @paths.design/caws-cli`)
-- Valid working specification (`.caws/working-spec.yaml`)
-- Project initialized with CAWS
+All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 domain failure, 2 composition failure.
 
-### Basic Usage
+## Prerequisites
 
-```bash
-# Check if working spec is ready for implementation
-caws evaluate --feedback-only .caws/working-spec.yaml
+- v11 CLI installed: `npm install -g @paths.design/caws-cli@^11.0.0`
+- Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
+- At least one spec authored at `.caws/specs/<id>.yaml` (v11 ships no spec generator — author the YAML directly)
 
-# Evaluate current implementation progress
-caws evaluate .caws/working-spec.yaml
+## Pre-implementation checks
 
-# Get iterative development guidance
-caws iterate --current-state '{"description": "Started core implementation"}' .caws/working-spec.yaml
-```
-
-## Agent Workflow Integration
-
-### 1. Pre-Implementation Assessment
-
-Before starting work, agents should validate the working spec:
-
-```bash
-# Get structured feedback on spec readiness
-FEEDBACK=$(caws evaluate --feedback-only .caws/working-spec.yaml)
-
-# Parse the JSON response
-if [ "$(echo $FEEDBACK | jq -r '.success')" = "true" ]; then
-    echo "Spec is ready for implementation"
-    NEXT_ACTIONS=$(echo $FEEDBACK | jq -r '.evaluation.next_actions[]')
-    echo "Next actions: $NEXT_ACTIONS"
-else
-    echo "Spec needs improvement"
-    exit 1
-fi
-```
-
-### 2. Iterative Development Loop
-
-Agents should use CAWS throughout development:
+Before an agent starts implementing a feature, the integration runtime should:
 
 ```bash
-#!/bin/bash
+# 1. Verify the project is healthy
+caws doctor                              # exit 0 = clean
+if [ $? -ne 0 ]; then exit 1; fi
 
-WORKING_SPEC=".caws/working-spec.yaml"
-CURRENT_STATE="Started implementation"
+# 2. Verify the target spec exists and is well-formed
+ls .caws/specs/<id>.yaml || exit 1
 
-while true; do
-    echo "Evaluating current progress..."
-
-    # Run quality evaluation
-    RESULT=$(caws evaluate $WORKING_SPEC)
-    SUCCESS=$(echo $RESULT | jq -r '.success')
-    STATUS=$(echo $RESULT | jq -r '.evaluation.overall_status')
-
-    if [ "$SUCCESS" = "true" ] && [ "$STATUS" = "quality_passed" ]; then
-        echo "Quality standards met! Implementation complete."
-        break
-    fi
-
-    # Get guidance for next iteration
-    GUIDANCE=$(caws iterate --current-state "{\"description\": \"$CURRENT_STATE\"}" $WORKING_SPEC)
-
-    # Extract next steps from guidance
-    NEXT_STEPS=$(echo $GUIDANCE | jq -r '.iteration.next_steps[]')
-
-    echo "Next steps to implement:"
-    echo "$NEXT_STEPS" | while read -r step; do
-        echo "  - $step"
-    done
-
-    # Agent would implement the next steps here
-    # Then update CURRENT_STATE and repeat
-
-    echo "Implementation iteration complete. Re-evaluating..."
-    CURRENT_STATE="Completed iteration: $NEXT_STEPS"
+# 3. For each file the agent intends to edit, verify scope
+for f in $TARGET_FILES; do
+  caws scope check "$f" || exit 1
 done
+
+# 4. Surface worktree ownership (if running in a worktree)
+caws claim                               # exit 0 = owned by this session
 ```
 
-### 3. Quality Gate Integration
+## The development loop
 
-Agents can integrate CAWS quality gates into their CI/CD:
+There is no `caws iterate` in v11. The agent's loop is structured by the *project's* test suite and the v11 gate evaluation, not by a CAWS-internal guidance command.
+
+Recommended loop:
+
+1. **Implement** — agent edits files within `scope.in`.
+2. **Run project tests** — `npm test` / `pytest` / etc.
+3. **Record evidence** — `caws evidence record --type test --spec <id> --data '{...}'` for each test result the runtime cares to audit.
+4. **Run gates** — `caws gates run --spec <id>`. Exit 0 if all blocking gates pass.
+5. **Address blockers** — either fix the underlying issue, or open a waiver (see below).
+6. **Re-run** — back to (4) until green.
+7. **Final check** — `caws doctor && caws status`.
+
+## Recording evidence
+
+Each evidence event is hash-chained and atomic. The runtime should record:
+
+```bash
+# A test result
+caws evidence record --type test --spec <id> \
+  --data '{"name":"unit/login","status":"pass","runtime_ms":42}'
+
+# An acceptance-criterion closure
+caws evidence record --type ac --spec <id> \
+  --data '{"id":"A1","status":"satisfied","tested_by":["unit/login","integration/login"]}'
+
+# An AI-assisted-change marker (tool, model, session id)
+caws evidence record --type ac --spec <id> \
+  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code","model":"opus-4.7","session":"<session-id>"}'
+```
+
+The schema for `--data` is per-`--type` and is otherwise free-form (the project's policy decides which fields are required). The store appends through `prepareAppend` + `verifyChain`; do not write `events.jsonl` directly.
+
+## Running gates
+
+```bash
+caws gates run --spec <id>
+```
+
+Behavior:
+
+- `policy.yaml` declares each gate's mode (`block`, `warn`, `skip`).
+- For each declared gate, one `gate_evaluated` event is appended to `.caws/events.jsonl`.
+- Active waivers filter matching violations out of the disposition. Waivers do not change gate mode.
+
+Exit codes: `0` (all blocking gates pass after waiver filtering), `1` (a blocking gate fails), `2` (composition failure — not in a repo, can't read `.caws/`, missing tooling).
+
+The integration runtime should treat exit `2` differently from exit `1`: `2` is a setup problem; `1` is a real quality failure.
+
+## Bypassing a gate (waivers)
+
+When a gate violation is acceptable but cannot be fixed in the current change:
+
+```bash
+caws waiver create <id>-w \
+  --gate <gate-name> \
+  --reason "Why the violation is acceptable + mitigation plan" \
+  --approved-by "approver@example.com" \
+  --expires-at "2026-12-31T23:59:59Z"
+```
+
+Subsequent `caws gates run --spec <id>` filters matching violations. The waiver is auditable, time-bound, and revocable:
+
+```bash
+caws waiver list
+caws waiver show <id>-w
+caws waiver revoke <id>-w
+```
+
+Waivers are the legitimate escape. Hand-editing `change_budget` in the spec or editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline.
+
+## Worktree ownership (multi-agent)
+
+When multiple agents work in parallel, each agent's runtime should:
+
+1. Place the agent in its assigned git worktree (`git worktree add ../proj-<name> -b <branch>`).
+2. Have the agent run `caws claim` to surface ownership.
+3. Refuse to mutate state if `caws claim` exits non-zero with a foreign-claim message.
+4. Read `tmp/<sessionId>/` (the prior session's log) before deciding to take over.
+5. Use `caws claim --takeover` only with explicit user authorization. Takeover writes a durable `prior_owners` audit on the worktree entry.
+
+A stale heartbeat is not authorization. Paused sessions are not ended sessions.
+
+## Composing v11 commands
+
+### Pattern: pre-edit gate
+
+Before letting the agent write to `<path>`:
+
+```bash
+caws scope check <path> || refuse_edit
+```
+
+### Pattern: post-edit evidence
+
+After each successful edit/test cycle:
+
+```bash
+project_tests && \
+  caws evidence record --type test --spec <id> --data '{...}'
+```
+
+### Pattern: pre-merge sign-off
+
+Before declaring the feature done:
+
+```bash
+caws doctor && \
+  caws gates run --spec <id> && \
+  caws evidence record --type ac --spec <id> --data '{"id":"A_FINAL","status":"satisfied"}'
+```
+
+## What CAWS v11 does NOT provide
+
+- **No agent guidance API** (`caws iterate`, `caws workflow guidance` are removed). The runtime decides the loop.
+- **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
+- **No spec generator** (`caws specs create` is removed). Author YAML directly.
+- **No worktree lifecycle** (`caws worktree create / merge`, `caws parallel setup` are removed). Use `git worktree`; v11.1 will reintroduce vNext lifecycle.
+- **No git-hook installer** (`caws hooks install` is removed). Set up project hooks externally.
+- **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
+
+If your runtime depends on any of those, pin `caws-cli@^10.2.x` until v11.1.
+
+## CI integration
+
+A v11-shaped CI step:
 
 ```yaml
-# .github/workflows/agent-development.yml
-name: Agent Development Quality Gates
+- name: Setup CAWS
+  run: npm install -g @paths.design/caws-cli@^11.0.0
 
-on:
-  push:
-    branches: [ main, develop ]
+- name: CAWS health check
+  run: caws doctor
 
-jobs:
-  quality-gates:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup CAWS
-        run: npm install -g @paths.design/caws-cli
-
-      - name: Validate Working Spec
-        run: caws validate .caws/working-spec.yaml
-
-      - name: Run Quality Gates
-        run: |
-          RESULT=$(caws evaluate .caws/working-spec.yaml)
-          SUCCESS=$(echo $RESULT | jq -r '.success')
-
-          if [ "$SUCCESS" != "true" ]; then
-            echo "Quality gates failed:"
-            echo $RESULT | jq -r '.evaluation.criteria[] | select(.status == "failed") | "- \(.name): \(.feedback)"'
-            exit 1
-          fi
-
-      - name: Generate Quality Report
-        run: |
-          caws evaluate .caws/working-spec.yaml > quality-report.json
-          echo "## Quality Report" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          cat quality-report.json >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+- name: Run gates
+  run: caws gates run --spec ${{ matrix.spec_id }}
 ```
 
-## API Reference
-
-### Agent Evaluate Command
-
-**Usage:**
-```bash
-caws evaluate [options] <spec-file>
-```
-
-**Options:**
-- `--json`: Output structured JSON (default for agent use)
-- `--strict`: Apply strict quality thresholds
-- `--feedback-only`: Only validate spec, don't run quality gates
-
-**Response Format:**
-```json
-{
-  "success": boolean,
-  "evaluation": {
-    "overall_status": "spec_valid" | "quality_passed" | "quality_failed" | "error",
-    "message": "Human-readable summary",
-    "criteria": [
-      {
-        "id": "string",
-        "name": "string",
-        "status": "passed" | "failed" | "error",
-        "score": number, // 0.0 to 1.0
-        "weight": number, // Relative importance
-        "feedback": "string" // Actionable guidance
-      }
-    ],
-    "spec_summary": {
-      "id": "string",
-      "mode": "feature" | "refactor" | "fix",
-      "tier": number, // 1-3 (risk level)
-      "title": "string",
-      "acceptance_criteria": number,
-      "invariants": number
-    },
-    "next_actions": ["string"],
-    "quality_score": number, // 0.0 to 1.0
-    "risk_assessment": {
-      "tier": number,
-      "applied_thresholds": {
-        "coverage": number,
-        "mutation": number,
-        "contracts": boolean
-      },
-      "risk_level": "high" | "medium" | "low",
-      "recommendations": ["string"]
-    }
-  }
-}
-```
-
-### Agent Iterate Command
-
-**Usage:**
-```bash
-caws iterate [options] <spec-file>
-```
-
-**Options:**
-- `--current-state <json>`: JSON description of current implementation state
-- `--json`: Output structured JSON (default)
-
-**Response Format:**
-```json
-{
-  "success": boolean,
-  "iteration": {
-    "guidance": "string", // Human-readable guidance
-    "next_steps": ["string"], // Specific actionable steps
-    "confidence": number, // 0.0 to 1.0 confidence in guidance
-    "focus_areas": ["string"], // Areas to prioritize
-    "risk_mitigation": ["string"] // Risk mitigation suggestions
-  }
-}
-```
-
-## Agent Implementation Patterns
-
-### Pattern 1: Quality-Driven Development
-
-```javascript
-class CawsGuidedAgent {
-  async developFeature(workingSpecPath) {
-    // Initial assessment
-    const initialEval = await this.evaluateSpec(workingSpecPath);
-    if (!initialEval.success) {
-      throw new Error(`Spec validation failed: ${initialEval.evaluation.message}`);
-    }
-
-    let currentState = "Initial implementation started";
-    let iterations = 0;
-    const maxIterations = 10;
-
-    while (iterations < maxIterations) {
-      // Get guidance for current state
-      const guidance = await this.getIterativeGuidance(workingSpecPath, currentState);
-
-      // Execute recommended next steps
-      await this.executeNextSteps(guidance.iteration.next_steps);
-
-      // Evaluate progress
-      const evaluation = await this.evaluateProgress(workingSpecPath);
-
-      if (evaluation.success && evaluation.evaluation.overall_status === 'quality_passed') {
-        console.log('✅ Feature implementation complete!');
-        break;
-      }
-
-      // Update state for next iteration
-      currentState = `Iteration ${iterations + 1}: ${guidance.iteration.next_steps.join(', ')}`;
-      iterations++;
-    }
-  }
-
-  async evaluateSpec(specPath) {
-    const result = await exec(`caws evaluate --feedback-only ${specPath}`);
-    return JSON.parse(result.stdout);
-  }
-
-  async getIterativeGuidance(specPath, currentState) {
-    const result = await exec(`caws iterate --current-state '${JSON.stringify({description: currentState})}' ${specPath}`);
-    return JSON.parse(result.stdout);
-  }
-
-  async evaluateProgress(specPath) {
-    const result = await exec(`caws evaluate ${specPath}`);
-    return JSON.parse(result.stdout);
-  }
-
-  async executeNextSteps(steps) {
-    // Agent implements the recommended steps
-    for (const step of steps) {
-      console.log(`Implementing: ${step}`);
-      // Implementation logic here
-    }
-  }
-}
-```
-
-### Pattern 2: Risk-Aware Development
-
-```javascript
-class RiskAwareAgent {
-  async assessAndMitigateRisks(specPath) {
-    const evaluation = await this.evaluateSpec(specPath);
-    const riskAssessment = evaluation.evaluation.risk_assessment;
-
-    if (riskAssessment.tier === 1) {
-      console.log('🔴 High-risk feature detected. Implementing extra safeguards...');
-
-      // Add additional quality measures for high-risk features
-      await this.implementExtraSecurity(specPath);
-      await this.addComprehensiveTesting(specPath);
-    }
-
-    // Apply risk mitigation recommendations
-    for (const recommendation of riskAssessment.recommendations) {
-      await this.implementRecommendation(recommendation);
-    }
-  }
-
-  async implementExtraSecurity(specPath) {
-    // Implement security measures based on CAWS guidance
-    const guidance = await this.getIterativeGuidance(specPath, "Implementing security measures");
-    await this.executeNextSteps(guidance.iteration.risk_mitigation);
-  }
-}
-```
-
-## Best Practices for Agents
-
-### 1. **Always Validate First**
-- Check working spec validity before starting implementation
-- Understand risk tier and quality requirements upfront
-
-### 2. **Iterate with Feedback**
-- Use CAWS evaluation after each significant implementation step
-- Address failing criteria before proceeding
-- Follow CAWS guidance for next steps
-
-### 3. **Respect Risk Tiers**
-- Higher risk features require more rigorous quality standards
-- Implement appropriate testing and validation based on tier
-
-### 4. **Handle Contract Requirements**
-- Features must define contracts before implementation
-- Validate contract compliance throughout development
-
-### 5. **Maintain Quality Gates**
-- Run quality gates regularly during development
-- Don't proceed with failing quality criteria
-- Use CAWS feedback to guide improvements
-
-### 6. **Document Decision Rationale**
-- Include CAWS evaluation results in commit messages
-- Track which guidance influenced implementation decisions
-- Maintain audit trail of quality improvements
+Exit codes drive CI status: `0` green, `1` red (real failure), `2` red (setup error — investigate before re-running).
 
 ## Troubleshooting
 
-### Common Issues
+**`caws init` refuses to run.**
+Legacy `.caws/working-spec.yaml` is present. Migrate to per-feature `.caws/specs/<id>.yaml` first.
 
-**"Working spec file not found"**
-- Ensure `.caws/working-spec.yaml` exists
-- Check file permissions and path
+**`caws scope check <path>` returned 1 unexpectedly.**
+Run `caws scope show <path>` to see the decision. Likely the file is not in `scope.in`. If it should be, edit the spec; if it shouldn't, the agent is out of bounds.
 
-**"Spec validation failed"**
-- Review CAWS validation errors
-- Use `caws validate --auto-fix` for automatic fixes
-- Check required fields: id, title, risk_tier, mode, etc.
+**`caws gates run --spec <id>` returned 1 and the failing gate seems wrong.**
+Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` or the spec's `change_budget` to bypass.
 
-**"Quality gates failed"**
-- Address failing criteria in order shown
-- Implement missing tests or contracts
-- Improve code quality based on feedback
+**`caws claim` refused with a foreign owner.**
+Another session id owns the worktree. Read their `tmp/<sessionId>/` log. Take over only with explicit user authorization.
 
-**"Tool system not available"**
-- Ensure `apps/tools/caws/` directory exists
-- Check tool file permissions
-- Validate tool implementations
+## See also
 
-### Getting Help
-
-- Run `caws --help` for command overview
-- Use `caws evaluate --help` for detailed options
-- Check CAWS logs for detailed error information
-- Review working spec against CAWS schema requirements
-
-## Advanced Usage
-
-### Custom Quality Thresholds
-
-For specialized projects, you can implement custom quality thresholds:
-
-```javascript
-// Custom evaluation logic
-async function customEvaluate(specPath, customThresholds) {
-  const baseEvaluation = await evaluateSpec(specPath);
-
-  // Apply custom business logic
-  const adjustedScore = adjustScoreForBusinessRules(
-    baseEvaluation.evaluation.quality_score,
-    customThresholds
-  );
-
-  return {
-    ...baseEvaluation,
-    evaluation: {
-      ...baseEvaluation.evaluation,
-      quality_score: adjustedScore,
-      custom_adjustments: customThresholds
-    }
-  };
-}
-```
-
-### Integration with Agent Frameworks
-
-CAWS can integrate with popular agent frameworks:
-
-**LangChain Integration:**
-```python
-from langchain.agents import Tool
-from langchain.utilities import BashProcess
-
-class CawsEvaluationTool(Tool):
-    name = "CAWS Quality Evaluation"
-    description = "Evaluate code quality against CAWS standards"
-
-    def _run(self, spec_path: str) -> str:
-        import subprocess
-        result = subprocess.run(
-            ["caws", "agent", "evaluate", spec_path],
-            capture_output=True, text=True
-        )
-        return result.stdout
-```
-
-**AutoGen Integration:**
-```python
-from autogen import AssistantAgent
-
-caws_agent = AssistantAgent(
-    name="CAWS_Quality_Assistant",
-    system_message="""You are a quality assurance agent using CAWS standards.
-    Always evaluate work against CAWS quality gates and provide guidance for improvement.""",
-    tools=[caws_evaluation_tool]
-)
-```
-
-This integration enables agents to use CAWS as their quality compass throughout the development process, ensuring consistent, high-quality outputs that meet organizational standards.
+- [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md) — doctrine source
+- [`docs/api/cli.md`](../api/cli.md) — full v11 CLI reference
+- [`docs/guides/multi-agent-workflow.md`](multi-agent-workflow.md) — multi-agent coordination
+- [`docs/guides/worktree-isolation.md`](worktree-isolation.md) — worktree mechanics
+- [`docs/agents/full-guide.md`](../agents/full-guide.md) — comprehensive agent workflow
+- [`AGENTS.md`](../../AGENTS.md) — agent quickstart

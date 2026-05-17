@@ -65,9 +65,9 @@ caws sidecar waiver-draft  # Generate pre-filled waiver template for a failing g
 caws sidecar provenance  # Summarize work history for merge readiness review
 ```
 
-### Working Spec
+### Feature Specs
 
-Canonical feature specs live at `.caws/specs/<ID>.yaml` (create with `caws specs create <id> --type feature --title "description"`). `.caws/working-spec.yaml` is a compatibility mirror for older tooling and legacy single-spec flows. The active spec defines:
+Feature specs live at `.caws/specs/<ID>.yaml`. There is **no project-level working spec** — every spec is per-feature. Create a spec with `caws specs create <id> --type feature --title "description"`. The active spec defines:
 
 - **Risk tier**: Quality requirements (T1: critical, T2: standard, T3: low risk)
 - **Mode**: The type of change (`feature`, `refactor`, `fix`, `doc`, `chore`) -- required
@@ -174,8 +174,7 @@ Valid reasons: `emergency_hotfix`, `legacy_integration`, `experimental_feature`,
 
 ```
 .caws/
-  working-spec.yaml   # Compatibility mirror for legacy commands
-  specs/              # Canonical feature specs
+  specs/              # Per-feature specs (canonical, the only spec location)
   policy.yaml         # Quality policy overrides (optional)
   waivers.yml         # Active waivers
   state/              # Runtime working state (auto-managed)
@@ -194,3 +193,15 @@ This project has Claude Code hooks configured in `.claude/settings.json`:
 - **Session**: Audit logging for provenance tracking
 
 See `.claude/README.md` for hook details.
+
+### Dangerous-command latch
+
+`block-dangerous.sh` is a human-review boundary, not a syntax check. When it returns `block` or `ask`:
+
+1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
+2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch.
+3. To clear, ask the user to run:
+   ```bash
+   bash .claude/hooks/reset-danger-latch.sh --current --reason "<why this is safe>"
+   ```
+4. If you need a fresh git repo for legitimate test setup, ask the user to do it in their terminal (via `! <command>` in Claude Code) rather than searching for a phrasing that bypasses the matcher.

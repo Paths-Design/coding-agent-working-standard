@@ -293,10 +293,10 @@ check-change-budget() {
 
 ## CAWS-Specific Integration
 
-### Working Spec Integration
+### Feature Spec Integration
 
 ```yaml
-# In .caws/working-spec.yaml
+# In .caws/specs/<spec-id>.yaml
 scope:
   in: ['src/auth/', 'tests/auth/', 'docs/auth/']
   out: ['src/billing/', 'src/payments/', 'node_modules/']

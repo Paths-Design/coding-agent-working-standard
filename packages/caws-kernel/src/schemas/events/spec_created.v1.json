@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_created.v1.json",
+  "title": "spec_created event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Envelope.spec_id is the spec being created.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "risk_tier", "mode", "lifecycle_state"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "risk_tier": { "type": "integer", "enum": [1, 2, 3] },
+    "mode": {
+      "type": "string",
+      "enum": ["feature", "refactor", "fix", "doc", "chore"]
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "active"],
+      "description": "A spec is created in 'draft' or (rarely) 'active'. closed/archived are not legal initial states."
+    }
+  }
+}

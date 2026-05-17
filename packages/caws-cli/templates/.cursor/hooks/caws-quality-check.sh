@@ -15,17 +15,17 @@ if [[ "$FILE_PATH" =~ \.(js|ts|jsx|tsx|py|go|rs|java)$ ]] && [[ ! "$FILE_PATH" =
   # Check if CAWS is available
   if command -v caws &> /dev/null; then
 
-    # Check if we're in a CAWS project
-    if [[ -f ".caws/working-spec.yaml" ]]; then
+    # Check if we're in a CAWS project (per-feature specs under .caws/specs/)
+    if [[ -d ".caws/specs" ]]; then
 
       echo "🔍 Running CAWS quality check..." >&2
 
       # Run CAWS evaluation in quiet mode for fast feedback
-      if caws evaluate .caws/working-spec.yaml --quiet 2>/dev/null; then
+      if caws evaluate --quiet 2>/dev/null; then
         echo '{"userMessage": "✅ CAWS quality check passed", "agentMessage": "Quality standards maintained"}'
       else
         # Get detailed feedback
-        EVALUATION=$(caws evaluate .caws/working-spec.yaml --json 2>/dev/null || echo '{"success": false, "error": "Evaluation failed"}')
+        EVALUATION=$(caws evaluate --json 2>/dev/null || echo '{"success": false, "error": "Evaluation failed"}')
 
         # Parse the evaluation result
         SUCCESS=$(echo "$EVALUATION" | jq -r '.success // false')

@@ -1,706 +1,211 @@
-# CAWS - Agent Quick Reference
+# CAWS — Agent Quick Reference (v11.0.0)
 
-**Essential guide for AI agents working with CAWS projects**
+**Agent quickstart for working in CAWS-managed projects on the v11.0.0 substrate.**
 
-## CRITICAL: Multi-Agent Workflow
+## Read this first
 
-**If multiple agents are working on this project, each MUST use feature-specific specs to avoid conflicts!**
+This repo is on the `caws-next` branch, mid-cutover to v11.0.0 (vNext kernel/store/shell rewrite, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-### The Problem
+**v11.0.0 ships exactly eight command groups.** Everything else listed in older docs (`specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `agents`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `sidecar`) is **removed in v11**. Do not invoke them — they will fail.
 
-Multiple agents editing `.caws/working-spec.yaml` = conflicts, overwritten work, chaos
+If your project genuinely needs the legacy lifecycle commands today, pin to `caws-cli@^10.2.x`. v11.1 will reintroduce vNext spec and worktree lifecycle. The two CLIs cannot run side-by-side on the same project — they write to overlapping state.
 
-### The Solution
+## v11 command surface
 
-Each agent works on `.caws/specs/<feature-id>.yaml` = parallel work, no conflicts, success
+| Command | Purpose |
+|---|---|
+| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. |
+| `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
+| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
+| `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
+| `caws scope check <path>` | Enforce the scope decision (exits 0 admit / 1 refuse). |
+| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. |
+| `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
+| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
+| `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
 
-**See [Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md) for complete details**
+Run `caws <group> --help` for full options and flag details.
 
-## Getting Started
+## Specs in v11
 
-### First Steps in Any CAWS Project
+- Specs live at `.caws/specs/<id>.yaml`. There is no project-level `working-spec.yaml`.
+- v11 does **not** ship a spec generator (`caws specs create` is removed). Author the YAML directly — see existing specs in `.caws/specs/` for the shape.
+- v11 does **not** ship `caws validate`. Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
+- Acceptance criteria use Given/When/Then format.
+- A spec's `scope.in` / `scope.out` defines what files an agent may touch. `caws scope check <path>` enforces it.
 
-```bash
-# 1. Create YOUR feature-specific spec (if multiple agents)
-caws specs create <your-feature-id> --type feature --title "Your Feature"
-
-# 2. Validate YOUR spec (always use --spec-id with multiple specs)
-caws validate --spec-id <your-feature-id>
-
-# 3. Check current status for YOUR feature
-caws status --visual --spec-id <your-feature-id>
-
-# 4. Get iterative guidance for YOUR feature
-caws iterate --spec-id <your-feature-id> --current-state "Starting implementation"
-```
-
-### Single-Agent Projects
-
-If you're the only agent:
-
-```bash
-# Option 1: Create a feature spec (recommended)
-caws specs create my-feature
-
-# Option 2: Use legacy single spec (not recommended for new projects)
-caws init .
-```
-
-### New Features for Better Agent Experience
-
-```bash
-# Enhanced visual status with progress bars
-caws status --visual
-
-# Multi-spec system for better organization
-caws specs list                    # List all specs
-caws specs create my-feature       # Create new spec
-caws specs show my-feature         # View spec details
-
-# Archive completed changes with lifecycle management
-caws archive FEAT-001
-
-# Use natural slash commands (via MCP server)
-/caws:start --projectName my-project
-/caws:validate
-/caws:archive --changeId FEAT-001
-/caws:specs list
-```
-
-### Your Contract with CAWS
+## Your contract with v11 CAWS
 
 **You MUST:**
 
-- **Use feature-specific specs** (if multiple agents working on project)
-- **Always include `--spec-id`** when multiple specs exist
-- **Stay within your feature's scope** boundaries
-- **Validate before starting** any work
-- **Create contracts before implementation**
-- **Write tests first** (TDD approach)
-- **Meet quality tier requirements**
-- **Track all changes** for provenance
+- Author a spec in `.caws/specs/<id>.yaml` for every unit of work.
+- Stay within the spec's `scope.in` boundaries — verify with `caws scope check <path>`.
+- Run `caws doctor` and `caws gates run --spec <id>` before declaring work complete.
+- Use `caws waiver create` (singular) to legitimately bypass a gate, with an expiry, an approver, and a reason.
+- Surface ownership with `caws claim` before mutating shared state in a worktree.
+- Treat `caws status` as observability — never write to `.caws/` directly except through CLI commands.
 
 **You MUST NOT:**
 
-- **Edit other agents' feature specs** or scope directories
-- **Work on `.caws/working-spec.yaml` if multiple agents exist**
-- Write implementation without validated specs
-- Create shadow files (`enhanced-*`, `new-*`)
-- Exceed change budgets
-- Skip quality gates
-- Include secrets in context
+- Invoke removed commands (see list above) — they are gone.
+- Edit `.caws/working-spec.yaml`, `.caws/events.jsonl`, `.caws/policy.yaml`, or other governed state by hand. Use the CLI.
+- Hand-edit `change_budget` keys in spec YAML to make a gate pass — create a waiver instead.
+- Take over a worktree owned by another session (`caws claim --takeover`) without explicit user authorization.
+- Create shadow files (`*-enhanced.*`, `*-final.*`, `*-v2.*`, `*-copy.*`) — edit canonical files in place.
 
-## Complexity Tiers (CAWS Modes)
-
-CAWS supports four complexity tiers that adapt the system to your project needs:
-
-| Tier              | Coverage | Mutation | Commands | Features                  | Use Case                          |
-| ----------------- | -------- | -------- | -------- | ------------------------- | --------------------------------- |
-| **Lite**       | —        | —        | 3        | Guardrails only, no specs | Multi-agent safety, local models  |
-| **Simple**     | 70%+     | 30%+     | 4        | Basic validation, specs   | Small projects, quick prototyping |
-| **Standard**   | 80%+     | 50%+     | 11       | Quality gates, provenance | Balanced teams, standard projects |
-| **Enterprise** | 90%+     | 70%+     | 14       | Full audit, compliance    | Large teams, regulated projects   |
-
-### CAWS-Lite Mode
-
-Lite mode provides guardrails without YAML spec ceremony. Designed for multi-agent workflows where less capable models need protection against catastrophic failures (git reinit, force push, file sprawl, simplification).
-
-**Guardrails active in Lite mode:**
-- Destructive command blocking (git push --force, git init, rm -rf, venv creation)
-- Scope fencing (edits outside allowed directories require confirmation)
-- File sprawl detection (blocks *-enhanced.*, *-final.*, *-v2.*, *-copy.*)
-- Simplification guard (prevents replacing implementations with stubs)
-- Git worktree isolation (optional physical scope separation)
+## Quick start (project setup)
 
 ```bash
-# Initialize in lite mode
-caws init . --mode lite
-
-# Configuration is in .caws/scope.json (not working-spec.yaml)
+git init my-project && cd my-project
+caws init                                  # idempotent; refuses legacy residue
 ```
 
-### Git Worktree Isolation
+`caws init` creates:
 
-Use worktrees to give each agent a physically isolated workspace:
-
-```bash
-# Create an isolated worktree for a feature
-caws worktree create auth-feature --scope "src/auth/**"
-
-# List worktrees
-caws worktree list
-
-# Destroy when done
-caws worktree destroy auth-feature --delete-branch
-
-# Clean up stale entries
-caws worktree prune --max-age 7
+```
+.caws/
+  specs/                  # per-feature specs (.caws/specs/<id>.yaml)
+  waivers/                # waiver records (.caws/waivers/<id>.yaml)
+  policy.yaml             # gate block/warn/skip policy
+  worktrees.json          # worktree registry
+  agents.json             # agent session registry
+  # events.jsonl is created on first append; never required at rest.
 ```
 
-#### Agent claim model (CAWSFIX-31/32)
+If `.caws/working-spec.yaml` exists, `caws init` refuses. Migrate that file into per-feature `.caws/specs/<id>.yaml` first — or do the migration on `caws-cli@10.2.x` and then upgrade.
 
-Worktree session ownership is recorded in `.caws/worktrees.json:owner` as a session id. When you encounter a worktree with dirty files or an existing claim, **the system tells you who owns it before you act**:
+## Daily agent workflow
 
 ```bash
-# Inspect the agent registry — who's working what
-caws agents list
+# 1. Author a spec for your work
+$EDITOR .caws/specs/FEAT-1.yaml
 
-# Inside a worktree, caws status shows a Claim panel
+# 2. Verify scope/structure
+caws doctor
+caws scope show src/foo.ts                 # explain the scope decision
+caws scope check src/foo.ts                # enforce; exits 1 if refused
+
+# 3. Implement, run tests, then evaluate gates
+caws gates run --spec FEAT-1               # policy decides block/warn/skip
+
+# 4. Record typed evidence (test results, AC closures)
+caws evidence record --type test --spec FEAT-1 \
+  --data '{"name":"unit","status":"pass"}'
+caws evidence record --type ac --spec FEAT-1 \
+  --data '{"id":"A1","status":"satisfied"}'
+
+# 5. Re-check
+caws doctor
 caws status
-
-# Inspect a specific worktree's claim (read-only by default)
-caws worktree claim <name>
 ```
 
-`caws worktree bind`, `merge`, and `claim` all soft-block when the worktree is owned by a different session id. The refusal message names the claimer as `<sessionId>:<platform>`, shows the heartbeat age, points at any `tmp/<sessionId>/` session-log directory, and gives the exact `--takeover` command to override:
+## Worktree-based parallel agent work
+
+When multiple agents work on the same project, each agent **must** work in its own git worktree. v11 does not ship the legacy `caws parallel setup` orchestration — create worktrees with `git worktree` directly, then use `caws claim` to surface and record ownership.
+
+```bash
+# Set up an isolated worktree (host-side, before agent starts)
+git worktree add ../my-proj-agent-auth -b agent-auth
+cd ../my-proj-agent-auth
+
+# Inside the worktree, surface the claim
+caws claim                                 # prints owner; exits 0 if you own it
+```
+
+### Foreign-claim soft-block
+
+`caws claim` (and `bind` / `merge` in lifecycle-shipping versions) refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal looks like:
 
 ```
 Worktree 'wt-foreign' is claimed by 8be65780-...:claude-code
    Last heartbeat: 2026-04-27T17:04:00Z (23 min ago)
    Session log:    tmp/8be65780-72e0-4fc7-a989-4ebac148c18d
                    15 turns, last turn 2026-04-27T17:26:49Z
-   To proceed:     caws worktree claim wt-foreign --takeover
+   To proceed:     caws claim --takeover
 ```
 
-**Read the session log first.** A stale heartbeat doesn't mean the prior session is dead — it may be paused. Take over only with explicit authorization. `--takeover` writes a durable `prior_owners` audit on the worktree entry (sessionId, platform, lastSeen-at-takeover, takenOver_at) so postmortems see what happened.
+**Read the session log first.** A stale heartbeat does not mean the prior session is dead — it may be paused. Take over only with explicit user authorization. `--takeover` writes a durable `prior_owners` audit (sessionId, platform, lastSeen-at-takeover, takenOver_at) so postmortems can see what happened.
 
-See [Worktree Isolation Guide](docs/guides/worktree-isolation.md) for detailed patterns.
+## Architectural invariants (v11)
 
-### Parallel Orchestration (Required for Multi-Agent Work)
+These are enforced by code, not docs. Don't try to work around them.
 
-**NEVER have multiple agents commit to the same branch.** When running multiple agents in parallel, you MUST use `caws parallel` to set up isolated workspaces:
+1. `events.jsonl` is written ONLY through the store's `appendEvent`. Never hand-edit.
+2. `policy.yaml` owns gate `mode` (block / warn / skip). Waivers filter violations out of the disposition; they do not change gate mode.
+3. Doctor is pure (kernel-side). The store composes the snapshot; doctor inspects it.
+4. Missing != malformed. Diagnostics distinguish absence from corruption.
+5. `events.jsonl` is never required at rest. The first `appendEvent` creates it.
+6. `caws init` is idempotent and non-destructive. It refuses legacy residue. There is no `--force`.
+7. `caws status` is observability. Running it any number of times produces no `.caws/` byte changes.
+
+## Risk tiers (your quality contract)
+
+| Tier | Coverage | Mutation | Contracts | Use Case |
+|---|---|---|---|---|
+| **T1** | 90%+ | 70%+ | Required | Auth, billing, migrations |
+| **T2** | 80%+ | 50%+ | Required | Features, APIs, data writes |
+| **T3** | 70%+ | 30%+ | Optional | UI, internal tools |
+
+Set the tier in your spec's `risk_tier` field. `caws gates run --spec <id>` enforces the corresponding requirements as configured by the project's `policy.yaml`.
+
+## Waivers
+
+Waivers legitimately bypass a gate violation. They do not change gate mode — they filter violations out of the disposition.
 
 ```bash
-# 1. Create a plan file defining each agent's workspace
-cat > parallel-plan.yaml <<EOF
-version: 1
-base_branch: main
-agents:
-  - name: agent-auth
-    scope: "src/auth/**,tests/auth/**"
-    spec_id: auth-feature
-    intent: "Implement authentication"
-  - name: agent-payments
-    scope: "src/payments/**"
-    spec_id: payments-feature
-    intent: "Add payment processing"
-EOF
+caws waiver create FEAT-1-w \
+  --gate budget_limit \
+  --reason "Refactor required emergency budget breach; cleanup tracked in FEAT-2" \
+  --approved-by "team-lead@example.com" \
+  --expires-at "2026-12-01T00:00:00Z"
 
-# 2. Set up all worktrees at once
-caws parallel setup parallel-plan.yaml
-
-# 3. Direct each agent to its worktree
-# Agent 1: cd .caws/worktrees/agent-auth/
-# Agent 2: cd .caws/worktrees/agent-payments/
-
-# 4. Monitor progress
-caws parallel status
-
-# 5. Merge when all agents complete
-caws parallel merge --strategy merge
-
-# 6. Clean up
-caws parallel teardown --delete-branches
+caws waiver list
+caws waiver show FEAT-1-w
+caws waiver revoke FEAT-1-w
 ```
 
-The pre-commit hook will block commits to the base branch while parallel worktrees are active, and will block `--amend` during parallel runs to prevent agents from rewriting each other's commits.
-
-### Mode Management
-
-```bash
-# Check current mode
-caws mode current
-
-# Switch modes
-caws mode set lite
-caws mode set simple
-caws mode set standard
-caws mode set enterprise
-
-# Interactive mode selection
-caws mode set --interactive
-
-# Compare tiers
-caws mode compare
-
-# Get recommendations
-caws mode recommend --size small --team-size 1
-```
-
-### Mode-Aware Features
-
-- **Visual status** adapts to show only relevant features
-- **Quality requirements** scale with complexity tier
-- **Command availability** changes based on mode
-- **Progress calculation** adjusts for enabled features
-
-## Risk Tiers (Your Quality Contract)
-
-| Tier      | Coverage | Mutation | Contracts | Use Case                    |
-| --------- | -------- | -------- | --------- | --------------------------- |
-| **T1** | 90%+     | 70%+     | Required  | Auth, billing, migrations   |
-| **T2** | 80%+     | 50%+     | Required  | Features, APIs, data writes |
-| **T3** | 70%+     | 30%+     | Optional  | UI, internal tools          |
-
-## Development Workflow
-
-### Phase 1: Plan & Validate
-
-```bash
-# Validate working spec
-caws validate
-
-# Check current progress
-caws progress update --criterion-id A1 --status in_progress
-```
-
-### Phase 2: Contract First
-
-```yaml
-# In .caws/working-spec.yaml, define contracts:
-contracts:
-  - type: openapi
-    path: docs/api/feature.yaml
-    version: 1.0.0
-  - type: typescript
-    path: src/types/feature.ts
-    version: 1.0.0
-```
-
-### Phase 3: Test-Driven Development
-
-```bash
-# Write failing tests first
-# Implement to make tests pass
-# Meet coverage requirements
-```
-
-### Phase 4: Quality Gates
-
-```bash
-# Run all validations
-caws diagnose
-
-# Check final status
-caws status
-```
-
-## Essential Commands
-
-### Multi-Spec Workflow Commands (Use These!)
-
-```bash
-# Specs Management - FEATURE-SPECIFIC (Primary Pattern)
-caws specs create <feature-id>               # Create YOUR feature spec
-caws specs list                              # List all specs (archived items show status: archived)
-caws specs show <feature-id>                 # View spec details
-caws specs close <feature-id>                # Mark complete (status: closed)
-caws specs archive <feature-id>              # Move to .caws/specs/.archive/ (canonical)
-
-# Agent registry / claim inspection
-caws agents list                             # See active sessions across this repo
-caws agents show <session-id>                # Detail for one session + session-log path
-caws worktree claim <name>                   # Inspect a worktree's claim (read-only)
-caws worktree claim <name> --takeover        # Take over a foreign claim with audit
-
-# Validation & Quality - WITH --spec-id
-caws validate --spec-id <feature-id>         # Validate YOUR spec
-caws status --visual --spec-id <feature-id>  # Check YOUR feature status
-caws iterate --spec-id <feature-id>          # Get YOUR guidance
-caws evaluate --spec-id <feature-id>         # Evaluate YOUR work
-caws diagnose --spec-id <feature-id>         # Check YOUR health
-
-# Progress Tracking - FEATURE-SPECIFIC
-caws progress update --spec-id <feature-id> --criterion-id A1 --status completed
-
-# Archive YOUR feature when complete
-caws archive FEAT-001 --spec-id <feature-id>
-```
-
-### Single-Spec Commands (Legacy - Only if Alone)
-
-```bash
-# Project Management (single agent only)
-caws init .                      # Initialize new CAWS project
-caws scaffold                    # Add CAWS to existing project
-caws status --visual             # Enhanced status
-caws validate                    # Validate (uses legacy working-spec.yaml)
-
-# Mode Management (Complexity Tiers)
-caws mode current               # Check current mode
-caws mode set simple            # Set simple mode
-caws mode compare               # Compare all tiers
-caws mode recommend             # Get tier recommendation
-
-# Development Guidance
-caws iterate --current-state "Implementation in progress"  # Get next steps
-caws workflow guidance --workflowType tdd --currentStep 1  # Workflow help
-caws tutorial agent  # Interactive agent tutorial
-caws plan generate  # Generate implementation plan
-```
-
-### MCP Server Slash Commands (Natural Language)
-
-```bash
-# Project setup (via MCP server)
-caws_slash_commands({
-  command: "/caws:start",
-  projectName: "my-project",
-  template: "api"
-})
-
-# Validation (via MCP server)
-caws_slash_commands({
-  command: "/caws:validate",
-  specFile: ".caws/working-spec.yaml"
-})
-
-# Status checking (via MCP server)
-caws_slash_commands({
-  command: "/caws:status"
-})
-
-# Multi-spec management (via MCP server)
-caws_slash_commands({
-  command: "/caws:specs list"
-})
-
-caws_slash_commands({
-  command: "/caws:specs create",
-  id: "user-auth",
-  type: "feature",
-  title: "User Authentication System"
-})
-
-caws_slash_commands({
-  command: "/caws:specs show",
-  id: "user-auth"
-})
-
-# Archive changes (via MCP server)
-caws_slash_commands({
-  command: "/caws:archive",
-  changeId: "FEAT-001",
-  force: true
-})
-```
-
-### Quality Assurance
-
-```bash
-# Test analysis and budget prediction
-caws test-analysis assess-budget  # Predict testing needs
-caws test-analysis analyze-patterns  # Analyze test patterns
-caws test-analysis find-similar   # Find similar test cases
-
-# Quality monitoring (real-time)
-caws quality-monitor file_saved --files src/feature.ts,tests/feature.test.ts
-caws quality-monitor test_run --context '{"testCount": 15, "passed": 14}'
-```
-
-### Provenance & Compliance
-
-```bash
-# Audit trails
-caws provenance init             # Initialize tracking
-caws provenance update --commit abc123 --message "Feature complete"
-caws provenance show             # View audit trail
-caws provenance verify           # Verify chain integrity
-
-# Git hooks management
-caws hooks install              # Install CAWS git hooks
-caws hooks status               # Check hook status
-caws hooks remove               # Remove hooks
-
-# Quality gate waivers
-caws waivers create --title "Emergency hotfix" --reason emergency_hotfix --gates test-coverage
-caws waivers list               # List all waivers
-```
-
-### Cursor Hooks
-
-CAWS includes pre-configured Cursor IDE hooks for Real-Time Quality enforcement and enhanced agent workflows:
-
-```bash
-# Hooks are automatically created during initialization
-# Located in .cursor/hooks/
-
-# Available hooks:
-# - audit.sh - Audit trail for file operations
-# - block-dangerous.sh - Block dangerous commands
-# - scan-secrets.sh - Detect secrets and PII
-# - naming-check.sh - Enforce naming conventions
-# - validate-spec.sh - Check working-spec.yaml
-# - format.sh - Auto-format code
-# - scope-guard.sh - Enforce scope boundaries
-```
-
-See `docs/guides/hooks-and-agent-workflows.md` for detailed configuration.
-
-### OIDC Setup (Publishing Projects Only)
-
-**OIDC (OpenID Connect) setup is only needed for projects that publish packages to registries.**
-
-CAWS automatically detects if your project publishes packages by checking for:
-
-- `package.json` with `publishConfig` or publish scripts (npm)
-- `pyproject.toml` with build system and project metadata (PyPI)
-- `pom.xml` (Maven)
-- `.csproj` files (NuGet)
-- GitHub Actions workflows with publishing steps
-
-**When OIDC is automatically included:**
-
-- Project has publishing configuration detected
-- You explicitly request it with `--with-oidc` flag
-
-**When OIDC is skipped:**
-
-- Research/training projects (no publishing config)
-- Internal tools (not published)
-- Applications (not published as packages)
-
-**If OIDC is skipped but you need it later:**
-
-```bash
-# Add OIDC setup guide manually
-caws scaffold --with-oidc
-```
-
-**Agent Guidance:**
-
-- If project publishes packages, OIDC setup is included automatically
-- If project is research/training/internal, OIDC is skipped (correct behavior)
-- If user asks about OIDC, check project type and explain when it's needed
-- Don't add OIDC to non-publishing projects unless explicitly requested
-
-## Critical Rules
-
-### Scope Boundaries
-
-```yaml
-# Respect these in .caws/working-spec.yaml
-scope:
-  in: ['src/feature/', 'tests/feature/'] # ✅ Allowed
-  out: ['node_modules/', 'src/other/'] # ❌ Forbidden
-```
-
-### Change Budgets
-
-```yaml
-# Never exceed these limits
-change_budget:
-  max_files: 25 # Files changed
-  max_loc: 1000 # Lines of code
-```
-
-### Quality Requirements
-
-- **T1**: 90% coverage, 70% mutation, contracts required
-- **T2**: 80% coverage, 50% mutation, contracts required
-- **T3**: 70% coverage, 30% mutation, contracts optional
-
-## Key Resources
-
-- **[Multi-Agent Workflow Guide](docs/guides/multi-agent-workflow.md)** - **READ THIS FIRST** if multiple agents
-- **[Full Guide](docs/agents/full-guide.md)** - Complete documentation
-- **[Working Specs](docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Current specifications
-- **[Benchmarking](docs/internal/CAWS_AGENT_BENCHMARKING_FRAMEWORK.md)** - Performance testing
-- **[Demo Project](packages/caws-cli/demo-project/)** - Working example
-
-## Success Metrics
-
-**Agent excellence is measured by:**
-
-- **Independence**: Working autonomously without constant human guidance
-- **Quality Compliance**: Meeting tier requirements on first attempt
-- **Contract Adherence**: APIs exactly matching specifications
-- **Test Effectiveness**: Comprehensive suites that catch mutations
-- **Scope Discipline**: Staying within defined boundaries
-
-## Complete Workflow Examples
-
-### Example 1: New Feature Development (Multi-Agent TDD Approach)
-
-```bash
-# 1. Create YOUR feature-specific spec
-caws specs create user-auth --type feature --title "User Authentication System"
-
-# 2. Edit YOUR spec with contracts
-# File: .caws/specs/user-auth.yaml
-# - Define acceptance criteria
-# - Set scope boundaries (what files you'll touch)
-# - Define contracts and interfaces
-
-# 3. Validate YOUR spec
-caws validate --spec-id user-auth
-
-# 4. Get guidance for YOUR feature
-caws iterate --spec-id user-auth --current-state "Planning authentication"
-
-# 5. Write tests first (TDD)
-# Create tests for acceptance criteria A1-A3
-
-# 6. Implement feature incrementally
-# Update progress as each criterion is met
-caws progress update --spec-id user-auth --criterion-id A1 --status completed --tests-written 5 --tests-passing 5
-
-# 7. Run quality gates on YOUR feature
-caws diagnose --spec-id user-auth
-caws status --visual --spec-id user-auth
-
-# 8. Archive YOUR feature when complete
-caws archive FEAT-001 --spec-id user-auth
-```
-
-### Example 2: Bug Fix with Waiver (Emergency Scenario)
-
-```bash
-# 1. Acknowledge the issue
-caws status --visual  # See current state
-
-# 2. Create emergency waiver for quick fix
-caws waivers create \
-  --title "Critical login bug hotfix" \
-  --reason emergency_hotfix \
-  --description "Users cannot login - blocking all access" \
-  --gates test-coverage,mutation-testing \
-  --expires-at "2024-12-31" \
-  --approved-by "Emergency Response Team" \
-  --impact-level critical \
-  --mitigation-plan "Deploy fix immediately, add tests within 24h"
-
-# 3. Quick fix implementation (waiver allows reduced quality gates)
-# Fix the critical issue
-
-# 4. Archive the fix
-caws archive FIX-001 --force  # Force due to incomplete tests
-
-# 5. Follow up with proper test coverage (remove waiver later)
-```
-
-### Example 3: Refactoring with Quality Monitoring
-
-```bash
-# 1. Plan refactoring in working spec
-caws validate
-
-# 2. Enable quality monitoring
-caws quality-monitor code_edited \
-  --files src/legacy-module.ts \
-  --context '{"refactoring": true, "targetComplexity": "low"}'
-
-# 3. Iterative refactoring with monitoring
-# Make small changes, monitor quality impact
-
-# 4. Update progress as you go
-caws progress update --criterion-id REF1 --status in_progress
-
-# 5. Validate refactoring meets goals
-caws evaluate
-caws status --visual
-
-# 6. Archive when complete
-caws archive REFACT-001
-```
-
-## Common Pitfalls & Solutions
-
-### Common Mistakes
-
-**Problem**: Starting implementation before validation
-**Solution**: Always run `caws validate` first - it catches issues early
-
-**Problem**: Creating `enhanced-*` or `new-*` files
-**Solution**: Edit existing canonical files, don't create duplicates
-
-**Problem**: Writing code without tests first (not TDD)
-**Solution**: Write failing tests before implementation
-
-**Problem**: Exceeding change budgets
-**Solution**: Break large changes into smaller, auditable commits
-
-**Problem**: Ignoring provenance tracking
-**Solution**: Initialize with `caws provenance init` and update regularly
-
-**Problem**: Forcing archives without meeting criteria
-**Solution**: Use `--force` only for emergencies, document why
-
-### Best Practices
-
-- **Validate Often**: Run `caws validate` after any spec changes
-- **Use Visual Status**: `caws status --visual` shows progress clearly
-- **Leverage Slash Commands**: Natural language via MCP server is more intuitive
-- **Monitor Quality**: Use `caws quality-monitor` for real-time feedback
-- **Archive Properly**: Use `caws archive` to maintain clean change history
-- **Request Help**: Use `caws workflow guidance` when stuck
-
-## Getting Help
-
-### Quick Help Commands
-
-```bash
-# Get command-specific help
-caws --help                    # All available commands
-caws status --help             # Status command options
-caws archive --help            # Archive command options
-
-# Workflow guidance for specific scenarios
-caws workflow guidance --workflowType tdd --currentStep 1
-caws workflow guidance --workflowType feature --currentStep 2
-
-# Tool-specific help via MCP server
-caws_help({ tool: "caws_validate" })           # Detailed tool help
-caws_help({ category: "validation" })          # Tools by category
-```
-
-### Documentation Resources
-
-1. **[Full Agent Guide](docs/agents/full-guide.md)** - Complete documentation
-2. **[Demo Project](packages/caws-cli/demo-project/)** - Working examples
-3. **[Spec System Comparison](docs/internal/SPEC_SYSTEMS_COMPARISON.md)** - Architecture insights
-4. **[Working Specs](docs/internal/SPEC_VALIDATION_SUMMARY.md)** - Current specifications
-
-### When to Ask for Human Help
-
-- **Tier 1 Changes**: Always request review for critical features
-- **Architecture Decisions**: When design choices affect multiple components
-- **Emergency Waivers**: Before creating waivers for reduced quality gates
-- **Complex Refactoring**: When changes span many files or systems
-- **Performance Issues**: When optimizations might impact user experience
-
-### Troubleshooting Commands
-
-```bash
-# Diagnose issues
-caws diagnose                  # Run health checks
-caws diagnose --fix            # Auto-fix detected issues
-
-# Check system status
-caws status --visual           # Visual project overview
-caws status --json             # Machine-readable status
-
-# Validate everything
-caws validate                  # Check working spec
-caws evaluate                  # Check quality compliance
-
-# Get guidance
-caws iterate --current-state "Stuck on implementation"
-caws workflow guidance --workflowType refactor --currentStep 1
-```
+## Exit codes (uniform across v11)
+
+- `0` — success / observation
+- `1` — domain failure (gate failed, doctor finding, scope refused, waiver duplicate)
+- `2` — composition failure (not a git repo, can't read `.caws/`, missing required tooling)
+
+## When to ask a human
+
+- **Tier 1 changes** — always request review.
+- **Architecture decisions** — when the design affects multiple components or governed paths.
+- **Waivers on T1 gates** — emergency only; document mitigation plan.
+- **`caws claim --takeover`** — never without explicit authorization.
+- **A dangerous-command hook fires** — `block-dangerous.sh` returning `block` or `ask` is a human-review boundary, not a syntax problem to solve. Do not rephrase, wrap, reorder, or alias the command. Stop and ask. The hook also engages a per-session latch that blocks all subsequent Bash until the user runs `reset-danger-latch.sh`. Read [`packages/caws-cli/docs-status/failure-lineage.md`](packages/caws-cli/docs-status/failure-lineage.md) Entry 17 for why this rule exists.
+
+## Resources
+
+- [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md) — **doctrine source**: posture, kept commands, removed commands, invariants
+- [`docs/agents/full-guide.md`](docs/agents/full-guide.md) — comprehensive workflow guide (post-8c.1; cross-reference doctrine doc for any conflicts)
+- [`docs/guides/multi-agent-workflow.md`](docs/guides/multi-agent-workflow.md) — multi-agent patterns
+- [`docs/guides/worktree-isolation.md`](docs/guides/worktree-isolation.md) — worktree discipline
+- [`docs/guides/waiver-troubleshooting.md`](docs/guides/waiver-troubleshooting.md) — waiver patterns
+- [`packages/caws-cli/README.md`](packages/caws-cli/README.md) — v11 CLI package reference
+- [`CLAUDE.md`](CLAUDE.md) — Claude Code project guidance for this repo
+
+## Common pitfalls
+
+**Problem**: Tried to run `caws specs create` / `caws validate` / `caws iterate` / `caws diagnose`.
+**Cause**: Reading a stale doc that pre-dates v11 cutover.
+**Fix**: Use the v11 surface above. Spec lifecycle returns in v11.1.
+
+**Problem**: `caws init` refuses to run.
+**Cause**: Legacy `.caws/working-spec.yaml` residue from v10.x.
+**Fix**: Migrate that file's contents into `.caws/specs/<id>.yaml`, then re-run.
+
+**Problem**: `caws claim` refused with a foreign-owner message.
+**Cause**: Another agent session owns the worktree.
+**Fix**: Read their session log under `tmp/<sessionId>/`; only `--takeover` with user authorization.
+
+**Problem**: A gate keeps blocking and you want to bypass it.
+**Cause**: Hand-editing `change_budget` will be rejected by CI; the right escape is a waiver.
+**Fix**: `caws waiver create` with reason, approver, and expiry.
 
 ---
 
-## Agent Success Framework
-
-**Your mission**: Deliver reliable, high-quality code that meets CAWS standards while maintaining efficient collaboration with human developers.
-
-**Key Success Indicators**:
-
-- **Zero validation errors** before implementation
-- **Complete test coverage** meeting tier requirements
-- **Clean archival** of completed changes
-- **Proactive communication** about challenges and decisions
-- **Scope discipline** - staying within defined boundaries
-
-**Remember**: CAWS exists to make AI-human collaboration reliable and high-quality. Follow the rules, validate often, and deliver excellent results. When in doubt, validate first and ask for guidance!
+**Mission**: Deliver reliable, scoped, auditable changes through the v11 governance surface. When the docs and the doctrine doc disagree, trust the doctrine doc.

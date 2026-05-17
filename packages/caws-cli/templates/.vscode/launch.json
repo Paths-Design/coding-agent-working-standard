@@ -6,7 +6,7 @@
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/packages/caws-cli/src/index.js",
-      "args": ["validate", ".caws/working-spec.yaml"],
+      "args": ["validate", "--spec-id", "${input:specId}"],
       "env": {
         "NODE_ENV": "development",
         "CAWS_DEBUG": "true"

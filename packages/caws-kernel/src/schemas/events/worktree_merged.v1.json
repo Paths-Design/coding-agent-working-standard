@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_merged.v1.json",
+  "title": "worktree_merged event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. spec_id present when the worktree was bound at merge time (typical).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "merge_commit", "base_branch"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "merge_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "base_branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "auto_closed_spec": {
+      "type": "boolean",
+      "description": "True when merge auto-flipped the bound spec to closed."
+    }
+  }
+}

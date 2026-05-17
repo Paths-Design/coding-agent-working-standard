@@ -1,6 +1,17 @@
-# CAWS Tutorial - Step-by-Step Guide
+---
+doc_id: agents-tutorial
+authority: reference
+status: active
+title: CAWS Tutorial — Step-by-Step Guide (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-**Hands-on tutorial for implementing CAWS in your project**
+# CAWS Tutorial — Step-by-Step Guide
+
+**Hands-on tutorial for implementing CAWS v11.0.0 in your project**
+
+> **v11 surface only.** This tutorial uses the v11 commands: `init`, `doctor`, `status`, `scope`, `gates`, `evidence`, `waiver`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
@@ -31,25 +42,36 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 
 ## Step 1: Initialize CAWS
 
-### Create Working Spec
+### Initialize CAWS state
 
 ```bash
-# Initialize with interactive wizard
-caws init --interactive
+# v11: idempotent, no-arg, no wizard
+caws init
 ```
 
-**Wizard Responses**:
-- Project type: `application`
-- Title: `Add User Preferences Storage`
-- Risk tier: `2` (Standard feature)
-- Mode: `feature`
-- Max files: `8` (reasonable for this feature)
-- Max lines: `200` (focused implementation)
-- Modules: `ui, storage, types`
-- Data migration: `No`
-- Rollback SLO: `5m`
+This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`, `agents.json`. (v11 does not ship an interactive wizard or templates; author the spec by hand in the next step.)
 
-**Result**: `.caws/working-spec.yaml` is created with:
+### Create the feature spec
+
+Create `.caws/specs/user-preferences.yaml` with these fields:
+
+```yaml
+id: FEAT-PREFS
+title: Add User Preferences Storage
+risk_tier: T2
+mode: feature
+change_budget:
+  max_files: 8
+  max_loc: 200
+blast_radius:
+  modules: [ui, storage, types]
+  data_migration: false
+operational_rollback_slo: 5m
+```
+
+(See [`docs/api/schema.md`](../api/schema.md) for the full schema.)
+
+**Result**: `.caws/specs/<spec-id>.yaml` is created with:
 
 ```yaml
 id: PREF-001
@@ -62,9 +84,9 @@ change_budget:
 # ... rest auto-generated
 ```
 
-### Customize Working Spec
+### Customize Feature Spec
 
-Edit `.caws/working-spec.yaml` to add project-specific details:
+Edit `.caws/specs/<spec-id>.yaml` to add project-specific details:
 
 ```yaml
 scope:
@@ -97,13 +119,13 @@ non_functional:
   security: ["input validation", "XSS prevention"]
 ```
 
-### Validate Spec
+### Verify spec / drift
 
 ```bash
-caws validate --suggestions
+caws doctor
 ```
 
-**Expected**: Valid spec
+**Expected**: exit 0 (no findings).
 
 ---
 
@@ -358,21 +380,21 @@ npm test
 
 ```bash
 # Count files changed
-find src/ tests/ -name "*.ts" -newer .caws/working-spec.yaml | wc -l
+find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml | wc -l
 
 # Count lines changed
-find src/ tests/ -name "*.ts" -newer .caws/working-spec.yaml -exec wc -l {} + | tail -1
+find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} + | tail -1
 ```
 
 **Expected**: Within budget (8 files, 200 lines)
 
-### Run Validation
+### Run quality gates
 
 ```bash
-caws validate --quiet
+caws gates run --spec FEAT-PREFS
 ```
 
-**Expected**: No validation errors
+**Expected**: exit 0 (all blocking gates pass).
 
 ### Check Coverage
 
@@ -399,9 +421,9 @@ npm run test:coverage
 
 ## Step 6: Update Documentation
 
-### Update Working Spec
+### Update Feature Spec
 
-If scope changed during implementation, update `.caws/working-spec.yaml`:
+If scope changed during implementation, update `.caws/specs/<spec-id>.yaml`:
 
 ```yaml
 # Add any new files to scope.in
@@ -434,7 +456,7 @@ cp .caws/templates/pr.md docs/prs/PREF-001.md
 ## Description
 Implements persistent user preferences with localStorage, including theme and language settings.
 
-## Working Spec
+## Feature Spec
 - **ID**: PREF-001
 - **Risk Tier**: 2
 - **Change Budget**: 8 files, 200 lines
@@ -446,7 +468,7 @@ Implements persistent user preferences with localStorage, including theme and la
 - `src/preferences/validation.ts` (35 lines)
 - `tests/preferences/storage.test.ts` (60 lines)
 - `tests/preferences/validation.test.ts` (40 lines)
-- `.caws/working-spec.yaml` (minor updates)
+- `.caws/specs/<spec-id>.yaml` (minor updates)
 
 ## Testing
 - Unit tests: full coverage
@@ -454,7 +476,7 @@ Implements persistent user preferences with localStorage, including theme and la
 - Manual testing: All acceptance criteria verified
 
 ## Quality Gates
-- Validation: Working spec valid
+- Validation: feature spec valid
 - Coverage: 85% branch coverage
 - Tests: All passing
 - Manual Review: Ready for review
@@ -486,7 +508,7 @@ You've successfully implemented a CAWS-managed feature with:
 
 ### What You Learned
 
-1. **Planning First**: Working spec prevents scope creep
+1. **Planning First**: feature spec prevents scope creep
 2. **Tests as Safety**: TDD catches issues early
 3. **Validation Matters**: Automated checks maintain quality
 4. **Documentation Pays**: Clear PRs speed up reviews
@@ -501,7 +523,7 @@ You've successfully implemented a CAWS-managed feature with:
 
 ### Resources
 
-- **Working Spec**: `.caws/working-spec.yaml`
+- **Feature Spec**: `.caws/specs/<spec-id>.yaml`
 - **Tests**: `tests/preferences/`
 - **Documentation**: `docs/plans/PREF-001.md`
 - **Templates**: `.caws/templates/`

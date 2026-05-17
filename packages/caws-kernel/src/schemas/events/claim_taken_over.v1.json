@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/claim_taken_over.v1.json",
+  "title": "claim_taken_over event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. Records --takeover with prior_owners audit. Stale heartbeat is NOT abandonment; takeover is explicit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "prior_owner", "new_owner"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "prior_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "platform": {
+          "type": "string",
+          "description": "claude-code | cursor | other; informational."
+        },
+        "last_seen": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Null when the prior session entry was already TTL-pruned at takeover time."
+        }
+      }
+    },
+    "new_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string" }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional human reason for the takeover."
+    }
+  }
+}

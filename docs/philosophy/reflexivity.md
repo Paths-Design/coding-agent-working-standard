@@ -1,9 +1,20 @@
+---
+doc_id: caws-reflexivity
+authority: reference
+status: active
+title: CAWS Reflexivity — Self-Auditing Architecture (proposed philosophy)
+owner: @darianrosebrook
+updated: 2026-05-15
+---
+
 # CAWS Reflexivity: Self-Auditing Architecture
 
-**Author**: @darianrosebrook  
-**Date**: October 12, 2025  
-**Status**: Proposed Philosophy  
+**Author**: @darianrosebrook
+**Date**: October 12, 2025
+**Status**: Proposed Philosophy (pre-v11)
 **Inspiration**: Agent-Agency V2 Constitutional Design
+
+> **v11 doctrine note.** This document is *speculative philosophy* authored before the v11.0.0 cutover. The CLI snippets below reference `caws self-audit`, `caws waivers` (plural), `caws provenance analyze-waivers`, and `caws provenance analyze-ai` — none of which exist in v11.0.0. The *idea* (CAWS subjects itself to its own standards via the v11 surface — `caws doctor`, `caws gates run`, `caws evidence record`, `caws waiver`) is the v11-honest realization of this principle. Treat the snippets as design illustrations, not invocable commands.
 
 ---
 
@@ -486,7 +497,7 @@ By validating itself against its own standards, CAWS:
 
 ## Additional Resources
 
-- [CAWS Working Spec](../api/schema.md)
+- [CAWS Feature Spec](../api/schema.md)
 - [Provenance Tracking](../guides/provenance.md)
 - [Waiver System](../guides/waivers.md)
 

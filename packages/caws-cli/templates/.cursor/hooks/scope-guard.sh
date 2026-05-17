@@ -1,9 +1,9 @@
 #!/bin/bash
 # Cursor Hook: Scope Guard
-# 
-# Purpose: Check if files being worked on are within working-spec scope
+#
+# Purpose: Check if files being worked on are within an active feature spec's scope
 # Event: beforeSubmitPrompt
-# 
+#
 # @author @darianrosebrook
 
 set -euo pipefail
@@ -14,9 +14,8 @@ INPUT=$(cat)
 # Extract attachments
 ATTACHMENTS=$(echo "$INPUT" | jq -r '.attachments // []')
 
-# Only check if we have file attachments and a working spec
-if [ ! -f ".caws/working-spec.yaml" ] && [ ! -f ".caws/working-spec.yml" ]; then
-  # No spec file, allow by default
+# Only check if there are per-feature specs under .caws/specs/
+if [ ! -d ".caws/specs" ]; then
   echo '{"continue":true}' 2>/dev/null
   exit 0
 fi
@@ -40,7 +39,7 @@ if [ -f ".caws/tools/scope-guard.js" ]; then
     # If any files are out of scope, warn but don't block
     if [ ${#OUT_OF_SCOPE[@]} -gt 0 ]; then
       FILES_LIST=$(printf '%s\n' "${OUT_OF_SCOPE[@]}")
-      echo '{"continue":true,"userMessage":"⚠️ Warning: Some attached files may be outside working-spec scope:\n'"$FILES_LIST"'","agentMessage":"Some files are outside the defined scope in working-spec.yaml. Consider updating the scope or removing these files."}' 2>/dev/null
+      echo '{"continue":true,"userMessage":"⚠️ Warning: Some attached files may be outside the active feature spec scope:\n'"$FILES_LIST"'","agentMessage":"Some files are outside the scope.in of the active spec under .caws/specs/. Consider updating scope.in or removing these files."}' 2>/dev/null
       exit 0
     fi
   fi

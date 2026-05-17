@@ -110,12 +110,10 @@ async function writeInitialSpecArtifacts(specContent, fallbackId) {
   const canonicalContent = yaml.dump(canonicalSpec, { indent: 2 });
   const specsDir = path.join('.caws', 'specs');
   const featureSpecPath = path.join(specsDir, `${canonicalSpec.id}.yaml`);
-  const workingSpecPath = path.join('.caws', 'working-spec.yaml');
   const registryPath = path.join(specsDir, 'registry.json');
 
   await fs.ensureDir(specsDir);
   await fs.writeFile(featureSpecPath, canonicalContent);
-  await fs.writeFile(workingSpecPath, canonicalContent);
   await fs.writeJson(
     registryPath,
     {
@@ -138,7 +136,6 @@ async function writeInitialSpecArtifacts(specContent, fallbackId) {
   return {
     canonicalSpec,
     featureSpecPath,
-    workingSpecPath,
   };
 }
 
@@ -607,11 +604,10 @@ async function initProject(projectName, options) {
       console.log(chalk.blue('\nGenerating CAWS working spec...'));
       const specContent = generateWorkingSpec(answers);
 
-      // Write canonical feature spec plus legacy compatibility mirror
+      // Write canonical feature spec under .caws/specs/
       await fs.ensureDir('.caws');
       const initialSpec = await writeInitialSpecArtifacts(specContent, answers.projectId);
       console.log(chalk.green(`Created ${initialSpec.featureSpecPath}`));
-      console.log(chalk.green('Created .caws/working-spec.yaml'));
       console.log(chalk.green('Created .caws/specs/registry.json'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
@@ -643,10 +639,9 @@ ${answers.projectDescription}
 3. Implement features according to the spec
 4. Run \`caws validate --spec-id ${answers.projectId}\` to check your progress
 
-## Multi-Agent Recommendation
-The initial project spec is also available in \`.caws/specs/${answers.projectId}.yaml\`.
-For multi-agent work, treat feature specs in \`.caws/specs/\` as canonical and use
-\`.caws/working-spec.yaml\` only as a compatibility mirror:
+## Multi-Agent Workflow
+Feature specs live under \`.caws/specs/<id>.yaml\`. Each feature gets its own spec.
+There is no project-level working-spec — every spec is per-feature.
 
 \`\`\`bash
 caws specs create my-feature --type feature --title "My Feature"
@@ -752,7 +747,6 @@ Happy coding! `;
       await fs.ensureDir('.caws');
       const initialSpec = await writeInitialSpecArtifacts(specContent, defaultAnswers.projectId);
       console.log(chalk.green(`Created ${initialSpec.featureSpecPath}`));
-      console.log(chalk.green('Created .caws/working-spec.yaml'));
       console.log(chalk.green('Created .caws/specs/registry.json'));
 
       // Optionally create policy.yaml (optional - defaults work fine)
@@ -798,9 +792,8 @@ Happy coding! `;
     console.log(chalk.green('\nCAWS project initialized successfully!'));
     console.log(chalk.blue('\nNext steps:'));
     console.log('1. Review .caws/specs/<spec-id>.yaml');
-    console.log('2. Treat .caws/working-spec.yaml as the compatibility mirror, not the long-term source of truth');
-    console.log('3. If multiple agents will collaborate, create more feature specs with `caws specs create <id>`');
-    console.log('4. Use `--spec-id` on validation/status/diagnose commands for feature work');
+    console.log('2. For each new feature, create its own spec with `caws specs create <id>`');
+    console.log('3. Always pass `--spec-id` on validate/status/diagnose commands');
 
     // Show contract requirements if Tier 1 or 2
     // Use answers if available (interactive mode), otherwise default to 2
@@ -811,8 +804,8 @@ Happy coding! `;
       console.log('   For infrastructure/setup work, add a minimal contract:');
       console.log(chalk.gray('   contracts:'));
       console.log(chalk.gray('     - type: "project_setup"'));
-      console.log(chalk.gray('       path: ".caws/working-spec.yaml"'));
-      console.log(chalk.gray('       description: "Project-level CAWS configuration"'));
+      console.log(chalk.gray('       path: ".caws/specs/<spec-id>.yaml"'));
+      console.log(chalk.gray('       description: "Per-feature CAWS specification"'));
       console.log('   Or use "chore" mode for maintenance work (mode: chore)');
     }
 

@@ -1,22 +1,37 @@
-# CAWS - Agent Workflow Guide
+---
+doc_id: agents-full-guide
+authority: reference
+status: active
+title: CAWS Agent Workflow Guide (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-**Coding Agent Workflow System** - Engineering-grade operating system for AI-assisted development
+# CAWS — Agent Workflow Guide (v11.0.0)
 
-**Version**: 3.1.0  
-**Last Updated**: October 8, 2025
+**Coding Agent Workflow System** — engineering-grade operating system for AI-assisted development.
+
+**Version**: 11.0.0
+**Last Updated**: 2026-05-15
+
+> **v11 posture (A1).** This guide describes the v11.0.0 surface — eight command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`). Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `hooks`, `scaffold`, `specs`, `worktree`, `parallel`, `mode`, etc.) are no longer registered with the CLI entry point.
+>
+> Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md). When this guide and the doctrine doc disagree, the doctrine doc wins.
+>
+> If you need the legacy lifecycle commands today, pin `caws-cli@^10.2.x` until v11.1 reintroduces vNext spec/worktree lifecycle.
 
 ---
 
 ## Purpose & Philosophy
 
-CAWS is an engineering-grade operating system for coding agents that:
+CAWS is an engineering-grade governance substrate for coding agents that:
 
-1. **Forces planning before code** - No implementation without a validated working spec
-2. **Treats tests as first-class artifacts** - Tests drive implementation, not the other way around
-3. **Creates explainable provenance** - Every change is tracked and attributable
-4. **Enforces quality via automated gates** - CI/CD validates coverage, mutation scores, and contracts
+1. **Forces planning before code** — no implementation without a per-feature spec under `.caws/specs/<id>.yaml`
+2. **Treats tests as first-class artifacts** — tests drive implementation, evidence is recorded as ACs close
+3. **Creates explainable, hash-chained audit trails** — every gate evaluation and evidence event lands in `.caws/events.jsonl` (append-only, hash-chained via the store)
+4. **Enforces quality via policy-driven gates** — `policy.yaml` declares each gate's mode (block/warn/skip); `caws gates run --spec <id>` executes them
 
-This guide teaches agents how to collaborate effectively with humans using CAWS tooling and conventions.
+This guide teaches agents how to collaborate effectively with humans using v11 CAWS tooling and conventions.
 
 ---
 
@@ -26,20 +41,20 @@ This guide teaches agents how to collaborate effectively with humans using CAWS 
 
 When you encounter a CAWS project, follow this sequence:
 
-1. **Check for working spec**: Look for `.caws/working-spec.yaml`
-2. **Understand the scope**: Read the `scope.in` and `scope.out` to know boundaries
-3. **Check risk tier**: Tier 1 (critical), Tier 2 (standard), Tier 3 (low risk)
-4. **Review acceptance criteria**: These are your implementation targets
-5. **Validate before starting**: Run `caws validate` to ensure spec is valid
+1. **Find your spec**: Look for `.caws/specs/<id>.yaml` for your feature.
+2. **Understand the scope**: Read `scope.in` and `scope.out` for the boundaries.
+3. **Check risk tier**: T1 (critical), T2 (standard), T3 (low risk).
+4. **Review acceptance criteria**: These are your implementation targets (Given/When/Then).
+5. **Verify project health**: Run `caws doctor` and `caws status`. `caws scope check <path>` for each file you intend to touch.
 
 ### The Golden Rule
 
 **Never write implementation code until:**
 
-- Working spec exists and validates
+- A per-feature spec exists at `.caws/specs/<id>.yaml`
 - Test plan is defined
 - Acceptance criteria are clear
-- Scope boundaries are understood
+- Scope boundaries are understood (`caws scope show <path>` to confirm)
 
 ---
 
@@ -70,9 +85,9 @@ Risk tiers drive rigor and determine quality gates:
 4. **Secure Prompts**: Never include secrets, `.env` files, or keys in context
 5. **Provenance**: All changes are tracked and attributable
 
-### The Working Spec - Your Blueprint
+### The Feature Spec - Your Blueprint
 
-Every task needs a working spec at `.caws/working-spec.yaml`:
+Every task needs a working spec at `.caws/specs/<spec-id>.yaml`:
 
 ```yaml
 id: FEAT-001
@@ -117,17 +132,17 @@ contracts:
 
 ### Phase 1: Plan (Before Any Code)
 
-**Goal**: Create a validated working spec and test plan.
+**Goal**: Author a per-feature spec and a test plan.
 
 ```bash
-# 1. Create or validate working spec
-caws validate --suggestions
+# 1. Author the spec directly (v11 ships no spec generator)
+$EDITOR .caws/specs/<id>.yaml
 
-# 2. If issues exist, use auto-fix for safe corrections
-caws validate --auto-fix
+# 2. Verify drift / structure
+caws doctor
 
-# 3. Review acceptance criteria - these are your targets
-cat .caws/working-spec.yaml | grep -A 20 "acceptance:"
+# 3. Review acceptance criteria — these are your targets
+cat .caws/specs/<id>.yaml | grep -A 20 "acceptance:"
 ```
 
 **What to include in your plan:**
@@ -236,9 +251,9 @@ npm run test:e2e          # End-to-end smoke tests
 **PR checklist:**
 
 ```markdown
-## Working Spec
+## Feature Spec
 
-- [ ] `.caws/working-spec.yaml` attached and validates
+- [ ] `.caws/specs/<spec-id>.yaml` attached and validates
 - [ ] Risk tier appropriate for change impact
 - [ ] Acceptance criteria met
 
@@ -269,74 +284,72 @@ npm run test:e2e          # End-to-end smoke tests
 
 - [ ] Commits follow conventional commits format
 - [ ] PR title references ticket ID
-- [ ] Provenance updated: `caws provenance update`
+- [ ] Evidence recorded: `caws evidence record --type ac --spec <id> --data '{...}'`
 ```
 
 ---
 
-## CLI Commands Reference
+## CLI Commands Reference (v11)
 
-### Project Initialization
+> Full reference: [`docs/api/cli.md`](../api/cli.md). What follows is a quickstart per phase.
 
-```bash
-# Interactive wizard (recommended for new projects)
-caws init --interactive
-
-# Initialize in existing directory
-caws init .
-
-# Use project template
-caws init my-project --template=extension
-```
-
-### Validation
+### Project initialization
 
 ```bash
-# Check working spec validity
-caws validate
-
-# Get helpful suggestions for fixing issues
-caws validate --suggestions
-
-# Auto-fix safe validation issues
-caws validate --auto-fix
-
-# Quiet mode for CI
-caws validate --quiet
+caws init                # idempotent; refuses legacy .caws/working-spec.yaml residue
+                          # creates .caws/specs/, .caws/waivers/, policy.yaml, worktrees.json, agents.json
+                          # there is no --force in v11
 ```
 
-### Scaffolding
+### Validation and drift detection
 
 ```bash
-# Add CAWS components to existing project
-caws scaffold
+caws doctor              # drift detection over .caws/ state
+                          # exit 0 (clean) / 1 (findings or load errors) / 2 (composition failure)
 
-# Only essential components
-caws scaffold --minimal
+caws status              # read-only dashboard; never mutates .caws/
 
-# Include specific features
-caws scaffold --with-codemods
-caws scaffold --with-oidc
+caws scope show <path>   # explain the scope decision
+caws scope check <path>  # enforce; exit 0 admit / 1 refuse
 ```
 
-### Provenance Tracking
+(v11 does not ship `caws validate` / `caws scaffold`. Author specs in `.caws/specs/<id>.yaml` directly. Use `caws doctor` + `caws gates run` for validation.)
+
+### Quality gates
 
 ```bash
-# Initialize provenance tracking
-caws provenance init
-
-# Install git hooks for automatic tracking
-caws hooks install --backup
-
-# Update provenance manually
-caws provenance update --commit <hash>
-
-# View beautiful dashboard
-caws provenance show --format=dashboard
-
-# Analyze AI effectiveness
-caws provenance analyze-ai
+caws gates run --spec <id>
+# Policy declares each gate's mode (block/warn/skip).
+# Appends one gate_evaluated event per declared gate to .caws/events.jsonl.
+# Waivers filter matching violations out of the disposition.
 ```
+
+### Evidence recording
+
+```bash
+# Record a test result
+caws evidence record --type test --spec <id> \
+  --data '{"name":"login_happy_path","status":"pass"}'
+
+# Record an acceptance-criterion closure
+caws evidence record --type ac --spec <id> \
+  --data '{"id":"A1","status":"satisfied"}'
+
+# Record a gate decision (rare — gates run records this automatically)
+caws evidence record --type gate --spec <id> --data '{...}'
+```
+
+All append hash-chained events through the store's `appendEvent`. There is no other writer.
+
+### Worktree ownership
+
+```bash
+caws claim               # surface ownership of the current worktree
+caws claim --takeover    # acquire from a foreign session (writes prior_owners audit)
+                          # use only with explicit user authorization
+```
+
+(v11 does not ship `caws hooks install` or `caws provenance` commands. The hash-chained `events.jsonl` is the audit trail; record evidence with `caws evidence record`.)
 
 ---
 
@@ -437,7 +450,7 @@ vim src/services/user-service.ts
 npm test # Should pass
 
 # 3. Document
-vim .caws/working-spec.yaml # Add root cause note
+vim .caws/specs/<spec-id>.yaml # Add root cause note
 ```
 
 ---
@@ -602,12 +615,12 @@ EOF
 
 #### Error: `risk_tier is required`
 
-**Cause**: Working spec missing risk tier.
+**Cause**: feature spec missing risk tier.
 
 **Fix**:
 
 ```yaml
-# Add to .caws/working-spec.yaml
+# Add to .caws/specs/<spec-id>.yaml
 risk_tier: 2 # Choose 1, 2, or 3 based on impact
 ```
 
@@ -709,42 +722,40 @@ change_budget:
 
 ---
 
-## Provenance & AI Tracking
+## Audit trail (v11): events.jsonl
 
-CAWS automatically tracks all AI-assisted changes for transparency and quality analysis.
+CAWS audit lives in `.caws/events.jsonl` — an append-only, hash-chained log written exclusively through the store's `appendEvent`. v11 does not ship the legacy `caws provenance` subtree; the hash-chained event log is the single audit surface.
 
-### Automatic Tracking via Git Hooks
+### Writers
 
-When you commit, hooks automatically:
+| Event type | Writer |
+|---|---|
+| `gate_evaluated` | `caws gates run --spec <id>` (one per declared gate) |
+| `evidence_recorded` | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
+| `worktree_takeover` | `caws claim --takeover` (records `prior_owners` audit) |
 
-1. Detect if change was AI-assisted (Cursor Composer, Chat, Tab)
-2. Extract quality metrics (coverage, mutation score)
-3. Link commits to working spec
-4. Update provenance journal
+There is no other path that writes `events.jsonl`. Hand-editing is forbidden — it breaks the chain.
 
-### Viewing Provenance
+### Reading the log
+
+`events.jsonl` is plain JSON-Lines. Read with `jq` or any JSON-Lines tool:
 
 ```bash
-# Beautiful dashboard with insights
-caws provenance show --format=dashboard
-
-# JSON output for tooling
-caws provenance show --format=json
-
-# Analyze AI effectiveness
-caws provenance analyze-ai
+jq -c '.' .caws/events.jsonl | tail -20
 ```
 
-### Dashboard Insights
+The log is never required at rest — invariant 5. `caws doctor` does not flag a missing `events.jsonl`; the first `appendEvent` creates it.
 
-The provenance dashboard shows:
+### Recording AI-assisted-change evidence
 
-- Total commits and AI-assisted percentage
-- Quality score trends over time
-- AI contribution breakdown (Composer vs Tab completions)
-- Acceptance rate for AI-assisted changes
-- Recent activity timeline
-- Smart recommendations for improvement
+When a change is AI-assisted, record an evidence event so the audit trail captures it:
+
+```bash
+caws evidence record --type ac --spec <id> \
+  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code"}'
+```
+
+The evidence-event schema accepts arbitrary `--data` payloads; the project's policy decides which fields are required.
 
 ---
 
@@ -790,61 +801,61 @@ git commit --no-verify  # Allowed for commits
 
 ---
 
-## Project Templates
+## Project archetypes (spec patterns)
 
-CAWS includes templates for common project types.
+v11's `caws init` is no-arg and ships no project-template scaffolds. Below are recommended `risk_tier` and `change_budget` defaults to author into `.caws/specs/<id>.yaml` for common archetypes.
 
-### VS Code Extension
+### VS Code extension
 
-```bash
-caws init my-extension --template=extension
+```yaml
+risk_tier: T2          # high user impact
+change_budget:
+  max_files: 25
+  max_loc: 1000
+non_functional:
+  perf:
+    activation_ms: 1000
+  security:
+    - csp-enforcement       # webview security
 ```
 
-**Optimized for:**
+### React library
 
-- Risk tier: 2 (high user impact)
-- Webview security (CSP enforcement)
-- Activation performance (<1s)
-- Budget: 25 files, 1000 lines
-
-### React Library
-
-```bash
-caws init my-lib --template=library
+```yaml
+risk_tier: T2          # API stability
+change_budget:
+  max_files: 20
+  max_loc: 800
+non_functional:
+  perf:
+    bundle_kb: 50           # tree-shakeable
 ```
 
-**Optimized for:**
+### API service
 
-- Risk tier: 2 (API stability)
-- Bundle size limits
-- Tree-shakeable exports
-- Budget: 20 files, 800 lines
-
-### API Service
-
-```bash
-caws init my-api --template=api
+```yaml
+risk_tier: T1          # data integrity
+change_budget:
+  max_files: 40
+  max_loc: 1500
+non_functional:
+  perf:
+    api_p95_ms: 250
+  security:
+    - input-validation
+    - rate-limiting
 ```
 
-**Optimized for:**
+### CLI tool
 
-- Risk tier: 1 (data integrity)
-- Backward compatibility
-- Performance budgets
-- Budget: 40 files, 1500 lines
-
-### CLI Tool
-
-```bash
-caws init my-cli --template=cli
+```yaml
+risk_tier: T3          # low risk
+change_budget:
+  max_files: 15
+  max_loc: 600
 ```
 
-**Optimized for:**
-
-- Risk tier: 3 (low risk)
-- Error handling
-- Help text and UX
-- Budget: 15 files, 600 lines
+(v11.1 may reintroduce project templates as a separate `caws templates` surface. For now, copy the snippets above into your spec.)
 
 ---
 
@@ -959,9 +970,9 @@ du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
 
 **A: Create one.** Before any implementation:
 
-1. Create `.caws/working-spec.yaml`
-2. Fill in all required fields
-3. Run `caws validate --suggestions`
+1. Create `.caws/specs/<id>.yaml` — author the YAML directly (v11 ships no spec generator)
+2. Fill in all required fields (see existing specs in `.caws/specs/` for shape)
+3. Run `caws doctor` to verify drift / structure
 4. Request human approval
 5. Then implement
 
@@ -984,12 +995,16 @@ Only increase budget with human approval and strong justification.
 3. Human can update lint config if appropriate
 4. Note: `git push --no-verify` is BLOCKED
 
-### Q: Can I commit without updating provenance?
+### Q: How do I record an AI-assisted change in the audit trail?
 
-**A: Hooks do it automatically.** If hooks are installed, provenance updates on every commit. If hooks aren't installed:
+**A: Use `caws evidence record`.** v11 has no `caws provenance` or `caws hooks install` — the hash-chained `.caws/events.jsonl` is the audit surface. Record evidence per AC closure or test result:
 
-1. Install them: `caws hooks install`
-2. Or manually update: `caws provenance update`
+```bash
+caws evidence record --type ac --spec <id> \
+  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code"}'
+```
+
+The store appends a hash-chained event. There is no separate provenance file to maintain.
 
 ---
 
@@ -1005,7 +1020,7 @@ Only increase budget with human approval and strong justification.
 
 - **Getting Started**: `.caws/GETTING_STARTED.md` - Generated per project
 - **Templates**: `.caws/templates/` - Feature plans, test plans, PR templates
-- **Examples**: `.caws/examples/` - Working spec examples
+- **Examples**: `.caws/examples/` - feature spec examples
 
 ### Cursor Rules
 
@@ -1018,7 +1033,7 @@ Only increase budget with human approval and strong justification.
 
 Before starting any work:
 
-- [ ] Working spec exists and validates
+- [ ] feature spec exists and validates
 - [ ] Risk tier is appropriate
 - [ ] Acceptance criteria are clear
 - [ ] Scope boundaries are defined
@@ -1043,7 +1058,7 @@ Before submitting PR:
 - [ ] Contracts validate (if applicable)
 - [ ] Performance budgets met
 - [ ] No secret scan violations
-- [ ] Provenance updated
+- [ ] Evidence recorded for each AC closure (`caws evidence record --type ac --spec <id>`)
 
 **Questions?** Check the full guide or ask your human collaborator.
 

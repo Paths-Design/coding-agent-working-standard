@@ -1,408 +1,159 @@
-# CAWS CLI
+# @paths.design/caws-cli
 
-**Command Line Interface for CAWS (Coding Agent Workflow System)**
+**CAWS CLI v11.0.0 — the governed core for the Coding Agent Workflow System.**
 
-The CAWS CLI is the primary interface for developers and agents to interact with CAWS quality assurance and workflow management capabilities. It provides comprehensive project scaffolding, validation, and management tools.
+CAWS (Coding Agent Workflow System) gives coding agents a deterministic
+substrate for project state, scope, claims, gates, waivers, and audit
+evidence. v11.0.0 is a ground-up rewrite around a pure kernel, an I/O
+store, and a thin shell. It replaces v10.x.
 
-## Overview
+## What v11 ships
 
-The CAWS CLI serves as the central control point for:
+Exactly eight command groups. Nothing else.
 
-- **Project Initialization**: Scaffold new projects with CAWS quality gates
-- **Quality Validation**: Run comprehensive validation against working specifications
-- **Agent Integration**: Programmatic APIs for AI agents to evaluate and guide development
-- **Waiver Management**: Fast-lane escape hatches with full audit trails
-- **Quality Gates**: v2 pipeline with configurable gate modules
-- **Session Management**: Track and manage agent work sessions
+| Command | What it does |
+|---|---|
+| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. |
+| `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
+| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates `.caws/`. |
+| `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
+| `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 on admit, 1 on refuse. |
+| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. |
+| `caws gates run --spec <id>` | Run quality gates against current changes. Policy decides block/warn/skip. Appends one `gate_evaluated` event per policy-declared gate. |
+| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
+| `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+
+Run `caws <group> --help` for full options.
+
+## Posture: what v11 does NOT ship
+
+v11.0.0 is the **governed core**. It is not a complete lifecycle CLI.
+The following commands existed in v10.2.x and are **removed** in v11:
+
+- `caws scaffold` — installed legacy templates and git hooks.
+- `caws validate`, `caws verify-acs`, `caws evaluate`, `caws iterate`,
+  `caws diagnose`, `caws burnup` — used legacy spec resolution
+  (`working-spec.yaml` fallback) and a parallel event-log writer.
+- `caws specs`, `caws worktree`, `caws archive`, `caws parallel` —
+  spec/worktree lifecycle (returns in v11.1).
+- `caws provenance`, `caws hooks` — superseded by `.caws/events.jsonl`
+  and `caws gates run`. Generated git hooks called the removed
+  commands.
+- `caws sidecar`, `caws mode`, `caws tutorial`, `caws plan`,
+  `caws agents`, `caws session`, `caws templates`, `caws workflow`,
+  `caws quality-monitor`, `caws tool`, `caws test-analysis` —
+  peripherals not part of the governed core under A1.
+
+If your project depends on the legacy spec or worktree lifecycle
+commands, **pin to `caws-cli@^10.2.x` until v11.1 ships** vNext
+lifecycle commands. The two CLIs cannot coexist on the same project —
+they write to overlapping state.
+
+See `docs/architecture/caws-vnext-command-surface.md` in the repo for
+the complete cutover doctrine, removal table, and architectural
+invariants.
 
 ## Installation
 
-### Global Installation (Recommended)
+```bash
+npm install -g @paths.design/caws-cli@^11.0.0
+```
+
+The package depends on `@paths.design/caws-kernel@^1.0.0` (the pure
+governance primitives). Both are published independently; the kernel
+is published first and the CLI second.
+
+Requires Node.js >= 18.
+
+## Quickstart
+
+In a fresh repo:
 
 ```bash
-npm install -g @paths.design/caws-cli
+git init
+caws init
 ```
 
-### Local Development
+`caws init` creates the canonical vNext layout:
+
+```
+.caws/
+  specs/                  # per-feature specs (.caws/specs/<id>.yaml)
+  waivers/                # waiver records (.caws/waivers/<id>.yaml)
+  policy.yaml             # gate block/warn/skip policy
+  worktrees.json          # worktree registry
+  agents.json             # agent session registry
+  # events.jsonl is created on first append; never required at rest.
+```
+
+It refuses to run if legacy `.caws/working-spec.yaml` is present.
+Migrate that file into per-feature `.caws/specs/<id>.yaml` first (or
+do the migration on `caws-cli@10.2.x` and then upgrade).
+
+Then:
 
 ```bash
-# Clone the CAWS monorepo
-git clone https://github.com/paths-design/caws.git
-cd caws
-
-# Install dependencies
-npm install
-
-# Build all packages
-npm run build
-
-# Use locally
-node packages/caws-cli/dist/index.js --help
+caws doctor                  # health check (exit 0/1/2)
+caws status                  # dashboard
+caws scope show src/foo.ts   # what scope says about src/foo.ts
+caws gates run --spec FEAT-1 # run policy-driven gates
+caws waiver create FOO-1 \
+  --title "Temporary waiver for X" \
+  --gate budget_limit \
+  --reason "..." \
+  --approved-by "team-lead" \
+  --expires-at "2026-12-01T00:00:00Z"
+caws evidence record \
+  --type test --spec FEAT-1 \
+  --data '{"name":"unit","status":"pass"}'
 ```
 
-## Core Commands
-
-### Project Management
-
-```bash
-# Initialize a new CAWS project
-caws init my-project
-
-# Add CAWS to existing project
-caws scaffold
-
-# Validate working specification
-caws validate
-
-# Get help
-caws --help
-```
-
-### Agent Integration
-
-```bash
-# Evaluate work quality (JSON output for agents)
-caws agent evaluate .caws/working-spec.yaml
-
-# Get iterative development guidance
-caws agent iterate --current-state "Started implementation" .caws/working-spec.yaml
-```
-
-### Waiver Management
-
-```bash
-# Create a waiver for exceptional circumstances
-caws waivers create \
-  --title "Emergency security fix" \
-  --reason emergency_hotfix \
-  --gates coverage_threshold \
-  --expires-at "2025-11-01T00:00:00Z" \
-  --approved-by "security-team"
-
-# List active waivers
-caws waivers list
-
-# Revoke a waiver
-caws waivers revoke WV-0001
-```
-
-### Quality Gates
-
-```bash
-# Run quality gates v2 pipeline
-caws gates run
-
-# Run legacy quality gates
-caws quality-gates
-```
-
-### Worktree Management
-
-```bash
-# Create an isolated worktree for parallel agent work
-caws worktree create <name>
-
-# List active worktrees
-caws worktree list
-
-# Merge a completed worktree back to base
-caws worktree merge <name>
-
-# Destroy a worktree
-caws worktree destroy <name>
-
-# Bind a spec to a worktree (fixes authoritative scope mode)
-caws worktree bind <spec-id>
-
-# Repair registry inconsistencies
-caws worktree repair
-```
-
-### Scope Management
-
-```bash
-# Inspect effective scope boundaries, mode, and binding health
-caws scope show
-```
-
-### Session Management
-
-```bash
-# Start a tracked session
-caws session start
-
-# Create a session checkpoint
-caws session checkpoint
-
-# End a session
-caws session end
-
-# List past sessions
-caws session list
-```
-
-### Spec Management
-
-```bash
-# List all specs (project + feature)
-caws specs list
-
-# Create a feature spec
-caws specs create FEAT-001 --type feature --title "description"
-
-# Show a spec
-caws specs show FEAT-001
-
-# Check for scope conflicts between specs
-caws specs conflicts
-```
-
-### Tool Management
-
-```bash
-# Run the CAWS tool interface
-caws tool
-```
-
-## Architecture
-
-The CLI is built with a modular architecture:
-
-```
-caws-cli/
-├── src/
-│   ├── index.js           # Main CLI entry point
-│   ├── waivers-manager.js # Waiver system implementation
-│   ├── quality-gates/     # v2 gate modules
-│   └── tool-loader.js     # Dynamic tool loading system
-├── templates/             # Project templates
-└── dist/                  # Compiled output
-```
-
-### Key Components
-
-- **Command Parser**: Commander.js-based CLI with subcommands
-- **Tool System**: Dynamic loading of quality gate tools
-- **Waiver Manager**: Fast-lane escape hatch management
-- **Quality Gates v2**: Modular gate pipeline with configurable modules
-- **Agent Interface**: JSON APIs for programmatic agent integration
-
-## Integration with CAWS Ecosystem
-
-### Relationship to Other Packages
-
-```
-┌─────────────────┐    ┌──────────────────┐
-│   caws-cli      │────│  caws-template   │
-│   (Commands)    │    │  (Tools & Config)│
-└─────────────────┘    └──────────────────┘
-        │                       │
-        └───────────────────────┘
-                │
-```
-
-- **caws-template**: Provides the tools and configurations that CLI manages
-
-### Quality Gates Integration
-
-The v2 quality gates pipeline (`caws gates run`) executes modular gate checks:
-
-1. **Spec Validation**: Validates working specifications against schema (mode, blast_radius, rollback SLO)
-2. **Security Scanning**: Runs security checks and secret detection
-3. **Scope Enforcement**: Verifies changes stay within spec-defined boundaries
-4. **Test & Coverage**: Runs tests and validates coverage thresholds per risk tier
-5. **Performance Checks**: Validates performance budgets and metrics
-
-Gates can be configured per-spec with `mode` (block/warn/skip) and custom `thresholds` in policy.yaml.
-
-### Agent Workflow Integration
-
-The CLI provides structured APIs for agents:
-
-```javascript
-// Agent can evaluate work quality
-const result = await runCommand('caws agent evaluate spec.yaml');
-// Returns: { success: true, evaluation: { quality_score: 0.85, ... } }
-
-// Agent can get guidance for next steps
-const guidance = await runCommand('caws agent iterate --current-state "..." spec.yaml');
-// Returns: { guidance: "...", next_steps: [...], confidence: 0.8 }
-```
-
-## Configuration
-
-### Working Specifications
-
-Projects use `.caws/working-spec.yaml` files:
-
-```yaml
-id: PROJ-001
-title: 'Feature implementation'
-risk_tier: 2
-mode: feature
-change_budget:
-  max_files: 25
-  max_loc: 1000
-acceptance:
-  - id: 'A1'
-    given: 'Current state'
-    when: 'Feature implemented'
-    then: 'Expected behavior'
-```
-
-### Tool Configuration
-
-Tools are configured in `apps/tools/caws/` directory with metadata:
-
-```javascript
-// Tool metadata
-{
-  id: 'validate',
-  name: 'Working Spec Validator',
-  capabilities: ['validation', 'quality-gates'],
-  version: '1.0.0'
-}
-```
-
-## Development
-
-### Building
-
-```bash
-cd packages/caws-cli
-npm run build    # Compile TypeScript
-npm run dev      # Development with watch
-npm run lint     # Run ESLint
-npm run test     # Run tests
-```
-
-### Adding New Commands
-
-1. Add command implementation in `src/index.js`
-2. Update help text and option parsing
-3. Add integration tests
-4. Update documentation
-
-### Tool Development
-
-Tools follow a standardized interface:
-
-```javascript
-class MyTool extends BaseTool {
-  getMetadata() {
-    return {
-      id: 'my-tool',
-      name: 'My Custom Tool',
-      capabilities: ['validation'],
-      version: '1.0.0',
-    };
-  }
-
-  async executeImpl(parameters, context) {
-    // Tool logic here
-    return { success: true, output: result };
-  }
-}
-```
-
-## Testing
-
-### Test Categories
-
-- **Unit Tests**: Individual command and component testing
-- **Integration Tests**: End-to-end command workflows
-- **Contract Tests**: API compatibility testing
-- **Quality Gate Tests**: Tool execution and validation
-
-### Running Tests
-
-```bash
-npm run test              # All tests
-npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests
-npm run test:contract     # Contract tests
-```
-
-## Security
-
-### Tool Validation
-
-- All tools are validated against allowlists
-- Security scanning prevents malicious tool execution
-- Sandboxed execution environment
-- Audit trails for all tool usage
-
-### Waiver Security
-
-- Waivers require explicit approval and justification
-- Time-limited validity prevents permanent bypasses
-- Audit logs track all waiver usage
-- High-risk waivers trigger review processes
-
-## Troubleshooting
-
-### Common Issues
-
-**Command not found**
-
-```bash
-# Ensure global installation
-npm install -g @paths.design/caws-cli
-caws --version
-
-# Or use local installation
-node packages/caws-cli/dist/index.js --help
-```
-
-**Tool loading errors**
-
-```bash
-# Check tool directory structure
-ls -la apps/tools/caws/
-
-# Validate tool metadata
-caws tools list
-
-# Check tool permissions
-chmod +x apps/tools/caws/*.js
-```
-
-**Validation failures**
-
-```bash
-# Check working spec syntax
-caws validate --suggestions .caws/working-spec.yaml
-
-# Auto-fix common issues
-caws validate --auto-fix .caws/working-spec.yaml
-```
+## Architecture (v11)
+
+Three layers:
+
+1. **Kernel** (`@paths.design/caws-kernel`) — pure TypeScript. Spec
+   parsing, policy validation, scope evaluation, doctor inspection,
+   waiver effectiveness, hash-chained event verification. No `fs`,
+   `path`, `process.env`, `Date.now()`, or `new Date()` in executable
+   code; all time is injected.
+2. **Store** — Node I/O. Atomic writes via `writeFileAtomic`,
+   hash-chained `events.jsonl` via lock + `prepareAppend`,
+   snapshot composition for the doctor, `working-spec.yaml` residue
+   detection.
+3. **Shell** — Commander commands and renderers. Composes store
+   snapshots, calls kernel functions, prints diagnostics.
+
+### Architectural invariants
+
+1. `events.jsonl` is written ONLY through the store's `appendEvent`.
+2. `policy.yaml` owns gate `mode` (block/warn/skip). Waivers filter
+   violations out of the disposition; they do not change gate mode.
+3. Doctor is pure (kernel-side). The store composes the snapshot;
+   doctor inspects it.
+4. Missing != malformed. Diagnostics distinguish absence from
+   corruption.
+5. `events.jsonl` is never required at rest. The first `appendEvent`
+   creates it.
+6. `caws init` is idempotent and non-destructive. It refuses legacy
+   residue. There is no `--force`.
+7. `caws status` is observability. Running it any number of times
+   produces no `.caws/` byte changes.
+
+## Exit codes
+
+- `0` — success / observation.
+- `1` — domain failure (gate failed, doctor finding, validation
+  rejected, scope refused).
+- `2` — composition failure (not a git repo, can't read `.caws/`,
+  missing required tooling).
 
 ## Contributing
 
-### Code Standards
-
-- Use async/await for asynchronous operations
-- Provide comprehensive error handling
-- Include detailed help text for all commands
-- Write tests for new functionality
-- Update documentation for API changes
-
-### Pull Request Process
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Update documentation
-6. Submit pull request with working spec
+The CAWS repo self-hosts: `.caws/` drives real quality gates on this
+codebase. See the project repository for contributing guidelines and
+the agent workflow guide.
 
 ## License
 
-MIT License - see main project LICENSE file.
-
-## Links
-
-- **Main Project**: https://github.com/Paths-Design/coding-agent-working-standard
-- **Documentation**: https://docs.paths.design
-- **Issues**: https://github.com/Paths-Design/coding-agent-working-standard/issues
-- **Discussions**: https://github.com/Paths-Design/coding-agent-working-standard/discussions
+MIT

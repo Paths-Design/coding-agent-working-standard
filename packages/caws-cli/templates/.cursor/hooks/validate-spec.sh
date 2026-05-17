@@ -1,7 +1,7 @@
 #!/bin/bash
 # Cursor Hook: CAWS Spec Validation
 # 
-# Purpose: Validate working-spec.yaml when it's edited
+# Purpose: Validate per-feature specs under .caws/specs/ when they're edited
 # Event: afterFileEdit
 # 
 # @author @darianrosebrook

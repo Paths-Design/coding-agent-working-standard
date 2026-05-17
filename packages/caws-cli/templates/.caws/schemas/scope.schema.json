@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CAWS Lite Scope Configuration",
-  "description": "Scope configuration for CAWS lite mode — guardrails without YAML specs. This schema governs the standalone .caws/scope.json file ONLY; inline scope: blocks inside working-spec.yaml or feature specs are governed by the working-spec schema's scope sub-schema and do NOT invoke this schema. See CAWSFIX-11.",
+  "description": "Scope configuration for CAWS lite mode — guardrails without YAML specs. This schema governs the standalone .caws/scope.json file ONLY; inline scope: blocks inside feature specs under .caws/specs/ are governed by the feature-spec schema's scope sub-schema and do NOT invoke this schema. See CAWSFIX-11.",
   "type": "object",
   "required": ["allowedDirectories"],
   "properties": {

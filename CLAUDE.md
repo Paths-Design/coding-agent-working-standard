@@ -2,73 +2,82 @@
 
 Project-specific guidance for Claude Code agents working on the CAWS repository.
 
-## This repo self-hosts
+## This repo self-hosts (and is mid-cutover)
 
-CAWS (Coding Agent Workflow System) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase. Follow CAWS protocol, not free-form edits.
+CAWS (Coding Agent Workflow System) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
+
+The repo is currently on the `caws-next` branch, completing the **v11.0.0 cutover** (vNext rewrite — pure kernel, I/O store, thin shell). Until cutover (slice 8d), `main` still runs the legacy v10.x surface and `caws-next` runs the v11 surface. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (posture A1) and §6 (invariants) before making decisions.
+
+## v11 ships exactly eight command groups (A1 posture)
+
+```
+init  doctor  status  scope  claim  gates  evidence  waiver
+```
+
+Everything else (specs, worktree, validate, verify-acs, evaluate, iterate, diagnose, burnup, provenance, hooks, scaffold, agents, parallel, sidecar, mode, tutorial, plan, workflow, quality-monitor, tool, test-analysis, session, templates) is **removed in v11**. Spec/worktree lifecycle returns in v11.1. Projects needing it today pin to `caws-cli@^10.2.x`.
+
+When working on `caws-next`, do not invoke removed commands as if they were current. They are gone from the v11 entry point and will fail with a `command not found` style error.
 
 ## Before you start
 
-1. Check current state: `caws specs list` — see active specs
-2. Check conflicts: `caws specs conflicts` — before editing scope-shared areas
-3. Check for active agent claims: `caws agents list` — surfaces any other sessions registered in `.caws/agents.json` with their bound worktree/spec. Run `caws status` from inside a worktree to see the Claim panel. Don't take over a worktree owned by another session id without confirmation.
-4. If working in parallel with other agents, use a worktree (`caws worktree create <name>` or `caws parallel setup <plan.yaml>`)
+1. **Confirm which branch you're on.** `caws-next` (vNext, v11 surface) vs. `main` (legacy, v10 surface). Behavior differs.
+2. **On `caws-next`:** run `caws status` and `caws doctor`. The `claim` panel surfaces worktree ownership; doctor surfaces drift.
+3. **On `main` (legacy):** the v10 commands (specs, worktree, agents, parallel) are still active.
+4. If working in parallel with another agent: create a git worktree externally (`git worktree add`); v11 does not ship the legacy `caws worktree create` orchestration. `caws claim` registers the worktree; `caws claim --takeover` acquires it from a foreign session.
 
-## Spec workflow
+## v11 spec workflow (replacement, not migration)
 
-- **Never edit `.caws/working-spec.yaml` directly.** That's the project baseline. Create a feature spec at `.caws/specs/<ID>.yaml` instead:
-  ```bash
-  caws specs create <id> --type feature --title "..."
-  caws validate --spec-id <id>
-  ```
-- **Always pass `--spec-id`** on `caws validate|iterate|evaluate|verify-acs|status` — otherwise commands may target the wrong spec.
-- Acceptance criteria use Given/When/Then format (see `.caws/specs/EVLOG-002.yaml` for reference shape).
-- `contracts: []` is accepted but discouraged for `mode=feature`.
+- Specs live at `.caws/specs/<id>.yaml`. There is no project-level working spec.
+- v11 does **not** ship `caws specs create` / `caws validate`. Author the YAML directly; `caws doctor` and `caws gates run --spec <id>` are the validation surface in v11.
+- Acceptance criteria use Given/When/Then format (see existing specs in `.caws/specs/` for the shape).
+
+If you need legacy spec ergonomics today, pin `caws-cli@^10.2.x` and use `caws specs create / validate` there. Do not mix the two CLIs in one project.
 
 ## Governed paths (require special handling)
 
-Per `.caws/agent-operating-spec.yaml`:
+- `.caws/policy.yaml` — owns gate `mode` (block/warn/skip). Waivers filter violations; they do not change gate mode.
+- `CODEOWNERS` — reviewer routing.
+- `change_budget` keys in any spec YAML — use waivers, not edits.
+- Pre-commit hooks — do not bypass with `--no-verify`.
 
-- `.caws/policy.yaml` — CI requires 2 approvals + path discipline (no code changes in the same PR)
-- `CODEOWNERS` — reviewer routing, do not edit casually
-- `change_budget` keys in any spec YAML — blocked by CI; use waivers instead
-- Pre-commit hooks — do not bypass with `--no-verify`
-
-Legitimate escape: `caws waivers create --reason=<code> --gates=<list> --expires-at=<iso8601>`.
+Legitimate escape: `caws waiver create <id> --gate <gate> --reason "..." --approved-by "..." --expires-at <iso8601>` (singular `waiver`, not plural `waivers`).
 
 ## Worktree discipline
 
-When worktrees are active:
+When git worktrees are active for parallel agent work:
 
-- Work only in your assigned worktree
-- Use the main repo's venv (`source <main-repo>/.venv/bin/activate`), not a per-worktree one
-- Commits to the base branch during active worktrees must use the `merge(worktree):` format (enforced by commit-msg hook)
-- On completion: `caws worktree destroy <name>` → `git checkout main` → `git merge --no-ff caws/<name>`
-
-**Foreign claim soft-block (CAWSFIX-31/32):** `caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal prints the claimer as `<sessionId>:<platform>`, the heartbeat age, any `tmp/<sessionId>/` session-log path, and the exact `--takeover` command. Read the session log first; only take over when you have authorization. Takeover writes a durable `prior_owners` audit on the worktree entry.
+- Work only in your assigned worktree.
+- Use the main repo's venv (`source <main-repo>/.venv/bin/activate`), not a per-worktree one.
+- Commits to the base branch during active worktrees should use the `merge(worktree):` format.
+- `caws claim` shows worktree ownership; `caws claim --takeover` acquires it from a foreign session and writes a durable `prior_owners` audit.
+- v11 does not ship orchestration commands for worktree create/destroy/merge — use `git worktree` directly. Lifecycle helpers return in v11.1.
 
 See `.claude/rules/worktree-isolation.md` for the full list.
 
-## Commands you'll use
+## v11 commands you'll use
 
-- `caws validate --spec-id <id>` — schema validation
-- `caws gates run --context cli|commit` — quality gates (cli context skips budget — it applies to diffs, not the whole repo)
-- `caws verify-acs --spec-id <id>` — check ACs against tests
-- `caws iterate --spec-id <id>` — iteration guidance
-- `caws status [--visual] [--spec-id <id>]` — project health (includes Claim panel when cwd is inside a worktree)
-- `caws specs conflicts` — scope overlap check
-- `caws specs archive <id>` — move a closed spec to `.caws/specs/.archive/` (canonical archive location, surfaced as `archived` by `caws specs list`)
-- `caws agents list | show <id>` — inspect registered agents and their session-log pointers
-- `caws worktree claim <name> [--takeover]` — read-only by default; `--takeover` records the prior owner in a durable `prior_owners` audit
+- `caws init` — bootstrap canonical `.caws/` (idempotent; refuses legacy single-spec residue; no `--force`)
+- `caws doctor` — drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure)
+- `caws status` — read-only dashboard. Always observability — never mutates `.caws/`
+- `caws scope show <path>` — explain the scope decision for `<path>`
+- `caws scope check <path>` — enforce the scope decision (exits 0 admit / 1 refuse)
+- `caws claim [--takeover]` — surface or take ownership of the current worktree
+- `caws gates run --spec <id>` — run policy-driven quality gates; appends one `gate_evaluated` event per declared gate
+- `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event
+- `caws waiver create | list | show | revoke` — manage waiver records (singular, no plural alias)
+
+Run `caws <group> --help` for full options.
 
 ## Test suite
 
-- Fast gate: `npm run test:fast`
-- CLI tests: `cd packages/caws-cli && npx jest` (invoke directly — the top-level `test:fast` script occasionally gets swallowed by zsh completion noise)
+- CLI tests (vNext shell + store): `cd packages/caws-cli && npx jest`
+- Kernel tests: `cd packages/caws-kernel && npm test`
 - Per `/Users/darianrosebrook/.claude/CLAUDE.md` session protocol: interpret pass counts critically, cite specific assertion evidence, call out false-confidence risks.
 
 ## References
 
+- `docs/architecture/caws-vnext-command-surface.md` — **doctrine source**: A1 posture, kept commands, removed commands, invariants
 - `AGENTS.md` — full agent quickstart (in-repo)
-- `docs/agents/full-guide.md` — comprehensive agent workflow
+- `docs/agents/full-guide.md` — comprehensive agent workflow (note: post-8c.1 cleanup may still contain v10 historical context — cross-reference the doctrine doc)
 - `.claude/rules/` — git safety + worktree isolation rules (already loaded by Claude Code)
 - `docs/internal/claude-code-cross-analysis.md` — how CAWS compares to Claude Code's runtime harness

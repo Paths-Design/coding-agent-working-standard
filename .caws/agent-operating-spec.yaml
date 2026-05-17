@@ -6,7 +6,7 @@ version: 1
 
 # Core behavioral invariants - agents MUST follow these
 invariants:
-  - "Agents MUST NOT edit .caws/policy.yaml or introduce change_budget keys in working-spec.yaml"
+  - "Agents MUST NOT edit .caws/policy.yaml or introduce change_budget keys in any spec under .caws/specs/"
   - "Agents MUST NOT bypass CAWS quality gates without creating proper waivers"
   - "Agents MUST pause and request human approval for any scope expansion beyond derived budget"
   - "Agents MUST maintain audit trail transparency in all CAWS-related actions"
@@ -50,7 +50,7 @@ emergency_override:
 
 # Quality gate compliance matrix
 quality_gates:
-  working_spec_validation: "MUST pass before any code changes"
+  spec_validation: "MUST pass before any code changes (per-feature spec under .caws/specs/)"
   budget_compliance: "MUST be within derived limits or have active waiver"
   path_discipline: "Policy changes isolated from code changes"
   dual_control: "Policy/waiver changes require multiple approvals"

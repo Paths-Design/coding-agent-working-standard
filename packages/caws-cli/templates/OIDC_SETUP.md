@@ -258,7 +258,7 @@ For CAWS projects, OIDC setup integrates with:
 ### CAWS-Specific Configuration
 
 ```yaml
-# .caws/working-spec.yaml
+# .caws/specs/<spec-id>.yaml
 non_functional:
   security:
     - 'oidc-authentication'

@@ -518,7 +518,7 @@ caws verify-acs --spec-id <id>
 ### CAWS Quality Gates
 
 ```yaml
-# In .caws/working-spec.yaml
+# In .caws/specs/<spec-id>.yaml
 quality_gates:
   complexity:
     max_cyclomatic: 10

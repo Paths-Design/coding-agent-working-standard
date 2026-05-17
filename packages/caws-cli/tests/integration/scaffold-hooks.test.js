@@ -148,6 +148,12 @@ describe('scaffold --ide claude hooks', () => {
       ).toBe(true);
     });
 
+    test('creates reset-danger-latch.sh (supporting script)', () => {
+      expect(
+        fs.existsSync(path.join(testDir, '.claude', 'hooks', 'reset-danger-latch.sh'))
+      ).toBe(true);
+    });
+
     // --- Hook script content validation ---
 
     test('hook scripts have bash shebang', () => {

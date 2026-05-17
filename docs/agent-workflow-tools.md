@@ -1,419 +1,164 @@
-# CAWS Agent Workflow Tools Guide
+---
+doc_id: agent-workflow-tools
+authority: reference
+status: active
+title: Agent workflow tools (v11.0.0)
+owner: vNext rewrite team
+updated: 2026-05-15
+---
 
-This guide shows agents how to use CAWS tools to navigate quality gates and achieve their objectives without violating guardrails.
+# Agent workflow tools (v11.0.0)
 
-## When You Get Blocked: Actionable Solutions
+This guide shows agents how to use the v11.0.0 CAWS surface to navigate quality gates and recover from common blocks. The full CLI reference is at [`docs/api/cli.md`](api/cli.md); the doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md).
 
-### **Block: "Cannot edit .caws/policy.yaml"**
+> **v11 surface only.** This doc references exactly the eight v11 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed. Pin to `caws-cli@^10.2.x` if you need them today.
 
-**Why blocked**: Policy files require human dual-control to prevent silent bypass.
+## When you get blocked
 
-**Approved workflow**:
+### Block: a gate is failing on `caws gates run --spec <id>`
+
+**Why blocked:** policy declares the gate as `block`, and your changes don't satisfy it.
+
+**Approved workflow:**
 
 ```bash
-# 1. Check current budget status
-caws burnup
+# 1. Inspect what's failing
+caws gates run --spec <id>          # exit 1 + diagnostic output
 
-# 2. Create a waiver for budget exception
-caws waivers create \
-  --title="Budget exception for [describe work]" \
-  --reason=architectural_refactor \
-  --description="Detailed explanation of why budget increase needed" \
-  --gates=budget_limit \
-  --expires-at="2025-12-31T23:59:59Z" \
-  --approved-by="developer-name" \
-  --impact-level=medium \
-  --mitigation-plan="How you'll address the underlying issue"
+# 2. Either fix the underlying issue, or open a waiver
+caws waiver create <id>-w \
+  --gate <gate-name> \
+  --reason "Why the violation is acceptable + mitigation plan" \
+  --approved-by "approver@example.com" \
+  --expires-at "2026-12-31T23:59:59Z"
 
-# 3. Reference waiver in working spec
-# Edit .caws/working-spec.yaml and add:
-waiver_ids: ["WV-XXXX"]  # Replace with actual waiver ID
-
-# 4. Validate your changes
-caws validate .caws/working-spec.yaml
+# 3. Re-run gates — the violation is now filtered out of the disposition
+caws gates run --spec <id>
 ```
+
+Waivers do not change gate `mode` (block/warn/skip). They filter matching violations out of the run's disposition. Gate mode lives in `.caws/policy.yaml` and is governed (CI requires dual control to edit).
 
 ---
 
-### **Block: "Cannot add change_budget to working-spec.yaml"**
+### Block: `caws scope check <path>` returned 1
 
-**Why blocked**: Budgets must be derived from policy, not directly editable.
+**Why blocked:** the file is not in your spec's `scope.in`.
 
-**Approved workflow**:
+**Approved workflow:**
 
 ```bash
-# 1. Check current budget vs usage
-caws burnup
+# 1. Confirm the decision and see why
+caws scope show <path>
 
-# 2. Create waiver if over budget
-caws waivers create \
-  --title="Scope expansion for [feature]" \
-  --reason=architectural_refactor \
-  --gates=budget_limit \
-  --delta-max-files=10 \
-  --delta-max-loc=1000 \
-  --expires-at="2025-12-31T23:59:59Z"
+# 2. If the file genuinely belongs in scope, edit your spec's scope.in
+$EDITOR .caws/specs/<id>.yaml          # add the path / glob
 
-# 3. Add waiver reference to spec
-# In .caws/working-spec.yaml:
-waiver_ids: ["WV-XXXX"]
-
-# 4. Validate and proceed
-caws validate .caws/working-spec.yaml
+# 3. Re-check
+caws scope check <path>
 ```
+
+If the path is genuinely out of scope but you must touch it (rare — usually means the spec was scoped wrong), open a waiver against the scope gate as configured in `policy.yaml`.
 
 ---
 
-### **Block: "File access outside CAWS scope"**
+### Block: a foreign session owns the worktree
 
-**Why blocked**: Work must stay within defined scope boundaries.
+**Why blocked:** another agent's session id is recorded as the owner of this worktree in `.caws/worktrees.json`. v11 enforces session-id equality before allowing mutations.
 
-**Approved workflow**:
+**Approved workflow:**
 
 ```bash
-# 1. Check current scope definition
-caws validate .caws/working-spec.yaml
+# 1. Inspect — read-only
+caws claim
+# prints: <sessionId>:<platform>, last heartbeat age, tmp/<sessionId>/ session-log path
 
-# 2. Option A: Update scope in working spec
-# Edit .caws/working-spec.yaml scope.in array to include needed files
+# 2. Read the prior session's log first (it may be paused, not dead)
+ls tmp/<sessionId>/
 
-# Option B: Create scope waiver
-caws waivers create \
-  --title="Scope expansion for [file/directory]" \
-  --reason=architectural_refactor \
-  --gates=scope_boundary \
-  --description="Need access to [specific files] for [reason]"
-
-# 3. Validate scope changes
-caws validate .caws/working-spec.yaml
+# 3. ONLY with explicit user authorization, take over
+caws claim --takeover
+# Writes a durable prior_owners audit on the worktree entry.
 ```
+
+A stale heartbeat is not authorization. Paused sessions are not ended sessions.
 
 ---
 
-### **Block: "Policy + code changes in same PR"**
+### Block: `caws init` refuses to run
 
-**Why blocked**: Governance changes must be isolated and approved separately.
+**Why blocked:** legacy `.caws/working-spec.yaml` is present. v11 refuses single-spec residue (invariant 6).
 
-**Approved workflow**:
+**Approved workflow:**
 
 ```bash
-# 1. Create separate PR for policy changes
-# Move waiver/policy changes to dedicated PR
+# 1. Migrate the legacy spec into per-feature shape
+$EDITOR .caws/specs/<id>.yaml          # extract content from working-spec.yaml
+rm .caws/working-spec.yaml
 
-# 2. For budget issues, create waiver in separate PR
-caws waivers create \
-  --title="Budget exception" \
-  --reason=architectural_refactor \
-  --gates=budget_limit
-
-# 3. Reference waiver in main work PR
-# In working-spec.yaml of main PR:
-waiver_ids: ["WV-XXXX"]
+# 2. Re-run
+caws init                              # idempotent; will succeed
 ```
+
+Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 
 ---
 
-## Essential CAWS Tools for Agents
+### Block: editing `.caws/policy.yaml` is rejected
 
-### **caws validate** - Check compliance
+**Why blocked:** `policy.yaml` is a governed path. CI requires dual control + path discipline (no code changes in the same PR).
 
-```bash
-# Validate working spec
-caws validate .caws/working-spec.yaml
+**Approved workflow:**
 
-# Check if file is in scope
-caws validate .caws/working-spec.yaml --scope-check "path/to/file"
-```
-
-### **caws burnup** - Budget visibility
-
-```bash
-# See current budget vs usage
-caws burnup
-
-# Output shows:
-# - Baseline budget (from policy)
-# - Effective budget (with waivers)
-# - Current usage percentage
-# - Warnings when approaching limits
-```
-
-### **caws waivers create** - Request exceptions
-
-```bash
-# Full waiver creation
-caws waivers create \
-  --title="Clear description" \
-  --reason=architectural_refactor \
-  --description="Why needed + mitigation" \
-  --gates=budget_limit \
-  --expires-at="2025-12-31T23:59:59Z" \
-  --approved-by="agent-handle"
-```
-
-### **caws evaluate** - Quality assessment
-
-```bash
-# Get structured evaluation
-caws evaluate
-
-# Returns JSON with:
-# - Overall quality score
-# - Specific gate results
-# - Actionable improvement suggestions
-```
-
-### **caws iterate** - Iterative guidance
-
-```bash
-# Get next steps for current work
-caws iterate
-
-# Returns JSON with:
-# - Current status assessment
-# - Recommended next actions
-# - Quality gate status
-```
+1. Open a separate PR for the policy change.
+2. If the underlying motivation is a budget breach, prefer a waiver over a policy edit. Waivers are time-bound and auditable.
 
 ---
 
-## Complete Agent Workflow
+## v11 command cheat sheet
 
-### **Daily Development Loop**:
-
-1. **Start work**: `caws evaluate` to check current status
-2. **Plan changes**: Reference waiver_ids if budget exceptions needed
-3. **Implement**: Stay within scope and budget limits
-4. **Validate**: `caws validate` frequently to catch issues early
-5. **Check budget**: `caws burnup` when approaching complexity limits
-6. **Get guidance**: `caws iterate` for next steps
-7. **Handle blocks**: Use appropriate waiver creation workflow
-
-### **When Budget Issues Arise**:
-
-1. **Assess**: `caws burnup` to understand current vs limit
-2. **Waiver**: `caws waivers create` with proper justification
-3. **Reference**: Add waiver_ids to working spec
-4. **Validate**: `caws validate` to confirm waiver acceptance
-5. **Proceed**: Continue work within new effective budget
-
-### **When Scope Issues Arise**:
-
-1. **Check scope**: `caws validate --scope-check "file"`
-2. **Update spec**: Add needed files to scope.in OR
-3. **Create waiver**: For exceptional scope expansions
-4. **Validate**: Confirm scope compliance
+| Situation | Command |
+|---|---|
+| Health check | `caws doctor` |
+| Dashboard | `caws status` |
+| Explain scope decision | `caws scope show <path>` |
+| Enforce scope decision | `caws scope check <path>` |
+| Inspect worktree claim | `caws claim` |
+| Take over worktree (with authorization) | `caws claim --takeover` |
+| Run quality gates | `caws gates run --spec <id>` |
+| Record test evidence | `caws evidence record --type test --spec <id> --data '{...}'` |
+| Record AC closure | `caws evidence record --type ac --spec <id> --data '{...}'` |
+| Open a waiver | `caws waiver create <id> --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>` |
+| List waivers | `caws waiver list` |
+| Show waiver | `caws waiver show <id>` |
+| Revoke waiver | `caws waiver revoke <id>` |
 
 ---
 
-## Quick Reference Commands
+## Daily agent loop
 
-| Situation             | Command                                      | Purpose                        |
-| --------------------- | -------------------------------------------- | ------------------------------ |
-| Check budget status   | `caws burnup`                                | See usage vs limits            |
-| Validate work         | `caws validate`                              | Check compliance               |
-| Need budget exception | `caws waivers create --gates=budget_limit`   | Request budget waiver          |
-| Need scope exception  | `caws waivers create --gates=scope_boundary` | Request scope waiver           |
-| Get evaluation        | `caws evaluate`                        | Structured quality assessment  |
-| Get next steps        | `caws iterate`                         | Iterative development guidance |
-| Check scope           | `caws validate --scope-check "file"`         | Verify file access             |
+1. **Author the spec** in `.caws/specs/<id>.yaml`. v11 does not ship a spec generator — author the YAML directly.
+2. **Verify scope** with `caws scope check <path>` for each file you intend to touch.
+3. **Implement and test.** Run your project's test suite as usual.
+4. **Record typed evidence** as ACs close: `caws evidence record --type ac --spec <id> --data '{"id":"A1","status":"satisfied"}'`.
+5. **Run gates** with `caws gates run --spec <id>`. If anything blocks, fix or waive.
+6. **Re-check** with `caws doctor` and `caws status` before declaring done.
 
 ---
 
-## Agent Operating Principles
+## Operating principles
 
-1. **Prevention over cure**: Use `caws validate` and `caws burnup` proactively
-2. **Waivers are normal**: Budget/scope exceptions happen - just follow the process
-3. **Dual control**: Policy changes require human approval - respect this
-4. **Transparency**: All exceptions are auditable and time-bound
-5. **Iterative**: Use `caws iterate` to maintain quality throughout work
-
-**Remember**: CAWS tools exist to help you succeed within quality constraints, not to prevent success. The guardrails guide you to the proper path for achieving your objectives safely and sustainably.
+1. **Use observability proactively.** `caws doctor` and `caws status` are free; run them often.
+2. **Waivers are normal.** Time-bound exceptions with an approver are the legitimate escape; hand-editing `change_budget` is not.
+3. **Dual control on governed paths is real.** `policy.yaml`, `CODEOWNERS`, and pre-commit hooks are not yours to silently bypass.
+4. **Transparency by construction.** Every gate evaluation appends a `gate_evaluated` event to `.caws/events.jsonl` (hash-chained). Every takeover writes a `prior_owners` audit.
+5. **Replacement, not migration.** v11 commands are the canonical surface. Don't reach for v10 names; they're gone.
 
 ---
 
-## Advanced Test Analysis (Future Enhancement)
+## See also
 
-### **Vision: Learning Quality System**
-
-**CAWS Test Analysis learns from quality gate failures and waivers to continuously improve budget allocation, test selection, and risk assessment.**
-
-### **What We're Looking For**
-
-#### **Key Outcomes**
-
-- **70-80% accuracy** in predicting budget overruns before they happen
-- **50% reduction** in unnecessary test execution through smart selection
-- **Proactive risk alerts** when similar projects historically needed waivers
-- **Continuous improvement** as the system learns from each quality gate violation
-
-#### **Example User Experience**
-
-```bash
-# Before starting work, get intelligent guidance
-$ caws test-analysis assess-budget --spec .caws/working-spec.yaml
-📊 Budget Assessment for FEAT-0123 (Tier 2)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Historical Analysis: 45 similar projects analyzed
-🎯 Recommended Budget: 120 files, 12,000 LOC (+20% buffer)
-💡 Rationale: Similar API features needed 18% extra for comprehensive testing
-⚠️ Risk Factors: Complex state management (80% of overruns)
-✅ Confidence: High (78% prediction accuracy)
-
-# During development, optimize test runs
-$ caws test-analysis select-tests --changes diff.patch --time-budget 5m
-🎯 Smart Test Selection (5min budget)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Priority Tests (85% issue detection rate):
-  ✅ api/user-management.test.js (2.1s, catches 40% of auth bugs)
-  ✅ state/validation.test.js (1.8s, catches 35% of data bugs)
-  ✅ integration/user-flow.test.js (0.9s, catches 25% of flow bugs)
-
-Skipped: 12 low-value tests (saves 3.2min, 2% false negative risk)
-```
-
-### **Core Components**
-
-#### **1. Waiver Pattern Learning Engine**
-
-```javascript
-// What it does: Analyzes waiver history to find systematic patterns
-class WaiverPatternLearner {
-  analyzePatterns(waivers, specs) {
-    return {
-      budget_overruns: {
-        by_feature_type: { api: +25%, ui: +10%, data: +40% },
-        by_tech_stack: { react: +15%, node: +20% },
-        by_team_size: { small: +5%, large: +35% }
-      },
-      common_reasons: [
-        { reason: 'test_coverage', frequency: 0.35, avg_overrun: 1200 },
-        { reason: 'integration_complexity', frequency: 0.28, avg_overrun: 800 }
-      ]
-    };
-  }
-}
-```
-
-#### **2. Project Similarity Matcher**
-
-```javascript
-// What it does: Finds historical projects similar to current work
-class ProjectSimilarityMatcher {
-  findSimilarProjects(currentSpec, historicalSpecs) {
-    return historicalSpecs
-      .map((project) => ({
-        project: project.id,
-        similarity_score: calculateSimilarity(currentSpec, project),
-        budget_accuracy: project.actual_budget / project.allocated_budget,
-        waiver_count: project.waivers.length,
-      }))
-      .filter((p) => p.similarity_score > 0.7)
-      .sort((a, b) => b.similarity_score - a.similarity_score);
-  }
-}
-```
-
-#### **3. Test Effectiveness Scorer**
-
-```javascript
-// What it does: Learns which tests catch which types of issues
-class TestEffectivenessScorer {
-  scoreTests(testResults, waivers) {
-    return testResults.map((test) => ({
-      test: test.name,
-      effectiveness_score: calculateEffectiveness(test, waivers),
-      issue_types_caught: ['auth', 'data', 'performance'],
-      avg_runtime: test.duration,
-      false_positive_rate: test.falsePositives / test.totalRuns,
-    }));
-  }
-}
-```
-
-### **Why This Fits CAWS Big Picture**
-
-#### **1. Closes the Learning Loop**
-
-- **Current CAWS**: Quality gates prevent bad practices
-- **With Analysis**: System learns WHY gates were triggered and prevents similar issues proactively
-- **Result**: Quality gates become smarter over time
-
-#### **2. Addresses Budget Inaccuracy Pain Point**
-
-- **Problem**: Static risk tiers often wrong (±50% accuracy)
-- **Solution**: Statistical analysis of similar projects (±75% accuracy)
-- **Impact**: Fewer waiver requests, better planning
-
-#### **3. Optimizes CI/CD Performance**
-
-- **Problem**: All tests run on every change (slow, expensive)
-- **Solution**: Run only high-value tests based on change type
-- **Impact**: 50% faster feedback loops, lower cloud costs
-
-#### **4. Scales with Team Growth**
-
-- **Small teams**: Basic correlations provide value
-- **Large teams**: Rich historical data enables precise predictions
-- **Enterprise**: Automated budget allocation and risk assessment
-
-### **Implementation Roadmap**
-
-#### **Phase 1: Correlation Analysis (v0.1 - IMPLEMENTED)**
-
-- Waiver pattern analysis (`caws test-analysis analyze-patterns`)
-- Basic project similarity matching (`caws test-analysis find-similar`)
-- Statistical budget predictions (`caws test-analysis assess-budget`)
-- **Target**: 70% prediction accuracy
-- **Status**: Working with waiver data, ready for historical project data
-
-#### **Phase 2: Test Effectiveness (v0.2)**
-
-- Test result correlation with issues found
-- Smart test selection algorithms
-- Runtime optimization
-- **Target**: 50% test time reduction
-
-#### **Phase 3: ML Enhancement (v1.0 - Optional)**
-
-- Neural networks for complex pattern recognition
-- Natural language processing for spec analysis
-- Predictive risk modeling
-- **Target**: 85%+ prediction accuracy
-
-### **Success Metrics**
-
-#### **Quantitative**
-
-- **Prediction Accuracy**: >75% for budget overrun prediction
-- **Test Optimization**: >50% reduction in CI time for equivalent coverage
-- **Waiver Reduction**: >30% fewer waivers through better initial budgets
-
-#### **Qualitative**
-
-- **Developer Experience**: "CAWS predicted our exact budget needs"
-- **Team Velocity**: "CI runs 3x faster with same confidence"
-- **Quality Gates**: "Gates now prevent issues before they happen"
-
-### **Technical Architecture**
-
-#### **Data Sources**
-
-- Waiver history (`.caws/waivers/`)
-- Working specs (`.caws/working-spec.yaml`)
-- Test results (CI artifacts)
-- Git history (change patterns)
-
-#### **Storage Strategy**
-
-- Local JSON files for team data
-- Optional cloud sync for enterprise features
-- Compression for historical archives
-
-#### **Privacy & Security**
-
-- All analysis local-first
-- No code/content sent externally
-- Team controls data sharing
-
-This feature transforms CAWS from a **static quality gate system** into a **learning quality intelligence platform** that gets smarter with every project.
+- [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md) — doctrine source (posture, kept commands, removed commands, invariants)
+- [`docs/api/cli.md`](api/cli.md) — full CLI reference for v11
+- [`AGENTS.md`](../AGENTS.md) — agent quickstart
+- [`docs/guides/waiver-troubleshooting.md`](guides/waiver-troubleshooting.md) — waiver patterns
+- [`docs/guides/worktree-isolation.md`](guides/worktree-isolation.md) — worktree discipline

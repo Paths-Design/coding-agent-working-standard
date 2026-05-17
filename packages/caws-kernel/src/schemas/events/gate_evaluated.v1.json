@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/gate_evaluated.v1.json",
+  "title": "gate_evaluated event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a single gate evaluation. The quality-gates subprocess returns its own JSON; this records the kernel's interpretation of that JSON.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["gate_id", "mode", "result"],
+  "properties": {
+    "gate_id": {
+      "type": "string",
+      "enum": [
+        "budget_limit",
+        "spec_completeness",
+        "scope_boundary",
+        "god_object",
+        "todo_detection"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["block", "warn", "skip"]
+    },
+    "result": {
+      "type": "string",
+      "enum": ["pass", "fail", "skipped"]
+    },
+    "violations": {
+      "type": "array",
+      "description": "Machine-readable violations. Empty when result=pass.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "subject"],
+        "properties": {
+          "rule": { "type": "string", "minLength": 1 },
+          "subject": { "type": "string", "minLength": 1 },
+          "details": { "type": "string" }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Gate-specific scalars (files_changed, loc_changed, etc.). Validated against gate-specific shape, not here.",
+      "additionalProperties": true
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "waived_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of subprocess-reported violations on this gate that an effective waiver suppressed before disposition. 0 when no waivers applied. Always present so downstream consumers can rely on its existence."
+    },
+    "waiver_ids": {
+      "type": "array",
+      "description": "Stable ids of the waivers credited with the suppression on this gate, deduped + sorted. Omitted when waived_count is 0.",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

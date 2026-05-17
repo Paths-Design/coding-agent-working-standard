@@ -9,21 +9,26 @@ risk_tiers:
   "1":
     max_files: 10
     max_loc: 250
-    label: "Critical"
+    description: "Critical"
   "2":
     max_files: 100
     max_loc: 10000
-    label: "Standard"
+    description: "Standard"
   "3":
     max_files: 500
     max_loc: 40000
-    label: "Low Risk"
+    description: "Low Risk"
 
 # Edit rules for policy changes
 edit_rules:
   policy_and_code_same_pr: false
-  min_approvers_for_budget_raise: 2
   require_signed_commits: true
+
+# Waiver-related policy rules. Individual waivers live in .caws/waivers/.
+# `min_approvers_for_budget_raise` migrated here from `edit_rules` under
+# HOST-GOV-001 — v11 schema places waiver controls on the waivers surface.
+waivers:
+  min_approvers_for_budget_raise: 2
 
 # Quality gates — only gates with implementations
 # mode: block (fails commit), warn (advisory), skip (disabled)

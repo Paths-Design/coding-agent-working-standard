@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/test_recorded.v1.json",
+  "title": "test_recorded event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the outcome of running a test command.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["command", "exit_code"],
+  "properties": {
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The exact command that was run."
+    },
+    "exit_code": { "type": "integer" },
+    "nodeids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Specific test node ids that were targeted (jest/vitest/pytest)."
+    },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "skipped": { "type": "integer", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "log_path": {
+      "type": "string",
+      "description": "Optional path to captured stdout/stderr."
+    }
+  }
+}

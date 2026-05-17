@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_archived.v1.json",
+  "title": "spec_archived event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition closed -> archived (filesystem move into .archive/).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from_path", "to_path"],
+  "properties": {
+    "from_path": { "type": "string", "minLength": 1 },
+    "to_path": { "type": "string", "minLength": 1 }
+  }
+}
