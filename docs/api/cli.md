@@ -9,7 +9,7 @@ updated: 2026-05-15
 
 # CAWS CLI API Reference (v11.0.0)
 
-The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Workflow System. v11.0.0 ships exactly eight command groups; everything else has been removed (see [§ Removed in v11](#removed-in-v11)).
+The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. v11.0.0 ships exactly eight command groups; everything else has been removed (see [§ Removed in v11](#removed-in-v11)).
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). When this reference and the doctrine doc disagree, the doctrine doc wins.
 

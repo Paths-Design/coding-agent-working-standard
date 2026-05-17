@@ -2,7 +2,7 @@
 
 ## Security Overview
 
-CAWS (Coding Agent Workflow System) prioritizes security through multiple layers of protection, including tool allowlisting, secret detection, provenance tracking, and comprehensive validation. This document outlines our security practices and vulnerability reporting process.
+CAWS (Coding Agent Working Standard) prioritizes security through multiple layers of protection, including tool allowlisting, secret detection, provenance tracking, and comprehensive validation. This document outlines our security practices and vulnerability reporting process.
 
 ## Security Features
 

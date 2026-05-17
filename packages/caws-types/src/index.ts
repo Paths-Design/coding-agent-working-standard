@@ -1,6 +1,6 @@
 /**
  * @fileoverview CAWS Types - Main Entry Point
- * TypeScript type definitions for CAWS (Coding Agent Workflow System)
+ * TypeScript type definitions for CAWS (Coding Agent Working Standard)
  * @author @darianrosebrook
  */
 

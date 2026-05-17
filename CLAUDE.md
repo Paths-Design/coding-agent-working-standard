@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code agents working on the CAWS repository.
 
 ## This repo self-hosts (and is mid-cutover)
 
-CAWS (Coding Agent Workflow System) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
+CAWS (Coding Agent Working Standard) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
 
 The repo is currently on the `caws-next` branch, completing the **v11.0.0 cutover** (vNext rewrite — pure kernel, I/O store, thin shell). Until cutover (slice 8d), `main` still runs the legacy v10.x surface and `caws-next` runs the v11 surface. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (posture A1) and §6 (invariants) before making decisions.
 

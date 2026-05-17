@@ -1,4 +1,4 @@
-# CAWS — Coding Agent Workflow System
+# CAWS — Coding Agent Working Standard
 
 **A deterministic substrate for project state, scope, claims, gates, waivers, and audit evidence.**
 

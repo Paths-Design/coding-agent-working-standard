@@ -9,7 +9,7 @@ updated: 2026-05-15
 
 # CAWS — Agent Workflow Guide (v11.0.0)
 
-**Coding Agent Workflow System** — engineering-grade operating system for AI-assisted development.
+**Coding Agent Working Standard** — engineering-grade operating system for AI-assisted development.
 
 **Version**: 11.0.0
 **Last Updated**: 2026-05-15

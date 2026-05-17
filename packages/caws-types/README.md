@@ -1,6 +1,6 @@
 # @paths.design/caws-types
 
-TypeScript type definitions for CAWS (Coding Agent Workflow System).
+TypeScript type definitions for CAWS (Coding Agent Working Standard).
 
 ## Installation
 

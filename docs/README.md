@@ -1,6 +1,6 @@
 # CAWS Documentation
 
-This directory contains comprehensive documentation for the CAWS (Coding Agent Workflow System) framework.
+This directory contains comprehensive documentation for the CAWS (Coding Agent Working Standard) framework.
 
 ## Documentation Structure
 

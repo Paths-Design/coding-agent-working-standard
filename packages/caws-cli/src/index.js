@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * @fileoverview CAWS CLI - Scaffolding tool for Coding Agent Workflow System
+ * @fileoverview CAWS CLI - Scaffolding tool for Coding Agent Working Standard
  * Provides commands to initialize new projects and scaffold existing ones with CAWS.
  * Includes spec management, quality gates, and AI-assisted development workflows.
  * @author @darianrosebrook
@@ -39,7 +39,7 @@ const program = new Command();
 
 program
   .name('caws')
-  .description('CAWS - Coding Agent Workflow System CLI')
+  .description('CAWS - Coding Agent Working Standard CLI')
   .version(CLI_VERSION)
   .showHelpAfterError(false);
 

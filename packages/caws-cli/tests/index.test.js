@@ -334,7 +334,7 @@ module.exports = { runCodemod };`
     test('should show help information', () => {
       const cliPath = path.resolve(__dirname, '../dist/index.js');
       const output = execSync(`node "${cliPath}" --help`, { encoding: 'utf8' });
-      expect(output).toContain('CAWS - Coding Agent Workflow System CLI');
+      expect(output).toContain('CAWS - Coding Agent Working Standard CLI');
       expect(output).toContain('init');
       expect(output).toContain('scaffold');
       expect(output).toContain('version');

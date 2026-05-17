@@ -1,7 +1,7 @@
 # CAWS Project Documentation
 
 ## Overview
-This project is built with the **Coding Agent Workflow System (CAWS)** - an engineering-grade framework that ensures quality, reliability, and maintainability in AI-assisted development.
+This project is built with the **Coding Agent Working Standard (CAWS)** - an engineering-grade framework that ensures quality, reliability, and maintainability in AI-assisted development.
 
 ## Key Features
 - **Quality Gates**: Automated validation of scope, budget, and standards

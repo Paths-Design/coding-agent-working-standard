@@ -1,6 +1,6 @@
 # Contributing to CAWS
 
-We welcome contributions from the community! This guide will help you get started with contributing to the CAWS (Coding Agent Workflow System) project.
+We welcome contributions from the community! This guide will help you get started with contributing to the CAWS (Coding Agent Working Standard) project.
 
 ## Quick Start
 

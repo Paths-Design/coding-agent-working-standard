@@ -679,7 +679,7 @@ describe('Schema Validation Contracts', () => {
       const helpOutput = execSync(`node "${cliPath}" --help`, { encoding: 'utf8' });
 
       // Contract: Help should contain expected sections
-      expect(helpOutput).toContain('CAWS - Coding Agent Workflow System CLI');
+      expect(helpOutput).toContain('CAWS - Coding Agent Working Standard CLI');
       expect(helpOutput).toContain('Commands:');
       expect(helpOutput).toContain('init');
       expect(helpOutput).toContain('scaffold');

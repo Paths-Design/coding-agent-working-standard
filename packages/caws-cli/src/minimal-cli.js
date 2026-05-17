@@ -20,7 +20,7 @@ const CLI_VERSION = require('../package.json').version;
  */
 function showVersion() {
   console.log(chalk.bold(`CAWS CLI v${CLI_VERSION}`));
-  console.log(chalk.cyan('Coding Agent Workflow System - Scaffolding Tool'));
+  console.log(chalk.cyan('Coding Agent Working Standard - Scaffolding Tool'));
   console.log(chalk.gray('Author: @darianrosebrook'));
   console.log(chalk.gray('License: MIT'));
 }
@@ -54,7 +54,7 @@ async function initProject(projectName, _options) {
 // CLI Commands
 program
   .name('caws')
-  .description('CAWS - Coding Agent Workflow System CLI')
+  .description('CAWS - Coding Agent Working Standard CLI')
   .version(CLI_VERSION, '-v, --version', 'Show version information');
 
 program

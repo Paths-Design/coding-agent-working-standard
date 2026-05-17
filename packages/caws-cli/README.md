@@ -1,8 +1,8 @@
 # @paths.design/caws-cli
 
-**CAWS CLI v11.0.0 — the governed core for the Coding Agent Workflow System.**
+**CAWS CLI v11.0.0 — the governed core for the Coding Agent Working Standard.**
 
-CAWS (Coding Agent Workflow System) gives coding agents a deterministic
+CAWS (Coding Agent Working Standard) gives coding agents a deterministic
 substrate for project state, scope, claims, gates, waivers, and audit
 evidence. v11.0.0 is a ground-up rewrite around a pure kernel, an I/O
 store, and a thin shell. It replaces v10.x.

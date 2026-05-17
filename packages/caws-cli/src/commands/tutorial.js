@@ -20,7 +20,7 @@ const TUTORIALS = {
         id: 'welcome',
         title: 'Welcome to CAWS',
         content: `
-Welcome to CAWS (Coding Agent Workflow System)!
+Welcome to CAWS (Coding Agent Working Standard)!
 
 CAWS helps AI agents and developers collaborate effectively by providing:
 - Structured specifications and requirements
