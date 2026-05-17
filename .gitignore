@@ -9,6 +9,7 @@ node_modules/
 .npm/
 .yarn/
 .yarnrc.yml
+__pycache__
 
 # Build outputs
 # =============
@@ -449,6 +450,7 @@ public
 # =============
 # CAWS runtime caches and ephemeral state
 .caws/cache/
+.caws/sessions/
 .caws/worktrees/
 **/.caws/state/
 .caws/duplication-cache.json
