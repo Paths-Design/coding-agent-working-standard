@@ -37,7 +37,9 @@ const { initProject } = require('../../dist/store/init-store');
 
 function mkBareGitRepo(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  execFileSync('git', ['init', '--quiet', root]);
+  // -b main pins the default branch so tests asserting baseBranch === 'main'
+  // pass regardless of the runner's init.defaultBranch (CI defaults to master).
+  execFileSync('git', ['init', '--quiet', '-b', 'main', root]);
   execFileSync('git', ['-C', root, 'config', 'user.email', 't@t.com']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'T']);
   // Need a non-empty repo: write a file + commit so worktree branches have a base.
