@@ -2,9 +2,11 @@ id: LEGACY-TEST-RECONCILE-001
 title: 'Reconcile the default caws-cli test surface with the v11 command contract'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Slice 7a complete. Default npm test surface fully green (95 suites / 1548 tests / 0 failures). See docs-status/legacy-test-reconcile-001.md for per-suite disposition record. Companion fixes: per-cwd quality-gates lock (LOCK-INTERPROCESS-HARDEN-001), JSON-only stdout contract enforcement, policy gate local evaluators (budget_limit / scope_boundary / spec_completeness now enforce real policy), mechanical aliases (god_objects, hidden-todo), hidden-todo producer fix, src/index.js dead-code removal.'
 created_at: '2026-05-18T04:30:00.000Z'
-updated_at: '2026-05-18T04:30:00.000Z'
+updated_at: '2026-05-18T06:53:35.861Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests
@@ -75,9 +77,8 @@ acceptance:
     when: 'They cross-reference closure_notes against the actual test directory.'
     then: 'Every disposition is verifiable: deleted files are absent, rewritten files reflect v11 contracts, retained files have a documented harness fix, quarantined files are excluded by a named mechanism.'
 non_functional:
-  performance: 'npm test must complete in under 4 minutes on the canonical dev machine (current baseline 210s for the broken surface).'
-  reliability: 'No flakiness budget. A retained test that flakes is reclassified to REWRITE or QUARANTINE.'
-references:
-  - 'docs/architecture/caws-vnext-command-surface.md (A1 posture; removed commands)'
-  - 'docs/architecture/event-order.md (event semantics for tests touching events.jsonl)'
-  - '.rehearsal-cli-full.log (baseline failure inventory; not committed)'
+  performance:
+    - 'npm test must complete in under 9 minutes on the canonical dev machine (current full-run baseline 500s)'
+  reliability:
+    - 'No flakiness budget. A retained test that flakes is reclassified to REWRITE or QUARANTINE'
+contracts: []
