@@ -1,3 +1,10 @@
+## [11.1.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.1...v11.1.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* **quality-gates:** route CI/FIX mode banners through logHuman to preserve JSON stdout ([e562a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/e562a0e161f182482b550fe38b04b2cc8c4d22f8))
+
 # [11.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.0...v11.1.1) (2026-05-18)
 
 Patch release. Restores the hook-pack templates to the published tarball and adds a
