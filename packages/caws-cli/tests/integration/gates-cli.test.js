@@ -182,6 +182,86 @@ function runGatesCli(projectDir, specId, extraArgs = []) {
 }
 
 /**
+ * Assert that the gates-cli subprocess exited with the expected code.
+ * On mismatch, dump the full subprocess result and a snapshot of the
+ * fixture state to stderr BEFORE jest fires the assertion error. This
+ * makes CI failures self-explanatory — no need to add ad-hoc logging
+ * to re-run after a failure.
+ *
+ * Captures:
+ *   - exit code, stdout, stderr from the failing subprocess
+ *   - resolved CLI path + node version + git version + platform
+ *   - fixture .caws/ contents (existence of policy.yaml, specs/<id>.yaml,
+ *     events.jsonl head, worktrees.json, agents.json)
+ *   - process env keys that the gates pipeline reads
+ *
+ * Diagnostic, not corrective: this helper does NOT change test semantics.
+ * It only widens the failure log so the next CI failure explains itself.
+ */
+function expectExit(result, expected, projectDir, specId, args) {
+  if (result.exitCode === expected) {
+    expect(result.exitCode).toBe(expected);
+    return;
+  }
+  const lines = [];
+  lines.push('--- gates-cli failure diagnostic ---');
+  lines.push(`expected exitCode=${expected}, received=${result.exitCode}`);
+  lines.push(`cli_path=${CLI_PATH}`);
+  lines.push(`cli_exists=${fs.existsSync(CLI_PATH)}`);
+  lines.push(`node=${process.version} platform=${process.platform} arch=${process.arch}`);
+  try {
+    const gitVer = execFileSync('git', ['--version'], { encoding: 'utf8' }).trim();
+    lines.push(`git=${gitVer}`);
+  } catch (e) {
+    lines.push(`git=<unavailable: ${e.message}>`);
+  }
+  lines.push(`cwd=${projectDir}`);
+  lines.push(`spec_id=${specId}`);
+  lines.push(`args=${JSON.stringify(args)}`);
+  const cawsDir = path.join(projectDir, '.caws');
+  lines.push(`.caws exists=${fs.existsSync(cawsDir)}`);
+  if (fs.existsSync(cawsDir)) {
+    try {
+      lines.push(`.caws contents=${JSON.stringify(fs.readdirSync(cawsDir))}`);
+    } catch (e) {
+      lines.push(`.caws contents=<unreadable: ${e.message}>`);
+    }
+    const specsDir = path.join(cawsDir, 'specs');
+    if (fs.existsSync(specsDir)) {
+      try {
+        lines.push(`.caws/specs contents=${JSON.stringify(fs.readdirSync(specsDir))}`);
+      } catch (e) {
+        lines.push(`.caws/specs contents=<unreadable: ${e.message}>`);
+      }
+    }
+    const eventsPath = path.join(cawsDir, 'events.jsonl');
+    if (fs.existsSync(eventsPath)) {
+      try {
+        const lines2 = fs.readFileSync(eventsPath, 'utf8').split('\n').slice(0, 5);
+        lines.push(`events.jsonl head (5 lines):`);
+        for (const l of lines2) lines.push(`  ${l}`);
+      } catch (e) {
+        lines.push(`events.jsonl=<unreadable: ${e.message}>`);
+      }
+    } else {
+      lines.push(`events.jsonl=<does not exist>`);
+    }
+  }
+  const envKeys = ['CAWS_RUN_PERF_BUDGETS', 'CI', 'GITHUB_ACTIONS', 'NODE_ENV', 'PATH'];
+  for (const k of envKeys) {
+    const v = process.env[k];
+    if (v !== undefined) lines.push(`env.${k}=${k === 'PATH' ? '<set>' : v}`);
+  }
+  lines.push(`stdout (${result.stdout.length} bytes):`);
+  lines.push(result.stdout || '<empty>');
+  lines.push(`stderr (${result.stderr.length} bytes):`);
+  lines.push(result.stderr || '<empty>');
+  lines.push('--- end gates-cli failure diagnostic ---');
+  console.error(lines.join('\n'));
+  expect(result.exitCode).toBe(expected);
+}
+
+/**
  * Read the appended `gate_evaluated` events from .caws/events.jsonl.
  * Returns the structured per-gate detail that v11 publishes in events,
  * not stdout.
@@ -231,8 +311,9 @@ describe('gates CLI integration (v11.1)', () => {
     test('exits 0 when all gates are in warn mode and project is clean', () => {
       ctx = createTestProject();
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
-      expect(result.exitCode).toBe(0);
+      const args = ['--context=cli'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(result.stdout).toContain('Overall: OK');
 
       const events = readGateEvents(ctx.dir);
@@ -248,8 +329,9 @@ describe('gates CLI integration (v11.1)', () => {
     test('exits 0 with commit context and no staged files', () => {
       ctx = createTestProject();
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
-      expect(result.exitCode).toBe(0);
+      const args = ['--context=commit'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(result.stdout).toContain('Overall: OK');
     });
   });
@@ -308,8 +390,9 @@ describe('gates CLI integration (v11.1)', () => {
       }
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
-      expect(result.exitCode).toBe(1);
+      const args = ['--context=commit'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 1, ctx.dir, ctx.specId, args);
 
       const events = readGateEvents(ctx.dir);
       const budgetEvent = events.find((e) => e.data.gate_id === 'budget_limit');
@@ -341,8 +424,9 @@ describe('gates CLI integration (v11.1)', () => {
     test('each gate_evaluated event has gate_id, mode, result, violations, waived_count', () => {
       ctx = createTestProject();
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
-      expect(result.exitCode).toBe(0);
+      const args = ['--context=cli'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
 
       const events = readGateEvents(ctx.dir);
       expect(events.length).toBeGreaterThan(0);
@@ -377,8 +461,9 @@ describe('gates CLI integration (v11.1)', () => {
     test('produces human-readable disposition table on stdout', () => {
       ctx = createTestProject();
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
-      expect(result.exitCode).toBe(0);
+      const args = ['--context=cli'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
 
       // v11 text format: per-gate PASS/FAIL rows + Overall summary.
       expect(result.stdout).toContain('Gate dispositions');
@@ -389,8 +474,9 @@ describe('gates CLI integration (v11.1)', () => {
     test('text output is not valid JSON', () => {
       ctx = createTestProject();
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
-      expect(result.exitCode).toBe(0);
+      const args = ['--context=cli'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(() => JSON.parse(result.stdout)).toThrow();
     });
   });
@@ -415,11 +501,12 @@ describe('gates CLI integration (v11.1)', () => {
       }
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
+      const args = ['--context=commit'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
       // Exit 0 because no policy-declared gate blocks (default policy is
       // all warn). The subprocess code_freeze violation surfaces as an
       // unmatched violation, not as a block.
-      expect(result.exitCode).toBe(0);
+      expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(result.stdout).toContain('Unmatched violations');
       expect(result.stdout).toContain('code_freeze');
     });
@@ -451,8 +538,9 @@ describe('gates CLI integration (v11.1)', () => {
       fs.writeFileSync(path.join(ctx.dir, 'vendor', 'lib.js'), '// out of scope\n');
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
-      expect(result.exitCode).toBe(1);
+      const args = ['--context=commit'];
+      const result = runGatesCli(ctx.dir, ctx.specId, args);
+      expectExit(result, 1, ctx.dir, ctx.specId, args);
 
       const events = readGateEvents(ctx.dir);
       const scopeEvent = events.find((e) => e.data.gate_id === 'scope_boundary');
