@@ -828,14 +828,24 @@ export function mergeWorktree(
   // Auto-close the bound spec through the canonical specs-writer
   // path. This appends spec_closed. We then append worktree_merged
   // with auto_closed_spec: true.
-  const now = (input.now ?? (() => new Date()))().toISOString();
+  //
+  // `mergeNow` is captured once and reused for every sub-operation
+  // (close, worktree_merged append, destroy). Composed merge is one
+  // governance moment; emitted events must share that baseline so
+  // ts order matches seq order in the chain. Without this, sub-calls
+  // re-read the wall clock at append time and can produce timestamps
+  // that disagree with seq (seq remains the causal authority, but
+  // human-readable timestamps should not contradict it).
+  const mergeNow = new Date((input.now ?? (() => new Date()))().getTime());
+  const now = mergeNow.toISOString();
+  const sharedNowFactory = () => mergeNow;
   const closeResult = closeSpec(cawsDir, {
     id: specId,
     resolution: 'completed',
     reason: `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`,
     mergeCommit,
     actor: input.actor,
-    now: input.now ?? (() => new Date()),
+    now: sharedNowFactory,
   });
 
   if (!isOk(closeResult)) {
@@ -897,12 +907,13 @@ export function mergeWorktree(
     );
   }
 
-  // Destroy the worktree last.
+  // Destroy the worktree last. Reuse the same merge-baseline clock
+  // so worktree_destroyed.ts matches the rest of the composed merge.
   const destroyResult = destroyWorktree(cawsDir, {
     name: input.name,
     session: input.session,
     actor: input.actor,
-    now: input.now ?? (() => new Date()),
+    now: sharedNowFactory,
   });
   if (!isOk(destroyResult)) {
     // The merge + close + merged event all succeeded. The destroy

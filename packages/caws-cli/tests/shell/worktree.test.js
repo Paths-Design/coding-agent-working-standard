@@ -312,6 +312,53 @@ describe('A8/A9: caws worktree merge', () => {
 });
 
 // ============================================================
+// Doctrine: composed merge shares one baseline timestamp
+// (see docs/architecture/event-order.md — fix A locks the rule)
+// ============================================================
+describe('Event-order doctrine: merge baseline-share', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setupRepoWithSpec('wt-ts-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('spec_closed, worktree_merged, and worktree_destroyed share one ts when a composed merge runs', () => {
+    capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'wt-ts-001', specId: 'FEAT-001',
+    });
+    const wtPath = path.join(cawsDir, 'worktrees/wt-ts-001');
+    fs.writeFileSync(path.join(wtPath, 'feature.txt'), 'feature\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'feature.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'feat: add feature.txt']);
+
+    // Inject a fixed `now` so the merge baseline-share invariant is
+    // observable. Without fix A, closeSpec and destroyWorktree would
+    // re-invoke `new Date()` regardless of `input.now` (the bug).
+    const fixed = new Date('2026-05-17T12:00:00.000Z');
+    const r = capture(runWorktreeMergeCommand, {
+      cwd: repoRoot, name: 'wt-ts-001', now: () => fixed,
+    });
+    expect(r.code).toBe(0);
+
+    const events = readEvents(cawsDir);
+    // Find the three events emitted by this composed merge.
+    // `spec_id` is a top-level field on every event; per-event detail
+    // lives in `data`.
+    const merge = {
+      closed: events.find((e) => e.event === 'spec_closed' && e.spec_id === 'FEAT-001'),
+      merged: events.find((e) => e.event === 'worktree_merged' && e.data && e.data.worktree_name === 'wt-ts-001'),
+      destroyed: events.find((e) => e.event === 'worktree_destroyed' && e.data && e.data.worktree_name === 'wt-ts-001'),
+    };
+    expect(merge.closed).toBeDefined();
+    expect(merge.merged).toBeDefined();
+    expect(merge.destroyed).toBeDefined();
+
+    // All three timestamps equal the injected merge baseline.
+    expect(merge.closed.ts).toBe(fixed.toISOString());
+    expect(merge.merged.ts).toBe(fixed.toISOString());
+    expect(merge.destroyed.ts).toBe(fixed.toISOString());
+  });
+});
+
+// ============================================================
 // A10: no command writes .caws/working-spec.yaml
 // ============================================================
 describe('A10: no working-spec.yaml writes', () => {
