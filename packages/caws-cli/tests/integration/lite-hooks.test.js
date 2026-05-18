@@ -68,6 +68,16 @@ describe('lite-hooks integration', () => {
       }
     }
 
+    // Copy classify_command.py — without it, block-dangerous.sh follows
+    // the ask-latch missing-classifier path. With it, we exercise the
+    // real classifier decisions (which can be ask, deny, or allow).
+    const classifierSrc = path.join(templateDir, '.claude', 'hooks', 'classify_command.py');
+    const classifierDest = path.join(hooksDir, 'classify_command.py');
+    if (fs.existsSync(classifierSrc)) {
+      fs.copySync(classifierSrc, classifierDest);
+      fs.chmodSync(classifierDest, 0o755);
+    }
+
     process.chdir(testDir);
   });
 
@@ -109,31 +119,67 @@ describe('lite-hooks integration', () => {
   }
 
   describe('block-dangerous.sh', () => {
-    test('blocks git push --force', () => {
+    // The hook follows the Claude Code PreToolUse JSON protocol:
+    // - exit 0 always (the harness reads `permissionDecision` from stdout)
+    // - permissionDecision: "ask"   → human approval gate
+    // - permissionDecision: "deny"  → categorical block (reserved for
+    //                                 structurally unsafe commands)
+    // - allow (no decision field)   → silently allow
+    //
+    // Authority-bearing / destructive commands (force push, hard reset,
+    // git init, venv creation) are deliberately classified `ask`, not
+    // `deny`, so the user can authorize them when contextually safe.
+    // See docs/architecture/event-order.md, classify_command.py.
+    function parseHookJson(stdout) {
+      const trimmed = (stdout || '').trim();
+      if (!trimmed) return null;
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+    function expectAskEnvelope(result, reasonSubstring) {
+      expect(result.exitCode).toBe(0);
+      const envelope = parseHookJson(result.stdout);
+      expect(envelope).not.toBeNull();
+      expect(envelope.hookSpecificOutput).toBeDefined();
+      expect(envelope.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+      expect(envelope.hookSpecificOutput.permissionDecision).toBe('ask');
+      if (reasonSubstring) {
+        expect(envelope.hookSpecificOutput.permissionDecisionReason).toContain(reasonSubstring);
+      }
+    }
+
+    test('ask-gates git push --force (destructive authority)', () => {
       const result = runHook('block-dangerous.sh', 'Bash', { command: 'git push --force origin main' });
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('BLOCKED');
+      expectAskEnvelope(result, 'git force push');
     });
 
-    test('blocks git init', () => {
+    test('ask-gates git init (creates a new repo authority boundary)', () => {
       const result = runHook('block-dangerous.sh', 'Bash', { command: 'git init' });
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('BLOCKED');
+      expectAskEnvelope(result, 'git init');
     });
 
-    test('blocks git reset --hard', () => {
+    test('ask-gates git reset --hard (destructive)', () => {
       const result = runHook('block-dangerous.sh', 'Bash', { command: 'git reset --hard HEAD~1' });
-      expect(result.exitCode).toBe(2);
+      expectAskEnvelope(result, 'git reset --hard');
     });
 
-    test('blocks venv creation', () => {
+    test('ask-gates python -m venv (virtual environment creation)', () => {
       const result = runHook('block-dangerous.sh', 'Bash', { command: 'python -m venv myenv' });
-      expect(result.exitCode).toBe(2);
+      expectAskEnvelope(result, 'virtual environment');
     });
 
     test('allows normal git commands', () => {
       const result = runHook('block-dangerous.sh', 'Bash', { command: 'git status' });
       expect(result.exitCode).toBe(0);
+      // Allow path emits no JSON envelope (or an empty allow envelope).
+      const envelope = parseHookJson(result.stdout);
+      if (envelope) {
+        expect(envelope.hookSpecificOutput?.permissionDecision).not.toBe('deny');
+        expect(envelope.hookSpecificOutput?.permissionDecision).not.toBe('ask');
+      }
     });
 
     test('allows normal commands', () => {
@@ -222,12 +268,23 @@ describe('lite-hooks integration', () => {
         expect(result.exitCode).toBe(0);
       });
 
-      skipOrTest('blocks dangerous command chained after safe quoted echo', () => {
+      skipOrTest('ask-gates dangerous command chained after safe quoted echo', () => {
+        // The classifier must reach into the `&&` chain and detect the
+        // embedded dangerous command, not stop at the safe `echo` prefix.
+        // Verified: classify_command.py returns {decision: "ask", reason:
+        // "git force push"} for this input.
         const result = runHookWithFile('block-dangerous.sh', 'Bash', {
           command: 'echo "safe command" && git push --force',
         });
-        // Python classifier returns "ask" for git force push (exit 1)
-        expect(result.exitCode).not.toBe(0);
+        expect(result.exitCode).toBe(0);
+        const envelope = (() => {
+          const trimmed = (result.stdout || '').trim();
+          if (!trimmed) return null;
+          try { return JSON.parse(trimmed); } catch { return null; }
+        })();
+        expect(envelope).not.toBeNull();
+        expect(envelope.hookSpecificOutput?.permissionDecision).toBe('ask');
+        expect(envelope.hookSpecificOutput?.permissionDecisionReason).toContain('git force push');
       });
     });
   });
