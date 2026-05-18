@@ -1,0 +1,58 @@
+id: EVENTS-LEGACY-ARCHIVE-001
+title: Archive pre-v11 events.jsonl to unblock v11 appendEvent
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-17T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .caws/events.jsonl
+    - .archive/.caws-legacy
+  data_migration: true
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/events.jsonl
+    - .archive/.caws-legacy/events.jsonl.pre-v11
+    - .caws/specs/EVENTS-LEGACY-ARCHIVE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/specs/registry.json
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/src/schemas/events/
+    - packages/caws-kernel/src/spec/
+invariants:
+  - 'The pre-v11 events.jsonl is preserved byte-for-byte at .archive/.caws-legacy/events.jsonl.pre-v11.'
+  - 'No replacement events.jsonl is hand-authored; the new v11 chain starts when appendEvent next runs and emits its first valid genesis event.'
+  - 'The loader, schema, and doctor are not softened. This is an event-chain epoch boundary, not a chain repair.'
+  - 'Slice 4 (LIFECYCLE-MUTATION-001) does not begin until appendEvent has been empirically demonstrated to succeed in the host repo.'
+acceptance:
+  - id: A1
+    given: 'The host .caws/events.jsonl contains pre-v11 entries that the v11 kernel rejects as invalid_event_shape (actor as bare string, prev_hash as empty string on genesis, legacy event names).'
+    when: 'EVENTS-LEGACY-ARCHIVE-001 moves the file to .archive/.caws-legacy/events.jsonl.pre-v11.'
+    then: 'The archive file is byte-identical to the pre-archive .caws/events.jsonl. The original location no longer exists.'
+  - id: A2
+    given: 'After archive, the host has no .caws/events.jsonl.'
+    when: 'caws doctor runs.'
+    then: 'The 8 store.events.invalid_event_shape load errors disappear. The new doctor exit may still be 1 if active-spec warnings keep it there, but the events load surface is clean.'
+  - id: A3
+    given: 'After archive, the host has no .caws/events.jsonl.'
+    when: 'caws evidence record --type test --spec EVENTS-LEGACY-ARCHIVE-001 is invoked.'
+    then: 'The command succeeds with exit 0. A new .caws/events.jsonl is created. It contains exactly one entry. The entry validates under the v11 chained-event schema: seq=1, prev_hash=null, actor is {kind, id}, event_hash is a valid sha256.'
+  - id: A4
+    given: 'The new v11 events.jsonl exists.'
+    when: 'caws doctor runs again.'
+    then: 'No invalid_event_shape errors. The events load surface returns Ok with at least one validated event.'
+  - id: A5
+    given: 'This slice is described as an epoch boundary.'
+    when: 'A reader inspects the commit history.'
+    then: 'The commit message explicitly says this is an event-chain epoch boundary, not a repair of the legacy chain. The legacy log is preserved as historical evidence at .archive/.caws-legacy/events.jsonl.pre-v11.'
+non_functional:
+  reliability:
+    - 'Archive is a single rename; no schema migration is attempted on the legacy entries.'
+    - 'No loader softening: a future re-population of .caws/events.jsonl with legacy-shaped entries would fail the same way it does today.'
+  security:
+    - 'The legacy log is not deleted. Provenance is preserved at .archive/.caws-legacy/events.jsonl.pre-v11.'
+contracts: []
