@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_destroyed.v1.json",
+  "title": "worktree_destroyed event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. Records the lifecycle event 'git worktree was removed and the registry entry deleted.' Emitted by caws worktree destroy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "branch", "path"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Name of the destroyed worktree (the key removed from worktrees.json)."
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Branch the worktree was on at destroy time."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Filesystem path the worktree occupied (typically .caws/worktrees/<name>)."
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Optional: spec id this worktree was bound to at destroy time."
+    },
+    "owner_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional: session id that performed the destroy (always the same as the actor for non-takeover destroys)."
+    },
+    "removed_git_worktree": {
+      "type": "boolean",
+      "description": "True when git worktree remove succeeded. False indicates the registry entry was cleaned up but the on-disk worktree was already gone or could not be removed."
+    }
+  }
+}

@@ -152,9 +152,9 @@ describe('registerShellCommands — does not touch legacy commands', () => {
     expect(names).not.toContain('iterate');
   });
 
-  it('does not register worktree', () => {
+  it('registers worktree as a v11.1 command group (CLI-WORKTREE-001)', () => {
     const program = mkProgramWithShellOnly([]);
     const names = program.commands.map((c) => c.name());
-    expect(names).not.toContain('worktree');
+    expect(names).toContain('worktree');
   });
 });

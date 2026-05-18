@@ -46,6 +46,7 @@ import testRecordedSchema from '../schemas/events/test_recorded.v1.json';
 import waiverAppliedSchema from '../schemas/events/waiver_applied.v1.json';
 import worktreeBoundSchema from '../schemas/events/worktree_bound.v1.json';
 import worktreeCreatedSchema from '../schemas/events/worktree_created.v1.json';
+import worktreeDestroyedSchema from '../schemas/events/worktree_destroyed.v1.json';
 import worktreeMergedSchema from '../schemas/events/worktree_merged.v1.json';
 
 import { EVIDENCE_RULES } from './rules';
@@ -88,6 +89,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   waiver_applied: waiverAppliedSchema,
   worktree_bound: worktreeBoundSchema,
   worktree_created: worktreeCreatedSchema,
+  worktree_destroyed: worktreeDestroyedSchema,
   worktree_merged: worktreeMergedSchema,
 } as const;
 

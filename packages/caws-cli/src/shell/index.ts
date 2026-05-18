@@ -144,6 +144,21 @@ export type {
   SpecsArchiveOptions,
 } from './commands/specs';
 
+export {
+  runWorktreeCreateCommand,
+  runWorktreeListCommand,
+  runWorktreeBindCommand,
+  runWorktreeDestroyCommand,
+  runWorktreeMergeCommand,
+} from './commands/worktree';
+export type {
+  WorktreeCreateOptions,
+  WorktreeListOptions,
+  WorktreeBindOptions,
+  WorktreeDestroyOptions,
+  WorktreeMergeOptions,
+} from './commands/worktree';
+
 export { renderInit } from './render/init';
 export type { RenderInitInput } from './render/init';
 

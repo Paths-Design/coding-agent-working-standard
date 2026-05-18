@@ -2,9 +2,11 @@ id: CLI-GATES-002
 title: caws-cli package must resolve and install caws-quality-gates for v11 gates run
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Quality-gates runtime dep work landed in 4535c33. Closed via caws specs close per the canonical v11 lifecycle path.'
 created_at: '2026-05-16T00:00:00.000Z'
-updated_at: '2026-05-16T18:50:00.000Z'
+updated_at: '2026-05-18T03:22:51.224Z'
 blast_radius:
   modules:
     - packages/caws-cli/package.json

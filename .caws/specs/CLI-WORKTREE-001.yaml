@@ -1,0 +1,116 @@
+id: CLI-WORKTREE-001
+title: 'Restore v11 worktree lifecycle commands: caws worktree create/list/bind/destroy/merge'
+risk_tier: 2
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Slice 6 complete. caws worktree lifecycle commands shipped; manual closure is no longer the canonical path for worktree lifecycle either. Verified end-to-end against the substrate (lifecycle-transaction + applyRegistryPatch + specs-writer.closeSpec for auto-close on merge).'
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T03:40:24.026Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/worktree.test.js
+    - packages/caws-kernel/src/schemas/events/worktree_destroyed.v1.json
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/tests/shell/worktree.test.js
+    - packages/caws-cli/tests/shell/register.test.js
+    - packages/caws-kernel/src/schemas/events/worktree_destroyed.v1.json
+    - packages/caws-kernel/src/evidence/validate.ts
+    - .caws/specs/CLI-WORKTREE-001.yaml
+  out:
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - .caws/events.jsonl
+    - .caws/policy.yaml
+invariants:
+  - 'caws worktree commands are the canonical worktree lifecycle path. Hand-edits to .caws/worktrees.json should not be necessary after this slice.'
+  - 'create requires an existing active spec; refuses creation when the bound spec is closed, archived, draft, or missing.'
+  - 'create emits TWO events in order: worktree_created (the git+registry fact) then worktree_bound (the bidirectional spec binding fact). Both events appended through appendEvent within a single lifecycle transaction.'
+  - 'destroy is non-forceful: refuses foreign-session ownership, dirty worktrees, and unmerged branches. Uses git worktree remove (NEVER rm -rf).'
+  - 'merge --dry-run is read-only: no git operations, no file writes, no event appends.'
+  - 'merge auto-closes the bound spec by calling closeSpec from specs-writer; it does not duplicate close logic. Event order: spec_closed (from the auto-close) then worktree_merged with auto_closed_spec true.'
+  - 'No command writes .caws/working-spec.yaml. No command writes events.jsonl directly; only through appendEvent inside lifecycle-transaction.'
+  - 'Bidirectional binding (worktrees.json[name].specId AND spec.worktree) is the only legal bound state. One-sided binding is refused except via an explicit repair path on bind.'
+acceptance:
+  - id: A1
+    given: 'A v11-initialized repo with active spec FEAT-001 and no existing worktree named feat-001-wt.'
+    when: 'caws worktree create feat-001-wt --spec FEAT-001 is invoked.'
+    then: 'A git worktree exists at .caws/worktrees/feat-001-wt on a new branch. .caws/worktrees.json contains an entry for feat-001-wt with specId FEAT-001. FEAT-001.yaml has worktree set to feat-001-wt. Two events are appended: worktree_created (seq=N) then worktree_bound (seq=N+1).'
+  - id: A2
+    given: 'No spec named MISSING-001 exists, OR spec NOT-ACTIVE is in lifecycle_state closed/archived/draft.'
+    when: 'caws worktree create wt-name --spec MISSING-001 (or --spec NOT-ACTIVE) is invoked.'
+    then: 'The command exits non-zero with a typed diagnostic naming the missing or wrong-state spec. No git worktree is created. No registry entry is written. No event is appended.'
+  - id: A3
+    given: 'A worktree create has failed mid-transaction (e.g., event append rejected after git worktree add succeeded).'
+    when: 'The failure is observed.'
+    then: 'The transaction rolls back filesystem state. The git worktree is removed via git worktree remove. The user gets a typed partial-failure diagnostic. No half-state is left.'
+  - id: A4
+    given: 'A worktree feat-001-wt with a one-sided binding (registry has specId, but spec.worktree is missing OR vice versa).'
+    when: 'caws worktree bind feat-001-wt --spec FEAT-001 is invoked.'
+    then: 'The command repairs both surfaces to the canonical bidirectional binding. A worktree_bound event is appended. previously_bound_to is populated when there was a different prior binding.'
+  - id: A5
+    given: 'A v11-initialized repo with one or more registered worktrees.'
+    when: 'caws worktree list is invoked.'
+    then: 'The output shows worktree name, path, branch, base_branch, spec id, owner session, and a freshness indicator. The command does not write to any registry file (mtime unchanged).'
+  - id: A6
+    given: 'A worktree owned by a foreign session id (different from current).'
+    when: 'caws worktree destroy is invoked.'
+    then: 'The command exits non-zero with a typed foreign-ownership diagnostic. The worktree is not destroyed; no event is appended.'
+  - id: A7
+    given: 'A worktree with uncommitted changes (dirty working tree).'
+    when: 'caws worktree destroy is invoked.'
+    then: 'The command exits non-zero with a typed dirty-worktree diagnostic. No git operations or registry mutations occur.'
+  - id: A8
+    given: 'A worktree owned by the current session, clean, on a branch fully merged into base.'
+    when: 'caws worktree destroy is invoked.'
+    then: 'git worktree remove succeeds, the registry entry is removed, the spec.worktree field is cleared, and a worktree_destroyed event is appended.'
+  - id: A9
+    given: 'A worktree feat-001-wt bound to active spec FEAT-001 with a clean checkout and commits to merge.'
+    when: 'caws worktree merge feat-001-wt --dry-run is invoked.'
+    then: 'The command reports the planned merge (merge target, current state) without performing any git operation, file write, or event append. Exit code reflects whether the merge would succeed.'
+  - id: A10
+    given: 'A worktree feat-001-wt bound to active spec FEAT-001, ready to merge.'
+    when: 'caws worktree merge feat-001-wt is invoked (no --dry-run).'
+    then: 'git merge --no-ff is performed onto base_branch. After the merge commit lands, closeSpec is called with resolution: completed and merge_commit: <sha>. The event log records spec_closed (seq=N) then worktree_merged (seq=N+1) with auto_closed_spec: true. The git worktree is removed; registry entry is removed.'
+  - id: A11
+    given: 'A failure injection at any step of merge (merge fails, close fails, etc.).'
+    when: 'caws worktree merge is invoked.'
+    then: 'Typed diagnostic surfaces. No worktree_merged event is appended unless spec_closed succeeded. The repository is in a defined state — either pre-merge (failure before merge commit) or post-merge-with-open-spec (failure after merge commit but before spec close, surfaced as partial-failure-unrecovered with a recovery instruction).'
+  - id: A12
+    given: 'CLI-WORKTREE-001 is fully landed.'
+    when: 'caws --help is inspected.'
+    then: 'caws worktree appears as a noun group with create/list/bind/destroy/merge subcommands. caws parallel, caws agents, caws session do NOT appear (still gated to later slices).'
+non_functional:
+  reliability:
+    - 'create acquires the lifecycle lock; concurrent creates serialize.'
+    - 'destroy uses git worktree remove and respects ownership; no command in this slice uses rm -rf.'
+    - 'merge auto-close uses the same closeSpec path as caws specs close; close logic is not duplicated.'
+  security:
+    - 'Worktree name is validated against the kernel regex before any git operation.'
+    - 'Foreign ownership refuses without an explicit --takeover flag (which writes a prior_owners audit entry).'
+contracts:
+  - name: caws worktree create event order
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/worktree_created.v1.json
+    description: 'create emits worktree_created (required: name, branch, base_branch, path) then worktree_bound (required: worktree_name; previously_bound_to optional).'
+  - name: caws worktree merge auto-close path
+    type: behavior
+    path: packages/caws-cli/src/store/specs-writer.ts
+    description: 'merge calls closeSpec from specs-writer with resolution: completed and merge_commit: <sha>. The close path emits spec_closed; worktree_merged is appended after with auto_closed_spec: true.'
+  - name: caws worktree destroyed event schema
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/worktree_destroyed.v1.json
+    description: 'destroy emits worktree_destroyed with required {worktree_name, branch, path} and optional {spec_id, owner_session_id, removed_git_worktree: true}.'

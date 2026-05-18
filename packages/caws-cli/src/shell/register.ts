@@ -32,6 +32,11 @@ import {
   runWaiverListCommand,
   runWaiverRevokeCommand,
   runWaiverShowCommand,
+  runWorktreeBindCommand,
+  runWorktreeCreateCommand,
+  runWorktreeDestroyCommand,
+  runWorktreeListCommand,
+  runWorktreeMergeCommand,
   type EvidenceKind,
 } from './index';
 
@@ -561,6 +566,119 @@ export function registerShellCommands(
         const code = runSpecsArchiveCommand({
           id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  // -------------------------------------------------------------------
+  // caws worktree (CLI-WORKTREE-001)
+  //
+  // Restores v11 worktree lifecycle commands. All mutation paths go
+  // through worktrees-writer (which uses the lifecycle-transaction
+  // substrate from Slice 4 + applyRegistryPatch + specs-writer.closeSpec
+  // for auto-close on merge).
+  // -------------------------------------------------------------------
+  const worktreeCmd = program
+    .command('worktree')
+    .description(
+      'Manage CAWS worktrees (create/list/bind/destroy/merge). Worktrees are git worktrees bound to active specs.'
+    );
+
+  worktreeCmd
+    .command('create <name>')
+    .description(
+      'Create a new git worktree under .caws/worktrees/<name> bound to an active spec.'
+    )
+    .requiredOption('--spec <id>', 'Active spec id to bind the worktree to')
+    .option('--base-branch <branch>', 'Base branch to start from (default: current branch)')
+    .option('--branch <branch>', 'New branch name (default: worktree name)')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        name: string,
+        opts: {
+          spec: string;
+          baseBranch?: string;
+          branch?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runWorktreeCreateCommand({
+          name,
+          specId: opts.spec,
+          ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
+          ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  worktreeCmd
+    .command('list')
+    .description('List registered worktrees with branch, spec binding, and owner.')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { data?: boolean }) => {
+      const code = runWorktreeListCommand({ showData: opts.data === true });
+      exit(code);
+    });
+
+  worktreeCmd
+    .command('bind <name>')
+    .description(
+      'Repair bidirectional binding between a worktree and a spec (one-sided → bound).'
+    )
+    .requiredOption('--spec <id>', 'Spec id to bind the worktree to')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((name: string, opts: { spec: string; data?: boolean }) => {
+      const code = runWorktreeBindCommand({
+        name,
+        specId: opts.spec,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  worktreeCmd
+    .command('destroy <name>')
+    .description(
+      'Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use --abandon-unmerged to override branch check only).'
+    )
+    .option(
+      '--abandon-unmerged',
+      'Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (name: string, opts: { abandonUnmerged?: boolean; data?: boolean }) => {
+        const code = runWorktreeDestroyCommand({
+          name,
+          ...(opts.abandonUnmerged === true ? { abandonUnmerged: true } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  worktreeCmd
+    .command('merge <name>')
+    .description(
+      'Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close.'
+    )
+    .option('--dry-run', 'Validate prerequisites only; no git, no file writes, no events')
+    .option('--message <text>', 'Custom merge commit message (default: merge(worktree): <name>)')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        name: string,
+        opts: { dryRun?: boolean; message?: string; data?: boolean }
+      ) => {
+        const code = runWorktreeMergeCommand({
+          name,
+          ...(opts.dryRun === true ? { dryRun: true } : {}),
+          ...(opts.message !== undefined ? { message: opts.message } : {}),
           showData: opts.data === true,
         });
         exit(code);
