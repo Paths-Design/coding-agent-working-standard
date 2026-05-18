@@ -69,6 +69,26 @@ export const STORE_RULES = {
   INIT_LEGACY_RESIDUE: 'store.init.legacy_residue',
   /** init seeded a default policy that did not pass kernel validation. */
   INIT_DEFAULT_POLICY_INVALID: 'store.init.default_policy_invalid',
+
+  // ---- lifecycle mutation substrate (LIFECYCLE-MUTATION-001) -------------
+  /** Failed to acquire the global .caws/state.lock after bounded retry. */
+  LIFECYCLE_LOCK_CONTENTION: 'store.lifecycle.lock_contention',
+  /** Plan validation rejected the proposed transaction before any write. */
+  LIFECYCLE_PLAN_REJECTED: 'store.lifecycle.plan_rejected',
+  /** A planned file write failed; the transaction aborted before event append. */
+  LIFECYCLE_WRITE_FAILED: 'store.lifecycle.write_failed',
+  /** State writes succeeded but event append failed; rollback succeeded. */
+  LIFECYCLE_PARTIAL_FAILURE_RECOVERED:
+    'store.lifecycle.partial_failure_recovered',
+  /** State writes succeeded, event append failed, AND rollback also failed.
+   *  Caller MUST handle the recovery instruction in the diagnostic data. */
+  LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED:
+    'store.lifecycle.partial_failure_unrecovered',
+  /** yaml-patch refused an ambiguous mutation (e.g., duplicate top-level key,
+   *  or a flow-style mapping at the target location). */
+  YAML_PATCH_AMBIGUOUS: 'store.yaml_patch.ambiguous',
+  /** yaml-patch refused because the target key was not found in the document. */
+  YAML_PATCH_KEY_NOT_FOUND: 'store.yaml_patch.key_not_found',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];

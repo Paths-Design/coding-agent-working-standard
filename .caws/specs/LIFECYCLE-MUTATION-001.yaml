@@ -1,0 +1,106 @@
+id: LIFECYCLE-MUTATION-001
+title: Multi-file lifecycle mutation substrate (lock, transaction, yaml-patch)
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+    - packages/caws-cli/src/store/yaml-patch.ts
+    - packages/caws-cli/src/store/atomic-write.ts
+    - packages/caws-cli/tests/store/
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+    - packages/caws-cli/src/store/yaml-patch.ts
+    - packages/caws-cli/src/store/atomic-write.ts
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/tests/store/lifecycle-lock.test.js
+    - packages/caws-cli/tests/store/lifecycle-transaction.test.js
+    - packages/caws-cli/tests/store/yaml-patch.test.js
+    - packages/caws-cli/tests/store/atomic-write.test.js
+    - .caws/specs/LIFECYCLE-MUTATION-001.yaml
+  out:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/src/
+    - .caws/events.jsonl
+    - .caws/specs/registry.json
+    - .caws/policy.yaml
+invariants:
+  - 'No user-facing lifecycle commands are added in this slice. The substrate is consumed by CLI-SPECS-001 (Slice 5) and CLI-WORKTREE-001 (Slice 6).'
+  - 'Multi-file lifecycle mutations serialize through a single global .caws/state.lock. Per-resource locks are deferred until the mutation graph is well understood.'
+  - 'yaml-patch operates on raw source bytes; lifecycle field mutations must not reserialize the YAML document.'
+  - 'Event append is the final step of a transaction; it routes through events-store appendEvent and is never re-implemented.'
+  - 'Partial failure is detected, named (LIFECYCLE_PARTIAL_FAILURE), and recoverable. The transaction does not return ordinary success when state writes succeeded but event append failed and rollback also failed.'
+  - 'Rollback is best-effort. The transaction documents that filesystem rollback is not equivalent to a database transaction; the useful invariant is named partial-failure, not perfect transactionality.'
+  - 'No loader softening: legacy-shape events.jsonl fixtures must remain rejected.'
+acceptance:
+  - id: A1
+    given: 'Two concurrent lifecycle transactions attempting to mutate state at the same time.'
+    when: 'Both call into the lifecycle-transaction wrapper.'
+    then: 'A single global .caws/state.lock serializes them; only one holds the critical section at a time; both ultimately succeed (sequentially) or fail with a clear typed diagnostic. The lock releases on success AND on caller exception (verified via Promise.all + injected failure).'
+  - id: A2
+    given: 'An existing managed file with mode 0755 (executable; e.g., a hook script).'
+    when: 'atomicWrite is called to update it under the new mode-preservation option.'
+    then: 'After write, the file mode is still 0755. Tests assert via fs.statSync that the mode bits survived.'
+  - id: A3
+    given: 'A transaction that writes multiple files then appends events.'
+    when: 'The transaction completes.'
+    then: 'Either (a) the post-write directory state is fsynced where v11.1 needs crash durability, or (b) the spec explicitly states why v11.1 accepts rename durability without directory fsync. The chosen posture is documented in the transaction module header and asserted by behavior.'
+  - id: A4
+    given: 'A v11-shape spec YAML with comments, a specific field order, and trailing whitespace.'
+    when: 'yaml-patch setTopLevelScalar or insertTopLevelScalarAfter mutates lifecycle_state, resolution, closure_notes, updated_at, or worktree.'
+    then: 'Byte-level diff shows only the targeted lines changed. Unrelated comments and trailing whitespace are byte-identical. The test asserts via Buffer.compare or equivalent, not via parsed-object equality.'
+  - id: A5
+    given: 'A test fixture with a valid v11 events.jsonl containing at least one prior validated event (seq=1, valid actor object, prev_hash null, real event_hash).'
+    when: 'The transaction appends a new event through appendEvent.'
+    then: 'The new event has seq=2 and prev_hash equal to the prior event_hash. Tests use a real-chain fixture, not an empty events.jsonl.'
+  - id: A6
+    given: 'A test that appends two events sequentially via the transaction.'
+    when: 'Both appends succeed.'
+    then: 'event[2].prev_hash equals event[1].event_hash. seq increments monotonically. The chain on disk passes validateChainedEvent for both entries.'
+  - id: A7
+    given: 'A pre-v11 events.jsonl fixture shaped like the archived legacy log (actor as bare string, prev_hash as empty string on genesis, legacy event names).'
+    when: 'The transaction attempts an append against this fixture.'
+    then: 'The transaction returns an Err carrying the events-store rejection diagnostic. The legacy fixture remains unchanged (no soft load, no migration attempt).'
+  - id: A8
+    given: 'A transaction that writes file A successfully, writes file B successfully, then fails to append the event (e.g., schema validation rejection injected via the harness).'
+    when: 'The transaction completes its rollback step.'
+    then: 'Files A and B are restored to their pre-transaction bytes. The transaction returns a typed Err whose rule is LIFECYCLE_PARTIAL_FAILURE_RECOVERED or similar, naming both files as rolled back and surfacing the original append rejection.'
+  - id: A9
+    given: 'A transaction whose event append fails AND whose rollback also fails (file write error injected during rollback).'
+    when: 'The transaction completes.'
+    then: 'It returns LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED with: the planned event body, the files written before the failure, the rollback files that succeeded, the rollback files that failed, and a recovery instruction string. The diagnostic is not silenced; the caller MUST handle it.'
+  - id: A10
+    given: 'The substrate code is exercised by tests.'
+    when: 'The test suite runs.'
+    then: 'lifecycle-lock, lifecycle-transaction, yaml-patch, and atomicWrite all have direct unit tests. Failure-injection scenarios are explicit. No test depends on a Slice 5/6 command surface.'
+non_functional:
+  reliability:
+    - 'Lock acquisition retries with exponential or fixed backoff up to a bounded attempt count; stale locks are recovered with the same approach events-store already uses.'
+    - 'atomicWrite preserves file mode when explicitly opted in; the default remains permission-unaware to avoid silently widening the contract.'
+  security:
+    - 'No path in the substrate writes events.jsonl except through appendEvent. The transaction wrapper imports appendEvent; it does not duplicate its logic.'
+contracts:
+  - name: lifecycle-lock surface
+    type: behavior
+    path: packages/caws-cli/src/store/lifecycle-lock.ts
+    description: 'acquire/release returning Result<LockHandle>. Stale-lock detection. Bounded retry. Release-on-failure semantics.'
+  - name: lifecycle-transaction surface
+    type: behavior
+    path: packages/caws-cli/src/store/lifecycle-transaction.ts
+    description: 'runLifecycleTransaction(plan): Result<TransactionResult>. plan describes affected files and event body. Result distinguishes success, partial-failure-recovered, partial-failure-unrecovered.'
+  - name: yaml-patch surface
+    type: behavior
+    path: packages/caws-cli/src/store/yaml-patch.ts
+    description: 'setTopLevelScalar and insertTopLevelScalarAfter on raw source bytes. Refuses to silently re-flow. Refuses ambiguous mutations (multiple top-level keys with the same name).'

@@ -29,22 +29,89 @@ function nextTempName(targetPath: string): string {
   return path.join(dir, `${base}.tmp.${process.pid}.${counter}`);
 }
 
+export interface WriteFileAtomicOptions {
+  /**
+   * When true and `targetPath` exists, the temp file is created with the
+   * target's existing mode, and the final on-disk file has the same mode
+   * after rename. Used by the lifecycle substrate to preserve the
+   * executable bit on managed hook scripts.
+   *
+   * When false (default), the temp file is created with the standard
+   * `'w'` mode (0o666 masked by umask). This preserves the historical
+   * behavior of writeFileAtomic so existing callers are not silently
+   * affected.
+   *
+   * When `targetPath` does NOT exist, this option has no effect; the
+   * file is created with the default mode regardless.
+   */
+  readonly preserveMode?: boolean;
+}
+
 /**
  * Write `contents` to `targetPath` atomically.
  *
  * On Err, the temp file is cleaned up. On Ok, the target file holds the
- * new bytes.
+ * new bytes. When `options.preserveMode` is true and the target exists,
+ * the new file has the same mode bits as the prior file.
  */
-export function writeFileAtomic(targetPath: string, contents: string | Buffer): Result<true> {
+export function writeFileAtomic(
+  targetPath: string,
+  contents: string | Buffer,
+  options: WriteFileAtomicOptions = {}
+): Result<true> {
   const tmpPath = nextTempName(targetPath);
   let fd: number | undefined;
+
+  // When preserveMode is requested, stat the target BEFORE the temp
+  // write so we can match the mode at creation time (reducing the
+  // window where the file has a wrong mode) and verify/restore after
+  // rename (so chmod failures on the temp file don't silently drop
+  // the exec bit).
+  let preservedMode: number | undefined;
+  if (options.preserveMode === true) {
+    try {
+      preservedMode = fs.statSync(targetPath).mode & 0o7777;
+    } catch {
+      // Target doesn't exist; preserveMode has no effect.
+    }
+  }
+
   try {
     fd = fs.openSync(tmpPath, 'w');
     fs.writeFileSync(fd, contents);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;
+
+    // Apply preserved mode to the temp file before rename so the
+    // window between rename and chmod is minimal.
+    if (preservedMode !== undefined) {
+      try {
+        fs.chmodSync(tmpPath, preservedMode);
+      } catch {
+        // chmod on temp may fail on some filesystems (e.g., NFS);
+        // post-rename chmod below is the safety net.
+      }
+    }
+
     fs.renameSync(tmpPath, targetPath);
+
+    // Post-rename verification: if preserveMode was requested, ensure
+    // the final file has the right bits. This is the safety net for
+    // pre-rename chmod failure, and a no-op when the pre-rename chmod
+    // succeeded.
+    if (preservedMode !== undefined) {
+      try {
+        const actualMode = fs.statSync(targetPath).mode & 0o7777;
+        if (actualMode !== preservedMode) {
+          fs.chmodSync(targetPath, preservedMode);
+        }
+      } catch {
+        // Best-effort: if the verify or chmod itself fails, the write
+        // already succeeded; the caller may need to chmod manually.
+      }
+    }
+
     return ok(true);
   } catch (e) {
     if (fd !== undefined) {
