@@ -132,6 +132,36 @@ if (DEBUG_MODE) {
   console.log('DEBUG: Starting quality gates runner');
 }
 
+// ─── JSON-mode stdout discipline ──────────────────────────────────────────
+//
+// LEGACY-TEST-RECONCILE-001 exposed that caws-cli's strict gates adapter
+// (gate-result-contract.ts:validateGatesReport) parses the entire subprocess
+// stdout via JSON.parse. Any human/progress/result text on stdout breaks the
+// contract. In --json mode, stdout MUST be exactly one JSON object.
+//
+// Use these helpers instead of bare console.log for any human-facing output
+// in the run-quality-gates code paths. The final JSON payload is the only
+// thing that should reach stdout in JSON_MODE:
+//
+//   logHuman(...)    — banners, section headers, summary text
+//   logProgress(...) — "Checking X...", "X gate took N ms"
+//   logResult(...)   — per-gate finding counts, exception lists
+//
+// All three no-op when JSON_MODE or QUIET_MODE is true. Diagnostic info that
+// callers actually need in JSON mode should go into the report payload or
+// debugLog (DEBUG_MODE only), not stdout.
+//
+// The strict producer contract is preserved: --json means JSON-only stdout.
+function logHuman(...args) {
+  if (!QUIET_MODE && !JSON_MODE) console.log(...args);
+}
+function logProgress(...args) {
+  if (!QUIET_MODE && !JSON_MODE) console.log(...args);
+}
+function logResult(...args) {
+  if (!QUIET_MODE && !JSON_MODE) console.log(...args);
+}
+
 /**
  * Parses --gates command-line argument to determine which gates should run.
  * @returns {Set<string>|null} Set of gate names to run, or null if all gates should run
@@ -445,8 +475,8 @@ class QualityGateRunner {
         }
       }
 
-      if (clearedCount > 0 && !QUIET_MODE) {
-        console.log(`   Cleared ${clearedCount} cache files`);
+      if (clearedCount > 0) {
+        logResult(`   Cleared ${clearedCount} cache files`);
       }
     } catch (error) {
       console.warn('Warning: Could not clear caches:', error.message);
@@ -1249,9 +1279,9 @@ class QualityGateRunner {
 
       // Report warnings
       if (allWarnings.length > 0) {
-        console.log(`   ${allWarnings.length} approved exceptions in use`);
+        logResult(`   ${allWarnings.length} approved exceptions in use`);
         for (const warning of allWarnings) {
-          console.log(`      ${warning.file}: ${warning.reason}`);
+          logResult(`      ${warning.file}: ${warning.reason}`);
         }
       }
 
@@ -1259,8 +1289,7 @@ class QualityGateRunner {
       const enforcementLevel = filenameResults.enforcementLevel;
 
       if (allViolations.length > 0) {
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of allViolations) {
           const severity = violation.severity || enforcementLevel;
@@ -1291,13 +1320,9 @@ class QualityGateRunner {
           }
         }
 
-        if (!QUIET_MODE && !JSON_MODE) {
-          console.log(`   ${allViolations.length} naming findings (${enforcementLevel} mode)`);
-        }
+        logResult(`   ${allViolations.length} naming findings (${enforcementLevel} mode)`);
       } else {
-        if (!QUIET_MODE && !JSON_MODE) {
-          console.log('   No problematic naming patterns found');
-        }
+        logResult('   No problematic naming patterns found');
       }
     } catch (error) {
       this.violations.push({
@@ -1316,9 +1341,9 @@ class QualityGateRunner {
 
       // Report warnings (approved exceptions)
       if (codeFreezeResults.warnings.length > 0) {
-        console.log(`   ${codeFreezeResults.warnings.length} approved exceptions in use`);
+        logResult(`   ${codeFreezeResults.warnings.length} approved exceptions in use`);
         for (const warning of codeFreezeResults.warnings) {
-          console.log(`      ${warning.violation.file}: ${warning.exception.reason}`);
+          logResult(`      ${warning.violation.file}: ${warning.exception.reason}`);
         }
       }
 
@@ -1326,8 +1351,7 @@ class QualityGateRunner {
       const enforcementLevel = codeFreezeResults.enforcementLevel;
 
       if (codeFreezeResults.violations.length > 0) {
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of codeFreezeResults.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -1352,11 +1376,11 @@ class QualityGateRunner {
           }
         }
 
-        console.log(
+        logResult(
           `   ${codeFreezeResults.violations.length} code freeze findings (${enforcementLevel} mode)`
         );
       } else {
-        console.log('   Code freeze compliance check passed');
+        logResult('   Code freeze compliance check passed');
       }
     } catch (error) {
       this.violations.push({
@@ -1369,20 +1393,20 @@ class QualityGateRunner {
 
   async runDuplicationGate() {
     try {
-      if (!QUIET_MODE && !JSON_MODE) console.log('   Checking functional duplication...');
+      logProgress('   Checking functional duplication...');
 
       const duplicationResults = await checkFunctionalDuplication(this.context);
 
       // Report warnings (approved exceptions)
       if (duplicationResults.warnings.length > 0) {
-        console.log(`   ${duplicationResults.warnings.length} approved exceptions in use`);
+        logResult(`   ${duplicationResults.warnings.length} approved exceptions in use`);
         for (const warning of duplicationResults.warnings) {
           if (warning.type === 'exception_used') {
-            console.log(
+            logResult(
               `      ${warning.violation.files?.[0]?.file || 'unknown'}: ${warning.exception.reason}`
             );
           } else {
-            console.log(`      ${warning.files?.[0]?.file || 'unknown'}: ${warning.message}`);
+            logResult(`      ${warning.files?.[0]?.file || 'unknown'}: ${warning.message}`);
           }
         }
       }
@@ -1391,8 +1415,7 @@ class QualityGateRunner {
       const enforcementLevel = duplicationResults.enforcementLevel;
 
       if (duplicationResults.violations.length > 0) {
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of duplicationResults.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -1420,16 +1443,16 @@ class QualityGateRunner {
         }
 
         if (enforcementLevel === 'warning') {
-          console.log(
+          logResult(
             `   ${duplicationResults.violations.length} functional duplication warnings (commit allowed)`
           );
         } else {
-          console.log(
+          logResult(
             `   ${duplicationResults.violations.length} functional duplication violations (${enforcementLevel} mode)`
           );
         }
       } else {
-        if (!QUIET_MODE && !JSON_MODE) console.log('   No functional duplication violations found');
+        logResult('   No functional duplication violations found');
       }
     } catch (error) {
       console.error('   Error running functional duplication gate:', error.message);
@@ -1458,9 +1481,9 @@ class QualityGateRunner {
 
       // Report warnings (approved exceptions)
       if (allWarnings.length > 0) {
-        console.log(`   ${allWarnings.length} approved exceptions in use`);
+        logResult(`   ${allWarnings.length} approved exceptions in use`);
         for (const warning of allWarnings) {
-          console.log(`      ${warning.violation.file}: ${warning.exception.reason}`);
+          logResult(`      ${warning.violation.file}: ${warning.exception.reason}`);
         }
       }
 
@@ -1468,8 +1491,7 @@ class QualityGateRunner {
       const enforcementLevel = godObjectResults.enforcementLevel;
 
       if (allViolations.length > 0) {
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of allViolations) {
           const severity = violation.severity || enforcementLevel;
@@ -1496,10 +1518,9 @@ class QualityGateRunner {
           }
         }
 
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`   ${allViolations.length} god object findings (${enforcementLevel} mode)`);
+        logResult(`   ${allViolations.length} god object findings (${enforcementLevel} mode)`);
       } else {
-        if (!QUIET_MODE && !JSON_MODE) console.log('   No god object violations found');
+        logResult('   No god object violations found');
       }
     } catch (error) {
       this.violations.push({
@@ -1511,7 +1532,7 @@ class QualityGateRunner {
   }
 
   async runHiddenTodoQualityGate() {
-    console.log('   Checking for hidden incomplete implementations...');
+    logProgress('   Checking for hidden incomplete implementations...');
 
     try {
       const todoAnalyzerPath = join(__dirname, 'todo-analyzer.mjs');
@@ -1519,13 +1540,13 @@ class QualityGateRunner {
 
       // Check if the TODO analyzer script exists
       if (!fs.existsSync(todoAnalyzerPath)) {
-        console.log('   Hidden TODO analyzer not available (script missing)');
-        console.log('   Consider installing advanced code quality tooling');
+        logResult('   Hidden TODO analyzer not available (script missing)');
+        logResult('   Consider installing advanced code quality tooling');
         return; // Skip this gate gracefully
       }
 
       // TODO: Update TODO analyzer to support file filtering. For transparency, announce scope here.
-      console.log(
+      logResult(
         `    File scope: ${this.filesToCheck.length} files (analyzer currently scans repo)`
       );
 
@@ -1536,6 +1557,7 @@ class QualityGateRunner {
         const analyzer = new HiddenTodoAnalyzer(projectRoot);
         issues = await analyzer.analyzeProject(false, this.filesToCheck); // No progress in quality gates
       } catch (analyzerError) {
+        // console.warn → stderr; stdout stays JSON-clean.
         console.warn('   TODO analyzer failed, skipping hidden TODO check...');
         console.warn(`   Error: ${analyzerError.message}`);
         return;
@@ -1568,9 +1590,9 @@ class QualityGateRunner {
 
         // Report errors (unapproved violations)
         if (errors.length > 0) {
-          console.log(`   ❌ Found ${errors.length} hidden incomplete implementations`);
+          logResult(`   ❌ Found ${errors.length} hidden incomplete implementations`);
           for (const error of errors) {
-            console.log(
+            logResult(
               `      ${path.relative(projectRoot, error.file)}:${error.line} - ${error.message}`
             );
           }
@@ -1579,15 +1601,16 @@ class QualityGateRunner {
 
         // Report warnings (approved exceptions)
         if (result.warnings.length > 0) {
-          console.log(`   ${result.warnings.length} approved exceptions in use`);
+          logResult(`   ${result.warnings.length} approved exceptions in use`);
           for (const warning of result.warnings) {
-            console.log(`      ${warning.violation.file}: ${warning.exception.reason}`);
+            logResult(`      ${warning.violation.file}: ${warning.exception.reason}`);
           }
         }
       } else {
-        console.log('   ✅ No hidden incomplete implementations found');
+        logResult('   ✅ No hidden incomplete implementations found');
       }
     } catch (error) {
+      // console.warn → stderr; stdout stays JSON-clean.
       console.warn('   Warning: Hidden TODO analysis failed');
       console.warn(`   Error: ${error.message}`);
       // Don't fail the entire quality gates for this
@@ -1601,8 +1624,8 @@ class QualityGateRunner {
 
       // Check if the documentation linter script exists
       if (!fs.existsSync(docLinterPath)) {
-        console.log('   Documentation linter not available (script missing)');
-        console.log('   Falling back to basic documentation checks...');
+        logResult('   Documentation linter not available (script missing)');
+        logResult('   Falling back to basic documentation checks...');
         return await this.runBasicDocumentationChecks();
       }
 
@@ -1610,9 +1633,9 @@ class QualityGateRunner {
       // - commit: staged files only
       // - push: all tracked files (entire repo)
       // - ci: all tracked files (entire repo)
-      console.log(`    File scope: ${this.filesToCheck.length} files (context: ${this.context})`);
+      logProgress(`    File scope: ${this.filesToCheck.length} files (context: ${this.context})`);
 
-      console.log('    Starting documentation quality scan...');
+      logProgress('    Starting documentation quality scan...');
 
       // Import and run the Node.js documentation linter
       let issues = [];
@@ -1624,12 +1647,13 @@ class QualityGateRunner {
           this.filesToCheck.length > 0 ? this.filesToCheck : null
         );
       } catch (linterError) {
+        // console.warn → stderr; stdout stays JSON-clean.
         console.warn('   Documentation linter failed, falling back to basic checks...');
         console.warn(`   Error: ${linterError.message}`);
         return await this.runBasicDocumentationChecks();
       }
 
-      console.log(`    Found ${issues.length} documentation quality issues`);
+      logResult(`    Found ${issues.length} documentation quality issues`);
 
       if (issues.length > 0) {
         // Convert issues to violations format for shared framework
@@ -1652,17 +1676,16 @@ class QualityGateRunner {
 
         // Report warnings (approved exceptions)
         if (result.warnings.length > 0) {
-          console.log(`   ${result.warnings.length} approved exceptions in use`);
+          logResult(`   ${result.warnings.length} approved exceptions in use`);
           for (const warning of result.warnings) {
-            console.log(`      ${warning.violation.file}: ${warning.exception.reason}`);
+            logResult(`      ${warning.violation.file}: ${warning.exception.reason}`);
           }
         }
 
         // Handle violations based on enforcement level
         const enforcementLevel = result.enforcementLevel;
 
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of result.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -1693,11 +1716,11 @@ class QualityGateRunner {
           }
         }
 
-        console.log(
+        logResult(
           `   ${result.violations.length} documentation findings (${enforcementLevel} mode)`
         );
       } else {
-        console.log('   No documentation quality issues found');
+        logResult('   No documentation quality issues found');
       }
     } catch (error) {
       // Check if it's an exit code error (issues found) or a real error
@@ -1731,17 +1754,16 @@ class QualityGateRunner {
 
               // Report warnings (approved exceptions)
               if (result.warnings.length > 0) {
-                console.log(`   ${result.warnings.length} approved exceptions in use`);
+                logResult(`   ${result.warnings.length} approved exceptions in use`);
                 for (const warning of result.warnings) {
-                  console.log(`      ${warning.violation.file}: ${warning.exception.reason}`);
+                  logResult(`      ${warning.violation.file}: ${warning.exception.reason}`);
                 }
               }
 
               // Handle violations based on enforcement level
               const enforcementLevel = result.enforcementLevel;
 
-              if (!QUIET_MODE && !JSON_MODE)
-                console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+              logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
               for (const violation of result.violations) {
                 const severity = violation.severity || enforcementLevel;
@@ -1773,11 +1795,11 @@ class QualityGateRunner {
               }
 
               if (enforcementLevel === 'warning') {
-                console.log(
+                logResult(
                   `   ${result.violations.length} documentation warnings (commit allowed)`
                 );
               } else {
-                console.log(
+                logResult(
                   `   ${result.violations.length} documentation violations (${enforcementLevel} mode)`
                 );
               }
@@ -1810,9 +1832,9 @@ class QualityGateRunner {
 
       // Report warnings (approved exceptions)
       if (placeholderResults.warnings.length > 0) {
-        console.log(`   ${placeholderResults.warnings.length} approved exceptions in use`);
+        logResult(`   ${placeholderResults.warnings.length} approved exceptions in use`);
         for (const warning of placeholderResults.warnings) {
-          console.log(`      ${warning.file || 'General'}: ${warning.message}`);
+          logResult(`      ${warning.file || 'General'}: ${warning.message}`);
         }
       }
 
@@ -1820,8 +1842,7 @@ class QualityGateRunner {
       const enforcementLevel = placeholderResults.enforcementLevel;
 
       if (placeholderResults.violations.length > 0) {
-        if (!QUIET_MODE && !JSON_MODE)
-          console.log(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
+        logResult(`    Enforcement level: ${enforcementLevel.toUpperCase()}`);
 
         for (const violation of placeholderResults.violations) {
           const severity = violation.severity || enforcementLevel;
@@ -1852,15 +1873,11 @@ class QualityGateRunner {
           }
         }
 
-        if (!QUIET_MODE && !JSON_MODE) {
-          console.log(
-            `   ${placeholderResults.violations.length} placeholder governance findings (${enforcementLevel} mode)`
-          );
-        }
+        logResult(
+          `   ${placeholderResults.violations.length} placeholder governance findings (${enforcementLevel} mode)`
+        );
       } else {
-        if (!QUIET_MODE && !JSON_MODE) {
-          console.log('   No placeholder governance violations found');
-        }
+        logResult('   No placeholder governance violations found');
       }
     } catch (error) {
       this.violations.push({
@@ -1908,12 +1925,10 @@ class QualityGateRunner {
         }
       }
 
-      if (!QUIET_MODE && !JSON_MODE) {
-        if (result.violations.length > 0) {
-          console.log(`   ${result.violations.length} simplification violations found`);
-        } else {
-          console.log('   No simplification violations found');
-        }
+      if (result.violations.length > 0) {
+        logResult(`   ${result.violations.length} simplification violations found`);
+      } else {
+        logResult('   No simplification violations found');
       }
     } catch (error) {
       this.violations.push({
@@ -1925,7 +1940,7 @@ class QualityGateRunner {
   }
 
   async runBasicDocumentationChecks() {
-    console.log('   Running basic documentation quality checks (Python fallback)');
+    logProgress('   Running basic documentation quality checks (Python fallback)');
 
     const violations = [];
     const warnings = [];
@@ -2072,14 +2087,12 @@ class QualityGateRunner {
    * @returns {void} Exits process with code 0 (success) or 1 (blocking violations)
    */
   reportResults() {
-    if (!QUIET_MODE) {
-      console.log('\n' + '='.repeat(50));
-      console.log('QUALITY GATES RESULTS');
-      console.log('='.repeat(50));
-      console.log(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
-      console.log(`Files checked: ${this.filesToCheck.length} file(s)`);
-      console.log('='.repeat(50));
-    }
+    logHuman('\n' + '='.repeat(50));
+    logHuman('QUALITY GATES RESULTS');
+    logHuman('='.repeat(50));
+    logHuman(`Context: ${this.context.toUpperCase()} (${this.contextInfo.description})`);
+    logHuman(`Files checked: ${this.filesToCheck.length} file(s)`);
+    logHuman('='.repeat(50));
 
     // Check waivers for each violation
     for (const violation of this.violations) {
@@ -2216,7 +2229,7 @@ class QualityGateRunner {
         console.log(JSON.stringify(payload, null, 2));
       }
 
-      if (DEBUG_MODE && !QUIET_MODE) {
+      if (DEBUG_MODE && !QUIET_MODE && !JSON_MODE) {
         console.log('\n' + '='.repeat(50));
         console.log('DEBUG INFORMATION');
         console.log('='.repeat(50));

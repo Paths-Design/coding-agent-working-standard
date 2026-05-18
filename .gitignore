@@ -557,3 +557,8 @@ bun.lockb
 # Python bytecode caches (e.g. from running templates/.claude/hooks/test_classify_command.py)
 __pycache__/
 *.pyc
+
+# Slice 7a rehearsal scratch dirs
+.rehearsal-gates/
+.rehearsal-*.log
+.triage-*.log
