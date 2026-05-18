@@ -156,15 +156,17 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 
 ### 8. `tests/contract/schema-contract.test.js`
 
-**Failure count:** Per-suite run reports **0 explicit failures** in the visible output (`✓` on every printed test); however, the full-suite run flagged it as failing. Likely cause: a flaky setup/teardown or an off-by-one in the global tally, **not** an assertion failure.
+**Failure count:** 1 failed / 51 passed (deterministic across 3 isolated runs — NOT a flake; earlier triage log had truncated mid-suite)
 
-**v11 status:** Schemas at `packages/caws-cli/schemas/` (working-spec, worktrees, waivers, scope, policy) all exist and pass JSON validity + title + structural assertions.
+**Failing test:** `Schema Validation Contracts › Template-Runtime Schema Parity (CAWSFIX-20) › A2: template working-spec schema matches runtime after $comment strip`
 
-**Proposed disposition:** `RETAIN` (verify only)
+**Root cause:** Line 357 sets `RUNTIME_WORKING = path.join(__dirname, '../../../../.caws/working-spec.schema.json')` — points to **the project-root `.caws/working-spec.schema.json`**, which does not exist in v11 (v11 has no working-spec.yaml, therefore no working-spec.schema.json deployed to host `.caws/`).
 
-**Rationale:** Re-run individually until a deterministic failure mode is identified. If it stabilizes as fully green in isolation, it's likely an interaction with another suite's global state. Document the finding; do not edit.
+**Proposed disposition (revised after step-3 investigation):** `REWRITE` (one test only — delete the working-spec parity check)
 
-**Salvage:** N/A — this is RETAIN pending confirmation.
+**Rationale:** The other 51 assertions are v11-valid (schema existence, JSON validity, title fields, working-spec schema validation against the *bundled* schema, worktree/waiver/scope/policy schemas, working-spec template-vs-runtime parity for the schemas that *are* deployed). Only the working-spec runtime check is moot in v11.
+
+**Salvage:** Keep all 51 passing tests. Delete the single failing test (A2 working-spec parity) since the working-spec.yaml concept itself is removed.
 
 ---
 
@@ -253,14 +255,23 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
   (b) the test fixture doesn't set up a valid v11 project before invoking gates
   (c) the test uses an old gates invocation shape
 
-**Proposed disposition:** `RETAIN` (with investigation) or possibly `REWRITE` if invocation shape changed
+**Proposed disposition (after step-1 sandbox investigation):** `REWRITE` (full file)
 
-**Rationale:** This is the **highest-priority diagnostic finding** of the whole triage. Gates is a v11 product surface. If `caws gates` actually fails in CI conditions, that's a release-blocker for v11.1 independent of test reconciliation. We should:
-  1. Manually run the test scenario in a sandbox and see whether gates fails or the test setup is wrong.
-  2. If gates works manually: REWRITE the test fixture.
-  3. If gates is broken: open a parallel spec (GATES-CLI-REGRESSION-001) and fix it.
+**Investigation findings (sandbox-confirmed):**
+- The test at line 14 invokes `src/index.js` — **stale v10 entry-point still on disk**, not the v11 `dist/index.js`. The v11 cutover removed the command surface but left the old entry file.
+- Test fixture writes `.caws/working-spec.yaml` (line 83) — v11 removed working-spec.yaml; specs live at `.caws/specs/<id>.yaml`.
+- Test invokes `gates run --context=cli --json` — v11 requires `--spec <id>`, and the `--json` flag does not exist on v11 gates.
+- v11 `caws gates run --spec FEAT-001 --context=cli` works correctly (sandbox-verified): all 5 declared gates evaluate, all pass, exit 0, text output "Overall: OK".
 
-**Salvage:** All assertions encode real v11 contracts (exit codes, JSON shape, warn vs block semantics). 100% durable.
+**Conclusion:** No v11 product regression. Pure fixture mismatch.
+
+**Salvage:** All intents (exit codes, gate disposition, scope-boundary blocking, budget enforcement) are durable v11 invariants. REWRITE to v11 shape:
+- Use `dist/index.js` (or the `runGatesRunCommand` in-process runner from `dist/shell`)
+- Create fixture via `caws init` + `caws specs create FEAT-001`
+- Invoke `gates run --spec FEAT-001 --context=cli`
+- Assert on text-output disposition table AND on appended `gate_evaluated` events in `events.jsonl`
+
+**Side cleanup:** Delete `packages/caws-cli/src/index.js` after grep-confirming no v11 path still references it.
 
 ---
 
@@ -272,11 +283,37 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
 
 **v11 status:** Lite hooks classify shell commands and edits. The failing tests are all about a hooks classifier blocking specific dangerous commands. The hook pack itself shipped in INIT-HOOK-PACKS-001 (Slice 2). The classifier behavior may have shifted between v10 and v11 (the user already noted standing rules about not bypassing hooks).
 
-**Proposed disposition:** `RETAIN` (with investigation)
+**Proposed disposition (after step-2 sandbox investigation):** `REWRITE` (4 top-level block tests) + investigate 1 chained-dangerous case separately
 
-**Rationale:** These tests encode **incident-derived hook behavior** — the user has explicitly flagged hook discipline as a standing rule. Casual deletion would lose safety assertions. The 19 passing tests confirm the hook substrate broadly works. The 5 failures need per-test diagnosis: is the classifier intentionally less strict in v11 (which would mean the tests need updating), or is the classifier broken (which would mean v11 has a hook-safety regression)?
+**Investigation findings (sandbox-confirmed):**
+- The hook architecture changed from "deny via exit 2 + bash regex fallback" to "JSON-decision via `permissionDecision` field, exit 0, single-semantic-layer (no regex fallback). Missing classifier → ask-latch."
+- Test setup (lines 62-69) **does not copy `classify_command.py`** to the test dir. The top-level block tests rely on the missing-classifier fallback path. With no classifier, the new hook architecture emits `permissionDecision: "ask"` + exit 0 (correct behavior: human review required).
+- For all four failing commands (`git push --force`, `git init`, `git reset --hard`, `python -m venv`), `classify_command.py` returns `{"decision": "ask"}` (sandbox-verified). Per `block-dangerous.sh:129-133`, an `ask` decision exits 0 with the JSON ask envelope.
+- This is *stricter* safety than the old model: instead of categorical deny, the hook routes destructive/authority-bearing commands through a human-approval gate.
 
-**Salvage:** All assertions are durable safety invariants. Investigate before any change.
+**Conclusion:** No safety regression. The hook is *more* conservative than the test asserted. Test contract is outdated; safety architecture is improved.
+
+**Rewrite contract (per reviewer decision):**
+```
+git push --force          → permissionDecision: ask
+git init                  → permissionDecision: ask
+git reset --hard          → permissionDecision: ask
+python -m venv myenv      → permissionDecision: ask
+missing classifier        → permissionDecision: ask + latch
+```
+
+Tests assert:
+- `exitCode === 0` (the new contract)
+- `stdout` parses as JSON
+- `hookSpecificOutput.hookEventName === "PreToolUse"`
+- `hookSpecificOutput.permissionDecision === "ask"`
+- `permissionDecisionReason` contains the relevant reason
+
+Do NOT change the classifier to `deny` for any of these four. `deny` is reserved for categorically unsafe commands; `ask` is the right level for destructive/authority-bearing.
+
+**Separately investigate:** `blocks dangerous command chained after safe quoted echo` (line 225) — may be a genuine classifier bug if the command after `&&` is semantically dangerous outside the quoted region. Diagnose during the rewrite step.
+
+**Salvage:** All 19 passing tests stay. Rewrite the 4 top-level block tests to JSON assertions; investigate the chained-dangerous-after-echo case.
 
 ---
 
@@ -306,27 +343,33 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
 | 5. `perf-budgets.test.js` | REWRITE (4 tests) | 4 (keep 5 passing) |
 | 6. `axe/cli-accessibility.test.js` | REWRITE (2 tests) | 2 (keep 7 passing) |
 | 7. `contract/cli-contract.test.js` | REWRITE | 4 (keep 2 passing) |
-| 8. `contract/schema-contract.test.js` | RETAIN (verify isolation-pass) | 0 |
+| 8. `contract/schema-contract.test.js` | REWRITE (1 test only — delete working-spec parity) | 1 (keep 51) |
 | 9. `e2e/smoke-workflow.test.js` | REWRITE (full file) | 5 |
 | 10. `integration/cli-workflow.test.js` | REWRITE (full file) | 5 |
 | 11. `integration/cursor-hooks.test.js` | RETAIN + 3 small REWRITEs | 3 (keep 13 passing) |
 | 12. `integration/event-log-read-parity.test.js` | SPLIT (delete iterate/sidecar; evaluate status/gates parity) | 8 |
-| 13. `integration/gates-cli.test.js` | RETAIN + investigation | 9 (real v11 surface — possible regression) |
-| 14. `integration/lite-hooks.test.js` | RETAIN + investigation | 5 (safety invariants — diagnose, don't delete) |
+| 13. `integration/gates-cli.test.js` | REWRITE (post-investigation: fixture mismatch, no v11 regression) | 9 |
+| 14. `integration/lite-hooks.test.js` | REWRITE (post-investigation: stricter safety, JSON contract changed; assert `ask` semantics) | 4 top-level + 1 chained case to diagnose |
 | 15. `integration/tools-integration.test.js` | DELETE | 2 |
 
-**Totals:**
+**Totals (post-investigation):**
 - DELETE: 2 suites (`parallel-command`, `tools-integration`)
 - SPLIT: 1 suite (`event-log-read-parity` — delete removed-command parts; evaluate status/gates parity)
-- REWRITE: 7 suites (some full-file, some surgical)
-- RETAIN: 4 suites (with diagnostic work, not blind keeping)
-- QUARANTINE: 0 suites (none qualified as "deferred future product surface with tracking spec")
+- REWRITE: 11 suites (everything else; gates-cli and lite-hooks moved here after investigation)
+- RETAIN (harness fix only): 1 suite (`validation.test.js` — src → dist import)
+- QUARANTINE: 0 suites
+- **Real v11 product regressions found:** 0
 
-## Key risks flagged
+## Risks investigated — all clear
 
-1. **`gates-cli.test.js` — possible real v11 regression.** Every test fails on a kept v11 command. Must be diagnosed before reconciliation. If gates actually broken, this becomes its own blocker (parallel slice).
-2. **`lite-hooks.test.js` — safety assertions failing.** Five tests about classifier blocking dangerous commands fail. Need diagnosis: is the classifier intentionally relaxed, or is hook safety regressing? The user's standing rule against bypassing hooks makes this high-priority.
-3. **`schema-contract.test.js` — flake suspect.** Per-suite run shows green; full-suite run flagged failing. Almost certainly interaction with another suite's global state. Worth identifying the offender.
+1. **`gates-cli.test.js`** — **investigated, no regression.** Fixture invokes legacy `src/index.js` with v10 `--json --context=cli` and v10 working-spec.yaml. v11 `gates run --spec FEAT-001 --context=cli` works correctly in sandbox. REWRITE the test.
+2. **`lite-hooks.test.js`** — **investigated, safety improved, not regressed.** Hook moved from "exit 2 + regex fallback" to "JSON `permissionDecision` + single-semantic-layer + ask-latch on missing classifier." Classifier deliberately returns `ask` (not `deny`) for `git push --force` / `git init` / `git reset --hard` / `python -m venv` — these are destructive/authority-bearing, gated by human approval rather than categorical refusal. REWRITE tests to assert JSON envelope with `permissionDecision === "ask"`.
+3. **`schema-contract.test.js`** — **investigated, not a flake.** Deterministic 1/52 failure across 3 isolated runs. Earlier triage log truncated mid-suite. The single failing test (A2 working-spec parity) references `.caws/working-spec.schema.json` at host project root, which v11 does not deploy. REWRITE: delete the one test; the other 51 are v11-valid.
+
+## Side cleanup discovered during investigations
+
+- **Dead v10 entry-point in tree:** `packages/caws-cli/src/index.js` exists and contains v10 scaffolding code, never removed during the cutover at commit `267b2bc`. `gates-cli.test.js` invokes it. After v11 path-reference verification, delete it.
+- Possibly other v10 entry stubs at `src/cli.js`, `src/commands/*.js` — check during the gates-cli rewrite step.
 
 ## Approved execution order
 
