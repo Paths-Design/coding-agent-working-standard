@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -46,15 +46,21 @@ fi
 
 emit_scope_progression() {
   local detail="$1"
-  local unblock="To get unblocked: edit files that are already in scope, or update the relevant CAWS spec so this path is legitimately in scope. If you are already in the correct worktree, verify the mutual CAWS binding: the spec must declare 'worktree: <name>' and .caws/worktrees.json must map that same worktree name to the correct 'specId' (v10) or 'spec_id' (v11). If that registry binding is missing, unrelated active specs may block your edit. On CAWS v11.0 the worktree lifecycle CLI is not yet restored; on v11.1+ use the repo-local 'caws worktree bind' command. If the scope change is not clearly yours to make, ask the user. If the scope was legitimately corrected but prior strikes from earlier edits are still cornering this session, ask the user to run: bash .claude/hooks/reset-strikes.sh --current (or --session <uuid>) to clear stale strike state — never edit guard-strikes-*.json by hand. Do not edit .claude/hooks/, .claude/logs/guard-strikes-*.json, or other guard state to bypass this check."
+  # Strike-level diagnostic triage: strike 1 fires often (any agent
+  # touching the edge of its lane) and the edit proceeds — keep the
+  # message short so it informs without burying. Strike 2 escalates to
+  # user-approval and adds the spec/binding-fix options. Strike 3 is the
+  # hard block and surfaces the full reset-strikes + binding guidance.
+  local fix_options="Fix options: (1) edit a file already in scope, (2) update the bound spec's scope.in if this path should be in scope, (3) ask the user."
+  local hard_block_guidance="If prior strikes from earlier edits are cornering this session and the scope is now correct, ask the user to run: bash .claude/hooks/reset-strikes.sh --current (or --session <uuid>) to clear stale strike state. Verify the worktree binding: the spec must declare 'worktree: <name>' and .caws/worktrees.json must map that same worktree name to the correct 'specId' (v10) or 'spec_id' (v11). On CAWS v11.0 the worktree lifecycle CLI is not yet restored; on v11.1+ use 'caws worktree bind'. Do not edit .claude/hooks/, .claude/logs/guard-strikes-*.json, or other guard state to bypass this check."
 
   guard_enforce_progressive_strikes \
     "$SESSION_ID" \
     "scope_guard" \
     "$WORK_DIR" \
-    "Scope guard strike 1 of 3 for '$REL_PATH'. Strict warning: this edit is allowed, but the next out of scope edit requires user permission. $detail $unblock" \
-    "Scope guard strike 2 of 3 for '$REL_PATH'. You are blocked, asking the user for approval. $detail $unblock" \
-    "Scope guard strike 3 of 3 for '$REL_PATH'. You are blocked on moving forward until your scope is properly set. $detail $unblock"
+    "Scope guard strike 1 of 3 for '$REL_PATH'. This edit proceeds, but a second out-of-scope edit will require user approval. $detail" \
+    "Scope guard strike 2 of 3 for '$REL_PATH'. Blocked — asking the user for approval. $detail $fix_options" \
+    "Scope guard strike 3 of 3 for '$REL_PATH'. Hard-blocked until scope is corrected. $detail $fix_options $hard_block_guidance"
 }
 
 resolve_worktree_root() {

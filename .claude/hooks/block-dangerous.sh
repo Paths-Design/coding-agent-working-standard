@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 1,17
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -127,13 +127,13 @@ case "$DECISION" in
     exit 0
     ;;
   deny)
-    FULL_REASON="$REASON. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command. Stop and ask the user for the next step. Command was: $COMMAND"
+    FULL_REASON="$REASON. This is a HARD BLOCK — Claude Code will refuse the command. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command (e.g. via 'command git ...', 'env ... git ...', 'bash -lc \"...\"', or 'git --bare init'). Stop and ask the user for the next step. Command was: $COMMAND"
     record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
     emit_block_json "$FULL_REASON"
     exit 0
     ;;
   ask)
-    FULL_REASON="$REASON. This may alter destructive or authority-bearing state. Do not retry by alternate syntax if permission is not granted. Command was: $COMMAND"
+    FULL_REASON="$REASON. Claude Code will PAUSE and ask the user to approve before running. This may alter destructive or authority-bearing state. Do not attempt to bypass this by rephrasing the command, switching syntax, or wrapping the invocation. If permission is not granted, stop and ask the user for the next step. Command was: $COMMAND"
     record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
     emit_ask_json "$FULL_REASON"
     exit 0
@@ -142,7 +142,7 @@ case "$DECISION" in
     # Unknown decision value -- malformed classifier output. Do NOT fall
     # through to the weaker regex fallback; ask+latch instead so a
     # corrupted classifier cannot silently downgrade safety.
-    FULL_REASON="command classifier returned an unrecognized decision '$DECISION'. This is a human-review boundary. Command was: $COMMAND"
+    FULL_REASON="command classifier returned an unrecognized decision '$DECISION'. Claude Code will PAUSE and ask the user. This is a human-review boundary. Command was: $COMMAND"
     record_danger_latch "$LATCH_FILE" "ask" "classifier unknown decision: $DECISION" "$COMMAND"
     emit_ask_json "$FULL_REASON"
     exit 0

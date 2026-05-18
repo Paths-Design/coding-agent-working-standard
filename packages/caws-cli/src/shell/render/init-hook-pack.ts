@@ -157,6 +157,13 @@ export function renderSettingsWiring(
       '  NOT fire until Claude Code reads a settings.json that wires them.'
     );
     lines.push('');
+    lines.push(
+      '  init does not write this file directly because merging with your'
+    );
+    lines.push(
+      '  existing permissions, env, and hook entries is your responsibility.'
+    );
+    lines.push('');
     lines.push('  Create .claude/settings.json with the following content:');
     lines.push('');
     for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
@@ -196,9 +203,16 @@ export function renderSettingsWiring(
 }
 
 /** Render the activation contract. Drives what the agent should do
- *  immediately after init. */
+ *  immediately after init. The message tailors to three signals:
+ *  - did this run actually install or update files? (changed vs no-op)
+ *  - is settings.json wired? (only known when caller passes wiringStatus)
+ *  - what is the harness's activation model? (from pack)
+ *
+ *  Without these signals the panel becomes a constant STOP sign on every
+ *  re-run, which trains agents to ignore it. */
 export function renderActivationContract(
-  result: HookPackInstallResult
+  result: HookPackInstallResult,
+  wiringStatus?: SettingsWiringStatus
 ): string {
   const lines: string[] = [];
   lines.push(section('Step: activation'));
@@ -216,6 +230,10 @@ export function renderActivationContract(
     return lines.join('\n');
   }
 
+  const changed =
+    result.outcome === 'installed' || result.outcome === 'updated';
+  const wired = wiringStatus?.kind === 'wired';
+
   switch (result.activation) {
     case 'immediate':
       lines.push(
@@ -223,19 +241,55 @@ export function renderActivationContract(
       );
       break;
     case 'restart_required':
-      lines.push(
-        '  RESTART REQUIRED: Claude Code reads .claude/settings.json at session'
-      );
-      lines.push(
-        '  start. The hooks you just installed are NOT enforcing in this session.'
-      );
-      lines.push('');
-      lines.push(
-        '  STOP. Do not continue substantive work. Ask the user to restart or'
-      );
-      lines.push(
-        '  reopen the Claude Code session so the hooks become active.'
-      );
+      if (!changed && wired) {
+        // No-op re-run on a fully-wired install. Positive confirmation.
+        lines.push(
+          '  Hooks are installed and wired. They are active in any Claude Code'
+        );
+        lines.push(
+          '  session started AFTER the install. If you are running in a session'
+        );
+        lines.push(
+          '  that pre-dates the install, restart the session to load them.'
+        );
+      } else if (changed && wired) {
+        // Files updated; wiring is already in place but the new versions
+        // need a session restart to load.
+        lines.push(
+          '  Hook files were installed or updated. Settings.json is wired.'
+        );
+        lines.push(
+          '  Restart the Claude Code session so the updated hooks load.'
+        );
+      } else if (changed && !wired) {
+        // The original STOP-sign case. Files just landed AND wiring is
+        // missing or partial. Agent must not continue.
+        lines.push(
+          '  RESTART REQUIRED: Claude Code reads .claude/settings.json at session'
+        );
+        lines.push(
+          '  start. The hooks you just installed are NOT enforcing in this session.'
+        );
+        lines.push('');
+        lines.push(
+          '  STOP. Do not continue substantive work. Wire .claude/settings.json'
+        );
+        lines.push(
+          '  (see the previous panel) and ask the user to restart or reopen'
+        );
+        lines.push(
+          '  the Claude Code session so the hooks become active.'
+        );
+      } else {
+        // Idempotent re-run with wiring still missing or invalid.
+        lines.push(
+          '  Hook files are installed but settings.json wiring is not complete.'
+        );
+        lines.push(
+          '  Hooks will not fire until the wiring is finished (see the previous'
+        );
+        lines.push('  panel) and the Claude Code session is restarted.');
+      }
       break;
     case 'unknown':
     case 'not_applicable':

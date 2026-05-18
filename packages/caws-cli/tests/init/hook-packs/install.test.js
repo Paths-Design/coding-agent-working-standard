@@ -428,7 +428,11 @@ describe('A6 / A13: explicit none and ambiguous skip', () => {
     fs.mkdirSync(path.join(repo, '.claude'));
     const r = capture(runInitCommand, { cwd: repo });
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/Step: hook-pack install \(claude-code v1\)/);
+    expect(r.stdout).toMatch(
+      new RegExp(
+        `Step: hook-pack install \\(claude-code v${CLAUDE_CODE_PACK.packVersion}\\)`
+      )
+    );
     expect(fs.existsSync(
       path.join(repo, '.claude/hooks/scope-guard.sh')
     )).toBe(true);

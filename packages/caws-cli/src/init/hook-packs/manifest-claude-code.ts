@@ -19,7 +19,12 @@
 
 import type { HookPackV1 } from './types';
 
-export const CLAUDE_CODE_PACK_VERSION = 1;
+// Pack version bumps when managed file contents change in a way that
+// existing installs should pick up via the managed_old_version → auto-
+// update path. Version 2 ships the strike-level diagnostic triage,
+// activation-banner wording fix, settings.json "why we don't write it"
+// note, and tightened ask/block semantics in block-dangerous.
+export const CLAUDE_CODE_PACK_VERSION = 2;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

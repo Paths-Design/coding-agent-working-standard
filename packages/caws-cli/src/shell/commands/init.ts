@@ -217,13 +217,18 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // Step 3: inspect .claude/settings.json. Only meaningful when a pack
   // was actually installed (claude-code in v11.1). For 'none' or
   // 'skipped_ambiguous', skip this check.
+  let wiringStatus: ReturnType<typeof inspectClaudeSettings> | undefined;
   if (hookPackResult.pack !== null) {
-    const wiringStatus = inspectClaudeSettings(repoRoot);
+    wiringStatus = inspectClaudeSettings(repoRoot);
     out(renderSettingsWiring(wiringStatus));
   }
 
-  // Step 4: activation contract.
-  out(renderActivationContract(hookPackResult));
+  // Step 4: activation contract. The contract message tailors to whether
+  // anything was actually installed/updated this run AND whether the
+  // settings.json wiring is in place — without those signals the panel
+  // becomes a constant STOP sign on re-runs, training agents to ignore
+  // it.
+  out(renderActivationContract(hookPackResult, wiringStatus));
 
   // Exit code: refusal in pack install → 1 so callers see something went
   // wrong; otherwise 0.
