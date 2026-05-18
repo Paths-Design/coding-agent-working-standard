@@ -96,86 +96,67 @@ describe('Performance Budget Tests', () => {
   });
 
   describe('Command Execution Performance', () => {
+    // LEGACY-TEST-RECONCILE-001: v11 init is in-place (no project-name
+    // arg, no --non-interactive). Each perf test creates a fresh
+    // git-initialized subdir and runs caws init / specs create against
+    // it. v11 has no `caws scaffold` command (removed); the "scaffold
+    // perf budget" test below was rewritten to measure `specs create`
+    // which is the closest v11 equivalent (bootstrapping a feature spec
+    // is the v11 way to "scaffold" a new piece of work).
+    function makeV11Project(dir) {
+      fs.mkdirSync(dir, { recursive: true });
+      execSync('git init -q', { cwd: dir });
+      execSync('git config user.email t@t.com', { cwd: dir });
+      execSync('git config user.name T', { cwd: dir });
+      execSync('git commit --allow-empty -q -m init', { cwd: dir });
+    }
+
     test('should initialize project within performance budget', () => {
-      // Performance Contract: Project initialization should be fast (< 2s)
-
-      const testProjectName = `test-perf-init-${Date.now()}`;
-      const testProjectPath = path.join(testTempDir, testProjectName);
-
-      // Clean up any existing test project
-      if (fs.existsSync(testProjectPath)) {
-        fs.rmSync(testProjectPath, { recursive: true, force: true });
-      }
+      // v11 init is in-place. Budget: 2s.
+      const testProjectPath = path.join(testTempDir, `perf-init-${Date.now()}`);
+      makeV11Project(testProjectPath);
 
       const startTime = performance.now();
-
       try {
-        execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+        execSync(`node "${cliPath}" init`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: testTempDir,
+          cwd: testProjectPath,
         });
       } finally {
-        // Clean up
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
         }
       }
-
-      const endTime = performance.now();
-      const initTime = endTime - startTime;
-
-      const maxInitTime = 2000; // 2s budget
-
-      // Performance Contract: Project init should complete within budget
+      const initTime = performance.now() - startTime;
+      const maxInitTime = 2000;
       expect(initTime).toBeLessThan(maxInitTime);
-
-      console.log(`Project init time: ${initTime.toFixed(2)}ms (budget: ${maxInitTime}ms)`);
+      console.log(`v11 init time: ${initTime.toFixed(2)}ms (budget: ${maxInitTime}ms)`);
     });
 
-    test('should scaffold project within performance budget', () => {
-      // Performance Contract: Project scaffolding should be fast (< 3s)
-
-      const testProjectName = `test-perf-scaffold-${Date.now()}`;
-      const testProjectPath = path.join(testTempDir, testProjectName);
-
-      // Clean up any existing test project
-      if (fs.existsSync(testProjectPath)) {
-        fs.rmSync(testProjectPath, { recursive: true, force: true });
-      }
+    test('should create a feature spec within performance budget', () => {
+      // v11 has no `caws scaffold` command. The closest equivalent for
+      // "bootstrap a unit of work" is `caws specs create`. Budget: 1.5s.
+      const testProjectPath = path.join(testTempDir, `perf-specs-${Date.now()}`);
+      makeV11Project(testProjectPath);
 
       try {
-        // Create project first
-        execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-          cwd: testTempDir,
-        });
-
-        const startTime = performance.now();
-
-        // Verify the project was created before changing directory
-        if (!fs.existsSync(testProjectPath)) {
-          throw new Error(`Test project not created: ${testProjectPath}`);
-        }
-
-        execSync(`node "${cliPath}" scaffold`, {
+        execSync(`node "${cliPath}" init`, {
           encoding: 'utf8',
           stdio: 'pipe',
           cwd: testProjectPath,
         });
 
-        const endTime = performance.now();
-        const scaffoldTime = endTime - startTime;
-
-        const maxScaffoldTime = 3000; // 3s budget
-
-        // Performance Contract: Scaffolding should complete within budget
-        expect(scaffoldTime).toBeLessThan(maxScaffoldTime);
-
-        console.log(
-          `Project scaffold time: ${scaffoldTime.toFixed(2)}ms (budget: ${maxScaffoldTime}ms)`
-        );
+        const startTime = performance.now();
+        execSync(`node "${cliPath}" specs create FEAT-001 --title perf-test --mode feature --risk-tier 3`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+          cwd: testProjectPath,
+        });
+        const createTime = performance.now() - startTime;
+        const maxCreateTime = 1500;
+        expect(createTime).toBeLessThan(maxCreateTime);
+        console.log(`v11 specs create time: ${createTime.toFixed(2)}ms (budget: ${maxCreateTime}ms)`);
       } finally {
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
@@ -191,24 +172,26 @@ describe('Performance Budget Tests', () => {
       const maxMemoryMB = 100;
       const initialMemory = process.memoryUsage().heapUsed / 1024 / 1024;
 
+      const testProjectPath = path.join(testTempDir, `perf-mem-${Date.now()}`);
+      fs.mkdirSync(testProjectPath, { recursive: true });
+      execSync('git init -q', { cwd: testProjectPath });
+      execSync('git config user.email t@t.com', { cwd: testProjectPath });
+      execSync('git config user.name T', { cwd: testProjectPath });
+      execSync('git commit --allow-empty -q -m init', { cwd: testProjectPath });
+
       try {
-        // Run a memory-intensive operation
-        execSync(`node "${cliPath}" init test-memory-check --non-interactive`, {
+        // v11 init (in-place)
+        execSync(`node "${cliPath}" init`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: testTempDir,
+          cwd: testProjectPath,
         });
 
         const finalMemory = process.memoryUsage().heapUsed / 1024 / 1024;
         const memoryUsed = finalMemory - initialMemory;
-
-        // Performance Contract: Memory usage should stay within budget
         expect(memoryUsed).toBeLessThan(maxMemoryMB);
-
-        console.log(`🧠 Memory usage: ${memoryUsed.toFixed(2)}MB (budget: ${maxMemoryMB}MB)`);
+        console.log(`Memory usage: ${memoryUsed.toFixed(2)}MB (budget: ${maxMemoryMB}MB)`);
       } finally {
-        // Clean up test project
-        const testProjectPath = path.join(testTempDir, 'test-memory-check');
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
         }
@@ -306,35 +289,25 @@ describe('Performance Budget Tests', () => {
 
   describe('Resource Usage Monitoring', () => {
     test('should monitor CPU usage during operations', () => {
-      // Performance Contract: CLI should not consume excessive CPU
-
-      const testProjectName = `test-cpu-monitor-${Date.now()}`;
-      const testProjectPath = path.join(testTempDir, testProjectName);
+      // v11 init (in-place). Budget: 5s end-to-end wall clock.
+      const testProjectPath = path.join(testTempDir, `perf-cpu-${Date.now()}`);
+      fs.mkdirSync(testProjectPath, { recursive: true });
+      execSync('git init -q', { cwd: testProjectPath });
+      execSync('git config user.email t@t.com', { cwd: testProjectPath });
+      execSync('git config user.name T', { cwd: testProjectPath });
+      execSync('git commit --allow-empty -q -m init', { cwd: testProjectPath });
 
       try {
-        // Clean up any existing test project
-        if (fs.existsSync(testProjectPath)) {
-          fs.rmSync(testProjectPath, { recursive: true, force: true });
-        }
-
         const startTime = process.hrtime.bigint();
-
-        // Run a CPU-intensive operation
-        execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+        execSync(`node "${cliPath}" init`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: testTempDir,
+          cwd: testProjectPath,
         });
-
-        const endTime = process.hrtime.bigint();
-        const executionTimeMs = Number(endTime - startTime) / 1000000;
-
-        // Performance Contract: Operations should complete in reasonable time
-        expect(executionTimeMs).toBeLessThan(5000); // 5 seconds max
-
-        console.log(`⏱️  CPU time: ${executionTimeMs.toFixed(2)}ms`);
+        const executionTimeMs = Number(process.hrtime.bigint() - startTime) / 1000000;
+        expect(executionTimeMs).toBeLessThan(5000);
+        console.log(`CPU time (v11 init): ${executionTimeMs.toFixed(2)}ms`);
       } finally {
-        // Clean up
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
         }
