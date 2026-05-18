@@ -16,7 +16,6 @@ scope:
     - packages/quality-gates/run-quality-gates.mjs
     - packages/quality-gates/tests/
   out:
-    - packages/caws-cli/
     - packages/caws-kernel/
 invariants:
   - When caws-quality-gates is invoked with --json, every successful exit path emits exactly one JSON document to stdout that conforms to the GatesReport contract.

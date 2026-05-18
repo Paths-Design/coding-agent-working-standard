@@ -2,9 +2,11 @@ id: HOST-GOV-002
 title: Migrate legacy-shape host specs to v11 lifecycle_state and resolve registry.json semantics
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Work landed in 895f2b2 (chore(caws): migrate legacy-shape host specs to v11). All five legacy specs migrated; registry.json archived to .archive/.caws-legacy/specs-registry.json. Manually closed during v11.1 transition because caws specs close is not yet restored; spec remained active only due to lifecycle-command gap.'
 created_at: '2026-05-17T00:00:00.000Z'
-updated_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
 blast_radius:
   modules:
     - .caws/specs

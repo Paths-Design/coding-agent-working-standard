@@ -2,9 +2,11 @@ id: CLI-CONTRACT-001
 title: Re-green caws --help contract tests after v11 surface trim
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Work landed in 9d811f9 (fix(caws-cli): re-green help-contract tests for v11 surface). Manually closed during v11.1 transition because caws specs close is not yet restored; spec remained active only due to lifecycle-command gap. Hand-closure follows the same lifecycle transition the missing CLI would perform.'
 created_at: '2026-05-17T00:00:00.000Z'
-updated_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/contract/schema-contract.test.js

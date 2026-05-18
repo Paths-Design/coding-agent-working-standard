@@ -2,9 +2,11 @@ id: INIT-HOOK-PACKS-001
 title: caws init installs durable v11 Claude Code hook pack (first-contact governance)
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Work landed in c460aa7 (feat(caws-cli): caws init --agent-surface installs durable hook pack) and d3aa1a0 (polish from fresh-agent walkthrough, pack v2). The Claude Code hook pack is published with managed markers, the CAWS repo .claude/hooks/ is a dogfood install, and the empirical fresh-repo walkthrough verified the full first-contact flow. Manually closed during v11.1 transition because caws specs close is not yet restored; spec remained active only due to lifecycle-command gap.'
 created_at: '2026-05-17T00:00:00.000Z'
-updated_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init
