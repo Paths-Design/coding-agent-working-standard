@@ -40,7 +40,6 @@ const {
 } = require('../../../dist/init/harness-detect');
 const {
   parseManagedHeader,
-  installHookPack,
   inspectClaudeSettings,
   CANONICAL_SETTINGS_SNIPPET,
 } = require('../../../dist/init/hook-install');

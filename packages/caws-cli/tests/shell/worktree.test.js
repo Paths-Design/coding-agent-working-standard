@@ -28,7 +28,6 @@ const { execFileSync } = require('child_process');
 const {
   runWorktreeCreateCommand,
   runWorktreeListCommand,
-  runWorktreeBindCommand,
   runWorktreeDestroyCommand,
   runWorktreeMergeCommand,
   runSpecsCreateCommand,

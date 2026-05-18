@@ -354,7 +354,6 @@ describe('Schema Validation Contracts', () => {
 
   // CAWSFIX-20: template schemas mirror runtime schemas; CAWSFIX-21: id regex parity
   describe('Template-Runtime Schema Parity (CAWSFIX-20)', () => {
-    const RUNTIME_WORKING = path.join(__dirname, '../../../../.caws/working-spec.schema.json');
     const RUNTIME_POLICY = path.join(__dirname, '../../../../.caws/policy.schema.json');
 
     const stripComments = (obj) => {

@@ -157,7 +157,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
 
 // ─── caws worktree list ───────────────────────────────────────────────────
 
-export interface WorktreeListOptions extends BaseCommandOptions {}
+export type WorktreeListOptions = BaseCommandOptions;
 
 export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
   const { cwd, out, err, showData } = setupIO(opts);
