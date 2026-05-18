@@ -1,29 +1,37 @@
-type: feature
-status: closed
+id: CLI-CLAIM-001
+title: 'Slice 6a: caws claim ownership command'
 risk_tier: 3
-mode: development
+mode: feature
+lifecycle_state: closed
+resolution: completed
+created_at: '2026-05-14T19:13:14.178Z'
+updated_at: '2026-05-17T00:00:00.000Z'
 blast_radius:
-  modules: []
+  modules:
+    - packages/caws-cli/src/shell/commands/claim.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - src/
-    - tests/
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/tests/shell/claim.test.js
   out:
-    - node_modules/
-    - dist/
-    - build/
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - System maintains data consistency
-acceptance: []
-acceptance_criteria: []
+  - 'caws claim surfaces current-worktree ownership without mutating state by default.'
+  - '--takeover writes a durable prior_owners audit entry on the worktree record.'
+acceptance:
+  - id: A1
+    given: 'A worktree owned by the current session.'
+    when: 'caws claim is invoked without --takeover.'
+    then: 'The command prints ownership info and exits 0; no state is mutated.'
+  - id: A2
+    given: 'A worktree owned by a different session.'
+    when: 'caws claim --takeover is invoked with the current session id.'
+    then: 'Ownership transfers, prior_owners audit is appended, and a claim_taken_over event is recorded.'
 non_functional:
-  a11y: []
-  perf: {}
-  security: []
+  security:
+    - 'Takeover requires explicit --takeover flag; ownership decisions use session-id equality only.'
 contracts: []
-id: CLI-CLAIM-001
-title: 'Slice 6a: caws claim ownership command'
-created_at: '2026-05-14T19:13:14.178Z'
-updated_at: '2026-05-14T19:22:40.837Z'

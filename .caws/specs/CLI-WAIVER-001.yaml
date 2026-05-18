@@ -1,29 +1,36 @@
 id: CLI-WAIVER-001
-type: feature
 title: 'Slice 7a: caws waiver authority surface'
-status: draft
 risk_tier: 3
-mode: development
+mode: feature
+lifecycle_state: draft
 created_at: '2026-05-14T22:21:52.990Z'
-updated_at: '2026-05-14T22:21:52.991Z'
+updated_at: '2026-05-17T00:00:00.000Z'
 blast_radius:
-  modules: []
+  modules:
+    - packages/caws-cli/src/shell/commands/waiver.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - src/
-    - tests/
+    - packages/caws-cli/src/shell/commands/waiver.ts
+    - packages/caws-cli/src/store/waivers-store.ts
+    - packages/caws-cli/tests/shell/waiver.test.js
   out:
-    - node_modules/
-    - dist/
-    - build/
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - System maintains data consistency
-acceptance: []
-acceptance_criteria: []
+  - 'Waivers filter gate violations on the read path; they do not change a gate''s mode (block/warn/skip).'
+  - 'Waiver creation, listing, show, and revocation each append exactly one event through appendEvent.'
+acceptance:
+  - id: A1
+    given: 'A repo with no active waivers and a gate violation matching some predicate.'
+    when: 'caws waiver create --gate <name> --reason <text> --approved-by <user> --expires-at <iso> is invoked.'
+    then: 'A waiver record is created; on subsequent gate evaluations, matching violations are filtered from the surfaced findings.'
+  - id: A2
+    given: 'An active waiver.'
+    when: 'caws waiver revoke <id> is invoked.'
+    then: 'The waiver becomes inactive; matching violations re-appear on next gate run.'
 non_functional:
-  a11y: []
-  perf: {}
-  security: []
+  security:
+    - 'Waiver creation requires approver and expiration; the kernel rejects records missing either.'
 contracts: []

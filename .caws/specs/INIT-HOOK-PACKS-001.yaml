@@ -72,9 +72,9 @@ acceptance:
     when: The installed scope-guard.sh evaluates an edit against active specs.
     then: The closed spec does not participate in union enforcement; only active specs are consulted.
   - id: A8
-    given: A v11 worktrees.json using the direct-key shape ({ "wt-name": { ... } }).
-    when: The installed worktree-guard.sh reads worktree ownership and binding.
-    then: The entry is recognized; both specId and spec_id keys are tolerated for the bound spec id.
+    given: 'A v11 worktrees.json using the direct-key shape (worktree-name keys map directly to entry objects).'
+    when: 'The installed worktree-guard.sh reads worktree ownership and binding.'
+    then: 'The entry is recognized; both specId and spec_id keys are tolerated for the bound spec id.'
   - id: A9
     given: An installed Claude Code hook pack on a system where the globally installed caws major version differs from the repo's caws-cli major version.
     when: The session start surface (session-caws-status.sh) runs.
@@ -97,25 +97,24 @@ acceptance:
     then: No hook pack is installed; output explicitly states that no pre-tool-call governance was installed and that the repo is not agent-safe for multi-session work without external governance.
 non_functional:
   security:
-    - Managed hook files must carry CAWS-MANAGED-HOOK headers to prevent silent treatment as ordinary scripts.
-    - Install must refuse rather than overwrite non-managed files at managed paths.
-    - Danger-command detection (Entry 17) must remain tokenization-aware in the installed pack; substring matching is regression.
+    - 'Managed hook files must carry CAWS-MANAGED-HOOK headers to prevent silent treatment as ordinary scripts.'
+    - 'Install must refuse rather than overwrite non-managed files at managed paths.'
+    - 'Danger-command detection (Entry 17) must remain tokenization-aware in the installed pack; substring matching is regression.'
   reliability:
-    - Re-running install with same pack version produces zero file mutations.
-    - Activation contract printed on every install so harness restart semantics are explicit.
-  compatibility:
-    - Installed scope-guard accepts v11 lifecycle_state and falls back to v10 status; closed/archived/completed are terminal regardless of which field is present.
-    - Installed worktree guards accept both registry shapes during the v10 to v11 transition.
+    - 'Re-running install with same pack version produces zero file mutations.'
+    - 'Activation contract printed on every install so harness restart semantics are explicit.'
+    - 'Installed scope-guard accepts v11 lifecycle_state and falls back to v10 status; closed/archived/completed are terminal regardless of which field is present.'
+    - 'Installed worktree guards accept both registry shapes during the v10 to v11 transition.'
 contracts:
   - name: HookPackV1 manifest
     type: schema
     path: packages/caws-cli/src/init/hook-packs/types.ts
-    description: Manifest shape enumerating id, target_surface, pack_version, caws_min_major, lifecycle_events, installed_paths, state_model, and lineage_refs for each registered hook pack.
-  - name: caws init --agent-surface
-    type: cli
+    description: 'Manifest shape enumerating id, target_surface, pack_version, caws_min_major, lifecycle_events, installed_paths, state_model, and lineage_refs for each registered hook pack.'
+  - name: caws init --agent-surface contract
+    type: behavior
     path: packages/caws-cli/src/shell/commands/init.ts
-    description: caws init accepts --agent-surface claude-code|cursor|windsurf|none; only claude-code is fully implemented in v11.1.
+    description: 'caws init accepts --agent-surface claude-code|cursor|windsurf|none; only claude-code is fully implemented in v11.1.'
   - name: Managed hook header
-    type: file-marker
+    type: schema
     path: packages/caws-cli/templates/hook-packs/claude-code/
-    description: Every managed file begins with a CAWS-MANAGED-HOOK comment block declaring hook_pack, hook_pack_version, caws_min_major, lineage_refs, and a do-not-edit-directly note.
+    description: 'Every managed file begins with a CAWS-MANAGED-HOOK comment block declaring hook_pack, hook_pack_version, caws_min_major, lineage_refs, and a do-not-edit-directly note.'

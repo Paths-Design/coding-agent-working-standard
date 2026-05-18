@@ -1,0 +1,78 @@
+id: HOST-GOV-002
+title: Migrate legacy-shape host specs to v11 lifecycle_state and resolve registry.json semantics
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-17T00:00:00.000Z'
+updated_at: '2026-05-17T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .caws/specs
+  data_migration: true
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CLI-CLAIM-001.yaml
+    - .caws/specs/CLI-GATES-001.yaml
+    - .caws/specs/CLI-STATUS-001.yaml
+    - .caws/specs/CLI-WAIVER-001.yaml
+    - .caws/specs/OPS-001.yaml
+    - .caws/specs/registry.json
+    - .caws/specs/HOST-GOV-002.yaml
+  out:
+    - .caws/events.jsonl
+    - .caws/policy.yaml
+    - .caws/specs/CLI-GATES-002.yaml
+    - .caws/specs/CLI-GATES-003.yaml
+    - .caws/specs/HOOK-SAFETY-001.yaml
+    - .caws/specs/HOST-GOV-001.yaml
+    - .caws/specs/QG-001.yaml
+    - .caws/specs/CLI-CONTRACT-001.yaml
+    - .caws/specs/INIT-HOOK-PACKS-001.yaml
+    - packages/caws-cli/src/
+    - packages/caws-kernel/src/
+invariants:
+  - 'Closed specs after migration carry lifecycle_state and required resolution per the v11 semantic validator.'
+  - 'Draft specs remain draft; migration does not invent a closer-decided transition.'
+  - 'Migration is minimal-semantic — preserves id, title, created_at, updated_at, scope structures, acceptance criteria, comments where reasonable.'
+  - 'The top-level v10 type field is removed; v11 expresses mode via the mode key only.'
+  - 'registry.json is treated as derived/stale index, not canonical input. Resolution is documented (deleted, archived, or regenerated) — never hand-rewritten as authoritative.'
+  - 'No v11-shape active specs from prior sessions are closed by this migration. The lifecycle CLI to close them lands in Slice 5 (CLI-SPECS-001).'
+acceptance:
+  - id: A1
+    given: 'The host repo contains five legacy-shape specs (CLI-CLAIM-001, CLI-GATES-001, CLI-STATUS-001, CLI-WAIVER-001, OPS-001).'
+    when: 'HOST-GOV-002 migration completes.'
+    then: 'All five specs validate as v11 shape; lifecycle_state is present, no top-level type field, mode is present, risk_tier is an integer, and closed or archived specs carry a resolution.'
+  - id: A2
+    given: 'Specs that were status closed in v10 shape.'
+    when: 'They are migrated to v11.'
+    then: 'They become lifecycle_state closed with a resolution field. The resolution defaults to completed only where the historical record supports it; otherwise abandoned. The migration does not invent transitions.'
+  - id: A3
+    given: 'A spec that was status draft in v10 shape (CLI-WAIVER-001).'
+    when: 'It is migrated.'
+    then: 'It becomes lifecycle_state draft. Migration does not transition it to active or closed.'
+  - id: A4
+    given: 'The .caws/specs/registry.json file exists in v10 shape using type/status keys and may be stale.'
+    when: 'HOST-GOV-002 resolves registry semantics after reading specs-store.ts.'
+    then: 'The file is either deleted, archived to .archive/.caws-legacy/, or regenerated from YAML by a documented derived writer, whichever matches what active v11 paths actually consume. The decision is recorded in the slice commit closure note.'
+  - id: A5
+    given: 'The five v11-shape active specs from prior sessions (CLI-GATES-002, CLI-GATES-003, HOOK-SAFETY-001, HOST-GOV-001, QG-001).'
+    when: 'HOST-GOV-002 migration runs.'
+    then: 'They are unchanged. Their lifecycle_state active is preserved.'
+  - id: A6
+    given: 'After migration, caws doctor runs against the host repo.'
+    when: 'All five legacy specs have been migrated and registry semantics resolved.'
+    then: 'doctor exits 0, or exits 1 with only explicitly documented intentional warnings (the v11.0 worktree-binding gap or agent stale-heartbeat display-only).'
+non_functional:
+  reliability:
+    - 'Migration is idempotent. Re-running the same migration on a v11-shape spec is a no-op.'
+    - 'During migration, hooks must read lifecycle_state first (already established in pack v2). Migration steps that temporarily produce intermediate states must not be classified as terminal.'
+contracts:
+  - name: v11 spec shape (closed)
+    type: schema
+    path: packages/caws-kernel/src/spec/validate-semantics.ts
+    description: Closed specs require lifecycle_state and resolution. Migration must satisfy both.
+  - name: registry.json consumer surface
+    type: behavior
+    path: packages/caws-cli/src/store/specs-store.ts
+    description: Investigation determines whether registry.json is read by any active v11 path; resolution policy follows from that finding.
