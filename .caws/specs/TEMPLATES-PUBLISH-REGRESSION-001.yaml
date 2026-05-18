@@ -1,0 +1,77 @@
+id: TEMPLATES-PUBLISH-REGRESSION-001
+title: 'v11.1.1: restore hook-pack templates to published tarball + prepublishOnly fresh-install smoke'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/TEMPLATES-PUBLISH-REGRESSION-001.yaml
+  out:
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/templates/hook-packs
+    - packages/caws-kernel
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+invariants:
+  - 'The published @paths.design/caws-cli tarball contains every runtime asset required by the v11 command surface. Fresh install + caws init --agent-surface claude-code must succeed without ENOENT.'
+  - 'Re-inclusion is by narrow allowlist, not bare templates. The dead scaffold/template surfaces slice 8b correctly excluded stay excluded.'
+  - 'A fresh-install smoke runs as prepublishOnly and as a CI step. It executes npm pack → install tarball into a temp dir → caws init --agent-surface claude-code → asserts presence of every hook-pack file the manifest declares. A red smoke blocks publish.'
+  - 'The smoke runs against the packed tarball, never against the repo-local dist/. Runtime asset coverage is verified by what npm publishes, not by what the working tree contains.'
+acceptance:
+  - id: A1
+    given: 'A clean checkout at v11.1.1.'
+    when: 'npm pack runs inside packages/caws-cli.'
+    then: 'The tarball contains templates/hook-packs/claude-code/scope-guard.sh and every other file declared in manifest-claude-code.ts. It does NOT contain bare templates/ deadwood (scaffold templates, codemod, OIDC_SETUP.md, etc.) that slice 8b removed.'
+  - id: A2
+    given: 'A fresh temp dir with git init + an empty initial commit, and no global caws install.'
+    when: 'The packed tarball is installed (npm install -g <tarball> OR npx --package <tarball> caws init --agent-surface claude-code).'
+    then: 'caws init succeeds, .caws/ is created with the v11 layout, AND .claude/hooks/ is populated with every file from the claude-code hook pack. No ENOENT.'
+  - id: A3
+    given: 'A hypothetical regression that drops templates/hook-packs from package.json:files (the exact class of bug v11.1.0 shipped).'
+    when: 'npm publish is attempted.'
+    then: 'The prepublishOnly smoke fails with a diagnostic naming the missing file and the path it was expected at. Publish does not proceed.'
+  - id: A4
+    given: 'The fresh-install smoke is wired as a CI workflow step.'
+    when: 'A PR modifies packages/caws-cli/package.json:files OR packages/caws-cli/templates/hook-packs/**.'
+    then: 'CI runs the smoke against npm pack output. A red smoke blocks merge.'
+non_functional:
+  reliability:
+    - 'The smoke is hermetic: temp dir under os.tmpdir(), no network beyond npm pack/install, cleaned up on both success and failure.'
+    - 'The smoke prints a clear diagnostic on failure naming the missing file path and the manifest entry that required it. No silent ENOENT surfaced through layers.'
+  performance:
+    - 'Smoke runs in under 60s wall-clock locally. (npm pack + install of one package + caws init.)'
+contracts:
+  - name: published tarball manifest contract
+    type: behavior
+    path: packages/caws-cli/scripts/fresh-install-smoke.mjs
+    description: 'For every file declared in packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts, the published tarball MUST contain a corresponding source under templates/hook-packs/claude-code/. The smoke iterates the manifest and asserts each path exists in the install.'
+# --- Triage ------------------------------------------------------------------
+# Regression introduced in df519ff (slice 8b — packaging boundary, 2026-05-15)
+# which correctly removed bare templates from package.json:files to exclude
+# dead scaffold surfaces. Later commit c460aa7 (INIT-HOOK-PACKS-001, slice
+# landed before v11.1.0) added templates/hook-packs/claude-code/ as a runtime
+# dependency for caws init --agent-surface claude-code but did not re-open
+# the publish allowlist for the new narrower subtree.
+#
+# Live in v11.1.0 since publish. v11.0.0 was not affected (hook-packs did
+# not exist yet). Surfaced by the v11.1.0 post-release fresh-install smoke
+# against the published @paths.design/caws-cli@11.1.0 tarball — a smoke that
+# should have existed as a prepublishOnly gate. This spec adds that gate.
+#
+# Postmortem framing: removal needs a load-bearing audit by ROLE, not just
+# runtime command reachability. A thing can be non-load-bearing as a command
+# but load-bearing as a packaged asset; non-load-bearing in repo-local dist/
+# but load-bearing after npm pack; non-load-bearing for v11.0's minimal core
+# but load-bearing for v11.1's restored lifecycle or hook installer.

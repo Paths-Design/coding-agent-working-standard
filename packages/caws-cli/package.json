@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "11.1.0",
+  "version": "11.1.1",
   "description": "CAWS CLI - the governed core for CAWS project state, scope, claims, gates, waivers, and evidence (v11.1). Restores canonical spec/worktree lifecycle on the vNext kernel/store/shell architecture.",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,8 @@
   "preferGlobal": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "templates/hook-packs/**"
   ],
   "scripts": {
     "build": "node scripts/build-cli.js",
@@ -33,7 +34,9 @@
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node dist/index.js validate",
     "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
-    "prepare": "husky >/dev/null 2>&1 || true"
+    "prepare": "husky >/dev/null 2>&1 || true",
+    "smoke:fresh-install": "node scripts/fresh-install-smoke.mjs",
+    "prepublishOnly": "npm run build && node scripts/fresh-install-smoke.mjs"
   },
   "keywords": [
     "caws",

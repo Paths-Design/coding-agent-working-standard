@@ -1,3 +1,26 @@
+# [11.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.0...v11.1.1) (2026-05-18)
+
+Patch release. Restores the hook-pack templates to the published tarball and adds a
+fresh-install smoke gate so the regression class cannot ship again.
+
+### Bug Fixes
+
+* **packaging:** restore `templates/hook-packs/**` to `package.json:files` (TEMPLATES-PUBLISH-REGRESSION-001). v11.1.0 published with `files: ["dist", "README.md"]`, which excluded the hook-pack templates that `caws init --agent-surface claude-code` reads at runtime. Every fresh install hit `ENOENT: no such file or directory, copyfile '…/templates/hook-packs/claude-code/scope-guard.sh'`. The narrow allowlist re-includes only the load-bearing subtree; dead scaffold surfaces slice 8b correctly excluded stay excluded.
+
+### Tests
+
+* **smoke:** add `scripts/fresh-install-smoke.mjs` wired as `prepublishOnly`. Pipeline: `npm pack` → install tarball into a fresh temp project → load the *installed* manifest → assert every declared `sourcePath` exists in `templates/hook-packs/<pack-id>/` AND every `destPath` materializes after `caws init`. A red smoke blocks `npm publish`. Verified in both directions (current state passes in ~2.5s; sabotaged `files` allowlist fails with 19 named missing paths + exact remediation, exit 1).
+
+### Postmortem
+
+Removal needs a load-bearing audit by **role**, not just runtime command reachability.
+Slice 8b (`df519ff`) correctly excluded the dead `templates/` scaffold to keep the
+v11 tarball boundary clean, but the removal was applied at too coarse a granularity:
+a later slice (`c460aa7`, INIT-HOOK-PACKS-001) added `templates/hook-packs/` as a
+runtime dependency for the v11.1 hook installer without re-opening the publish
+allowlist for the new narrower subtree. The two slices didn't talk. The
+`prepublishOnly` smoke prevents this class of mistake structurally.
+
 # [11.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.0.0...v11.1.0) (2026-05-18)
 
 Restores the canonical CAWS spec/worktree lifecycle on top of the v11.0 governed-core
