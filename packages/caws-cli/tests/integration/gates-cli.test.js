@@ -255,20 +255,23 @@ describe('gates CLI integration (v11.1)', () => {
   });
 
   describe('budget exceeded (block mode)', () => {
-    test('exits 1 when staged file count exceeds tier-1 budget in block mode', () => {
-      // v11 policy schema requires monotonic risk_tiers (T1 ≤ T2 ≤ T3 on
-      // both max_files and max_loc), and tier-1 specs require contracts,
-      // observability, rollback, and non_functional.security. We build a
-      // full tier-1 spec because that's the most authoritative tier — the
-      // budget evaluator must enforce when a tier-1 spec exceeds its
-      // (strict) budget.
+    test('exits 1 when staged file count exceeds tier-3 budget in block mode', () => {
+      // LEGACY-TEST-RECONCILE-001 perf-test-contract correction:
+      // earlier version used a tier-1 spec + 10 staged files, which
+      // triggered heavy semantic evaluation in the quality-gates
+      // subprocess (180s+ under parallel jest load). The product
+      // invariant ("budget_limit blocks when files_changed > max_files")
+      // is proven equally by a tier-3 spec with max_files=1 + 2 staged
+      // files, with far less subprocess work — stays robust under
+      // contention. Tier-1 heavy-spec coverage lives in the sandbox
+      // smoke (rehearsal-smoke/run.sh), not this default test surface.
       ctx = createTestProject({
         policy: {
           version: 1,
           risk_tiers: {
-            1: { max_files: 3, max_loc: 50 },
-            2: { max_files: 5, max_loc: 100 },
-            3: { max_files: 100, max_loc: 5000 },
+            1: { max_files: 1, max_loc: 10 },
+            2: { max_files: 1, max_loc: 10 },
+            3: { max_files: 1, max_loc: 10 },
           },
           edit_rules: EDIT_RULES,
           gates: {
@@ -278,20 +281,13 @@ describe('gates CLI integration (v11.1)', () => {
           },
         },
         spec: buildValidSpec({
-          risk_tier: 1,
+          // Default tier-3 (no semantic-requirement barrier).
           scope: { in: ['src/**'], out: [] },
-          // Tier-1 semantic requirements (kernel/spec validate-semantics).
-          contracts: [
-            { name: 'test-contract', type: 'api', path: 'contracts/test.yaml' },
-          ],
-          observability: ['log: gates.test_event'],
-          rollback: ['revert the staged change'],
-          non_functional: { security: ['no secrets in staged files'] },
         }),
       });
 
       fs.ensureDirSync(path.join(ctx.dir, 'src'));
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 2; i++) {
         fs.writeFileSync(
           path.join(ctx.dir, 'src', `file${i}.js`),
           `// file ${i}\nconst x = ${i};\n`

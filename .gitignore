@@ -563,3 +563,5 @@ __pycache__/
 .rehearsal-*.log
 .triage-*.log
 .claude/scheduled_tasks.lock
+
+.rehearsal-smoke/
