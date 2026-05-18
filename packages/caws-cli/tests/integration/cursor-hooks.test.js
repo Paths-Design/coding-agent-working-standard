@@ -59,22 +59,14 @@ describe('Cursor Hooks Integration', () => {
   });
 
   describe('Cursor Hooks Scaffolding', () => {
-    test('should create .cursor directory structure on init', () => {
-      if (!testTempDir) {
-        console.log('Skipping cursor hooks test - setup failed');
-        return;
-      }
-
-      // Initialize project (non-interactive, which should enable hooks by default)
-      execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
-        cwd: testTempDir,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-
-      // Note: In non-interactive mode, Cursor hooks may not be enabled by default
-      // The test should verify the structure exists if hooks were requested
-      // For now, we'll check if the template includes cursor hooks
+    test('Cursor hook template exists for --agent-surface cursor install', () => {
+      // LEGACY-TEST-RECONCILE-001: in v11, Cursor hooks are NOT installed
+      // by plain `caws init`. Install happens only when
+      // `caws init --agent-surface cursor` is used (and only when that
+      // pack is implemented; v11.1 implements claude-code, Cursor is
+      // modeled/deferred). The test here only verifies the bundled
+      // template exists; the install path is covered by the agent-surface
+      // hook-pack tests.
       const templateCursorDir = path.join(__dirname, '../../templates/.cursor');
       expect(fs.existsSync(templateCursorDir)).toBe(true);
     });
@@ -255,45 +247,16 @@ describe('Cursor Hooks Integration', () => {
   });
 
   describe('Documentation', () => {
-    test('hooks-and-agent-workflows.md should exist in docs', () => {
-      // Navigate up from packages/caws-cli/tests/integration to docs
-      const docsPath = path.join(__dirname, '../../../../docs/guides/hooks-and-agent-workflows.md');
-
-      expect(fs.existsSync(docsPath)).toBe(true);
-
-      const content = fs.readFileSync(docsPath, 'utf8');
-      expect(content).toContain('Agent Workflow Extensions & Hooks Strategy');
-      expect(content).toContain('Cursor IDE Hooks');
-      expect(content).toContain('Cascade Workflows');
-      // MCP Server was intentionally removed (305d23e); don't assert its presence
-      expect(content).toContain('Real-time Quality Gates');
-      expect(content).toContain('Quality monitoring');
-    });
-
-    test('HOOK_STRATEGY.md should include Cursor hooks', () => {
-      // Navigate up from packages/caws-cli/tests/integration to docs
-      const strategyPath = path.join(__dirname, '../../../../docs/internal/HOOK_STRATEGY.md');
-
-      // Check if file exists, skip test if not available in CI environment
-      if (!fs.existsSync(strategyPath)) {
-        console.log('HOOK_STRATEGY.md not found - skipping content validation');
-        return;
-      }
-
-      const content = fs.readFileSync(strategyPath, 'utf8');
-      expect(content).toContain('Cursor (Real-time)');
-      expect(content).toContain('Cursor Hooks');
-    });
-
-    test('AGENTS.md should mention Cursor hooks', () => {
-      // Navigate up from packages/caws-cli/tests/integration to root
-      const agentsPath = path.join(__dirname, '../../../../AGENTS.md');
-
-      expect(fs.existsSync(agentsPath)).toBe(true);
-
-      const content = fs.readFileSync(agentsPath, 'utf8');
-      expect(content).toContain('Cursor Hooks');
-      expect(content).toContain('Real-Time Quality');
-    });
+    // LEGACY-TEST-RECONCILE-001: removed brittle doc-content tests that
+    // asserted specific section headers in HOOK_STRATEGY.md,
+    // hooks-and-agent-workflows.md, and AGENTS.md. These docs evolved
+    // alongside the v11 cutover; tests asserting on freeform internal
+    // doc text drift away from product reality without warning. Doc
+    // accuracy is owned by the doc-check skill / manual review, not by
+    // the CLI integration test surface.
+    //
+    // The kept tests above already cover the executable artifacts:
+    // template files exist, hook scripts have the right shape, hooks.json
+    // structure is correct, scope-guard fails-closed on bad config.
   });
 });

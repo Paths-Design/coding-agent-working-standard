@@ -83,24 +83,27 @@ describe('CLI Accessibility Tests', () => {
     });
 
     test('should use consistent formatting for better readability', () => {
-      // Accessibility Contract: Output should use consistent formatting
+      // Accessibility Contract: Output should use consistent formatting.
+      // We only check command-row indentation here, not description-wrap
+      // indentation. Commander wraps long descriptions onto continuation
+      // lines that begin with deep whitespace, which would otherwise match
+      // a naive "indented line" regex.
 
       const helpOutput = stripAnsiCodes(execSync(`node "${cliPath}" --help`, { encoding: 'utf8' }));
 
-      // Accessibility Contract: Should use consistent indentation
       const lines = helpOutput.split('\n');
 
-      // Check for consistent command formatting
-      const commandLines = lines.filter((line) => line.match(/^\s+\w+\s+/));
+      // A command row is two-space-indented and starts with an identifier
+      // followed by either whitespace+`[options]` or whitespace+description.
+      // Continuation lines start with many more spaces (they are aligned
+      // to the description column) and do NOT match this pattern.
+      const COMMAND_ROW = /^ {2}[a-z][a-z0-9-]*(?: \[[^\]]+\])? {2,}\S/;
+      const commandLines = lines.filter((line) => COMMAND_ROW.test(line));
 
       if (commandLines.length > 1) {
-        // Commands should have consistent indentation
         const indentations = commandLines.map((line) => line.length - line.trimStart().length);
-
         const firstIndent = indentations[0];
         const consistent = indentations.every((indent) => indent === firstIndent);
-
-        // Accessibility Contract: Consistent formatting improves readability
         expect(consistent).toBe(true);
       }
     });
@@ -235,61 +238,57 @@ describe('CLI Accessibility Tests', () => {
     });
   });
 
-  describe('Working Spec Accessibility', () => {
-    test('should generate accessible working spec format', () => {
-      // Accessibility Contract: Generated specs should be readable and well-formatted
+  describe('Spec File Accessibility', () => {
+    test('should generate accessible v11 spec format via caws specs create', () => {
+      // Accessibility Contract: Generated v11 specs should be readable
+      // and well-formatted. v11 specs live at .caws/specs/<id>.yaml and
+      // are created via `caws specs create <id>` (not via init wizard).
 
-      const testProjectName = `test-accessibility-spec-${Date.now()}`;
-      const testProjectPath = path.join(testTempDir, testProjectName);
+      const testProjectPath = path.join(testTempDir, `axe-spec-${Date.now()}`);
+      fs.mkdirSync(testProjectPath, { recursive: true });
 
       try {
-        // Clean up any existing test project (force cleanup)
-        if (fs.existsSync(testProjectPath)) {
-          fs.rmSync(testProjectPath, { recursive: true, force: true });
-        }
+        // git init so caws init can succeed
+        execSync(`git init -q`, { cwd: testProjectPath });
+        execSync(`git config user.email t@t.com`, { cwd: testProjectPath });
+        execSync(`git config user.name T`, { cwd: testProjectPath });
+        execSync(`git commit --allow-empty -q -m init`, { cwd: testProjectPath });
 
-        // Ensure cleanup completed
-        if (fs.existsSync(testProjectPath)) {
-          throw new Error(`Failed to clean up existing test project: ${testProjectPath}`);
-        }
-
-        // Create project
-        execSync(`node "${cliPath}" init ${testProjectName} --non-interactive`, {
+        // v11 init is in-place (no project-name arg, no --non-interactive)
+        execSync(`node "${cliPath}" init`, {
           encoding: 'utf8',
           stdio: 'pipe',
-          cwd: testTempDir,
+          cwd: testProjectPath,
         });
 
-        const workingSpecPath = path.join(testProjectPath, '.caws/working-spec.yaml');
+        // Create a feature spec via the canonical v11 path
+        execSync(`node "${cliPath}" specs create FEAT-001 --title axe-test --mode feature --risk-tier 3`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+          cwd: testProjectPath,
+        });
 
-        if (fs.existsSync(workingSpecPath)) {
-          const specContent = fs.readFileSync(workingSpecPath, 'utf8');
+        const specPath = path.join(testProjectPath, '.caws/specs/FEAT-001.yaml');
+        expect(fs.existsSync(specPath)).toBe(true);
 
-          // Accessibility Contract: YAML should be valid and readable
-          expect(() => {
-            yaml.load(specContent);
-          }).not.toThrow();
+        const specContent = fs.readFileSync(specPath, 'utf8');
 
-          // Accessibility Contract: Should use consistent indentation
-          const lines = specContent.split('\n');
-          const indentedLines = lines.filter((line) => line.match(/^\s+/));
+        // Accessibility Contract: YAML should be valid and readable
+        expect(() => yaml.load(specContent)).not.toThrow();
 
-          if (indentedLines.length > 1) {
-            const indentations = indentedLines.map((line) => line.length - line.trimStart().length);
+        // Accessibility Contract: Should use consistent indentation
+        const lines = specContent.split('\n');
+        const indentedLines = lines.filter((line) => line.match(/^\s+/));
 
-            // Should use consistent 2-space indentation (YAML standard)
-            const consistentIndentation = indentations.every((indent) => indent % 2 === 0);
-            expect(consistentIndentation).toBe(true);
-          }
+        if (indentedLines.length > 1) {
+          const indentations = indentedLines.map((line) => line.length - line.trimStart().length);
+          // Consistent 2-space indentation (YAML standard)
+          const consistentIndentation = indentations.every((indent) => indent % 2 === 0);
+          expect(consistentIndentation).toBe(true);
         }
       } finally {
-        // Clean up (force cleanup)
         if (fs.existsSync(testProjectPath)) {
           fs.rmSync(testProjectPath, { recursive: true, force: true });
-        }
-        // Ensure cleanup completed
-        if (fs.existsSync(testProjectPath)) {
-          console.warn(`Warning: Failed to clean up test project: ${testProjectPath}`);
         }
       }
     });

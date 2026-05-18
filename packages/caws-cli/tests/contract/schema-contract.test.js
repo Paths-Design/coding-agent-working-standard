@@ -379,11 +379,13 @@ describe('Schema Validation Contracts', () => {
       return cleaned;
     };
 
-    test('A2: template working-spec schema matches runtime after $comment strip', () => {
-      const runtime = stripTitleAndComments(JSON.parse(fs.readFileSync(RUNTIME_WORKING, 'utf8')));
-      const template = stripTitleAndComments(workingSpecSchema);
-      expect(template).toEqual(runtime);
-    });
+    // LEGACY-TEST-RECONCILE-001: removed A2 working-spec parity test.
+    // v11 does NOT deploy .caws/working-spec.schema.json to the host
+    // (the working-spec.yaml concept itself is removed; specs live at
+    // .caws/specs/<id>.yaml and are validated against the bundled
+    // template schema, never against a host-deployed schema). The
+    // policy schema (A3 below) IS deployed in v11 and remains
+    // covered.
 
     test('A3: template policy schema matches runtime after $comment strip', () => {
       const runtime = stripTitleAndComments(JSON.parse(fs.readFileSync(RUNTIME_POLICY, 'utf8')));

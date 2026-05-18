@@ -126,56 +126,13 @@ describe('loadRegistry schema validation', () => {
   });
 });
 
-describe('resolveSpec schema validation', () => {
-  let mockProjectRoot;
-
-  // jest.mock must use mock-prefixed variable to reference outer scope
-  jest.mock('../src/utils/detection', () => ({
-    findProjectRoot: () => mockProjectRoot,
-  }));
-
-  beforeEach(() => {
-    mockProjectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-spec-test-'));
-    fs.ensureDirSync(path.join(mockProjectRoot, '.caws'));
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    fs.removeSync(mockProjectRoot);
-    jest.restoreAllMocks();
-  });
-
-  test('resolveSpec with invalid spec includes schema errors in thrown error', async () => {
-    // Create an invalid spec file (missing required fields)
-    const invalidSpec = {
-      id: 'bad',
-      title: 'x',
-    };
-    const specFilePath = path.join(mockProjectRoot, 'bad-spec.yaml');
-    fs.writeFileSync(specFilePath, yaml.dump(invalidSpec));
-
-    // Copy schema so validation can find it
-    const schemasDir = path.join(mockProjectRoot, '.caws', 'schemas');
-    fs.ensureDirSync(schemasDir);
-    fs.copyFileSync(
-      path.join(TEMPLATES_SCHEMAS, 'working-spec.schema.json'),
-      path.join(schemasDir, 'working-spec.schema.json')
-    );
-
-    const { resolveSpec } = require('../src/utils/spec-resolver');
-
-    // Schema violations are now warnings, not errors — resolveSpec should
-    // resolve successfully but emit a warning to stderr.
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = await resolveSpec({ specFile: specFilePath });
-    expect(result.spec).toBeDefined();
-    expect(result.spec.id).toBe('bad');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Schema warnings'));
-    warnSpy.mockRestore();
-  });
-});
+// LEGACY-TEST-RECONCILE-001: removed `describe('resolveSpec schema
+// validation', ...)`. resolveSpec is a v10 helper
+// (src/utils/spec-resolver.js); the v11 path is loadSpecs in
+// store/specs-store.ts, whose schema-warning behavior is covered by
+// tests/store/specs-store.test.js. The 14 remaining tests cover policy
+// loading + working-spec validation + AJV-vs-semantic-pass behavior,
+// all of which DO survive in v11 against the bundled schema.
 
 describe('PolicyManager.loadPolicy schema validation', () => {
   let tempDir;
