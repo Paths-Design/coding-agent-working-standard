@@ -2381,12 +2381,17 @@ EXIT CODES:
     process.exit(0);
   }
 
+  // QG-001 JSON-mode stdout discipline: these banners must go through
+  // logHuman() (no-ops under JSON_MODE/QUIET_MODE) instead of bare console.log.
+  // The caws-cli gates adapter passes --json and JSON.parses stdout in one shot;
+  // a bare banner here corrupted the stream and tripped shell.gates.report_not_json
+  // on every CI run (env.CI=true → CI_MODE=true).
   if (CI_MODE) {
-    console.log('Running in CI mode - strict enforcement');
+    logHuman('Running in CI mode - strict enforcement');
   }
 
   if (FIX_MODE) {
-    console.log('Running in fix mode - will attempt automatic fixes');
+    logHuman('Running in fix mode - will attempt automatic fixes');
   }
 
   const runner = new QualityGateRunner();

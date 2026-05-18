@@ -165,6 +165,60 @@ await runTest('Regression: --json suppresses the entry banner ("Quality gates st
   assert.ok(first === '{' || first === '[', `stdout must start with JSON, got ${JSON.stringify(first)}`);
 });
 
+// QUALITY-GATES-JSON-STDOUT-001: the CI banner at run-quality-gates.mjs main()
+// previously used bare console.log, bypassing the JSON_MODE/QUIET_MODE
+// discipline. With env.CI=true, CI_MODE became true and "Running in CI mode -
+// strict enforcement" leaked into JSON stdout, causing the caws-cli adapter
+// to fail JSON.parse with `shell.gates.report_not_json` on every CI run.
+// Locking the regression: with CI=true, --json stdout must remain pure JSON.
+await runTest('Regression: CI_MODE banner does not leak into JSON stdout (QUALITY-GATES-JSON-STDOUT-001)', () => {
+  const r = spawnSync('node', [BINARY, '--json', '--context=commit'], {
+    cwd: testDir,
+    encoding: 'utf8',
+    // Force CI_MODE=true by both --ci flag AND env.CI; either path must be
+    // safe in JSON mode. Real callers (caws-cli adapter) rely on env.CI.
+    env: { ...process.env, FORCE_COLOR: '0', CI: 'true' },
+  });
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}; stderr: ${r.stderr}`);
+  assert.equal(
+    r.stdout.includes('Running in CI mode'),
+    false,
+    'CI mode banner must not appear in stdout when JSON mode is on'
+  );
+  // Whole stdout must round-trip as one JSON document.
+  let parsed;
+  try {
+    parsed = JSON.parse(r.stdout);
+  } catch (e) {
+    throw new Error(
+      `stdout is not valid JSON with CI=true: ${e.message}\nstdout head: ${r.stdout.slice(0, 200)}`
+    );
+  }
+  assert.ok(typeof parsed.timestamp === 'string', 'parsed JSON must be a GatesReport');
+});
+
+await runTest('Regression: FIX_MODE banner does not leak into JSON stdout (QUALITY-GATES-JSON-STDOUT-001)', () => {
+  const r = spawnSync('node', [BINARY, '--json', '--fix', '--context=commit'], {
+    cwd: testDir,
+    encoding: 'utf8',
+    env: { ...process.env, FORCE_COLOR: '0' },
+  });
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}; stderr: ${r.stderr}`);
+  assert.equal(
+    r.stdout.includes('Running in fix mode'),
+    false,
+    'fix mode banner must not appear in stdout when JSON mode is on'
+  );
+  // Whole stdout must round-trip as one JSON document.
+  try {
+    JSON.parse(r.stdout);
+  } catch (e) {
+    throw new Error(
+      `stdout is not valid JSON with --fix: ${e.message}\nstdout head: ${r.stdout.slice(0, 200)}`
+    );
+  }
+});
+
 console.log('='.repeat(50));
 console.log(`Results: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
