@@ -1588,15 +1588,31 @@ class QualityGateRunner {
           (v) => v.severity === 'fail' || v.severity === 'block'
         );
 
-        // Report errors (unapproved violations)
+        // Report errors (unapproved violations).
+        //
+        // LEGACY-TEST-RECONCILE-001: previously this branch threw and the
+        // catch handler swallowed the violations, so hidden TODO findings
+        // never reached the JSON report's violations[] and the caws-cli
+        // `todo_detection` policy gate was structurally unreachable. Push
+        // each finding onto this.violations with gate: "hidden-todo" so
+        // the canonical alias in caws-cli's disposition layer can route
+        // them to the `todo_detection` policy gate.
         if (errors.length > 0) {
           logResult(`   ❌ Found ${errors.length} hidden incomplete implementations`);
           for (const error of errors) {
             logResult(
               `      ${path.relative(projectRoot, error.file)}:${error.line} - ${error.message}`
             );
+            this.violations.push({
+              gate: 'hidden-todo',
+              type: error.type ?? 'hidden_todo_error',
+              file: error.file,
+              line: error.line,
+              message: error.message,
+              rule: error.rule,
+              severity: error.severity,
+            });
           }
-          throw new Error(`${errors.length} hidden incomplete implementations found`);
         }
 
         // Report warnings (approved exceptions)

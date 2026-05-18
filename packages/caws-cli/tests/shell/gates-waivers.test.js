@@ -60,6 +60,35 @@ gates:
   todo_detection: { enabled: false, mode: skip }
 `;
 
+// LEGACY-TEST-RECONCILE-001: gates.ts now refuses to run without a
+// loadable spec for the named id. captureRun uses specId 'FOO-1'; we
+// write a minimal tier-3 spec that passes schema + tier-3 semantics.
+const MINIMAL_SPEC_YAML = `id: FOO-1
+title: gates-waivers test fixture
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-18T00:00:00Z'
+updated_at: '2026-05-18T00:00:00Z'
+blast_radius:
+  modules:
+    - src
+operational_rollback_slo: 30m
+scope:
+  in:
+    - src/**
+  out: []
+invariants:
+  - no regressions
+acceptance:
+  - id: A1
+    given: a project
+    when: gates run
+    then: report is produced
+non_functional: {}
+contracts: []
+`;
+
 function mkTempGitRepo(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   execFileSync('git', ['init', '--quiet', root]);
@@ -71,6 +100,7 @@ function mkTempGitRepo(prefix) {
   fs.mkdirSync(path.join(root, '.caws', 'specs'), { recursive: true });
   fs.mkdirSync(path.join(root, '.caws', 'waivers'), { recursive: true });
   fs.writeFileSync(path.join(root, '.caws', 'policy.yaml'), VALID_POLICY);
+  fs.writeFileSync(path.join(root, '.caws', 'specs', 'FOO-1.yaml'), MINIMAL_SPEC_YAML);
   return root;
 }
 

@@ -562,3 +562,4 @@ __pycache__/
 .rehearsal-gates/
 .rehearsal-*.log
 .triage-*.log
+.claude/scheduled_tasks.lock

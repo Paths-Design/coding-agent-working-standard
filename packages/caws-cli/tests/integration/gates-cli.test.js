@@ -1,37 +1,66 @@
 /**
- * @fileoverview Integration tests for `caws gates run` CLI command
- * Exercises the gates pipeline end-to-end via child_process.execFileSync,
- * verifying JSON and text output, exit codes, and gate pass/fail behavior.
+ * @fileoverview Integration tests for `caws gates run` CLI command (v11.1)
+ *
+ * Exercises the v11 gates pipeline end-to-end via child_process.execFileSync,
+ * verifying exit codes, text-output disposition, and the structured
+ * `gate_evaluated` events emitted to .caws/events.jsonl.
+ *
+ * v11 contract notes:
+ *   - `caws gates run --spec <id> [--context cli|commit|ci]`
+ *   - No `--json` flag; v11 emits a text disposition table.
+ *   - Structured per-gate detail lives in events.jsonl, not stdout.
+ *   - Exit 0 when all gates pass; exit 1 when any block-mode gate fails.
+ *   - One `gate_evaluated` event is appended per policy-declared gate.
+ *
  * @author @darianrosebrook
  */
 
 const path = require('path');
 const fs = require('fs-extra');
-const { execSync, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const { createTemplateRepo, cloneFixture, cleanupTemplate } = require('../helpers/git-fixture');
 
-const cliPath = path.join(__dirname, '../../src/index.js');
+// v11 entry point. The legacy v10 src/index.js is deadwood (see
+// LEGACY-TEST-RECONCILE-001 closure notes).
+const CLI_PATH = path.join(__dirname, '../../dist/index.js');
 
-// CAWSFIX-22: policy schema requires edit_rules; shared fixture for test policies
-const EDIT_RULES = { policy_and_code_same_pr: false, min_approvers_for_budget_raise: 2 };
+// v11 policy schema: edit_rules holds only edit-time policy. The
+// approvers-for-budget field belongs under `waivers` (the v11 schema
+// emits a repair hint to that effect if you misplace it).
+const EDIT_RULES = { policy_and_code_same_pr: false };
+
+let _gatesCLITemplate = null;
 
 /**
- * Build a minimal schema-valid working-spec.yaml object.
- * The v10 schema requires id, title, risk_tier, mode, blast_radius,
- * operational_rollback_slo, scope, invariants, acceptance, non_functional, contracts.
+ * Build a minimal schema-valid v11 spec object. v11 specs live at
+ * .caws/specs/<id>.yaml. Required fields are id, title, risk_tier, mode,
+ * blast_radius, operational_rollback_slo, scope, invariants, acceptance,
+ * lifecycle_state, created_at, updated_at.
  */
 function buildValidSpec(overrides = {}) {
+  const now = '2026-05-18T00:00:00.000Z';
+  // v11 spec schema:
+  //   - Required: id, title, risk_tier, mode, lifecycle_state,
+  //     blast_radius, scope, invariants, acceptance, non_functional, contracts
+  //   - Semantic: tier-1 and tier-2 specs require ≥1 contract; tier-3 does not.
+  //   - We use tier-3 for fixtures so we can ship empty contracts without
+  //     synthesizing irrelevant contract objects.
   return {
-    id: 'TS-001',
+    id: 'FEAT-001',
     title: 'Integration test spec fixture',
-    risk_tier: 2,
+    risk_tier: 3,
     mode: 'feature',
+    lifecycle_state: 'active',
+    created_at: now,
+    updated_at: now,
     blast_radius: { modules: ['src'] },
     operational_rollback_slo: '30m',
     scope: { in: ['src/**'], out: [] },
     invariants: ['No regressions in existing tests'],
-    acceptance: [{ id: 'A1', given: 'a project', when: 'gates run', then: 'report is produced' }],
+    acceptance: [
+      { id: 'A1', given: 'a project', when: 'gates run', then: 'a report is produced' },
+    ],
     non_functional: {},
     contracts: [],
     ...overrides,
@@ -39,22 +68,19 @@ function buildValidSpec(overrides = {}) {
 }
 
 /**
- * Create a temp directory with a git repo, .caws/policy.yaml, and .caws/working-spec.yaml.
- * Returns the directory path. Caller must clean up.
+ * Create a temp directory with a git repo, .caws/policy.yaml, and a v11
+ * spec at .caws/specs/<id>.yaml. Returns { dir, specId }.
  */
-// Shared git template — created once per test suite
-let _gatesCLITemplate = null;
-
 function createTestProject(overrides = {}) {
   if (!_gatesCLITemplate) {
     _gatesCLITemplate = createTemplateRepo();
   }
   const dir = cloneFixture(_gatesCLITemplate, 'caws-gates-cli-');
 
-  // Create .caws directory
   fs.ensureDirSync(path.join(dir, '.caws'));
+  fs.ensureDirSync(path.join(dir, '.caws', 'specs'));
 
-  // Default policy with all gates in warn mode (so they pass)
+  // Default policy with all gates in warn mode (so they pass).
   const defaultPolicy = {
     version: 1,
     risk_tiers: {
@@ -73,28 +99,43 @@ function createTestProject(overrides = {}) {
   };
 
   const policy = overrides.policy || defaultPolicy;
-  fs.writeFileSync(
-    path.join(dir, '.caws', 'policy.yaml'),
-    yaml.dump(policy)
-  );
+  fs.writeFileSync(path.join(dir, '.caws', 'policy.yaml'), yaml.dump(policy));
 
   const spec = overrides.spec || buildValidSpec();
-  fs.writeFileSync(
-    path.join(dir, '.caws', 'working-spec.yaml'),
-    yaml.dump(spec)
-  );
+  const specId = spec.id;
+  fs.writeFileSync(path.join(dir, '.caws', 'specs', `${specId}.yaml`), yaml.dump(spec));
 
-  return dir;
+  // Minimal worktrees registry so doctor doesn't complain.
+  fs.writeFileSync(path.join(dir, '.caws', 'worktrees.json'), JSON.stringify({}));
+  fs.writeFileSync(path.join(dir, '.caws', 'agents.json'), JSON.stringify({}));
+
+  return { dir, specId };
+}
+
+// The quality-gates subprocess uses a lockfile at
+// `<quality-gates-pkg>/docs-status/quality-gates.lock` (shared across
+// all parallel jest workers — a real product limitation, tracked in
+// the LOCK-INTERPROCESS-HARDEN-001 backlog). Tests must clear the lock
+// before each run; the lock holds for 5 minutes by default which makes
+// parallel test runs flaky without this hygiene.
+const QG_LOCK_PATH = path.join(
+  __dirname,
+  '../../../quality-gates/docs-status/quality-gates.lock'
+);
+
+function clearQGLock() {
+  try { fs.rmSync(QG_LOCK_PATH, { force: true }); } catch { /* no-op */ }
 }
 
 /**
- * Run the CLI gates command and return { stdout, stderr, exitCode }.
- * Handles non-zero exit codes via try/catch since execSync throws.
+ * Run `caws gates run --spec <id> [...extraArgs]` and return
+ * { stdout, stderr, exitCode }. Non-zero exits do not throw.
  */
-function runGatesCli(projectDir, extraArgs = []) {
-  const args = ['gates', 'run', ...extraArgs];
+function runGatesCli(projectDir, specId, extraArgs = []) {
+  clearQGLock();
+  const args = [CLI_PATH, 'gates', 'run', '--spec', specId, ...extraArgs];
   try {
-    const stdout = execFileSync(process.execPath, [cliPath, ...args], {
+    const stdout = execFileSync(process.execPath, args, {
       cwd: projectDir,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -111,38 +152,36 @@ function runGatesCli(projectDir, extraArgs = []) {
 }
 
 /**
- * Extract JSON from CLI stdout.
- * The CLI may emit non-JSON lines before and after the JSON block
- * (e.g. "Detecting CAWS setup..." preamble, schema warnings, etc.).
- * This finds and parses the first complete JSON object in the output.
+ * Read the appended `gate_evaluated` events from .caws/events.jsonl.
+ * Returns the structured per-gate detail that v11 publishes in events,
+ * not stdout.
  */
-function extractJson(stdout) {
-  // Find the first '{' that starts a JSON object
-  const jsonStart = stdout.indexOf('{');
-  if (jsonStart === -1) {
-    throw new Error(`No JSON object found in stdout: ${stdout.slice(0, 200)}`);
-  }
-  // Find the matching closing brace by counting braces
-  let depth = 0;
-  let jsonEnd = -1;
-  for (let i = jsonStart; i < stdout.length; i++) {
-    if (stdout[i] === '{') depth++;
-    else if (stdout[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        jsonEnd = i + 1;
-        break;
-      }
-    }
-  }
-  if (jsonEnd === -1) {
-    throw new Error(`Unclosed JSON object in stdout: ${stdout.slice(jsonStart, jsonStart + 200)}`);
-  }
-  return JSON.parse(stdout.slice(jsonStart, jsonEnd));
+function readGateEvents(projectDir) {
+  const p = path.join(projectDir, '.caws', 'events.jsonl');
+  if (!fs.existsSync(p)) return [];
+  return fs
+    .readFileSync(p, 'utf8')
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+    .filter((e) => e.event === 'gate_evaluated');
 }
 
-describe('gates CLI integration', () => {
-  let testDir;
+/** Read every event in events.jsonl in seq order (for hash-chain checks). */
+function readAllEvents(projectDir) {
+  const p = path.join(projectDir, '.caws', 'events.jsonl');
+  if (!fs.existsSync(p)) return [];
+  return fs
+    .readFileSync(p, 'utf8')
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+}
+
+describe('gates CLI integration (v11.1)', () => {
+  let ctx;
 
   afterAll(() => {
     if (_gatesCLITemplate) {
@@ -152,39 +191,48 @@ describe('gates CLI integration', () => {
   });
 
   afterEach(async () => {
-    if (testDir) {
-      await fs.remove(testDir);
-      testDir = null;
+    if (ctx) {
+      await fs.remove(ctx.dir);
+      ctx = null;
     }
   });
 
   describe('all gates pass', () => {
-    test('exits 0 with passed=true when all gates are in warn mode and project is clean', () => {
-      testDir = createTestProject();
+    test('exits 0 when all gates are in warn mode and project is clean', () => {
+      ctx = createTestProject();
 
-      const result = runGatesCli(testDir, ['--context=cli', '--json']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Overall: OK');
 
-      const report = extractJson(result.stdout);
-      expect(report.passed).toBe(true);
-      expect(Array.isArray(report.gates)).toBe(true);
-      expect(report.summary.blocked).toBe(0);
+      const events = readGateEvents(ctx.dir);
+      expect(events.length).toBeGreaterThan(0);
+      // Every emitted event for a warn-mode clean project should
+      // report pass.
+      for (const evt of events) {
+        expect(evt.data.result).toBe('pass');
+        expect(evt.spec_id).toBe(ctx.specId);
+      }
     });
 
     test('exits 0 with commit context and no staged files', () => {
-      testDir = createTestProject();
+      ctx = createTestProject();
 
-      const result = runGatesCli(testDir, ['--context=commit', '--json']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
       expect(result.exitCode).toBe(0);
-
-      const report = extractJson(result.stdout);
-      expect(report.passed).toBe(true);
+      expect(result.stdout).toContain('Overall: OK');
     });
   });
 
   describe('budget exceeded (block mode)', () => {
     test('exits 1 when staged file count exceeds tier-1 budget in block mode', () => {
-      testDir = createTestProject({
+      // v11 policy schema requires monotonic risk_tiers (T1 ≤ T2 ≤ T3 on
+      // both max_files and max_loc), and tier-1 specs require contracts,
+      // observability, rollback, and non_functional.security. We build a
+      // full tier-1 spec because that's the most authoritative tier — the
+      // budget evaluator must enforce when a tier-1 spec exceeds its
+      // (strict) budget.
+      ctx = createTestProject({
         policy: {
           version: 1,
           risk_tiers: {
@@ -195,112 +243,152 @@ describe('gates CLI integration', () => {
           edit_rules: EDIT_RULES,
           gates: {
             budget_limit: { enabled: true, mode: 'block' },
+            spec_completeness: { enabled: true, mode: 'warn' },
+            scope_boundary: { enabled: true, mode: 'warn' },
           },
         },
         spec: buildValidSpec({
           risk_tier: 1,
           scope: { in: ['src/**'], out: [] },
+          // Tier-1 semantic requirements (kernel/spec validate-semantics).
+          contracts: [
+            { name: 'test-contract', type: 'api', path: 'contracts/test.yaml' },
+          ],
+          observability: ['log: gates.test_event'],
+          rollback: ['revert the staged change'],
+          non_functional: { security: ['no secrets in staged files'] },
         }),
       });
 
-      // Create and stage more files than tier-1 allows (max_files: 3)
-      fs.ensureDirSync(path.join(testDir, 'src'));
+      fs.ensureDirSync(path.join(ctx.dir, 'src'));
       for (let i = 0; i < 10; i++) {
-        fs.writeFileSync(path.join(testDir, 'src', `file${i}.js`), `// file ${i}\nconst x = ${i};\n`);
+        fs.writeFileSync(
+          path.join(ctx.dir, 'src', `file${i}.js`),
+          `// file ${i}\nconst x = ${i};\n`
+        );
       }
-      execSync('git add .', { cwd: testDir, stdio: 'pipe' });
+      execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const result = runGatesCli(testDir, ['--context=commit', '--json']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
       expect(result.exitCode).toBe(1);
 
-      const report = extractJson(result.stdout);
-      expect(report.passed).toBe(false);
-      expect(report.summary.blocked).toBeGreaterThanOrEqual(1);
+      const events = readGateEvents(ctx.dir);
+      const budgetEvent = events.find((e) => e.data.gate_id === 'budget_limit');
+      expect(budgetEvent).toBeDefined();
+      expect(budgetEvent.data.mode).toBe('block');
+      expect(budgetEvent.data.result).toBe('fail');
+      expect(Array.isArray(budgetEvent.data.violations)).toBe(true);
+      expect(budgetEvent.data.violations.length).toBeGreaterThan(0);
 
-      // Find the budget_limit gate result
-      const budgetGate = report.gates.find(g => g.name === 'budget_limit');
-      expect(budgetGate).toBeDefined();
-      expect(budgetGate.status).toBe('fail');
-      expect(budgetGate.mode).toBe('block');
-      expect(budgetGate.messages.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('JSON output structure', () => {
-    test('JSON output has passed, gates, summary, and timestamp fields', () => {
-      testDir = createTestProject();
-
-      const result = runGatesCli(testDir, ['--json']);
-      expect(result.exitCode).toBe(0);
-
-      const report = extractJson(result.stdout);
-
-      // Required top-level fields
-      expect(report).toHaveProperty('passed');
-      expect(report).toHaveProperty('gates');
-      expect(report).toHaveProperty('summary');
-      expect(report).toHaveProperty('timestamp');
-
-      // Summary structure
-      expect(report.summary).toHaveProperty('blocked');
-      expect(report.summary).toHaveProperty('warned');
-      expect(report.summary).toHaveProperty('passed');
-      expect(report.summary).toHaveProperty('skipped');
-      expect(report.summary).toHaveProperty('waived');
-
-      // Timestamp is valid ISO date
-      expect(new Date(report.timestamp).toISOString()).toBe(report.timestamp);
-    });
-
-    test('each gate entry has name, mode, status, waived, messages, and duration', () => {
-      testDir = createTestProject();
-
-      const result = runGatesCli(testDir, ['--json']);
-      const report = extractJson(result.stdout);
-
-      expect(report.gates.length).toBeGreaterThan(0);
-
-      for (const gate of report.gates) {
-        expect(gate).toHaveProperty('name');
-        expect(gate).toHaveProperty('mode');
-        expect(gate).toHaveProperty('status');
-        expect(gate).toHaveProperty('waived');
-        expect(gate).toHaveProperty('messages');
-        expect(gate).toHaveProperty('duration');
-        expect(typeof gate.name).toBe('string');
-        expect(typeof gate.duration).toBe('number');
-        expect(Array.isArray(gate.messages)).toBe(true);
+      // Hash-chain assertion: every event's prev_hash must equal the
+      // previous event's event_hash; the first event has prev_hash null.
+      // This proves the events.jsonl chain is intact and was not corrupted
+      // by the local-evaluator + waiver + disposition merge.
+      const all = readAllEvents(ctx.dir);
+      expect(all.length).toBeGreaterThan(0);
+      for (let i = 0; i < all.length; i++) {
+        expect(typeof all[i].event_hash).toBe('string');
+        expect(all[i].event_hash).toMatch(/^sha256:/);
+        if (i === 0) {
+          expect(all[i].prev_hash).toBeNull();
+        } else {
+          expect(all[i].prev_hash).toBe(all[i - 1].event_hash);
+        }
       }
     });
   });
 
-  describe('non-JSON (text) output', () => {
-    test('produces human-readable text output without --json flag', () => {
-      testDir = createTestProject();
+  describe('per-gate event detail', () => {
+    test('each gate_evaluated event has gate_id, mode, result, violations, waived_count', () => {
+      ctx = createTestProject();
 
-      const result = runGatesCli(testDir, ['--context=cli']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
       expect(result.exitCode).toBe(0);
 
-      // Text output should contain the report header and summary
-      expect(result.stdout).toContain('Quality Gates Report');
-      expect(result.stdout).toContain('Summary:');
+      const events = readGateEvents(ctx.dir);
+      expect(events.length).toBeGreaterThan(0);
+
+      for (const evt of events) {
+        expect(typeof evt.data.gate_id).toBe('string');
+        expect(['block', 'warn', 'skip']).toContain(evt.data.mode);
+        expect(['pass', 'fail', 'skip']).toContain(evt.data.result);
+        expect(Array.isArray(evt.data.violations)).toBe(true);
+        expect(typeof evt.data.waived_count).toBe('number');
+        // Common envelope assertions.
+        expect(typeof evt.event_hash).toBe('string');
+        expect(typeof evt.seq).toBe('number');
+      }
+    });
+
+    test('one gate_evaluated event is appended per policy-declared gate', () => {
+      ctx = createTestProject();
+
+      runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
+
+      const events = readGateEvents(ctx.dir);
+      const gateIds = events.map((e) => e.data.gate_id).sort();
+      // Default policy declares 5 gates.
+      expect(gateIds).toEqual(
+        ['budget_limit', 'god_object', 'scope_boundary', 'spec_completeness', 'todo_detection'].sort()
+      );
+    });
+  });
+
+  describe('text output', () => {
+    test('produces human-readable disposition table on stdout', () => {
+      ctx = createTestProject();
+
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
+      expect(result.exitCode).toBe(0);
+
+      // v11 text format: per-gate PASS/FAIL rows + Overall summary.
+      expect(result.stdout).toContain('Gate dispositions');
+      expect(result.stdout).toContain('PASS');
+      expect(result.stdout).toContain('Overall:');
     });
 
     test('text output is not valid JSON', () => {
-      testDir = createTestProject();
+      ctx = createTestProject();
 
-      const result = runGatesCli(testDir, ['--context=cli']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
       expect(result.exitCode).toBe(0);
-
-      // The full stdout should not parse as JSON (even though
-      // there may be some braces in the text, the complete output is not JSON)
       expect(() => JSON.parse(result.stdout)).toThrow();
+    });
+  });
+
+  describe('unmatched violations are surfaced (not silently dropped)', () => {
+    test('subprocess gates with no canonical policy mapping appear in the rendered output', () => {
+      // 10 new files trigger the subprocess `code_freeze` gate, which has
+      // no canonical policy gate mapping (refused alias — semantically
+      // distinct from `budget_limit`). The rendered text must report it
+      // under "Unmatched violations" so the operator can see what the
+      // subprocess found even when policy does not declare a matching
+      // gate. Silent suppression here would let real-quality issues slip
+      // past the operator.
+      ctx = createTestProject();
+
+      fs.ensureDirSync(path.join(ctx.dir, 'src'));
+      for (let i = 0; i < 10; i++) {
+        fs.writeFileSync(
+          path.join(ctx.dir, 'src', `unmatched${i}.js`),
+          `// f ${i}\nconst x = ${i};\n`
+        );
+      }
+      execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
+
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
+      // Exit 0 because no policy-declared gate blocks (default policy is
+      // all warn). The subprocess code_freeze violation surfaces as an
+      // unmatched violation, not as a block.
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Unmatched violations');
+      expect(result.stdout).toContain('code_freeze');
     });
   });
 
   describe('scope boundary violation in block mode', () => {
     test('exits 1 when staged file is out of scope with block mode', () => {
-      testDir = createTestProject({
+      ctx = createTestProject({
         policy: {
           version: 1,
           risk_tiers: {
@@ -311,6 +399,8 @@ describe('gates CLI integration', () => {
           edit_rules: EDIT_RULES,
           gates: {
             scope_boundary: { enabled: true, mode: 'block' },
+            budget_limit: { enabled: true, mode: 'warn' },
+            spec_completeness: { enabled: true, mode: 'warn' },
           },
         },
         spec: buildValidSpec({
@@ -318,33 +408,18 @@ describe('gates CLI integration', () => {
         }),
       });
 
-      // Stage a file outside the allowed scope
-      fs.ensureDirSync(path.join(testDir, 'vendor'));
-      fs.writeFileSync(path.join(testDir, 'vendor', 'lib.js'), '// out of scope\n');
-      execSync('git add .', { cwd: testDir, stdio: 'pipe' });
+      fs.ensureDirSync(path.join(ctx.dir, 'vendor'));
+      fs.writeFileSync(path.join(ctx.dir, 'vendor', 'lib.js'), '// out of scope\n');
+      execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const result = runGatesCli(testDir, ['--context=commit', '--json']);
+      const result = runGatesCli(ctx.dir, ctx.specId, ['--context=commit']);
       expect(result.exitCode).toBe(1);
 
-      const report = extractJson(result.stdout);
-      expect(report.passed).toBe(false);
-
-      const scopeGate = report.gates.find(g => g.name === 'scope_boundary');
-      expect(scopeGate).toBeDefined();
-      expect(scopeGate.status).toBe('fail');
-      expect(scopeGate.mode).toBe('block');
-    });
-  });
-
-  describe('quiet mode', () => {
-    test('--quiet suppresses text output on success', () => {
-      testDir = createTestProject();
-
-      const result = runGatesCli(testDir, ['--quiet']);
-      expect(result.exitCode).toBe(0);
-
-      // In quiet mode, the gates command should not produce the full report text
-      expect(result.stdout).not.toContain('Quality Gates Report');
+      const events = readGateEvents(ctx.dir);
+      const scopeEvent = events.find((e) => e.data.gate_id === 'scope_boundary');
+      expect(scopeEvent).toBeDefined();
+      expect(scopeEvent.data.mode).toBe('block');
+      expect(scopeEvent.data.result).toBe('fail');
     });
   });
 });

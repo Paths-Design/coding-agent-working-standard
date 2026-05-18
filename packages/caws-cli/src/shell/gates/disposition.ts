@@ -53,6 +53,37 @@ const KNOWN_GATE_IDS = [
   'todo_detection',
 ] as const;
 
+/**
+ * Mechanical aliases from subprocess gate names to canonical policy
+ * gate IDs. Each alias must be a clear naming-only translation, never a
+ * semantic repurposing. Adding a new alias here requires evidence that
+ * the subprocess gate and the policy gate measure the same thing under
+ * different names.
+ *
+ * Current aliases:
+ *   - `god_objects` (subprocess plural) → `god_object` (policy singular).
+ *     Same intent: detect files exceeding size threshold.
+ *   - `hidden-todo` (subprocess internal name) → `todo_detection` (policy
+ *     canonical). Same intent: detect hidden incomplete implementations.
+ *     NOTE: the subprocess `runHiddenTodoQualityGate` currently throws on
+ *     errors instead of emitting violations, so this alias is only useful
+ *     once that producer path is fixed (LEGACY-TEST-RECONCILE-001 follow-up).
+ *
+ * Refused aliases (semantically distinct, not naming variants):
+ *   - `code_freeze` → `budget_limit` (crisis-response vs risk-tier budget)
+ *   - `naming` → `spec_completeness` (identifier conventions vs spec health)
+ *   - `duplication`, `documentation`, `placeholders`, `simplification`:
+ *     no policy correspondent; remain in `unmatchedViolations`.
+ */
+const SUBPROCESS_GATE_TO_POLICY_GATE: Readonly<Record<string, string>> = {
+  god_objects: 'god_object',
+  'hidden-todo': 'todo_detection',
+};
+
+function canonicalGateName(subprocessGate: string): string {
+  return SUBPROCESS_GATE_TO_POLICY_GATE[subprocessGate] ?? subprocessGate;
+}
+
 function gateConfigFor(
   policy: Policy,
   gateId: (typeof KNOWN_GATE_IDS)[number]
@@ -66,11 +97,12 @@ export function deriveDispositions(
   report: GatesReport,
   policy: Policy
 ): DispositionResult {
-  // Group violations by gate name.
+  // Group violations by canonical gate name (applying mechanical aliases).
   const byGate = new Map<string, GatesViolation[]>();
   for (const v of report.violations) {
-    const list = byGate.get(v.gate);
-    if (list === undefined) byGate.set(v.gate, [v]);
+    const canonical = canonicalGateName(v.gate);
+    const list = byGate.get(canonical);
+    if (list === undefined) byGate.set(canonical, [v]);
     else list.push(v);
   }
 

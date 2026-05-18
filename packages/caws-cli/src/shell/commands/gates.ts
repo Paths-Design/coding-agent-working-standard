@@ -39,6 +39,8 @@ import {
   deriveDispositions,
   type GateDisposition,
 } from '../gates/disposition';
+import { runLocalEvaluators } from '../gates/local-evaluators';
+import type { GatesReport } from '../gates/gate-result-contract';
 import {
   runQualityGates,
   type QualityGatesRunner,
@@ -191,6 +193,35 @@ export function runGatesRunCommand(
   }
   const report = reportResult.value;
 
+  // 5b. Local CAWS policy evaluators. These produce violations under
+  //     canonical policy gate IDs (budget_limit, scope_boundary,
+  //     spec_completeness) that the subprocess does not emit. Locating
+  //     them in caws-cli (not in the generic quality-gates subprocess)
+  //     keeps quality-gates decoupled from spec/policy authority.
+  //
+  //     The active spec must exist and be loadable. If it isn't,
+  //     refuse the run with a typed diagnostic — running gates against
+  //     a missing or unparseable spec is a category error.
+  const activeSpec = snapshot.specs.find((s) => s.id === request.specId);
+  if (activeSpec === undefined) {
+    err(
+      `caws gates run: spec ${request.specId} not found in .caws/specs/. ` +
+        `Either the id is wrong, or the spec failed to load (run \`caws doctor\` for details).`
+    );
+    err(`(rule: ${SHELL_RULES.GATES_POLICY_REQUIRED})`);
+    return 2;
+  }
+  const localResult = runLocalEvaluators({
+    spec: activeSpec,
+    policy,
+    repoRoot,
+    nowIso: now.toISOString(),
+  });
+  const mergedReport: GatesReport = {
+    ...report,
+    violations: [...report.violations, ...localResult.violations],
+  };
+
   // 6a. Load + apply waivers BEFORE disposition.
   //     Waivers do NOT mutate policy.gates[gate].mode. They remove
   //     authorized-exception violations from the report so blocking is
@@ -201,7 +232,7 @@ export function runGatesRunCommand(
     err(renderDiagnostics(waiversLoad.diagnostics, { showData }));
   }
   const waiverFilter = filterWaivedViolations({
-    report,
+    report: mergedReport,
     waivers: waiversLoad.waivers,
     specId: request.specId,
     now,

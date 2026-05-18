@@ -38,6 +38,37 @@ gates:
   todo_detection: { enabled: false, mode: skip }
 `;
 
+// LEGACY-TEST-RECONCILE-001: gates.ts now refuses to run if the named
+// spec is not loadable (the local evaluators need the spec). Tests
+// using `captureRun(repoRoot, ..., { specId: 'FOO-1' })` must have a
+// matching .caws/specs/FOO-1.yaml. We write a minimal tier-3 spec that
+// passes both schema and tier-3 semantic checks.
+const MINIMAL_SPEC_YAML = `id: FOO-1
+title: gates-command test fixture
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-18T00:00:00Z'
+updated_at: '2026-05-18T00:00:00Z'
+blast_radius:
+  modules:
+    - src
+operational_rollback_slo: 30m
+scope:
+  in:
+    - src/**
+  out: []
+invariants:
+  - no regressions
+acceptance:
+  - id: A1
+    given: a project
+    when: gates run
+    then: report is produced
+non_functional: {}
+contracts: []
+`;
+
 function mkTempGitRepo(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   execFileSync('git', ['init', '--quiet', root]);
@@ -47,6 +78,7 @@ function mkTempGitRepo(prefix) {
     '-C', root, 'commit', '--quiet', '--allow-empty', '-m', 'init',
   ]);
   fs.mkdirSync(path.join(root, '.caws', 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.caws', 'specs', 'FOO-1.yaml'), MINIMAL_SPEC_YAML);
   return root;
 }
 
@@ -214,6 +246,93 @@ describe('deriveDispositions — policy ownership of block/warn/skip', () => {
     // policy says scope_boundary is mode=warn → command does NOT block
     expect(sb.blocks).toBe(false);
     expect(r.anyBlocks).toBe(false);
+  });
+
+  // LEGACY-TEST-RECONCILE-001: mechanical alias mappings. The subprocess
+  // emits violations under implementation-level gate names that differ
+  // from policy KNOWN_GATE_IDS only by mechanical naming (singular vs
+  // plural, hyphen vs underscore). Each alias must be a clear naming
+  // translation, not a semantic repurposing.
+  it('alias: subprocess `god_objects` (plural) maps to policy `god_object`', () => {
+    const report = {
+      ...PASS_REPORT,
+      violations: [
+        {
+          gate: 'god_objects', // subprocess plural
+          type: 'file_too_large',
+          file: 'src/big.js',
+          message: 'File exceeds size threshold',
+        },
+      ],
+    };
+    const r = deriveDispositions(report, policy);
+    const godObject = r.dispositions.find((d) => d.gate_id === 'god_object');
+    expect(godObject).toBeDefined();
+    expect(godObject.outcome).toBe('fail');
+    expect(godObject.violations).toHaveLength(1);
+    expect(godObject.violations[0].gate).toBe('god_objects'); // original tag preserved
+    // policy.god_object.mode === 'warn' here → blocks=false
+    expect(godObject.blocks).toBe(false);
+    // Alias-routed violation must NOT also appear in unmatchedViolations.
+    expect(r.unmatchedViolations.find((v) => v.gate === 'god_objects')).toBeUndefined();
+  });
+
+  it('alias: subprocess `hidden-todo` maps to policy `todo_detection`', () => {
+    // The hidden-todo gate in quality-gates emits violations with
+    // gate: "hidden-todo" (legacy internal name). The disposition layer
+    // aliases this to the canonical policy gate `todo_detection`.
+    const policyWithTodoBlock = {
+      ...policy,
+      gates: {
+        ...policy.gates,
+        todo_detection: { enabled: true, mode: 'block' }, // override skip from outer scope
+      },
+    };
+    const report = {
+      ...PASS_REPORT,
+      violations: [
+        {
+          gate: 'hidden-todo',
+          type: 'hidden_todo_error',
+          file: 'src/incomplete.js',
+          line: 42,
+          message: 'Found stub returning hardcoded value',
+        },
+      ],
+    };
+    const r = deriveDispositions(report, policyWithTodoBlock);
+    const td = r.dispositions.find((d) => d.gate_id === 'todo_detection');
+    expect(td).toBeDefined();
+    expect(td.outcome).toBe('fail');
+    expect(td.violations).toHaveLength(1);
+    expect(td.violations[0].gate).toBe('hidden-todo');
+    // Block mode → blocks=true
+    expect(td.blocks).toBe(true);
+    expect(r.anyBlocks).toBe(true);
+  });
+
+  it('refused alias: subprocess `code_freeze` is NOT mapped to `budget_limit`', () => {
+    // code_freeze and budget_limit are semantically distinct (crisis-
+    // response new-file block vs risk-tier file/loc budget). Mapping
+    // them would be a semantic repurposing, not a mechanical alias.
+    // Confirm code_freeze violations land in unmatchedViolations.
+    const report = {
+      ...PASS_REPORT,
+      violations: [
+        {
+          gate: 'code_freeze',
+          type: 'new_file_during_freeze',
+          message: 'New file staged during code freeze',
+        },
+      ],
+    };
+    const r = deriveDispositions(report, policy);
+    expect(r.unmatchedViolations).toHaveLength(1);
+    expect(r.unmatchedViolations[0].gate).toBe('code_freeze');
+    const budget = r.dispositions.find((d) => d.gate_id === 'budget_limit');
+    // budget_limit must remain at pass — no code_freeze leakage.
+    expect(budget.outcome).toBe('pass');
+    expect(budget.violations).toHaveLength(0);
   });
 });
 
