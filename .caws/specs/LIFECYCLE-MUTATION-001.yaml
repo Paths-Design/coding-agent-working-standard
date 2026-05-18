@@ -2,9 +2,11 @@ id: LIFECYCLE-MUTATION-001
 title: Multi-file lifecycle mutation substrate (lock, transaction, yaml-patch)
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Work landed in a140ab4 (feat(caws-cli): lifecycle mutation substrate). 4 modules implemented (lifecycle-lock, yaml-patch, lifecycle-transaction, atomic-write preserveMode option); 43 new test cases across 4 test files; all 116 store tests pass; doctor load surface 0E/0W/0I. Manually closed during v11.1 transition because caws specs close is not yet restored (CLI-SPECS-001 is the next slice and depends on this substrate). Acknowledged follow-up debt: AUTH-BINDING-BRIDGE-001 (transition gap), LOCK-INTERPROCESS-HARDEN-001 (sync-only lock), LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (deterministic fs injection for the unrecovered path).'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T01:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/lifecycle-lock.ts
