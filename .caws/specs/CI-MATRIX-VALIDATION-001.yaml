@@ -1,0 +1,61 @@
+id: CI-MATRIX-VALIDATION-001
+title: 'Multi-platform fresh-machine CI matrix for published CAWS packages'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .github/workflows/ci-matrix.yml
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .github/workflows/ci-matrix.yml
+    - .caws/specs/CI-MATRIX-VALIDATION-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - packages/quality-gates/src
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+invariants:
+  - 'The matrix runs against the published npm packages (or rc tarballs in a release-rehearsal job), not against the repo workspace. It is a true outside-in fresh-install test.'
+  - 'The matrix runs on at least Ubuntu, macOS, and Windows. Each platform exercises caws init + a spec create + a worktree create + a gates run end-to-end.'
+  - 'The matrix runs on at least the two most recent LTS Node versions.'
+  - 'A red matrix blocks the next publish — the matrix is the release gate, not just observability.'
+acceptance:
+  - id: A1
+    given: 'A new release rehearsal job in .github/workflows/.'
+    when: 'A release is cut (tag pushed or manual workflow_dispatch).'
+    then: 'The matrix installs the package(s) from npm (or local tarball for pre-publish rehearsal), runs the smoke sequence on each (OS × Node) cell, and fails the release if any cell fails.'
+  - id: A2
+    given: 'A Windows runner in the matrix.'
+    when: 'The smoke sequence runs.'
+    then: 'init, spec create, worktree create, gates run all succeed. Any Windows-specific divergences (path separators, line endings, shell-quoting) are caught here and not in user reports.'
+  - id: A3
+    given: 'A Node version one minor behind the minimum declared in engines.node.'
+    when: 'The matrix runs that cell.'
+    then: 'The cell fails with a clear engines mismatch — the smoke does not silently regress to an unsupported Node.'
+non_functional:
+  reliability:
+    - 'Matrix jobs are idempotent: rerunning a failed job produces the same outcome.'
+  performance:
+    - 'Total matrix runtime is under 15 minutes wall-clock per release rehearsal.'
+contracts: []
+# --- Triage (deferred from v11.1.0) -----------------------------------------
+# Pre-publish validation in v11.1.0 was a single sandbox smoke
+# (.rehearsal-smoke/run.sh) on the maintainer's machine. There is no evidence
+# the published packages work on a machine other than the maintainer's —
+# only that they work in his sandbox.
+#
+# Open questions before implementation:
+#   - Pre-publish rehearsal (against tarballs from npm pack) vs post-publish
+#     verification (against npm-registry packages)? Probably both, in two
+#     separate workflows.
+#   - Where does the smoke sequence live? An npm-publishable test harness,
+#     an in-repo script that gets cloned in CI, or inline workflow YAML?
+#   - Does the matrix include the VS Code extension and MCP server, or only
+#     the core CLI + kernel + quality-gates? (Core only is fine for v1;
+#     extend later.)

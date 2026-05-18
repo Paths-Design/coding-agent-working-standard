@@ -1,8 +1,81 @@
-# Unreleased
+# [11.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.0.0...v11.1.0) (2026-05-18)
+
+Restores the canonical CAWS spec/worktree lifecycle on top of the v11.0 governed-core
+architecture (store / shell / kernel separation), makes the default `npm test` surface
+truthful for v11, and turns three previously-orphaned policy gates into real enforcement.
+
+Published packages (in dependency order):
+
+* `@paths.design/caws-kernel@1.1.0` (shasum `bdc0373f…`)
+* `@paths.design/quality-gates@2.1.0` (shasum `2789da96…`)
+* `@paths.design/caws-cli@11.1.0` (shasum `3cc62c64…`)
 
 ### Features
 
-* **claude-hooks:** add dangerous-command session latch, semantic `git init` detection, trusted nonce escape, and latch reset audit path for installed Claude hooks
+* **specs:** restore `caws specs create | list | show | close | archive` on the v11 store/shell architecture (CLI-SPECS-001)
+* **worktree:** restore `caws worktree create | list | bind | destroy | merge` with auto-close on merge (CLI-WORKTREE-001)
+* **lifecycle:** lifecycle-mutation substrate — multi-file atomic writes under a single in-process lock (LIFECYCLE-MUTATION-001)
+* **gates:** local policy-gate evaluators for `budget_limit`, `scope_boundary`, `spec_completeness` (previously orphaned — declared but unenforced) plus mechanical aliases `god_objects→god_object` and `hidden-todo→todo_detection`
+* **init:** `caws init --agent-surface claude-code` installs durable hook pack with managed markers (INIT-HOOK-PACKS-001)
+* **claude-hooks:** dangerous-command session latch, semantic `git init` detection, trusted nonce escape, latch reset audit path (HOOK-SAFETY-001)
+
+### Bug Fixes
+
+* **caws-cli:** share single baseline timestamp across composed `mergeWorktree` lifecycle so `ts` agrees with `seq` ordering; chain integrity was always correct via `prev_hash`
+* **quality-gates:** enforce JSON-only stdout contract — gate progress/result lines now suppressed under `--json`/quiet mode so caws-cli's strict `JSON.parse(stdout)` adapter never breaks on real-violation runs
+* **quality-gates:** per-cwd `docs-status/quality-gates.lock` (was install-dir-shared) — eliminates cross-project contention under parallel jest workers; preserves one-run-per-project semantics
+* **caws-cli:** unmatched subprocess violations surface in `unmatchedViolations` rather than being silently dropped; refused aliases documented as doctrine (code_freeze, naming, duplication, documentation, placeholders, simplification have no policy correspondent)
+
+### Tests
+
+* **legacy-test-reconcile:** explicit per-suite DELETE/REWRITE disposition (no blanket ignore patterns, no silent skips) — see `packages/caws-cli/docs-status/legacy-test-reconcile-001.md`
+* **opt-in perf budgets:** 8 load-sensitive tests gated behind `CAWS_RUN_PERF_BUDGETS=1` (7 perf-budget assertions + 1 gates-cli budget-block subprocess test) — default `npm test` is deterministic; CI sets the flag to enforce thresholds
+* Final default test surface: 95 suites / 1540 pass / 8 skip / 0 fail (296s)
+
+### Deferred
+
+The following items are tracked but NOT shipped in v11.1.0. Each becomes a governed
+spec in v11.1.x patches or v11.2.0:
+
+* **AUTH-BINDING-BRIDGE-001** — agent-session friction reduction for non-worktree contexts
+* **LOCK-INTERPROCESS-HARDEN-001** — cross-process semantics for the quality-gates lock (per-cwd is in; multi-process serialization on the same cwd is not regression-tested)
+* **LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001** — adversarial fault-injection tests for partial-failure rollback in lifecycle transactions
+* **PRUNE-REPAIR-WORKTREE-001** — restore v10.2's `worktree prune | reconcile | repair` ergonomics on the v11 substrate
+* **CI-MATRIX-VALIDATION-001** — fresh-machine/multi-platform CI matrix for the published packages
+
+# [11.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.2.0...v11.0.0) (2026-05-17)
+
+CAWS governed-core cutover. Replaces the legacy mixed-regime CLI surface with eight
+governed command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`,
+`evidence`, `waiver`. All other v10 commands are removed; spec/worktree lifecycle
+returns in v11.1.0.
+
+Projects needing v10 spec/worktree ergonomics should pin to `caws-cli@^10.2.x`.
+
+### Features
+
+* **vNext architecture:** kernel / store / shell separation; pure kernel rules; I/O store; thin shell commands
+* **init:** v11 `caws init` — in-place bootstrap, refuses legacy single-spec residue, idempotent (no `--force`)
+* **doctor:** drift detection over `.caws/` state — exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure)
+* **status:** read-only dashboard panels (Spec, Scope, Claim, Gates, Recent Events) — never mutates `.caws/`
+* **scope:** `caws scope show` and `caws scope check` with binding-aware admission
+* **claim:** `caws claim` and `caws claim --takeover` with `prior_owners` audit
+* **gates:** `caws gates run --spec <id>` — policy-driven gate runner; appends one `gate_evaluated` event per declared gate
+* **evidence:** `caws evidence record --type <test|gate|ac>` typed append
+* **waiver:** singular `caws waiver create | list | show | revoke` (no plural alias)
+* **policy:** `policy.yaml` declares non-governed zones; `mode: block | warn | skip` per gate
+
+### Bug Fixes
+
+* **CLI-GATES-002:** declare `@paths.design/quality-gates` as a caws-cli runtime dependency
+* **CLI-GATES-003:** resolve quality-gates from the installed CLI package location (handles npm global, npx, pnpm)
+* **QG-001:** quality-gates emits valid JSON in `--json` mode and supports npm bin shims
+* **HOST-GOV-001:** migrate the CAWS repo's own `.caws/` governance state to v11 shape
+
+### BREAKING CHANGES
+
+* Removed commands: `specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `agents`, `parallel`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `archive`. Pin to `caws-cli@^10.2.x` if you need them; v11.1.0 restores `specs` and `worktree`.
+* `caws init` no longer accepts `--force`. The v10 single-spec layout is refused outright; remove `working-spec.yaml` to migrate.
 
 # [10.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.1.0...v10.2.0) (2026-04-28)
 

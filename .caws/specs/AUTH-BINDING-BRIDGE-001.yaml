@@ -1,0 +1,56 @@
+id: AUTH-BINDING-BRIDGE-001
+title: 'Agent-session binding bridge for non-worktree contexts'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/claim-store.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/store/claim-store.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/tests/shell/claim.test.js
+    - .caws/specs/AUTH-BINDING-BRIDGE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+invariants:
+  - 'The bridge does not invent identity. A non-worktree session still presents a session_id; the bridge connects that session_id to a spec without requiring a worktree binding.'
+  - 'Bridge bindings are subordinate to worktree bindings: if a worktree binding exists for the same spec, the worktree binding wins.'
+  - 'Bridge creation appends exactly one event through appendEvent inside a lifecycle transaction.'
+acceptance:
+  - id: A1
+    given: 'A v11-initialized repo with an active spec FEAT-001 and no worktree.'
+    when: 'A session not running in a worktree claims FEAT-001 via the bridge command (exact surface TBD).'
+    then: 'The claim is recorded; caws status surfaces the session-id on the Spec panel; subsequent scope checks recognize the session.'
+  - id: A2
+    given: 'A worktree binding for FEAT-001 exists with a different session_id.'
+    when: 'A non-worktree session attempts to bridge-claim FEAT-001.'
+    then: 'The command refuses with a typed diagnostic naming the worktree-binding owner; no event is appended.'
+non_functional:
+  reliability:
+    - 'Bridge create acquires the lifecycle lock; concurrent bridges to the same spec serialize.'
+  security:
+    - 'Bridge does not relax foreign-claim semantics; --takeover (when added) writes the same prior_owners audit as worktree claim.'
+contracts: []
+# --- Triage (deferred from v11.1.0) -----------------------------------------
+# Pressure on this slice dropped once CLI-WORKTREE-001 restored canonical
+# worktree binding. Most CAWS agent sessions follow the worktree path; the
+# bridge is for environments where worktree creation is impractical
+# (read-only checkouts, certain CI contexts, sub-projects inside a monorepo).
+#
+# Open questions before implementation:
+#   - Is the bridge a `caws claim --no-worktree` flag, a separate `caws bind`
+#     command, or an extension of `caws claim --spec <id>`?
+#   - Does the bridge require any new event schema, or does it reuse
+#     claim_acquired with an additional bridge: true field?
+#   - How does scope check resolve when both a bridge binding and a worktree
+#     binding exist for different specs in the same cwd?

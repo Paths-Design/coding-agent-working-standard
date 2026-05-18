@@ -1,0 +1,62 @@
+id: LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001
+title: 'Adversarial fault-injection tests for lifecycle-transaction rollback'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/tests/store/lifecycle-rollback-failure-harness.test.js
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+    - .caws/specs/LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src/schemas
+invariants:
+  - 'Every composed lifecycle operation (specs.close, worktree.create, worktree.merge, claim.takeover) leaves the .caws/ tree in a defined state after partial failure — either fully pre-operation or fully post-operation, never half-applied.'
+  - 'Rollback never deletes files outside .caws/. Git worktree rollback uses `git worktree remove`, never `rm -rf`.'
+  - 'A partial failure surfaces a typed diagnostic naming the step that failed and the recovery posture (rolled-back vs partial-failure-unrecovered).'
+acceptance:
+  - id: A1
+    given: 'A fault injector that fails appendEvent during worktree.create after git worktree add succeeded.'
+    when: 'caws worktree create is invoked.'
+    then: 'The git worktree is removed via git worktree remove. .caws/worktrees.json is unchanged. The spec.worktree field is unchanged. The user gets a typed partial-failure diagnostic. No half-state is left.'
+  - id: A2
+    given: 'A fault injector that fails appendEvent during worktree.merge after the merge commit landed but before closeSpec completes.'
+    when: 'caws worktree merge is invoked.'
+    then: 'The diagnostic explicitly surfaces partial-failure-unrecovered with a recovery instruction (e.g. "run caws specs close <id> --resolution completed manually"). The merge commit is not reverted. No worktree_merged event is appended.'
+  - id: A3
+    given: 'A fault injector that fails yaml-patch (e.g. unwritable spec file) during specs.close.'
+    when: 'caws specs close is invoked.'
+    then: 'No spec_closed event is appended. The spec file remains in its prior state. The user gets a typed io diagnostic.'
+  - id: A4
+    given: 'A concurrency violation: two processes attempt lifecycle mutations in the same .caws/ tree without acquiring the lifecycle lock (simulated by bypassing the lock in test).'
+    when: 'Both processes attempt overlapping mutations.'
+    then: 'The test fails loudly — this proves the lock is the only synchronization point. (Sanity guard against future regressions that introduce out-of-band mutation paths.)'
+non_functional:
+  reliability:
+    - 'Fault-injection coverage extends to every step boundary in lifecycle-transaction.'
+contracts: []
+# --- Triage (deferred from v11.1.0) -----------------------------------------
+# v11.1.0 ships the lifecycle-mutation substrate and the composed lifecycle
+# operations on top of it, but the partial-failure paths are only exercised
+# by happy-path tests + a couple of contrived "what if the file is missing"
+# assertions. Adversarial fault-injection is missing.
+#
+# Open questions before implementation:
+#   - Where does the fault injector hook in? A test-only seam in
+#     lifecycle-transaction, or jest module mocks at each call site?
+#   - How are partial-failure-unrecovered states modeled in the event log?
+#     Is there a `lifecycle_partial_failure` event, or is it inferred from
+#     operator inspection?
+#   - Should there be a `caws doctor` rule that detects half-applied state
+#     and reports it? (Probably yes — could be a follow-up slice.)

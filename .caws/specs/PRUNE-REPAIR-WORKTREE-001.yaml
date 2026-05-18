@@ -1,0 +1,81 @@
+id: PRUNE-REPAIR-WORKTREE-001
+title: 'Restore v10.2 worktree prune/reconcile/repair ergonomics on v11 substrate'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/shell/worktree-prune-repair.test.js
+    - .caws/specs/PRUNE-REPAIR-WORKTREE-001.yaml
+  out:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .caws/worktrees.json
+invariants:
+  - 'prune removes registry entries whose backing git worktree no longer exists; it never removes a live git worktree.'
+  - 'repair reconciles one-sided bindings (registry has specId but spec.worktree missing, or vice versa) into the canonical bidirectional state, or refuses with a typed diagnostic when there is genuine ambiguity.'
+  - 'reconcile is a read-only diagnostic: it reports drift between git worktree state, .caws/worktrees.json, and spec.worktree fields, but performs no mutations.'
+  - 'All three commands respect foreign-session ownership: they refuse to mutate entries owned by a different session unless --takeover is supplied (which writes a prior_owners audit).'
+  - 'prune and repair emit one event per mutation through appendEvent; reconcile emits zero events.'
+acceptance:
+  - id: A1
+    given: 'A v11-initialized repo with .caws/worktrees.json containing an entry for ghost-wt whose backing git worktree was manually deleted.'
+    when: 'caws worktree prune is invoked.'
+    then: 'The ghost-wt entry is removed from worktrees.json. The bound spec.worktree field is cleared. A worktree_destroyed event (or new worktree_pruned event, TBD) is appended with reason: ghost.'
+  - id: A2
+    given: 'A worktree feat-001-wt with worktrees.json[feat-001-wt].specId=FEAT-001 but the spec file has no worktree field.'
+    when: 'caws worktree repair feat-001-wt is invoked.'
+    then: 'The spec file gains the worktree: feat-001-wt field; a worktree_bound event is appended; previously_bound_to is null (because this is repairing a one-sided binding, not changing one).'
+  - id: A3
+    given: 'A worktree feat-001-wt with spec.worktree=feat-001-wt but no entry in worktrees.json AND the git worktree still exists at .caws/worktrees/feat-001-wt.'
+    when: 'caws worktree repair feat-001-wt is invoked.'
+    then: 'A new worktrees.json entry is created for feat-001-wt, bound to the spec; a worktree_bound event is appended.'
+  - id: A4
+    given: 'A repo with multiple drift scenarios (ghost worktrees, one-sided bindings, conflicting bindings).'
+    when: 'caws worktree reconcile is invoked.'
+    then: 'A structured drift report is printed (table or JSON with --json). No mutations occur. Exit code 0 if no drift, 1 if drift detected.'
+  - id: A5
+    given: 'A worktree owned by a foreign session.'
+    when: 'caws worktree prune or repair is invoked without --takeover.'
+    then: 'The command refuses with a typed foreign-ownership diagnostic. No mutations occur.'
+non_functional:
+  reliability:
+    - 'All three commands acquire the lifecycle lock for any mutation.'
+    - 'reconcile is safe to run while other agents hold lifecycle operations in progress (read-only, no lock contention beyond a snapshot read).'
+  security:
+    - '--takeover writes a prior_owners audit entry, matching the existing claim --takeover semantics.'
+contracts:
+  - name: prune/repair event emissions
+    type: behavior
+    path: packages/caws-cli/src/store/worktrees-writer.ts
+    description: 'prune appends worktree_destroyed (or worktree_pruned, TBD) per removed ghost entry. repair appends worktree_bound per resolved one-sided binding. reconcile appends nothing.'
+# --- Triage (deferred from v11.1.0) -----------------------------------------
+# v10.2 shipped caws worktree prune (commits 5957a33, b8828c7), reconcile/
+# repair (commit 2127e3b), and the adversarial test suite (commit 4e6d28e).
+# v11.0 removed the entire worktree surface; v11.1 restored create/list/bind/
+# destroy/merge but NOT prune/reconcile/repair. Upgrading v10.2 users will
+# immediately ask "where did prune go?"
+#
+# Open questions before implementation:
+#   - Should prune emit worktree_destroyed (same event) or a new
+#     worktree_pruned event with reason: ghost? worktree_destroyed implies
+#     the user destroyed it; worktree_pruned implies recovery from prior
+#     destruction.
+#   - Should reconcile have a --fix shortcut that combines prune + repair,
+#     or should the user always run them explicitly?
+#   - Does repair handle the conflicting-bindings case (registry says
+#     spec A, spec file says worktree X, but spec A.worktree != X)?
+#     Refusing with a diagnostic seems right, but the diagnostic needs
+#     careful design.
