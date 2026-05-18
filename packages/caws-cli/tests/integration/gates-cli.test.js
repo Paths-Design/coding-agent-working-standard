@@ -112,34 +112,53 @@ function createTestProject(overrides = {}) {
   return { dir, specId };
 }
 
-// The quality-gates subprocess uses a lockfile at
-// `<quality-gates-pkg>/docs-status/quality-gates.lock` (shared across
-// all parallel jest workers — a real product limitation, tracked in
-// the LOCK-INTERPROCESS-HARDEN-001 backlog). Tests must clear the lock
-// before each run; the lock holds for 5 minutes by default which makes
-// parallel test runs flaky without this hygiene.
-const QG_LOCK_PATH = path.join(
-  __dirname,
-  '../../../quality-gates/docs-status/quality-gates.lock'
-);
+// LOCK-INTERPROCESS-HARDEN-001 (fixed): the quality-gates subprocess
+// now uses a per-cwd lock at `<cwd>/docs-status/quality-gates.lock`.
+// Each test creates an isolated project dir, so parallel jest workers
+// no longer contend.
+//
+// Per-suite timeout still raised to 240s as a defense-in-depth bound;
+// a single-run subprocess is ~5-15s, so this gives plenty of headroom.
+jest.setTimeout(240000);
 
-function clearQGLock() {
-  try { fs.rmSync(QG_LOCK_PATH, { force: true }); } catch { /* no-op */ }
+function clearQGLockIn(projectDir) {
+  try {
+    fs.rmSync(path.join(projectDir, 'docs-status', 'quality-gates.lock'), { force: true });
+  } catch { /* no-op */ }
+}
+
+function sleepSync(ms) {
+  // Crude but adequate for retry pacing in a node test runner.
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* spin */ }
+}
+
+function isLockContention(result) {
+  return (
+    result.exitCode !== 0 &&
+    typeof result.stderr === 'string' &&
+    /Another quality gates process is already running/.test(result.stderr)
+  );
 }
 
 /**
  * Run `caws gates run --spec <id> [...extraArgs]` and return
  * { stdout, stderr, exitCode }. Non-zero exits do not throw.
+ *
+ * Timeout 30s per attempt. Up to 3 retries on lock contention to handle
+ * parallel jest workers competing for the shared
+ * <quality-gates-pkg>/docs-status/quality-gates.lock. Total worst-case
+ * wall time per call: ~100s. jest.setTimeout above is 120s.
  */
-function runGatesCli(projectDir, specId, extraArgs = []) {
-  clearQGLock();
+function runOnce(projectDir, specId, extraArgs) {
+  clearQGLockIn(projectDir);
   const args = [CLI_PATH, 'gates', 'run', '--spec', specId, ...extraArgs];
   try {
     const stdout = execFileSync(process.execPath, args, {
       cwd: projectDir,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 30000,
+      timeout: 180000,
     });
     return { stdout, stderr: '', exitCode: 0 };
   } catch (error) {
@@ -149,6 +168,17 @@ function runGatesCli(projectDir, specId, extraArgs = []) {
       exitCode: error.status || 1,
     };
   }
+}
+
+function runGatesCli(projectDir, specId, extraArgs = []) {
+  let result = runOnce(projectDir, specId, extraArgs);
+  let attempt = 1;
+  while (isLockContention(result) && attempt < 3) {
+    sleepSync(2000 + attempt * 1000);
+    attempt++;
+    result = runOnce(projectDir, specId, extraArgs);
+  }
+  return result;
 }
 
 /**

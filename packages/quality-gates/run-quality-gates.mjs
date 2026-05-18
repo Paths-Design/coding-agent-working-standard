@@ -342,7 +342,13 @@ class QualityGateRunner {
    * @returns {void}
    */
   acquireLock() {
-    const docsStatusDir = path.join(__dirname, 'docs-status');
+    // LOCK-INTERPROCESS-HARDEN-001 / LEGACY-TEST-RECONCILE-001:
+    // Lock is per-cwd (project-scoped), not per-install-dir, so parallel
+    // jest workers operating on isolated test projects do not contend.
+    // The lock's purpose is to prevent concurrent quality-gates runs
+    // against the SAME project; two runs against different projects
+    // (or different test sandboxes) are independent and must not block.
+    const docsStatusDir = path.join(process.cwd(), 'docs-status');
     const lockPath = path.join(docsStatusDir, 'quality-gates.lock');
 
     if (DEBUG_MODE) {
