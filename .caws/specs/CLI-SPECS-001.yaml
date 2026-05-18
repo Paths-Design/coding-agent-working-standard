@@ -1,0 +1,107 @@
+id: CLI-SPECS-001
+title: 'Restore v11 spec lifecycle commands: caws specs create/list/show/close/archive'
+risk_tier: 2
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Slice 5 complete. First non-manual close using the v11 spec lifecycle CLI.'
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T02:35:53.852Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/specs.test.js
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/specs-store.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/render/specs.ts
+    - packages/caws-cli/tests/shell/specs.test.js
+    - .caws/specs/CLI-SPECS-001.yaml
+  out:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/src/
+    - .caws/events.jsonl
+    - .caws/policy.yaml
+invariants:
+  - 'caws specs commands are the canonical replacement for manual lifecycle reconciliation. After this slice lands, completed specs should not be hand-closed except in emergency recovery.'
+  - 'create writes lifecycle_state: active (per the plan; draft is not v11.1 default).'
+  - 'close uses raw-byte yaml-patch through lifecycle-transaction; no full YAML reserialization.'
+  - 'archive performs filesystem move from .caws/specs/<id>.yaml to .caws/specs/.archive/<id>.yaml, emitting spec_archived with from_path/to_path.'
+  - 'Every command appends events ONLY through appendEvent inside a lifecycle-transaction. No direct events.jsonl writes.'
+  - 'All lifecycle transitions go through the v11 substrate: lifecycle-lock + lifecycle-transaction + yaml-patch.'
+  - 'No worktree lifecycle command is introduced in this slice. That belongs to Slice 6.'
+acceptance:
+  - id: A1
+    given: 'A v11-initialized repo with no spec named NEW-001.'
+    when: 'caws specs create NEW-001 --title "test" --mode feature --risk-tier 3 is invoked.'
+    then: '.caws/specs/NEW-001.yaml exists with lifecycle_state: active, mode: feature, risk_tier: 3, and a created_at timestamp. A spec_created event is appended to .caws/events.jsonl with prev_hash matching the prior tail.'
+  - id: A2
+    given: 'A v11-initialized repo with an existing spec NEW-002.'
+    when: 'caws specs create NEW-002 ... is invoked.'
+    then: 'The command exits non-zero with a typed diagnostic naming the duplicate spec id. No event is appended. The existing file is byte-identical before and after.'
+  - id: A3
+    given: 'A repo with specs in lifecycle_state active, closed, draft, and archived (archived spec is at .caws/specs/.archive/...).'
+    when: 'caws specs list is invoked.'
+    then: 'Active, closed, and draft specs appear in the output. Archived specs do NOT appear in the default list (must use --archived to include them).'
+  - id: A4
+    given: 'A spec NEW-004 exists at .caws/specs/NEW-004.yaml.'
+    when: 'caws specs show NEW-004 is invoked.'
+    then: 'The command prints the spec contents (or a structured render) and exits 0. For a missing id, exits non-zero with a typed not-found diagnostic.'
+  - id: A5
+    given: 'A spec NEW-005 in lifecycle_state: active with comments, specific field order, and trailing whitespace in its YAML.'
+    when: 'caws specs close NEW-005 --resolution completed --reason "test" is invoked.'
+    then: 'The YAML file is updated: lifecycle_state becomes closed, resolution is set to completed, closure_notes contains the --reason text, updated_at is bumped. Byte-level diff shows ONLY these mutations; all comments and unrelated lines remain byte-identical.'
+  - id: A6
+    given: 'caws specs close NEW-006 ... has just been invoked successfully.'
+    when: 'events.jsonl is inspected.'
+    then: 'A new spec_closed event has been appended through appendEvent. Its data carries resolution: completed (and closure_notes if --reason was passed). The chain remains valid; the new event prev_hash equals the prior tail event_hash.'
+  - id: A7
+    given: 'A spec NEW-007 in lifecycle_state: closed at .caws/specs/NEW-007.yaml.'
+    when: 'caws specs archive NEW-007 --reason "complete" is invoked.'
+    then: 'The file is moved from .caws/specs/NEW-007.yaml to .caws/specs/.archive/NEW-007.yaml. A spec_archived event is appended with from_path and to_path matching the move. lifecycle_state in the YAML becomes archived. The original location no longer exists.'
+  - id: A8
+    given: 'A spec NEW-008 in lifecycle_state: active.'
+    when: 'caws specs archive NEW-008 is invoked (archive from active).'
+    then: 'The command exits non-zero with a typed diagnostic naming the illegal transition. The file is unchanged. No event is appended.'
+  - id: A9
+    given: 'A failure injection in the lifecycle-transaction layer that fails event append after the YAML patch.'
+    when: 'caws specs close runs against this injection.'
+    then: 'The transaction reports a partial-failure-recovered (or unrecovered) outcome. The YAML file is restored to its pre-close bytes. No spec_closed event is appended.'
+  - id: A10
+    given: 'A spec was manually closed earlier (lifecycle_state: closed, resolution: completed, hand-authored closure_notes).'
+    when: 'caws specs list and caws specs show are invoked against that spec.'
+    then: 'Both commands render the spec correctly. Neither command rewrites the YAML file. The byte content is unchanged after read-only commands.'
+  - id: A11
+    given: 'CLI-SPECS-001 is fully landed.'
+    when: 'caws --help is inspected.'
+    then: 'No caws worktree command appears (still gated to CLI-WORKTREE-001). caws specs is present as a noun group with create/list/show/close/archive subcommands.'
+non_functional:
+  reliability:
+    - 'close and archive run under lifecycle-lock; concurrent invocations serialize.'
+    - 'YAML mutation is non-destructive (raw-byte patch via yaml-patch).'
+  security:
+    - 'Spec id is validated against the v11 schema regex before any file operation.'
+contracts:
+  - name: caws specs create payload
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/spec_created.v1.json
+    description: 'create emits spec_created with required {title, risk_tier, mode, lifecycle_state}; lifecycle_state must be active or draft.'
+  - name: caws specs close payload
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/spec_closed.v1.json
+    description: 'close emits spec_closed with required {resolution}; optional {closure_notes, merge_commit, supersedes, superseded_by}.'
+  - name: caws specs archive payload
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/spec_archived.v1.json
+    description: 'archive emits spec_archived with required {from_path, to_path}; semantics are filesystem move.'

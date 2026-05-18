@@ -129,6 +129,21 @@ export type {
 export { runInitCommand } from './commands/init';
 export type { InitCommandOptions } from './commands/init';
 
+export {
+  runSpecsCreateCommand,
+  runSpecsListCommand,
+  runSpecsShowCommand,
+  runSpecsCloseCommand,
+  runSpecsArchiveCommand,
+} from './commands/specs';
+export type {
+  SpecsCreateOptions,
+  SpecsListOptions,
+  SpecsShowOptions,
+  SpecsCloseOptions,
+  SpecsArchiveOptions,
+} from './commands/specs';
+
 export { renderInit } from './render/init';
 export type { RenderInitInput } from './render/init';
 

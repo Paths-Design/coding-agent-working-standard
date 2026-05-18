@@ -22,6 +22,11 @@ import {
   runGatesRunCommand,
   runInitCommand,
   runScopeCommand,
+  runSpecsArchiveCommand,
+  runSpecsCloseCommand,
+  runSpecsCreateCommand,
+  runSpecsListCommand,
+  runSpecsShowCommand,
   runStatusCommand,
   runWaiverCreateCommand,
   runWaiverListCommand,
@@ -422,6 +427,139 @@ export function registerShellCommands(
         const code = runWaiverRevokeCommand({
           id,
           ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  // -------------------------------------------------------------------
+  // caws specs (CLI-SPECS-001)
+  //
+  // Restores v11 spec lifecycle commands. All mutation paths go through
+  // specs-writer (which uses the lifecycle-transaction substrate from
+  // Slice 4). The shell layer parses args + builds the actor envelope;
+  // the writer owns YAML patching + event append.
+  // -------------------------------------------------------------------
+  const specsCmd = program
+    .command('specs')
+    .description('Manage CAWS spec lifecycle (create/list/show/close/archive)');
+
+  specsCmd
+    .command('create <id>')
+    .description('Create a new spec in lifecycle_state: active.')
+    .requiredOption('--title <title>', 'Short spec title')
+    .requiredOption(
+      '--mode <mode>',
+      'Spec mode: feature | refactor | fix | doc | chore'
+    )
+    .requiredOption('--risk-tier <n>', 'Risk tier: 1, 2, or 3')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        id: string,
+        opts: { title: string; mode: string; riskTier: string; data?: boolean }
+      ) => {
+        const code = runSpecsCreateCommand({
+          id,
+          title: opts.title,
+          mode: opts.mode,
+          riskTier: opts.riskTier,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  specsCmd
+    .command('list')
+    .description('List specs. By default excludes archived specs.')
+    .option('--archived', 'Include archived specs in the listing')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { archived?: boolean; data?: boolean }) => {
+      const code = runSpecsListCommand({
+        includeArchived: opts.archived === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  specsCmd
+    .command('show <id>')
+    .description('Show a spec by id (searches active and archived locations).')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((id: string, opts: { data?: boolean }) => {
+      const code = runSpecsShowCommand({
+        id,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  specsCmd
+    .command('close <id>')
+    .description(
+      'Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed event.'
+    )
+    .requiredOption(
+      '--resolution <r>',
+      'Resolution: completed | superseded | abandoned'
+    )
+    .option(
+      '--reason <text>',
+      'Closure notes recorded on the spec YAML and the spec_closed event'
+    )
+    .option(
+      '--merge-commit <sha>',
+      'Optional merge commit SHA (e.g., when closure follows a worktree merge)'
+    )
+    .option(
+      '--superseded-by <id>',
+      'Spec id that supersedes this one (use with --resolution superseded)'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (
+        id: string,
+        opts: {
+          resolution: string;
+          reason?: string;
+          mergeCommit?: string;
+          supersededBy?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsCloseCommand({
+          id,
+          resolution: opts.resolution,
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(opts.mergeCommit !== undefined
+            ? { mergeCommit: opts.mergeCommit }
+            : {}),
+          ...(opts.supersededBy !== undefined
+            ? { supersededBy: opts.supersededBy }
+            : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  specsCmd
+    .command('archive <id>')
+    .description(
+      'Archive a closed spec. Moves the YAML file to .caws/specs/.archive/; appends spec_archived event.'
+    )
+    .option(
+      '--reason <text>',
+      'Archive reason (advisory; spec_archived schema does not carry it)'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (id: string, opts: { reason?: string; data?: boolean }) => {
+        const code = runSpecsArchiveCommand({
+          id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,
         });
