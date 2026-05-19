@@ -29,8 +29,8 @@ Run `caws <group> --help` for full options and flag details.
 ## Specs in v11
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level `working-spec.yaml`.
-- v11 does **not** ship a spec generator (`caws specs create` is removed). Author the YAML directly — see existing specs in `.caws/specs/` for the shape.
-- v11 does **not** ship `caws validate`. Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
+- v11.1 ships `caws specs create/list/show/close/archive`. You can also author the YAML directly — see existing specs in `.caws/specs/` for the shape.
+- v11 does **not** ship `caws validate` (removed in v11.0, not returning). Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
 - Acceptance criteria use Given/When/Then format.
 - A spec's `scope.in` / `scope.out` defines what files an agent may touch. `caws scope check <path>` enforces it.
 
@@ -190,9 +190,9 @@ caws waiver revoke FEAT-1-w
 
 ## Common pitfalls
 
-**Problem**: Tried to run `caws specs create` / `caws validate` / `caws iterate` / `caws diagnose`.
-**Cause**: Reading a stale doc that pre-dates v11 cutover.
-**Fix**: Use the v11 surface above. Spec lifecycle returns in v11.1.
+**Problem**: Tried to run `caws validate` / `caws iterate` / `caws diagnose` / `caws verify-acs` / `caws evaluate` / `caws burnup`.
+**Cause**: Reading a stale doc that pre-dates v11.0 cutover.
+**Fix**: Those commands were removed in v11.0 and are not planned to return. Use `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality) as the validation surface. `caws specs create` was restored in v11.1.
 
 **Problem**: `caws init` refuses to run.
 **Cause**: Legacy `.caws/working-spec.yaml` residue from v10.x.

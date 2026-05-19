@@ -71,14 +71,14 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\binit\s+[06]\b", "system runlevel change"),
     # CAWS spec/policy/waiver protection (RC defect #8).
     # Naked rm/mv on .caws/specs/, .caws/policy.yaml, or .caws/waivers/ bypasses
-    # the audit trail. Use `caws specs delete|archive`, `caws waivers revoke`,
+    # the audit trail. Use `caws specs close|archive`, `caws waiver revoke`,
     # or edit policy.yaml in place via Edit (not Bash) instead.
     (r"\b(rm|mv)\b[^\n]*\.caws/specs/[^\s'\"]*\.ya?ml\b",
-     "naked rm/mv on .caws/specs/*.yaml — use `caws specs delete|archive <id>`"),
+     "naked rm/mv on .caws/specs/*.yaml — use `caws specs close|archive <id>`"),
     (r"\b(rm|mv)\b[^\n]*\.caws/policy\.ya?ml\b",
      "naked rm/mv on .caws/policy.yaml — policy is governed; use Edit and a CAWS waiver"),
     (r"\b(rm|mv)\b[^\n]*\.caws/waivers/[^\s'\"]*\.ya?ml\b",
-     "naked rm/mv on .caws/waivers/*.yaml — use `caws waivers revoke <id>`"),
+     "naked rm/mv on .caws/waivers/*.yaml — use `caws waiver revoke <id>`"),
 ]
 
 # Segment-level regex patterns that require user confirmation.

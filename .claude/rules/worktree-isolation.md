@@ -9,17 +9,18 @@ When multiple agents are working on this project, each agent MUST work in its ow
 
 ## Before starting work
 
-1. Check if worktrees exist: `caws worktree list` shows all active worktrees with last commit time and owner
-2. Check who's actually working: `caws agents list` shows registered sessions and their bound worktree/spec, formatted as `<sessionId>:<platform>`
-3. If you're inside a worktree, run `caws status` — the Claim panel shows the current owner, last heartbeat, and any session-log pointer under `tmp/<sessionId>/`
-4. If worktrees are active and you are on the base branch, switch to your assigned worktree
-5. If no worktree exists for you, create one with `caws worktree create <name>` or `caws parallel setup <plan-file>`
+1. Check if worktrees exist: `caws worktree list` shows all active worktrees with their branch, spec binding, and owner session.
+2. If you're inside a worktree, run `caws status` — the Claim panel shows the current owner, any prior_owners audit history, and any session-log pointer under `tmp/<sessionId>/` if your harness produces one. (`caws agents list/show` for cross-session inspection is planned in v11.2; until then use `caws status` and direct reads of `.caws/worktrees.json`.)
+3. If worktrees are active and you are on the base branch, switch to your assigned worktree.
+4. If no worktree exists for you, create one with `caws worktree create <name> --spec <id>`. For setting up multiple worktrees in parallel, loop `caws worktree create` per spec — there is no `caws parallel setup` in v11; that surface was removed and is not planned to return.
 
 ## Foreign-claim soft-block (CAWSFIX-31/32)
 
-`caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree whose `worktrees.json:owner` is a session id different from the current session — unless `--takeover` is supplied. The refusal prints a structured warning naming the claimer as `<sessionId>:<platform>`, the heartbeat age, any session-log pointer under `tmp/<sessionId>/`, and the exact `--takeover` command.
+`caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree whose `worktrees.json:owner` is a session id different from the current session — unless `--takeover` is supplied. The refusal prints a structured warning naming the claimer as `<sessionId>:<platform>`, any session-log pointer under `tmp/<sessionId>/`, and the exact `--takeover` command.
 
-**Decision-gating uses session-id equality only.** A stale heartbeat is NOT authorization to take over — paused sessions are not ended sessions. Read the session log under `tmp/<sessionId>/` for context first. Take over only with explicit user authorization. `--takeover` writes a durable `prior_owners` audit on the worktree entry.
+**Stale lease is evidence, never authority.** This is doctrine invariant §6.8 in `docs/architecture/caws-vnext-command-surface.md`. A stale lease (when leases ship in v11.2) or stale heartbeat may justify a louder warning or richer takeover context — it does NOT silently authorize a takeover or relax the foreign-claim refusal. Paused sessions are not ended sessions. The only authority transition is: prior owner exists → new session supplies `--takeover` → registry updates and audit event appends in one lifecycle transaction. Take over only with explicit user authorization.
+
+`--takeover` writes a durable `prior_owners` audit on the worktree entry. In v11.2, takeover will additionally emit a `claim_taken_over.v1` event into the hash-chained `events.jsonl` (the audit gap that exists in v11.0–v11.1.x).
 
 ## Forbidden operations when worktrees are active
 

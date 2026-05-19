@@ -1,10 +1,10 @@
 ---
 doc_id: caws-vnext-command-surface
 authority: architecture
-status: draft
-title: CAWS vNext command surface (v11.0.0)
+status: active
+title: CAWS vNext command surface (v11.0.0 → v11.2)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-19
 governs:
   modules:
     - packages/caws-cli/src/index.js
@@ -16,17 +16,17 @@ governs:
     - packages/caws-kernel/src/schemas/events/
 ---
 
-# CAWS vNext command surface (v11.0.0)
+# CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active (Slice 8a4 audit complete; 4 blockers carried into 8b)
-**Branch:** `caws-next` (post-8a4)
+**Status:** active. v11.0.0 → v11.1.2 shipped (governed core, worktree lifecycle restored). v11.2 in planning (multi-agent authority and observability — see §1).
+**Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
-**Last updated:** 2026-05-15
+**Last updated:** 2026-05-19
 
-This document is the doctrine source for the v11.0.0 cutover. It captures
-the cutover posture, the command surface that ships in v11, the legacy
-commands that are removed, and the architectural invariants the rewrite
-established.
+This document is the doctrine source for the v11 cutover and its follow-on
+releases. It captures the cutover posture, the command surface that ships,
+the legacy commands that are removed, and the architectural invariants the
+rewrite established.
 
 If a future change conflicts with anything below, fix the change or revise
 this doc — do not silently regress an invariant.
@@ -71,21 +71,81 @@ A1 is chosen because:
 - A1 is honest about the scope of v11.0.0: it is a strong governance
   core, not yet a complete lifecycle replacement
 
-### v11.1 plan (out of scope for v11.0.0)
+### v11.1 plan (out of scope for v11.0.0) — **shipped in v11.1.x**
 
 vNext spec lifecycle (`spec create/close/archive`) and worktree lifecycle
-(`worktree create/destroy/merge`) will be reintroduced as vNext shell
-commands in v11.1. Until then, projects that need those commands should
-pin to `caws-cli@^10.2.x`.
+(`worktree create/destroy/merge`) were reintroduced as vNext shell
+commands in v11.1. Projects that need only the v11.0 governed core may
+still pin to `caws-cli@^11.0.x`.
+
+### v11.2 plan — multi-agent authority and observability
+
+v11.0 → v11.1 delivered the governed core and worktree lifecycle. v11.2
+delivers the surface CAWS needs to be **usable for multi-agent work**:
+agent visibility, takeover audit, non-worktree (bridge) claims, and
+recovery ergonomics. The deliverables are:
+
+- **Leases** (ephemeral operational cache) under `.caws/leases/` — a
+  per-session liveness file written by the store layer on write-class
+  command dispatch. **Not authority. Not in `events.jsonl`.**
+- **`claim_taken_over.v1` event emission** wired into `caws claim
+  --takeover` inside the same lifecycle transaction as the worktrees.json
+  mutation. Closes the existing audit gap.
+- **Bridge bindings** under `.caws/claims/bridge.json` — `caws claim
+  --spec <id>` outside a worktree creates a session ↔ spec authority
+  binding. Bridge has the full lifecycle (acquire, observe, refuse,
+  takeover, release via `--release`, retire via spec close/archive,
+  prune).
+- **`caws agents list/show`** vNext rewrite — pure read-only composition
+  over agents/leases/worktrees/bridge/events stores. Restores agent
+  visibility removed in v11.0.0.
+- **`caws worktree prune/repair/reconcile`** — recovery ergonomics for
+  ghost worktree entries and ghost bridge bindings.
+- **Adversarial fault-injection harness** on `lifecycle-transaction` to
+  prove every step boundary is rollback-safe.
+
+**Explicitly deferred to v11.3+:** `caws session start/checkpoint/end`
+and `caws parallel setup/status/merge/teardown`. The `caws worktree
+create` loop pattern replaces `parallel` for the multi-agent setup case.
+Session lifecycle re-introduction waits on evidence of need from real
+v11.2 usage.
+
+### v11.2 acceptance bar: binding lifecycle spine
+
+Every authority binding introduced by v11.2 (and any future binding)
+must satisfy all seven lifecycle slots, each with at least one test:
+
+```
+acquire    — creation path, with audit event
+observe    — read paths (status, agents); side-effect-free
+refuse     — typed diagnostics for every conflicting acquire scenario
+takeover   — explicit authority transition, with audited event
+release    — explicit relinquishment by the owning session
+retire     — automatic ending tied to a natural lifecycle event
+prune      — operator-driven cleanup of ghost/stale entries
+```
+
+| Binding | acquire | observe | refuse | takeover | release | retire | prune |
+|---|---|---|---|---|---|---|---|
+| Worktree binding | `worktree create` | `worktree list`, `status`, `agents` | `worktree create` collision | `claim --takeover` (v11.2) | `worktree destroy` | `worktree merge` auto-close | `worktree prune` (v11.2) |
+| Bridge binding | `claim --spec <id>` (v11.2) | `agents`, `status` | `claim --spec` collision (v11.2) | `claim --spec --takeover` (v11.2) | `claim --release` (v11.2) | spec close/archive auto-retire (v11.2) | `worktree prune` extension (v11.2) |
+| Lease (presence, not authority) | first write-class command with stable identity | `agents list/show` | n/a (presence is not exclusive) | n/a | n/a — natural refresh-or-decay | stale_after_seconds decay | `worktree prune` extension (v11.2) |
+
+A v11.2+ binding that does not define all applicable slots is a doctrine
+violation, not just a missing feature.
 
 ---
 
 ## 2. v11.0.0 command surface (kept)
 
 These eight command groups are the canonical authority surface for
-v11.0.0. Every one is implemented in `packages/caws-cli/src/shell/`,
-composed atop `packages/caws-cli/src/store/` and
-`packages/caws-kernel/`.
+v11.0.0. v11.1 added `worktree` (a ninth group) and `specs` (a tenth) as
+restored lifecycle commands. v11.2 adds `agents` (an eleventh) for
+multi-agent observability. Every command group is implemented in
+`packages/caws-cli/src/shell/`, composed atop
+`packages/caws-cli/src/store/` and `packages/caws-kernel/`.
+
+### v11.0.0 (governed core)
 
 | Command | Purpose |
 |---|---|
@@ -98,6 +158,24 @@ composed atop `packages/caws-cli/src/store/` and
 | `caws gates run --spec <id>` | Run quality gates against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+
+### Added in v11.1 (lifecycle restoration)
+
+| Command | Purpose |
+|---|---|
+| `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws specs` | vNext spec lifecycle. |
+
+### Planned in v11.2 (multi-agent authority and observability)
+
+| Command | Purpose |
+|---|---|
+| `caws agents list/show` | Read-only inspector over agents/leases/worktrees/bridge/events. Restores agent visibility removed in v11.0.0. |
+| `caws claim --spec <id>` | Bridge claim — session ↔ spec binding outside a worktree. |
+| `caws claim --release [--spec <id>]` | Explicit relinquishment of a bridge binding. |
+| `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
+| `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. |
+| `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
 
 ### Help banner (built CLI)
 
@@ -225,9 +303,17 @@ escalated).
 | `.caws/specs/registry.json` | store | Index over `specs/`. Optional; doctor handles missing/malformed. |
 | `.caws/policy.yaml` | store | Single source of truth for gate `mode` (block/warn/skip). |
 | `.caws/waivers/<id>.yaml` | store + waiver command | Waivers filter violations; never mutate gate mode. |
-| `.caws/worktrees.json` | store + claim | Worktree registry; v11 commands read but do not create new worktrees. |
-| `.caws/agents.json` | store | Agent session registry. |
-| `.caws/events.jsonl` | **store ONLY** (`appendEvent` in `events-store.ts`) | Hash-chained, append-only. First `appendEvent` creates the file under lock. Never required at rest. |
+| `.caws/worktrees.json` | store + claim + worktree commands | **Authority binding** for worktree ↔ spec ↔ owner. |
+| `.caws/agents.json` | store | **Compatibility/identity registry** — durable identity metadata (platform first-seen, capsule references, prior_owners pointers). **Not the presence source.** See `.caws/leases/` for presence. |
+| `.caws/events.jsonl` | **store ONLY** (`appendEvent` in `events-store.ts`) | Hash-chained, append-only durable governance/audit facts. First `appendEvent` creates the file under lock. Never required at rest. |
+| `.caws/leases/<session_id>` (v11.2) | store (`leases-store.ts`) | **Ephemeral operational cache.** Per-session liveness file. Content-authoritative (`last_command_at` is the primary timestamp). Writes are non-blocking and outside `lifecycle-transaction`. Never participates in governance authority decisions. |
+| `.caws/claims/bridge.json` (v11.2) | store (`claim-store.ts`) | **Authority binding** for non-worktree session ↔ spec. Mutated only through `lifecycle-transaction`. |
+
+**State-file role split:** liveness (leases) and authority (worktrees,
+bridge claims) are deliberately separated. `agents.json` is compatibility/
+identity metadata only — it is **not** the canonical presence source from
+v11.2 onward. This split prevents the dual-write drift that would
+re-introduce the mixed-regime hazard the rewrite eliminated.
 
 ### Refused by v11 (legacy residue)
 
@@ -298,9 +384,67 @@ update to this document.
    pieces. It never creates `events.jsonl`. It refuses if legacy residue
    is detected.
 
-7. **Status is observability.** `caws status` never mutates. Running it
-   any number of times produces no `.caws/` byte changes (mutation-
-   negative test in `tests/shell/doctor-status-7c3.test.js`).
+7. **Status is observability.** `caws status` never mutates governance
+   state. Running it any number of times produces no `.caws/` byte
+   changes *in the governance dimension* — specs, policy, waivers,
+   worktrees.json, bridge claims, events.jsonl. (Mutation-negative test
+   in `tests/shell/doctor-status-7c3.test.js`.) **From v11.2 onward, the
+   carve-out is explicit:** repeated read-only commands may update
+   `.caws/leases/<session_id>` mtime/content. Leases are ephemeral
+   operational cache (invariant 9) and are exempt from the governance-
+   mutation invariant. Status MUST NOT mutate anything other than the
+   current session's lease entry.
+
+### v11.2 invariants
+
+The following are added in v11.2 to support the multi-agent surface.
+Same authority as invariants 1–7: a violation is either a regression to
+fix or an explicit doctrine shift requiring an update to this document.
+
+8. **Stale lease is evidence, never authority.** A stale lease may
+   justify a louder warning, a richer `agents list` display, or context
+   inside a takeover diagnostic. It MUST NOT silently authorize a
+   takeover or relax any refusal. The only authority transition is:
+   prior owner exists → new session supplies `--takeover` →
+   `worktrees.json` (or `claims/bridge.json`) updates and
+   `claim_taken_over` appends in one lifecycle transaction. Paused
+   sessions are not ended sessions.
+
+9. **Liveness is operational cache; authority is governance state.**
+   The two are split into separate stores with different invariants:
+   `.caws/leases/*` is ephemeral operational cache; `.caws/events.jsonl`
+   is durable governance/audit facts; `.caws/policy.yaml` is
+   configuration; `.caws/worktrees.json` and `.caws/claims/bridge.json`
+   are authority bindings; `.caws/agents.json` is compatibility/identity
+   metadata. No store may write to another's domain.
+
+10. **No heartbeat events.** `events.jsonl` is reserved for durable
+    governance facts. Lease writes (creation, refresh, expiry) MUST NOT
+    append events. There is no `lease_created`, no `lease_refreshed`, no
+    `lease_expired`. Operator queries see lease state via `caws agents
+    list`; the audit trail lives in claim/takeover/release events, not
+    lease events.
+
+11. **Lease writes never block work, never corrupt governance state.**
+    Lease write failure logs a warning and continues. Lease touches are
+    NOT inside `lifecycle-transaction`. A failed lease write MUST NOT
+    prevent a `caws claim` (or any other command) from succeeding.
+
+12. **Bridge bindings do not bypass scope.** A bridge claim is an
+    *authority binding* (session ↔ spec), not a *scope expansion*.
+    Scope checks still consult `spec.scope.in` for the bound spec. A
+    governed write outside `scope.in` still fails normally.
+
+13. **Every authority binding satisfies the seven-slot lifecycle.**
+    Worktree bindings and bridge bindings (and any future authority
+    binding type) MUST define: acquire (with audit event), observe
+    (side-effect-free read path), refuse (typed diagnostics for every
+    conflicting acquire scenario), takeover (explicit transition with
+    audit), release (explicit relinquishment by owner), retire
+    (automatic ending tied to natural lifecycle), prune (operator-driven
+    cleanup of ghost/stale entries). Each slot has at least one test.
+    A binding type that omits an applicable slot is a doctrine
+    violation, not just a missing feature.
 
 ---
 

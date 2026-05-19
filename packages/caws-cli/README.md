@@ -1,21 +1,22 @@
 # @paths.design/caws-cli
 
-**CAWS CLI v11.0.0 — the governed core for the Coding Agent Working Standard.**
+**CAWS CLI v11.1 — the governed core plus lifecycle for the Coding Agent
+Working Standard.**
 
 CAWS (Coding Agent Working Standard) gives coding agents a deterministic
 substrate for project state, scope, claims, gates, waivers, and audit
-evidence. v11.0.0 is a ground-up rewrite around a pure kernel, an I/O
+evidence. v11 is a ground-up rewrite around a pure kernel, an I/O
 store, and a thin shell. It replaces v10.x.
 
 ## What v11 ships
 
-Exactly eight command groups. Nothing else.
+### Governed core (v11.0)
 
 | Command | What it does |
 |---|---|
 | `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
-| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates `.caws/`. |
+| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates governance state. |
 | `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
 | `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 on admit, 1 on refuse. |
 | `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. |
@@ -23,35 +24,39 @@ Exactly eight command groups. Nothing else.
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
 
+### Lifecycle (v11.1)
+
+| Command | What it does |
+|---|---|
+| `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws specs` | vNext spec lifecycle. |
+
 Run `caws <group> --help` for full options.
 
-## Posture: what v11 does NOT ship
+## Posture
 
-v11.0.0 is the **governed core**. It is not a complete lifecycle CLI.
-The following commands existed in v10.2.x and are **removed** in v11:
+v11 is structured as kernel + store + shell. The kernel has no `fs`,
+`path`, or clock access; the store owns all I/O and the hash-chained
+event log; the shell composes them into commands.
 
-- `caws scaffold` — installed legacy templates and git hooks.
-- `caws validate`, `caws verify-acs`, `caws evaluate`, `caws iterate`,
-  `caws diagnose`, `caws burnup` — used legacy spec resolution
-  (`working-spec.yaml` fallback) and a parallel event-log writer.
-- `caws specs`, `caws worktree`, `caws archive`, `caws parallel` —
-  spec/worktree lifecycle (returns in v11.1).
-- `caws provenance`, `caws hooks` — superseded by `.caws/events.jsonl`
-  and `caws gates run`. Generated git hooks called the removed
-  commands.
-- `caws sidecar`, `caws mode`, `caws tutorial`, `caws plan`,
-  `caws agents`, `caws session`, `caws templates`, `caws workflow`,
-  `caws quality-monitor`, `caws tool`, `caws test-analysis` —
-  peripherals not part of the governed core under A1.
+Commands that existed in v10.2.x and were **removed in v11.0** (no
+replacement is planned in any current milestone): `scaffold`, `validate`,
+`verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`,
+`provenance` (superseded by `events.jsonl`), `sidecar`, `mode`,
+`tutorial`, `plan`, `templates`, `workflow`, `quality-monitor`, `tool`,
+`test-analysis`, legacy `hooks` install (users wire their own hooks
+against `caws gates run`).
 
-If your project depends on the legacy spec or worktree lifecycle
-commands, **pin to `caws-cli@^10.2.x` until v11.1 ships** vNext
-lifecycle commands. The two CLIs cannot coexist on the same project —
-they write to overlapping state.
+Currently absent from v11.1 and **planned for v11.2** (multi-agent
+authority and observability): `caws agents list/show`, `caws claim
+--spec <id>` (bridge claims), `caws worktree prune/repair/reconcile`.
+
+Explicitly deferred to v11.3+: `caws session` and `caws parallel`. The
+`caws worktree create` loop pattern replaces `parallel` for multi-agent
+setup today.
 
 See `docs/architecture/caws-vnext-command-surface.md` in the repo for
-the complete cutover doctrine, removal table, and architectural
-invariants.
+the complete doctrine, command surface, and architectural invariants.
 
 ## Installation
 
