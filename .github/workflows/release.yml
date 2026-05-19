@@ -4,13 +4,24 @@ on:
   push:
     branches:
       - main
+    # RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001 — Layer 2.
+    # Trigger paths name only files that, if changed, could legitimately
+    # require a @paths.design/caws-cli release. Removed paths and why:
+    #   - packages/quality-gates/**  : quality-gates is no longer published
+    #                                  separately (see PACKAGES array in
+    #                                  scripts/multi-package-release.mjs);
+    #                                  its changes must not spin up the
+    #                                  release workflow at all.
+    #   - .releaserc.json            : no such file exists (script is the
+    #                                  single source of truth per its own
+    #                                  comment).
+    #   - CHANGELOG.md (root)        : CHANGELOGs are per-package.
+    #   - scripts/**                 : too broad; only the release script
+    #                                  itself can change release behavior.
     paths:
       - 'packages/caws-cli/**'
-      - 'packages/quality-gates/**'
-      - 'scripts/**'
+      - 'scripts/multi-package-release.mjs'
       - '.github/workflows/release.yml'
-      - '.releaserc.json'
-      - 'CHANGELOG.md'
       - 'package.json'
       - 'package-lock.json'
 
