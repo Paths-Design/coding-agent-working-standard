@@ -1,0 +1,81 @@
+id: CI-CAWS-GATE-V11-SURFACE-001
+title: Rewrite CAWS Gate workflow from v10 assumptions to the v11 command surface
+risk_tier: 3
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'v11-surface rewrite of caws-gate.yml. PR-event-context invocations migrated to caws doctor. Workspace-local CLI build chain (npx turbo run build --filter) + node invocation of dist/index.js bypasses the executable-bit defect on tsc output. Build-cli executable-bit fix tracked separately as proposed CAWS-CLI-BIN-EXECUTABLE-BIT-001.'
+created_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T22:13:57.274Z'
+blast_radius:
+  modules:
+    - .github/workflows/caws-gate.yml
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .github/workflows/caws-gate.yml
+    - .caws/specs/CI-CAWS-GATE-V11-SURFACE-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+invariants:
+  - >-
+    The CAWS Gate workflow must never install @caws/cli. That package name does not exist on the npm registry; the
+    published name is @paths.design/caws-cli.
+  - >-
+    The CAWS Gate workflow must never invoke `caws validate`. That command was removed in v11.0 and is not planned to
+    return; per-spec validation runs through `caws doctor` (drift detection over `.caws/` state) and `caws gates run
+    --spec <id>` (policy-driven quality gates).
+  - >-
+    The workflow exercises the PR's checked-out CLI, not a registry-pinned version. A red CI must reflect the PR's own
+    behavior, not skew from a stale registry tarball.
+  - >-
+    The workflow validates CAWS artifacts under .caws/ that the PR touches. It is not a smoke test of the published CLI
+    surface — that responsibility belongs to CI-MATRIX-VALIDATION-001 (fresh-install matrix).
+acceptance:
+  - id: A1
+    given: A PR is opened that touches a v11-shaped spec file under .caws/specs/.
+    when: The CAWS Gate workflow runs.
+    then: >-
+      The workflow does not call `npm install -g @caws/cli` (the install step references either `@paths.design/caws-cli`
+      or the workspace-local build). The job no longer fails with the npm 404.
+  - id: A2
+    given: The CAWS Gate workflow has been migrated to the v11 command surface.
+    when: Validation runs against the PR's touched spec files.
+    then: >-
+      The workflow invokes `caws doctor` and/or `caws gates run --spec <id>`. No invocation of `caws validate`, `caws
+      scaffold`, `caws verify-acs`, `caws evaluate`, `caws iterate`, `caws diagnose`, `caws burnup`, `caws provenance`,
+      `caws hooks`, `caws workflow`, `caws quality-monitor`, `caws test-analysis`, `caws templates`, or any other
+      removed v10 command appears anywhere in the workflow file.
+  - id: A3
+    given: The decision between workspace-local CLI install and published CLI install is recorded.
+    when: The maintainer or reviewer reads the workflow file.
+    then: >-
+      A header comment in caws-gate.yml states which install path was chosen and why. The chosen approach matches the
+      workflow's purpose (PR validation = workspace-local; release smoke = published).
+  - id: A4
+    given: 'PR #1 (feat/release-automation-guard) is re-run after this fix lands on main.'
+    when: 'The caws-gate check executes against PR #1''s head.'
+    then: >-
+      The job no longer fails with the npm 404 error and no longer fails because of removed-command invocations. Any
+      remaining failures must be attributable to PR #1's own diff, not to v10-era workflow assumptions.
+  - id: A5
+    given: Path-discipline, budget-immutability, waiver-schema, and dual-approval enforcement are preserved.
+    when: A reviewer compares the pre- and post-rewrite workflow.
+    then: >-
+      Every check the v10-era workflow performed has either a v11-surface equivalent invoked here, an explicit
+      deferred-to-elsewhere note with a target spec id, or an explicit removed-as-obsolete note with reasoning. No
+      silent removal of enforcement.
+non_functional:
+  reliability:
+    - The workflow is idempotent across re-runs on the same PR HEAD.
+    - >-
+      Workflow failures are typed: a missing-spec failure is distinguishable from a doctor-drift failure is
+      distinguishable from a gates-run failure.
+  performance:
+    - Workflow wall-clock runtime stays under 5 minutes for typical PRs (single-spec touches).
+contracts: []
