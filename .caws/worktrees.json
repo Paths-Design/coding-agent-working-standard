@@ -13,17 +13,17 @@
       "status": "destroyed",
       "destroyedAt": "2026-05-20T19:11:11.284Z"
     },
-    "ci-kernel-typecheck-wt": {
-      "name": "ci-kernel-typecheck-wt",
-      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/ci-kernel-typecheck-wt",
-      "branch": "caws/ci-kernel-typecheck-wt",
+    "ci-caws-gate-exec-wt": {
+      "name": "ci-caws-gate-exec-wt",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/ci-caws-gate-exec-wt",
+      "branch": "caws/ci-caws-gate-exec-wt",
       "baseBranch": "feat/ci-v11-workflow-repair",
       "scope": null,
-      "specId": "CI-KERNEL-WORKSPACE-TYPECHECK-001",
+      "specId": "CI-CAWS-GATE-V11-SURFACE-001",
       "owner": null,
-      "createdAt": "2026-05-20T19:11:23.248Z",
+      "createdAt": "2026-05-20T22:07:05.130Z",
       "status": "destroyed",
-      "destroyedAt": "2026-05-20T19:36:37.149Z"
+      "destroyedAt": "2026-05-20T22:08:02.009Z"
     }
   }
 }
