@@ -2,9 +2,26 @@ id: V11-DOCTRINE-HYGIENE-001
 title: 'Slice 0: v11.2 doctrine update and tarball hygiene (multi-agent surface plan blocker)'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: |
+  All acceptance criteria met:
+  - A1: doctrine doc landed in 9850d0b with v11.2 plan, lifecycle spine,
+    and §6.8-13 numbered invariants
+  - A2/A3: shipped tarball (README + hook-pack templates) clean of
+    removed-command references; project-root agent docs reflect v11.1.2
+    reality (also 9850d0b)
+  - A4: scripts/check-removed-commands.mjs exits 0 against the rebuilt
+    tarball (26 shipped files scanned, 0 hits)
+  - A5: .github/workflows/release.yml Tarball-truth step is hard-blocking
+    (continue-on-error removed in fe9a265, merged via 3db1c3a)
+  - A6: doctrine doc cross-references CLAUDE.md and
+    .claude/rules/worktree-isolation.md without contradiction
+  Follow-on: source drift in error-handler.js and config/index.js was
+  fixed in ERROR-HANDLER-V11-SURFACE-001 (merge commit 3db1c3a). The
+  guard's continue-on-error wrapper was removed in the same commit.
 created_at: '2026-05-19T00:00:00.000Z'
-updated_at: '2026-05-19T00:00:00.000Z'
+updated_at: '2026-05-19T14:00:00.000Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
