@@ -117,26 +117,20 @@ jobs:
       - name: Build packages
         run: npx turbo run build
 
-      # V11-DOCTRINE-HYGIENE-001 — tarball-truth check.
+      # V11-DOCTRINE-HYGIENE-001 — tarball-truth release blocker.
       # Scans the built @paths.design/caws-cli tarball contents for any
       # reference to commands removed in v11.0 (and not part of the
       # current v11.x or planned v11.2 surface). If shipped files
       # advertise commands that don't exist, agents reading the tarball
       # will try those commands and fail.
       #
-      # Currently runs in warning-only mode: known drift in
-      # dist/error-handler.js is tracked by ERROR-HANDLER-V11-SURFACE-001.
-      # Once that ships, flip `continue-on-error: true` to false (or
-      # remove it) so the guard blocks releases on regressions.
+      # Hard-blocks the release on match. Initial drift was cleaned up by
+      # ERROR-HANDLER-V11-SURFACE-001; any new match is a regression to
+      # fix before release. If v11.2+ restores a command, update
+      # REMOVED_COMMANDS in scripts/check-removed-commands.mjs in the
+      # same commit as the doctrine update.
       - name: Tarball truth — no removed-command references
-        continue-on-error: true
-        run: |
-          echo "::group::check-removed-commands"
-          node scripts/check-removed-commands.mjs || {
-            echo "::warning::Tarball contains references to removed v10 commands. See ERROR-HANDLER-V11-SURFACE-001 for the cleanup plan. This will become a hard failure after that spec lands."
-            exit 0
-          }
-          echo "::endgroup::"
+        run: node scripts/check-removed-commands.mjs
 
       - name: Setup NPM with OIDC for Trusted Publisher
         uses: actions/setup-node@v4
