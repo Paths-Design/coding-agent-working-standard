@@ -2,9 +2,11 @@ id: CI-CAWS-GATE-V11-SURFACE-001
 title: Rewrite CAWS Gate workflow from v10 assumptions to the v11 command surface
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'v11-surface rewrite of caws-gate.yml. PR-event-context invocations migrated to caws doctor. Workspace-local CLI build chain (npx turbo run build --filter) + node invocation of dist/index.js bypasses the executable-bit defect on tsc output. Build-cli executable-bit fix tracked separately as proposed CAWS-CLI-BIN-EXECUTABLE-BIT-001.'
 created_at: '2026-05-20T00:00:00.000Z'
-updated_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T22:13:57.274Z'
 blast_radius:
   modules:
     - .github/workflows/caws-gate.yml
@@ -77,4 +79,3 @@ non_functional:
   performance:
     - Workflow wall-clock runtime stays under 5 minutes for typical PRs (single-spec touches).
 contracts: []
-worktree: ci-caws-gate-exec-wt

@@ -2,9 +2,11 @@ id: CI-KERNEL-WORKSPACE-TYPECHECK-001
 title: Resolve @paths.design/caws-kernel as a workspace sibling during caws-cli typecheck
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'turbo.json typecheck.dependsOn:["^build"] orders caws-kernel#build before caws-cli#typecheck on clean checkout. Diagnosis corrected during implementation: npm-workspaces version-range symlink resolution is sufficient; explicit workspace:* protocol was attempted and reverted because npm 10.9.3 rejects it (recorded in spec triage). End-to-end verified via cold turbo run typecheck.'
 created_at: '2026-05-20T00:00:00.000Z'
-updated_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T22:13:57.524Z'
 blast_radius:
   modules:
     - packages/caws-cli/package.json
@@ -103,7 +105,6 @@ non_functional:
       Total typecheck wall-clock time does not regress by more than 20% compared to the pre-fix baseline (whichever ran
       successfully). If the chosen strategy requires kernel build first, the build is incremental.
 contracts: []
-worktree: ci-kernel-typecheck-wt
 # --- Implementation outcome (recorded after worktree merge) -----------------
 # Three findings emerged during implementation that the original triage did
 # not anticipate:

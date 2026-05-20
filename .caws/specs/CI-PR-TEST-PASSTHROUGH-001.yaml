@@ -2,9 +2,11 @@ id: CI-PR-TEST-PASSTHROUGH-001
 title: 'Pass Jest flags through Turbo in PR Quality Gates Test Suite'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'pr-checks.yml Unit-tests step now invokes turbo directly: npx turbo run test -- --coverage --passWithNoTests. Avoids the npm/turbo double-dash ambiguity. Other test invocations (Contract/Integration/E2E/Mutation/Accessibility) currently pass no flags and remain out of scope.'
 created_at: '2026-05-20T00:00:00.000Z'
-updated_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T22:13:57.767Z'
 blast_radius:
   modules:
     - .github/workflows/pr-checks.yml
