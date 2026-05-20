@@ -1,1 +1,17 @@
-{"version":1,"worktrees":{}}
+{
+  "version": 1,
+  "worktrees": {
+    "ci-caws-gate-wt": {
+      "name": "ci-caws-gate-wt",
+      "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/ci-caws-gate-wt",
+      "branch": "caws/ci-caws-gate-wt",
+      "baseBranch": "feat/ci-v11-workflow-repair",
+      "scope": null,
+      "specId": "CI-CAWS-GATE-V11-SURFACE-001",
+      "owner": null,
+      "createdAt": "2026-05-20T19:08:58.140Z",
+      "status": "destroyed",
+      "destroyedAt": "2026-05-20T19:11:11.284Z"
+    }
+  }
+}
