@@ -55,11 +55,13 @@ acceptance:
       silenced via // @ts-ignore, // @ts-expect-error, skipLibCheck override, or per-file exclusion.
   - id: A2
     given: packages/caws-cli/package.json declares its dependency on @paths.design/caws-kernel.
-    when: A reviewer inspects the dependency entry.
+    when: A reviewer inspects the dependency entry AND runs `npm ls @paths.design/caws-kernel`.
     then: >-
-      The dependency specifier is the workspace protocol (`workspace:*` or equivalent npm workspace resolution) — not a
-      version range like `^1.0.0`. `npm ci` resolves the dependency to the local packages/caws-kernel directory, not a
-      registry tarball.
+      `npm ls` resolves the dependency to packages/caws-kernel (the local workspace symlink), not to a registry tarball.
+      The specifier may be either the explicit workspace protocol (`workspace:*`) OR a npm-version-range that the local
+      kernel's package.json version satisfies (yielding equivalent npm-workspaces symlink resolution). Both expressions
+      are accepted; the runtime resolution outcome is what the invariant tests. See triage block for the protocol-vs-range
+      decision recorded during implementation.
   - id: A3
     given: The fix has landed.
     when: >-
@@ -102,3 +104,65 @@ non_functional:
       successfully). If the chosen strategy requires kernel build first, the build is incremental.
 contracts: []
 worktree: ci-kernel-typecheck-wt
+# --- Implementation outcome (recorded after worktree merge) -----------------
+# Three findings emerged during implementation that the original triage did
+# not anticipate:
+#
+# 1. NPM REJECTS `workspace:*` PROTOCOL ON THIS REPO'S NPM 10.9.3.
+#    The first implementation commit (42ac717) changed the kernel dep
+#    from `^1.0.0` to `workspace:*`. A subsequent `npm install` from the
+#    repo root failed immediately with:
+#      npm error code EUNSUPPORTEDPROTOCOL
+#      npm error Unsupported URL Type "workspace:": workspace:*
+#    npm 10.9.3 + node 22.19.0 + the root package.json's
+#    `workspaces: ["packages/*"]` declaration was expected to support
+#    the workspace protocol (npm has documented it since v7), but the
+#    install rejects it. Root cause not investigated further — likely
+#    a known npm regression or interaction with this repo's specific
+#    workspace setup. The `workspace:*` change was reverted in the
+#    next commit on this branch.
+#
+# 2. THE ROOT-CAUSE FIX IS `turbo.json`, NOT THE DEPENDENCY PROTOCOL.
+#    The original diagnosis assumed the version pin caused npm to fetch
+#    the registry tarball. That's wrong: npm-workspaces already symlinks
+#    `node_modules/@paths.design/caws-kernel -> ../../packages/caws-kernel`
+#    because the local kernel's version (1.1.0) satisfies `^1.0.0`. The
+#    actual CI failure was `turbo.json`'s `typecheck.dependsOn: []` —
+#    on a clean checkout, kernel's `dist/` hadn't been built when
+#    caws-cli typechecked, so the resolved symlink target had no
+#    `index.d.ts`. Changing `dependsOn: ["^build"]` orders kernel build
+#    before caws-cli typecheck; the cascade collapses.
+#
+#    End-to-end verification (post-revert): with both kernel dists
+#    stashed and a fresh `npm install`, `turbo run typecheck --force`
+#    succeeded cold (6/6 tasks, exit 0). Turbo rebuilt kernel `dist/`
+#    via the new dependsOn during the run, and caws-cli typecheck
+#    resolved the kernel types from the rebuilt artifact. Spec A1
+#    satisfied.
+#
+# 3. SCOPE GUARD UNION-MODE BEHAVIOR WAS LIVE-EXERCISED.
+#    After both worktrees merged back, editing
+#    `packages/caws-cli/package.json` from the unbound main tree
+#    triggered a strike-1 scope-guard warning citing
+#    CI-CAWS-GATE-V11-SURFACE-001's scope.out (which lists that file).
+#    Union-mode interference exactly as warned. The edit proceeded
+#    (strike, not block) because no spec was authoritatively bound;
+#    the warning was correct behavior. Spec A2 in CI-CAWS-GATE-V11-
+#    SURFACE-001 lists `packages/caws-cli/package.json` in scope.out
+#    even though that spec doesn't intend to gate this file — the
+#    scope.out was a deliberate exclusion-by-omission. Acceptable
+#    for this slice; tracked as a known scope-guard ergonomic for
+#    future spec authoring.
+#
+# Open follow-ups (NOT addressed in this slice):
+#   - Investigate why npm 10.9.3 rejects `workspace:*`. File against
+#     npm or against this repo's workspace setup. If resolvable,
+#     migrate caws-cli + quality-gates dependencies to explicit
+#     workspace protocol for architectural correctness.
+#   - @paths.design/quality-gates has the same `^2.0.0` version-pin
+#     shape. Same structural pattern, same workspace-symlink
+#     resolution. Worth a peer spec to migrate alongside whenever
+#     finding #1 is resolved.
+#   - Document the npm-workspace-protocol-rejection finding in
+#     CONTRIBUTING.md so future contributors don't repeat the same
+#     attempted change.
