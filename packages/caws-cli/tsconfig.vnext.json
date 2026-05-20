@@ -1,3 +1,18 @@
+// caws-cli vNext typecheck config.
+//
+// Cross-package resolution of @paths.design/caws-kernel is handled at the
+// task-graph layer, not at the tsconfig layer. turbo.json declares
+// `typecheck.dependsOn: ["^build"]`, which runs caws-kernel's `tsc` build
+// before this typecheck runs. The kernel's emitted dist/index.d.ts is then
+// resolved via npm workspaces' node_modules symlink the same way a published
+// consumer would resolve it.
+//
+// Rationale (per CI-KERNEL-WORKSPACE-TYPECHECK-001 triage, Option 2):
+// validates the same artifact downstream consumers receive (kernel's
+// exports, declaration emit, files entry). A `paths` mapping pointing
+// directly at packages/caws-kernel/src/index.ts would be faster for inner-
+// loop typechecks, but would bypass the kernel's published surface and
+// could mask issues that only manifest after declaration emit.
 {
   "compilerOptions": {
     "target": "ES2022",
