@@ -52,15 +52,27 @@ jobs:
         id: caws-bin
         run: |
           set -euo pipefail
-          # Prefer the workspace bin symlink (created by `npm ci` and
-          # populated by the build step above). Fall back to invoking the
-          # build artifact directly if the symlink is missing.
-          if [ -x node_modules/.bin/caws ]; then
-            echo "path=node_modules/.bin/caws" >> "$GITHUB_OUTPUT"
-          elif [ -f packages/caws-cli/dist/index.js ]; then
+          # Prefer the deterministic Node invocation of the freshly-built
+          # artifact. caws-cli's dist/index.js is emitted by tsc, which
+          # does NOT set the executable bit on output files; published-CLI
+          # consumers get the bit set by `npm install`'s bin-linking step,
+          # but workspace-local installs do not. Invoking via `node` makes
+          # the interpreter explicit and bypasses the executable-bit
+          # requirement entirely.
+          #
+          # The `node_modules/.bin/caws` symlink is retained as a fallback
+          # in case the build artifact path layout changes in a future
+          # caws-cli build; in that case the symlink would still resolve
+          # to whatever the package's `bin` entry declares. The fix to
+          # build-cli.js so dist/index.js is emitted with mode 0755 is a
+          # separate follow-up tracked as proposed spec
+          # CAWS-CLI-BIN-EXECUTABLE-BIT-001.
+          if [ -f packages/caws-cli/dist/index.js ]; then
             echo "path=node packages/caws-cli/dist/index.js" >> "$GITHUB_OUTPUT"
+          elif [ -x node_modules/.bin/caws ]; then
+            echo "path=node_modules/.bin/caws" >> "$GITHUB_OUTPUT"
           else
-            echo "❌ Workspace CAWS CLI not found. Expected node_modules/.bin/caws or packages/caws-cli/dist/index.js after build."
+            echo "❌ Workspace CAWS CLI not found. Expected packages/caws-cli/dist/index.js after build or executable node_modules/.bin/caws."
             exit 1
           fi
 
