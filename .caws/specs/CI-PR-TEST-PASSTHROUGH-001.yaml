@@ -1,0 +1,75 @@
+id: CI-PR-TEST-PASSTHROUGH-001
+title: 'Pass Jest flags through Turbo in PR Quality Gates Test Suite'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .github/workflows/pr-checks.yml
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .github/workflows/pr-checks.yml
+    - .caws/specs/CI-PR-TEST-PASSTHROUGH-001.yaml
+  out:
+    - .github/workflows/caws-gate.yml
+    - packages/caws-cli/package.json
+    - turbo.json
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+invariants:
+  - 'The Test Suite Unit-tests step must pass `--coverage` and `--passWithNoTests` to Jest, not to Turbo. Turbo rejects unknown flags.'
+  - 'The repair is a one-line shell change in pr-checks.yml. No changes to test scripts in package.json files, no changes to turbo.json task config.'
+  - 'Other test invocations in pr-checks.yml (Contract, Integration, E2E, Mutation, Accessibility) currently do not pass flags and are not in scope. Their failure modes — if they fail — are tracked separately.'
+acceptance:
+  - id: A1
+    given: 'PR #3 is re-run after this fix.'
+    when: 'The Test Suite "Unit tests with coverage" step executes.'
+    then: 'The step no longer fails with `ERROR  unexpected argument ''--coverage'' found`. Jest receives `--coverage` and `--passWithNoTests`; Turbo passes them through verbatim.'
+  - id: A2
+    given: 'The repair is in place.'
+    when: 'A reviewer inspects line 160 of pr-checks.yml.'
+    then: 'The invocation uses Turbo''s explicit pass-through separator syntax — either `npm run test:unit -- -- --coverage --passWithNoTests` (npm strips one `--`, leaving Turbo to see the second `--` and pass the rest through) OR `npx turbo run test -- --coverage --passWithNoTests` (direct Turbo invocation). The chosen syntax is documented inline.'
+  - id: A3
+    given: 'The fix has landed on PR #3.'
+    when: 'CI runs the Test Suite job on PR #3 itself.'
+    then: 'The Unit tests step exits 0 OR exits nonzero with genuine Jest output (test failures, not flag-parse errors). Either outcome proves the passthrough mechanism works; a Jest-genuine failure is a separate concern outside this spec''s scope.'
+non_functional:
+  reliability:
+    - 'The fix is mechanical and deterministic. No test code is modified; no behavioral change to the test runs themselves.'
+  performance:
+    - 'No measurable performance impact — the fix changes only argument parsing.'
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Surfaced by PR #3 CI run 26190854016. With the kernel typecheck fix
+# unblocking Quick Sanity Checks, the downstream Test Suite job ran for the
+# first time on a v11 PR and immediately failed at `npm run test:unit -- --coverage`.
+#
+# The root `test:unit` script in package.json is:
+#   "test:unit": "turbo run test --coverage --passWithNoTests"
+# So when the workflow runs `npm run test:unit -- --coverage --passWithNoTests`,
+# npm strips the leading `--` and passes `--coverage --passWithNoTests` to
+# the script (i.e. to `turbo run test`), and Turbo treats them as its own
+# flags rather than as pass-through args. Turbo rejects them.
+#
+# Turbo's documented pass-through syntax requires `--` BEFORE the
+# pass-through args: `turbo run test -- --coverage --passWithNoTests`.
+# Through npm, that becomes `npm run test:unit -- -- --coverage --passWithNoTests`
+# (double `--` because npm strips one).
+#
+# Alternative: bypass npm and invoke Turbo directly:
+#   `npx turbo run test -- --coverage --passWithNoTests`
+# This is more explicit and avoids the double-dash confusion.
+#
+# Recommendation: the npx turbo invocation. The double-dash form is a
+# known JavaScript-ecosystem footgun that future maintainers will trip
+# over again. Direct invocation makes the intent obvious.
+#
+# This is the second NEW spec activated on the feat/ci-v11-workflow-repair
+# branch after the original two (CI-CAWS-GATE-V11-SURFACE-001,
+# CI-KERNEL-WORKSPACE-TYPECHECK-001). The branch's purpose — CI substrate
+# repair — accommodates governing this third defect under its own spec
+# rather than smuggling it into one of the existing specs' scopes.
