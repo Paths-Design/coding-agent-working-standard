@@ -40,19 +40,27 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
+      - name: Build workspace CAWS CLI
+        # The caws-cli `bin` entry points to dist/index.js (a build artifact).
+        # `npm ci` does not run build scripts on workspace packages, so the
+        # dist/ output does not exist on a fresh checkout. Build via Turbo
+        # with `...` so upstream package builds (kernel, quality-gates) run
+        # first in dependency order.
+        run: npx turbo run build --filter=@paths.design/caws-cli...
+
       - name: Resolve workspace CLI path
         id: caws-bin
         run: |
           set -euo pipefail
-          # Prefer the workspace bin entry. Fall back to the bin script
-          # declared in packages/caws-cli/package.json if the workspace
-          # symlink isn't present (older npm versions).
+          # Prefer the workspace bin symlink (created by `npm ci` and
+          # populated by the build step above). Fall back to invoking the
+          # build artifact directly if the symlink is missing.
           if [ -x node_modules/.bin/caws ]; then
             echo "path=node_modules/.bin/caws" >> "$GITHUB_OUTPUT"
-          elif [ -x packages/caws-cli/bin/caws.js ]; then
-            echo "path=node packages/caws-cli/bin/caws.js" >> "$GITHUB_OUTPUT"
+          elif [ -f packages/caws-cli/dist/index.js ]; then
+            echo "path=node packages/caws-cli/dist/index.js" >> "$GITHUB_OUTPUT"
           else
-            echo "❌ Workspace CAWS CLI not found. Expected node_modules/.bin/caws or packages/caws-cli/bin/caws.js."
+            echo "❌ Workspace CAWS CLI not found. Expected node_modules/.bin/caws or packages/caws-cli/dist/index.js after build."
             exit 1
           fi
 
