@@ -1,3 +1,17 @@
+## [11.1.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.2...v11.1.3) (2026-05-20)
+
+
+### Bug Fixes
+
+* **ci:** build workspace CLI before caws-gate doctor ([f5b3fba](https://github.com/Paths-Design/coding-agent-working-standard/commit/f5b3fba67b6d300c347c44322f13d7e6439db64e)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3)
+* **ci:** invoke CLI via node to bypass executable-bit dependency ([f4c1bfe](https://github.com/Paths-Design/coding-agent-working-standard/commit/f4c1bfe7136a18510c8d6c83628d19d30911fd42))
+* **ci:** keep version-range pin; document npm workspace:* rejection ([2ed5736](https://github.com/Paths-Design/coding-agent-working-standard/commit/2ed573603d8d081f6e4e5fb8878b6a9d758ec773))
+* **ci:** pass coverage flags through turbo ([08c76a7](https://github.com/Paths-Design/coding-agent-working-standard/commit/08c76a7e0c4c130d635ca019251554f36ac033f9)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3) [CI-PR-TEST-PASSTHROU#001](https://github.com/CI-PR-TEST-PASSTHROU/issues/001)
+* **ci:** resolve kernel typecheck via workspace protocol ([42ac717](https://github.com/Paths-Design/coding-agent-working-standard/commit/42ac7175ab04d879866e8e61534534ff71b587f4)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+* **ci:** rewrite caws-gate for v11 surface ([2f06d0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/2f06d0db5227a65142aa6f1666a8f729da81b688)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1)
+* **cli:** remove removed-command suggestions from error handler ([fe9a265](https://github.com/Paths-Design/coding-agent-working-standard/commit/fe9a2659cfa18816a043752592653e17aa57f107))
+* **specs:** lower WORKTREE-CAWS-SHARED-STATE-001 risk_tier to 3 ([e9effde](https://github.com/Paths-Design/coding-agent-working-standard/commit/e9effde44cdb9c0f360ac1ae5f64231ca732a4f5))
+
 ## [11.1.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.1...v11.1.2) (2026-05-18)
 
 
