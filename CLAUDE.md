@@ -2,36 +2,37 @@
 
 Project-specific guidance for Claude Code agents working on the CAWS repository.
 
-## This repo self-hosts (and is mid-cutover)
+## This repo self-hosts
 
 CAWS (Coding Agent Working Standard) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
 
-The repo is currently on the `caws-next` branch, completing the **v11.0.0 cutover** (vNext rewrite — pure kernel, I/O store, thin shell). Until cutover (slice 8d), `main` still runs the legacy v10.x surface and `caws-next` runs the v11 surface. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (posture A1) and §6 (invariants) before making decisions.
+The v11 cutover is complete. `main` runs the v11 surface (currently published as `@paths.design/caws-cli@11.1.2`). v11.2 is in planning — see `docs/architecture/caws-vnext-command-surface.md` §1 ("v11.2 plan") for the multi-agent authority and observability work. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (cutover posture and v11.2 plan) and §6 (architectural invariants — invariants 1–7 are v11 core; 8–13 are v11.2 additions) before making decisions.
 
-## v11 ships exactly eight command groups (A1 posture)
+## v11.1 ships eleven command groups
 
 ```
-init  doctor  status  scope  claim  gates  evidence  waiver
+init  doctor  status  scope  claim  gates  evidence  waiver  specs  worktree
 ```
 
-Everything else (specs, worktree, validate, verify-acs, evaluate, iterate, diagnose, burnup, provenance, hooks, scaffold, agents, parallel, sidecar, mode, tutorial, plan, workflow, quality-monitor, tool, test-analysis, session, templates) is **removed in v11**. Spec/worktree lifecycle returns in v11.1. Projects needing it today pin to `caws-cli@^10.2.x`.
+(The eight v11.0 governed-core groups, plus `specs` and `worktree` restored in v11.1.)
 
-When working on `caws-next`, do not invoke removed commands as if they were current. They are gone from the v11 entry point and will fail with a `command not found` style error.
+Removed in v11.0 and not planned to return: `scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`, `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`. The hash-chained `.caws/events.jsonl` is the audit surface; users wire their own hooks against `caws gates run`.
+
+Currently absent and **planned for v11.2**: `caws agents list/show`, `caws claim --spec <id>` (bridge claims for non-worktree contexts), `caws worktree prune/repair/reconcile`. Until v11.2 ships, `caws status` + direct reads of `.caws/worktrees.json` and `.caws/agents.json` cover the agent-inspection use case.
+
+**Deferred to v11.3+**: `caws session` and `caws parallel`. The `caws worktree create` loop replaces `parallel` for multi-agent setup.
 
 ## Before you start
 
-1. **Confirm which branch you're on.** `caws-next` (vNext, v11 surface) vs. `main` (legacy, v10 surface). Behavior differs.
-2. **On `caws-next`:** run `caws status` and `caws doctor`. The `claim` panel surfaces worktree ownership; doctor surfaces drift.
-3. **On `main` (legacy):** the v10 commands (specs, worktree, agents, parallel) are still active.
-4. If working in parallel with another agent: create a git worktree externally (`git worktree add`); v11 does not ship the legacy `caws worktree create` orchestration. `caws claim` registers the worktree; `caws claim --takeover` acquires it from a foreign session.
+1. Run `caws status` and `caws doctor`. The `claim` panel surfaces worktree ownership; doctor surfaces drift.
+2. For multi-agent work: create your worktree with `caws worktree create <name> --spec <id>`. The command writes the bidirectional worktree↔spec binding, registers ownership, and emits the `worktree_created` + `worktree_bound` events. There is no `caws parallel setup` — loop `caws worktree create` per spec.
+3. `caws claim` surfaces or takes worktree ownership. `caws claim --takeover` acquires from a foreign session and writes a `prior_owners` audit entry. In v11.2, `--takeover` will additionally emit a `claim_taken_over.v1` event (currently missing — known audit gap).
 
-## v11 spec workflow (replacement, not migration)
+## v11 spec workflow
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level working spec.
-- v11 does **not** ship `caws specs create` / `caws validate`. Author the YAML directly; `caws doctor` and `caws gates run --spec <id>` are the validation surface in v11.
+- v11.1 ships `caws specs create/list/show/close/archive`. Author specs via the CLI; `caws doctor` and `caws gates run --spec <id>` validate.
 - Acceptance criteria use Given/When/Then format (see existing specs in `.caws/specs/` for the shape).
-
-If you need legacy spec ergonomics today, pin `caws-cli@^10.2.x` and use `caws specs create / validate` there. Do not mix the two CLIs in one project.
 
 ## Governed paths (require special handling)
 

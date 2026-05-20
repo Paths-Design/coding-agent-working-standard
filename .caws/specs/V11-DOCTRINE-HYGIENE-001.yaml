@@ -1,0 +1,98 @@
+id: V11-DOCTRINE-HYGIENE-001
+title: 'Slice 0: v11.2 doctrine update and tarball hygiene (multi-agent surface plan blocker)'
+risk_tier: 2
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: |
+  All acceptance criteria met:
+  - A1: doctrine doc landed in 9850d0b with v11.2 plan, lifecycle spine,
+    and §6.8-13 numbered invariants
+  - A2/A3: shipped tarball (README + hook-pack templates) clean of
+    removed-command references; project-root agent docs reflect v11.1.2
+    reality (also 9850d0b)
+  - A4: scripts/check-removed-commands.mjs exits 0 against the rebuilt
+    tarball (26 shipped files scanned, 0 hits)
+  - A5: .github/workflows/release.yml Tarball-truth step is hard-blocking
+    (continue-on-error removed in fe9a265, merged via 3db1c3a)
+  - A6: doctrine doc cross-references CLAUDE.md and
+    .claude/rules/worktree-isolation.md without contradiction
+  Follow-on: source drift in error-handler.js and config/index.js was
+  fixed in ERROR-HANDLER-V11-SURFACE-001 (merge commit 3db1c3a). The
+  guard's continue-on-error wrapper was removed in the same commit.
+created_at: '2026-05-19T00:00:00.000Z'
+updated_at: '2026-05-19T14:00:00.000Z'
+blast_radius:
+  modules:
+    - docs/architecture/caws-vnext-command-surface.md
+    - CLAUDE.md
+    - AGENTS.md
+    - .claude/rules/worktree-isolation.md
+    - docs/agents/full-guide.md
+    - packages/caws-cli/README.md
+    - packages/caws-cli/templates
+    - .github/workflows
+    - scripts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - docs/architecture/caws-vnext-command-surface.md
+    - CLAUDE.md
+    - AGENTS.md
+    - .claude/rules/worktree-isolation.md
+    - docs/agents/full-guide.md
+    - packages/caws-cli/README.md
+    - packages/caws-cli/templates
+    - .github/workflows
+    - scripts/check-removed-commands.mjs
+    - .caws/specs/V11-DOCTRINE-HYGIENE-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .caws/worktrees.json
+invariants:
+  - 'Slice 0 ships zero code under packages/*/src/. It is doctrine, agent-facing docs, package README/templates, and one CI script.'
+  - 'Doctrine doc declares v11.2 deliverables as "multi-agent authority and observability" and explicitly defers session and parallel to v11.3+.'
+  - 'The six hard architectural invariants (stale lease never authorizes, liveness vs authority store split, no heartbeat events, lease writes non-blocking and outside lifecycle-transaction, bridge does not bypass scope, status byte-stable for governance state with explicit lease carve-out) are codified as numbered §6 invariants.'
+  - 'The seven-slot binding-lifecycle spine (acquire, observe, refuse, takeover, release, retire, prune) is documented as the acceptance bar for any new authority binding.'
+  - '.caws/agents.json role is sharpened: compatibility/identity registry, not the canonical presence source. Leases (introduced in Slice 1) are presence; agents.json keeps durable identity metadata only.'
+  - 'No shipped npm package file (README, templates, anything listed in package.json "files") contains references to commands removed in v11.0.0.'
+  - 'A CI grep check fails the release if any shipped file matches a regex for removed command names. The check survives forever as the doctrine enforcement boundary at the tarball.'
+acceptance:
+  - id: A1
+    given: 'The repo at HEAD of feat/v11-multi-agent-doctrine.'
+    when: 'docs/architecture/caws-vnext-command-surface.md is read.'
+    then: 'The doc has a §1 statement declaring v11.2 as "multi-agent authority and observability" and explicitly defers session and parallel to v11.3+; §2 lists 9 v11.2 command groups (8 current + agents); §4 lists .caws/leases/* and .caws/claims/bridge.json under v11-owned state with a note that leases are ephemeral; §6 has the six invariants numbered and the seven-slot lifecycle spine documented.'
+  - id: A2
+    given: 'A grep across packages/caws-cli/README.md and packages/caws-cli/templates/ for the removed-command regex.'
+    when: 'The grep is run as in: git grep -E "caws (scaffold|validate|provenance|parallel|session|mode|tutorial|plan|workflow|quality-monitor|diagnose|verify-acs|evaluate|iterate|burnup)\\b" -- packages/caws-cli/README.md packages/caws-cli/templates/'
+    then: 'The grep returns no matches (exit 1 from git grep, which is success for "no matches").'
+  - id: A3
+    given: 'A grep across CLAUDE.md, AGENTS.md, .claude/rules/worktree-isolation.md, docs/agents/full-guide.md for the same regex.'
+    when: 'The grep is run on those files.'
+    then: 'The grep returns no matches, OR matches are explicitly framed as "removed in v11.0; returning in vX.Y" historical context. No instructions tell an agent to run a removed command.'
+  - id: A4
+    given: 'A new CI script scripts/check-removed-commands.mjs and a workflow step that invokes it.'
+    when: 'The CI step runs against the shipped package contents (npm pack --dry-run output).'
+    then: 'The step exits 0 when no shipped file contains a removed-command reference; the step exits non-zero with a clear error if any shipped file matches.'
+  - id: A5
+    given: 'The release workflow under .github/workflows/.'
+    when: 'A release is attempted (real or dry-run).'
+    then: 'The check-removed-commands step runs before publish and blocks publish on match.'
+  - id: A6
+    given: 'docs/architecture/caws-vnext-command-surface.md after Slice 0.'
+    when: 'The doc is cross-referenced against CLAUDE.md and .claude/rules/worktree-isolation.md.'
+    then: 'No statements contradict each other. The command surface advertised in every doc matches the v11.1.2 reality (8 groups) for now; the v11.2 surface (9 groups) is described as "planned, lands with v11.2.0" in the doctrine but not yet in agent-facing rules.'
+non_functional:
+  reliability:
+    - 'The CI grep is deterministic and runs in under 5 seconds against the tarball contents.'
+  security:
+    - 'No new authority paths, no new state mutations, no new event types in this slice.'
+contracts:
+  - name: removed-commands regex
+    type: behavior
+    path: scripts/check-removed-commands.mjs
+    description: 'The regex enforced by the CI script: /caws (scaffold|validate|verify|provenance|parallel|session|mode|tutorial|plan|workflow|quality-monitor|diagnose|verify-acs|evaluate|iterate|burnup|specs|hooks|archive|templates|sidecar|quality-gates|tool|test-analysis)\b/ — case-sensitive, word-boundary. Subject to refinement as Slice 0b/c audits surface new misuses.'
