@@ -2,9 +2,11 @@ id: RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001
 title: 'Prevent non-shipping commits from triggering package publishes'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Three-layer release guard merged via PR #1 (merge SHA 9639f97). Layer 1 (semantic-release releaseRules deny list with breaking-change denials), Layer 2 (workflow trigger path reduction), Layer 3 (shipping-file classifier with files-array authority and fail-open unknown marker). Three verification harnesses (release-guard-dry-run 8/8, release-guard-commit-analyzer-check 16/16 against real @semantic-release/commit-analyzer, release-guard-scope-audit 0 unclassified) confirm the v11.1.2 incident class is blocked while real caws-cli shipping commits and unscoped fixes pass through correctly. Re-validated against post-PR-#3 main on f61f487 before merge.'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T10:55:00.000Z'
+updated_at: '2026-05-20T22:42:55.366Z'
 blast_radius:
   modules:
     - .github/workflows

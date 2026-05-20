@@ -157,7 +157,12 @@ jobs:
         run: npm ci
 
       - name: Unit tests with coverage
-        run: npm run test:unit -- --coverage --passWithNoTests
+        # The root `test:unit` script is `turbo run test`. Flags after the
+        # script name belong to Jest, not to Turbo. Invoking Turbo directly
+        # avoids the npm/turbo double-`--` ambiguity (npm run test:unit -- -- ...)
+        # that future maintainers would trip over.
+        # Governed by CI-PR-TEST-PASSTHROUGH-001.
+        run: npx turbo run test -- --coverage --passWithNoTests
 
       - name: Contract tests
         if: hashFiles('tests/contract/**') != ''
