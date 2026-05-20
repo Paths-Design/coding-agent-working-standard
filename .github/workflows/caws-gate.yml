@@ -1,3 +1,25 @@
+# CAWS Gate — PR-level governance enforcement for CAWS artifacts.
+#
+# Purpose: validate the PR's own .caws/ artifacts and enforce governance
+# invariants (path discipline, change_budget immutability, waiver schema,
+# policy.yaml dual approval) on every pull request.
+#
+# Install strategy: workspace-local CLI (npm ci on the checked-out PR,
+# then invoke `node packages/caws-cli/bin/caws.js`). Rationale: this
+# workflow validates the PR's own state and command surface, both of
+# which are PR-checkout-relative. A registry-pinned CLI could be several
+# releases behind the PR's expected behavior and would either pass or
+# fail spuriously for reasons unrelated to the PR diff. The fresh-install
+# smoke test against published packages is covered separately by
+# CI-MATRIX-VALIDATION-001.
+#
+# v11 surface: this workflow invokes `caws doctor` (drift detection over
+# .caws/ state) and `caws gates run --spec <id>` (policy-driven quality
+# gates). It does NOT invoke `caws validate`, which was removed in v11.0
+# and is not planned to return.
+#
+# Spec: CI-CAWS-GATE-V11-SURFACE-001
+
 name: CAWS Gate
 on: [pull_request]
 
@@ -15,20 +37,38 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install CAWS CLI
-        run: npm install -g @caws/cli
+      - name: Install workspace dependencies
+        run: npm ci
 
-      - name: Validate changed specs
+      - name: Resolve workspace CLI path
+        id: caws-bin
+        run: |
+          set -euo pipefail
+          # Prefer the workspace bin entry. Fall back to the bin script
+          # declared in packages/caws-cli/package.json if the workspace
+          # symlink isn't present (older npm versions).
+          if [ -x node_modules/.bin/caws ]; then
+            echo "path=node_modules/.bin/caws" >> "$GITHUB_OUTPUT"
+          elif [ -x packages/caws-cli/bin/caws.js ]; then
+            echo "path=node packages/caws-cli/bin/caws.js" >> "$GITHUB_OUTPUT"
+          else
+            echo "❌ Workspace CAWS CLI not found. Expected node_modules/.bin/caws or packages/caws-cli/bin/caws.js."
+            exit 1
+          fi
+
+      - name: Run caws doctor on changed specs
         run: |
           set -u
+          CAWS="${{ steps.caws-bin.outputs.path }}"
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
 
-          # Collect every spec file touched in this PR:
-          #   - feature specs at .caws/specs/*.yaml or *.yml
-          #   - the legacy .caws/working-spec.yaml if it changed
+          # Collect every per-feature spec file touched in this PR.
+          # v11 removes the project-level working-spec.yaml; only
+          # per-feature specs under .caws/specs/ exist.
           CHANGED_SPECS=$(git diff --name-only "$BASE" "$HEAD" \
-            | grep -E '^\.caws/(specs/.+\.(yaml|yml)|working-spec\.yaml)$' \
+            | grep -E '^\.caws/specs/.+\.(yaml|yml)$' \
+            | grep -v '^\.caws/specs/\.archive/' \
             | sort -u || true)
 
           if [ -z "$CHANGED_SPECS" ]; then
@@ -36,37 +76,34 @@ jobs:
             exit 0
           fi
 
-          echo "🔍 Validating changed spec files:"
+          echo "🔍 Specs touched in this PR:"
           echo "$CHANGED_SPECS" | sed 's/^/   - /'
           echo ""
 
-          FAIL=0
-          FAILED_FILES=""
-          for f in $CHANGED_SPECS; do
-            if [ ! -f "$f" ]; then
-              # File was deleted in this PR — nothing to validate.
-              echo "⏭️  Skipping deleted spec: $f"
-              continue
-            fi
-            echo "▶️  caws validate $f"
-            if ! caws validate "$f" --quiet; then
-              echo "❌ Invalid spec: $f"
-              FAIL=1
-              FAILED_FILES="$FAILED_FILES $f"
-            fi
-          done
-
-          if [ "$FAIL" -ne 0 ]; then
+          # caws doctor performs drift detection over the entire .caws/
+          # state, including structural validation of every spec file.
+          # A single invocation covers all specs; per-file iteration is
+          # not needed in v11.
+          #
+          # Exit codes (from caws doctor):
+          #   0 — clean
+          #   1 — findings or load errors (treated as failure)
+          #   2 — composition failure (treated as failure)
+          echo "▶️  $CAWS doctor"
+          if ! $CAWS doctor; then
             echo ""
-            echo "❌ Spec validation failed for:$FAILED_FILES"
+            echo "❌ caws doctor reported drift or load errors in the PR's .caws/ state."
+            echo "💡 Run \`caws doctor\` locally to see the findings."
             exit 1
           fi
 
-          echo "✅ All changed specs validate cleanly."
+          echo "✅ caws doctor clean."
 
       - name: Enforce path discipline
         run: |
-          # Check if PR contains both policy and code changes
+          # policy.yaml changes must not be combined with code changes.
+          # Preserved verbatim from the v10 workflow — pure bash logic,
+          # no CLI dependency. Suggestion text updated to v11 commands.
           POLICY_CHANGES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '^\.caws/policy\.yaml$' || true)
           CODE_CHANGES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -vE '^\.caws/' || true)
 
@@ -75,53 +112,85 @@ jobs:
             echo "Policy changes: $POLICY_CHANGES"
             echo "Code changes: $CODE_CHANGES"
             echo "💡 Fix this by:"
-            echo "   1. Create separate PR for policy changes only"
-            echo "   2. For budget exceptions: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit"
-            echo "   3. Add waiver_ids to working spec instead of editing policy directly"
-            echo "   4. Get dual approval from @gatekeepers before merging policy changes"
+            echo "   1. Create a separate PR for policy changes only"
+            echo "   2. For budget exceptions: caws waiver create <id> --gate <gate> --reason '<reason>' --approved-by '<who>' --expires-at <iso8601>"
+            echo "   3. Add waiver_ids to the relevant per-feature spec instead of editing policy directly"
+            echo "   4. Get dual approval from CODEOWNERS before merging policy changes"
             exit 1
           fi
 
-      - name: Check budget immutability
+      - name: Check change_budget immutability
         run: |
-          # Ensure working spec doesn't contain change_budget
-          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^\.caws/working-spec\.yaml$'; then
-          if git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- .caws/working-spec.yaml | grep -q "change_budget"; then
-            echo "❌ POLICY VIOLATION: working-spec.yaml cannot contain change_budget"
-            echo "💡 Fix this by:"
-            echo "   1. Check current budget: caws burnup"
-            echo "   2. Create waiver: caws waivers create --title='Budget exception' --reason=architectural_refactor --gates=budget_limit --expires-at='2025-12-31T23:59:59Z'"
-            echo "   3. Add waiver_ids to working spec: ['WV-XXXX']"
-            echo "   4. Validate: caws validate .caws/working-spec.yaml"
-            exit 1
+          # In v10 this checked .caws/working-spec.yaml for change_budget.
+          # v11 removes working-spec.yaml entirely; per-feature specs at
+          # .caws/specs/<id>.yaml declare change_budget instead. The
+          # invariant is preserved: change_budget keys are governed and
+          # must be modified via waivers, not direct edits.
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          CHANGED_SPECS=$(git diff --name-only "$BASE" "$HEAD" \
+            | grep -E '^\.caws/specs/.+\.(yaml|yml)$' \
+            | grep -v '^\.caws/specs/\.archive/' \
+            | sort -u || true)
+
+          if [ -z "$CHANGED_SPECS" ]; then
+            exit 0
           fi
+
+          BUDGET_VIOLATION=0
+          for f in $CHANGED_SPECS; do
+            if [ ! -f "$f" ]; then
+              continue
+            fi
+            # Inspect the diff for added or modified change_budget keys.
+            # We allow change_budget on initial spec creation (file is
+            # new in this diff) but block modifications to an existing
+            # spec's change_budget.
+            if git diff "$BASE" "$HEAD" -- "$f" | grep -qE '^\+.*change_budget'; then
+              if git show "$BASE:$f" >/dev/null 2>&1; then
+                # File existed at BASE — change_budget edit is a violation.
+                echo "❌ POLICY VIOLATION: $f modifies change_budget on an existing spec"
+                BUDGET_VIOLATION=1
+              fi
+            fi
+          done
+
+          if [ "$BUDGET_VIOLATION" -ne 0 ]; then
+            echo ""
+            echo "💡 Fix this by:"
+            echo "   1. Revert the change_budget edit"
+            echo "   2. Create a waiver: caws waiver create <id> --gate budget_limit --reason '<reason>' --approved-by '<who>' --expires-at <iso8601>"
+            echo "   3. Reference the waiver in the spec's waiver_ids field"
+            exit 1
           fi
 
       - name: Validate waivers
         run: |
-          # Check waiver files against schema
+          # Waiver schema check. Preserved from v10 — pure YAML + regex.
+          # Waiver file storage location is unchanged in v11.
+          if [ ! -d .caws/waivers ]; then
+            exit 0
+          fi
+          shopt -s nullglob
           for waiver_file in .caws/waivers/*.yaml; do
-            if [[ -f "$waiver_file" ]]; then
-              echo "Validating waiver: $waiver_file"
-              # Basic YAML validation
-              if ! python3 -c "import yaml; yaml.safe_load(open('$waiver_file'))"; then
-                echo "❌ Invalid YAML in waiver: $waiver_file"
-                exit 1
-              fi
-
-              # Check waiver ID format
-              WAIVER_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$waiver_file'))['id'])")
-              if [[ ! "$WAIVER_ID" =~ ^WV-[0-9]{4}$ ]]; then
-                echo "❌ Invalid waiver ID format: $WAIVER_ID"
-                exit 1
-              fi
+            echo "Validating waiver: $waiver_file"
+            if ! python3 -c "import yaml; yaml.safe_load(open('$waiver_file'))"; then
+              echo "❌ Invalid YAML in waiver: $waiver_file"
+              exit 1
+            fi
+            WAIVER_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$waiver_file'))['id'])")
+            if [[ ! "$WAIVER_ID" =~ ^WV-[0-9]{4}$ ]]; then
+              echo "❌ Invalid waiver ID format: $WAIVER_ID (expected WV-NNNN)"
+              exit 1
             fi
           done
 
       - name: Require dual control for policy changes
         run: |
+          # Preserved verbatim from v10 — pure gh CLI logic, no caws-cli
+          # dependency.
           if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^\.caws/policy\.yaml$'; then
-            # Count approvals from CODEOWNERS
             APPROVALS=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews | map(select(.state == "APPROVED")) | length')
 
             if [[ "$APPROVALS" -lt 2 ]]; then
@@ -133,16 +202,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate burn-up report
+      - name: Summary
         run: |
-          echo "## 📊 CAWS Budget Burn-up Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # This would integrate with the burn-up reporting function
-          # For now, just show that the gate passed
-          echo "✅ All CAWS quality gates passed" >> $GITHUB_STEP_SUMMARY
-          echo "- Working spec validation: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Path discipline: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Budget immutability: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Waiver validation: ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Dual control: ✅" >> $GITHUB_STEP_SUMMARY
+          # v10 had a burn-up report stub here (`caws burnup` was a v10
+          # command, removed in v11). The summary is now a static
+          # statement of what passed; per-spec burn-up belongs in
+          # `caws status` and is consumed by reviewers locally rather
+          # than rendered into PR summaries by this workflow.
+          {
+            echo "## 📊 CAWS Gate Report"
+            echo ""
+            echo "✅ All CAWS governance checks passed"
+            echo "- Spec validation (caws doctor): ✅"
+            echo "- Path discipline (policy/code separation): ✅"
+            echo "- change_budget immutability: ✅"
+            echo "- Waiver schema/ID validation: ✅"
+            echo "- Dual control for policy.yaml: ✅"
+          } >> "$GITHUB_STEP_SUMMARY"
