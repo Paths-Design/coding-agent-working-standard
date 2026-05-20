@@ -103,6 +103,15 @@ const ALLOWLIST = [
     needle: 'Explicitly deferred to v11.3+',
     reason: 'negative-context naming of deferred command groups; not an instruction',
   },
+  // config/index.js loadProvenanceTools comment explains that the v10
+  // `caws provenance` command was removed and superseded by events.jsonl.
+  // The reference is historical context for someone reading the legacy
+  // loader code, not an instruction to run a removed command.
+  {
+    file: 'dist/config/index.js',
+    needle: 'v10 had a `caws provenance` command',
+    reason: 'historical-context code comment explaining a removed command; not an instruction',
+  },
 ];
 
 /**

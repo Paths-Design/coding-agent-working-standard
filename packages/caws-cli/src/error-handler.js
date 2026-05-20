@@ -134,17 +134,30 @@ function safeSync(operation, context = '', includeTiming = false) {
 /**
  * Command-specific error suggestions
  */
+// v11 command surface. Mirrors docs/architecture/caws-vnext-command-surface.md
+// §2 — the eight v11.0 governed-core groups plus `specs` and `worktree`
+// restored in v11.1. When v11.2 lands `agents` and bridge claims, extend
+// this list in the same commit as the doctrine update.
+const V11_COMMANDS = [
+  'init',
+  'doctor',
+  'status',
+  'scope',
+  'claim',
+  'gates',
+  'evidence',
+  'waiver',
+  'specs',
+  'worktree',
+];
+
 const COMMAND_SUGGESTIONS = {
   'unknown option': (option, command) => {
     const suggestions = [];
 
-    // Common typos and alternatives
     const optionMap = {
-      '--suggestions': 'Validation includes suggestions by default. Try: caws validate',
-      '--suggest': 'Validation includes suggestions by default. Try: caws validate',
       '--help': 'Try: caws --help or caws <command> --help',
-      '--json': 'For JSON output, try: caws provenance show --format=json',
-      '--dashboard': 'Try: caws provenance show --format=dashboard',
+      '--json': 'v11 commands accept --json for machine-readable output where supported',
     };
 
     if (optionMap[option]) {
@@ -157,60 +170,45 @@ const COMMAND_SUGGESTIONS = {
   },
 
   'unknown command': (command) => {
-    const validCommands = [
-      'init',
-      'validate',
-      'scaffold',
-      'status',
-      'diagnose',
-      'evaluate',
-      'iterate',
-      'waivers',
-      'templates',
-      'provenance',
-      'hooks',
-      'workflow',
-      'quality-monitor',
-      'test-analysis',
-    ];
-    const similar = findSimilarCommand(command, validCommands);
+    const similar = findSimilarCommand(command, V11_COMMANDS);
 
     const suggestions = [];
     if (similar) {
       suggestions.push(`Did you mean: caws ${similar}?`);
     }
 
-    // Suggest category based on what user might be trying to do
-    if (command.includes('setup') || command.includes('start') || command.includes('create')) {
+    // Suggest category based on what the user might be trying to do.
+    // Each branch points only at the v11 surface — no removed-command leakage.
+    if (command.includes('setup') || command.includes('start')) {
       suggestions.push('For project setup: caws init');
+    } else if (command.includes('new') || command.includes('create')) {
+      suggestions.push('For a new spec: caws specs create <id>');
+      suggestions.push('For a new worktree: caws worktree create <name> --spec <id>');
     } else if (
       command.includes('check') ||
       command.includes('verify') ||
-      command.includes('test')
+      command.includes('valid')
     ) {
-      suggestions.push('For validation: caws validate');
+      suggestions.push('For drift detection: caws doctor');
+      suggestions.push('For policy and quality gates: caws gates run --spec <id>');
+      suggestions.push('For path scope: caws scope check <path>');
     } else if (command.includes('list') || command.includes('show') || command.includes('get')) {
-      suggestions.push('For status: caws status');
+      suggestions.push('For project status: caws status');
+      suggestions.push('For specs: caws specs list / caws specs show <id>');
+      suggestions.push('For worktrees: caws worktree list');
+    } else if (command.includes('evidence') || command.includes('record')) {
+      suggestions.push('To record test/gate/ac evidence: caws evidence record --type <kind> --spec <id> --data <json>');
     }
 
-    suggestions.push(
-      'Available commands: init, validate, scaffold, status, diagnose, evaluate, iterate, waivers, templates, provenance, hooks, workflow, quality-monitor'
-    );
+    suggestions.push(`Available v11 commands: ${V11_COMMANDS.join(', ')}`);
     suggestions.push('Try: caws --help for full command list with descriptions');
 
     return suggestions;
   },
 
-  'template not found': () => [
-    'Templates are bundled with CAWS CLI',
-    'Try: caws scaffold (should work automatically)',
-    'If issue persists: npm i -g @paths.design/caws-cli@latest',
-  ],
-
   'not a caws project': () => [
-    'Initialize CAWS first: caws init .',
-    'Or create new project: caws init <project-name>',
-    'Check for .caws/working-spec.yaml file',
+    'Initialize CAWS first: caws init',
+    'Verify .caws/ exists in the current directory',
   ],
 };
 
@@ -309,15 +307,15 @@ function getRecoverySuggestions(error, category, context = {}) {
       break;
 
     case ERROR_CATEGORIES.VALIDATION:
-      suggestions.push('Run: caws validate for detailed validation help');
-      suggestions.push('Check your working spec format against the schema');
-      suggestions.push('See: docs/api/schema.md for specification details');
+      suggestions.push('Run: caws doctor for spec and policy drift detection');
+      suggestions.push('Run: caws gates run --spec <id> for policy and quality gates');
+      suggestions.push('Check .caws/specs/<id>.yaml against the spec schema in packages/caws-kernel');
       break;
 
     case ERROR_CATEGORIES.CONFIGURATION:
-      suggestions.push('Run: caws init --interactive to reconfigure');
-      suggestions.push('Check your .caws directory and configuration files');
-      suggestions.push('Try: caws diagnose to identify configuration issues');
+      suggestions.push('Run: caws init to bootstrap canonical .caws/ state (idempotent)');
+      suggestions.push('Run: caws doctor to surface configuration drift');
+      suggestions.push('Inspect .caws/ contents directly to confirm expected layout');
       break;
 
     case ERROR_CATEGORIES.NETWORK:
@@ -352,12 +350,20 @@ function getDocumentationLink(category, context = {}) {
   };
 
   if (context.command) {
+    // v11 doc anchors. Generic fallback to the architecture doctrine if a
+    // specific command page is not yet authored.
+    const doctrine = `${baseUrl}/docs/architecture/caws-vnext-command-surface.md`;
     const commandLinks = {
-      init: `${baseUrl}/docs/agents/tutorial.md#initialization`,
-      validate: `${baseUrl}/docs/api/cli.md#validate`,
-      scaffold: `${baseUrl}/docs/api/cli.md#scaffold`,
-      provenance: `${baseUrl}/docs/api/cli.md#provenance`,
-      hooks: `${baseUrl}/docs/guides/hooks-and-agent-workflows.md`,
+      init: doctrine,
+      doctor: doctrine,
+      status: doctrine,
+      scope: doctrine,
+      claim: doctrine,
+      gates: doctrine,
+      evidence: doctrine,
+      waiver: doctrine,
+      specs: doctrine,
+      worktree: doctrine,
     };
 
     if (commandLinks[context.command]) {
@@ -522,29 +528,29 @@ const TROUBLESHOOTING_GUIDES = {
     ],
   },
 
-  'working-spec-validation': {
-    title: 'Working Spec Validation Errors',
+  'spec-validation': {
+    title: 'Spec Validation Errors',
     symptoms: [
-      'Working spec fails validation',
-      'Schema errors in .caws/working-spec.yaml',
-      'Invalid risk tier or scope configuration',
+      'A spec under .caws/specs/<id>.yaml fails to load',
+      'doctor reports spec.schema errors',
+      'Invalid risk tier, scope, or acceptance criteria',
     ],
     rootCauses: [
       'Invalid YAML syntax',
       'Missing required fields',
       'Incorrect schema structure',
-      'Invalid scope paths',
+      'Invalid scope paths (e.g., globs in scope.out)',
     ],
     solutions: [
-      'Run validation with suggestions: caws validate --suggestions',
-      'Auto-fix safe issues: caws validate --auto-fix',
-      'Check schema documentation',
-      'Use caws init to generate valid spec',
+      'Run: caws doctor — drift detection over .caws/ state',
+      'Inspect the failing spec at .caws/specs/<id>.yaml directly',
+      'Compare against existing specs in .caws/specs/ for shape',
+      'See packages/caws-kernel for the canonical spec schema',
     ],
     commands: [
-      'caws validate --suggestions',
-      'caws validate --auto-fix',
-      'caws init --interactive',
+      'caws doctor',
+      'caws specs show <id>',
+      'caws specs list',
     ],
   },
 
@@ -570,7 +576,7 @@ const TROUBLESHOOTING_GUIDES = {
     commands: [
       'cat package.json | grep workspaces',
       'find packages -name package.json',
-      'caws diagnose',
+      'caws doctor',
       'caws status',
     ],
   },
@@ -607,8 +613,14 @@ function suggestTroubleshootingGuide(errorMessage) {
   if (lowerMessage.includes('mutation') && lowerMessage.includes('not found')) {
     return 'mutation-report-not-found';
   }
-  if (lowerMessage.includes('working spec') || lowerMessage.includes('validation')) {
-    return 'working-spec-validation';
+  // 'spec' (per-feature .caws/specs/<id>.yaml) replaces the v10 'working spec' term.
+  // Match either for compatibility with errors that quote either phrase.
+  if (
+    lowerMessage.includes('spec') ||
+    lowerMessage.includes('validation') ||
+    lowerMessage.includes('schema')
+  ) {
+    return 'spec-validation';
   }
   if (lowerMessage.includes('workspace') || lowerMessage.includes('monorepo')) {
     return 'monorepo-detection';

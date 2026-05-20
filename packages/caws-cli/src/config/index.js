@@ -49,8 +49,11 @@ function initializeGlobalSetup() {
 function loadProvenanceTools() {
   if (provenanceTools) return provenanceTools; // Already loaded
 
-  // Provenance tools are now handled by CLI command (caws provenance)
-  // Legacy tool loading removed - use CLI instead
+  // v10 had a `caws provenance` command that loaded these tools. That
+  // command was removed in v11.0.0; the hash-chained .caws/events.jsonl
+  // is now the canonical audit surface (write via the v11 events-store
+  // or `caws evidence record`). This loader remains for legacy installs
+  // that still drop a local provenance.js into the search paths below.
   // Try multiple possible locations for provenance tools (legacy support)
   const possiblePaths = [
     // 1. New location (if someone manually adds it)

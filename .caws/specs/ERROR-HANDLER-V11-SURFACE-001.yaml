@@ -2,19 +2,25 @@ id: ERROR-HANDLER-V11-SURFACE-001
 title: 'Fix packages/caws-cli/src/error-handler.js suggesting removed v10 commands'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: eh-v11-surface-wt
 created_at: '2026-05-19T00:00:00.000Z'
-updated_at: '2026-05-19T00:00:00.000Z'
+updated_at: '2026-05-19T13:05:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/src/config/index.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/error-handler.js
-    - packages/caws-cli/tests/error-handler.test.js
+    - packages/caws-cli/src/config/index.js
+    - packages/caws-cli/tests/error-handler-v11-surface.test.js
+    - scripts/check-removed-commands.mjs
+    - .github/workflows/release.yml
     - .caws/specs/ERROR-HANDLER-V11-SURFACE-001.yaml
+    - .caws/specs/V11-DOCTRINE-HYGIENE-001.yaml
   out:
     - packages/caws-cli/src/shell
     - packages/caws-cli/src/store
