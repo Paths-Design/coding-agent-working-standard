@@ -77,4 +77,4 @@ non_functional:
   performance:
     - Workflow wall-clock runtime stays under 5 minutes for typical PRs (single-spec touches).
 contracts: []
-worktree: ci-caws-gate-wt
+worktree: ci-caws-gate-exec-wt
