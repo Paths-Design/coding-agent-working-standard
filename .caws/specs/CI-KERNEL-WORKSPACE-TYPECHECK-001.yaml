@@ -1,0 +1,104 @@
+id: CI-KERNEL-WORKSPACE-TYPECHECK-001
+title: 'Resolve @paths.design/caws-kernel as a workspace sibling during caws-cli typecheck'
+risk_tier: 2
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-20T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/tsconfig.vnext.test.json
+    - turbo.json
+    - package-lock.json
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/tsconfig.vnext.test.json
+    - turbo.json
+    - package-lock.json
+    - .caws/specs/CI-KERNEL-WORKSPACE-TYPECHECK-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .github/workflows/caws-gate.yml
+invariants:
+  - 'caws-cli must resolve @paths.design/caws-kernel as a workspace sibling, not as a registry-pinned dependency. The CI typecheck reflects the PR''s own cross-package state, not the last published kernel tarball.'
+  - 'The fix is purely structural — no caws-cli source edits, no kernel source edits. Only dependency-protocol, tsconfig, and task-graph changes.'
+  - 'TS2307 (Cannot find module @paths.design/caws-kernel) and the downstream TS7006 (implicit-any) cascade must both collapse from a single root-cause fix. Per-error patching of implicit-any is forbidden — it would mask the structural defect.'
+  - 'Kernel build (or kernel source typings, depending on resolution strategy) must be available before caws-cli typecheck on a clean checkout. CI must not depend on a developer''s local dist/ artifacts.'
+  - 'Whichever resolution strategy is chosen (workspace protocol + paths mapping pointing at src, vs workspace protocol + task-graph build ordering pointing at dist), the choice is recorded explicitly so future maintainers do not re-litigate it.'
+acceptance:
+  - id: A1
+    given: 'A clean checkout of feat/ci-v11-workflow-repair with no node_modules and no built dist/.'
+    when: 'CI runs `npm ci` followed by `npm run typecheck` from the repo root.'
+    then: 'The caws-cli typecheck step completes without TS2307 errors against @paths.design/caws-kernel. No errors are silenced via // @ts-ignore, // @ts-expect-error, skipLibCheck override, or per-file exclusion.'
+  - id: A2
+    given: 'packages/caws-cli/package.json declares its dependency on @paths.design/caws-kernel.'
+    when: 'A reviewer inspects the dependency entry.'
+    then: 'The dependency specifier is the workspace protocol (`workspace:*` or equivalent npm workspace resolution) — not a version range like `^1.0.0`. `npm ci` resolves the dependency to the local packages/caws-kernel directory, not a registry tarball.'
+  - id: A3
+    given: 'The fix has landed.'
+    when: 'A developer makes a breaking change in packages/caws-kernel/src and runs `npm run typecheck` from packages/caws-cli without first publishing the kernel.'
+    then: 'The typecheck reflects the local kernel state — either failing because the local change broke caws-cli, or passing because the local change is compatible. The registry version of the kernel does not influence the result.'
+  - id: A4
+    given: 'turbo.json declares task ordering for the typecheck pipeline.'
+    when: 'A reviewer reads turbo.json.'
+    then: 'Either (a) the typecheck task declares `dependsOn: ["^build"]` so kernel build is ordered before caws-cli typecheck, OR (b) tsconfig.vnext.json declares a `paths` entry pointing @paths.design/caws-kernel at packages/caws-kernel/src (TypeScript resolves source directly, no build required). The chosen option is documented in a top-of-file comment in the relevant config.'
+  - id: A5
+    given: 'PR #1 (feat/release-automation-guard) is re-run after this fix lands on main.'
+    when: 'The PR Quality Gates "Quick Sanity Checks" job runs.'
+    then: 'The typecheck step does not emit the 45+ TS2307 errors and does not emit the downstream TS7006 implicit-any cascade. Any remaining failures must be attributable to PR #1''s own diff, not to kernel module resolution.'
+  - id: A6
+    given: 'package-lock.json is regenerated as part of this slice.'
+    when: 'A reviewer inspects the diff to package-lock.json.'
+    then: 'The @paths.design/caws-kernel entry resolves to the local workspace path, not a registry URL. No other unrelated lockfile churn (no version bumps to unrelated dependencies, no resolution-algorithm thrash).'
+non_functional:
+  reliability:
+    - 'The fix is deterministic — `npm ci && npm run typecheck` produces the same result on Linux, macOS, and Windows runners.'
+    - 'Type resolution does not depend on filesystem case-sensitivity tricks that work on macOS/Linux but fail on Windows.'
+  performance:
+    - 'Total typecheck wall-clock time does not regress by more than 20% compared to the pre-fix baseline (whichever ran successfully). If the chosen strategy requires kernel build first, the build is incremental.'
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Two viable resolutions surfaced during investigation:
+#
+# Option 1: workspace:* + tsconfig paths mapping at src
+#   packages/caws-cli/package.json:
+#     "@paths.design/caws-kernel": "workspace:*"
+#   packages/caws-cli/tsconfig.vnext.json:
+#     "paths": { "@paths.design/caws-kernel": ["../caws-kernel/src/index.ts"] }
+#   No kernel build required before typecheck. TypeScript resolves source
+#   directly. Faster CI, but bypasses the kernel's package.json `exports`
+#   surface and could mask issues that only manifest after kernel build
+#   (e.g., a kernel re-export that doesn't survive declaration emit).
+#
+# Option 2: workspace:* + turbo dependsOn ordering
+#   packages/caws-cli/package.json:
+#     "@paths.design/caws-kernel": "workspace:*"
+#   turbo.json:
+#     "typecheck": { "dependsOn": ["^build"] }
+#   npm ci links the local kernel into node_modules as a symlink. Turbo
+#   builds the kernel first so dist/index.d.ts exists when caws-cli
+#   typechecks. Slower CI, but tests the same artifact developers ship.
+#
+# Recommendation: Option 2. Validates the actual shipped surface
+# (kernel's exports, declaration output, files entry). Option 1 is a
+# convenience for fast inner-loop typechecks, which can be addressed
+# separately if it becomes a developer-ergonomics issue.
+#
+# Open questions before implementation:
+#   - Does the published @paths.design/caws-kernel@1.0.0 tarball contain
+#     a valid dist/index.d.ts? (Diagnostic question only; does not change
+#     the structural fix. Worth answering after this spec lands to decide
+#     whether a kernel re-release is also needed.)
+#   - Does turbo.json need a `caws-cli#typecheck` override, or does the
+#     pipeline-level dependsOn suffice?
+#   - Are there other packages besides caws-cli that import caws-kernel
+#     and would benefit from the same fix? (quality-gates? vscode-extension?)
