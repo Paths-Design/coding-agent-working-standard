@@ -1,6 +1,6 @@
 id: WORKTREE-CAWS-SHARED-STATE-001
 title: 'Make .caws/ shared state across git worktrees instead of per-worktree copies'
-risk_tier: 2
+risk_tier: 3
 mode: refactor
 lifecycle_state: draft
 created_at: '2026-05-19T00:00:00.000Z'
