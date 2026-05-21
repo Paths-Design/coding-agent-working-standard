@@ -2,9 +2,11 @@ id: WORKTREE-MERGE-CLEARS-SPEC-BINDING-001
 title: 'caws worktree lifecycle and specs close must clear spec.worktree on terminal transitions'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Lifecycle correctness fix for caws worktree merge / specs close / worktree destroy. Three commits delivered: mergeWorktree honest-completion check (5069590), byte-level worktree clearance via removeTopLevelScalar helper (ad18168), and kernel schema admission of prior_worktree (297e7a8). End-to-end verified: merge actually closes, byte-level invariant grep ^worktree: returns no match, spec_closed event chain order is honest, partial_failure_recovered no longer fakes success. CAWS doctor exits 0 on clean main.'
 created_at: '2026-05-20T00:00:00.000Z'
-updated_at: '2026-05-20T00:00:00.000Z'
+updated_at: '2026-05-21T00:26:36.403Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/yaml-patch.ts
