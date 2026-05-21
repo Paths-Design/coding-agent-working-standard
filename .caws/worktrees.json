@@ -25,16 +25,5 @@
       "status": "destroyed",
       "destroyedAt": "2026-05-20T22:08:02.009Z"
     }
-  },
-  "wt-danger-latch": {
-    "specId": "DANGER-LATCH-CALIBRATION-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-21T06:58:26.560Z",
-    "branch": "feat/danger-latch-calibration",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/wt-danger-latch"
   }
 }

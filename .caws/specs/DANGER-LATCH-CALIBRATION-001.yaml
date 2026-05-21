@@ -2,10 +2,11 @@ id: DANGER-LATCH-CALIBRATION-001
 title: 'Calibrate classify_command.py: explicit allow-list of read-only subcommands, no broad whitelisting'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: wt-danger-latch
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Calibration shipped via @paths.design/caws-cli@11.1.6 (sigstore-attested OIDC provenance). PR #9 merged at 476678b. Tag caws-cli-v11.1.6 preserved on origin (asymmetric success-path invariant). 79/79 acceptance tests pass against the real classifier — covers A1-A11 plus negative fixtures for quote-safety, wrapper transparency, anchoring, command substitution. Hybrid fail-closed semantics for git/gh/npm families; universal-fail-closed deferred. Closure follow-ups recorded: SPECS-PROMOTE-DRAFT-001 (CLI draft-to-active gap), TEMPLATES-V11-COMMAND-REFRESH-001 (stale v10 refs in shipped templates), UNIVERSAL-FAIL-CLOSED-001 (concept; deferred). Maintainer-local .claude/hooks/classify_command.py NOT modified by this slice — separate surface.'
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-20T23:30:00.000Z'
+updated_at: '2026-05-21T08:06:44.371Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
