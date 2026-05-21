@@ -1,0 +1,130 @@
+id: QUALITY-GATES-PACKAGE-DEPRECATE-001
+title: 'Mark quality-gates package as deprecated and stop treating it as a release target'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/quality-gates/README.md
+    - packages/quality-gates/package.json
+    - .releaserc.json
+    - scripts/multi-package-release.mjs
+    - .github/workflows
+    - docs/architecture
+    - docs/guides
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/quality-gates/README.md
+    - packages/quality-gates/package.json
+    - .releaserc.json
+    - scripts/multi-package-release.mjs
+    - .github/workflows/release.yml
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/architecture/quality-gates-deprecation.md
+    - docs/guides/quality-gates.md
+    - .caws/specs/QUALITY-GATES-PACKAGE-DEPRECATE-001.yaml
+  out:
+    - packages/caws-cli
+    - packages/caws-kernel
+invariants:
+  - 'Within packages/quality-gates/, only README.md and package.json may be modified by this slice. No checker .mjs source file, no test file, no template file is touched.'
+  - 'No npm unpublish is performed against any version, including 11.1.2.'
+  - 'No `npm deprecate` command is executed against any already-published version as part of this slice; registry deprecation is an explicit follow-up requiring separate authorization.'
+  - 'No patch release of @paths.design/caws-quality-gates is produced as part of this slice.'
+  - 'The accidental v11.1.2 release is documented as a release-governance incident, not reverted.'
+  - 'caws-cli runtime behavior is unchanged; gates run still spawns the quality-gates subprocess as it does today.'
+  - 'Release automation changes prevent unintentional publishes; they do not block intentional ones.'
+acceptance:
+  - id: A1
+    given: 'A reader of packages/quality-gates/README.md.'
+    when: 'They open the file.'
+    then: 'The top of the README states the package is deprecated, names hook-pack checks as the replacement, and links to docs/architecture/quality-gates-deprecation.md.'
+  - id: A2
+    given: 'packages/quality-gates/package.json.'
+    when: 'It is inspected.'
+    then: 'The package.json description references hook-packs as the canonical replacement and includes a "deprecated" notice in plain text (e.g., description prefixed with "[DEPRECATED]"). This is repo-only metadata; it is visible to anyone reading the source or the next-published tarball, but it does NOT mutate npm registry deprecation state for already-published versions. Registry-side `npm deprecate` is an explicit follow-up action (see "npm registry deprecation — explicit follow-up" comment block), not part of this slice.'
+  - id: A3
+    given: 'A commit that touches only files under packages/quality-gates/.'
+    when: 'CI runs semantic-release on the release branch.'
+    then: 'No @paths.design/caws-cli publish is triggered by the quality-gates-only change. (Enforcement: per-package release scope, releaseRules, or explicit-only publish gate — implementer chooses the mechanism.)'
+  - id: A4
+    given: 'A commit that touches only files under packages/quality-gates/.'
+    when: 'CI runs semantic-release on the release branch.'
+    then: 'No @paths.design/caws-quality-gates publish is triggered unless explicitly authorized (e.g., a commit-message marker, a manual workflow input, or a feature-flagged release lane).'
+  - id: A5
+    given: 'A real shipping fix to packages/caws-cli (a non-test, non-doc change to dist-bound files).'
+    when: 'CI runs semantic-release on the release branch.'
+    then: 'A normal patch release of @paths.design/caws-cli is published as before.'
+  - id: A6
+    given: 'A reader of docs/architecture/quality-gates-deprecation.md.'
+    when: 'They look up the incident context.'
+    then: 'The doc records the accidental v11.1.2 release as a release-governance incident with the dates, the commit that triggered it, and the rationale for not reverting.'
+  - id: A7
+    given: 'docs/architecture/caws-vnext-command-surface.md.'
+    when: 'It is read.'
+    then: 'It notes that quality-gates is deprecated and that the hooks-first posture is the canonical safety surface; caws gates run is recorded as pending review under GATES-RUN-POST-QG-DOCTRINE-001.'
+non_functional:
+  reliability:
+    - 'Release automation changes are covered by a dry-run test or a documented manual verification procedure.'
+  security:
+    - 'No automation change weakens authentication or token scope for npm publishing.'
+contracts: []
+# --- Preconditions (informational; schema does not admit a preconditions field) ---
+# - QG-HOOKS-EXTRACT-001 is closed (replacement hooks exist before the
+#   package is publicly deprecated).
+#
+# --- npm registry deprecation — explicit follow-up (NOT this slice) -------
+# This slice ships repo-side deprecation only (README + package.json text).
+# It deliberately does NOT mutate npm registry state for already-published
+# versions. Two viable follow-ups, in order of caution:
+#
+#   Follow-up A (recommended): Do nothing on the registry side. Consumers
+#     installing @paths.design/caws-quality-gates@2.x see the same package
+#     they always did; the deprecation is communicated through repo docs,
+#     hook-pack documentation, and natural disuse as the package stops
+#     receiving updates. This avoids producing surprising install-time
+#     warnings for downstream users.
+#
+#   Follow-up B (deliberate, requires separate authorization): Run
+#     `npm deprecate '@paths.design/caws-quality-gates@<=2.x.x>' "<message>"`
+#     against the registry. This adds an install-time warning that the
+#     package is deprecated and points users to hook-packs. Per npm policy,
+#     `npm deprecate` updates the registry entry visible to installers; it
+#     does NOT unpublish or remove the version. The action is reversible by
+#     calling `npm deprecate <pkg>@<range> ""` to clear the marker.
+#
+# If Follow-up B is ever taken, it must be its own slice with explicit user
+# authorization, a recorded deprecation message, and a captured npm output
+# log as evidence. It must not be silently folded into this slice or any
+# child slice (REMOVE in particular).
+#
+# --- What this slice deliberately does NOT do ------------------------------
+# - Does not patch run-quality-gates.mjs (the JSON-stdout fix from
+#   e562a0e ships in-repo only; not republished).
+# - Does not unpublish v11.1.2 from npm. The npm unpublish policy makes the
+#   version space scarred either way, and version reuse is forbidden; leaving
+#   v11.1.2 as a known harmless test-infrastructure release is the lower-noise
+#   outcome.
+# - Does not delete packages/quality-gates. Deletion is a separate slice
+#   (QUALITY-GATES-PACKAGE-REMOVE-001) that runs after the doctrine slice and
+#   only when caws-cli no longer depends on the package at runtime.
+# - Does not change caws gates run's behavior. That is doctrine and lives in
+#   GATES-RUN-POST-QG-DOCTRINE-001.
+#
+# --- Implementation latitude -----------------------------------------------
+# The acceptance criteria specify outcomes (no accidental publish of caws-cli
+# from quality-gates-only commits) rather than mechanism. Three viable
+# approaches:
+#   1. semantic-release releaseRules mapping selected scopes (e.g.,
+#      scope:quality-gates) to release: false for caws-cli.
+#   2. Per-package release lanes via scripts/multi-package-release.mjs that
+#      detect changed packages and only invoke semantic-release for those.
+#   3. A CI gate that requires an explicit "publish-authorized" label or
+#      workflow_dispatch input before semantic-release publishes anything.
+# Implementer picks one based on inspecting current automation. Option 2 is
+# already partially in place (scripts/multi-package-release.mjs exists);
+# auditing it for package-aware behavior may be the lowest-cost path.

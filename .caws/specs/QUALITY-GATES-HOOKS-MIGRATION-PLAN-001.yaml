@@ -1,0 +1,100 @@
+id: QUALITY-GATES-HOOKS-MIGRATION-PLAN-001
+title: 'Replace quality-gates batch scanner with operator-harness hook surfaces'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/quality-gates
+    - packages/caws-cli/templates/hook-packs
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - docs/architecture
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/QUALITY-GATES-HOOKS-MIGRATION-PLAN-001.yaml
+    - .caws/specs/RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001.yaml
+    - .caws/specs/QG-HOOKS-EXTRACT-001.yaml
+    - .caws/specs/QUALITY-GATES-PACKAGE-DEPRECATE-001.yaml
+    - .caws/specs/GATES-RUN-POST-QG-DOCTRINE-001.yaml
+    - .caws/specs/QUALITY-GATES-PACKAGE-REMOVE-001.yaml
+    - docs/architecture/quality-gates-hooks-migration.md
+  out:
+    - packages/quality-gates
+    - packages/caws-cli
+    - packages/caws-kernel
+invariants:
+  - 'The doctrine slice produces no code changes; it only records the campaign shape and ordering constraints.'
+  - 'RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001 closes BEFORE any of the four migration slices is committed; it is the parent guard that makes safe commits of the campaign possible.'
+  - 'Hook extraction precedes any package deprecation, which precedes any command-surface doctrine change, which precedes deletion.'
+  - 'The accidental v11.1.2 release is treated as a release-governance incident, not reverted; quality-gates fixes do not ship as npm patches.'
+  - 'caws gates run is part of the v11 canonical command surface and remains so until GATES-RUN-POST-QG-DOCTRINE-001 explicitly amends doctrine.'
+acceptance:
+  - id: A1
+    given: 'One parent guard slice plus four migration slices are drafted as separate specs (five dependent slices total under this campaign).'
+    when: 'The campaign is reviewed.'
+    then: 'Each slice has independent scope, acceptance, and a stated ordering constraint relative to the others; the parent guard is named first in the ordering.'
+  - id: A2
+    given: 'A reader of caws-vnext-command-surface.md.'
+    when: 'They look up the current authority for safety checks.'
+    then: 'The doctrine doc reflects the hooks-first posture and the transitional role of caws gates run.'
+  - id: A3
+    given: 'A future release that touches packages/quality-gates only.'
+    when: 'CI runs semantic-release.'
+    then: 'No publish of @paths.design/caws-cli is triggered solely from quality-gates changes (deferred to QUALITY-GATES-PACKAGE-DEPRECATE-001 for the enforcement; this slice records the intent).'
+non_functional:
+  reliability:
+    - 'Campaign ordering is documented and ordering violations are visible in code review.'
+  security:
+    - 'No campaign step disables an existing safety hook (naming-check, scope-guard, doc-frontmatter) as a side effect.'
+contracts: []
+# --- Campaign rationale ----------------------------------------------------
+# packages/quality-gates accumulated batch-scanner implementations for checks
+# whose durable value now lives at the operator-harness hook layer
+# (PreToolUse/PostToolUse in Claude Code; equivalents in Cursor/Windsurf
+# hook packs).
+#
+# Sterling already demonstrates the working shape:
+#   .claude/hooks/naming-check.sh        — banned-modifier list = shadow-file gate
+#   .claude/hooks/scope-guard.sh         — file-scope enforcement with strikes
+#   .claude/hooks/doc-frontmatter-check.sh — frontmatter advisory
+#
+# These ~100-400 LOC bash hooks replaced large .mjs modules (~500-1500 LOC
+# each) with single-file, synchronous, file-scoped checks. The remaining
+# load-bearing gates from packages/quality-gates collapse to hook shape
+# equally well; the surrounding orchestration (run-quality-gates.mjs,
+# worker-pool.mjs, cache-manager.mjs, progress.mjs, shared-exception-framework.mjs)
+# only exists to make the batch-scan model tolerable and stops mattering
+# once the gates move to hooks.
+#
+# The accidental v11.1.2 release (semantic-release auto-published on a green
+# `fix(quality-gates):` commit) made the cost of the current shape concrete:
+# we cannot patch packages/quality-gates without risking an unrelated caws-cli
+# publish, and the package itself is the wrong long-term home for the checks.
+#
+# --- Why a campaign, not one slice -----------------------------------------
+# A single "delete quality-gates and add hooks" slice would either:
+#   (a) leave a functionality gap between deletion and hook coverage, or
+#   (b) tempt the agent to half-delete and keep caws gates run wired to the
+#       partial package "for compatibility."
+# Splitting forces the constructive work (hook extraction) before any
+# destructive work (deprecation, doctrine change, deletion), and lets the
+# command-surface doctrine change be its own deliberate decision.
+#
+# --- Parent guard and child slices, in order ------------------------------
+# 0. RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001 — parent guard.
+#    Closes first. Establishes that specs-only, docs-only, tests-only, and
+#    packages/quality-gates-only commits do not trigger @paths.design/caws-cli
+#    publishes. Without this slice, every subsequent slice empirically tests
+#    the v11.1.2 incident conditions against main on every push.
+# 1. QG-HOOKS-EXTRACT-001          — add replacement hooks; quality-gates untouched
+# 2. QUALITY-GATES-PACKAGE-DEPRECATE-001 — mark package deprecated, isolate releases
+# 3. GATES-RUN-POST-QG-DOCTRINE-001 — decide what caws gates run becomes
+# 4. QUALITY-GATES-PACKAGE-REMOVE-001 — remove the deprecated package
+#
+# Slice 0 is non-negotiable. Slices 1-4 land separately, may be paused or
+# reordered relative to each other (subject to declared preconditions),
+# and may be cancelled without leaving the repo in a half-state.

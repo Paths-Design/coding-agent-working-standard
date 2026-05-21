@@ -1,0 +1,117 @@
+id: QUALITY-GATES-PACKAGE-REMOVE-001
+title: 'Remove deprecated quality-gates batch scanner package'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/quality-gates
+    - package-lock.json
+    - package.json
+    - .github/workflows
+    - docs
+  data_migration: false
+operational_rollback_slo: 60m
+scope:
+  in:
+    - packages/quality-gates
+    - .archive/packages/quality-gates
+    - package-lock.json
+    - package.json
+    - .github/workflows/release.yml
+    - .github/workflows/test.yml
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/guides/quality-gates.md
+    - docs/architecture/quality-gates-deprecation.md
+    - turbo.json
+    - .caws/specs/QUALITY-GATES-PACKAGE-REMOVE-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs
+    - packages/caws-cli/src/shell/commands/gates.ts
+invariants:
+  - 'No hook behavior changes; this slice does not modify packages/caws-cli/templates/hook-packs/**.'
+  - 'caws gates run continues to exist or has been formally removed per GATES-RUN-POST-QG-DOCTRINE-001; this slice does not change its contract.'
+  - 'No npm unpublish of any caws-quality-gates version is performed; prior versions remain on the registry as archival artifacts.'
+  - 'CI passes without invoking run-quality-gates.mjs after the slice closes.'
+  - 'package-lock.json is regenerated cleanly; no orphan references to caws-quality-gates remain.'
+acceptance:
+  - id: A1
+    given: 'The repo state after this slice closes.'
+    when: 'A file listing is taken of the repo root.'
+    then: 'packages/quality-gates is either (a) deleted entirely, or (b) archived to a NON-workspace location such as .archive/packages/quality-gates/ at repo root (NOT under packages/, to avoid the path being picked up by workspace globs or `packages/*` patterns). If option (b) is chosen, the archive path is added to .gitignore-equivalent exclusions for turbo/jest/eslint to ensure it does not affect builds, tests, or CI.'
+  - id: A2
+    given: 'package.json (root) and any published package.json files.'
+    when: 'They are inspected.'
+    then: 'No bin entry for caws-quality-gates remains in any published package; no workspaces[] entry references the removed/archived package as an active workspace.'
+  - id: A3
+    given: 'package-lock.json after a clean install.'
+    when: 'It is inspected for caws-quality-gates references.'
+    then: 'caws-quality-gates does not appear as an installed dependency of any active workspace.'
+  - id: A4
+    given: 'The CI pipeline.'
+    when: 'It runs on the post-slice main.'
+    then: 'No CI job invokes run-quality-gates.mjs or caws-quality-gates; jobs that previously did so are either removed or updated to invoke their replacements.'
+  - id: A5
+    given: 'docs/architecture/caws-vnext-command-surface.md and docs/guides/.'
+    when: 'They are read.'
+    then: 'They point users to hook-pack safety checks and caws evidence/doctor surfaces; no doc still recommends running caws-quality-gates as a current tool.'
+  - id: A6
+    given: 'Any past consumer that pinned @paths.design/caws-quality-gates@2.x.'
+    when: 'They install that version from npm.'
+    then: 'The installation still works as it did before this slice; this slice does not touch the registry.'
+non_functional:
+  reliability:
+    - 'A clean checkout + npm install + npm test passes after the slice.'
+    - 'CI runs from a clean cache produce identical results to the pre-slice main on hook-pack tests.'
+  security:
+    - 'Removing the package does not weaken any security check still active in CI; replacements (from QG-HOOKS-EXTRACT-001) are verified live before this slice runs.'
+contracts: []
+# --- Risk tier note --------------------------------------------------------
+# risk_tier: 3 is provisional for the draft state. The implementation is
+# T1 because removing a workspace package is irreversible (within a single
+# release) and touches package-lock, CI workflows, and docs simultaneously.
+# Before flipping lifecycle_state to active, raise to T1 and author:
+#   - contracts: package boundary contract (what does removal mean for
+#     consumers of @paths.design/caws-quality-gates on npm)
+#   - non_functional.observability: how to verify CI still produces the
+#     same hook-pack test results after removal
+#   - non_functional.reliability.rollback: revert plan if a missed import
+#     surfaces post-merge
+#
+# --- Preconditions (informational; schema does not admit a preconditions field) ---
+# - QG-HOOKS-EXTRACT-001 is closed.
+# - QUALITY-GATES-PACKAGE-DEPRECATE-001 is closed.
+# - GATES-RUN-POST-QG-DOCTRINE-001 is closed AND its implementation no longer
+#   spawns caws-quality-gates as a subprocess.
+# - No path in caws-cli source imports or spawns caws-quality-gates (verified
+#   via grep against the chosen subprocess entrypoint name).
+# - Release automation ignores packages/quality-gates (enforced from
+#   QUALITY-GATES-PACKAGE-DEPRECATE-001 A3/A4).
+# - npm unpublish of any prior caws-quality-gates version is explicitly NOT
+#   performed; the registry artifacts remain for archival consumers.
+#
+# --- Why a separate slice from deprecation ---------------------------------
+# Deprecation (QUALITY-GATES-PACKAGE-DEPRECATE-001) is reversible and has no
+# semantic effect on consumers — the package keeps working. Removal is a hard
+# state change that requires:
+#   (1) confirmed hook coverage of the load-bearing checks, and
+#   (2) confirmed absence of runtime dependency from caws-cli.
+# Both preconditions are satisfied only after the prior three slices close.
+# Splitting also lets the deprecation sit for as long as needed (a release
+# cycle, a quarter) before removal commits the change.
+#
+# --- Why ".archive/packages/" instead of "packages/.archive/" --------------
+# Workspace globs typically use `packages/*` patterns; an archive under
+# `packages/.archive/quality-gates/` is at risk of being picked up depending
+# on glob syntax, jest discovery, eslint config, etc. Placing the archive
+# at .archive/packages/quality-gates/ at REPO ROOT keeps it cleanly outside
+# every standard workspace/test/lint discovery pattern. The trade-off is
+# that path-aware tooling (like git history follow) requires `--follow` to
+# trace through the move, but that is a one-time cost.
+#
+# Source preservation is cheap and lets future readers see what the package
+# was. The npm package remains on the registry for archaeological consumers.
+# Either deletion or archive satisfies A1; the implementer chooses based on
+# whether any internal tool still imports the source.

@@ -1,0 +1,115 @@
+id: GATES-RUN-POST-QG-DOCTRINE-001
+title: 'Redefine caws gates run after quality-gates package deprecation'
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-18T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/gates
+    - packages/caws-cli/tests/integration/gates-cli.test.js
+    - packages/caws-kernel/src/schemas/events
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/gates
+    - packages/caws-cli/tests/integration/gates-cli.test.js
+    - packages/caws-cli/tests/shell/gates-command.test.js
+    - packages/caws-cli/tests/shell/gates-waivers.test.js
+    - packages/caws-kernel/src/schemas/events/gate-evaluated.ts
+    - packages/caws-kernel/tests/unit/policy.test.ts
+    - docs/architecture/caws-vnext-command-surface.md
+    - .caws/specs/GATES-RUN-POST-QG-DOCTRINE-001.yaml
+  out:
+    - packages/quality-gates
+    - packages/caws-cli/templates/hook-packs
+    - .releaserc.json
+    - scripts/multi-package-release.mjs
+invariants:
+  - 'events.jsonl is appended only through the store appendEvent path; no path in this slice writes directly.'
+  - 'Policy mode semantics (block/warn/skip) remain owned by .caws/policy.yaml; hooks do not mutate gate policy.'
+  - 'caws gates run remains in the v11 canonical command surface UNLESS option C is chosen and doctrine is explicitly amended.'
+  - 'Whichever option is chosen, the chosen behavior is recorded in docs/architecture/caws-vnext-command-surface.md before implementation lands.'
+  - 'The accidental v11.1.2 release is not retroactively justified by this slice; this slice does not republish caws-cli.'
+acceptance:
+  - id: A1
+    given: 'docs/architecture/caws-vnext-command-surface.md.'
+    when: 'It is read after this slice closes.'
+    then: 'It records the chosen option (A, B, or C) for caws gates run with rationale and the date of the decision.'
+  - id: A2
+    given: 'The v11 invariants in caws-vnext-command-surface.md §6.'
+    when: 'They are compared to the post-slice state.'
+    then: 'Any invariant change is explicit and dated; no silent semantic drift.'
+  - id: A3
+    given: 'The chosen option is implemented.'
+    when: 'caws gates run --spec <id> is invoked.'
+    then: 'The command exits 0/1 per the option contract; events.jsonl is appended only via store.appendEvent; no direct file writes.'
+  - id: A4
+    given: 'A policy.yaml declaring gates in block, warn, and skip modes.'
+    when: 'caws gates run evaluates the spec.'
+    then: 'Gate modes are honored as defined by policy; the implementation does not invent mode promotion or relaxation.'
+  - id: A5
+    given: 'The gates-cli integration test suite (packages/caws-cli/tests/integration/gates-cli.test.js).'
+    when: 'It runs against the new implementation.'
+    then: 'It reflects the new command contract; tests for removed behavior are deleted, not silently skipped; tests for new behavior are added.'
+non_functional:
+  reliability:
+    - 'The new command contract is exercised under env.CI=true to prevent recurrence of the v11.1.0 JSON-stdout class of bug.'
+  security:
+    - 'No new subprocess spawn surface is added without contract tests covering stdout/stderr separation.'
+contracts: []
+# --- Risk tier note --------------------------------------------------------
+# risk_tier: 3 is provisional for the draft state. The implementation is
+# almost certainly T1 because it touches the v11 canonical command surface
+# and may change documented invariants. Before flipping lifecycle_state to
+# active, raise to T1 and author:
+#   - contracts: the new caws gates run interface (CLI args, exit codes,
+#     events.jsonl shape, policy.yaml interaction)
+#   - non_functional.observability: how the new path is instrumented
+#   - non_functional.reliability.rollback: how a regression is reverted
+#     without leaving events.jsonl in an inconsistent state
+#
+# --- Preconditions (informational; schema does not admit a preconditions field) ---
+# - QG-HOOKS-EXTRACT-001 is closed (hook replacements exist).
+# - QUALITY-GATES-PACKAGE-DEPRECATE-001 is closed (deprecation is on record).
+#
+# --- Decision options ------------------------------------------------------
+#
+# Option A — Hooks event reader
+#   caws gates run no longer spawns caws-quality-gates. It evaluates policy
+#   against hook outcomes already recorded in events.jsonl or companion hook
+#   artifacts.
+#   Pros: cleanest hooks-first architecture; no subprocess contract.
+#   Cons: requires a reliable hook event schema and hooks that emit events
+#     (current hooks log to .claude/logs/ but do not append to events.jsonl).
+#
+# Option B — Minimal CI gate runner (recommended TRANSITION)
+#   caws gates run remains, but only runs small CI-time checks that are not
+#   expressible as single-file hooks. Subprocess to caws-quality-gates is
+#   replaced with in-process checks or removed entirely.
+#   Pros: preserves v11 command surface; shrinks dependency surface; allows
+#     incremental cutover without doctrine change.
+#   Cons: a thin runner still exists and must be maintained.
+#
+# Option C — Deprecate command (recommended TARGET)
+#   caws gates run is removed from the v11 command surface. Equivalent
+#   intent is served by hooks (synchronous safety) plus caws doctor and
+#   caws evidence (read-only state queries).
+#   Pros: cleanest long-term model; aligns with hooks-first posture.
+#   Cons: doctrine change; affects external workflows and CI pipelines
+#     that invoke `caws gates run`.
+#
+# --- Recommended path: B as transition, A as target ------------------------
+# Option B preserves the v11 contract while removing the broken subprocess
+# dependency. Once hooks reliably append gate_evaluated events (a separate
+# follow-up), option A becomes feasible. Option C should not be pursued
+# until external usage of caws gates run is surveyed.
+#
+# This slice does not have to lock in the final option; it only requires
+# that ONE option be chosen, recorded, and implemented. The decision can be
+# revisited in a successor slice.
