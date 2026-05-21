@@ -2,9 +2,11 @@ id: CAWS-RELEASE-TAG-DRIVEN-001
 title: 'Tag-driven release for @paths.design/caws-cli (v1: CLI-only; kernel CI publish deferred)'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implemented + merged via PR #6 (merge commit 6cb4ea9). Refusal-and-deletion bake on real GHA confirmed: v99.99.99 observed/refused/deleted via gh api with dry_run:false. Branch-push-never-publishes empirically proven across 4 branch pushes + main merge (zero Release runs). Post-publish path untested in CI; tracked under LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 / WORKTREE-MERGE-A2-FAULT-INJECTION-001.'
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T02:00:00.000Z'
+updated_at: '2026-05-21T03:41:13.599Z'
 blast_radius:
   modules:
     - .github/workflows/release.yml
