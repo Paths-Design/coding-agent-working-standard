@@ -19,7 +19,9 @@ scope:
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/tests/shell/worktree.test.js
     - packages/caws-cli/tests/shell/specs.test.js
-    - packages/caws-cli/tests/store/yaml-patch.test.ts
+    - packages/caws-cli/tests/store/yaml-patch.test.js
+    - packages/caws-cli/tests/store/specs-writer-close.test.js
+    - packages/caws-cli/tests/store/worktrees-writer-destroy.test.js
     - .caws/specs/WORKTREE-MERGE-CLEARS-SPEC-BINDING-001.yaml
   out:
     - .github/workflows

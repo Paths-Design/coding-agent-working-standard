@@ -331,3 +331,70 @@ export function insertTopLevelScalarAfter(
   ];
   return ok(joinLines(newLines, sep, trailing));
 }
+
+/** Remove a top-level scalar key's line entirely.
+ *
+ *  Semantics (per WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 A6):
+ *    - if the key does NOT exist at top level: NO-OP, returns the source
+ *      unchanged. Backward-compatible with specs that never had the field.
+ *    - if the key exists exactly once at top level with a scalar value:
+ *      removes the entire line. Trailing inline comments are removed
+ *      with the line (they belonged to the field, not to surrounding
+ *      context).
+ *    - if the key appears more than once at top level: AMBIGUOUS, refuse.
+ *    - if the key's value spans multiple lines (block scalar, nested
+ *      mapping, unclosed flow): AMBIGUOUS, refuse — surgical scalar
+ *      removal only.
+ *    - if the key appears only nested (with leading whitespace): NO-OP
+ *      at top level (does not match).
+ *
+ *  Used by closeSpec and destroyWorktree to clear the `worktree:`
+ *  binding on terminal lifecycle transitions per the byte-level
+ *  invariant: grep '^worktree:' <spec>.yaml must return no match. */
+export function removeTopLevelScalar(
+  source: string,
+  key: string
+): Result<string> {
+  const sep = source.includes('\r\n') ? '\r\n' : '\n';
+  const trailing = originalHadTrailing(source, sep);
+  const { lines } = splitLines(source);
+  const hits = findTopLevelKeyLines(lines, key);
+
+  // No-op: key not present at top level.
+  if (hits.length === 0) {
+    return ok(source);
+  }
+
+  if (hits.length > 1) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.YAML_PATCH_AMBIGUOUS,
+        `Top-level key "${key}" appears ${hits.length} times; refusing ambiguous removal.`,
+        { subject: key, data: { occurrences: hits.length } }
+      )
+    );
+  }
+
+  const keyLineIdx = hits[0];
+  if (keyLineIdx === undefined) {
+    // Defensive — hits.length === 1 implies hits[0] is defined, but TS
+    // narrowing doesn't always catch that.
+    return ok(source);
+  }
+
+  if (valueSpansMultipleLines(lines, keyLineIdx)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.YAML_PATCH_AMBIGUOUS,
+        `Top-level key "${key}" has a multi-line value (block scalar, nested mapping, or unclosed flow); refusing scalar removal.`,
+        { subject: key }
+      )
+    );
+  }
+
+  const newLines = [
+    ...lines.slice(0, keyLineIdx),
+    ...lines.slice(keyLineIdx + 1),
+  ];
+  return ok(joinLines(newLines, sep, trailing));
+}

@@ -47,6 +47,7 @@ import { STORE_RULES } from './rules';
 import { loadSpecs } from './specs-store';
 import {
   insertTopLevelScalarAfter,
+  removeTopLevelScalar,
   setTopLevelScalar,
 } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
@@ -350,6 +351,26 @@ export function closeSpec(
   if (!step4.ok) return err(step4.errors);
   patched = step4.value;
 
+  // Step 5 (WORKTREE-MERGE-CLEARS-SPEC-BINDING-001):
+  // Clear any top-level `worktree:` binding. A closed spec cannot have
+  // a live worktree binding by definition; leaving the field is what
+  // produces doctor.binding.spec_missing_registry drift after merge or
+  // independent destroy. Byte-level invariant: after this step,
+  // `grep '^worktree:' <spec>.yaml` MUST return no match.
+  //
+  // `spec.worktree` was captured from the pre-patch parsed YAML; if it
+  // was set, we record it in the spec_closed event as `prior_worktree`
+  // for audit-trail continuity. If the field was absent, this is a
+  // no-op (per removeTopLevelScalar's contract) and no prior_worktree
+  // is recorded.
+  const priorWorktree =
+    typeof spec.worktree === 'string' && spec.worktree.length > 0
+      ? spec.worktree
+      : undefined;
+  const step5 = removeTopLevelScalar(patched, 'worktree');
+  if (!step5.ok) return err(step5.errors);
+  patched = step5.value;
+
   // Validate the patched bytes through the kernel before write.
   const reparsed = parseAndValidateSpec(patched);
   if (!isOk(reparsed)) {
@@ -369,6 +390,7 @@ export function closeSpec(
   }
   if (input.mergeCommit !== undefined) eventData.merge_commit = input.mergeCommit;
   if (input.supersededBy !== undefined) eventData.superseded_by = input.supersededBy;
+  if (priorWorktree !== undefined) eventData.prior_worktree = priorWorktree;
 
   const event: EventBody = {
     event: 'spec_closed',
