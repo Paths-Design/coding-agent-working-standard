@@ -19,9 +19,13 @@ name: Release
 #   - Post-publish failures (7–8): tag is PRESERVED; repair command emitted.
 #
 # Branch-push to main does NOT trigger publishes. There is no on: push:
-# branches block. Refused tags (bare v*, caws-kernel-v*) exit early with
-# a clear error and do NOT delete themselves (they're informational, not
-# defective).
+# branches block. Refused release-pattern tags (bare v*, caws-kernel-v*,
+# malformed caws-cli-v*) ARE observed by the workflow, refused with a
+# structured error, AND deleted from origin via gh api. Leaving a refused
+# tag in place would create "tag exists, package does not" ambiguity —
+# the same class this slice eliminates. Existing historical v* tags on
+# origin (pre-dating this slice) are NOT rewritten; only newly-pushed
+# refused tags trigger refusal-and-deletion.
 #
 # The release-guard layers (release-guard-dry-run.mjs,
 # release-guard-commit-analyzer-check.mjs, release-guard-scope-audit.mjs)
@@ -125,18 +129,21 @@ jobs:
             } && break
           done
 
-      - name: Verify tag-deletion permission
-        # Sanity check: the rollback path requires `contents: write`. If this
-        # check fails, the workflow surfaces it BEFORE attempting publish so
-        # the maintainer knows the pre-publish-failure path is unavailable.
+      - name: Verify tag-ref API access
+        # This confirms the workflow can READ the pushed tag ref via gh api.
+        # It does NOT prove DELETE authority — actual delete permission is
+        # exercised on the refused-tag bake after this workflow lands on
+        # main. If this read fails, the runner's GITHUB_TOKEN doesn't even
+        # have the ref-read scope, which makes any downstream API call
+        # impossible regardless of write semantics.
         run: |
           set -e
-          echo "Checking that GITHUB_TOKEN can list refs (proxy for write access)..."
+          echo "Checking that GITHUB_TOKEN can read the pushed tag ref via gh api..."
           gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${GITHUB_REF_NAME}" >/dev/null || {
-            echo "::error::Cannot read tag ref via gh api. Rollback path may be unavailable."
+            echo "::error::Cannot read tag ref via gh api. Rollback path is unavailable; aborting."
             exit 1
           }
-          echo "✓ gh api ref access confirmed."
+          echo "✓ gh api ref read confirmed. (DELETE authority will be exercised by the refused-tag path, not pre-validated here.)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
