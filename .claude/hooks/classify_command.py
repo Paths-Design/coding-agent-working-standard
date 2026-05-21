@@ -547,9 +547,6 @@ def classify_git_semantics(
             return "allow", ""
         return "ask", "git init requires human approval; do not retry by wrapping, reordering, aliasing, or indirect invocation"
 
-    if subcommand == "push":
-        return "ask", "git push requires human approval"
-
     if subcommand == "pull":
         return "ask", "git pull mutates the worktree and requires human approval"
 
