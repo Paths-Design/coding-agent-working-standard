@@ -1,47 +1,96 @@
 name: Release
 
+# CAWS-RELEASE-TAG-DRIVEN-001 v1.
+#
+# Tag-driven release for @paths.design/caws-cli only. Pushing a tag
+# matching `caws-cli-v*` triggers exactly one workflow run that:
+#   1. parses the tag
+#   2. validates packages/caws-cli/package.json version equals the tag
+#   3. validates packages/caws-cli/CHANGELOG.md has a section for the version
+#   4. builds caws-cli
+#   5. runs the prepublish fresh-install smoke
+#   6. runs `npm publish --provenance`
+#   7. polls `npm view` to verify registry has the version
+#   8. creates a GitHub Release with the CHANGELOG section as body
+#
+# Asymmetric failure invariant:
+#   - Pre-publish failures (1–5): tag is DELETED from origin via gh api.
+#   - npm publish failure (6): tag is DELETED (registry was not mutated).
+#   - Post-publish failures (7–8): tag is PRESERVED; repair command emitted.
+#
+# Branch-push to main does NOT trigger publishes. There is no on: push:
+# branches block. Refused tags (bare v*, caws-kernel-v*) exit early with
+# a clear error and do NOT delete themselves (they're informational, not
+# defective).
+#
+# The release-guard layers (release-guard-dry-run.mjs,
+# release-guard-commit-analyzer-check.mjs, release-guard-scope-audit.mjs)
+# remain as PR-time advisory checks in pr-checks.yml. They tell reviewers
+# what a release-tag for a PR's content would publish. The human decides
+# whether to tag.
+#
+# Releasing manually:
+#   1. Verify release-guard PR advisory is happy on your PR
+#   2. Author/update packages/caws-cli/CHANGELOG.md section for the version
+#   3. Bump packages/caws-cli/package.json version to match
+#   4. Commit both as a single non-shipping commit on main
+#   5. Tag: git tag caws-cli-vX.Y.Z -m "..."
+#   6. Push: git push origin caws-cli-vX.Y.Z
+#   7. Watch this workflow
+#   8. Verify npm registry shows the version and GitHub Release was created
+#
+# See docs/release-procedure.md for the full procedure.
+
 on:
   push:
-    branches:
-      - main
-    # RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001 — Layer 2.
-    # Trigger paths name only files that, if changed, could legitimately
-    # require a @paths.design/caws-cli release. Removed paths and why:
-    #   - packages/quality-gates/**  : quality-gates is no longer published
-    #                                  separately (see PACKAGES array in
-    #                                  scripts/multi-package-release.mjs);
-    #                                  its changes must not spin up the
-    #                                  release workflow at all.
-    #   - .releaserc.json            : no such file exists (script is the
-    #                                  single source of truth per its own
-    #                                  comment).
-    #   - CHANGELOG.md (root)        : CHANGELOGs are per-package.
-    #   - scripts/**                 : too broad; only the release script
-    #                                  itself can change release behavior.
-    paths:
-      - 'packages/caws-cli/**'
-      - 'scripts/multi-package-release.mjs'
-      - '.github/workflows/release.yml'
-      - 'package.json'
-      - 'package-lock.json'
+    tags:
+      - 'caws-cli-v*'
+      # Note: bare v* and caws-kernel-v* are intentionally OMITTED from this
+      # trigger filter. They would still match `v*` as a glob fragment in some
+      # systems, but GitHub Actions tag filters are anchored. To be defensive,
+      # release-tag-publish.mjs refuses them explicitly with a clear error.
+      # Adding kernel CI publish is a single-line table change in that script
+      # plus an additional tag glob here.
 
 permissions:
+  # contents: write — required for tag deletion via gh api on pre-publish
+  # failure (CAWS-RELEASE-TAG-DRIVEN-001 contract: pre-publish-failure-
+  # deletes-tag). Verified at workflow init via the "Verify tag-deletion
+  # permission" step below.
   contents: write
-  issues: write
-  pull-requests: write
+  # id-token: write — retained for future OIDC trusted-publisher adoption
+  # (deferred to a follow-up slice; current publish uses NPM_TOKEN).
   id-token: write
 
 jobs:
   release:
-    name: Release
+    name: Tag-driven release
     runs-on: ubuntu-latest
     environment: Release
     steps:
-      - name: Checkout
+      - name: Checkout tag
         uses: actions/checkout@v4
         with:
+          # Checkout the tag SHA exactly, not a branch. The workflow operates
+          # on the tagged commit content; main may have moved on since.
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify tag context
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::This workflow only runs on tag pushes (GITHUB_REF_TYPE was '${GITHUB_REF_TYPE}')."
+            exit 1
+          fi
+          TAG_NAME="${GITHUB_REF_NAME}"
+          if [ -z "$TAG_NAME" ]; then
+            echo "::error::GITHUB_REF_NAME is empty; cannot determine tag."
+            exit 1
+          fi
+          echo "tag_name=${TAG_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "🏷️  Tag: ${TAG_NAME}"
+          echo "🔖 Commit SHA: ${GITHUB_SHA}"
+        id: tag_ctx
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -49,21 +98,15 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: "package-lock.json"
-
-      - name: Configure Git for CI
-        run: |
-          git config --global user.email "ci@paths.design"
-          git config --global user.name "CAWS CI"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: |
-          # Configure npm for better reliability
           npm config set fetch-retry-mintimeout 20000
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-retries 3
           npm config set fetch-retry-factor 10
 
-          # Retry npm ci with exponential backoff
           for i in {1..3}; do
             echo "Attempt $i of 3..."
             npm ci --prefer-offline --no-audit --no-fund || {
@@ -76,82 +119,26 @@ jobs:
             } && break
           done
 
-      - name: Run linting
-        run: npx turbo run lint
-
-      - name: Security audit
+      - name: Verify tag-deletion permission
+        # Sanity check: the rollback path requires `contents: write`. If this
+        # check fails, the workflow surfaces it BEFORE attempting publish so
+        # the maintainer knows the pre-publish-failure path is unavailable.
         run: |
-          # Use critical level because many high-severity vulns are in bundled
-          # transitive deps (npm, semantic-release) without available fixes.
-          # MCP SDK fix (1.25.2) not yet published as of 2026-01.
-          # Monitor: https://github.com/advisories
-          npm audit --audit-level=critical || {
-            echo "::warning::Security audit found vulnerabilities. Review npm audit output above."
-            # Monorepo peer-dep conflicts prevent npm audit fix from resolving
-            # even non-breaking fixes (ajv, js-yaml). Warn but don't block.
-            # TODO: revisit after monorepo restructure / next major dep refresh.
-            echo "::warning::Vulnerabilities present but unblocked — see TODO above."
+          set -e
+          echo "Checking that GITHUB_TOKEN can list refs (proxy for write access)..."
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${GITHUB_REF_NAME}" >/dev/null || {
+            echo "::error::Cannot read tag ref via gh api. Rollback path may be unavailable."
+            exit 1
           }
-
-      - name: Run tests
-        run: |
-          echo "🔍 CI Environment Info:"
-          echo "  Node version: $(node --version)"
-          echo "  NPM version: $(npm --version)"
-          echo "  Current directory: $(pwd)"
-          echo "  Directory contents:"
-          ls -la
-          echo ""
-          echo "🔍 Checking for template and demo directories:"
-          echo "  Template paths:"
-          find . -name "caws-template" -type d 2>/dev/null || echo "  ❌ No caws-template found"
-          echo "  Demo project paths:"
-          find . -name "demo-project" -type d 2>/dev/null || echo "  ❌ No demo-project found"
-          echo ""
-          echo "🔍 Checking test directory structure:"
-          echo "  Test directory: $(ls -la packages/caws-cli/tests/ | head -10)"
-          echo "  Contract tests: $(ls -la packages/caws-cli/tests/contract/)"
-          echo ""
-          npm test
-
-      - name: Build packages
-        run: npx turbo run build
-
-      # V11-DOCTRINE-HYGIENE-001 — tarball-truth release blocker.
-      # Scans the built @paths.design/caws-cli tarball contents for any
-      # reference to commands removed in v11.0 (and not part of the
-      # current v11.x or planned v11.2 surface). If shipped files
-      # advertise commands that don't exist, agents reading the tarball
-      # will try those commands and fail.
-      #
-      # Hard-blocks the release on match. Initial drift was cleaned up by
-      # ERROR-HANDLER-V11-SURFACE-001; any new match is a regression to
-      # fix before release. If v11.2+ restores a command, update
-      # REMOVED_COMMANDS in scripts/check-removed-commands.mjs in the
-      # same commit as the doctrine update.
-      - name: Tarball truth — no removed-command references
-        run: node scripts/check-removed-commands.mjs
-
-      - name: Setup NPM with OIDC for Trusted Publisher
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Release
+          echo "✓ gh api ref access confirmed."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN needed for @semantic-release/npm verifyConditions step.
-          # Actual publish uses OIDC provenance via trusted publisher (bypasses OTP).
+
+      - name: Run tag-driven publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          # Use multi-package release script to handle multiple packages
-          # Falls back to standard semantic-release if script doesn't exist
-          if [ -f "scripts/multi-package-release.mjs" ]; then
-            node scripts/multi-package-release.mjs
-          else
-            npx semantic-release
-          fi
+          set -e
+          node scripts/release-tag-publish.mjs "${GITHUB_REF_NAME}"

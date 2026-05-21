@@ -9,7 +9,7 @@ blast_radius:
   modules:
     - .github/workflows/release.yml
     - scripts/release-tag-publish.mjs
-    - docs/internal/release-procedure.md
+    - docs/release-procedure.md
     - CLAUDE.md
   data_migration: false
 operational_rollback_slo: 5m
@@ -17,7 +17,8 @@ scope:
   in:
     - .github/workflows/release.yml
     - scripts/release-tag-publish.mjs
-    - docs/internal/release-procedure.md
+    - packages/caws-cli/tests/scripts/release-tag-publish.test.js
+    - docs/release-procedure.md
     - CLAUDE.md
     - .caws/specs/CAWS-RELEASE-TAG-DRIVEN-001.yaml
     - packages/caws-cli/CHANGELOG.md
@@ -64,7 +65,7 @@ acceptance:
   - id: A5
     given: 'V1 NARROWING: A maintainer pushes `caws-kernel-v1.1.2`.'
     when: 'The Release workflow runs.'
-    then: 'The workflow REFUSES with a clear error: "kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/internal/release-procedure.md." No build, no publish, no tag deletion. The tag remains in place (it is a valid future request, just not honored in v1). Exit code is non-zero.'
+    then: 'The workflow REFUSES with a clear error: "kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md." No build, no publish, no tag deletion. The tag remains in place (it is a valid future request, just not honored in v1). Exit code is non-zero.'
   - id: A6
     given: 'V1 narrowing applies: kernel publish is manual; cli publish is CI tag-driven.'
     when: 'The maintainer publishes caws-kernel@1.1.2 manually, verifies registry, then pushes `caws-cli-v11.1.5`.'
@@ -86,7 +87,7 @@ acceptance:
     when: 'CI runs the release workflow on a tag push.'
     then: 'The release workflow does NOT modify `packages/<pkg>/package.json` in any way — no version bumps, no commits pushed back to main, no PRs opened. The workflow''s only Git operation against the remote is (a) tag deletion in the pre-publish-failure path, OR (b) the GitHub Release creation API call. No `git push origin main` from CI on the release workflow path.'
   - id: A11
-    given: 'CLAUDE.md and docs/internal/release-procedure.md are present after this slice.'
+    given: 'CLAUDE.md and docs/release-procedure.md are present after this slice.'
     when: 'A maintainer reads them.'
     then: 'Both documents describe the new tag-driven procedure: (1) verify release-guard-dry-run is happy locally on the PR, (2) author/update the CHANGELOG section for the target version, (3) bump `packages/<pkg>/package.json` version to match, (4) commit both as a single non-shipping commit on main, (5) tag with the canonical convention (`caws-cli-vX.Y.Z` or `caws-kernel-vX.Y.Z`), (6) push tag, (7) verify npm registry shows the new version, (8) verify GitHub Release was created. The asymmetric failure invariant (pre-publish vs post-publish) is documented. The coupled-release ordering procedure is documented. The old "merge to main and let CI auto-publish" procedure is explicitly retired with a pointer to this spec.'
 non_functional:
