@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: wt-merge-a2
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T12:00:00.000Z'
+updated_at: '2026-05-21T12:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/lifecycle-transaction.ts
@@ -22,7 +22,6 @@ scope:
     - .caws/policy.yaml
     - .caws/events.jsonl
     - packages/caws-kernel/src
-    - packages/caws-cli/src
 invariants:
   - 'The test injects a fault into closeSpec''s lifecycle transaction such that the transaction validates planned bytes, then fails post-validation (e.g., during commit-fsync or event append), rolls back, and returns ok({ kind: "partial_failure_recovered", cause: ... }).'
   - 'Under that injected fault, mergeWorktree''s post-condition is: returns err(STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED) with a diagnostic naming the merge commit and stating (a) the spec remains active, (b) the worktree is NOT destroyed.'
