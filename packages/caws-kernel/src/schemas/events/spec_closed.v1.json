@@ -25,6 +25,10 @@
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "Optional merge commit SHA when closure followed a worktree merge."
     },
-    "closure_notes": { "type": "string" }
+    "closure_notes": { "type": "string" },
+    "prior_worktree": {
+      "type": "string",
+      "description": "Worktree name this spec was bound to immediately before close. Recorded when closeSpec clears a top-level `worktree:` field as part of the close transaction. Audit-trail record per WORKTREE-MERGE-CLEARS-SPEC-BINDING-001."
+    }
   }
 }

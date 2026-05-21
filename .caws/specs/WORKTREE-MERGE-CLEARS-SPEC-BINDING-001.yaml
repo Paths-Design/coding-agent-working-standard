@@ -17,6 +17,7 @@ scope:
     - packages/caws-cli/src/store/yaml-patch.ts
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-kernel/src/schemas/events/spec_closed.v1.json
     - packages/caws-cli/tests/shell/worktree.test.js
     - packages/caws-cli/tests/shell/specs.test.js
     - packages/caws-cli/tests/store/yaml-patch.test.js
@@ -27,7 +28,6 @@ scope:
     - .github/workflows
     - .caws/policy.yaml
     - .caws/events.jsonl
-    - packages/caws-kernel/src
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
 invariants:
