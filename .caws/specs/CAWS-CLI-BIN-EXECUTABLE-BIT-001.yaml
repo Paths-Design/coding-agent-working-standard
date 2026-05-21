@@ -2,9 +2,11 @@ id: CAWS-CLI-BIN-EXECUTABLE-BIT-001
 title: 'Set executable bit on dist/index.js during caws-cli build (first canonical tag-driven publish bake)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implemented + merged via PR #8 (merge commit 87417f3). First canonical tag-driven publish through CAWS-RELEASE-TAG-DRIVEN-001 v1 substrate. caws-cli@11.1.5 published with OIDC trusted-publisher provenance (sigstore log entry 1590395951) — the first CAWS publish with real attestations. GitHub Release created from CHANGELOG section. Tag preserved on origin. Branch-push-never-publishes contract held across merge commit. Asymmetric failure invariant proven on the success path. CI Test Suite re-validated after two parallel-jest race fixes (build-cli-bin-mode + release-tag-publish E2E gating). Parallel-safety contract documented in test file: parallel tests must not mutate dist/.'
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T04:20:00.000Z'
+updated_at: '2026-05-21T06:10:30.926Z'
 blast_radius:
   modules:
     - packages/caws-cli/scripts/build-cli.js
