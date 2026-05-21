@@ -3,6 +3,7 @@ title: 'Calibrate classify_command.py: explicit allow-list of read-only subcomma
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: wt-danger-latch
 created_at: '2026-05-21T00:00:00.000Z'
 updated_at: '2026-05-20T23:30:00.000Z'
 blast_radius:
@@ -13,7 +14,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
-    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.py
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
     - .caws/specs/DANGER-LATCH-CALIBRATION-001.yaml
   out:
     - .caws/policy.yaml
@@ -33,8 +34,8 @@ invariants:
        - Read-only npm: `npm view`, `npm whoami`, `npm config get`, `npm ls`, `npm outdated`, `npm explain`, `npm pack --dry-run`
      No other commands are added to the allow-list in this slice.'
   - 'Mutating subcommands of allow-listed top-level commands are EXPLICITLY rejected by the allow-list (they fall through to the existing ask/deny tiers). Concrete denylist by name: `gh pr merge`, `gh pr edit`, `gh pr close`, `gh pr reopen`, `gh pr ready`, `gh pr review --approve`, `gh pr comment`, `gh run rerun`, `gh run cancel`, `gh workflow run`, `gh workflow enable/disable`, `gh release create/edit/delete`, `gh issue create/edit/close`, `gh api -X POST|PUT|PATCH|DELETE`, `git push`, `git pull`, `git fetch --prune`, `git reset`, `git rebase`, `git cherry-pick`, `git stash`, `git checkout` (any), `npm publish`, `npm install`, `npm uninstall`, `npm version`, `npm unpublish`, `npm pack` (without --dry-run).'
-  - 'Calibration is fail-closed. If the classifier cannot decide (no allow match AND no deny match), the result is "ask" (existing default tier), never "allow".'
-  - 'Pipeline-aware deny rules (curl|sh, fork bombs) remain matched against the FULL raw command, not segmented commands. An observational command piped into a destructive sink (e.g., `tail logs/foo.log | sh`) still triggers the pipeline deny rule.'
+  - 'Calibration is fail-closed FOR GOVERNED COMMAND FAMILIES AND THE DOCUMENTED READ-ONLY SURFACE. Specifically: unknown `git`, `gh`, and `npm` subcommands NOT on the explicit allow-list and NOT matched by an existing deny/confirm pattern resolve to "ask", never "allow". The documented read-only inspection/search surface (`tail`, `head`, `cat`, `grep`, `rg`, `find` without mutating flags, etc.) is admitted by explicit allow-list match. All other shell commands retain the existing classifier default (currently "allow" for unmatched commands). This slice is a calibration, not a redesign of the universal shell-command policy — that would be a separate, larger slice.'
+  - 'Pipeline-aware deny rules are STRENGTHENED, not weakened. The existing curl|sh and wget|sh patterns remain. A NEW generic pipe-to-shell pattern is added that matches any executable command piped to bash/sh (e.g., `tail logs/foo.log | sh`, `cat script | bash`). The new pattern must NOT fire on quoted literals (e.g., `git commit -m "fix | sh"`), heredoc bodies, or command substitutions whose surrounding context is inert.'
   - 'The reset path is unchanged. When block-dangerous.sh latches a session, `bash .claude/hooks/reset-danger-latch.sh --current --reason "..."` remains the only documented escape, run by the human user. The agent cannot self-reset.'
 acceptance:
   - id: A1
@@ -83,7 +84,7 @@ acceptance:
     then: 'No danger latch is created. .claude/hooks/state/danger-latch-<session>.json does not exist.'
 non_functional:
   reliability:
-    - 'Fail-closed default: any command not matched by the explicit allow-list AND not matched by any deny pattern goes to "ask", never "allow". This preserves the existing ambiguous-default tier.'
+    - 'Hybrid fail-closed: for the three governed command families (`git`, `gh`, `npm`), a subcommand not on the explicit allow-list AND not matched by any deny/confirm pattern resolves to "ask". For commands outside those families, the existing classifier default applies (currently "allow" for unmatched commands). The classifier''s global default is NOT changed by this slice; a universal-fail-closed rewrite is deferred (see triage block).'
     - 'No regression on lineage entries 1 and 17 (the failure-lineage entries this hook covers). The substantive deny patterns are preserved bit-for-bit; only ALLOW_SEGMENT_PATTERNS is added (new), and only narrow whitelist additions are made.'
     - 'The allow-list regex patterns are anchored at segment boundaries (start of subcommand). A command like `gh-pr-view-fake-script` does not match the `gh pr view` allow pattern.'
   performance:
@@ -143,3 +144,45 @@ contracts: []
 # Follow-up: file SPECS-PROMOTE-DRAFT-001 (or similar) AFTER this
 # slice is moving, to add `caws specs promote <id>` to the v11.1
 # surface. Do not block lane-1 work on that follow-up.
+#
+# --- Implementation-decision note (2026-05-21) ------------------------------
+# Three pre-implementation findings from the classifier audit
+# (recorded here so closure does not lose them):
+#
+# 1. Fail-closed scope: HYBRID. The original spec text implied a
+#    universal fail-closed model. That would have required flipping
+#    the classifier's global default from `allow` to `ask`, a behavior
+#    change far broader than this calibration intends. The invariant
+#    above now states fail-closed applies only to (a) unknown
+#    `git`/`gh`/`npm` subcommands, and (b) the documented read-only
+#    inspection/search allow-list. Other shell commands keep the
+#    existing default. A future slice may rewrite the universal
+#    default; that is explicitly out of scope here.
+#
+# 2. A9 pipe-to-shell: KEPT. The current DENY_PIPELINE_PATTERNS
+#    only catch `curl|sh` and `wget|sh`. A new generic pattern is
+#    added that strengthens (does not weaken) the existing deny set.
+#    Quoted-literal and heredoc safety is asserted by negative
+#    fixtures.
+#
+# 3. Test file path: scope.in changed from
+#    `classify_command_calibration.test.py` to
+#    `classify_command_calibration.test.js`. There is no Python test
+#    infrastructure in this repo — all tests run under Jest. The
+#    correct pattern is a Jest test that shells out to
+#    `python3 classify_command.py` and asserts on the JSON output.
+#
+# --- Closure follow-ups (file AFTER this slice closes) ----------------------
+# - SPECS-PROMOTE-DRAFT-001: add `caws specs promote <id>` + verify
+#   `caws specs delete <id>` exists per CLAUDE.md doctrine reference.
+# - TEMPLATES-V11-COMMAND-REFRESH-001: refresh stale v10 command
+#   references in `packages/caws-cli/templates/CLAUDE.md` and
+#   `packages/caws-cli/templates/.claude/rules/worktree-isolation.md`
+#   (currently reference removed commands like `caws validate`,
+#   `caws iterate`, `caws evaluate`, `caws verify-acs`, `caws burnup`,
+#   `caws sidecar`, `caws parallel setup`). The vNext doctrine doc
+#   already flags this template/doc rot; capture as a separate slice.
+# - UNIVERSAL-FAIL-CLOSED-001 (deferred, possibly never): rewrite the
+#   classifier's global default from `allow` to `ask`. Larger blast
+#   radius than this slice; needs explicit user direction before
+#   filing.
