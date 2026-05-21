@@ -25,16 +25,5 @@
       "status": "destroyed",
       "destroyedAt": "2026-05-20T22:08:02.009Z"
     }
-  },
-  "wt-merge-a2": {
-    "specId": "WORKTREE-MERGE-A2-FAULT-INJECTION-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-21T09:47:04.398Z",
-    "branch": "wt-merge-a2",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/wt-merge-a2"
   }
 }
