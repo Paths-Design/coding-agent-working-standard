@@ -7,7 +7,7 @@
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # CAWS Command Safety Gate for Claude Code
 # Delegates to classify_command.py for robust command parsing and classification.
-# Falls back to bash pattern matching if Python is unavailable.
+# Fails closed with an ask+latch if the classifier is unavailable.
 #
 # The Python classifier handles:
 #   - Heredoc-aware parsing (won't false-positive on quoted dangerous commands)
@@ -15,6 +15,7 @@
 #   - Pipeline-aware dangers (curl | sh)
 #   - Context-aware rm classification (safe prefixes vs dangerous targets)
 #   - Proper shell segmentation (&&, ||, ;, |)
+#   - Explicit read-only allow-list with mutating sibling commands gated
 #
 # @author @darianrosebrook
 
@@ -34,6 +35,13 @@ danger_latch_file() {
   local safe_session
   safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
   printf '%s/danger-latch-%s.json\n' "$(danger_state_dir)" "$safe_session"
+}
+
+danger_log_dir() {
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local log_dir="$project_dir/.claude/logs"
+  mkdir -p "$log_dir"
+  printf '%s\n' "$log_dir"
 }
 
 emit_block_json() {
@@ -75,23 +83,108 @@ record_danger_latch() {
     }' > "$file"
 }
 
+reset_guard_strikes_for_session() {
+  local session_id="$1"
+  local reason="$2"
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local safe_session
+  local log_dir
+  local strike_log
+  local targets=()
+  local file
+
+  safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
+  log_dir="$(danger_log_dir)"
+  strike_log="$log_dir/strike-resets.log"
+
+  if [[ -f "$log_dir/guard-strikes-$safe_session.json" ]]; then
+    targets+=("$log_dir/guard-strikes-$safe_session.json")
+  fi
+
+  while IFS= read -r file; do
+    [[ -n "$file" ]] && targets+=("$file")
+  done < <(find "$project_dir/.caws/worktrees" -maxdepth 3 -type f -name "guard-strikes-$safe_session.json" 2>/dev/null || true)
+
+  for file in "${targets[@]+"${targets[@]}"}"; do
+    [[ -f "$file" ]] || continue
+    if ! jq -e 'any(.[]; (type == "number") and . >= 2)' "$file" >/dev/null 2>&1; then
+      continue
+    fi
+    local before
+    before=$(cat "$file" 2>/dev/null || echo '{}')
+    rm -f "$file"
+    printf '%s  action=auto-delete-after-approved-danger-command  guard=*  dry_run=0  before=%s  target=%s  reason=%s\n' \
+      "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+      "$(printf '%s' "$before" | jq -c . 2>/dev/null || printf '%s' "$before" | tr -d '\n')" \
+      "$file" \
+      "$reason" \
+      >> "$strike_log"
+  done
+}
+
+reset_danger_latch_after_execution() {
+  local file="$1"
+  local session_id="$2"
+  local command="$3"
+
+  [[ -f "$file" ]] || return 0
+
+  local latched_decision
+  local latched_command
+  latched_decision=$(jq -r '.decision // ""' "$file" 2>/dev/null || true)
+  latched_command=$(jq -r '.command // ""' "$file" 2>/dev/null || true)
+
+  # Only auto-clear ask latches after the exact command reaches PostToolUse.
+  # A deny latch remains a manual human-review boundary.
+  if [[ "$latched_decision" != "ask" ]] || [[ "$latched_command" != "$command" ]]; then
+    return 0
+  fi
+
+  local log_dir
+  log_dir="$(danger_log_dir)"
+  jq -n \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg file "$file" \
+    --arg by "${USER:-unknown}" \
+    --arg command "$command" \
+    '{
+      ts: $ts,
+      latch: $file,
+      reset_by: $by,
+      reason: "auto-reset after approved Bash command reached PostToolUse",
+      command: $command
+    }' >> "$log_dir/danger-latch-resets.log"
+  rm -f "$file"
+  reset_guard_strikes_for_session "$session_id" "approved-danger-command"
+}
+
 # Read JSON input from Claude Code
 INPUT=$(cat)
 
 # Extract tool info
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
+HOOK_EVENT_NAME=$(printf '%s' "$INPUT" | jq -r '.hook_event_name // env.HOOK_EVENT_NAME // ""')
 # Fallback to "unknown" when no session id is available so the latch still
 # engages. Multiple concurrent sessions without an id will share the "unknown"
 # latch -- safer than not latching at all.
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // env.CLAUDE_SESSION_ID // env.HOOK_SESSION_ID // "unknown"')
 
-# Only check Bash tool
+LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
+
+if [[ "$HOOK_EVENT_NAME" == "PostToolUse" ]]; then
+  if [[ "$TOOL_NAME" == "Bash" && -n "$COMMAND" ]]; then
+    reset_danger_latch_after_execution "$LATCH_FILE" "$SESSION_ID" "$COMMAND"
+  fi
+  reset_guard_strikes_for_session "$SESSION_ID" "approved-tool-use"
+  exit 0
+fi
+
+# Only check Bash tool on PreToolUse.
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
 if [[ -f "$LATCH_FILE" ]]; then
   REASON="A dangerous command was previously blocked or sent for approval in this Claude session. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"

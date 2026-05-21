@@ -51,6 +51,7 @@ source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
 # settings.json groups so ordering-sensitive behavior (stdout "last
 # wins" policy, audit log ordering) is preserved.
 HANDLERS=(
+  "block-dangerous.sh"
   # "quality-check.sh"
   # "validate-spec.sh"
   # "naming-check.sh"

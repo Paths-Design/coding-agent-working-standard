@@ -50,6 +50,7 @@ SAFE_DELETE_PREFIXES: list[str] = [
 DENY_PIPELINE_PATTERNS: list[tuple[str, str]] = [
     # Pipe-to-shell (network exfiltration) — must match across | boundary
     (r"\b(curl|wget)\b.*\|\s*(ba)?sh\b", "pipe-to-shell execution"),
+    (r"\|\s*(ba|da|z)?sh\b", "pipeline into shell execution"),
     # Fork bombs — special syntax that segmentation mangles
     (r":\(\)\s*\{.*:\|:.*\}\s*;\s*:", "fork bomb"),
     (r"\bwhile\s+true\b.*\bfork\b", "fork loop"),
@@ -71,15 +72,53 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\binit\s+[06]\b", "system runlevel change"),
     # CAWS spec/policy/waiver protection (RC defect #8).
     # Naked rm/mv on .caws/specs/, .caws/policy.yaml, or .caws/waivers/ bypasses
-    # the audit trail. Use `caws specs delete|archive`, `caws waivers revoke`,
+    # the audit trail. Use `caws specs close|archive`, `caws waiver revoke`,
     # or edit policy.yaml in place via Edit (not Bash) instead.
     (r"\b(rm|mv)\b[^\n]*\.caws/specs/[^\s'\"]*\.ya?ml\b",
-     "naked rm/mv on .caws/specs/*.yaml — use `caws specs delete|archive <id>`"),
+     "naked rm/mv on .caws/specs/*.yaml — use `caws specs close|archive <id>`"),
     (r"\b(rm|mv)\b[^\n]*\.caws/policy\.ya?ml\b",
      "naked rm/mv on .caws/policy.yaml — policy is governed; use Edit and a CAWS waiver"),
     (r"\b(rm|mv)\b[^\n]*\.caws/waivers/[^\s'\"]*\.ya?ml\b",
-     "naked rm/mv on .caws/waivers/*.yaml — use `caws waivers revoke <id>`"),
+     "naked rm/mv on .caws/waivers/*.yaml — use `caws waiver revoke <id>`"),
 ]
+
+READ_ONLY_COMMANDS: set[str] = {
+    "tail",
+    "head",
+    "cat",
+    "less",
+    "more",
+    "wc",
+    "stat",
+    "file",
+    "du",
+    "df",
+    "ls",
+    "tree",
+    "grep",
+    "rg",
+}
+
+FIND_MUTATING_FLAGS: set[str] = {
+    "-delete",
+    "-exec",
+    "-execdir",
+    "-fprint",
+    "-fprint0",
+    "-ok",
+    "-okdir",
+}
+
+GH_GLOBAL_OPTIONS_WITH_VALUE: set[str] = {
+    "-R",
+    "--repo",
+    "--hostname",
+    "--config-dir",
+}
+
+GH_GLOBAL_OPTIONS_NO_VALUE: set[str] = {
+    "--help",
+}
 
 # Segment-level regex patterns that require user confirmation.
 CONFIRM_SEGMENT_PATTERNS: list[tuple[str, str]] = [
@@ -508,13 +547,264 @@ def classify_git_semantics(
             return "allow", ""
         return "ask", "git init requires human approval; do not retry by wrapping, reordering, aliasing, or indirect invocation"
 
+    if subcommand == "push":
+        return "ask", "git push requires human approval"
+
+    if subcommand == "pull":
+        return "ask", "git pull mutates the worktree and requires human approval"
+
+    if subcommand == "fetch" and "--prune" in _git_args_after_subcommand(segment):
+        return "ask", "git fetch --prune mutates remote-tracking refs"
+
+    if subcommand == "reset":
+        return "ask", "git reset requires human approval"
+
     if subcommand == "rebase":
         return "ask", "git rebase rewrites branch history"
 
     if subcommand == "cherry-pick":
         return "ask", "git cherry-pick replays commits across branches"
 
+    if subcommand == "stash":
+        return "ask", "git stash mutates worktree state"
+
+    if subcommand == "checkout":
+        return "ask", "git checkout mutates worktree or branch state"
+
     return None
+
+
+def normalized_segment_tokens(segment: str) -> tuple[list[str], int] | None:
+    """Return parsed tokens and the normalized executable index."""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+    start, nested = normalize_command_tokens(tokens)
+    if nested is not None or start >= len(tokens):
+        return None
+    return tokens, start
+
+
+def _git_args_after_subcommand(segment: str) -> list[str]:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return []
+    tokens, start = parsed
+    if command_basename(tokens[start]) != "git":
+        return []
+
+    i = start + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "--":
+            i += 1
+            break
+        if tok in GIT_GLOBAL_OPTIONS_WITH_VALUE:
+            i += 2
+            continue
+        if any(tok.startswith(f"{opt}=") for opt in GIT_GLOBAL_OPTIONS_WITH_VALUE if opt.startswith("--")):
+            i += 1
+            continue
+        if tok in GIT_GLOBAL_OPTIONS_NO_VALUE:
+            i += 1
+            continue
+        if tok.startswith("-"):
+            if "=" in tok:
+                i += 1
+                continue
+            break
+        return tokens[i + 1:]
+    return []
+
+
+def _find_has_mutating_action(segment: str) -> bool:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return False
+    tokens, start = parsed
+    if command_basename(tokens[start]) != "find":
+        return False
+    return any(tok in FIND_MUTATING_FLAGS for tok in tokens[start + 1:])
+
+
+def _has_option(tokens: Sequence[str], options: set[str]) -> bool:
+    return any(tok in options or any(tok.startswith(f"{opt}=") for opt in options if opt.startswith("--")) for tok in tokens)
+
+
+def _skip_gh_globals(tokens: Sequence[str], start: int) -> int:
+    i = start + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "--":
+            return i + 1
+        if tok in GH_GLOBAL_OPTIONS_WITH_VALUE:
+            i += 2
+            continue
+        if any(tok.startswith(f"{opt}=") for opt in GH_GLOBAL_OPTIONS_WITH_VALUE if opt.startswith("--")):
+            i += 1
+            continue
+        if tok in GH_GLOBAL_OPTIONS_NO_VALUE:
+            i += 1
+            continue
+        return i
+    return i
+
+
+def _gh_api_method(args: Sequence[str]) -> str:
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok in ("-X", "--method"):
+            return args[i + 1].upper() if i + 1 < len(args) else ""
+        if tok.startswith("-X") and len(tok) > 2:
+            return tok[2:].upper()
+        if tok.startswith("--method="):
+            return tok.split("=", 1)[1].upper()
+        i += 1
+    return "GET"
+
+
+def classify_gh_semantics(segment: str) -> tuple[str, str] | None:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return None
+    tokens, start = parsed
+    if command_basename(tokens[start]) != "gh":
+        return None
+
+    i = _skip_gh_globals(tokens, start)
+    if i >= len(tokens):
+        return None
+    group = tokens[i]
+    sub = tokens[i + 1] if i + 1 < len(tokens) else ""
+    args = tokens[i + 2:]
+
+    readonly = {
+        ("pr", "view"),
+        ("pr", "status"),
+        ("pr", "list"),
+        ("pr", "checks"),
+        ("pr", "diff"),
+        ("run", "view"),
+        ("run", "list"),
+        ("issue", "view"),
+        ("issue", "list"),
+        ("repo", "view"),
+        ("release", "view"),
+        ("release", "list"),
+    }
+    mutating = {
+        ("pr", "merge"),
+        ("pr", "edit"),
+        ("pr", "close"),
+        ("pr", "reopen"),
+        ("pr", "ready"),
+        ("pr", "comment"),
+        ("run", "rerun"),
+        ("run", "cancel"),
+        ("run", "delete"),
+        ("workflow", "run"),
+        ("workflow", "enable"),
+        ("workflow", "disable"),
+        ("release", "create"),
+        ("release", "edit"),
+        ("release", "delete"),
+        ("issue", "create"),
+        ("issue", "edit"),
+        ("issue", "close"),
+    }
+
+    if (group, sub) in mutating:
+        return "ask", f"gh {group} {sub} mutates GitHub state"
+    if group == "pr" and sub == "review" and _has_option(args, {"--approve", "--request-changes", "--comment"}):
+        return "ask", "gh pr review mutates pull request review state"
+    if group == "api":
+        method = _gh_api_method(tokens[i + 1:])
+        if method == "GET":
+            return "allow", ""
+        return "ask", f"gh api -X {method} mutates or may mutate GitHub state"
+    if (group, sub) in readonly:
+        return "allow", ""
+    return None
+
+
+def classify_npm_semantics(segment: str) -> tuple[str, str] | None:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return None
+    tokens, start = parsed
+    if command_basename(tokens[start]) not in ("npm", "npm-cli.js"):
+        return None
+    if start + 1 >= len(tokens):
+        return None
+
+    cmd = tokens[start + 1]
+    args = tokens[start + 2:]
+
+    if cmd in ("view", "whoami", "ls", "outdated", "explain"):
+        return "allow", ""
+    if cmd == "config" and args[:1] == ["get"]:
+        return "allow", ""
+    if cmd == "pack":
+        if "--dry-run" in args:
+            return "allow", ""
+        return "ask", "npm pack without --dry-run creates an artifact"
+
+    mutating = {"publish", "deprecate", "unpublish", "owner", "access", "install", "uninstall", "version"}
+    if cmd in mutating:
+        return "ask", f"npm {cmd} mutates package or dependency state"
+    if cmd == "dist-tag" and args[:1] == ["add"]:
+        return "ask", "npm dist-tag add mutates registry state"
+    return None
+
+
+def classify_sed_perl_semantics(segment: str) -> tuple[str, str] | None:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return None
+    tokens, start = parsed
+    cmd = command_basename(tokens[start])
+    args = tokens[start + 1:]
+    if cmd == "sed":
+        if any(tok == "-i" or tok.startswith("-i") for tok in args):
+            return "ask", "sed -i edits files in place"
+        if "-n" in args:
+            return "allow", ""
+    if cmd == "perl" and any(tok == "-pi" or tok.startswith("-pi") or tok == "-i" or tok.startswith("-i") for tok in args):
+        return "ask", "perl -pi edits files in place"
+    return None
+
+
+def classify_allow_list(segment: str) -> tuple[str, str] | None:
+    parsed = normalized_segment_tokens(segment)
+    if parsed is None:
+        return None
+    tokens, start = parsed
+    cmd = command_basename(tokens[start])
+
+    if cmd in READ_ONLY_COMMANDS:
+        return "allow", ""
+    if cmd == "find" and not _find_has_mutating_action(segment):
+        return "allow", ""
+
+    subcommand = detect_git_subcommand(segment)
+    if subcommand is not None:
+        args = _git_args_after_subcommand(segment)
+        if subcommand in {"status", "log", "diff", "show", "rev-parse", "ls-files", "blame"}:
+            return "allow", ""
+        if subcommand == "branch" and not any(arg in {"-d", "-D", "-m", "-M", "--delete", "--move"} for arg in args):
+            return "allow", ""
+        if subcommand == "tag" and args and all(arg in {"--list", "-l"} or not arg.startswith("-") for arg in args):
+            return "allow", ""
+        if subcommand == "remote" and args == ["-v"]:
+            return "allow", ""
+        if subcommand == "config" and args[:1] == ["--get"]:
+            return "allow", ""
+
+    return classify_gh_semantics(segment) or classify_npm_semantics(segment) or classify_sed_perl_semantics(segment)
 
 
 def _trusted_git_init_token_path(repo_root: Path) -> Path | None:
@@ -984,14 +1274,44 @@ def classify_command(
     segments = segment_command(raw_command)
 
     for segment in segments:
+        segment_decision = "ask"
+        segment_reason = "command is not on the explicit read-only allow-list"
+
+        def classify_segment(decision: str, reason: str) -> None:
+            nonlocal segment_decision, segment_reason
+            priority = {"allow": 0, "ask": 1, "deny": 2}
+            if (
+                priority.get(decision, 0) > priority.get(segment_decision, 0)
+                or (
+                    decision == "ask"
+                    and segment_decision == "ask"
+                    and segment_reason == "command is not on the explicit read-only allow-list"
+                )
+            ):
+                segment_decision = decision
+                segment_reason = reason
+
         nested_result = classify_nested_shell(segment, repo_root, home, cwd, caws_worktree)
         if nested_result:
-            escalate(*nested_result)
+            classify_segment(*nested_result)
+            escalate(segment_decision, segment_reason)
             continue
 
         git_result = classify_git_semantics(segment, caws_worktree, repo_root)
         if git_result:
-            escalate(*git_result)
+            classify_segment(*git_result)
+
+        gh_result = classify_gh_semantics(segment)
+        if gh_result:
+            classify_segment(*gh_result)
+
+        npm_result = classify_npm_semantics(segment)
+        if npm_result:
+            classify_segment(*npm_result)
+
+        sed_perl_result = classify_sed_perl_semantics(segment)
+        if sed_perl_result:
+            classify_segment(*sed_perl_result)
 
         # Strip quoted regions for pattern matching so that e.g.
         # echo "git reset --hard" does not trigger the git pattern.
@@ -1002,7 +1322,7 @@ def classify_command(
         # --- Hard-block patterns (segment-level) ---
         for pattern, desc in DENY_SEGMENT_PATTERNS:
             if re.search(pattern, segment_surface, re.IGNORECASE):
-                escalate("deny", desc)
+                classify_segment("deny", desc)
 
         # --- Confirm patterns (segment-level) ---
         for pattern, desc in CONFIRM_SEGMENT_PATTERNS:
@@ -1010,25 +1330,31 @@ def classify_command(
                 # Special case: git init in worktree context is allowed
                 if "git init" in desc and caws_worktree:
                     continue
-                escalate("ask", desc)
+                classify_segment("ask", desc)
 
         # --- rm classifier ---
         is_recursive, targets = is_recursive_rm(segment)
         if is_recursive:
             if not targets:
                 # Cannot determine targets — be conservative
-                escalate("ask", "recursive delete with unparseable targets")
+                classify_segment("ask", "recursive delete with unparseable targets")
             else:
                 for target in targets:
                     decision, reason = classify_rm_target(
                         target, repo_root, home, cwd,
                     )
-                    escalate(decision, reason)
+                    classify_segment(decision, reason)
 
         # --- find -delete classifier ---
         find_result = classify_find_delete(segment)
         if find_result:
-            escalate(*find_result)
+            classify_segment(*find_result)
+
+        allow_result = classify_allow_list(segment)
+        if allow_result and segment_decision == "ask" and segment_reason == "command is not on the explicit read-only allow-list":
+            segment_decision, segment_reason = allow_result
+
+        escalate(segment_decision, segment_reason)
 
     return worst_decision, worst_reason
 
