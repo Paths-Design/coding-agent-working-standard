@@ -1,0 +1,135 @@
+id: DOC-MIGRATION-V10-TO-V11-001
+title: 'v10.2 → v11.1 migration guide (operational doctrine for stateful repos)'
+risk_tier: 2
+mode: doc
+lifecycle_state: active
+created_at: '2026-05-21T03:50:00.000Z'
+updated_at: '2026-05-21T03:50:00.000Z'
+blast_radius:
+  modules:
+    - docs/migration-v10-to-v11.md
+    - CLAUDE.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - docs/migration-v10-to-v11.md
+    - CLAUDE.md
+    - .caws/specs/DOC-MIGRATION-V10-TO-V11-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - .github/workflows
+    - scripts
+invariants:
+  - 'The guide does NOT promise compatibility that does not exist. Its opening line states: "v11.1 is the canonical CAWS line for new work. It is not a drop-in replacement for every v10.2 workflow."'
+  - 'Every v10.2 command MUST be classified into exactly one of four buckets: Replaced (different name, equivalent behavior), Renamed (cosmetic), Removed-without-replacement (capability loss), Deferred (planned for v11.2 / v11.3+). Half-states are not permitted. A reader must know what to expect for every v10.2 command they used.'
+  - 'Removed-without-replacement entries are honest. They name the capability that is GONE, do not hand-wave about "future plans," and direct the user to either rebuild the capability themselves, stay on v10.2.x, or accept the loss.'
+  - 'The rollback path is explicit. A team that hits a blocker after upgrading must be able to pin back to caws-cli@^10.2.x via a documented one-liner without losing committed work.'
+  - 'CI migration recipes are concrete. The guide does not say "translate your CI"; it shows the before/after for the common v10.2 commands invoked in pipelines.'
+  - 'Legacy state migration is explicit. The guide names the singleton `.caws/working-spec.yaml` and walks through the conversion to per-feature specs.'
+  - 'The guide is reachable from removed-command errors. Either CLAUDE.md trap or the error-handler suggestion path links to docs/migration-v10-to-v11.md so users who hit "unknown command" can find the migration story.'
+  - 'Doc tier 2 because operational migration guidance is load-bearing for stateful repos. Bad migration guidance can destroy trust or strand projects as effectively as bad code.'
+acceptance:
+  - id: A1
+    given: 'A v10.2 user runs `npm install -g @paths.design/caws-cli@latest` and finds the binary is now v11.1.x.'
+    when: 'They read docs/migration-v10-to-v11.md from the repo or from npm package contents.'
+    then: 'They find an opening section titled clearly (e.g., "What v11 is and is not") that distinguishes "canonical for new work" from "compatibility replacement." They are not misled into thinking it is a drop-in upgrade.'
+  - id: A2
+    given: 'The guide is present after this slice.'
+    when: 'A reader scans the command-mapping section.'
+    then: 'They find a four-bucket table listing EVERY v10.2 command, classified as Replaced / Renamed / Removed-no-replacement / Deferred. No v10.2 command is unaddressed.'
+  - id: A3
+    given: 'A v10.2 team has CI pipelines invoking `caws validate --spec-id X`, `caws waivers list`, and `caws archive Y`.'
+    when: 'They read the CI migration recipes section.'
+    then: 'They find concrete before/after snippets for each: caws validate → caws doctor && caws gates run --spec X; caws waivers → caws waiver; caws archive → caws specs archive. The snippets are runnable, not paraphrased.'
+  - id: A4
+    given: 'A v10.2 project has `.caws/working-spec.yaml` (the singleton).'
+    when: 'They follow the legacy-state migration walkthrough.'
+    then: 'They convert the singleton to a per-feature `caws specs create` call OR archive it explicitly. The guide names this transition step-by-step. `caws init` failure on legacy residue is documented as the expected behavior, not a bug.'
+  - id: A5
+    given: 'A team depends on `caws sidecar drift`, `caws burnup`, or `caws verify-acs` for routine workflow.'
+    when: 'They read the removed-without-replacement section.'
+    then: 'They find an explicit statement: "These advisory tools are not present in v11.1 and have no v11.1 replacement. v11.1 intentionally prioritizes governed lifecycle and release safety over advisory-report parity. Options: (1) stay on v10.2.x, (2) treat replacement design as separate adoption work." The policy statement is verbatim or close to it.'
+  - id: A6
+    given: 'A team hits a blocker after upgrading and needs to revert.'
+    when: 'They read the rollback section.'
+    then: 'They find a one-liner: `npm install -g @paths.design/caws-cli@^10.2`. They find a statement that committed work (specs, events.jsonl, worktrees.json) is NOT corrupted by the v11 cutover — pinning back to v10.2 is safe.'
+  - id: A7
+    given: 'CLAUDE.md exists after this slice.'
+    when: 'A reader scans for migration pointers.'
+    then: 'CLAUDE.md contains at least one prominent pointer to docs/migration-v10-to-v11.md (in the trap section, the doctrine pointer section, or a dedicated migration paragraph). Agents authoring code in this repo are made aware the guide exists.'
+  - id: A8
+    given: 'Multi-agent operators on v10.2 used `caws agents list` and `caws session capsule`.'
+    when: 'They read the deferred section.'
+    then: 'They find an explicit statement: "agents list/show is planned for v11.2; session and parallel are deferred to v11.3+. Workaround: read .caws/worktrees.json directly. Multi-agent operators relying on these commands daily should defer the upgrade until v11.2 ships."'
+non_functional:
+  reliability:
+    - 'Every command-mapping table entry must be VERIFIED against the actual v11.1 surface. If the guide says `caws diagnose → caws doctor`, then `caws doctor` must exist in v11.1.4. A grep for each named v11 command in the guide must match a real command.'
+    - 'No marketing language. Words to avoid: "seamless," "drop-in," "easy upgrade," "battle-tested," "production-ready" (without evidence). The guide must read as operational documentation, not adoption pitch.'
+  performance:
+    - 'Not applicable to a doc slice.'
+contracts:
+  - name: 'four-bucket-coverage'
+    type: behavior
+    description: 'Every v10.2 command is classified into exactly one of: Replaced, Renamed, Removed-without-replacement, Deferred.'
+  - name: 'rollback-one-liner'
+    type: behavior
+    description: 'The guide documents `npm install -g @paths.design/caws-cli@^10.2` as the rollback path and asserts that committed state survives the round trip.'
+  - name: 'no-compatibility-overclaim'
+    type: behavior
+    description: 'Opening sentence makes the canonical-vs-replacement distinction explicit. No section implies v11 is a drop-in for v10.2.'
+  - name: 'advisory-tool-loss-honest'
+    type: behavior
+    description: 'sidecar drift/gaps/provenance, burnup, verify-acs, evaluate, test-analysis are listed under removed-no-replacement with the policy statement that v11.1 prioritizes governed lifecycle over advisory-report parity.'
+  - name: 'ci-recipes-concrete'
+    type: behavior
+    description: 'CI migration section contains runnable before/after snippets, not paraphrased descriptions, for the common pipeline-invoked v10.2 commands.'
+# --- Triage ----------------------------------------------------------------
+#
+# Surfaced by the v11.1.x readiness review (post-PR #6 merge + v99.99.99
+# refusal bake). Verdict: v11.1.x is "safe for new projects, NOT safe
+# for an automated v10.2 → v11.1 migration." Three blockers identified:
+#
+#   1. No migration guide. A real team cannot be expected to read
+#      doctrine docs to learn that `caws validate` is now `caws doctor`.
+#   2. Genuine capability loss for advisory tools (sidecar/burnup/
+#      verify-acs/evaluate/test-analysis). Teams using these will lose
+#      workflow.
+#   3. Multi-agent observability gap (agents list/show / session /
+#      parallel are deferred).
+#
+# This spec addresses (1) directly. (2) and (3) are referenced honestly
+# in the guide; the guide does NOT pretend to resolve them.
+#
+# Risk_tier 2 + mode doc: doc slices are normally tier 3, but
+# operational migration guidance for stateful repos is genuinely
+# load-bearing. Bad migration guidance strands projects. Tier 2
+# reflects the blast radius of misinformation.
+#
+# Activation note: doc-only slice. No publish needed. Can land via the
+# same draft-PR → CI-green → flip-ready flow proven by PR #6 (CAWS-
+# RELEASE-TAG-DRIVEN-001). The release guard will correctly classify
+# this as non-shipping (Layer 3: docs/* is not a shipping path), and
+# Release workflow will not trigger.
+#
+# Out of scope for this slice (explicit):
+#   - Designing v11 replacements for removed advisory tools. That
+#     belongs in a separate CAWS-ADVISORY-SURFACE-POLICY-001 spec
+#     IF a decision is made to rebuild them; the migration guide
+#     names the loss honestly without resolving the long-term
+#     product question.
+#   - Adding error-handler suggestions for removed v10 commands.
+#     Tracked as a follow-up DOC-REMOVED-COMMAND-ERRORS-001 (not
+#     filed by this slice). The migration guide should be findable
+#     from those errors, but improving the error-handler text is
+#     code work, not doc work.
+#   - Restoring agents/session/parallel. Those are v11.2/v11.3+
+#     scope and outside this slice.
+#
+# Activation prerequisites:
+#   - This spec lands on main as an active tier-2 doc spec.
+#   - Branch docs/migration-v10-to-v11 (already created).
+#   - Draft guide → PR → CI → flip-ready → merge.
