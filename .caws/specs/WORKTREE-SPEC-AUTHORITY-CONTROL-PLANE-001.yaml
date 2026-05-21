@@ -1,0 +1,317 @@
+id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
+title: 'CAWS state is control-plane; worktrees carry bindings, not mutable spec authority'
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-kernel/src/scope
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: true
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+invariants:
+  - >-
+    CAWS state is control-plane. Worktrees are execution sandboxes. The
+    control plane is not duplicated; bindings are. The control-plane
+    authority surfaces are `.caws/specs/<id>.yaml`, `.caws/worktrees.json`,
+    `.caws/events.jsonl`, `.caws/policy.yaml`, and `.caws/waivers.yaml`.
+    These files exist exactly once for a CAWS-managed repository; their
+    mutation is the responsibility of the CAWS store layer; they are
+    NEVER carried into a worktree as a mutable copy that CAWS would read
+    as authoritative.
+  - >-
+    A CAWS-managed worktree carries a NON-AUTHORITATIVE binding only.
+    The binding identifies which spec the worktree is currently doing
+    work for, the worktree name, the base branch, the branch name, and
+    a pointer back to the control-plane root. The binding is read-only
+    from the worktree side; mutation of bindings happens through CAWS
+    worktree commands that write the control-plane registry.
+  - >-
+    Worktree-local copies of `.caws/specs/*.yaml` and any legacy
+    `.caws/working-spec.yaml` MUST NOT be read as authoritative by CAWS
+    commands. The CLI's spec resolver, the scope evaluator, the gates
+    runner, and the lifecycle transaction layer all consult the
+    control-plane store, regardless of which checkout's cwd invoked the
+    command.
+  - >-
+    The phrase "specs live on main" is rejected as too branch-centric.
+    The invariant uses "control-plane store" deliberately so that future
+    topologies (dedicated control checkout, daemon-backed store,
+    registry-backed state root) remain consistent with the doctrine.
+    For v11.2 the control-plane store happens to be the root checkout's
+    `.caws/`, but the invariant survives later topology changes.
+  - >-
+    Migration is non-destructive. Pre-v11.2 worktrees created by older
+    CLIs (including the globally installed caws 10.2.x line that exposed
+    this failure mode) have a materialized `.caws/specs/*.yaml` in the
+    worktree filesystem. Repair converts these to the control-plane
+    model idempotently without touching the control-plane spec bytes.
+  - >-
+    Doctor's split-brain diagnostic is ERROR severity (not WARN). Drift
+    between a worktree-local spec copy and the control-plane spec is a
+    governance failure — it indicates an agent or tool edited the wrong
+    file and the next authority decision will be ambiguous. WARN would
+    let work continue against the wrong copy; ERROR forces explicit
+    repair before lifecycle operations proceed.
+  - >-
+    This slice is implementation-scope-bounded to v11.2 and uses
+    sparse-checkout as the lowest-disruption mechanism. `.caws/` directory
+    inversion (where only `.caws/binding.json` exists in the worktree
+    and everything else lives in the control plane) is named as the
+    cleaner v11.3+ architecture, but is NOT a v11.2 deliverable. The
+    sparse-checkout approach makes the control-plane invariant true in
+    practice for v11.2 without rewriting every CLI path that reads
+    `.caws/specs/<id>.yaml`.
+acceptance:
+  - id: A1
+    given: |
+      A CAWS-managed repository with control-plane `.caws/specs/FOO-001.yaml`
+      in `lifecycle_state: active`.
+    when: |
+      A user invokes `caws worktree create wt-foo --spec FOO-001`.
+    then: |
+      The new worktree at `.caws/worktrees/wt-foo/` does NOT contain an
+      editable `.caws/specs/FOO-001.yaml`. The file either does not
+      exist in the worktree's filesystem (sparse-checkout exclusion of
+      `.caws/specs/` configured on the worktree post-add) or is
+      filesystem-tagged read-only by an enforcement mechanism that
+      doctor verifies. The control-plane copy at `<root>/.caws/specs/
+      FOO-001.yaml` is unchanged.
+  - id: A2
+    given: |
+      A worktree created under A1, bound to FOO-001, with cwd inside
+      the worktree.
+    when: |
+      The user invokes `caws scope show <path>` or `caws specs show
+      FOO-001` from the worktree cwd.
+    then: |
+      The CLI resolves the spec from the control-plane path, not from
+      any worktree-local copy. Proof: a test fixture creates a divergent
+      worktree-local spec file (manually, simulating the 10.2 failure
+      mode); the CLI's output bytes match the control-plane spec
+      verbatim, not the worktree-local copy.
+  - id: A3
+    given: |
+      A worktree whose filesystem contains a `.caws/specs/<id>.yaml`
+      whose bytes differ from the control-plane spec for the same id.
+    when: |
+      `caws doctor` runs from any cwd.
+    then: |
+      Doctor reports `worktree.spec_drift` as severity ERROR. The
+      diagnostic names the worktree, the spec id, the control-plane
+      path, the worktree-local path, and the repair command. Exit code
+      reflects ERROR (1, not 0). The diagnostic message explicitly
+      states that authority decisions consult the control-plane file
+      and the worktree-local file is ignored.
+  - id: A4
+    given: |
+      A scope-evaluation invocation under the conditions of A3 (worktree-
+      local spec divergent from control-plane spec for the same id).
+    when: |
+      `caws scope check <path>` evaluates a file the worktree-local
+      spec admits but the control-plane spec refuses.
+    then: |
+      The check refuses the edit with `scope.reject.scope_out` (or the
+      narrower reject rule that applies). Decision provenance names the
+      control-plane spec as the source. The worktree-local copy is not
+      consulted. Equivalent assertions hold for `caws gates run --spec
+      <id>`.
+  - id: A5
+    given: |
+      A worktree bound to FOO-001, with cwd inside the worktree.
+    when: |
+      The user invokes `caws specs close FOO-001 --resolution completed`
+      or `caws scope` amendments that modify the spec's `scope.in`.
+    then: |
+      The lifecycle transaction mutates the control-plane spec ONLY.
+      The worktree's filesystem is unchanged — no spec file appears or
+      changes in the worktree. The event log entry (in `events.jsonl`)
+      is appended to the control-plane event store. A `git status` in
+      the worktree shows no changes from the lifecycle operation.
+  - id: A6
+    given: |
+      The 10.2 failure-mode regression fixture: a CAWS-managed worktree
+      with both a control-plane spec and a manually-created worktree-
+      local spec for the same id, where the worktree-local spec has
+      been edited to admit paths the control-plane spec refuses.
+    when: |
+      The test exercises scope-check, gates-run, doctor's binding
+      validation, and `caws specs show <id>` against this state.
+    then: |
+      Every authority decision matches what the control-plane spec
+      alone would produce. The worktree-local spec has zero observable
+      effect on outcomes. Doctor reports `worktree.spec_drift` ERROR.
+      The test asserts these properties as independent expectations,
+      not as a single composite assertion.
+  - id: A7
+    given: |
+      A pre-v11.2 worktree on disk: a `.caws/worktrees/<name>/` whose
+      filesystem contains a materialized `.caws/specs/<id>.yaml` (the
+      pre-v11.2 default behavior), with the worktree-local spec
+      currently identical to the control-plane spec.
+    when: |
+      The user invokes `caws worktree reconcile <name>` (this command
+      may compose into `caws worktree repair` or stand alone — naming
+      is a v11.2 design decision, but the behavior is required).
+    then: |
+      The worktree's filesystem is converted to the control-plane
+      model: the worktree-local `.caws/specs/<id>.yaml` is removed and
+      sparse-checkout is configured (or the equivalent mechanism). The
+      control-plane spec is unchanged byte-for-byte. The repair is
+      idempotent: running `caws worktree reconcile <name>` a second
+      time produces no changes, no errors, and emits a single
+      `worktree_already_reconciled` (or equivalent) event. The repair
+      refuses to proceed if the worktree-local spec differs from the
+      control-plane spec — that is the A3 ERROR case and requires
+      manual resolution first.
+non_functional:
+  reliability:
+    - >-
+      The control-plane invariant must hold for every CAWS command
+      that reads or writes spec state. Adding a new CAWS command does
+      not weaken the invariant — the kernel/store layer's spec
+      resolver is the only path to authoritative spec bytes.
+    - >-
+      Migration is non-destructive on the control-plane side. The
+      reconcile command refuses to delete or modify control-plane
+      bytes under any condition. Worktree-local bytes that conflict
+      with the control plane are refused-with-diagnostic, not silently
+      overwritten.
+    - >-
+      The sparse-checkout mechanism (or equivalent v11.2 implementation
+      choice) must work on macOS, Linux, and Windows. If sparse-checkout
+      is the chosen mechanism, the v11.2 minimum git version must be
+      explicitly documented (sparse-checkout cone mode requires git
+      2.25+; restricted patterns require 2.27+).
+  performance:
+    - >-
+      Spec resolution from a worktree cwd must not be observably
+      slower than from the control-plane cwd. The resolver walks
+      upward once to find `.caws/`, then reads the spec file from
+      there; no per-call drift check is required.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin: two independent reproductions of the same authority split
+# observed within a single session window (2026-05-21):
+#
+# 1. CAWS itself: the user uploaded tmp/caws-worktree-spec-failure-10.2.txt
+#    (transcript from globally-installed caws 10.2.0) showing the CLI
+#    creating or carrying a worktree-local spec while authority decisions
+#    were still resolved from the main checkout. Split-brain on
+#    governance.
+#
+# 2. Sterling project (different codebase, separate user transcript):
+#    Edit-tool calls with absolute paths to .caws/specs/PROGRAM-FRONTIER-
+#    RECONCILE-01.yaml landed on main's filesystem while the agent
+#    conceptually worked in the worktree. Result: 173-line dirty diff on
+#    main; worktree spec stayed stale; user had to manually pull main's
+#    content into the worktree to recover.
+#
+# 3. This session's WORKTREE-MERGE-A2-FAULT-INJECTION-001 slice
+#    (same CAWS repo): I edited the seam source and test in the main
+#    checkout (where the fresh dist was built), then transplanted to the
+#    worktree branch via a separate write pass. The worktree-guard hook
+#    correctly refused a cp from /tmp to the worktree path, surfacing
+#    the same class of problem. The PR merged cleanly because I caught
+#    it before commit, but the workflow proved the point.
+#
+# Common pattern across all three: the worktree filesystem contains a
+# spec file; an editor (CLI 10.2, agent Edit tool, or human) modifies
+# one copy; authority decisions read the other copy. The fix has to be
+# "don't materialize the spec file into the worktree" — fixing every
+# editor is bypass-prone.
+#
+# Hook-pack note: the worktree-guard hook fires on Bash but not on
+# Edit/Write tool calls. That is the right enforcement boundary for the
+# shell side, but it cannot cover all agent harnesses. The control-plane
+# invariant must be enforced at the kernel/store layer (the spec
+# resolver) AND at the filesystem-materialization layer (don't put the
+# file there in the first place). Defense in depth.
+#
+# Doctrine note: invariants 1-7 in docs/architecture/caws-vnext-command-
+# surface.md describe the kernel/store/shell trinity and event-log
+# authority but do NOT explicitly say "worktrees don't carry mutable
+# spec authority." This slice introduces a new invariant (probably §8
+# or §9 in the post-cutover doctrine) and amends that doctrine doc as
+# part of the implementation work. The doctrine amendment is in
+# blast_radius.modules, not scope.in — the implementation slice will
+# add it; this draft only captures intent.
+#
+# Relationship to other deferred work:
+#
+#   - WORKTREE-NODE-MODULES-001 (or equivalent): the inability to
+#     build dist inside a worktree without npm install is adjacent
+#     ergonomics — caused operational pressure during the WORKTREE-
+#     MERGE-A2 slice but did NOT create the governance split-brain.
+#     Kept separate so this slice does not balloon. Authority lands
+#     first; ergonomics second.
+#
+#   - caws worktree prune / repair / reconcile (deferred to v11.2 per
+#     the doctrine doc): this slice's A7 acceptance defines the
+#     reconcile semantics. The implementation may compose into a
+#     broader worktree repair surface or stand alone — that is a
+#     v11.2 design decision.
+#
+#   - LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (draft): the lifecycle
+#     fault-injection seam landed in v11.1.6 by WORKTREE-MERGE-A2-
+#     FAULT-INJECTION-001 will be reused here for A6 regression
+#     coverage (modify the worktree-local spec; verify no authority
+#     decision is affected).
+#
+# Activation note (DO NOT activate before doctrine alignment):
+#
+# This is the largest of the open follow-up drafts. It bisects the
+# worktree implementation, touches doctor diagnostics, kernel scope
+# evaluation, and the store layer's spec resolver. It also amends
+# vNext doctrine. Activation requires:
+#
+#   1. Doctrine pre-read: confirm that the proposed §8/§9 invariant
+#      ("CAWS state is control-plane; worktrees carry bindings, not
+#      mutable spec authority") is acceptable to the maintainer; this
+#      is a posture decision, not a code change.
+#
+#   2. Implementation-mechanism decision: sparse-checkout vs. directory
+#      inversion. v11.2 recommendation is sparse-checkout. If directory
+#      inversion is preferred, scope and risk_tier both grow.
+#
+#   3. Hooks-policy decision: should the worktree-guard hook also
+#      block Edit/Write on `.caws/specs/<id>.yaml` paths inside a
+#      worktree directory? Defense in depth. Decision shapes hook
+#      pack changes.
+#
+#   4. Migration timeline: how long do pre-v11.2 worktrees stay
+#      forgivable? Doctor ERROR vs. WARN for a freshly-detected
+#      materialized spec depends on the migration window.
+#
+#   5. Risk_tier rationale: filed at tier 3 for draft compliance
+#      (tier 2 requires at least one contract entry, which is filed
+#      empty across the v11.1 spec line; the draft is captured at
+#      tier 3 to load cleanly). Activation slice MUST re-evaluate
+#      tier: this is genuinely a kernel-authority change with broad
+#      blast radius across the scope guard, lifecycle transaction,
+#      and doctor diagnostics. Mode: feature because this introduces
+#      a new doctrine invariant and a new repair command, not just a
+#      fix. The activator should bump to tier 2 and add a real
+#      contracts entry (or amend the v11.2 contracts schema to make
+#      empty arrays valid).
+#
+# Strength language stays mechanism-level. The slice earns three
+# claims: (a) control-plane authority is enforced at the kernel/store
+# layer, (b) new worktrees do not materialize editable spec files, and
+# (c) pre-v11.2 worktrees are repairable idempotently. It does NOT
+# claim universal protection against every agent-harness bypass, does
+# NOT claim the directory-inversion architecture, and does NOT promote
+# this invariant to apply outside CAWS-managed worktrees (a git
+# worktree created without `caws worktree create` is not in scope).
