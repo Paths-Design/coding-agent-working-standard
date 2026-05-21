@@ -32,34 +32,40 @@ scope:
     - packages/caws-cli/src/shell/commands/worktree.ts
 invariants:
   - 'Byte-level invariant. After successful close/merge/destroy of a spec that previously had a `worktree:` field, `grep ''^worktree:'' <spec>.yaml` MUST return no match. An empty-scalar `worktree: ''` is NOT acceptable as an end state — it preserves the same drift surface and lies about the intent.'
+  - 'Honest completion. `caws worktree merge` may only report `auto_closed_spec: <id>` if `closeSpec` actually succeeded AND the closed bytes landed on disk. The merge command MUST NOT claim auto-close when the spec is still in lifecycle_state: active. A merge whose close transaction returns partial_failure_recovered must exit nonzero with LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED and a recovery instruction; it must NOT proceed to append worktree_merged or destroy the worktree.'
+  - 'Event-order honesty. `worktree_merged` may only be emitted if `spec_closed` was successfully emitted for the bound spec. `worktree_destroyed` may only be emitted after both. Reading the events.jsonl chain post-merge must always show this order — never worktree_merged-without-preceding-spec_closed.'
   - 'The clearance happens primarily in `specs-writer.closeSpec`. The merge path already routes auto-closure through closeSpec, so fixing closeSpec fixes the canonical merge-then-close flow at the right semantic moment: the spec ceases being live-bound when it becomes closed.'
   - 'The destroy path is a secondary cleanup path. When `caws worktree destroy <name>` removes a worktree that had a bound spec, the spec''s `worktree:` field must be cleared even if the spec remains active. This handles drift recovery and explicit-destroy flows.'
   - 'Doctor remains strict. An active spec + `worktree:` field + missing registry entry remains a hard error from doctor. This slice does NOT weaken doctor; it makes the lifecycle commands stop creating that drift in the first place.'
-  - 'The fix is purely structural — yaml-patch helper, specs-writer.closeSpec patch ordering, worktrees-writer.destroyWorktree clearance semantics. No shell-command edits, no event-schema changes, no kernel changes.'
+  - 'The fix is structural within the existing module boundary — yaml-patch helper, specs-writer.closeSpec patch ordering + planned-bytes validity, worktrees-writer.destroyWorktree clearance semantics, worktrees-writer.mergeWorktree post-close outcome inspection. No shell-command edits, no event-schema changes. Kernel changes are out of scope UNLESS investigation proves canTransitionSpecWithWorktree must be amended; in that case the kernel change is a separate slice.'
   - 'No new public CLI command in this slice. `caws specs unbind` is attractive but expands public surface and creates another authority transition to specify. The bug is "existing lifecycle operations leave stale bindings," not "users lack an unbind command."'
   - 'Honest atomicity. The clearance is atomic with the spec-YAML patch transaction in closeSpec (single writeFile of the rewritten YAML, single appendEvent). git worktree operations in mergeWorktree are NOT part of that atomic unit; failures after git succeeds surface as typed partial-failure diagnostics.'
 acceptance:
   - id: A1
-    given: 'A spec FEAT-001 is bound to worktree feat-001-wt via bidirectional binding (worktrees.json[feat-001-wt].specId = FEAT-001 AND FEAT-001.yaml has top-level `worktree: feat-001-wt`).'
-    when: '`caws worktree merge feat-001-wt` succeeds.'
-    then: 'After the merge, `grep ''^worktree:'' .caws/specs/FEAT-001.yaml` returns no match. The spec is closed (lifecycle_state: closed, resolution: completed). `caws doctor` does not emit doctor.binding.spec_missing_registry for FEAT-001. The spec_closed event recorded for FEAT-001 includes a `prior_worktree` field in its data block naming `feat-001-wt`.'
+    given: 'A spec FEAT-001 is active and bound to worktree feat-001-wt with a bidirectional binding (worktrees.json[feat-001-wt].specId = FEAT-001 AND FEAT-001.yaml has top-level `worktree: feat-001-wt`). The worktree branch has a committed change to integrate.'
+    when: '`caws worktree merge feat-001-wt` runs to completion.'
+    then: 'ALL of the following hold simultaneously: (1) command exits 0; (2) FEAT-001.yaml has lifecycle_state: closed and resolution: completed; (3) `grep ''^worktree:'' .caws/specs/FEAT-001.yaml` returns no match; (4) events.jsonl contains spec_closed BEFORE worktree_merged BEFORE worktree_destroyed; (5) the spec_closed event includes `prior_worktree: feat-001-wt` in its data block; (6) the worktree_merged event has `auto_closed_spec: true`; (7) command stdout reports `auto_closed_spec: FEAT-001`. The command MUST NOT report auto_closed_spec UNLESS conditions (2) through (6) hold.'
   - id: A2
-    given: 'A spec FEAT-002 is active and has a stale `worktree:` field pointing at a registry entry that no longer exists.'
-    when: '`caws specs close FEAT-002 --resolution completed` is invoked.'
-    then: 'The close transaction flips lifecycle_state to closed AND removes the top-level `worktree:` line as part of the same YAML patch. `grep ''^worktree:'' .caws/specs/FEAT-002.yaml` returns no match. `caws doctor` does not emit doctor.binding.spec_missing_registry for FEAT-002.'
+    given: 'A spec FEAT-002 is active and bound to worktree feat-002-wt. closeSpec is configured (via test harness or actual defect) to return Result<SpecWriterOutcome> with `kind: partial_failure_recovered` — i.e. the close transaction reported a recoverable partial failure.'
+    when: '`caws worktree merge feat-002-wt` is invoked.'
+    then: 'The command exits NONZERO. mergeWorktree MUST NOT append worktree_merged. MUST NOT call destroyWorktree. MUST NOT report auto_closed_spec in stdout. The diagnostic is LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED naming the close failure cause, with a recovery instruction (`Manually run: caws specs close <id> --resolution completed --merge-commit <sha>`). FEAT-002.yaml remains in its current state on disk — no half-written patch.'
   - id: A3
-    given: 'A spec FEAT-003 is bound to worktree feat-003-wt and the spec remains active.'
-    when: '`caws worktree destroy feat-003-wt` is invoked.'
-    then: 'After successful destroy: the registry entry for feat-003-wt is removed (or marked destroyed per existing semantics), AND the spec FEAT-003.yaml no longer has a top-level `worktree:` line. The spec stays active. `caws doctor` does not emit doctor.binding.spec_missing_registry for FEAT-003.'
+    given: 'A spec FEAT-003 is active and has a stale `worktree:` field pointing at a registry entry that no longer exists (no live registry entry — drift state).'
+    when: '`caws specs close FEAT-003 --resolution completed` is invoked.'
+    then: 'The close transaction flips lifecycle_state to closed AND removes the top-level `worktree:` line as part of the same YAML patch. `grep ''^worktree:'' .caws/specs/FEAT-003.yaml` returns no match. The spec_closed event includes `prior_worktree: <name>` in its data block. `caws doctor` does not emit doctor.binding.spec_missing_registry for FEAT-003.'
   - id: A4
-    given: 'A spec FEAT-004 is active with `worktree: feat-004-wt` but no registry entry exists for feat-004-wt (drift state already present).'
+    given: 'A spec FEAT-004 is bound to worktree feat-004-wt and the spec remains active. The worktree has no uncommitted changes.'
+    when: '`caws worktree destroy feat-004-wt` is invoked.'
+    then: 'After successful destroy: the registry entry for feat-004-wt is removed (or marked destroyed per existing semantics), AND FEAT-004.yaml no longer has a top-level `worktree:` line. The spec stays active (lifecycle_state: active). `caws doctor` does not emit doctor.binding.spec_missing_registry for FEAT-004.'
+  - id: A5
+    given: 'A spec FEAT-005 is active with `worktree: feat-005-wt` but no registry entry exists for feat-005-wt (drift state already present, not created by this command).'
     when: '`caws doctor` is invoked BEFORE any close/destroy command runs.'
     then: 'doctor still emits doctor.binding.spec_missing_registry as a hard error. The error message references `caws specs close <id>` as the canonical repair path. doctor.binding strictness is NOT weakened by this slice.'
-  - id: A5
-    given: 'A spec FEAT-005 has no `worktree:` field at all (no prior binding).'
-    when: '`caws specs close FEAT-005 --resolution completed` is invoked.'
-    then: 'Close succeeds. No worktree-clearance attempt is made (or the clearance is a verified no-op). No spurious `prior_worktree` field appears on spec_closed. Backward compatibility with non-worktree-bound specs is preserved.'
   - id: A6
+    given: 'A spec FEAT-006 has no `worktree:` field at all (no prior binding).'
+    when: '`caws specs close FEAT-006 --resolution completed` is invoked.'
+    then: 'Close succeeds. No worktree-clearance attempt is made (or the clearance is a verified no-op). No spurious `prior_worktree` field appears on spec_closed. Backward compatibility with non-worktree-bound specs is preserved.'
+  - id: A7
     given: 'The yaml-patch helper `removeTopLevelScalar(source, ''worktree'')` is called on a spec YAML.'
     when: 'The spec has (a) `worktree: foo` on its own line, (b) `worktree: foo` followed by trailing whitespace, (c) `worktree: foo  # comment`, (d) `worktree:` followed by a block scalar (this should NOT match — top-level scalar only), (e) a nested `worktree:` inside another mapping (this should NOT match — top-level only), (f) no `worktree:` line at all.'
     then: '(a)-(c) match and are removed; (d)-(e) are left intact; (f) is a no-op returning the source unchanged. Removal preserves surrounding whitespace and comments. The helper is byte-precise and does NOT re-serialize the YAML.'

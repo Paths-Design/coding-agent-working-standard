@@ -870,6 +870,31 @@ export function mergeWorktree(
     );
   }
 
+  // WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 invariant 2 (honest completion):
+  // isOk(closeResult) is not enough — closeSpec wraps both `success` and
+  // `partial_failure_recovered` in `ok()`. Only `success` means the closed
+  // bytes actually landed on disk. If close transaction rolled back, the
+  // spec remains active and mergeWorktree must NOT continue to append
+  // worktree_merged or destroy the worktree.
+  if (closeResult.value.kind !== 'success') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
+        {
+          subject: input.name,
+          data: {
+            merge_commit: mergeCommit,
+            spec_id: specId,
+            close_outcome_kind: closeResult.value.kind,
+            close_cause: closeResult.value.kind === 'partial_failure_recovered' ? closeResult.value.cause : undefined,
+            recovery_instruction: `Manually run: caws specs close ${specId} --resolution completed --merge-commit ${mergeCommit}; then: caws worktree destroy ${input.name}`,
+          },
+        }
+      )
+    );
+  }
+
   // Append worktree_merged AFTER spec_closed so the chain reflects
   // the actual order of state transitions.
   const mergedEvent: EventBody = {
