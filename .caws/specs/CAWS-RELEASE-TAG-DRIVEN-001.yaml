@@ -1,32 +1,38 @@
 id: CAWS-RELEASE-TAG-DRIVEN-001
-title: 'Replace branch-push release trigger with tag-push trigger; remove semantic-release race surface'
-risk_tier: 3
+title: 'Tag-driven release for @paths.design/caws-cli (v1: CLI-only; kernel CI publish deferred)'
+risk_tier: 2
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T00:00:00.001Z'
+updated_at: '2026-05-21T02:00:00.000Z'
 blast_radius:
   modules:
     - .github/workflows/release.yml
-    - scripts/multi-package-release.mjs
-    - packages/caws-cli/package.json
-    - packages/caws-kernel/package.json
+    - scripts/release-tag-publish.mjs
     - docs/internal/release-procedure.md
+    - CLAUDE.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - .github/workflows/release.yml
-    - scripts/multi-package-release.mjs
+    - scripts/release-tag-publish.mjs
     - docs/internal/release-procedure.md
     - CLAUDE.md
     - .caws/specs/CAWS-RELEASE-TAG-DRIVEN-001.yaml
+    - packages/caws-cli/CHANGELOG.md
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
     - packages/caws-kernel/src
     - packages/caws-cli/src
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
     - packages/quality-gates
+    - scripts/multi-package-release.mjs
+    - scripts/release-guard-dry-run.mjs
+    - scripts/release-guard-commit-analyzer-check.mjs
+    - scripts/release-guard-scope-audit.mjs
 invariants:
   - 'Release intent is human-explicit and tag-encoded. A package version is published if and only if a corresponding `<package>-v<version>` git tag is pushed to the remote. Branch-push to main does NOT trigger publishes.'
   - 'Failure invariant is ASYMMETRIC (not "tag iff registry"). Pre-publish failure: if any step before `npm publish` fails (build, prepublish smoke, version validation, auth verification), the workflow deletes or quarantines the pushed tag and surfaces a recovery command; the registry remains untouched. Post-publish failure: if `npm publish` succeeds but a downstream ancillary step (GitHub Release creation, registry verification poll, log emission) fails, the workflow MUST NOT delete the tag — the registry is authoritative and the tag is the provenance anchor; the workflow surfaces a precise repair command (e.g., "gh release create <tag> --notes-file <path>") and exits non-zero. Tag-without-registry is an error state requiring explicit repair, never silent success.'
@@ -56,13 +62,13 @@ acceptance:
     when: 'The workflow detects the ancillary failure.'
     then: 'The workflow DOES NOT delete the tag. The tag is the provenance anchor for the published version. The workflow emits a precise repair command (e.g., `gh release create caws-cli-v11.1.5 --notes-file CHANGELOG-11.1.5.md` or equivalent) and exits non-zero. A subsequent manual run of the repair command completes the publish without re-publishing to npm.'
   - id: A5
-    given: 'A maintainer pushes `caws-kernel-v1.1.2`.'
+    given: 'V1 NARROWING: A maintainer pushes `caws-kernel-v1.1.2`.'
     when: 'The Release workflow runs.'
-    then: 'The workflow identifies the target as `@paths.design/caws-kernel` (NOT caws-cli) by parsing the tag prefix. Builds and publishes only the kernel. caws-cli is not touched. All A2 validations apply against the kernel package.json and CHANGELOG.'
+    then: 'The workflow REFUSES with a clear error: "kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/internal/release-procedure.md." No build, no publish, no tag deletion. The tag remains in place (it is a valid future request, just not honored in v1). Exit code is non-zero.'
   - id: A6
-    given: 'A coupled release: kernel 1.1.2 schema change consumed by cli 11.1.5.'
-    when: 'The maintainer pushes `caws-kernel-v1.1.2` first, observes the workflow succeed, then pushes `caws-cli-v11.1.5`.'
-    then: 'Each tag triggers exactly one workflow run. The kernel publish completes (registry has 1.1.2) before the cli publish starts. If the cli publish fails post-publish-of-kernel, the kernel publish is NOT rolled back — coupled-release atomicity is "ordered, observable, repairable," not all-or-nothing. The procedure documentation in A11 explicitly states this contract.'
+    given: 'V1 narrowing applies: kernel publish is manual; cli publish is CI tag-driven.'
+    when: 'The maintainer publishes caws-kernel@1.1.2 manually, verifies registry, then pushes `caws-cli-v11.1.5`.'
+    then: 'The cli tag publish runs. The procedure documentation in A11 explicitly states the v1 narrowing: kernel is manual until a follow-up slice activates kernel CI publish. Coupled-release ordering remains "ordered, observable, repairable" — the maintainer is the orderer in v1.'
   - id: A7
     given: 'A PR is opened with shipping changes per Layer 3 classifier.'
     when: 'PR Quality Gates run.'
@@ -91,8 +97,63 @@ non_functional:
     - 'Tag-deletion permission is verified at workflow init. If `contents: write` is not available (e.g., due to branch/tag protection), the workflow uses the "mark failed, require manual deletion" path with a precise command surfaced to the maintainer. The choice is logged on every run.'
   performance:
     - 'A tag push triggers exactly one workflow run; publish completes in under 5 minutes wall-clock for typical packages.'
-contracts: []
+contracts:
+  - name: 'branch-push-never-publishes'
+    type: behavior
+    description: 'A branch push to main NEVER publishes a package. The release workflow has no `branches: [main]` trigger; only `tags:` triggers.'
+  - name: 'tag-naming-canonical-only'
+    type: behavior
+    description: 'Only canonical `caws-cli-vX.Y.Z` tags trigger a caws-cli publish. Bare `v*` tags and `caws-kernel-v*` tags are EXPLICITLY refused in v1 with a clear error.'
+  - name: 'tag-version-equals-package-json'
+    type: behavior
+    description: 'Tag version must equal `packages/caws-cli/package.json` version at the tag checkout SHA. Mismatch fails before `npm publish`.'
+  - name: 'changelog-section-required'
+    type: behavior
+    description: 'Tag version must have a matching section in `packages/caws-cli/CHANGELOG.md` at the tag checkout SHA. Missing section fails before `npm publish`.'
+  - name: 'pre-publish-failure-deletes-tag'
+    type: behavior
+    description: 'Pre-publish failures (validation, build, smoke) delete the pushed tag via `gh api -X DELETE repos/{owner}/{repo}/git/refs/tags/{tag}`. The registry remains untouched.'
+  - name: 'post-publish-failure-preserves-tag'
+    type: behavior
+    description: 'Post-publish failures (registry verification poll, GitHub Release creation, log emission) PRESERVE the tag. The workflow emits a precise repair command and exits non-zero. npm registry success is treated as irreversible.'
+  - name: 'workflow-never-writes-to-main'
+    type: behavior
+    description: 'The release workflow NEVER writes to `packages/caws-cli/package.json`, `packages/caws-cli/CHANGELOG.md`, any other tracked file, or `main`. No `git push`, no `git commit` operations against the remote main branch from the release workflow.'
+  - name: 'no-semantic-release-on-publish-path'
+    type: behavior
+    description: 'The release workflow contains zero invocations of `semantic-release`. `scripts/multi-package-release.mjs` is NOT called from `release.yml`. The semantic-release dependency may remain in `package.json` for PR-advisory tooling but is not executed on the publish path.'
 # --- Triage ----------------------------------------------------------------
+#
+# V1 NARROWING (locked in by 2026-05-21 implementation directive):
+#
+#   V1 publishes ONLY @paths.design/caws-cli via CI.
+#   V1 ACCEPTS:  `caws-cli-vX.Y.Z`
+#   V1 REFUSES:  bare `v*` tags (no legacy path)
+#   V1 REFUSES:  `caws-kernel-v*` tags with explicit "kernel CI publish
+#                is not enabled yet — publish manually" error.
+#
+#   The implementation is table-driven so kernel can be added in a
+#   follow-up slice without rewriting the workflow. The PACKAGES table
+#   in scripts/release-tag-publish.mjs has ONE entry (caws-cli) and a
+#   refused list including the kernel tag prefix. Adding kernel is a
+#   one-line table change.
+#
+#   Why this is narrower than the original spec scope: adding kernel CI
+#   publish is a NEW release surface (kernel was never published via
+#   CI; all three published versions were manual). Combining "remove
+#   semantic-release from the live CLI path" with "introduce first-ever
+#   kernel CI publishing" multiplies risk on the same slice.
+#
+# SECOND V1 NARROWING: scripts/multi-package-release.mjs is NOT
+#   deleted in this slice. It is REMOVED from the release workflow but
+#   left in place because release-guard advisory scripts
+#   (release-guard-dry-run.mjs, release-guard-commit-analyzer-check.mjs,
+#   release-guard-scope-audit.mjs) import internals from it. Deleting
+#   it now would break PR-time guards while repairing release-time
+#   behavior. A follow-up slice will extract the classifier internals
+#   to scripts/release-guard-lib.mjs and update advisory script
+#   imports, then delete multi-package-release.mjs.
+#
 # Surfaced by the v11.1.x cascade (PRs #3, #1, #4, #5 + manual recovery
 # commits). Three ghost releases in two sessions:
 #
