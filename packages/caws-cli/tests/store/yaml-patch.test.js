@@ -14,6 +14,7 @@
 const {
   setTopLevelScalar,
   insertTopLevelScalarAfter,
+  removeTopLevelScalar,
 } = require('../../dist/store/yaml-patch');
 
 function unwrap(result) {
@@ -284,5 +285,133 @@ describe('A4: byte-level non-destructive close fixture', () => {
     // Sanity: comments survived byte-for-byte.
     expect(bytes).toContain('# Authored: 2026-05-12');
     expect(bytes).toContain('# scope below intentionally minimal');
+  });
+});
+
+// WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 A6: removeTopLevelScalar
+// byte-precision contract.
+describe('removeTopLevelScalar — byte-level invariants (A6)', () => {
+  it('A6.a: removes a simple `key: value` line and preserves surrounding context', () => {
+    const original = [
+      'id: SPEC-001',
+      'title: example',
+      'worktree: feat-001-wt',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    const expected = [
+      'id: SPEC-001',
+      'title: example',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    expect(patched).toBe(expected);
+    // Byte-level invariant: grep '^worktree:' must return no match.
+    expect(/^worktree:/m.test(patched)).toBe(false);
+  });
+
+  it('A6.b: removes a line with trailing whitespace', () => {
+    const original = [
+      'id: SPEC-002',
+      'worktree: feat-002-wt   ',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    expect(/^worktree:/m.test(patched)).toBe(false);
+    expect(patched).toContain('id: SPEC-002');
+    expect(patched).toContain('lifecycle_state: active');
+  });
+
+  it('A6.c: removes a line that has an inline trailing comment (comment leaves with the line)', () => {
+    const original = [
+      'id: SPEC-003',
+      'worktree: feat-003-wt  # bound on 2026-05-20',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    expect(/^worktree:/m.test(patched)).toBe(false);
+    // The inline comment belonged to the field; it leaves with it.
+    expect(patched).not.toContain('bound on 2026-05-20');
+    expect(patched).toContain('id: SPEC-003');
+    expect(patched).toContain('lifecycle_state: active');
+  });
+
+  it('A6.d: refuses when value is a block scalar (key: |) — does NOT remove', () => {
+    const original = [
+      'id: SPEC-004',
+      'worktree: |',
+      '  multi',
+      '  line',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const result = removeTopLevelScalar(original, 'worktree');
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toMatch(/AMBIGUOUS/i);
+  });
+
+  it('A6.e: NO-OP when key appears only nested (with leading whitespace)', () => {
+    const original = [
+      'id: SPEC-005',
+      'lifecycle_state: active',
+      'metadata:',
+      '  worktree: nested-not-top-level',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    // No top-level `worktree:` to remove → source returned unchanged.
+    expect(patched).toBe(original);
+    expect(patched).toContain('  worktree: nested-not-top-level');
+  });
+
+  it('A6.f: NO-OP when key is absent entirely', () => {
+    const original = [
+      'id: SPEC-006',
+      'title: no binding ever',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    expect(patched).toBe(original);
+  });
+
+  it('refuses when key appears more than once at top level', () => {
+    const original = [
+      'id: SPEC-007',
+      'worktree: first',
+      'lifecycle_state: active',
+      'worktree: second',
+      '',
+    ].join('\n');
+    const result = removeTopLevelScalar(original, 'worktree');
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toMatch(/AMBIGUOUS/i);
+  });
+
+  it('preserves CRLF line endings end-to-end', () => {
+    const original =
+      'id: SPEC-008\r\nworktree: feat-008-wt\r\nlifecycle_state: active\r\n';
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    expect(patched).toBe('id: SPEC-008\r\nlifecycle_state: active\r\n');
+  });
+
+  it('preserves comments above and below the removed line', () => {
+    const original = [
+      '# Top-of-file comment',
+      'id: SPEC-009',
+      '# bound to active worktree below',
+      'worktree: feat-009-wt',
+      '# back to other fields',
+      'lifecycle_state: active',
+      '',
+    ].join('\n');
+    const patched = unwrap(removeTopLevelScalar(original, 'worktree'));
+    expect(patched).toContain('# Top-of-file comment');
+    expect(patched).toContain('# bound to active worktree below');
+    expect(patched).toContain('# back to other fields');
+    expect(/^worktree:/m.test(patched)).toBe(false);
   });
 });

@@ -50,6 +50,7 @@ import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
+  removeTopLevelScalar,
   setTopLevelScalar,
 } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
@@ -270,16 +271,19 @@ function patchSpecSetWorktree(
   );
 }
 
-/** Remove `worktree:` from a spec (sets to empty string via patch and
- *  trims). For destroy. */
+/** Remove `worktree:` from a spec by deleting the entire top-level
+ *  line. For destroy and other terminal-binding clearances.
+ *
+ *  Per WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 invariant 1 (byte-level):
+ *    After this patch, `grep '^worktree:' <spec>.yaml` MUST return no
+ *    match. An empty-scalar `worktree: ''` end state was the legacy
+ *    behavior and is no longer acceptable — it preserved the same
+ *    drift surface that this slice closes.
+ *
+ *  No-op when the field is absent (backward-compat with specs that
+ *  never had a binding). */
 function patchSpecClearWorktree(source: string): Result<string> {
-  const hasField = /^worktree:/m.test(source);
-  if (!hasField) return ok(source);
-  // Replace with empty value to keep the surface minimal; future
-  // doctor logic may treat empty as "unset" or we may insert a
-  // remove operation later. For now, set to '' which the kernel
-  // tolerates as no binding.
-  return setTopLevelScalar(source, 'worktree', "''");
+  return removeTopLevelScalar(source, 'worktree');
 }
 
 // ─── createWorktree ──────────────────────────────────────────────────────
@@ -860,6 +864,31 @@ export function mergeWorktree(
             spec_id: specId,
             close_errors: closeResult.errors.map((d) => d.message),
             recovery_instruction: `Manually run: caws specs close ${specId} --resolution completed --merge-commit ${mergeCommit}`,
+          },
+        }
+      )
+    );
+  }
+
+  // WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 invariant 2 (honest completion):
+  // isOk(closeResult) is not enough — closeSpec wraps both `success` and
+  // `partial_failure_recovered` in `ok()`. Only `success` means the closed
+  // bytes actually landed on disk. If close transaction rolled back, the
+  // spec remains active and mergeWorktree must NOT continue to append
+  // worktree_merged or destroy the worktree.
+  if (closeResult.value.kind !== 'success') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
+        {
+          subject: input.name,
+          data: {
+            merge_commit: mergeCommit,
+            spec_id: specId,
+            close_outcome_kind: closeResult.value.kind,
+            close_cause: closeResult.value.kind === 'partial_failure_recovered' ? closeResult.value.cause : undefined,
+            recovery_instruction: `Manually run: caws specs close ${specId} --resolution completed --merge-commit ${mergeCommit}; then: caws worktree destroy ${input.name}`,
           },
         }
       )

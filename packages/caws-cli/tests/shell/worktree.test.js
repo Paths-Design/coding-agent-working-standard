@@ -384,3 +384,136 @@ describe('A10: no working-spec.yaml writes', () => {
     expect(fs.existsSync(workingSpecPath)).toBe(false);
   });
 });
+
+// ============================================================
+// WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 — terminal-transition
+// clearance of spec.worktree binding.
+// ============================================================
+describe('WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 — spec.worktree clearance on terminal transitions', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setupRepoWithSpec('wt-wmcsb-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('A1: caws worktree merge clears spec.worktree (byte-level: no ^worktree: remains) and records prior_worktree on spec_closed', () => {
+    // Create + bind worktree.
+    capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'feat-001-wt', specId: 'FEAT-001',
+    });
+    const specPath = path.join(cawsDir, 'specs/FEAT-001.yaml');
+    let specContent = fs.readFileSync(specPath, 'utf8');
+    expect(/^worktree: feat-001-wt$/m.test(specContent)).toBe(true);
+
+    // Add commit so merge has something to integrate.
+    const wtPath = path.join(cawsDir, 'worktrees/feat-001-wt');
+    fs.writeFileSync(path.join(wtPath, 'a.txt'), 'a');
+    execFileSync('git', ['-C', wtPath, 'add', 'a.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'add a']);
+
+    // Merge — this triggers auto-close path via closeSpec.
+    const r = capture(runWorktreeMergeCommand, { cwd: repoRoot, name: 'feat-001-wt' });
+    expect(r.code).toBe(0);
+
+    // Byte-level invariant: grep '^worktree:' returns no match.
+    specContent = fs.readFileSync(specPath, 'utf8');
+    expect(/^worktree:/m.test(specContent)).toBe(false);
+
+    // Spec is closed. Match `lifecycle_state: closed` tolerant of whitespace.
+    expect(/^lifecycle_state:\s*closed\b/m.test(specContent)).toBe(true);
+    expect(/^resolution:\s*completed\b/m.test(specContent)).toBe(true);
+
+    // spec_closed event includes prior_worktree.
+    const events = readEvents(cawsDir);
+    const specClosed = events.find(e => e.event === 'spec_closed' && e.spec_id === 'FEAT-001');
+    expect(specClosed).toBeDefined();
+    expect(specClosed.data.prior_worktree).toBe('feat-001-wt');
+  });
+
+  it('A2: caws specs close on an active spec with a stale worktree: binding clears the binding in the same YAML patch', () => {
+    // Create + bind, then manually delete the worktree directory (simulating
+    // `git worktree remove` outside CAWS or another drift cause). We leave
+    // the spec's worktree: field present + the registry entry; closeSpec
+    // must clear the spec field.
+    capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'feat-001-wt', specId: 'FEAT-001',
+    });
+    const specPath = path.join(cawsDir, 'specs/FEAT-001.yaml');
+    expect(/^worktree: feat-001-wt$/m.test(fs.readFileSync(specPath, 'utf8'))).toBe(true);
+
+    // Run closeSpec directly. This bypasses the merge path; tests A2's
+    // drift-recovery case.
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot,
+      id: 'FEAT-001',
+      resolution: 'completed',
+      reason: 'A2 test — close active spec with stale worktree binding',
+    });
+    expect(r.code).toBe(0);
+
+    // Byte-level invariant.
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(/^worktree:/m.test(after)).toBe(false);
+    expect(/^lifecycle_state: closed$/m.test(after)).toBe(true);
+
+    // spec_closed event includes prior_worktree (binding was cleared).
+    const events = readEvents(cawsDir);
+    const specClosed = events.find(e => e.event === 'spec_closed' && e.spec_id === 'FEAT-001');
+    expect(specClosed).toBeDefined();
+    expect(specClosed.data.prior_worktree).toBe('feat-001-wt');
+  });
+
+  it('A3: caws worktree destroy on a still-active spec removes the registry entry AND clears spec.worktree (byte-level), spec stays active', () => {
+    capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'feat-001-wt', specId: 'FEAT-001',
+    });
+    const specPath = path.join(cawsDir, 'specs/FEAT-001.yaml');
+    expect(/^worktree: feat-001-wt$/m.test(fs.readFileSync(specPath, 'utf8'))).toBe(true);
+
+    // Destroy without merging. Worktree must be clean — it is, since we
+    // never wrote to it.
+    const r = capture(runWorktreeDestroyCommand, { cwd: repoRoot, name: 'feat-001-wt' });
+    expect(r.code).toBe(0);
+
+    // Byte-level invariant on spec.
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(/^worktree:/m.test(after)).toBe(false);
+
+    // Spec remains active (destroy does not auto-close).
+    expect(/^lifecycle_state: active$/m.test(after)).toBe(true);
+
+    // Registry no longer has the active entry (may have status: destroyed
+    // as an audit record — either way, no live binding).
+    const registry = readRegistry(cawsDir);
+    const entry = registry.worktrees ? registry.worktrees['feat-001-wt'] : registry['feat-001-wt'];
+    // Accept either absent or marked destroyed; the contract is no live binding.
+    if (entry !== undefined) {
+      expect(entry.status).toBe('destroyed');
+    }
+  });
+
+  it('A5: closeSpec on a spec with NO prior worktree binding works (no spurious prior_worktree, no errors)', () => {
+    // The setupRepoWithSpec helper created FEAT-001 with NO worktree binding.
+    // Confirm the precondition.
+    const specPath = path.join(cawsDir, 'specs/FEAT-001.yaml');
+    expect(/^worktree:/m.test(fs.readFileSync(specPath, 'utf8'))).toBe(false);
+
+    // Close it.
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot,
+      id: 'FEAT-001',
+      resolution: 'completed',
+      reason: 'A5 test — close spec with no prior binding',
+    });
+    expect(r.code).toBe(0);
+
+    // Still no worktree line.
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(/^worktree:/m.test(after)).toBe(false);
+    expect(/^lifecycle_state: closed$/m.test(after)).toBe(true);
+
+    // spec_closed event must NOT include prior_worktree.
+    const events = readEvents(cawsDir);
+    const specClosed = events.find(e => e.event === 'spec_closed' && e.spec_id === 'FEAT-001');
+    expect(specClosed).toBeDefined();
+    expect(specClosed.data.prior_worktree).toBeUndefined();
+  });
+});
