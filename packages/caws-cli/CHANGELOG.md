@@ -1,3 +1,65 @@
+## [11.1.6](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.5...caws-cli-v11.1.6) (2026-05-21)
+
+Calibrates the Claude Code hook pack's command classifier
+(`DANGER-LATCH-CALIBRATION-001`). The shipped template at
+`templates/hook-packs/claude-code/classify_command.py` gains an explicit
+allow-list for documented read-only inspection and search commands,
+plus hybrid fail-closed semantics for the three governed command
+families (`git`, `gh`, `npm`).
+
+### Features
+
+* **hook-packs/classify_command:** add explicit `ALLOW` configuration
+  for read-only file inspection (`tail`, `head`, `cat`, `less`, `more`,
+  `wc`, `stat`, `file`, `du`, `df`, `ls`, `tree`), read-only search
+  (`grep`, `rg`, observational `find`), read-only `git` subcommands
+  (`status`, `log`, `diff`, `show`, read-only `branch`/`tag`/`config`,
+  `remote`, `rev-parse`, `ls-files`, `blame`), read-only `gh`
+  subcommands (PR/run/issue/repo/release view-list-status-checks-diff
+  plus `gh api` when the HTTP method is GET), and read-only `npm`
+  subcommands (`view`, `whoami`, `config`, `ls`, `outdated`, `explain`,
+  `pack --dry-run`).
+* **hook-packs/classify_command:** add hybrid fail-closed default for
+  `git`, `gh`, `npm` families. An unknown subcommand (not on the
+  allow-list and not matched by any deny or confirm pattern) now
+  resolves to `ask` instead of the previous `allow` fall-through.
+  Non-governed commands retain the existing default.
+* **hook-packs/classify_command:** add PATH-spoof protection. Hyphenated
+  variants like `gh-something`, `git-something`, `npm-something` are
+  treated as suspicious shadowing of the governed families and
+  resolve to `ask`. Closes the spec's anchoring invariant.
+* **hook-packs/classify_command:** add a generic pipe-to-shell deny
+  pattern. Any executable command piped into a shell interpreter
+  now resolves to `deny`, where previously only `curl`-and-`wget`
+  specific variants did. Quote-safety is preserved by the existing
+  `strip_quoted_regions` upstream pass, so dangerous fixture text
+  inside quoted strings, heredoc bodies, or commit-message arguments
+  does not false-positive.
+* **hook-packs/classify_command:** extend `classify_find_delete` to
+  recognize `-execdir`, `-fprint`, `-fprintf`, `-fprint0`, `-ok`,
+  and `-okdir` as mutating action flags in addition to the existing
+  `-exec` and `-delete`.
+
+### Test coverage
+
+79 acceptance fixtures in `tests/hook-packs/classify_command_calibration.test.js`
+cover all 11 spec acceptance criteria (A1–A11) plus negative
+fixtures for quote-safety, wrapper transparency, command substitution
+escalation, and anchoring. Each fixture shells out to the real
+classifier and asserts on parsed JSON output — no mocking.
+
+### Out of scope
+
+* Universal fail-closed (flipping the classifier's global default
+  from `allow` to `ask`) is deferred. Filed as
+  `UNIVERSAL-FAIL-CLOSED-001` (concept; not yet created).
+* Stale v10 command references in `templates/CLAUDE.md` and
+  `templates/.claude/rules/worktree-isolation.md` will be addressed
+  by `TEMPLATES-V11-COMMAND-REFRESH-001` (concept; not yet created).
+* Maintainer-local `.claude/hooks/classify_command.py` is NOT
+  modified by this slice — it is a maintainer surface that consumers
+  do not see. The shipped template is the only target.
+
 ## [11.1.5](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.4...caws-cli-v11.1.5) (2026-05-21)
 
 First canonical tag-driven release under `CAWS-RELEASE-TAG-DRIVEN-001` v1.
