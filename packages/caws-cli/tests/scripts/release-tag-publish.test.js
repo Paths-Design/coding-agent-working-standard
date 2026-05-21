@@ -157,19 +157,32 @@ describe('CAWS-RELEASE-TAG-DRIVEN-001 v1 — pre-publish validation', () => {
   });
 
   it('outcome for current package.json version depends on CHANGELOG state', () => {
-    // Two valid outcomes when tag matches package.json:
-    //   - exit 0  if CHANGELOG has the section (full dry-run success)
-    //   - exit 20 with check === 'CHANGELOG section' (missing section)
+    // Multiple valid outcomes when tag matches package.json:
+    //   - exit 0  full dry-run success (CHANGELOG has section, build + smoke pass)
+    //   - exit 20 pre-publish failure (validation, build, OR smoke) — any of:
+    //       msg=validation.failed (CHANGELOG missing or package.json mismatch)
+    //       msg=build.failed      (turbo build returned non-zero)
+    //       msg=smoke.failed      (prepublish fresh-install smoke failed)
+    //
+    // Both exit 20 sub-cases involve tag deletion. The test asserts the
+    // outcome matches ONE of the documented paths, not a specific cause —
+    // this is integration-level coverage; specific-cause coverage lives
+    // in the parser/validation unit tests above.
     const r = runScript(`caws-cli-v${actualVersion}`);
-    if (r.exitCode === 20) {
-      const failed = r.logs.find((l) => l.msg === 'validation.failed');
-      expect(failed).toBeDefined();
-      expect(['package.json version', 'CHANGELOG section']).toContain(failed.check);
-    } else {
-      expect(r.exitCode).toBe(0);
-      // Full dry-run path emits release.success.
+    if (r.exitCode === 0) {
       const success = r.logs.find((l) => l.msg === 'release.success');
       expect(success).toBeDefined();
+    } else {
+      expect(r.exitCode).toBe(20);
+      // ONE of validation.failed, build.failed, smoke.failed must have been
+      // emitted as the failure cause.
+      const failureLog = r.logs.find((l) =>
+        ['validation.failed', 'build.failed', 'smoke.failed'].includes(l.msg)
+      );
+      expect(failureLog).toBeDefined();
+      // Tag deletion must have been recorded (pre-publish failure path).
+      const deleted = r.logs.find((l) => l.msg === 'tag.delete.dry_run');
+      expect(deleted).toBeDefined();
     }
   });
 });

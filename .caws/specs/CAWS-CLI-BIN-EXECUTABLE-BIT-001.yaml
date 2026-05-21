@@ -16,6 +16,7 @@ scope:
   in:
     - packages/caws-cli/scripts/build-cli.js
     - packages/caws-cli/tests/scripts/build-cli-bin-mode.test.js
+    - packages/caws-cli/tests/scripts/release-tag-publish.test.js
     - packages/caws-cli/package.json
     - packages/caws-cli/CHANGELOG.md
     - .caws/specs/CAWS-CLI-BIN-EXECUTABLE-BIT-001.yaml
