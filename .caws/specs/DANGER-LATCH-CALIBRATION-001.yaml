@@ -16,6 +16,9 @@ scope:
     - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
     - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
     - .caws/specs/DANGER-LATCH-CALIBRATION-001.yaml
+    # Required to ship the calibration to consumers — published artifact metadata.
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
