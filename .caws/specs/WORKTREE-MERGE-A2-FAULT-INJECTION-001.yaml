@@ -2,9 +2,9 @@ id: WORKTREE-MERGE-A2-FAULT-INJECTION-001
 title: 'Automated regression: mergeWorktree honest-completion on closeSpec partial_failure_recovered (via shared lifecycle fault-injection seam)'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T12:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/lifecycle-transaction.ts
@@ -15,6 +15,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/tests/store/worktree-merge-a2-fault-injection.test.js
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
     - .caws/specs/WORKTREE-MERGE-A2-FAULT-INJECTION-001.yaml
   out:
     - .caws/policy.yaml
