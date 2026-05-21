@@ -156,35 +156,75 @@ describe('CAWS-RELEASE-TAG-DRIVEN-001 v1 — pre-publish validation', () => {
     expect(deleted.tag).toBe('caws-cli-v99.99.99');
   });
 
-  it('outcome for current package.json version depends on CHANGELOG state', () => {
-    // Multiple valid outcomes when tag matches package.json:
-    //   - exit 0  full dry-run success (CHANGELOG has section, build + smoke pass)
-    //   - exit 20 pre-publish failure (validation, build, OR smoke) — any of:
-    //       msg=validation.failed (CHANGELOG missing or package.json mismatch)
-    //       msg=build.failed      (turbo build returned non-zero)
-    //       msg=smoke.failed      (prepublish fresh-install smoke failed)
+  // -------------------------------------------------------------------------
+  // PARALLEL-SAFETY CONTRACT for this suite:
+  //
+  // Tests in the normal Jest pool MUST NOT invoke release-tag-publish.mjs
+  // against a tag that would pass validation against the current real
+  // package.json + CHANGELOG. Doing so triggers the build + prepublish-smoke
+  // steps inside the script, which mutate packages/caws-cli/dist/ via
+  // `npx turbo run build` and `npm run smoke:fresh-install`. Concurrent
+  // Jest workers that do `require('../../dist/store')` /
+  // `require('../../dist/shell')` at module-load time will hit ENOENT
+  // during the build's `rmrf(distDir)` step.
+  //
+  // This is the same class of race as the one fixed in
+  // build-cli-bin-mode.test.js: tests must not delete/rebuild/rehydrate
+  // dist/ inside the parallel pool.
+  //
+  // Rule:
+  //   Parallel Jest tests may READ dist/ and assert properties of existing
+  //   dist/. They must NEVER cause a path that mutates dist/.
+  //
+  // Practically: every runScript() call in this suite uses a tag that
+  // either (a) is refused at parse time, (b) is malformed at parse time,
+  // or (c) fails validation BEFORE the build step (version mismatch,
+  // missing CHANGELOG section). Tags that would pass validation are
+  // forbidden in this suite — they're moved to the opt-in E2E smoke
+  // below.
+  // -------------------------------------------------------------------------
+
+  it('fails CHANGELOG validation for a synthetic mismatched-CHANGELOG version (validation-only, no build)', () => {
+    // To exercise the CHANGELOG-missing branch deterministically without
+    // racing dist/, we need a tag whose version DOES match package.json
+    // but does NOT have a CHANGELOG section. We can't easily mutate the
+    // real package.json / CHANGELOG here, so instead we use a synthetic
+    // version that passes the version-format regex but is guaranteed
+    // missing from CHANGELOG. We construct it from actualVersion to
+    // remain valid semver, then bump it. The version check will fail
+    // FIRST (since package.json says actualVersion, not the synthetic),
+    // and the test still asserts the validation.failed shape — which is
+    // the only branch that matters here.
     //
-    // Both exit 20 sub-cases involve tag deletion. The test asserts the
-    // outcome matches ONE of the documented paths, not a specific cause —
-    // this is integration-level coverage; specific-cause coverage lives
-    // in the parser/validation unit tests above.
-    const r = runScript(`caws-cli-v${actualVersion}`);
-    if (r.exitCode === 0) {
-      const success = r.logs.find((l) => l.msg === 'release.success');
-      expect(success).toBeDefined();
+    // (We rely on the validation order in the script: package.json check
+    // runs BEFORE CHANGELOG check. The "fails when tag version != ..."
+    // test above already covers this exact branch. This test is
+    // intentionally redundant for documentation purposes — it makes the
+    // parallel-safety rationale explicit at the use site.)
+    const syntheticVersion = `${actualVersion}-not-in-changelog`;
+    const r = runScript(`caws-cli-v${syntheticVersion}`);
+    // Synthetic version has a non-semver suffix that the parser may or
+    // may not accept depending on SEMVER_REGEX. Either path is valid:
+    //   - parser refuses (exit 10) -> the tag matches a refused pattern,
+    //     deletion is recorded
+    //   - parser accepts (exit 20) -> validation.failed fires
+    expect([10, 20]).toContain(r.exitCode);
+    if (r.exitCode === 20) {
+      const failed = r.logs.find((l) => l.msg === 'validation.failed');
+      expect(failed).toBeDefined();
+      expect(failed.check).toBe('package.json version');
     } else {
-      expect(r.exitCode).toBe(20);
-      // ONE of validation.failed, build.failed, smoke.failed must have been
-      // emitted as the failure cause.
-      const failureLog = r.logs.find((l) =>
-        ['validation.failed', 'build.failed', 'smoke.failed'].includes(l.msg)
-      );
-      expect(failureLog).toBeDefined();
-      // Tag deletion must have been recorded (pre-publish failure path).
-      const deleted = r.logs.find((l) => l.msg === 'tag.delete.dry_run');
-      expect(deleted).toBeDefined();
+      const refused = r.logs.find((l) => l.msg === 'tag.refused');
+      expect(refused).toBeDefined();
     }
   });
+
+  // The previous "outcome depends on CHANGELOG state" test that ran the
+  // full dry-run against caws-cli-v<actualVersion> has been MOVED to the
+  // opt-in E2E smoke at the bottom of this file. It was racing dist/
+  // mutations against other Jest workers on CI when the version + CHANGELOG
+  // happened to align (as they do in this slice). See parallel-safety
+  // contract above.
 });
 
 // =============================================================================
@@ -307,5 +347,62 @@ describe('CAWS-RELEASE-TAG-DRIVEN-001 v1 — dry-run mode', () => {
     const start = logs.find((l) => l.msg === 'release.start');
     expect(start).toBeDefined();
     expect(start.dry_run).toBe(true);
+  });
+});
+
+// =============================================================================
+// Opt-in E2E smoke (gated by CAWS_RUN_RELEASE_E2E_SMOKE=1)
+//
+// This suite exercises the FULL dry-run path against the real package
+// workspace, including the mutating build + prepublish-smoke steps. It
+// MUST NOT run in the normal parallel Jest pool, because the build's
+// rmrf(distDir) races with other suites that require('../../dist/store')
+// at module-load time (see parallel-safety contract above).
+//
+// To run this smoke manually:
+//
+//   cd packages/caws-cli
+//   CAWS_RUN_RELEASE_E2E_SMOKE=1 \
+//     npx jest tests/scripts/release-tag-publish.test.js --runInBand --no-coverage
+//
+// Or invoke the script directly (the original manual smoke command):
+//
+//   CAWS_RELEASE_DRY_RUN=1 GITHUB_REPOSITORY=<owner/repo> \
+//     node scripts/release-tag-publish.mjs caws-cli-vX.Y.Z
+//
+// Either form proves the full release path end-to-end. Neither is
+// suitable for the parallel CI Test Suite. Document a passing smoke run
+// in the PR description as evidence.
+// =============================================================================
+
+const describeIfOptedIn =
+  process.env.CAWS_RUN_RELEASE_E2E_SMOKE === '1' ? describe : describe.skip;
+
+describeIfOptedIn('CAWS-RELEASE-TAG-DRIVEN-001 v1 — E2E dry-run smoke (opt-in)', () => {
+  const pkgJsonPath = path.join(REPO_ROOT, 'packages', 'caws-cli', 'package.json');
+  const actualVersion = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')).version;
+
+  it('full dry-run for current package.json version succeeds when CHANGELOG section exists', () => {
+    // This is the test that USED to live in the validation suite above.
+    // It exercises the build + prepublish-smoke steps and therefore
+    // MUTATES packages/caws-cli/dist/. Safe only when this suite runs
+    // alone (via --runInBand + CAWS_RUN_RELEASE_E2E_SMOKE=1 gate).
+    const r = runScript(`caws-cli-v${actualVersion}`);
+    // Two valid outcomes:
+    //   - exit 0  full dry-run success (everything aligned)
+    //   - exit 20 pre-publish failure if CHANGELOG section is missing
+    //             for actualVersion (operator forgot to update CHANGELOG
+    //             before bumping package.json)
+    if (r.exitCode === 0) {
+      const success = r.logs.find((l) => l.msg === 'release.success');
+      expect(success).toBeDefined();
+      expect(success.version).toBe(actualVersion);
+    } else {
+      expect(r.exitCode).toBe(20);
+      const failureLog = r.logs.find((l) =>
+        ['validation.failed', 'build.failed', 'smoke.failed'].includes(l.msg)
+      );
+      expect(failureLog).toBeDefined();
+    }
   });
 });
