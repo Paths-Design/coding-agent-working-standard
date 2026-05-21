@@ -222,6 +222,56 @@ function buildRecoveryInstruction(
   return lines.join('\n');
 }
 
+// ─── Fault-injection seam (WORKTREE-MERGE-A2-FAULT-INJECTION-001) ────────
+//
+// Test-only seam that allows tests to simulate the partial_failure_recovered
+// outcome (state writes succeed, event append fails, rollback succeeds)
+// without sabotaging the filesystem or hand-rolling a bad event payload.
+//
+// Production-refusal contract: the seam is unreachable unless one of
+//   - process.env.NODE_ENV === 'test'
+//   - process.env.JEST_WORKER_ID is defined
+// is true. In any other environment the env var is silently ignored.
+//
+// Activation: set CAWS_TEST_INJECT_LIFECYCLE_FAULT to a JSON string
+// matching { eventMatch: string; cause?: string }. The seam fires the
+// FIRST time a planned event's `event` field equals `eventMatch` during
+// step-4 (event-append). When fired, the seam rolls back the writes
+// that step 3 already applied (reverse order, snapshot-restore) and
+// returns ok({ kind: 'partial_failure_recovered', cause, rolledBack }).
+//
+// The seam is intentionally SHARED — same shape will satisfy future
+// regressions for specs.close, worktree.create, claim.takeover, and
+// bridge claims (the broader scope tracked by
+// LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001).
+
+interface InjectedFault {
+  readonly eventMatch: string;
+  readonly cause: string;
+}
+
+function readInjectedFault(): InjectedFault | null {
+  const isTestEnv =
+    process.env.NODE_ENV === 'test' ||
+    process.env.JEST_WORKER_ID !== undefined;
+  if (!isTestEnv) return null;
+  const raw = process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT;
+  if (raw === undefined || raw.length === 0) return null;
+  try {
+    const parsed = JSON.parse(raw) as { eventMatch?: unknown; cause?: unknown };
+    if (typeof parsed.eventMatch !== 'string' || parsed.eventMatch.length === 0) {
+      return null;
+    }
+    const cause =
+      typeof parsed.cause === 'string' && parsed.cause.length > 0
+        ? parsed.cause
+        : 'CAWS_TEST_INJECT_LIFECYCLE_FAULT';
+    return { eventMatch: parsed.eventMatch, cause };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run a lifecycle transaction.
  *
@@ -336,11 +386,29 @@ export function runLifecycleTransaction(
 
   // Step 4: append events through appendEvent (the SOLE v11 events
   // writer). On any failure, attempt rollback.
+  //
+  // Test-only fault-injection seam (WORKTREE-MERGE-A2-FAULT-INJECTION-001):
+  // when CAWS_TEST_INJECT_LIFECYCLE_FAULT names an event matching the
+  // first planned event, simulate the event-append failure path so tests
+  // can assert composed-lifecycle honest-completion behavior. The seam
+  // is guarded by NODE_ENV/JEST_WORKER_ID; in production code paths,
+  // readInjectedFault() returns null regardless of the env var.
+  const injectedFault = readInjectedFault();
   const appendedEvents: ChainedEvent[] = [];
   for (let i = 0; i < plan.events.length; i++) {
     const body = plan.events[i];
     if (!body) continue;
-    const result = appendEvent(plan.cawsDir, body);
+    const shouldInject =
+      injectedFault !== null && body.event === injectedFault.eventMatch;
+    const result = shouldInject
+      ? err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+            `Test fault-injection seam fired for event "${body.event}": ${injectedFault.cause}`,
+            { subject: body.event, data: { injected_cause: injectedFault.cause } }
+          )
+        )
+      : appendEvent(plan.cawsDir, body);
     if (!result.ok) {
       // Roll back all writes. Reverse order so latest writes are
       // restored to their pre-transaction state first.
