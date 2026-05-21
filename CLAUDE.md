@@ -57,6 +57,10 @@ These patterns waste scope-strike budget and force unbinds/scope rewrites mid-im
 
 5. **Kernel-change escape clause must be explicit.** If your spec excludes `packages/caws-kernel/src` and investigation later proves a kernel-side change is necessary (e.g., adding a property to an event schema), the spec must be amended to add the specific kernel file to `scope.in` before the edit. The scope guard treats `packages/caws-kernel/src` as a literal prefix match — adding `packages/caws-kernel/src/schemas/events/spec_closed.v1.json` to `scope.in` admits that file specifically while leaving the rest of the kernel out.
 
+6. **`non_functional` only admits `reliability` and `performance`.** Adding `observability`, `security`, `maintainability`, or any other top-level key under `non_functional:` produces `spec.schema.violation: Unknown field "..." is not permitted`. Observability concerns belong under `reliability`. If you need a distinct surface, file a separate spec for it.
+
+7. **Never push to main while a release workflow is running.** The current release pipeline checks out main at its trigger SHA, computes "next version" from commit messages, generates CHANGELOG, bumps `package.json`, tags, then tries to push back. Any commit on main during that window causes semantic-release to refuse with "branch is behind remote." Wait for the release run to complete (or wait for `CAWS-RELEASE-TAG-DRIVEN-001` to land, which replaces this race-prone model with tag-driven publishing).
+
 ## Scope-guard strike state (avoid stale lockouts)
 
 The scope-guard strike counter is **session-global and accumulative**, not per-file or per-spec. Two important behaviors:

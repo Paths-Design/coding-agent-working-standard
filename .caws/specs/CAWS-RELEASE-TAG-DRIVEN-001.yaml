@@ -1,0 +1,181 @@
+id: CAWS-RELEASE-TAG-DRIVEN-001
+title: 'Replace branch-push release trigger with tag-push trigger; remove semantic-release race surface'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T00:00:00.000Z'
+blast_radius:
+  modules:
+    - .github/workflows/release.yml
+    - scripts/multi-package-release.mjs
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
+    - docs/internal/release-procedure.md
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .github/workflows/release.yml
+    - scripts/multi-package-release.mjs
+    - docs/internal/release-procedure.md
+    - CLAUDE.md
+    - .caws/specs/CAWS-RELEASE-TAG-DRIVEN-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - packages/quality-gates
+invariants:
+  - 'Release intent is human-explicit and tag-encoded. A package version is published if and only if a corresponding `<package>-v<version>` (or equivalent) git tag is pushed to the remote. Branch-push to main does NOT trigger publishes.'
+  - 'No ghost releases. Either the tag exists AND the npm registry has that version, OR neither exists. The workflow must not create one without the other. If npm publish fails, the workflow must NOT push the tag (or must delete it on failure).'
+  - 'No semantic-release-driven version bumps from CI. The current pipeline (semantic-release + multi-package-release.mjs) computes the next version from commit messages and PUSHES a `chore(release): @paths.design/caws-cli@X.Y.Z` commit back to main. That push race against contributors is the structural cause of three ghost releases in the v11.1.x cascade. Replace with: humans tag deliberately; CI publishes the tagged version verbatim.'
+  - 'Release-guard layers are preserved as PR-time CI, not release-time. Layer 1 (releaseRules deny-list), Layer 2 (workflow trigger paths), and Layer 3 (shipping-file classifier) become DRY-RUN advisory checks on every PR via the existing release-guard-dry-run.mjs and release-guard-commit-analyzer-check.mjs harnesses. Their job is to tell reviewers what a release WOULD do; the human decides whether to tag.'
+  - 'CHANGELOG generation is decoupled from publishing. The current pipeline conflates "compute next version from commits" + "generate CHANGELOG" + "publish to npm" into one transaction. This slice separates them: a `scripts/changelog-update.mjs` (new or extracted from existing) generates CHANGELOG fragments locally before tag-push; the tag-push triggers only the npm publish.'
+  - 'Multi-package tagging convention is unambiguous. The current `v11.1.4` tag does not say which package it refers to. New convention: `caws-cli-v11.1.4` and `caws-kernel-v1.1.1`. The workflow parses the tag to determine package + version; legacy `v*` tags (back-compat for caws-cli only) are still admitted with a deprecation warning.'
+  - 'Tarball-truth and release-guard scope-audit remain hard CI gates on every PR. The substrate verification this cascade relied on (PR #3''s tarball-truth hard-block, PR #1''s incident-class harnesses) does NOT regress with this slice.'
+acceptance:
+  - id: A1
+    given: 'A commit lands on main via PR merge. The commit touches packages/caws-cli/src.'
+    when: 'No `caws-cli-v*` tag is pushed.'
+    then: 'No release workflow runs. No npm publish happens. CHANGELOG is not updated. Branch-push triggers nothing release-related.'
+  - id: A2
+    given: 'A maintainer decides to release caws-cli at version 11.1.5.'
+    when: 'They run `git tag caws-cli-v11.1.5 -m "..."` followed by `git push origin caws-cli-v11.1.5`.'
+    then: 'The Release workflow runs once. It checks out the tag, builds the caws-cli package, runs prepublishOnly (fresh-install smoke), runs `npm publish` with the bypass-2FA token. On success: npm registry has 11.1.5, the tag remains on origin, a GitHub Release is created with the tag''s changelog. On failure: the tag is DELETED from origin (or the workflow marks it as failed and surfaces a recovery instruction); npm registry state is unchanged.'
+  - id: A3
+    given: 'A maintainer pushes a tag `caws-kernel-v1.1.2`.'
+    when: 'The Release workflow runs.'
+    then: 'The workflow correctly identifies the target as `@paths.design/caws-kernel`, NOT caws-cli. Builds only the kernel, publishes only the kernel. caws-cli is not touched.'
+  - id: A4
+    given: 'Three release runs are forced in a row (token race testing).'
+    when: 'The workflow runs.'
+    then: 'No ghost releases. After all three runs settle, either: (a) all three tags exist on origin AND all three versions exist on npm registry (success), OR (b) any failed run shows no orphan state — failed tags are removed or marked, and registry has no half-published versions. The invariant is: tag presence implies registry presence, always.'
+  - id: A5
+    given: 'A PR is opened that proposes shipping changes per Layer 3 classifier.'
+    when: 'PR Quality Gates run.'
+    then: 'The release-guard dry-run advisory runs and reports what a tag-push for this commit would publish. It does NOT publish. It does NOT push a version-bump commit. It is informational only.'
+  - id: A6
+    given: 'A maintainer pushes a legacy `v11.1.6` tag (caws-cli-only convention from the v11.0–v11.1.4 era).'
+    when: 'The workflow runs.'
+    then: 'The workflow accepts the legacy tag for caws-cli ONLY (with a warning emitted in the run log: "Legacy tag format `v*`; future tags should use `caws-cli-v*`"). It does NOT publish caws-kernel from a `v*` tag.'
+  - id: A7
+    given: 'A maintainer accidentally pushes a tag for a package version that already exists on npm (e.g., re-pushing `caws-cli-v11.1.4` after deletion).'
+    when: 'The workflow runs.'
+    then: 'npm publish refuses with E409 (or equivalent). The workflow surfaces the error clearly. No half-state is created. The tag MAY remain (the registry is authoritative; a tag pointing at an already-published version is harmless if intentional, e.g., for re-tagging the same content).'
+  - id: A8
+    given: 'CLAUDE.md and docs/internal/release-procedure.md are present after this slice.'
+    when: 'A maintainer reads them.'
+    then: 'Both documents describe the new tag-driven procedure: (1) verify release-guard-dry-run is happy locally, (2) update CHANGELOG fragments via `scripts/changelog-update.mjs`, (3) commit, (4) tag with the new convention, (5) push tag, (6) verify npm registry shows the new version, (7) verify GitHub Release was created. The old "merge to main and let CI auto-publish" procedure is explicitly retired with a pointer to this spec.'
+non_functional:
+  reliability:
+    - 'Failure modes are honest: tag-push followed by publish failure must NOT leave a tag without a registry entry. Either rollback the tag or fail loud.'
+    - 'No race conditions with concurrent main pushes. Tag-driven trigger is immune to "branch behind remote" semantic-release rejections by construction.'
+    - 'Every release workflow run emits a clear log line naming the tag, the package + version, prepublish smoke verdict, npm publish exit code, and GitHub Release creation result. Observability is a reliability concern.'
+  performance:
+    - 'A tag push triggers exactly one workflow run; publish completes in under 5 minutes wall-clock for typical packages.'
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Surfaced by the v11.1.x cascade (PRs #3, #1, #4, #5 + manual recovery
+# commits). Three ghost releases in two sessions:
+#
+# 1. v11.1.3 attempt 1 (PR #4 merge): EINVALIDNPMTOKEN at npm verify
+#    step. Tag pushed, package.json bumped on main, npm publish never
+#    happened. Recovered by manual local `npm publish` after token
+#    refresh.
+#
+# 2. v11.1.4 attempt 1 (PR #5 merge): semantic-release refused with
+#    "The local branch main is behind the remote one, therefore a new
+#    version won't be published." Root cause: my closure commit
+#    (de3ad9a chore(caws): close WORKTREE-MERGE-CLEARS-SPEC-BINDING-001)
+#    was pushed to main BEFORE the release workflow finished. Workflow
+#    checked out PR #5's merge SHA, saw main was ahead, refused. No
+#    tag created.
+#
+# 3. v11.1.4 attempt 2 (manual chore(release) commit): I bumped versions
+#    + created tag + pushed. CI ran the release workflow, but the
+#    shipping classifier said "no changes since lastTag=v11.1.4 — skip"
+#    because my push had already created the tag. Pre-existing-tag
+#    + same-run-skip race. No publish.
+#
+# In every case, the manual local `npm publish` worked. The CI publish
+# step has never been the reliable one in this two-session arc.
+#
+# The current architecture forces semantic-release to do too much:
+#   - decide the next version from commit messages
+#   - generate CHANGELOG
+#   - bump package.json on main (push back through HTTPS)
+#   - tag the commit
+#   - publish to npm
+#   - create a GitHub Release
+#
+# Each of these steps has its own failure mode. The composition is a
+# multi-stage transaction with no rollback at the seam between "tag +
+# version bump pushed" and "npm publish succeeded". When publish
+# fails, main is left in a half-published state that the next workflow
+# run cannot recover from (because the tag now exists, so the
+# shipping classifier skips).
+#
+# Tag-driven release inverts this:
+#   - Humans (or a deliberate `npm version` + CHANGELOG script) decide
+#     the version and write CHANGELOG locally.
+#   - Humans push the tag deliberately. This is the "I want to publish
+#     this now" signal.
+#   - CI does ONE thing: build the tagged content, run prepublishOnly,
+#     run `npm publish`, create GitHub Release.
+#   - If publish fails, CI deletes the tag from origin (or marks the
+#     run failed without ambiguous side effects). Main is untouched.
+#
+# The release-guard logic stays valuable as PR-time advisory CI: every
+# PR gets the existing release-guard-dry-run.mjs and
+# release-guard-commit-analyzer-check.mjs harnesses telling reviewers
+# what a release-tag for this PR's content would publish. Reviewers
+# decide whether to tag.
+#
+# Open implementation questions (must be answered before flipping
+# the workflow):
+#
+#   1. Tag convention: `caws-cli-v11.1.5` and `caws-kernel-v1.1.2`,
+#      OR `@paths.design/caws-cli@11.1.5` (matches npm), OR keep
+#      `v11.1.5` for caws-cli back-compat plus introduce kernel
+#      variant? Pick one and document.
+#
+#   2. CHANGELOG generation: keep semantic-release's
+#      generateNotes + commit-analyzer, but invoke them in a local
+#      script (`scripts/changelog-update.mjs`), not in CI? Or replace
+#      with conventional-changelog directly? Or human-authored?
+#
+#   3. Tag deletion on publish failure: the workflow needs `contents:
+#      write` permission and must use `gh api` (or git push --delete)
+#      to remove the failed tag. Verify the trusted-publisher / OIDC
+#      setup supports this.
+#
+#   4. Multi-package atomicity: kernel 1.1.1 + cli 11.1.4 had to be
+#      published together because cli depends on kernel. With
+#      tag-driven release, the maintainer pushes two tags
+#      (`caws-kernel-v1.1.1` then `caws-cli-v11.1.4`). If kernel
+#      publish succeeds but cli fails, kernel is on the registry but
+#      cli is not — is that acceptable? Probably yes (cli will pick
+#      up the new kernel on its next attempt), but document the
+#      atomicity contract.
+#
+#   5. GitHub Release body: who writes the changelog text that goes
+#      into the GitHub Release? The CHANGELOG.md fragment for that
+#      version? An auto-generated commit summary? Document.
+#
+#   6. Migration: existing `v11.1.4` and earlier tags follow the old
+#      naming. Document that they remain as historical record;
+#      starting v11.1.5 (or whatever's next), use the new convention.
+#
+# Related follow-up specs (deferred):
+#   - CAWS-CLI-BIN-EXECUTABLE-BIT-001 — chmod dist/index.js to 0755
+#     in build-cli.js. Required because npm install's bin-linking
+#     does it post-publish, but workspace-local installs (CI'') do not.
+#   - CAWS-SCOPE-CAMPAIGN-MODE-001 — union-mode scope guard needs a
+#     "campaign-mode" notion for coordinated active specs in one
+#     branch.
+#   - DANGER-LATCH-CALIBRATION-001 — Bash danger-latch over-fires on
+#     read-only operations like `tail` and on authorized `git push`.
+#   - A2 fault-injection regression test from
+#     WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 (honest-failure path).
