@@ -69,37 +69,59 @@ describe('CAWS-RELEASE-TAG-DRIVEN-001 v1 — tag parser', () => {
     expect(r.exitCode).toBe(20);
   });
 
-  it('refuses bare v* with exit code 10', () => {
+  it('refuses bare v* with exit code 10 AND deletes the tag', () => {
     const r = runScript('v11.1.5');
     expect(r.exitCode).toBe(10);
     const refused = r.logs.find((l) => l.msg === 'tag.refused');
     expect(refused).toBeDefined();
     expect(refused.reason).toMatch(/legacy bare v\*/i);
+    expect(refused.refusal_type).toBe('legacy_bare_v');
+    expect(refused.will_delete).toBe(true);
+    const deleted = r.logs.find((l) => l.msg === 'tag.deleted' && l.after === 'refusal');
+    expect(deleted).toBeDefined();
+    expect(deleted.tag).toBe('v11.1.5');
+    expect(deleted.dry_run).toBe(true);
   });
 
-  it('refuses caws-kernel-v* with exit code 10 and explicit reason', () => {
+  it('refuses caws-kernel-v* with exit code 10 AND deletes the tag', () => {
     const r = runScript('caws-kernel-v1.1.2');
     expect(r.exitCode).toBe(10);
     const refused = r.logs.find((l) => l.msg === 'tag.refused');
     expect(refused).toBeDefined();
     expect(refused.reason).toMatch(/kernel CI publish is not enabled/);
     expect(refused.reason).toMatch(/publish caws-kernel manually/);
+    expect(refused.refusal_type).toBe('refused_prefix');
+    expect(refused.will_delete).toBe(true);
+    const deleted = r.logs.find((l) => l.msg === 'tag.deleted' && l.after === 'refusal');
+    expect(deleted).toBeDefined();
+    expect(deleted.tag).toBe('caws-kernel-v1.1.2');
   });
 
-  it('refuses malformed tag (no valid version suffix)', () => {
+  it('refuses malformed caws-cli-vXXX tag with exit code 10 AND deletes the tag', () => {
     const r = runScript('caws-cli-vabc');
     expect(r.exitCode).toBe(10);
     const refused = r.logs.find((l) => l.msg === 'tag.refused');
     expect(refused).toBeDefined();
     expect(refused.reason).toMatch(/must match X\.Y\.Z/);
+    expect(refused.refusal_type).toBe('malformed_version');
+    expect(refused.will_delete).toBe(true);
+    const deleted = r.logs.find((l) => l.msg === 'tag.deleted' && l.after === 'refusal');
+    expect(deleted).toBeDefined();
   });
 
-  it('refuses unknown tag prefix', () => {
+  it('refuses unknown tag prefix without deleting (defensive path; exit 12)', () => {
+    // "some-other-package-v1.0.0" doesn't match any release trigger pattern.
+    // In practice GitHub Actions wouldn't even invoke the workflow on it;
+    // this asserts the defensive path leaves the tag untouched.
     const r = runScript('some-other-package-v1.0.0');
-    expect(r.exitCode).toBe(10);
+    expect(r.exitCode).toBe(12);
     const refused = r.logs.find((l) => l.msg === 'tag.refused');
     expect(refused).toBeDefined();
     expect(refused.reason).toMatch(/does not match any enabled package prefix/);
+    expect(refused.refusal_type).toBe('unknown_prefix');
+    expect(refused.will_delete).toBe(false);
+    const deleted = r.logs.find((l) => l.msg === 'tag.deleted');
+    expect(deleted).toBeUndefined();
   });
 
   it('refuses empty/missing tag', () => {
@@ -183,10 +205,15 @@ describe('CAWS-RELEASE-TAG-DRIVEN-001 v1 — release.yml shape', () => {
     expect(onBlock.pull_request).toBeUndefined();
   });
 
-  it('has on.push.tags trigger with caws-cli-v* pattern', () => {
+  it('has on.push.tags trigger with all three release patterns', () => {
+    // All three patterns MUST be triggers so the workflow can observe and
+    // refuse non-accepted tags. "Silent non-trigger" is a different contract
+    // from "observed and refused with deletion."
     const onBlock = getOnBlock();
     expect(onBlock.push.tags).toBeDefined();
     expect(onBlock.push.tags).toContain('caws-cli-v*');
+    expect(onBlock.push.tags).toContain('caws-kernel-v*');
+    expect(onBlock.push.tags).toContain('v*');
   });
 
   it('contains no semantic-release invocation', () => {

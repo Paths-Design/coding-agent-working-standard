@@ -44,13 +44,19 @@ name: Release
 on:
   push:
     tags:
+      # All three patterns are TRIGGERS — not just the canonical accepted one.
+      # "Refused via silent non-trigger" is not the same contract as "refused
+      # with explicit deletion." The workflow must observe a refused tag so it
+      # can delete it, emit a structured refusal log, and exit non-zero. That
+      # eliminates the "tag exists, package does not" ambiguity class that
+      # this slice exists to remove.
+      #
+      # caws-cli-v*     accepted candidate; script validates package/version/CHANGELOG
+      # caws-kernel-v*  refused in v1 (kernel CI publish deferred); tag is deleted
+      # v*              refused (legacy bare-v convention); tag is deleted
       - 'caws-cli-v*'
-      # Note: bare v* and caws-kernel-v* are intentionally OMITTED from this
-      # trigger filter. They would still match `v*` as a glob fragment in some
-      # systems, but GitHub Actions tag filters are anchored. To be defensive,
-      # release-tag-publish.mjs refuses them explicitly with a clear error.
-      # Adding kernel CI publish is a single-line table change in that script
-      # plus an additional tag glob here.
+      - 'caws-kernel-v*'
+      - 'v*'
 
 permissions:
   # contents: write — required for tag deletion via gh api on pre-publish

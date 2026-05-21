@@ -41,14 +41,25 @@ run:
 
 ## V1 scope
 
-V1 publishes **only `@paths.design/caws-cli`**. Other tag patterns are refused
-explicitly:
+V1 publishes **only `@paths.design/caws-cli`**. The workflow triggers on three
+tag patterns (`caws-cli-v*`, `caws-kernel-v*`, `v*`) so it can observe and
+explicitly refuse the non-accepted ones; silent non-trigger would leave refused
+tags as false release evidence on origin, which is the ambiguity class this
+slice eliminates.
 
-- **Bare `v*` tags** (legacy convention from v11.0–v11.1.4): refused with a
-  pointer to the new convention. They remain on origin as historical record
-  but no new bare `v*` tag will publish.
-- **`caws-kernel-v*` tags**: refused with "kernel CI publish is not enabled in
-  v1." Kernel still publishes manually (see [Publishing caws-kernel](#publishing-caws-kernel)).
+Refused tags are **DELETED from origin** via `gh api`:
+
+- **Bare `v*` tags** (legacy convention from v11.0–v11.1.4): NEW pushes are
+  refused and the tag is deleted with a pointer to the new convention.
+  **Existing historical `v*` tags on origin are NOT rewritten** — they
+  pre-date this slice and remain as audit record. Only newly-pushed bare-v
+  tags trigger refusal-and-deletion.
+- **`caws-kernel-v*` tags**: refused and deleted with "kernel CI publish is
+  not enabled in v1." The prefix is RESERVED until a future kernel CI publish
+  slice activates it. Kernel still publishes manually (see
+  [Publishing caws-kernel](#publishing-caws-kernel)).
+- **Malformed `caws-cli-v*` tags** (e.g., `caws-cli-vabc`): refused and
+  deleted with a version-format error.
 
 ## Asymmetric failure invariant
 
@@ -56,7 +67,7 @@ Failure handling depends on **when** the failure happens:
 
 | Failure stage | Tag handling | Registry handling |
 |---|---|---|
-| Tag refusal (parse) | Preserved (it's informational) | Untouched |
+| Tag refusal (any refused pattern) | DELETED via `gh api` | Untouched |
 | Pre-publish validation (steps 1–3) | DELETED via `gh api` | Untouched |
 | Build / smoke (steps 4–5) | DELETED | Untouched |
 | `npm publish` non-zero exit (step 6) | DELETED | Untouched (publish did not succeed) |
@@ -159,12 +170,34 @@ gh release view caws-cli-v11.1.5
 
 ## Failure recovery
 
-### Tag refused (exit code 10)
+### Tag refused-and-deleted (exit code 10)
 
-The tag does not match an enabled package prefix. The tag remains; the
-workflow did nothing. Either:
-- Delete the tag (`git push origin :caws-cli-v11.1.5`) if it was a mistake
-- Rename and re-tag with the canonical convention
+The tag matched a release trigger pattern but is not an accepted publish
+target in v1 (bare `v*`, `caws-kernel-v*`, malformed). The workflow has
+already deleted the tag from origin via `gh api`. The registry is untouched.
+To recover, fix the underlying cause and re-tag with the canonical convention:
+
+```bash
+git tag caws-cli-v11.1.5 -m "Release caws-cli 11.1.5"
+git push origin caws-cli-v11.1.5
+```
+
+### Tag refused-but-not-deleted (exit code 11)
+
+The refusal logic ran but the tag-deletion API call failed (unusual — e.g.,
+transient gh api outage). The workflow surfaces the manual repair command:
+
+```bash
+gh api -X DELETE repos/Paths-Design/coding-agent-working-standard/git/refs/tags/<tag>
+```
+
+Run it, then re-tag with the canonical convention if appropriate.
+
+### Defensive refusal (exit code 12)
+
+The tag didn't match any release trigger pattern — the workflow shouldn't
+have observed it. The tag is left untouched. This branch exists for defense
+in depth; you should never see it in practice.
 
 ### Pre-publish failure (exit code 20)
 

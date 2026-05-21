@@ -34,12 +34,18 @@
  *
  * Exit codes:
  *   0   publish + registry verification + GitHub Release all succeeded
- *   10  tag refused (bare v*, caws-kernel-v*, malformed)
+ *   10  tag refused AND deleted (bare v*, caws-kernel-v*, malformed-but-
+ *       matched-a-release-pattern). Registry untouched. Tag removed from
+ *       origin so it cannot create false release evidence.
+ *   11  tag refused but tag deletion ALSO failed. Manual repair: see logs
+ *       for the gh api -X DELETE command.
+ *   12  tag refused and NOT deleted (didn't match any release trigger
+ *       pattern; the workflow shouldn't have run on it — defensive only).
  *   20  pre-publish validation failed (version mismatch, CHANGELOG missing,
- *       build failed, smoke failed); tag was deleted
- *   21  pre-publish failure but tag deletion ALSO failed (manual repair)
+ *       build failed, smoke failed); tag was deleted.
+ *   21  pre-publish failure but tag deletion ALSO failed (manual repair).
  *   30  post-publish failure (registry verify failed, release create failed);
- *       tag preserved, repair command emitted
+ *       tag preserved, repair command emitted.
  */
 
 import { execSync, spawnSync } from 'child_process';
@@ -97,19 +103,30 @@ function logError(msg, extra = {}) {
 // Tag parsing.
 // =============================================================================
 
+// Release trigger patterns mirrored from .github/workflows/release.yml.
+// A tag that matches any of these patterns is something the workflow OBSERVED,
+// even if the script then refuses it. Refused-but-matched-a-trigger tags are
+// DELETED to prevent "tag exists, package does not" ambiguity.
+const RELEASE_TRIGGER_PREFIXES = ['caws-cli-v', 'caws-kernel-v', 'v'];
+
+function tagMatchesAnyReleaseTrigger(tag) {
+  return RELEASE_TRIGGER_PREFIXES.some((prefix) => tag.startsWith(prefix));
+}
+
 function parseTag(tag) {
   // Refused: bare v*
   if (LEGACY_BARE_V_REGEX.test(tag)) {
     return {
       ok: false,
-      code: 10,
+      refusalType: 'legacy_bare_v',
       reason: 'legacy bare v* tag refused. Use the canonical convention: caws-cli-vX.Y.Z',
+      shouldDelete: true,
     };
   }
   // Refused: explicit refused prefixes (e.g., caws-kernel-v*).
   for (const { prefix, reason } of REFUSED_TAG_PREFIXES) {
     if (tag.startsWith(prefix)) {
-      return { ok: false, code: 10, reason };
+      return { ok: false, refusalType: 'refused_prefix', reason, shouldDelete: true };
     }
   }
   // Match against enabled packages.
@@ -120,17 +137,24 @@ function parseTag(tag) {
       if (!SEMVER_REGEX.test(version)) {
         return {
           ok: false,
-          code: 10,
+          refusalType: 'malformed_version',
           reason: `tag "${tag}" has invalid version segment "${version}" — must match X.Y.Z`,
+          shouldDelete: true,
         };
       }
       return { ok: true, pkg, version };
     }
   }
+  // Unknown prefix. Only delete if it matched one of the release trigger
+  // patterns (defensive: the workflow shouldn't have been invoked otherwise).
+  const matchedTrigger = tagMatchesAnyReleaseTrigger(tag);
   return {
     ok: false,
-    code: 10,
-    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter(p => p.enabled).map(p => p.tagPrefix + 'X.Y.Z').join(', ')}`,
+    refusalType: 'unknown_prefix',
+    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter((p) => p.enabled)
+      .map((p) => p.tagPrefix + 'X.Y.Z')
+      .join(', ')}`,
+    shouldDelete: matchedTrigger,
   };
 }
 
@@ -317,15 +341,37 @@ function main() {
 
   // ---------------------------------------------------------------------------
   // Phase 1: Parse + refuse.
+  //
+  // Refused tags that matched a release trigger pattern are DELETED. Leaving
+  // a refused tag in place creates "tag exists, package does not" state —
+  // the same ambiguity class this slice removes. A future kernel CI publish
+  // path can introduce caws-kernel-v* as accepted; until then the prefix is
+  // RESERVED, not valid.
   // ---------------------------------------------------------------------------
   const parsed = parseTag(tag);
   if (!parsed.ok) {
-    logError('tag.refused', { tag, reason: parsed.reason });
-    // Refusals do NOT delete the tag — they're informational. The tag may be
-    // a legitimate future request the workflow doesn't honor yet (e.g.,
-    // caws-kernel-v*) or a user mistake that the maintainer should fix
-    // explicitly.
-    process.exit(parsed.code);
+    logError('tag.refused', {
+      tag,
+      refusal_type: parsed.refusalType,
+      reason: parsed.reason,
+      will_delete: parsed.shouldDelete,
+    });
+    if (!parsed.shouldDelete) {
+      // Defensive path: the workflow shouldn't fire on a tag that doesn't
+      // match any trigger pattern. If somehow it did, exit without touching
+      // the tag.
+      process.exit(12);
+    }
+    const del = deleteTagFromOrigin(tag, isDryRun);
+    if (!del.ok) {
+      logError('tag.delete.failed', {
+        reason: del.reason,
+        repair: `gh api -X DELETE repos/${process.env.GITHUB_REPOSITORY}/git/refs/tags/${tag}`,
+      });
+      process.exit(11);
+    }
+    logInfo('tag.deleted', { tag, dry_run: !!del.dryRun, after: 'refusal' });
+    process.exit(10);
   }
   const { pkg, version } = parsed;
   logInfo('tag.parsed', { tag, package: pkg.name, version });

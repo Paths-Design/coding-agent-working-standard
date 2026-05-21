@@ -43,6 +43,7 @@ invariants:
   - 'Release-guard layers are preserved as PR-time CI, not release-time. Layer 1 (releaseRules deny-list), Layer 2 (workflow trigger paths), and Layer 3 (shipping-file classifier) become DRY-RUN advisory checks on every PR via the existing release-guard-dry-run.mjs and release-guard-commit-analyzer-check.mjs harnesses. Their job is to tell reviewers what a release WOULD do; the human decides whether to tag.'
   - 'CHANGELOG generation is decoupled from publishing. The current pipeline conflates "compute next version from commits" + "generate CHANGELOG" + "publish to npm" into one transaction. This slice separates them: CHANGELOG fragments are authored/generated locally and committed BEFORE the tag-push; the tag-push triggers only the build + publish + GitHub Release creation. If the tag commit has no matching CHANGELOG section, the workflow fails before npm publish.'
   - 'Multi-package tagging convention is unambiguous and CANONICAL: `caws-cli-vX.Y.Z` and `caws-kernel-vX.Y.Z`. Legacy `v*` tags are NOT a normal publish path. They are accepted only for historical record (existing tags on origin are not retroactively rewritten); pushing a NEW `v*` tag does not publish. The workflow refuses bare `v*` tags with a clear error pointing at the new convention.'
+  - 'Refused release-pattern tags are DELETED, not silently observed. The workflow triggers on all release patterns it can refuse (`caws-cli-v*`, `caws-kernel-v*`, `v*` in v1). When a refused tag is observed, the workflow refuses with structured logs AND deletes the tag from origin via `gh api -X DELETE /repos/{owner}/{repo}/git/refs/tags/{tag}`. "Silent non-trigger" is not the same contract as "refused with deletion" — silent triggers leave refused tags as false release evidence. In v1, the `caws-kernel-v*` prefix is RESERVED, not valid; a future kernel CI publish slice will accept it.'
   - 'Coupled releases are ORDERED, OBSERVABLE, AND REPAIRABLE — not atomic. npm does not provide cross-package transactionality. The release procedure for coupled changes (e.g., kernel schema change consumed by cli) is: publish kernel first; verify registry; publish cli second; if cli fails, kernel remains published and cli is retried. The maintainer pushes two tags in deliberate order. The workflow does NOT attempt to roll back the kernel publish if the cli publish fails.'
   - 'Tarball-truth and release-guard scope-audit remain hard CI gates on every PR. The substrate verification this cascade relied on (PR #3''s tarball-truth hard-block, PR #1''s incident-class harnesses) does NOT regress with this slice.'
 acceptance:
@@ -65,7 +66,7 @@ acceptance:
   - id: A5
     given: 'V1 NARROWING: A maintainer pushes `caws-kernel-v1.1.2`.'
     when: 'The Release workflow runs.'
-    then: 'The workflow REFUSES with a clear error: "kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md." No build, no publish, no tag deletion. The tag remains in place (it is a valid future request, just not honored in v1). Exit code is non-zero.'
+    then: 'The workflow OBSERVES the tag (kernel-v* IS a release trigger pattern in v1) and REFUSES it with a clear error: "kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md." The refused tag IS DELETED from origin via `gh api`. No build, no publish. Exit code 10 on successful refusal-with-deletion, 11 if deletion also failed. The `caws-kernel-v*` prefix is RESERVED in v1, not valid — leaving the tag in place would create "tag exists, package does not" ambiguity. A future kernel CI publish slice will accept the prefix.'
   - id: A6
     given: 'V1 narrowing applies: kernel publish is manual; cli publish is CI tag-driven.'
     when: 'The maintainer publishes caws-kernel@1.1.2 manually, verifies registry, then pushes `caws-cli-v11.1.5`.'
@@ -75,9 +76,9 @@ acceptance:
     when: 'PR Quality Gates run.'
     then: 'The release-guard dry-run advisory runs and reports what a tag-push for this commit would publish. It does NOT publish. It does NOT push a version-bump commit. It is informational only. A grep for `semantic-release` in `release.yml` returns zero matches on the tag-trigger publish path; semantic-release, if retained, runs only in `--dry-run` advisory mode on PR paths.'
   - id: A8
-    given: 'A maintainer pushes a bare legacy tag `v11.1.6` (the v11.0–v11.1.4 caws-cli convention).'
+    given: 'A maintainer pushes a NEW bare legacy tag `v11.1.6` (the v11.0–v11.1.4 caws-cli convention).'
     when: 'The Release workflow runs.'
-    then: 'The workflow REFUSES with a clear error pointing at the new convention (`caws-cli-vX.Y.Z`). No publish happens. The tag is left in place (existing historical `v*` tags on origin are not rewritten by this slice; the refusal applies only to NEW `v*` tag pushes triggering publishes). To recover, the maintainer deletes the bare tag and re-tags with the canonical convention.'
+    then: 'The workflow OBSERVES the tag (v* IS a release trigger pattern) and REFUSES it with a clear error pointing at the new convention (`caws-cli-vX.Y.Z`). The pushed bare-v tag IS DELETED from origin via `gh api`. No publish happens. Exit code 10. Existing historical `v*` tags on origin (created before this slice activated) are NOT rewritten — the refusal applies only to NEWLY-PUSHED bare-v tags. To recover, the maintainer re-tags with the canonical convention.'
   - id: A9
     given: 'A maintainer pushes a tag for a version that already exists on npm (e.g., re-tagging `caws-cli-v11.1.4`).'
     when: 'The workflow runs.'
@@ -104,7 +105,7 @@ contracts:
     description: 'A branch push to main NEVER publishes a package. The release workflow has no `branches: [main]` trigger; only `tags:` triggers.'
   - name: 'tag-naming-canonical-only'
     type: behavior
-    description: 'Only canonical `caws-cli-vX.Y.Z` tags trigger a caws-cli publish. Bare `v*` tags and `caws-kernel-v*` tags are EXPLICITLY refused in v1 with a clear error.'
+    description: 'Only canonical `caws-cli-vX.Y.Z` tags trigger a caws-cli publish. Bare `v*` tags and `caws-kernel-v*` tags are OBSERVED by the workflow (all three patterns are triggers) and EXPLICITLY refused in v1 with structured logs, then DELETED from origin so they cannot become false release evidence.'
   - name: 'tag-version-equals-package-json'
     type: behavior
     description: 'Tag version must equal `packages/caws-cli/package.json` version at the tag checkout SHA. Mismatch fails before `npm publish`.'
