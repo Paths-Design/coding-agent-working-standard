@@ -110,4 +110,33 @@ if (fs.existsSync(tscBin)) {
   run('npx', ['--no', 'tsc', ...tscArg], pkgRoot);
 }
 
+// 4. Set executable bit on dist/index.js (CAWS-CLI-BIN-EXECUTABLE-BIT-001).
+//    npm install's bin-linking handles this at install time for downstream
+//    consumers, but workspace-local symlinks (node_modules/.bin/caws in CI
+//    before publishing, or fresh `npm install --workspaces` setups) do not.
+//    Without +x, tarball-truth tests had to invoke `node dist/index.js`
+//    directly rather than the symlink.
+//
+//    Step 4 runs AFTER tsc emit (step 3). If chmod ran before tsc, tsc
+//    would overwrite dist/index.js and clear the mode bits. The current
+//    order — copy → tsc → chmod — guarantees the bit is set on the final
+//    output. Note that index.js is a JS source COPY (not tsc output) per
+//    JS_ALLOWLIST, so it is created in step 2 and tsc does not touch it;
+//    the post-tsc ordering is defense in depth.
+//
+//    On Windows (process.platform === "win32"), chmod is skipped silently.
+//    POSIX modes do not apply; npm bin-linking creates .cmd shims separately.
+//
+//    A failed chmod on POSIX fails the build loudly (exit non-zero) — a
+//    non-executable bin is a published defect, not a recoverable warning.
+if (process.platform !== 'win32') {
+  const distIndex = path.join(distDir, 'index.js');
+  try {
+    fs.chmodSync(distIndex, 0o755);
+  } catch (err) {
+    console.error(`build-cli: chmod 0o755 failed on ${distIndex}: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 console.log('caws-cli build complete (v11 allowlist).');

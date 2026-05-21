@@ -1,3 +1,38 @@
+## [11.1.5](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.4...caws-cli-v11.1.5) (2026-05-21)
+
+First canonical tag-driven release under `CAWS-RELEASE-TAG-DRIVEN-001` v1.
+Published by the new `caws-cli-v*` tag-triggered workflow (no
+semantic-release, no branch-push trigger).
+
+### Bug Fixes
+
+* **build:** set executable bit (0o755) on `dist/index.js` after build on
+  POSIX systems (`CAWS-CLI-BIN-EXECUTABLE-BIT-001`). Closes the
+  workspace-install ergonomics gap where `node_modules/.bin/caws` was
+  not directly executable, forcing `node packages/caws-cli/dist/index.js`
+  invocation in tarball-truth and fresh-install tests. Windows builds
+  skip the chmod (POSIX modes do not apply; npm bin-linking creates
+  .cmd shims separately).
+
+## [11.1.4](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.3...v11.1.4) (2026-05-20)
+
+Manual publish (predates `CAWS-RELEASE-TAG-DRIVEN-001` and was therefore
+not produced through the new tag-driven workflow). Recorded
+retrospectively for audit completeness.
+
+### Bug Fixes
+
+* **store/yaml-patch:** byte-level removal of top-level `worktree:` scalar
+  on `closeSpec` (`WORKTREE-MERGE-CLEARS-SPEC-BINDING-001`). Preserves
+  LIFECYCLE-MUTATION-001 raw-source-bytes invariant.
+* **store/worktrees-writer:** honest completion in `mergeWorktree` —
+  inspects `closeResult.value.kind === 'success'` instead of treating
+  `partial_failure_recovered` as success. Surfaces
+  `LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED` when the spec-close transaction
+  rolls back; worktree is NOT destroyed and the bound spec remains active.
+* **schemas/events/spec_closed.v1:** add `prior_worktree` field for
+  audit-trail capture of the worktree binding cleared during close.
+
 ## [11.1.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.2...v11.1.3) (2026-05-20)
 
 
