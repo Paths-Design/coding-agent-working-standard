@@ -1,0 +1,181 @@
+id: CAWS-SCOPE-CAMPAIGN-MODE-001
+title: 'Bounded multi-spec scope authority ("campaign mode") — DOCTRINE FIRST, IMPLEMENTATION DEFERRED'
+# Risk_tier 3 + mode chore is the HONEST classification while this spec
+# is documentation/decision-record work only. ACTIVATION REQUIRES:
+#   1. Promoting to risk_tier 2 (kernel-authority change)
+#   2. Adding at least one contract entry
+#   3. Changing mode to "feature" (introducing new authority semantics)
+# See A0 acceptance for the gating ADR prerequisite.
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/scope
+    - packages/caws-cli/src/store/scope-store.ts
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/CAWS-SCOPE-CAMPAIGN-MODE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+invariants:
+  - 'ACTIVATION PREREQUISITE: a written Authority Decision Record (ADR or doctrine doc section) must exist BEFORE any code is written for this spec. The ADR answers the six open design questions in the triage block below. Code without ADR is rejected at review.'
+  - 'Worktree binding remains STRONGER than campaign membership. Campaign mode coordinates sibling active specs within a declared campaign; it does NOT override worktree isolation. If an edit is attempted from worktree A against a file admitted only via spec-B''s scope.in (where spec-B is bound to worktree B), the edit is refused — worktree binding wins. This is the default answer to the A6 open question; the ADR may override it but must explicitly say so.'
+  - 'Campaign mode is OPT-IN. Default behavior (single active spec + bound worktree -> authoritative mode; multiple active specs without binding -> union mode) is unchanged. No existing project state is reinterpreted by the introduction of campaign mode.'
+  - 'A campaign is a NAMED, EXPLICIT grouping of specs declared at the kernel layer — not an emergent property of which specs happen to be active. Membership is declared (mechanism to be decided in the ADR), not inferred from path overlap or co-activation.'
+  - 'Within a campaign, member specs'' scope.in patterns COMBINE additively for admit decisions. A file admitted by ANY campaign member''s scope.in is admitted for the whole campaign. This replaces the union-mode pathology where one spec''s scope.out can refuse another sibling''s legitimate edit.'
+  - 'Within a campaign, member specs'' scope.out patterns DO NOT cross-block other campaign members. A scope.out entry continues to enforce against ITS OWN spec''s admit set (it removes a path from that spec''s scope.in), but does not refuse edits that another campaign member admits.'
+  - 'Outside campaign mode, scope.in/scope.out semantics are unchanged. Non-campaign-member specs are still evaluated under existing union-mode rules. The campaign''s admit does NOT bypass scope.out of non-campaign specs.'
+  - 'Campaign membership is auditable. Every gate_evaluated event records the campaign id (or its absence) so post-hoc review can determine which authority decided each admit.'
+acceptance:
+  - id: A0
+    given: 'No Authority Decision Record exists for this spec.'
+    when: 'A reviewer evaluates whether this spec is ready to activate.'
+    then: 'The spec is REJECTED for activation. The ADR must exist as a committed file (e.g., docs/architecture/adr/0001-scope-campaign-mode.md or as a section in caws-vnext-command-surface.md) answering all six open design questions in the triage block, before any implementation work begins.'
+  - id: A1
+    given: 'Two specs FOO-001 and FOO-002 both declaring campaign membership in `foo-campaign`, both lifecycle_state: active. FOO-001 has scope.in: [packages/a], scope.out: [packages/b]. FOO-002 has scope.in: [packages/b], scope.out: [packages/a]. Neither is bound to a worktree.'
+    when: 'A scope check is performed for packages/a/file.js.'
+    then: 'The check returns admit. The decision provenance records "admitted by FOO-001 under campaign foo-campaign". FOO-002''s scope.out does not refuse the edit because FOO-002 is a campaign sibling.'
+  - id: A2
+    given: 'Same setup as A1.'
+    when: 'A scope check is performed for packages/c/file.js (admitted by neither spec''s scope.in).'
+    then: 'The check returns refuse. (Campaign mode does not invent admit authority; it only prevents cross-blocking among declared members.)'
+  - id: A3
+    given: 'A spec BAR-001 with no campaign declaration, lifecycle_state: active. scope.in: [packages/b], scope.out: [packages/a].'
+    when: 'A scope check is performed for packages/a/file.js with the foo-campaign active (FOO-001 admits it).'
+    then: 'The foo-campaign''s admit applies. BAR-001 is NOT a campaign sibling — its scope.out for packages/a applies under existing union-mode rules and refuses the edit. The campaign admit does NOT bypass non-campaign scope.out.'
+  - id: A4
+    given: 'A scope check decision under campaign mode.'
+    when: 'The decision is logged.'
+    then: 'The gate_evaluated event includes a `campaign` field naming the campaign id used to admit the edit (or null if the admit came from a non-campaign source).'
+  - id: A5
+    given: 'A campaign declaration referencing a spec that does not exist.'
+    when: 'caws doctor runs.'
+    then: 'doctor reports a finding (warning, not error) naming the missing spec id and the campaign that references it. The campaign remains usable for its other members.'
+  - id: A6
+    given: 'Two specs in the same campaign, each bound to a different worktree. FOO-001 bound to wt-A, FOO-002 bound to wt-B. FOO-001 admits packages/a, FOO-002 admits packages/b.'
+    when: 'An edit is attempted from worktree wt-A on packages/b/file.js (admitted only by FOO-002''s scope.in).'
+    then: 'The edit is REFUSED. Worktree binding wins over campaign admission — wt-A''s authoritative spec is FOO-001, which does not admit packages/b. (This is the default per the second invariant. The ADR may override it but must explicitly say so. Until the ADR overrides, this acceptance is normative.)'
+  - id: A7
+    given: 'A campaign cycle: campaign X references campaign Y references campaign X (only relevant if multi-campaign or nested campaigns are permitted by the ADR).'
+    when: 'caws doctor runs.'
+    then: 'doctor reports an error finding (not warning), names the cycle, and exits non-zero. If the ADR forbids multi-campaign membership (the recommended default), this acceptance reduces to "any spec declaring two campaigns is refused at load time."'
+non_functional:
+  reliability:
+    - 'Campaign-membership cycles, if permitted by the ADR, are detected at load time and surfaced as doctor findings, not silently accepted.'
+    - 'A campaign with no members loads cleanly (no crash) and behaves as if no campaign were declared.'
+    - 'The kernel-level scope decision API is the single source of truth for admit decisions. Campaign-aware admit logic lives in the kernel, not in the CLI store layer. The store layer queries the kernel''s decision API.'
+  performance:
+    - 'Scope check latency under campaign mode is within 2x of single-spec authoritative mode for campaigns of up to 10 members. The check remains O(members * patterns), not quadratic in member count.'
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin: the v11.1.x cascade repeatedly hit union-mode cross-blocking
+# where one sibling spec's scope.out refused legitimate edits from
+# another sibling's scope.in. The workaround (omit overlapping
+# scope.out entries) is documented in CLAUDE.md trap #4 but is a
+# symptom patch on a deeper authority model.
+#
+# Per the 2026-05-21 design review:
+#
+#   "Do not implement until the authority model is written down
+#   in doctrine. This is the biggest conceptual trap. The wrong
+#   implementation is 'campaign members' scope.out no longer
+#   cross-block.' That is only a symptom fix. The real question
+#   is: what authority does a campaign have relative to worktree
+#   binding, active spec state, and user/session ownership?
+#   ... My default answer: worktree binding remains stronger
+#   than campaign admission; campaign mode only coordinates
+#   sibling active specs within an explicitly declared campaign."
+#
+# This is reflected in invariant 2 and acceptance A6. The default
+# answer is normative until the ADR explicitly overrides it.
+#
+# What this spec is NOT:
+#   - It is NOT "union mode but less strict" — that would silently
+#     relax authority for unrelated specs. The whole point is to
+#     require an EXPLICIT, NAMED grouping.
+#   - It is NOT a way to bypass scope.out altogether. A spec's own
+#     scope.out still applies to its own admit set.
+#   - It is NOT a replacement for worktree binding. Worktree
+#     binding remains the canonical isolation mechanism for
+#     single-agent work. Campaign mode is for coordinated work
+#     where multiple specs intentionally share a path-space.
+#
+# Six open design questions for the Authority Decision Record:
+#
+#   1. Membership declaration mechanism:
+#      (a) `campaign: <name>` field in each member spec (distributed)
+#      (b) `.caws/campaigns/<name>.yaml` listing members (centralized)
+#      (c) Both, with consistency-check via doctor
+#      Default recommendation: (b) centralized for auditability.
+#      The ADR must pick one and commit.
+#
+#   2. Campaign lifecycle:
+#      (a) Campaigns have their own lifecycle_state (draft/active/closed)
+#      (b) Campaign state is purely derived from member states
+#          (campaign is "active" iff any member is active)
+#      Default recommendation: (b) derived — less surface.
+#      The ADR must pick one.
+#
+#   3. Worktree-vs-campaign authority precedence (A6):
+#      (a) Worktree binding always wins; campaign only relaxes union
+#          cross-blocking, never crosses worktree isolation.
+#      (b) Campaign membership wins; any campaign member can edit
+#          any path admitted by any other member regardless of
+#          worktree binding.
+#      Default (and current normative invariant): (a). The ADR may
+#      explicitly override, but doing so requires answering
+#      "how does multi-worktree campaign edit coordinate
+#      git state across worktrees?"
+#
+#   4. Multi-campaign membership:
+#      (a) NO — each spec belongs to at most one campaign (v1)
+#      (b) YES — with explicit admit semantics for when an edit is
+#          admitted via one campaign while context is bound to another
+#      Default recommendation: (a) for v1. The ADR locks this in.
+#
+#   5. Audit surface:
+#      (a) New event type `campaign_admit.v1` (clean, queryable)
+#      (b) Reuse `gate_evaluated` with a new `campaign` field
+#          (cheap, less standalone queryability)
+#      Default recommendation: (b) reuse with new field. The ADR
+#      must justify if (a) is chosen.
+#
+#   6. Migration / back-compat:
+#      Existing specs have no campaign field. Default behavior must
+#      be unchanged. The ADR must verify that EVERY kernel
+#      scope-decision call path treats "no campaign field" as
+#      "not a member" without ambiguity. List the call sites.
+#
+# Activation prerequisites (all must hold):
+#   - CAWS-RELEASE-TAG-DRIVEN-001 has landed (this spec touches
+#     kernel + cli surface and will need a publish to roll out)
+#   - The Authority Decision Record exists as a committed doctrine
+#     doc section answering all six questions above
+#   - LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 has landed OR been
+#     explicitly de-scoped (campaign mode composes with lifecycle
+#     transitions and benefits from the harness as a safety net;
+#     this prerequisite may be relaxed if the ADR documents the
+#     reason)
+#   - The kernel-level scope decision API exposes a stable hook
+#     for campaign-aware admit (otherwise the CLI store layer
+#     would have to reimplement scope logic — anti-pattern)
+#
+# Risk_tier 2 because this is a kernel-authority change. The
+# scope guard is the most-touched governance surface; semantic
+# changes here have broad blast radius. Mode: feature because
+# this introduces new authority semantics (not a fix or a chore).
+#
+# Scope note: scope.in is intentionally minimal (only this YAML)
+# because the spec is documentation/draft-only. The implementation
+# slice must amend scope.in to add the kernel scope files and
+# CLI store files explicitly, with the ADR as a required artifact
+# of that amendment (CLAUDE.md trap #5).

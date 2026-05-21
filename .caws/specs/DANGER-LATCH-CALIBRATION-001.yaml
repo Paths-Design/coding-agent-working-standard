@@ -1,0 +1,127 @@
+id: DANGER-LATCH-CALIBRATION-001
+title: 'Calibrate classify_command.py: explicit allow-list of read-only subcommands, no broad whitelisting'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.py
+    - .caws/specs/DANGER-LATCH-CALIBRATION-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+invariants:
+  - 'No destructive-operation pattern is weakened or removed. Existing deny coverage (rm -rf outside SAFE_DELETE_PREFIXES, git push --force on protected refs, git reset --hard during active worktrees, dd to /dev/*, mkfs, shutdown/reboot, fork bombs, curl|sh, naked rm/mv on .caws/specs|policy|waivers) remains in the deny set.'
+  - 'The allow-list is COMMAND+SUBCOMMAND SPECIFIC, never a top-level command whitelist. `gh pr view` is allowed; `gh pr merge`, `gh pr edit`, `gh pr close`, `gh pr ready` are NOT allowed by this allow-list. `git status` and `git log` are allowed; `git push`, `git reset`, `git rebase` are NOT.'
+  - 'The full canonical allow-list is exactly:
+       - Read-only file inspection: `tail`, `head`, `cat`, `less`, `more`, `wc`, `stat`, `file`, `du`, `df`, `ls`, `tree`
+       - Read-only search: `grep`, `rg`, `find` (only with no -delete, -exec, -execdir, -fprint, -ok flags)
+       - Read-only git: `git status`, `git log`, `git diff`, `git show`, `git branch` (without -d/-D/-m), `git tag --list`, `git tag -l`, `git remote -v`, `git config --get`, `git rev-parse`, `git ls-files`, `git blame`
+       - Read-only gh: `gh pr view`, `gh pr status`, `gh pr list`, `gh pr checks`, `gh pr diff`, `gh run view`, `gh run list`, `gh issue view`, `gh issue list`, `gh repo view`, `gh release view`, `gh release list`, `gh api` ONLY when -X is absent or -X is GET
+       - Read-only npm: `npm view`, `npm whoami`, `npm config get`, `npm ls`, `npm outdated`, `npm explain`, `npm pack --dry-run`
+     No other commands are added to the allow-list in this slice.'
+  - 'Mutating subcommands of allow-listed top-level commands are EXPLICITLY rejected by the allow-list (they fall through to the existing ask/deny tiers). Concrete denylist by name: `gh pr merge`, `gh pr edit`, `gh pr close`, `gh pr reopen`, `gh pr ready`, `gh pr review --approve`, `gh pr comment`, `gh run rerun`, `gh run cancel`, `gh workflow run`, `gh workflow enable/disable`, `gh release create/edit/delete`, `gh issue create/edit/close`, `gh api -X POST|PUT|PATCH|DELETE`, `git push`, `git pull`, `git fetch --prune`, `git reset`, `git rebase`, `git cherry-pick`, `git stash`, `git checkout` (any), `npm publish`, `npm install`, `npm uninstall`, `npm version`, `npm unpublish`, `npm pack` (without --dry-run).'
+  - 'Calibration is fail-closed. If the classifier cannot decide (no allow match AND no deny match), the result is "ask" (existing default tier), never "allow".'
+  - 'Pipeline-aware deny rules (curl|sh, fork bombs) remain matched against the FULL raw command, not segmented commands. An observational command piped into a destructive sink (e.g., `tail logs/foo.log | sh`) still triggers the pipeline deny rule.'
+  - 'The reset path is unchanged. When block-dangerous.sh latches a session, `bash .claude/hooks/reset-danger-latch.sh --current --reason "..."` remains the only documented escape, run by the human user. The agent cannot self-reset.'
+acceptance:
+  - id: A1
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `tail -n 50 /tmp/foo.log` through the classifier.'
+    then: 'decision is "allow". reason is empty.'
+  - id: A2
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `gh pr view 5 --json statusCheckRollup` through the classifier.'
+    then: 'decision is "allow".'
+  - id: A3
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `gh pr merge 5 --squash` through the classifier.'
+    then: 'decision is "ask" or "deny", NEVER "allow". The allow-list rejects mutating gh pr subcommands.'
+  - id: A4
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `gh run rerun 12345` through the classifier.'
+    then: 'decision is "ask" or "deny", NEVER "allow". The allow-list rejects mutating gh run subcommands.'
+  - id: A5
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `gh api -X POST /repos/foo/bar/pulls/5/comments -f body=hi` through the classifier.'
+    then: 'decision is "ask" or "deny". `gh api` is allowed only when -X is absent or -X is GET.'
+  - id: A6
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `git push --force origin main` through the classifier.'
+    then: 'decision is "deny" (existing behavior, NOT weakened). The reason mentions force-push.'
+  - id: A7
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes `rm -rf /Users/darian/important` through the classifier.'
+    then: 'decision is "deny". The reason names rm -rf outside safe prefixes.'
+  - id: A8
+    given: 'classify_command.py with the calibration applied.'
+    when: 'A test pipes the v11.1.x cascade-observed false positives: `tail -100 logs/release.log`, `head -200 .github/workflows/release.yml`, `grep -n "tag" scripts/multi-package-release.mjs`, `gh pr checks 5`, `gh run view 123 --log-failed`.'
+    then: 'Every one returns decision "allow". This is the calibration target.'
+  - id: A9
+    given: 'A pipeline like `tail logs/foo.log | sh` (read piped into shell execution).'
+    when: 'classify_command.py runs.'
+    then: 'decision is "deny". The pipe-to-shell pipeline rule fires regardless of the leading command being observational.'
+  - id: A10
+    given: 'A find command with a mutating flag: `find . -name "*.tmp" -exec rm {} \\;`.'
+    when: 'classify_command.py runs.'
+    then: 'decision is "ask" or "deny". `find` is in the allow-list ONLY without -delete/-exec/-execdir/-fprint/-ok flags. A find with any of those flags falls through to the existing tier.'
+  - id: A11
+    given: 'A real Claude Code session with the calibrated classifier.'
+    when: 'An agent runs 10 consecutive read-only commands from the allow-list (gh pr view, tail, git status, git log, grep, etc.).'
+    then: 'No danger latch is created. .claude/hooks/state/danger-latch-<session>.json does not exist.'
+non_functional:
+  reliability:
+    - 'Fail-closed default: any command not matched by the explicit allow-list AND not matched by any deny pattern goes to "ask", never "allow". This preserves the existing ambiguous-default tier.'
+    - 'No regression on lineage entries 1 and 17 (the failure-lineage entries this hook covers). The substantive deny patterns are preserved bit-for-bit; only ALLOW_SEGMENT_PATTERNS is added (new), and only narrow whitelist additions are made.'
+    - 'The allow-list regex patterns are anchored at segment boundaries (start of subcommand). A command like `gh-pr-view-fake-script` does not match the `gh pr view` allow pattern.'
+  performance:
+    - 'classifier latency stays under 50 ms per invocation on a 200-char command. Allow-list patterns are simple anchored prefixes; no catastrophic backtracking is introduced.'
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# The danger latch fired repeatedly in the v11.1.x cascade on read-only
+# operations: `tail` outside a redirect, `gh pr view --json`, and similar.
+# The user reset the latch 3+ times manually. The pattern surface is in
+# classify_command.py's DENY_SEGMENT_PATTERNS and the implicit "ask"
+# tier — but the calibration question is which observational commands
+# should be promoted to an explicit ALLOW_SEGMENT_PATTERNS list.
+#
+# Design decision (locked in by 2026-05-21 review):
+#
+#   The allow-list is COMMAND+SUBCOMMAND SPECIFIC, never broad.
+#   `gh` as a top-level command is NOT whitelisted; only the named
+#   read-only subcommands are. Same for `git` and `npm`. This is the
+#   exact place an over-broad regex would create a real safety
+#   regression — whitelisting `gh*` would silently allow `gh pr merge`,
+#   `gh release create`, `gh run rerun`, etc. The invariants and A3/A4
+#   acceptance tests make this rejection explicit.
+#
+# The shipped hook-pack templates under packages/caws-cli/templates are
+# part of the published CAWS CLI surface. Activating this slice
+# requires a publish to roll the calibration out to downstream
+# consumers. Hence: do NOT activate before CAWS-RELEASE-TAG-DRIVEN-001
+# lands.
+#
+# Out of scope for this slice:
+#   - block-dangerous.sh's latch-write logic (correct as-is)
+#   - reset-danger-latch.sh's reset semantics (correct as-is)
+#   - DENY_SEGMENT_PATTERNS or DENY_PIPELINE_PATTERNS removals
+#   - Any change to the "ask" default tier behavior
+#
+# Risk_tier 2 because this slice touches a published
+# security-adjacent surface (the agent-boundary guard). Errors in
+# calibration either weaken the guard (deny becomes allow on a
+# destructive op — high blast) or annoy agents (allow remains ask —
+# low blast). The narrow allow-list and fail-closed default skew
+# toward the low-blast direction.
