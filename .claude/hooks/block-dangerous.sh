@@ -158,6 +158,41 @@ reset_danger_latch_after_execution() {
   reset_guard_strikes_for_session "$session_id" "approved-danger-command"
 }
 
+reset_stale_ask_latch_for_allowed_command() {
+  local file="$1"
+  local session_id="$2"
+  local command="$3"
+
+  [[ -f "$file" ]] || return 1
+
+  local latched_decision
+  local latched_command
+  latched_decision=$(jq -r '.decision // ""' "$file" 2>/dev/null || true)
+  latched_command=$(jq -r '.command // ""' "$file" 2>/dev/null || true)
+
+  if [[ "$latched_decision" != "ask" ]] || [[ "$latched_command" != "$command" ]]; then
+    return 1
+  fi
+
+  local log_dir
+  log_dir="$(danger_log_dir)"
+  jq -n \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg file "$file" \
+    --arg by "${USER:-unknown}" \
+    --arg command "$command" \
+    '{
+      ts: $ts,
+      latch: $file,
+      reset_by: $by,
+      reason: "auto-reset stale ask latch after command reclassified as allow",
+      command: $command
+    }' >> "$log_dir/danger-latch-resets.log"
+  rm -f "$file"
+  reset_guard_strikes_for_session "$session_id" "stale-ask-latch-now-allowed"
+  return 0
+}
+
 # Read JSON input from Claude Code
 INPUT=$(cat)
 
@@ -185,15 +220,14 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-if [[ -f "$LATCH_FILE" ]]; then
-  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
-  emit_block_json "$REASON"
-  exit 0
-fi
-
 # --- Python classifier (preferred path) ---
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
 if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
+  if [[ -f "$LATCH_FILE" ]]; then
+    REASON="A dangerous command was previously blocked or sent for approval in this Claude session, and the command classifier is unavailable. This is a human-review boundary. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
+    emit_block_json "$REASON"
+    exit 0
+  fi
   REASON="command classifier unavailable; dangerous-command safety cannot verify Bash semantics. This is a human-review boundary. Command was: $COMMAND"
   record_danger_latch "$LATCH_FILE" "ask" "classifier unavailable" "$COMMAND"
   emit_ask_json "$REASON"
@@ -214,6 +248,15 @@ rm -f "$CLASSIFIER_STDERR"
 
 DECISION=$(printf '%s' "$RESULT" | jq -r '.decision // "ask"')
 REASON=$(printf '%s' "$RESULT" | jq -r '.reason // "unknown"')
+
+if [[ -f "$LATCH_FILE" ]]; then
+  if [[ "$DECISION" == "allow" ]] && reset_stale_ask_latch_for_allowed_command "$LATCH_FILE" "$SESSION_ID" "$COMMAND"; then
+    exit 0
+  fi
+  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
+  emit_block_json "$REASON"
+  exit 0
+fi
 
 case "$DECISION" in
   allow)

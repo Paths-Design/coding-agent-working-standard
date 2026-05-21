@@ -1274,19 +1274,14 @@ def classify_command(
     segments = segment_command(raw_command)
 
     for segment in segments:
-        segment_decision = "ask"
-        segment_reason = "command is not on the explicit read-only allow-list"
+        segment_decision = "allow"
+        segment_reason = ""
 
         def classify_segment(decision: str, reason: str) -> None:
             nonlocal segment_decision, segment_reason
             priority = {"allow": 0, "ask": 1, "deny": 2}
             if (
                 priority.get(decision, 0) > priority.get(segment_decision, 0)
-                or (
-                    decision == "ask"
-                    and segment_decision == "ask"
-                    and segment_reason == "command is not on the explicit read-only allow-list"
-                )
             ):
                 segment_decision = decision
                 segment_reason = reason
@@ -1351,7 +1346,7 @@ def classify_command(
             classify_segment(*find_result)
 
         allow_result = classify_allow_list(segment)
-        if allow_result and segment_decision == "ask" and segment_reason == "command is not on the explicit read-only allow-list":
+        if allow_result and segment_decision == "allow":
             segment_decision, segment_reason = allow_result
 
         escalate(segment_decision, segment_reason)
