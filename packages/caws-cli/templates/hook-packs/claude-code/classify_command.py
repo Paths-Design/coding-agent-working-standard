@@ -47,9 +47,24 @@ SAFE_DELETE_PREFIXES: list[str] = [
 # Pipeline-aware deny patterns: matched against the FULL raw command string
 # BEFORE segmentation.  These detect cross-pipeline dangers like curl|sh and
 # fork bombs whose syntax spans segment boundaries.
+#
+# IMPORTANT: these patterns are matched against `executable_surface`, which
+# has had quoted regions (single + double quotes) replaced with spaces by
+# strip_quoted_regions. That is what gives us quote-safety — a literal
+# `tail x | sh` inside a quoted string is replaced with whitespace before
+# the regex runs, so it does not trigger.
 DENY_PIPELINE_PATTERNS: list[tuple[str, str]] = [
-    # Pipe-to-shell (network exfiltration) — must match across | boundary
-    (r"\b(curl|wget)\b.*\|\s*(ba)?sh\b", "pipe-to-shell execution"),
+    # Pipe-to-shell (network exfiltration) — historical curl/wget pattern,
+    # kept for diagnostic-reason specificity. The generic rule below also
+    # catches these; this pattern fires first to give a clearer reason.
+    (r"\b(curl|wget)\b[^|]*\|\s*(ba)?sh\b", "pipe-to-shell execution"),
+    # Generic pipe-to-shell — any command piped into bash/sh execution.
+    # Catches `tail x | sh`, `cat script | bash`, `head install.sh | sh`,
+    # etc. The leading `[^|]` (non-pipe, non-empty char before the pipe)
+    # ensures we do not false-match `||` (logical OR). The trailing `\b`
+    # ensures we do not match `bash-completion` or similar word-extended
+    # forms. Quote-safety is provided by strip_quoted_regions upstream.
+    (r"[^|]\|\s*(ba)?sh\b", "generic pipe-to-shell execution — pipe target is a shell interpreter"),
     # Fork bombs — special syntax that segmentation mangles
     (r":\(\)\s*\{.*:\|:.*\}\s*;\s*:", "fork bomb"),
     (r"\bwhile\s+true\b.*\bfork\b", "fork loop"),
@@ -139,6 +154,83 @@ SHELL_C_WRAPPERS: set[str] = {
     "sh",
     "zsh",
 }
+
+
+# ---------------------------------------------------------------------------
+# DANGER-LATCH-CALIBRATION-001 — explicit allow-list of read-only surface
+# ---------------------------------------------------------------------------
+# Hybrid fail-closed semantics: for `git`, `gh`, and `npm` (the three
+# governed command families), a subcommand NOT on the allow-list and NOT
+# matched by any deny/confirm pattern resolves to "ask". Other commands
+# keep the existing classifier default. The allow-list itself is
+# command+subcommand specific — `gh pr view` is admitted, `gh pr merge`
+# is not (it falls through to ask). See spec invariant for the full
+# canonical surface.
+#
+# IMPORTANT: editing this allow-list weakens or expands the agent-
+# boundary guard. Add a name only after confirming it is observational
+# (no filesystem mutation, no network write, no privileged operation,
+# no irreversible state change to GitHub / npm / git).
+
+# Top-level simple commands that are read-only file inspection or search.
+# Matched by exact basename of the segment's first executable token.
+# These do NOT have subcommands worth tracking; presence of the name is
+# enough.
+ALLOWED_SIMPLE_COMMANDS: set[str] = {
+    # File inspection
+    "tail", "head", "cat", "less", "more", "wc", "stat", "file",
+    "du", "df", "ls", "tree",
+    # Search
+    "grep", "rg",
+    # `find` is NOT in this set because of -delete/-exec/-execdir/-fprint/-ok;
+    # classify_allow_list handles find specifically.
+}
+
+# Allowed git subcommands (read-only).
+ALLOWED_GIT_SUBCOMMANDS: set[str] = {
+    "status", "log", "diff", "show", "branch", "tag",
+    "remote", "config", "rev-parse", "ls-files", "blame",
+}
+
+# Allowed gh top-level groups + subcommands. Format: "group action".
+# Example: "pr view" means `gh pr view ...` is admitted.
+# `gh api` is handled specifically by gh_api_method() because its
+# admit decision depends on -X verb, not subcommand structure.
+ALLOWED_GH_ACTIONS: set[str] = {
+    "pr view", "pr status", "pr list", "pr checks", "pr diff",
+    "run view", "run list",
+    "issue view", "issue list",
+    "repo view",
+    "release view", "release list",
+    # `gh api` admitted only when -X is absent or -X is GET (separate logic)
+}
+
+# Mutating gh actions that the allow-list explicitly REJECTS (returns ask).
+# These exist because `gh` as a top-level command is not whitelisted; only
+# named read-only subcommands are. But for clarity (and to surface a
+# specific reason in diagnostics), we name the mutating ones explicitly.
+# Note: appearance here does NOT make the command a hard deny — only ask.
+GH_MUTATING_ACTIONS: set[str] = {
+    "pr merge", "pr edit", "pr close", "pr reopen", "pr ready",
+    "pr comment", "pr review",
+    "run rerun", "run cancel",
+    "workflow run", "workflow enable", "workflow disable",
+    "release create", "release edit", "release delete",
+    "issue create", "issue edit", "issue close",
+}
+
+# Allowed npm subcommands (read-only).
+ALLOWED_NPM_SUBCOMMANDS: set[str] = {
+    "view", "whoami", "config", "ls", "outdated", "explain",
+    # `npm pack --dry-run` is admitted; bare `npm pack` is not (handled separately)
+}
+
+# Top-level command names that participate in HYBRID FAIL-CLOSED semantics.
+# For commands in this set, an unknown subcommand (one not on the
+# allow-list and not matched by any deny/confirm pattern) resolves to
+# "ask", not the default "allow". Outside this set, the classifier's
+# global default applies.
+GOVERNED_FAMILIES: set[str] = {"git", "gh", "npm"}
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +609,324 @@ def classify_git_semantics(
     return None
 
 
+# ---------------------------------------------------------------------------
+# DANGER-LATCH-CALIBRATION-001 — gh / npm subcommand detection
+# ---------------------------------------------------------------------------
+
+def detect_gh_subcommand(segment: str) -> tuple[str, str] | None:
+    """Detect the (group, action) for a `gh` segment.
+
+    Returns a tuple like ("pr", "view") for `gh pr view 5`, or
+    ("api", "") for `gh api /repos/foo/bar`. Returns None if the
+    segment is not a gh invocation. Handles env/time/nohup wrappers
+    via normalize_command_tokens.
+
+    Subcommand-with-no-action (e.g., bare `gh pr`) returns
+    (group, "") so the caller can distinguish "no allow-list match"
+    from "not a gh command at all."
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+
+    if not tokens:
+        return None
+
+    start, nested = normalize_command_tokens(tokens)
+    if nested is not None:
+        return None
+    if start >= len(tokens) or command_basename(tokens[start]) != "gh":
+        return None
+
+    # First non-flag token after `gh` is the group (pr, run, issue, repo, api, ...)
+    i = start + 1
+    group = ""
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.startswith("-"):
+            i += 1
+            continue
+        group = tok
+        i += 1
+        break
+
+    if not group:
+        return None
+
+    # Second non-flag token is the action (view, list, merge, ...)
+    # For `gh api` there is no action — the next token is the path.
+    if group == "api":
+        return ("api", "")
+
+    action = ""
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.startswith("-"):
+            i += 1
+            continue
+        action = tok
+        break
+
+    return (group, action)
+
+
+def gh_api_method(segment: str) -> str:
+    """Return the HTTP method for a `gh api` segment.
+
+    Defaults to "GET" when no -X flag is present. Recognizes both
+    `-X POST` and `--method POST` / `-XPOST` forms.
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return "GET"
+
+    for i, tok in enumerate(tokens):
+        if tok in ("-X", "--method") and i + 1 < len(tokens):
+            return tokens[i + 1].upper()
+        if tok.startswith("-X") and len(tok) > 2:
+            # Concatenated form like -XPOST
+            return tok[2:].upper()
+        if tok.startswith("--method="):
+            return tok.split("=", 1)[1].upper()
+    return "GET"
+
+
+def detect_npm_subcommand(segment: str) -> str | None:
+    """Return the subcommand for an `npm` segment, or None if not npm.
+
+    Handles env/time/nohup wrappers via normalize_command_tokens.
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+
+    if not tokens:
+        return None
+
+    start, nested = normalize_command_tokens(tokens)
+    if nested is not None:
+        return None
+    if start >= len(tokens) or command_basename(tokens[start]) != "npm":
+        return None
+
+    i = start + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.startswith("-"):
+            i += 1
+            continue
+        return tok
+    return None
+
+
+def npm_pack_is_dry_run(segment: str) -> bool:
+    """Return true if `npm pack` invocation has --dry-run."""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return False
+    return "--dry-run" in tokens
+
+
+# ---------------------------------------------------------------------------
+# DANGER-LATCH-CALIBRATION-001 — allow-list classifier
+# ---------------------------------------------------------------------------
+
+def classify_allow_list(segment: str) -> tuple[str, str] | None:
+    """Return ("allow", "") if the segment is on the documented allow-list.
+
+    The allow-list is consulted AFTER deny/confirm patterns. A segment
+    that matches a deny or confirm pattern WILL escalate the overall
+    decision; this function is only what the segment contributes when
+    no other rule fires.
+
+    Returns None when the segment does not match the allow-list. The
+    caller (classify_command) then falls through to either:
+      (a) the existing classifier default (allow) for non-governed
+          commands, or
+      (b) hybrid fail-closed "ask" via
+          classify_governed_family_default for git/gh/npm.
+    """
+    # First, the simple-command allow-list — match by extracted command word.
+    cmd = extract_command_word(segment)
+    if not cmd:
+        return None
+
+    # Strip path components so /usr/bin/tail matches `tail`.
+    cmd_base = command_basename(cmd)
+
+    # `find` is allowed ONLY without mutating action flags. The
+    # classify_find_delete function returns ("ask", ...) when find has
+    # any of -delete/-exec/-execdir/-fprint/-ok. The allow-list admits
+    # find here only when classify_find_delete would return None (i.e.,
+    # the find is observational).
+    if cmd_base == "find":
+        if classify_find_delete(segment) is None:
+            return ("allow", "")
+        return None
+
+    if cmd_base in ALLOWED_SIMPLE_COMMANDS:
+        return ("allow", "")
+
+    # Read-only git subcommands.
+    if cmd_base == "git":
+        sub = detect_git_subcommand(segment)
+        if sub is None:
+            # Bare `git` with no subcommand — not allow-list eligible.
+            return None
+        # Special-case `git tag --list` / `git tag -l` — list only,
+        # not mutating (`git tag -d` is a delete).
+        if sub == "tag":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            # Admit only when --list or -l is present and no -d/-D/-m.
+            mutating = any(t in ("-d", "-D", "-m", "-a", "-s", "-f") for t in tokens)
+            listing = any(t in ("--list", "-l") for t in tokens)
+            if listing and not mutating:
+                return ("allow", "")
+            return None
+        # Special-case `git branch` — read-only when no -d/-D/-m flags.
+        if sub == "branch":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            mutating = any(
+                t in ("-d", "-D", "-m", "-M", "--delete", "--move") for t in tokens
+            )
+            if not mutating:
+                return ("allow", "")
+            return None
+        # Special-case `git config --get` — read-only get; bare `git config`
+        # or `git config key value` is mutating.
+        if sub == "config":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            if any(t in ("--get", "--get-all", "--get-regexp", "--list", "-l") for t in tokens):
+                return ("allow", "")
+            return None
+        if sub in ALLOWED_GIT_SUBCOMMANDS:
+            return ("allow", "")
+        return None
+
+    # Read-only gh subcommands.
+    if cmd_base == "gh":
+        result = detect_gh_subcommand(segment)
+        if result is None:
+            return None
+        group, action = result
+        # `gh api` is admit-only when method is GET.
+        if group == "api":
+            if gh_api_method(segment) == "GET":
+                return ("allow", "")
+            return None
+        key = f"{group} {action}".strip()
+        if key in ALLOWED_GH_ACTIONS:
+            return ("allow", "")
+        return None
+
+    # Read-only npm subcommands.
+    if cmd_base == "npm":
+        sub = detect_npm_subcommand(segment)
+        if sub is None:
+            return None
+        if sub == "pack":
+            if npm_pack_is_dry_run(segment):
+                return ("allow", "")
+            return None
+        if sub in ALLOWED_NPM_SUBCOMMANDS:
+            return ("allow", "")
+        return None
+
+    return None
+
+
+def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
+    """Hybrid fail-closed for git/gh/npm — unknown subcommand → ask.
+
+    Only fires when:
+      - the segment's command is in GOVERNED_FAMILIES, OR is a
+        hyphenated PATH-spoof variant (e.g. `gh-pr-view-fake-script`,
+        `git-foo`, `npm-something`) that could be mistaken for a
+        governed-family command,
+      - no deny/confirm pattern matched,
+      - no allow-list match.
+    Returns ("ask", reason) in that case, None otherwise.
+
+    Callers should invoke this AFTER deny/confirm/allow-list checks
+    have all returned no opinion. The function's job is the third
+    tier of decision-making for governed families.
+
+    The hyphenated-variant check enforces the spec's anchoring
+    invariant: `gh-pr-view-fake-script` does not match the `gh pr view`
+    allow-list, and because it shadows a governed family name, it
+    deserves the same ask-by-default treatment a real `gh` invocation
+    would get for an unknown subcommand.
+    """
+    cmd = extract_command_word(segment)
+    if not cmd:
+        return None
+    cmd_base = command_basename(cmd)
+
+    # PATH-spoof variants — gh-foo, git-foo, npm-foo. Treated as a
+    # suspicious hyphenated impersonation of a governed family, not
+    # as an unknown command. The reason names the spoof explicitly.
+    for family in GOVERNED_FAMILIES:
+        if cmd_base.startswith(f"{family}-"):
+            return (
+                "ask",
+                f"hyphenated command `{cmd_base}` shadows governed family "
+                f"`{family}` — not on the allow-list; ask before invoking "
+                "to confirm this is not a PATH-spoof of `{family}`",
+            )
+
+    if cmd_base not in GOVERNED_FAMILIES:
+        return None
+
+    # Surface a useful reason naming the family and subcommand if we
+    # can identify one.
+    if cmd_base == "gh":
+        result = detect_gh_subcommand(segment)
+        if result is not None:
+            group, action = result
+            return (
+                "ask",
+                f"unknown gh subcommand: {group} {action}".rstrip()
+                + " — not on the documented read-only allow-list; "
+                "ask before invoking",
+            )
+        return ("ask", "unknown gh invocation — ask before invoking")
+
+    if cmd_base == "git":
+        sub = detect_git_subcommand(segment)
+        if sub is not None:
+            return (
+                "ask",
+                f"unknown git subcommand: {sub} — not on the documented "
+                "read-only allow-list; ask before invoking",
+            )
+        return ("ask", "unknown git invocation — ask before invoking")
+
+    if cmd_base == "npm":
+        sub = detect_npm_subcommand(segment)
+        if sub is not None:
+            return (
+                "ask",
+                f"unknown npm subcommand: {sub} — not on the documented "
+                "read-only allow-list; ask before invoking",
+            )
+        return ("ask", "unknown npm invocation — ask before invoking")
+
+    return None
+
+
 def _trusted_git_init_token_path(repo_root: Path) -> Path | None:
     """Return the trusted git-init allow-token path if the env signals it.
 
@@ -703,9 +1113,15 @@ def classify_rm_target(
 
 
 def classify_find_delete(segment: str) -> tuple[str, str] | None:
-    """Check if segment is a find command with -delete or -exec rm.
+    """Check if segment is a find command with a mutating action flag.
 
-    Returns classification tuple or None if not a find-delete.
+    Mutating action flags: -delete, -exec, -execdir, -fprint*, -ok.
+    Returns classification tuple or None if find has no mutating action.
+
+    The allow-list (see classify_allow_list) admits `find` ONLY when none
+    of these flags are present. This classifier returns "ask" for find
+    invocations that DO carry a mutating action — the allow-list will
+    not match them, and they fall through to this check.
     """
     try:
         tokens = shlex.split(segment)
@@ -717,16 +1133,24 @@ def classify_find_delete(segment: str) -> tuple[str, str] | None:
         return None
 
     has_delete = '-delete' in tokens
-    has_exec_rm = False
+    has_exec = False
+    has_execdir = False
+    has_fprint = False
+    has_ok = False
     for i, tok in enumerate(tokens):
-        if tok == '-exec' and i + 1 < len(tokens) and 'rm' in tokens[i + 1]:
-            has_exec_rm = True
-            break
+        if tok == '-exec':
+            has_exec = True
+        elif tok == '-execdir':
+            has_execdir = True
+        elif tok in ('-ok', '-okdir'):
+            has_ok = True
+        elif tok in ('-fprint', '-fprint0', '-fprintf'):
+            has_fprint = True
 
-    if not has_delete and not has_exec_rm:
+    if not (has_delete or has_exec or has_execdir or has_fprint or has_ok):
         return None
 
-    return "ask", f"find with delete action"
+    return "ask", f"find with mutating action flag (-delete/-exec/-execdir/-fprint/-ok)"
 
 
 def extract_command_substitutions(raw: str) -> list[str]:
@@ -1029,6 +1453,24 @@ def classify_command(
         find_result = classify_find_delete(segment)
         if find_result:
             escalate(*find_result)
+
+        # --- DANGER-LATCH-CALIBRATION-001 ---
+        # Hybrid fail-closed for governed families (git/gh/npm).
+        # Run the allow-list AFTER all deny/confirm/rm/find checks have
+        # had a chance to escalate. The allow-list itself never escalates
+        # (allow is the lowest tier). It exists to:
+        #   (a) tell the governed-family default below to leave this
+        #       segment alone (do not escalate to ask),
+        #   (b) be auditable as an explicit admit decision in future
+        #       diagnostics.
+        # If the segment is on the allow-list, skip the hybrid default
+        # check. If it is NOT on the allow-list AND the segment is a
+        # governed-family command, escalate to "ask".
+        allow_result = classify_allow_list(segment)
+        if allow_result is None:
+            family_result = classify_governed_family_default(segment)
+            if family_result is not None:
+                escalate(*family_result)
 
     return worst_decision, worst_reason
 
