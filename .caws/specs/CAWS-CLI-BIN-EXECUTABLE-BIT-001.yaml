@@ -1,19 +1,24 @@
 id: CAWS-CLI-BIN-EXECUTABLE-BIT-001
-title: 'Set executable bit on dist/index.js during caws-cli build'
+title: 'Set executable bit on dist/index.js during caws-cli build (first canonical tag-driven publish bake)'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-21T04:20:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/scripts/build-cli.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/scripts/build-cli.js
     - packages/caws-cli/tests/scripts/build-cli-bin-mode.test.js
+    - packages/caws-cli/tests/scripts/release-tag-publish.test.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
     - .caws/specs/CAWS-CLI-BIN-EXECUTABLE-BIT-001.yaml
   out:
     - .caws/policy.yaml
@@ -21,6 +26,7 @@ scope:
     - packages/caws-kernel/src
     - packages/caws-cli/src
     - .github/workflows
+    - scripts/release-tag-publish.mjs
 invariants:
   - 'After `node scripts/build-cli.js` completes from a clean dist/ on a POSIX system, packages/caws-cli/dist/index.js exists and has the owner-executable bit set (mode & 0o100 is non-zero).'
   - 'The chmod step runs unconditionally on every POSIX build — not gated by env var, opt-in flag, or feature switch. The only conditional is the Windows skip.'
