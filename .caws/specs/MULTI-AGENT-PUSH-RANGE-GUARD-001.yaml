@@ -1,0 +1,456 @@
+id: MULTI-AGENT-PUSH-RANGE-GUARD-001
+title: 'CAWS-governed push refuses to silently include commits outside the current session''s slice range'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-22T22:30:00.000Z'
+updated_at: '2026-05-22T22:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/store
+    - packages/caws-kernel/src/doctor
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/MULTI-AGENT-PUSH-RANGE-GUARD-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src/scope
+invariants:
+  - >-
+    Diagnose/decide, NOT repair. This slice introduces detection and
+    governance of the push surface; it MUST NOT mutate repository
+    state, rewrite history, drop commits, reorder commits, or amend
+    commits. The guard's only outputs are (a) a structured report of
+    the outgoing commit range and its classification, and (b) a
+    refuse/require-acknowledgement decision before the push proceeds.
+    Repair of unexpected commits (e.g., "drop this commit before
+    push") is OUT OF SCOPE; the operator handles that with normal
+    git tools after the guard surfaces the problem.
+  - >-
+    Concurrency awareness is mechanical, not documentary. v11 has
+    repeatedly demonstrated that documentation-only safety ("agents
+    should remember to inspect git log origin/main..HEAD") fails
+    under multi-agent operation. This slice converts the discovered
+    coordination failures into mechanical gates: pushed commit range,
+    foreign worktree state, active spec attribution, and session
+    base. Without these gates, local main is a shared staging
+    surface across sessions where commits land without an explicit
+    ownership decision.
+  - >-
+    No global CLI dependency. The implementation MUST use the
+    repo-local v11 CLI (node packages/caws-cli/dist/index.js or
+    equivalent). The push-range guard's classification logic cannot
+    depend on whichever global caws binary happens to be on $PATH —
+    that is itself a known v11 coordination hazard (the
+    CLI-LOCAL-VERSION-PREFLIGHT-001 follow-up candidate covers
+    detection of global/local version skew separately; the push
+    guard is one of its eventual consumers but does not block on it).
+  - >-
+    Foreign physical worktrees become escalating evidence during
+    active slices, not blanket WARN. The existing
+    doctor.worktree.foreign_physical rule (currently INFO) remains
+    INFO for idle repos. During an active spec, a foreign worktree
+    is escalated to WARN by default and to ERROR when at least one
+    of: (a) the foreign worktree has an unmerged branch, (b) its
+    branch is not represented in .caws/worktrees.json, or (c)
+    commits reachable from local main that are not in the current
+    slice originate from the foreign worktree. The escalation rule
+    fires inside the push guard's preflight; it does NOT replace
+    the doctor rule, which remains a separate diagnostic surface.
+  - >-
+    Spec provenance is mechanically derivable, not prose-trusted.
+    Commit messages often name specs ("chore(caws): activate
+    SPEC-FOO-001"), but the guard MUST NOT rely on prose alone.
+    Minimum implementation infers provenance from (a) file touches
+    matched against active/recently-closed specs' scope.in arrays
+    and (b) commit subject pattern matching. Stronger implementation
+    (deferred to follow-up) records a local session ledger mapping
+    each commit SHA to the spec id active at commit time. The draft
+    locks the minimum; the stronger ledger is named as a forward-
+    looking option but is NOT a v1 deliverable.
+  - >-
+    Slice-base SHA tracking is the missing invariant. When a slice
+    activates (lifecycle_state draft -> active OR commit 1 of a
+    multi-commit implementation pass), the guard records the base
+    SHA so later preflights can report `<base>..HEAD` and flag
+    commits outside that range. Storage shape and the activation/
+    pass-start trigger mechanism are part of the ADR pre-read
+    (activation prerequisite) — they are not invented here.
+  - >-
+    The push guard is OPT-IN at v1, not a blocking middleware on
+    raw `git push`. Operators invoke `caws push` or `caws prepush`
+    explicitly. Hooking into git's pre-push lifecycle is a stronger
+    posture and is named as a follow-up, but the v1 deliverable is a
+    standalone command that the operator calls. The kernel/store
+    layer does the work; the shell exposes it. This sequencing
+    matches the v11 doctrine (kernel decides, shell exposes) and
+    avoids the hook-policy collision that would arise from
+    automatically intercepting every git push.
+  - >-
+    The guard's output is the exact commit list, not a summary.
+    `git rev-list --count origin/main..HEAD` ("2 commits ahead") is
+    insufficient. The guard's structured report enumerates each
+    commit with SHA, subject, touched files, inferred spec ids,
+    and an explicit current-slice-match boolean. Summary-only
+    output is the failure mode that allowed dd8841a (the parallel
+    session's CAWS-MIGRATE-V10-EVENTS-001 draft) to be pushed
+    silently alongside 96db0d1 + 23eaed7 in session 13.
+  - >-
+    Kernel-change escape clause: this draft excludes
+    packages/caws-kernel/src/scope. If implementation reveals the
+    push guard's foreign-worktree-escalation rule requires kernel-
+    side observation primitives (e.g., a doctor rule that consults
+    git's reflog or worktree-list and emits a typed diagnostic),
+    the activation must amend scope.in to include the specific
+    kernel file. Silent kernel edits are spec-authoring trap #5
+    and are refused. Kernel/doctor surfaces are in blast_radius.
+    modules but intentionally NOT in scope.in for the draft.
+  - >-
+    No event schema changes. The guard does NOT emit a new event
+    type for refused/acknowledged pushes in v1. If audit value
+    surfaces during implementation, a follow-up slice may add a
+    push_guard_evaluated event with its own schema; that work is
+    OUT OF SCOPE here.
+acceptance:
+  - id: A0
+    given: |
+      No Authority Decision Record (ADR or doctrine section) exists
+      for the push guard mechanism.
+    when: |
+      A reviewer evaluates whether this spec is ready to activate.
+    then: |
+      The spec is REJECTED for activation. The ADR must exist as a
+      committed file (proposed: a new section in
+      docs/architecture/caws-vnext-command-surface.md, or a
+      dedicated docs/architecture/adr/*.md) answering the six open
+      design questions in the triage block below, before any
+      implementation work begins. The ADR is the activator's
+      deliverable; this draft only captures intent.
+  - id: A1
+    given: |
+      A repository with one active spec ACTIVE-FOO-001 and two
+      local commits ahead of origin/main:
+        - Commit 1 touches files under ACTIVE-FOO-001's scope.in.
+        - Commit 2 touches files under a SIMULATED parallel spec
+          PARALLEL-BAR-001 (not currently active in this session,
+          but landed on main from another session).
+    when: |
+      The operator invokes `caws push` (or `caws prepush`) from a
+      cwd inside the main checkout.
+    then: |
+      The guard's structured report enumerates both commits. Commit
+      1 is classified as attributable to ACTIVE-FOO-001 (current-
+      slice-match: true). Commit 2 is classified as unattributable
+      to the current slice (current-slice-match: false), naming
+      PARALLEL-BAR-001 as the inferred spec via file-touch match.
+      The guard refuses to proceed without explicit acknowledgement
+      (mechanism per ADR — likely a `--ack-unexpected <sha>` flag
+      or interactive prompt). Exit code is non-zero on the refuse
+      path.
+  - id: A2
+    given: |
+      A repository with one active spec ACTIVE-FOO-001, no foreign
+      worktrees, and an outgoing range cleanly attributable to
+      ACTIVE-FOO-001 (every commit touches only files in scope.in
+      or has a commit subject naming the spec id).
+    when: |
+      The operator invokes `caws push` from main checkout cwd.
+    then: |
+      The guard's structured report enumerates every commit with
+      SHA, subject, touched files, inferred spec id ACTIVE-FOO-001,
+      current-slice-match: true for all commits. The guard does NOT
+      refuse; the push proceeds. Exit code 0. The output is NOT a
+      summary; it is the explicit commit list.
+  - id: A3
+    given: |
+      A repository with one active spec, no outgoing commits
+      unattributable to the active spec, but a foreign git worktree
+      exists at a sibling directory path (created via `git worktree
+      add` outside CAWS, not registered in .caws/worktrees.json).
+      The foreign worktree's branch is unrelated to main and has
+      no commits reachable from local main.
+    when: |
+      The operator invokes `caws push`.
+    then: |
+      The guard surfaces a non-blocking diagnostic naming the
+      foreign worktree (path, branch, last commit). It does NOT
+      refuse; severity is WARN (escalated from doctor's INFO
+      classification because an active spec is in play). Exit
+      code is 0; the diagnostic is visible in the report.
+  - id: A4
+    given: |
+      The exact session-13 condition: a foreign worktree exists,
+      and at least one commit in `origin/main..HEAD` originates
+      from that foreign worktree (the foreign worktree authored
+      it before the operator's session began pushing).
+    when: |
+      The operator invokes `caws push`.
+    then: |
+      The guard refuses or requires explicit acknowledgement. The
+      report names the foreign worktree, names the specific commit
+      SHA(s) that originate from it, and classifies them as
+      current-slice-match: false. The severity for the foreign-
+      worktree-with-overlapping-commits case is ERROR. The
+      operator's acknowledgement mechanism (per ADR) MUST include
+      a record of WHICH commits were acknowledged, not a blanket
+      "yes proceed."
+  - id: A5
+    given: |
+      The guard's outgoing-range classification is invoked against
+      a fixture repository (NOT this repo's real .caws/ — a
+      controlled fixture with synthetic specs and commits).
+    when: |
+      The classification logic runs.
+    then: |
+      The output is a structured object (JSON or equivalent) with
+      a known schema: a list of commit records, each with sha,
+      subject, touched_files (array), inferred_spec_ids (array),
+      current_slice_match (boolean), and provenance_source
+      ("file_touch" | "commit_subject" | "session_ledger" — the
+      last is the deferred stronger implementation). The schema is
+      stable enough for downstream tooling to consume. The classifier
+      does NOT mutate the fixture repo's state.
+  - id: A6
+    given: |
+      Any of the test fixtures above (A1, A3, A4).
+    when: |
+      The push guard runs to completion (refuse OR acknowledged-
+      proceed OR clean-pass).
+    then: |
+      The repository state is unchanged. No files are modified, no
+      commits are amended, no events are appended, no registry
+      entries are mutated. This slice is purely diagnose/decide;
+      `caws doctor` invoked immediately before and immediately
+      after the guard produces byte-identical output.
+  - id: A7
+    given: |
+      The push guard is invoked from a cwd inside a CAWS-managed
+      worktree (not the main checkout).
+    when: |
+      The operator runs `caws push`.
+    then: |
+      The guard either (a) refuses with a clear diagnostic naming
+      the worktree-vs-main distinction and pointing the operator
+      at the main checkout, OR (b) automatically delegates to the
+      main checkout's main branch (per ADR). The default behavior
+      is (a) — refuse — because v1 keeps the push surface single-
+      cwd to avoid the worktree-binding/push-target coupling that
+      A4-A7 of the authority slice will eventually need to resolve.
+non_functional:
+  reliability:
+    - >-
+      The guard's classification logic MUST be deterministic for a
+      given input state. Re-invoking `caws push` against the same
+      local commit set + same .caws/ state + same foreign-worktree
+      configuration produces the same structured report.
+    - >-
+      Classification failures (e.g., spec id inferred ambiguously,
+      foreign worktree state unreadable) MUST be surfaced as
+      structured diagnostics rather than silently passing or
+      silently refusing. The guard distinguishes "I could not
+      classify this commit" from "this commit is unattributable."
+    - >-
+      The guard MUST NOT depend on network access to origin. The
+      outgoing range is computed locally from
+      `git rev-list origin/main..HEAD`; the push itself happens
+      AFTER the guard passes. Network failures during `git push`
+      are git's concern, not the guard's.
+  performance:
+    - >-
+      Classification of a typical outgoing range (1-20 commits)
+      MUST complete in under 2 seconds on the slice author's
+      hardware. The classifier reads .caws/specs/ once and does
+      O(commits * specs) file-touch matching; the constants are
+      small. If implementation reveals a need for indexing or
+      caching, the activation amends this clause.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin
+# ------
+# Filed 2026-05-22 in response to session 13's push of
+# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 commit 3a (96db0d1) +
+# commit 3b (23eaed7), which inadvertently also pushed
+# dd8841a chore(caws): draft CAWS-MIGRATE-V10-EVENTS-001 — a commit
+# authored by a parallel session in a sibling git worktree
+# (/Users/darianrosebrook/Desktop/Projects/caws-wt-migrate-v10-events).
+#
+# The parallel session's commit landed on local main between the
+# operator's last commit and the push. Git did the normal thing; CAWS
+# did not force an explicit review of the pushed range. The new
+# doctor.worktree.foreign_physical INFO surfaced the sibling worktree
+# but only as an observation — not as a push gate.
+#
+# Maintainer summary (from the pivot decision):
+# > "The implementation went fine. A1 sparse-checkout + A2 narrow
+# > regression are good progress. The coordination substrate is still
+# > too permissive for concurrent agents. v11's safety model has good
+# > single-agent substrate (active specs, scope, doctor, worktrees,
+# > events, lifecycle transactions) but lacks concurrency-aware
+# > commit/worktree provenance."
+#
+# Why now (blocking authority A3+)
+# --------------------------------
+# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 A1 + A2 are landed.
+# A3 (doctor.worktree.spec_drift), A4 (kernel scope evaluator), A5
+# (lifecycle transaction worktree-cwd coverage), A6 (composed
+# regression), and A7 (reconcile) all start composing authority
+# across scope, gates, lifecycle, and regression surfaces. Those are
+# exactly the surfaces most likely to collide with parallel agents.
+#
+# Without push-range guarding, every subsequent authority commit
+# risks the same silent-foreign-commit class. Insert this slice
+# before A3; authority work resumes once the multi-agent envelope is
+# safe.
+#
+# Open design questions (ADR-gated)
+# ---------------------------------
+# Activation requires a written ADR (per A0) answering at minimum:
+#
+#   Q1. Provenance inference algorithm.
+#       The locked minimum is file-touch matching against active
+#       specs' scope.in + commit subject pattern matching. Open: how
+#       does the algorithm handle commits that touch files matching
+#       MULTIPLE specs' scope.in? Tie-break rules? "Closest
+#       active-spec match" vs "first-match wins" vs "ambiguous —
+#       flag for operator review"?
+#
+#   Q2. Session/slice base SHA storage shape.
+#       The locked invariant says the base SHA is recorded at slice
+#       activation OR commit 1 of an implementation pass. Open: where
+#       is it stored? Candidates: .caws/sessions/<id>.json (extends
+#       an existing session shape), a new top-level .caws/slice-
+#       base.json, or attached to the spec YAML itself. Storage
+#       choice has audit/migration consequences.
+#
+#   Q3. Acknowledgement mechanism for unexpected commits.
+#       A4 names the requirement: explicit acknowledgement names the
+#       specific SHAs, not a blanket "yes proceed." Open: command-
+#       line flag (--ack <sha> --ack <sha>) vs interactive prompt vs
+#       both? Does an ack persist (so the operator does not re-ack
+#       the same commit on subsequent invocations within the same
+#       session)?
+#
+#   Q4. Foreign worktree escalation thresholds.
+#       The locked invariant names three ERROR conditions: (a)
+#       unmerged branch, (b) branch not in worktrees.json, (c) origin
+#       in `origin/main..HEAD`. Open: are these OR'd or AND'd? Are
+#       there sub-cases (e.g., (c) alone might be acceptable if the
+#       commit's prose names a different spec the operator is also
+#       working on legitimately)?
+#
+#   Q5. Push-target naming.
+#       v1 covers `caws push origin main`. Open: how does the guard
+#       behave when pushing to a non-main branch, or to a non-origin
+#       remote? Does it refuse non-main pushes entirely? Does it
+#       still compute the outgoing range against the operator-named
+#       upstream? Tests must cover at least: push origin main (the
+#       common case) and push origin <feature-branch> (rejected or
+#       weakened?).
+#
+#   Q6. Doctor integration vs separate command.
+#       The push guard is a new command in v1, NOT a hook into raw
+#       git push. Open: should the foreign-worktree-escalation rule
+#       also fire when `caws doctor` runs during an active slice
+#       (the locked invariant says "remains INFO for idle repos;
+#       escalated WARN/ERROR during active spec")? Implementation:
+#       does doctor consult slice-base state, or does the push guard
+#       layer escalation on top of doctor's INFO output?
+#
+# Implementation sketch (sketch only, not authorized)
+# ---------------------------------------------------
+# Three commits expected after ADR + activation:
+#
+# Commit 1: ADR landed (likely as a section in
+# docs/architecture/caws-vnext-command-surface.md, or a new
+# docs/architecture/adr/0001-multi-agent-push-range-guard.md).
+# Answers Q1-Q6. No code yet.
+#
+# Commit 2: store-layer classifier + push-guard command.
+#   - packages/caws-cli/src/store/push-range-classifier.ts (new):
+#     compute origin/main..HEAD via runGit, load active spec(s) from
+#     loadSpecs(cawsDir), match each commit's touched files against
+#     scope.in arrays, produce structured Result<PushRangeReport>.
+#   - packages/caws-cli/src/shell/commands/push.ts (new): shell
+#     handler that calls the classifier, formats the structured
+#     report, applies the refuse/ack/proceed decision per the ADR.
+#   - packages/caws-cli/tests/store/push-range-classifier.test.js
+#     (new): fixture tests for A1, A2, A3, A4, A5 with controlled
+#     temp repos.
+#   - packages/caws-cli/tests/shell/push-command.test.js (new):
+#     end-to-end shell exit-code + output assertions.
+#
+# Commit 3: closure. Closure_notes record the ADR commit SHA, the
+# implementation commit SHA, the A1-A7 verification, and the
+# follow-up candidates (git pre-push hook integration, session
+# ledger upgrade, doctor escalation integration).
+#
+# What is NOT planned for v1
+# --------------------------
+# Per the locked invariants, the following are explicitly out of
+# scope for the initial implementation:
+#
+#   * Auto-detection of session boundaries (the operator names the
+#     slice; the guard does not heuristically segment work).
+#   * Repair of unexpected commits (operator runs git tools after
+#     the guard surfaces the problem).
+#   * Network-side enforcement (no server-side hook, no GitHub
+#     branch protection rules — v1 is local).
+#   * Cross-repo coordination (the guard is per-repo).
+#   * Session ledger persistence (commit-to-spec mapping at commit
+#     time). Named as a stronger implementation, deferred.
+#   * git pre-push hook integration. Named as a stronger posture,
+#     deferred.
+#   * Doctor-side escalation of foreign-physical to WARN/ERROR. The
+#     push guard layers this on top of doctor's INFO; whether doctor
+#     itself escalates is Q6 in the ADR.
+#
+# Relationship to other slices
+# ----------------------------
+#
+#   * WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 (active): A3-A7 are
+#     deliberately paused until this slice closes. A1+A2 are landed
+#     and unaffected.
+#   * SCOPE-GUARD-PATH-NORMALIZATION-001 (unfiled candidate): cwd
+#     normalization is a different defect class (hook-side, not
+#     CLI-side). The ordering puts it #2 after this slice, but the
+#     two can be implemented in parallel if scope.in clearly
+#     separates them.
+#   * SPECS-CLOSE-REASON-GUARD-001 (unfiled candidate from session
+#     13's closure incident): related to CLI guardrail
+#     productization; same class of failure as the push range gap
+#     but at a different surface. Lower priority than this slice.
+#   * CLI-LOCAL-VERSION-PREFLIGHT-001 (unfiled candidate): global/
+#     local CLI skew detection. Eventually a consumer of this
+#     slice's structured report; not a blocker.
+#   * PRUNE-REPAIR-WORKTREE-001 (blocked on authority): remains
+#     blocked. The repair surface only becomes safe once authority
+#     is settled AND the multi-agent envelope is sealed.
+#
+# Activation gate
+# ---------------
+# Activation requires:
+#   1. ADR committed answering Q1-Q6 above.
+#   2. Maintainer authorization (this is recon/draft only).
+#   3. The activation commit MUST NOT yet flip risk_tier or add
+#      contracts; the activator decides those at activation time
+#      per established slice pattern (see
+#      WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001's commit-1 vs
+#      commit-2 separation for prior art).
+#
+# Strength language stays mechanism-level. The slice earns three
+# claims:
+#   (a) outgoing-range commit classification is mechanically
+#       derivable and surfaced as a structured report;
+#   (b) foreign-worktree presence during active slices is
+#       escalated above INFO; and
+#   (c) push proceeds only when the range is cleanly attributable
+#       OR the operator has explicitly acknowledged unexpected
+#       commits by SHA.
+# It does NOT claim universal multi-agent safety, does NOT promote
+# itself to a server-side gate, and does NOT replace the operator's
+# judgment about whether to acknowledge unexpected commits.
