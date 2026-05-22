@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: draft
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-21T00:00:00.000Z'
+updated_at: '2026-05-22T12:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
@@ -74,6 +74,72 @@ invariants:
     sparse-checkout approach makes the control-plane invariant true in
     practice for v11.2 without rewriting every CLI path that reads
     `.caws/specs/<id>.yaml`.
+  # ----- Invariants added by the recon/activation pass (2026-05-22) -----
+  - >-
+    H4 enrichment is an observable filesystem fact, NOT provenance proof.
+    `WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001` (closed 2026-05-22) fixed
+    H4 to surface `canonical_dir_observed` (boolean) and
+    `canonical_dir_present` (set only when observed). The authority
+    slice MUST treat this as evidence of "the canonical path's current
+    state at observation time," not as proof that `destroyWorktree`
+    caused the state. Authority rules MUST cite both fields when H4 is
+    consumed; a rule that reads only `canonical_dir_present` and ignores
+    `canonical_dir_observed` reverts to the old confused behavior.
+  - >-
+    Doctor diagnostics that are ALLOWED as evidence inputs to authority
+    decisions (consumable):
+      - `doctor.worktree.ghost_registry_entry` (H1; registry-scoped)
+      - `doctor.binding.one_sided` (H2 discharge; data: `specHasWorktree`, `registryHasSpecId`)
+      - `doctor.binding.spec_missing_registry` (H3 + H4 enrichment;
+        data: `canonical_dir_observed`, `canonical_dir_present`)
+      - `doctor.worktree.foreign_physical` (H6; info-only)
+      - `doctor.worktree.git_observation_unavailable` (meta; signals partial evidence)
+    Doctor diagnostics that are REFUSED as evidence (authority must
+    answer them, cannot consume them):
+      - `doctor.worktree.binding_contradiction_3way` (H5; doctrine
+        pointer is to this slice). Authority rules that reference H5 must
+        be the resolution rule itself, not consumers of H5's output.
+  - >-
+    Legacy-envelope shape detection: v10.2-era `.caws/worktrees.json`
+    files have the shape `{"version": 1, "worktrees": {<map of records>}}`.
+    The v11 loader treats the outer object as a `WorktreeRegistry`,
+    making `"version"` (a number value) and `"worktrees"` (an object
+    value) appear as top-level worktree names. The H1 defensive filter
+    (commit a84ac60) skips the number record; the object record fires
+    H1 with a repair text that is ACTIONABLY WRONG for the legacy-
+    envelope case (following the repair would delete the entire nested
+    registry, including legitimate records). Authority rules MUST NOT
+    consume H1 against the literal subject `"worktrees"` as evidence
+    that a real worktree of that name exists; doing so encodes the
+    legacy-envelope confusion as authority.
+  - >-
+    Legacy-envelope migration is a DEPENDENCY of this slice, NOT an
+    in-scope deliverable of this slice. The recon pass classified
+    `.caws/worktrees.json` legacy-envelope shape as a migration
+    prerequisite (see Recon Outcome below). A separate slice
+    (`WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001` or equivalent)
+    must precede activation of this slice and complete before authority
+    decisions are consumed in production. This slice's acceptance
+    fixtures use the v11 flat-map shape exclusively; the prerequisite
+    slice owns the migration command.
+  - >-
+    Doctor diagnostics must NOT be weakened to suppress the current
+    real-repo 1E/3W/0I baseline. The ERROR finding on subject
+    `"worktrees"` is correct evidence of the legacy-envelope leak; the
+    fix is the migration slice (which makes the finding disappear by
+    correcting the underlying state), not a kernel rule change that
+    silences it. Any kernel change that hides legacy-envelope shape
+    behind a non-INFO severity is REFUSED in this slice's scope.out.
+  - >-
+    `WORKTREE-CAWS-SHARED-STATE-001` (draft) is SUPERSEDED by this
+    slice. Both specs assert the same control-plane invariant at
+    different abstraction levels: SHARED-STATE-001 names the physical
+    filesystem topology (symlinks/junction-points/CLI-side resolution);
+    this slice names the authority semantic and selects sparse-checkout
+    as the v11.2 mechanism. The first activation commit MUST close
+    `WORKTREE-CAWS-SHARED-STATE-001` with `resolution: superseded` and
+    `superseded_by: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001`. The
+    closure is an authority precondition, not in-scope implementation.
 acceptance:
   - id: A1
     given: |
@@ -315,3 +381,213 @@ contracts: []
 # NOT claim the directory-inversion architecture, and does NOT promote
 # this invariant to apply outside CAWS-managed worktrees (a git
 # worktree created without `caws worktree create` is not in scope).
+#
+# ============================================================================
+# Recon / activation pass (2026-05-22)
+# ============================================================================
+#
+# This block was added by a recon pass conducted after
+# WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001 closed (commit 7d11a45). The
+# spec stays at lifecycle_state: draft until the maintainer authorizes
+# activation. The recon answered five classification questions and
+# added six new invariants above (the H4 honesty rule, the evidence
+# allow/refuse list, the legacy-envelope shape recognition, the
+# migration-as-dependency rule, the diagnostic-non-weakening rule, and
+# the SHARED-STATE-001 supersession decision).
+#
+# --- Question 1: Is the legacy-envelope worktrees.json a migration
+# prerequisite for authority work, or an accepted baseline diagnostic?
+# ---------------------------------------------------------------------------
+# DECISION: Migration prerequisite, NOT accepted baseline.
+#
+# Evidence: this repo's `.caws/worktrees.json` is currently in v10.2
+# envelope shape `{"version": 1, "worktrees": {<map>}}` containing two
+# destroyed worktree records. The v11 loader sees `"worktrees"` (the
+# envelope key) as a top-level registry key whose value happens to be
+# an object — it fires H1 with subject `"worktrees"`. The H1 repair
+# text suggests removing the entry from `.caws/worktrees.json`; an
+# operator who follows it would delete the entire nested registry.
+# That is actionably wrong, and it would compound if authority
+# decisions consumed H1's subject as a real worktree name.
+#
+# Authority decisions reasoning against this baseline are reasoning
+# against a confused premise. The activation slice's six new
+# invariants pin: (i) authority MUST NOT consume H1 for subject
+# `"worktrees"`; (ii) a separate migration slice owns the format
+# conversion; (iii) doctor MUST NOT be weakened to suppress the ERROR.
+#
+# --- Question 2: Should this slice include legacy-envelope migration,
+# or should it be a separate slice?
+# ---------------------------------------------------------------------------
+# DECISION: Separate slice, sequenced ahead of activation.
+#
+# Proposed: WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001
+#   - mode: chore (or feature if a new CLI command is required)
+#   - risk_tier: 3
+#   - earned claim: v10.2 envelope-shaped `.caws/worktrees.json` is
+#     either migrated to the v11 flat-map shape in place, OR
+#     classified by a dedicated typed diagnostic (not H1 with subject
+#     `"worktrees"`).
+#   - non-goals: no authority decisions; no repair of half-states; no
+#     control-plane mutation beyond the format conversion itself.
+#   - acceptance bar: after the migration runs, doctor against this
+#     repo produces 0E findings related to the legacy envelope. The
+#     two destroyed worktree records inside the nested `worktrees`
+#     value are either preserved as flat-map entries (with their
+#     `status: destroyed` and `destroyedAt` intact) or removed
+#     deterministically (the destroyed-state heuristic is a policy
+#     decision the migration slice must make explicit).
+#
+# Rationale: format migration is mechanical and orthogonal to
+# authority doctrine. Folding it into the authority slice would
+# entangle topology decisions with format-conversion code review.
+# Sequencing it ahead means authority work consumes clean inputs.
+#
+# --- Question 3: Does WORKTREE-CAWS-SHARED-STATE-001 get superseded,
+# absorbed, or sequenced behind this spec?
+# ---------------------------------------------------------------------------
+# DECISION: Superseded.
+#
+# Evidence: SHARED-STATE-001 asserts ".caws/ is project-shared
+# authority state. Every git worktree reads from and writes to the
+# same physical .caws/ directory; no worktree carries its own copy."
+# Implementation options listed: symlinks, junction points, CLI-side
+# resolution. CONTROL-PLANE-001 asserts "CAWS state is control-plane.
+# Worktrees are execution sandboxes. The control plane is not
+# duplicated; bindings are." Implementation: sparse-checkout.
+#
+# These are the same invariant at different abstraction levels.
+# SHARED-STATE-001's A4 (cross-platform mechanism) folds into
+# CONTROL-PLANE-001's mechanism choice. CONTROL-PLANE-001's invariant
+# is strictly stronger ("control-plane store" is topology-agnostic;
+# "physical .caws/ directory" is sparse-checkout-incompatible).
+#
+# Action: activation commit #1 of this slice closes
+# WORKTREE-CAWS-SHARED-STATE-001 with `resolution: superseded` and
+# `superseded_by: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001`. The
+# closure is a precondition of activation, not an in-scope deliverable.
+#
+# --- Question 4: Which doctor diagnostics are allowed as evidence for
+# authority decisions now that H4 is corrected?
+# ---------------------------------------------------------------------------
+# DECISION: Allow list (5) and refuse list (1).
+#
+# See the two new invariants above ("ALLOWED as evidence" /
+# "REFUSED as evidence"). The H4 enrichment fix (FOLLOWUP-001) means
+# `doctor.binding.spec_missing_registry` is now an honest evidence
+# input — authority rules that consult it can distinguish "canonical
+# path observed absent" from "canonical path never observed." Without
+# the FOLLOWUP-001 fix, authority rules would inherit the noise.
+#
+# H5 stays on the refuse list: it is the case authority must answer.
+# Doctor's H5 doctrine pointer points to THIS slice; this slice's
+# authority rule for H5 is the resolution, not a consumer of H5.
+#
+# --- Question 5: Which states remain diagnose-only and must not be
+# repaired until a later prune/repair slice?
+# ---------------------------------------------------------------------------
+# DECISION: All H1-H6 stay diagnose-only after this slice ships.
+#
+# This slice introduces one new repair capability (A7: `caws worktree
+# reconcile <name>` for the pre-v11.2 spec-materialization migration).
+# That is not a backfill into PRUNE-REPAIR-WORKTREE-001's H1-H4
+# repair surface; it is a separate one-shot migration command gated
+# on the authority rule.
+#
+# PRUNE-REPAIR-WORKTREE-001 remains blocked on this slice's authority
+# rule being written and stable. After that, H1/H2/H3/H4 become
+# repairable in PRUNE-REPAIR-WORKTREE-001 under the authority rule.
+# H5 stays refused indefinitely (no automatic repair under current
+# doctrine; the doctrine pointer is structural).
+#
+# --- Activation prerequisites (must all be true before flip) -------------
+#
+# This expands the original "Activation note" above.
+#
+#   1. Doctrine pre-read: confirm the H4 honesty + legacy-envelope
+#      invariants in this spec are acceptable to the maintainer.
+#      (Recon-level confirmation needed; not a code change.)
+#
+#   2. Implementation-mechanism decision: sparse-checkout vs. directory
+#      inversion. v11.2 recommendation is sparse-checkout. If directory
+#      inversion is preferred, scope and risk_tier both grow.
+#
+#   3. Hooks-policy decision: should the worktree-guard hook also
+#      block Edit/Write on `.caws/specs/<id>.yaml` paths inside a
+#      worktree directory? Defense in depth. Decision shapes hook
+#      pack changes.
+#
+#   4. Migration timeline: how long do pre-v11.2 worktrees stay
+#      forgivable? Doctor ERROR vs. WARN for a freshly-detected
+#      materialized spec depends on the migration window.
+#
+#   5. Risk_tier rationale: filed at tier 3 for draft compliance
+#      (tier 2 requires at least one contract entry, which is filed
+#      empty across the v11.1 spec line; the draft is captured at
+#      tier 3 to load cleanly). Activation slice MUST re-evaluate
+#      tier: this is genuinely a kernel-authority change with broad
+#      blast radius across the scope guard, lifecycle transaction,
+#      and doctor diagnostics. Mode: feature because this introduces
+#      a new doctrine invariant and a new repair command, not just a
+#      fix. The activator should bump to tier 2 and add a real
+#      contracts entry (or amend the v11.2 contracts schema to make
+#      empty arrays valid).
+#
+#   6. NEW: WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001 (or
+#      equivalent) MUST be filed, activated, implemented, and closed
+#      BEFORE this slice can activate. The migration removes the
+#      legacy-envelope noise from authority decisions' input surface.
+#
+#   7. NEW: The activation commit #1 closes
+#      WORKTREE-CAWS-SHARED-STATE-001 with resolution: superseded.
+#
+# --- Activation-pass non-goals (explicit guards) -------------------------
+#
+#   * No prune/repair behavior in this slice. Repair lives in
+#     PRUNE-REPAIR-WORKTREE-001 after authority closes.
+#   * No automatic migration of pre-v11.2 worktrees. A7 defines the
+#     `caws worktree reconcile` semantics; the implementation is
+#     opt-in (operator runs the command), not run-on-discovery.
+#   * No release/version/CHANGELOG/template edits.
+#   * No shell binding surface imports from store. The kernel/store
+#     separation established in v11 stays intact.
+#   * No weakening of doctor diagnostics to hide the current
+#     1E/3W/0I real-repo baseline. The ERROR finding is correct
+#     evidence; the fix is the migration slice.
+#   * No re-opening of any closed slice referenced by this one
+#     (WORKTREE-DOCTOR-HALF-STATE-001, WORKTREE-DOCTOR-HALF-STATE-
+#     FOLLOWUP-001, LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001).
+#   * No expansion of acceptance criteria A1-A7 beyond what already
+#     appears above. New criteria added during implementation must
+#     be justified in commit messages, not silently appended.
+#
+# --- Implementation-ready acceptance matrix (per A1-A7) ------------------
+#
+# This matrix is the activation deliverable: each A row has a
+# clear pass condition the implementing slice can verify before
+# claiming completion.
+#
+# | # | Authority rule | Evidence source | Pass condition |
+# |---|----------------|-----------------|----------------|
+# | A1 | New worktrees do not materialize editable spec files | sparse-checkout config on the worktree post-`caws worktree create` | `cat .caws/specs/<id>.yaml` inside worktree either returns ENOENT or returns control-plane bytes (read-only) |
+# | A2 | Spec resolution from worktree cwd reads control-plane bytes | CLI invocation byte-comparison | divergent worktree-local fixture vs. control-plane spec; CLI output bytes match control-plane verbatim |
+# | A3 | Doctor reports `worktree.spec_drift` ERROR on byte divergence | new doctor rule (NOT in FOLLOWUP-001's set) | rule fires; severity ERROR; exit code 1; data names worktree, spec id, both paths |
+# | A4 | Scope check + gates run consult control-plane, not worktree-local | new kernel scope evaluator behavior | scope.reject.scope_out (or narrower) on edits the worktree-local spec admits but control-plane refuses; decision provenance names control-plane |
+# | A5 | Lifecycle transactions mutate control-plane only | filesystem observation after `caws specs close <id>` from worktree cwd | worktree git status shows zero changes from the lifecycle operation; control-plane spec + events.jsonl are the only mutations |
+# | A6 | Authority-rule regression for the 10.2 failure mode | full fixture suite | scope-check, gates-run, doctor, `caws specs show <id>` all match what control-plane alone produces; H4 enrichment data shape is correctly consumed |
+# | A7 | `caws worktree reconcile <name>` is idempotent and non-destructive | command + event log | first invocation converts; second invocation emits `worktree_already_reconciled` and no other events; control-plane bytes unchanged; refuses on byte divergence |
+#
+# --- What is NOT in this activation amendment ----------------------------
+#
+# This recon pass deliberately stops at the activation amendment +
+# acceptance matrix. The maintainer's authorization is required
+# before:
+#   - Flipping lifecycle_state from draft to active.
+#   - Filing WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001.
+#   - Closing WORKTREE-CAWS-SHARED-STATE-001 with
+#     resolution: superseded.
+#   - Any implementation commit.
+#
+# The recon's deliverable is this amendment. The next gate is the
+# maintainer's go-signal on the activation prerequisites (6 and 7 in
+# particular).
