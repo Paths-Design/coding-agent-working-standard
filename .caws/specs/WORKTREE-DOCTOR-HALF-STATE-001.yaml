@@ -2,24 +2,26 @@ id: WORKTREE-DOCTOR-HALF-STATE-001
 title: 'Doctor diagnostics for worktree/registry/spec half-state classes (detect-only)'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-22T08:44:02.356Z'
-updated_at: '2026-05-22T08:44:02.356Z'
+updated_at: '2026-05-22T09:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/doctor
-    - packages/caws-cli/tests
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
+    - packages/caws-cli/tests/store/doctor-half-state.test.js
     - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-kernel/src/doctor
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
     - packages/caws-cli/tests/store/doctor-half-state.test.js
-    - packages/caws-cli/tests/kernel/doctor-half-state.test.js
     - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
   out:
-    - packages/caws-cli/src/store
     - packages/caws-cli/src/shell
     - .caws/policy.yaml
     - .caws/events.jsonl
@@ -27,124 +29,184 @@ scope:
     - packages/caws-cli/package.json
     - .github/workflows
 invariants:
-  - 'Earned claim: doctor detects and classifies worktree/spec/registry/git-worktree inconsistency states, including the lifecycle-harness-witnessed H4 and H5, without mutating repository state.'
-  - 'All five (or six, including H6) rules are pure detection. No mutation of .caws/, no git worktree-altering commands. Only read-only inspection of worktrees.json, spec YAMLs, and git worktree list --porcelain.'
-  - 'Doctor purity invariant (§6.3) holds: no fs writes, no process.env mutation, no Date.now beyond the snapshot timestamp. This slice adds rules, not new IO categories.'
+  - 'Earned claim: doctor detects and classifies worktree/spec/registry/git-worktree inconsistency states across all six H-classes, without mutating repository state. Three classes are added as new rules (H1, H5, H6); two are discharged by existing kernel rules and pinned by regression tests (H2, H3); one is delivered as an enrichment of an existing rule (H4).'
+  - 'Kernel purity invariant (§6.3) holds: inspectProjectState performs no fs writes, no fs reads, no process.env mutation, no git invocation, no Date.now beyond the snapshot timestamp. All filesystem and git observations are pre-computed by the store-layer snapshot composition (doctor-snapshot.ts) and delivered to the kernel as plain fields on DoctorInput.'
+  - 'Store layer must not depend on shell. doctor-snapshot.ts implements its own minimal porcelain parser and its own minimal GitWorktreeEntry type; it MUST NOT import parseWorktreePorcelain from packages/caws-cli/src/shell/binding/resolve-binding.ts. Type and parser deduplication is deferred follow-up debt.'
+  - 'Git observation is non-fatal. If git worktree list --porcelain fails (no git, repo corruption, permission error), doctor still runs all existing diagnostics and emits a single INFO finding signalling that git-backed half-state classes (H1, H6) could not be evaluated. Doctor never fail-closes the full report on a git failure.'
   - 'H5 doctor-UX rule: the diagnostic for the 3-way contradiction MUST NOT suggest a mutating command. Its repair field is a non-actionable doctrine pointer referencing WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001. Test asserts the repair string contains none of the substrings: "caws worktree", "caws specs", "git ", "rm ", "mv ", "sh ", "bash ", "$", or "`".'
-  - 'No new event schema. No new CLI command. caws doctor remains the entry point. Severity discipline: ERROR for authority split-brain (H1, H4, H5 always; H2/H3 when bidirectional invariant violated); INFO for H6 foreign physical (CAWS does not govern raw git worktrees, but silent acceptance is a footgun); no new WARNs (stale display-only WARNs are a separate concern and must not be conflated with half-state classification).'
-  - 'Tests construct each H-class state directly in fixtures (no dependency on the lifecycle-rollback fault-injection seam). The harness proves the states are real; the doctor tests prove classification on explicit fixtures. This decouples doctor regressions from injection-seam regressions.'
+  - 'Tests construct each H-class state directly in fixtures (no dependency on the lifecycle-rollback fault-injection seam). The harness proves the states are real; the doctor tests prove classification on explicit fixtures.'
+  - 'No new event schema. No new CLI command. caws doctor remains the entry point. Severity discipline: ERROR for H1/H5 authority split-brain; H2/H3 inherit their existing kernel-rule severity (BINDING_ONE_SIDED and BINDING_SPEC_MISSING_REGISTRY respectively); H4 is enriched data on the existing H3 rule, not a new rule; INFO for H6 foreign physical and for git-unavailable.'
 acceptance:
   - id: A1
-    given: 'A test fixture with .caws/worktrees.json containing {name: {specId: id, ...}} but the backing git worktree directory absent'
+    given: 'A test fixture with .caws/worktrees.json containing {name: {specId: id, ...}} but the backing git worktree directory absent at the canonical path (.caws/worktrees/<name>) AND the git worktree list does not include the path either'
     when: 'doctor runs'
-    then: 'doctor emits doctor.worktree.ghost_registry_entry (or equivalent kernel-named rule) with severity ERROR and subject = worktree name. The diagnostic data includes spec id and the expected-but-missing path. Repair text suggests pruning (no shell command required to be present, but if present must be safe and unambiguous).'
+    then: 'doctor emits doctor.worktree.ghost_registry_entry with severity ERROR, subject = worktree name. data includes spec_id, expected_path, and the boolean facts that informed the decision. Repair text suggests pruning but is unambiguous (no harmful default).'
   - id: A2
-    given: 'A fixture with worktrees.json[name].specId === id and spec_<id>.yaml lacking a worktree: field'
+    given: 'A fixture with worktrees.json[name].specId === X and spec_X.yaml lacking a worktree: field (the H2 observable state)'
     when: 'doctor runs'
-    then: 'H2 detected. Likely satisfied by the existing kernel rule BINDING_SPEC_MISSING_REGISTRY. The implementing slice first verifies whether the existing rule covers this exact fixture; if yes, this AC is marked discharged with a citation; if no, a new rule is added.'
+    then: 'H2 is DISCHARGED by the existing kernel rule BINDING_ONE_SIDED (doctor.binding.one_sided, packages/caws-kernel/src/doctor/inspect.ts lines 201-218). The new test file packages/caws-kernel/tests/unit/doctor-half-state.test.ts contains a regression fixture pinning this discharge so future refactors of BINDING_ONE_SIDED cannot silently regress H2 coverage. NOTE: the original spec hypothesis named BINDING_SPEC_MISSING_REGISTRY as the discharging rule; diagnosis (commit 22298bf session) showed the correct rule is BINDING_ONE_SIDED. BINDING_SPEC_MISSING_REGISTRY discharges H3, not H2.'
   - id: A3
-    given: 'A fixture with spec_<id>.yaml containing worktree: <name> but worktrees.json lacking that name'
+    given: 'A fixture with spec_X.yaml containing worktree: <name> but worktrees.json lacking that name. Test exercises BOTH lifecycle_state: active AND lifecycle_state: draft to prove the existing rule has no lifecycle guard.'
     when: 'doctor runs'
-    then: 'H3 detected. Likely satisfied by the existing kernel rule BINDING_REGISTRY_MISSING_SPEC. Same verification posture as A2.'
+    then: 'H3 is DISCHARGED by the existing kernel rule BINDING_SPEC_MISSING_REGISTRY (doctor.binding.spec_missing_registry, packages/caws-kernel/src/doctor/inspect.ts lines 244-263). New regression test in doctor-half-state.test.ts exercises both active and draft specs to close the existing test-coverage gap.'
   - id: A4
-    given: 'A fixture mirroring destroyWorktree post-fault: spec_<id>.yaml has worktree: <name>, no registry entry for <name>, no git worktree dir at canonical path'
+    given: 'A fixture mirroring destroyWorktree post-fault: spec_X.yaml has worktree: <name>, no registry entry for <name>, no git worktree dir at canonical path'
     when: 'doctor runs'
-    then: 'doctor emits doctor.worktree.ghost_spec_binding (or equivalent) with severity ERROR and subject = spec id (and/or worktree name). Repair text suggests "clear the worktree: field from spec_<id>.yaml" — a specific actionable instruction, since H4 has a single defensible repair direction.'
+    then: 'BINDING_SPEC_MISSING_REGISTRY fires (the registry-absent half is H3). Its data payload is ENRICHED with git_worktree_present: false to surface the third fact (no git dir) operators need to recognize the H4 destroyWorktree post-fault class. No new ERROR rule is added — H4 is observationally identical to H3 on the registry/spec axis; the git-dir absence is enrichment, not a separate finding class. This avoids rule-id sprawl. Test asserts the enriched data field appears on the existing rule when filesystem.gitWorktreeForRegistryEntry information is available.'
   - id: A5
     given: 'A fixture mirroring bindWorktreeRepair post-fault: worktrees.json[name].specId === idB; spec_<idA>.yaml has worktree: <name>; spec_<idB>.yaml has no worktree: field'
     when: 'doctor runs'
-    then: 'doctor emits doctor.worktree.binding_contradiction_3way (or equivalent) with severity ERROR. The diagnostic data names all three contradictory facts (registry.specId, spec_idA.worktree, spec_idB.worktree). The repair field is a non-actionable doctrine pointer: "Ambiguous authority split; no automatic repair available under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001." Test ALSO asserts: the repair string does NOT contain any of these substrings: "caws worktree", "caws specs", "git ", "rm ", "mv ", "sh ", "bash ", "$", "`". This locks the H5 doctor-UX rule against future regressions.'
+    then: 'doctor emits doctor.worktree.binding_contradiction_3way with severity ERROR. The diagnostic data names all three contradictory facts (registry.specId, spec_idA.worktree, spec_idB.worktree). The repair field is a non-actionable doctrine pointer: "Ambiguous authority split; no automatic repair available under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001." Test ALSO asserts: the repair string does NOT contain any of these substrings: "caws worktree", "caws specs", "git ", "rm ", "mv ", "sh ", "bash ", "$", "`". This locks the H5 doctor-UX rule against future regressions. (Existing rules BINDING_ONE_SIDED and BINDING_SPEC_POINTS_TO_FOREIGN_BINDING may also fire for partial views; the new rule is the unified-finding surface and the only one with the doctrine-pointer repair text.)'
   - id: A6
-    given: 'A fixture with a git worktree created outside CAWS (raw git worktree add at some path) and no corresponding entry in worktrees.json'
+    given: 'A fixture with a git worktree created outside CAWS (raw git worktree add at some path) and no corresponding entry in worktrees.json. Filter applied: the main worktree itself (where path === repoRoot) is never reported as foreign.'
     when: 'doctor runs'
-    then: 'doctor emits doctor.worktree.foreign_physical (or equivalent) with severity INFO (NOT ERROR; CAWS does not govern raw git worktrees, but silent acceptance is a footgun worth surfacing). Subject is the foreign worktree path.'
+    then: 'doctor emits doctor.worktree.foreign_physical with severity INFO. Subject is the foreign worktree path. data includes the branch (if known from porcelain output). Severity is explicitly NOT ERROR — CAWS does not govern raw git worktrees, but silent acceptance is a footgun worth surfacing.'
   - id: A7
-    given: 'A repo in any fixture state from A1-A6'
-    when: 'doctor runs and the test snapshots .caws/ byte-for-byte before and after, plus git worktree list --porcelain before and after'
-    then: 'No byte-level change in .caws/ (no spec edits, no worktrees.json mutation, no events.jsonl append). No change in git worktree list (no git worktree add/remove). Doctor purity verified.'
+    given: 'A fixture where git worktree list --porcelain fails (e.g., mocked spawn to return non-zero, or repo with no .git directory at the resolved repoRoot)'
+    when: 'doctor runs'
+    then: 'Doctor still produces a complete report. All non-git diagnostics (specs, bindings, ownership, init, policy, waivers, events) fire normally. A single INFO finding doctor.worktree.git_observation_unavailable is emitted, naming the failure reason. H1 and H6 rules silently SKIP (they require git observation); H4 enrichment falls back to omitting the git_worktree_present field. The full report is non-empty; the process exit code reflects the other findings, not the git failure.'
   - id: A8
-    given: 'The full pre-existing kernel doctor test suite'
-    when: 'jest runs the kernel and store doctor tests'
-    then: 'All pre-existing tests remain green. BINDING_*, OWNERSHIP_*, INIT_* rules are not affected. The harness-style fault-injection tests (worktree-merge-a2-fault-injection.test.js, lifecycle-rollback-failure-harness.test.js) remain independent and remain green.'
+    given: 'A repo in any fixture state from A1-A6'
+    when: 'doctor runs and the test snapshots .caws/ byte-for-byte before and after, plus git worktree list --porcelain output before and after'
+    then: 'No byte-level change in .caws/ (no spec edits, no worktrees.json mutation, no events.jsonl append). No change in git worktree list output (no git worktree add/remove). Doctor purity verified at integration level.'
   - id: A9
+    given: 'The full pre-existing kernel doctor test suite and the pre-existing store/shell tests'
+    when: 'jest runs packages/caws-kernel/tests/ and packages/caws-cli/tests/'
+    then: 'All pre-existing tests remain green. BINDING_*, OWNERSHIP_*, INIT_* rules unaffected. The lifecycle-rollback-failure-harness.test.js and worktree-merge-a2-fault-injection.test.js suites remain independent and remain green.'
+  - id: A10
     given: 'Wall-time budget'
     when: 'doctor runs on a repo with up to 20 worktrees'
-    then: 'Half-state detection adds less than 50 ms to doctor wall time (the existing doctor budget). This is an observation target, not a hard correctness gate; report actual timing and only fail if the addition is wildly disproportionate (>500 ms).'
+    then: 'Half-state detection adds less than 50 ms to doctor wall time. This is an OBSERVATION TARGET, not a hard correctness gate. Report actual timing; only fail if the addition is wildly disproportionate (>500 ms) or shows obvious O(n^2) scaling.'
 non_functional:
   reliability:
-    - 'Detect-only. No repair behavior in this slice; that is gated on WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.'
-    - 'Doctor purity invariant (§6.3) holds; this slice adds rules, not new IO categories.'
+    - 'Detect-only. No repair behavior in this slice; repair is gated on WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.'
+    - 'Doctor purity invariant (§6.3) holds: inspectProjectState is IO-free. New fields on DoctorInput follow the established slice 7c.1 pattern (filesystem/initResidue booleans pre-computed in store layer).'
+    - 'Git observation failure is non-fatal: a doctor that fails-closed into "no report" would be worse than incomplete observability. INFO diagnostic surfaces the gap; full report continues.'
     - 'Tests use direct fixtures, not the lifecycle-rollback fault-injection seam. Doctor regressions stay decoupled from injection-seam regressions.'
+    - 'Store must not depend on shell. doctor-snapshot.ts implements its own minimal porcelain parser; it does NOT import from packages/caws-cli/src/shell/binding/.'
   performance:
     - 'Half-state detection adds < 50 ms on a repo with up to 20 worktrees on a developer laptop. Observation target, not a hard gate.'
 contracts:
   - name: 'doctor-worktree-half-state'
     type: behavior
     path: packages/caws-kernel/src/doctor
-    description: 'Doctor adds detection rules covering half-state classes H1-H6 from caws-vnext-command-surface.md §1.4. All rules are detect-only and emit no events. H5 diagnostic.repair MUST be a non-actionable doctrine pointer (no shell command substrings). Severity per §1.4 matrix.'
+    description: 'Doctor adds three new rules (ghost_registry_entry, binding_contradiction_3way, foreign_physical) covering H1/H5/H6 from caws-vnext-command-surface.md §1.4, plus a data enrichment on BINDING_SPEC_MISSING_REGISTRY for H4. H2 and H3 are discharged by existing rules and pinned by regression tests. All rules are detect-only and emit no events. H5 diagnostic.repair MUST be a non-actionable doctrine pointer (no shell command substrings). Severity per §1.4 matrix and the H5 substring-refusal regression.'
+  - name: 'doctor-snapshot-git-observation-graceful'
+    type: behavior
+    path: packages/caws-cli/src/store/doctor-snapshot.ts
+    description: 'doctor-snapshot.ts gains observeGitWorktrees(repoRoot) that calls spawnSync git worktree list --porcelain with -C repoRoot, filters out the main worktree, and returns an optional GitWorktreeEntry[] alongside a success/reason discriminator. On failure, the function returns the failure shape without throwing; composeDoctorSnapshot delivers undefined gitWorktrees and the failure reason to the kernel as a separate field so the kernel can emit doctor.worktree.git_observation_unavailable.'
 # --- Triage ----------------------------------------------------------------
 # Provenance
 # ----------
 # Filed 2026-05-22 by PRUNE-REPAIR-WORKTREE-RECON-001 (closed same day).
+# Activated 2026-05-22 by direct YAML edit (no caws specs promote in
+# v11.1.6 — audit-quiet by necessity; see PRUNE-REPAIR-WORKTREE-RECON-001
+# closure notes for the surface gap rationale).
+#
 # This spec is the Diagnose level of the §1.4 Diagnose / Decide / Repair
-# stratification.
+# stratification. Repair stays blocked on
+# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
 #
-# Why detect-only first
-# ---------------------
-# §1.4 establishes that prune/repair was filed as one capability but is
-# three at three different authority levels. Diagnose is the only level
-# authority-free; Decide requires control-plane authority doctrine
-# (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001); Repair requires Decide.
+# Diagnosis outcomes (2026-05-22)
+# --------------------------------
+# Pre-implementation read-only diagnosis (three parallel Explore agents
+# covering rule coverage, doctor architecture, git observability)
+# corrected several assumptions baked into the original draft. Recorded
+# here so the implementation slice executes against verified facts.
 #
-# Shipping detect-only first surfaces contradictions without choosing a
-# winner. H5 cannot be auto-repaired without picking an authority
-# surface (registry vs. spec_A vs. spec_B); any "helpful" repair
-# command shipped before authority policy exists will permanently
-# encode the wrong source of truth at first use.
+# 1. H2 discharging rule misnamed in original draft.
+#    Original draft said H2 is "likely satisfied by BINDING_SPEC_MISSING_REGISTRY".
+#    Correct answer: H2 is satisfied by BINDING_ONE_SIDED (inspect.ts:201-218).
+#    BINDING_SPEC_MISSING_REGISTRY satisfies H3, not H2. Acceptance A2/A3
+#    in this spec cite the correct rules.
 #
-# Implementation guidance
-# -----------------------
-# The diagnostic logic belongs in the kernel doctor surface
-# (packages/caws-kernel/src/doctor), NOT in worktrees-writer.ts.
-# Writers mutate; this is reader/diagnostic. Mixing detect with
-# repair-capable code makes the future repair slice harder to reason
-# about.
+# 2. H4 demoted from new rule to enrichment.
+#    Original draft proposed doctor.worktree.ghost_spec_binding as a new
+#    ERROR rule for the destroyWorktree post-fault state. Diagnosis
+#    showed H4's observable state is identical to H3 on the registry/spec
+#    axis (spec has worktree:, no registry entry). The "no git worktree
+#    dir" component is a third fact, not a separate failure class. Adding
+#    a fourth ERROR rule for what BINDING_SPEC_MISSING_REGISTRY already
+#    detects would create rule-id sprawl without diagnostic value.
+#    Decision: enrich BINDING_SPEC_MISSING_REGISTRY's data payload with
+#    git_worktree_present: boolean when filesystem.gitWorktreePresent is
+#    available. Operators get the third fact; no new rule.
 #
-# Read state sources:
-#   - .caws/worktrees.json
-#   - active spec YAMLs under .caws/specs/
-#   - git worktree list --porcelain
+# 3. Slice cannot be kernel-pure.
+#    Original draft kept packages/caws-cli/src/store in scope.out under
+#    the (correct) §6.3 doctor-purity invariant. Diagnosis showed that
+#    H1/H6 fundamentally require observing filesystem and git state,
+#    which the kernel by construction cannot do. The contractually
+#    established extension pattern (slice 7c.1) is: store layer observes
+#    IO, packs into DoctorInput as plain fields, kernel reads. The slice
+#    MUST edit packages/caws-cli/src/store/doctor-snapshot.ts to deliver
+#    the new fields. Without that edit, the kernel rules have no data
+#    to fire on.
+#    Decision: narrow scope amendment — admit doctor-snapshot.ts as a
+#    specific file (NOT the whole packages/caws-cli/src/store/
+#    directory). Other store files (specs-writer.ts, worktrees-writer.ts,
+#    etc.) remain out of scope. packages/caws-cli/src/shell stays
+#    completely out of scope.
 #
-# The shell should render diagnostics, not own the truth calculation.
-# If the current doctor implementation has a snapshot/check module,
-# extend that. If not, create a small store-level checker that doctor
-# calls.
+# 4. Shell parser reuse rejected (architecture preservation).
+#    parseWorktreePorcelain at packages/caws-cli/src/shell/binding/resolve-binding.ts:60
+#    parses git worktree list --porcelain output. Tempting to reuse from
+#    doctor-snapshot.ts, but store MUST NOT depend on shell — that would
+#    invert the v11 store/shell architecture. Decision: implement a
+#    minimal local porcelain parser inside doctor-snapshot.ts. Type and
+#    parser deduplication is deferred follow-up debt; closure notes
+#    record this so a future cleanup slice can promote a shared type
+#    (likely to packages/caws-kernel/src/doctor/types.ts) and delete the
+#    duplication.
 #
-# H2/H3 deduplication
+# 5. Test path corrected.
+#    Original scope.in listed packages/caws-cli/tests/kernel/doctor-half-state.test.js
+#    which is wrong: kernel tests live in packages/caws-kernel/tests/unit/.
+#    Corrected to packages/caws-kernel/tests/unit/doctor-half-state.test.ts.
+#    Store integration tests remain at
+#    packages/caws-cli/tests/store/doctor-half-state.test.js per repo convention.
+#
+# 6. Git observation must be non-fatal.
+#    Added invariant: if git worktree list fails (no git, corrupted
+#    repo, permission error), doctor still runs the full report. H1/H6
+#    silently skip; H4 enrichment omits the git fact; a single INFO
+#    finding doctor.worktree.git_observation_unavailable surfaces the
+#    gap. A diagnostic tool that fails-closed into "no report" would be
+#    worse than incomplete observability.
+#
+# Implementation plan
 # -------------------
-# The kernel already has BINDING_SPEC_MISSING_REGISTRY (likely covers
-# H2) and BINDING_REGISTRY_MISSING_SPEC (likely covers H3) per the
-# audit conducted during PRUNE-REPAIR-WORKTREE-RECON-001. The
-# implementing slice's FIRST step is verifying coverage with explicit
-# fixtures matching the H-class observable state. If covered,
-# acceptance A2/A3 are discharged with citations to the existing
-# rules and tests, not by adding duplicate rules.
+# Commit 1 (this commit): spec amendment only. Flip draft→active.
+#   Scope amendments. Acceptance corrections. Triage block.
 #
-# Audit-quiet draft-flip
-# ----------------------
-# This spec was created via caws specs create (which forces
-# lifecycle_state: active in v11.1.6, since the CLI has no
-# --initial-state flag) and then flipped to draft via direct YAML
-# edit. The spec_created event in events.jsonl will record
-# lifecycle_state: active (the create-time state); the flip-to-draft
-# is audit-quiet by necessity. SPECS-PROMOTE-DRAFT remains deferred
-# past v11.2 per V11-2-STABILIZATION-RECON-001 §1.3 finding 2.
+# Commit 2: kernel + store implementation + tests.
+#   - packages/caws-kernel/src/doctor/rules.ts: add 4 new rule ids
+#     (ghost_registry_entry, binding_contradiction_3way, foreign_physical,
+#     git_observation_unavailable).
+#   - packages/caws-kernel/src/doctor/types.ts: extend DoctorInput with
+#     filesystem.gitWorktreePresent (Record<name, boolean>), gitWorktrees
+#     (optional GitWorktreeEntry[]), gitObservationFailure (optional
+#     reason string). Add GitWorktreeEntry type (kernel-local; not
+#     imported from shell).
+#   - packages/caws-kernel/src/doctor/inspect.ts: 3 new emission sections
+#     adjacent to the existing §2 binding integrity block; 1 data
+#     enrichment on BINDING_SPEC_MISSING_REGISTRY; 1 emission section
+#     for git_observation_unavailable.
+#   - packages/caws-cli/src/store/doctor-snapshot.ts: extend
+#     observeFilesystem with per-name gitWorktreePresent map; add
+#     observeGitWorktrees(repoRoot) with local porcelain parser and
+#     local GitWorktreeEntry shape; filter out main worktree; non-fatal
+#     failure surface; project all into DoctorInput.
+#   - packages/caws-kernel/tests/unit/doctor-half-state.test.ts: H1,
+#     H2-discharge-regression, H3-discharge-regression (active+draft),
+#     H4 enrichment, H5 (with substring-refusal regression), H6,
+#     git-unavailable graceful behavior.
+#   - packages/caws-cli/tests/store/doctor-half-state.test.js:
+#     integration on real temp repos; A8 byte-snapshot purity; A9 full
+#     pre-existing test suite still green; A10 wall-time observation.
 #
-# Activation
-# ----------
-# This spec stays draft until an implementer is ready to pick it up.
-# Activation is a separate (audit-quiet) direct YAML edit. The
-# implementing agent should also at that time amend scope.in if the
-# concrete implementation file paths differ from those listed here
-# (e.g., if the test directory convention is tests/kernel/ rather
-# than tests/store/, prefer the actual convention).
+# Commit 3: spec closure with full closure notes recording the
+#   discharge matrix, the enrichment-vs-new-rule decision for H4, the
+#   architecture preservation (no shell import in store), the deferred
+#   deduplication debt, and the next slice routing (control-plane
+#   authority, not prune/repair).
