@@ -122,8 +122,17 @@ export interface StoreSnapshot {
    *
    * `worktreeDirByName` (WORKTREE-DOCTOR-HALF-STATE-001): for each name
    * in `worktrees`, whether the canonical worktree directory
-   * (`.caws/worktrees/<name>/`) exists on disk. Used by kernel H1/H4
-   * detection.
+   * (`.caws/worktrees/<name>/`) exists on disk. Used by kernel H1
+   * detection (registry-scoped).
+   *
+   * `specClaimedWorktreeDirByName` (WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001):
+   * for each name appearing in a loaded spec's `worktree:` field, whether
+   * the canonical worktree directory exists on disk. Used by kernel H4
+   * enrichment. Distinct from `worktreeDirByName` because H4's defining
+   * shape is "spec claims X, registry has no X" — so X is by
+   * construction NOT a key in the registry-keyed map. The store stats
+   * each unique spec-claimed name exactly once; multiple specs claiming
+   * the same name share one observation.
    */
   readonly filesystem: {
     readonly cawsDirExists: boolean;
@@ -134,6 +143,7 @@ export interface StoreSnapshot {
     readonly agentsJsonExists: boolean;
     readonly eventsJsonlExists: boolean;
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
+    readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
   };
 
   /**

@@ -153,9 +153,22 @@ export interface DoctorInput {
    *
    * `worktreeDirByName` (WORKTREE-DOCTOR-HALF-STATE-001): for each name
    * in `worktrees`, whether the canonical worktree directory
-   * (`.caws/worktrees/<name>/`) exists on disk. Used by H1/H4 detection.
-   * Optional so older test callers without this awareness stay valid;
-   * when undefined, H1 silently skips its filesystem check.
+   * (`.caws/worktrees/<name>/`) exists on disk. Used by H1 detection
+   * (registry-scoped). Optional so older test callers without this
+   * awareness stay valid; when undefined, H1 silently skips its
+   * filesystem check.
+   *
+   * `specClaimedWorktreeDirByName` (WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001):
+   * for each name appearing in some spec's `worktree:` field, whether
+   * the canonical worktree directory exists on disk. Used by H4
+   * enrichment on BINDING_SPEC_MISSING_REGISTRY. Distinct from
+   * `worktreeDirByName` because the H4 case is precisely "spec claims X,
+   * registry has no X" — so X is by construction NOT a key in the
+   * registry-keyed map. The kernel must NOT collapse "unobserved" into
+   * "absent": when a spec-claimed name is not a key in this map,
+   * H4 emits `canonical_dir_observed: false` and omits
+   * `canonical_dir_present`; when it IS a key, the boolean value is
+   * surfaced verbatim as `canonical_dir_present`.
    */
   readonly filesystem?: {
     readonly cawsDirExists: boolean;
@@ -166,6 +179,7 @@ export interface DoctorInput {
     readonly agentsJsonExists: boolean;
     readonly eventsJsonlExists: boolean;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
+    readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
   };
 
   /**

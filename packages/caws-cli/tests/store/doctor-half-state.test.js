@@ -131,7 +131,25 @@ function writeRegistry(cawsDir, registry) {
 
 function snapshotCawsDirBytes(cawsDir) {
   // Concatenate all governance-state file bytes into one string for
-  // byte-equality comparison. Skips directories that doctor never reads.
+  // byte-equality comparison.
+  //
+  // Inclusions:
+  //   - Every file under .caws/ EXCEPT what we explicitly exclude below.
+  //   - FOLLOWUP-001 A6: this includes .caws/events.jsonl. The prior
+  //     slice's mutation-free claim was scoped only to specs/registry
+  //     files; events.jsonl was never asserted on. Doctor must NOT
+  //     append to events.jsonl. A byte-equal pre/post comparison of the
+  //     event log catches accidental appends from a future code change
+  //     (e.g. doctor "helpfully" recording a self-diagnostic).
+  //
+  // Exclusions:
+  //   - .caws/worktrees/<name>/ subdirectories: these are git worktree
+  //     working trees. Their content is owned by git and the user's
+  //     editor, not by CAWS governance. Including them would make the
+  //     test flaky against any unrelated checkout-time touch (mtime
+  //     changes from git internals are common). Doctor never reads
+  //     inside these subdirs anyway — it only stats their top-level
+  //     existence via observeFilesystem.
   const files = [];
   function walk(dir, relParts = []) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -139,9 +157,6 @@ function snapshotCawsDirBytes(cawsDir) {
       const full = path.join(dir, ent.name);
       const rel = [...relParts, ent.name].join('/');
       if (ent.isDirectory()) {
-        // Skip the worktrees/ dir contents — those are git worktrees,
-        // not governance state; their internal content can shift on
-        // its own.
         if (relParts.length === 0 && ent.name === 'worktrees') continue;
         walk(full, [...relParts, ent.name]);
       } else if (ent.isFile()) {
@@ -151,6 +166,20 @@ function snapshotCawsDirBytes(cawsDir) {
   }
   walk(cawsDir);
   return files.join('\n---\n');
+}
+
+function eventsJsonlLineCount(cawsDir) {
+  // FOLLOWUP-001 A6: cheap secondary assertion alongside the byte
+  // snapshot. Catches the case where a future regression rewrites
+  // events.jsonl to identical bytes but with a different line count
+  // (which is roughly impossible but defends in depth) — and more
+  // importantly, makes the intent explicit in the test name.
+  const p = path.join(cawsDir, 'events.jsonl');
+  if (!fs.existsSync(p)) return 0;
+  const text = fs.readFileSync(p, 'utf8');
+  if (text.length === 0) return 0;
+  // Trailing newline is normal; non-trailing-newline is also legal.
+  return text.split('\n').filter((l) => l.length > 0).length;
 }
 
 function gitWorktreeListStable(repoRoot) {
@@ -203,6 +232,51 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 store integration', () => {
         'wt-present': true,
         'wt-absent': false,
       });
+    });
+
+    test('FOLLOWUP-001 A1: populates filesystem.specClaimedWorktreeDirByName from spec.worktree fields', () => {
+      // Three specs, two distinct worktree-name claims (one shared).
+      // Registry intentionally empty — this is the H4 shape: spec
+      // claims X, registry has no X. The new map must be keyed by the
+      // spec-claimed names, NOT the registry keys.
+      writeSpec(cawsDir, 'PLUMB-SC-001', { worktree: 'wt-sc-present' });
+      writeSpec(cawsDir, 'PLUMB-SC-002', { worktree: 'wt-sc-absent' });
+      writeSpec(cawsDir, 'PLUMB-SC-003', { worktree: 'wt-sc-absent' });
+      writeRegistry(cawsDir, {});
+      fs.mkdirSync(path.join(cawsDir, 'worktrees', 'wt-sc-present'));
+      // wt-sc-absent: directory intentionally not created
+
+      const { snapshot, doctorInput } = composeDoctorSnapshot({
+        repoRoot: repo,
+        cawsDir,
+        now: NOW,
+      });
+
+      // StoreSnapshot.filesystem carries the same shape.
+      expect(snapshot.filesystem.specClaimedWorktreeDirByName).toEqual({
+        'wt-sc-present': true,
+        'wt-sc-absent': false,
+      });
+      // DoctorInput.filesystem projects it through unchanged.
+      expect(doctorInput.filesystem.specClaimedWorktreeDirByName).toEqual({
+        'wt-sc-present': true,
+        'wt-sc-absent': false,
+      });
+      // Registry-keyed map is independently empty (no registry entries).
+      expect(doctorInput.filesystem.worktreeDirByName).toEqual({});
+    });
+
+    test('FOLLOWUP-001 A1: specs without worktree: field contribute no entry', () => {
+      writeSpec(cawsDir, 'PLUMB-NOWT-001'); // no worktree field
+      writeRegistry(cawsDir, {});
+
+      const { doctorInput } = composeDoctorSnapshot({
+        repoRoot: repo,
+        cawsDir,
+        now: NOW,
+      });
+
+      expect(doctorInput.filesystem.specClaimedWorktreeDirByName).toEqual({});
     });
 
     test('populates gitWorktrees when git observation succeeds (filters main worktree)', () => {
@@ -284,7 +358,7 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 store integration', () => {
   // ----- end-to-end rule firing through composeDoctorSnapshot -------------
 
   describe('end-to-end doctor findings on real fixtures', () => {
-    test('H1: registry entry + missing dir + missing from git list → ghost_registry_entry ERROR', () => {
+    test('H1: registry entry + missing dir + missing from git list → ghost_registry_entry ERROR (FOLLOWUP-001 A4: subject filter + data shape)', () => {
       writeSpec(cawsDir, 'H1-INT-001');
       writeRegistry(cawsDir, {
         'wt-ghost-int': { specId: 'H1-INT-001' },
@@ -299,18 +373,39 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 store integration', () => {
       });
       const report = inspectProjectState(doctorInput);
 
-      const ghost = report.findings.find(
-        (f) => f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY
+      // FOLLOWUP-001 A4: filter by rule AND subject; assert EXACTLY one
+      // such finding. The previous "find any matching rule" assertion
+      // would have passed even if the kernel duplicated the finding or
+      // emitted on a different subject than expected.
+      const matches = report.findings.filter(
+        (f) =>
+          f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY &&
+          f.subject === 'wt-ghost-int'
       );
-      expect(ghost).toBeDefined();
+      expect(matches).toHaveLength(1);
+      const ghost = matches[0];
       expect(ghost.severity).toBe('error');
-      expect(ghost.subject).toBe('wt-ghost-int');
+      // FOLLOWUP-001 A4: assert full data shape so downstream authority
+      // logic (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001) can rely on
+      // these fields.
+      expect(ghost.data).toMatchObject({
+        worktree_name: 'wt-ghost-int',
+        spec_id: 'H1-INT-001',
+        canonical_dir_present: false,
+        git_worktree_listed: false,
+      });
     });
 
-    test('H4 enrichment: BINDING_SPEC_MISSING_REGISTRY data carries git_worktree_present', () => {
-      writeSpec(cawsDir, 'H4-INT-001', { worktree: 'wt-h4-int' });
-      // Empty registry — spec claims worktree, registry has no entry.
+    test('FOLLOWUP-001: H4 enrichment uses spec-claim-keyed observation — canonical dir present', () => {
+      // The canonical-path-present case. Spec claims worktree, registry
+      // has no entry, BUT the canonical directory exists at
+      // .caws/worktrees/<name>. The plumbing must stat the spec-claimed
+      // name (NOT the registry-keyed map, which is empty by construction
+      // in the H4 case) and surface canonical_dir_present: true.
+      writeSpec(cawsDir, 'H4-INTPRES-1', { worktree: 'wt-h4-intpres' });
       writeRegistry(cawsDir, {});
+      // Create the canonical directory.
+      fs.mkdirSync(path.join(cawsDir, 'worktrees', 'wt-h4-intpres'));
 
       const { doctorInput } = composeDoctorSnapshot({
         repoRoot: repo,
@@ -323,15 +418,45 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 store integration', () => {
         (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
       );
       expect(finding).toBeDefined();
-      // worktreeDirByName is keyed by registry name. The registry is
-      // empty here, so the map is empty. The enrichment fallback reads
-      // false for any name not in the map. (worktreeDirByName[name] ===
-      // true returns false when undefined.)
       expect(finding.data).toMatchObject({
-        spec_id: 'H4-INT-001',
-        worktree_name: 'wt-h4-int',
-        git_worktree_present: false,
+        spec_id: 'H4-INTPRES-1',
+        worktree_name: 'wt-h4-intpres',
+        canonical_dir_observed: true,
+        canonical_dir_present: true,
       });
+      // Honesty: the obsolete git_worktree_present field must not leak
+      // back through the integration path either.
+      expect('git_worktree_present' in finding.data).toBe(false);
+    });
+
+    test('FOLLOWUP-001: H4 enrichment uses spec-claim-keyed observation — canonical dir observably absent', () => {
+      // The destroyWorktree post-fault signature. Spec claims worktree,
+      // registry has no entry, AND the canonical directory does not
+      // exist at .caws/worktrees/<name>. The plumbing must surface
+      // canonical_dir_observed: true (we DID stat it) and
+      // canonical_dir_present: false.
+      writeSpec(cawsDir, 'H4-INTABS-1', { worktree: 'wt-h4-intabs' });
+      writeRegistry(cawsDir, {});
+      // Intentionally do NOT create the canonical directory.
+
+      const { doctorInput } = composeDoctorSnapshot({
+        repoRoot: repo,
+        cawsDir,
+        now: NOW,
+      });
+      const report = inspectProjectState(doctorInput);
+
+      const finding = report.findings.find(
+        (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
+      );
+      expect(finding).toBeDefined();
+      expect(finding.data).toMatchObject({
+        spec_id: 'H4-INTABS-1',
+        worktree_name: 'wt-h4-intabs',
+        canonical_dir_observed: true,
+        canonical_dir_present: false,
+      });
+      expect('git_worktree_present' in finding.data).toBe(false);
     });
 
     test('H5: 3-way contradiction fires binding_contradiction_3way ERROR with doctrine pointer', () => {
@@ -473,34 +598,103 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 store integration', () => {
   // ----- A8: doctor purity at integration level --------------------------
 
   describe('A8: doctor purity', () => {
-    test('composeDoctorSnapshot + inspectProjectState leave .caws/ and git worktree list byte-identical', () => {
-      // Mixed fixture: H3 + H6 + an existing valid binding.
-      writeSpec(cawsDir, 'PURE-001');
-      writeSpec(cawsDir, 'PURE-002', { worktree: 'wt-purity-orphan' });
+    test('composeDoctorSnapshot + inspectProjectState leave .caws/ and git worktree list byte-identical (FOLLOWUP-001 A6: includes events.jsonl)', () => {
+      // Mixed fixture exercising H1, H3, H4 enrichment, H5, and H6.
+      // FOLLOWUP-001 A6: pre-seed .caws/events.jsonl with a real event
+      // line so the byte-snapshot comparison would actually catch a
+      // future "doctor appends a self-diagnostic" regression. Without
+      // a pre-seeded line, comparing empty-string to empty-string is
+      // trivially equal even if the production code writes nothing.
+      writeSpec(cawsDir, 'PURE-001'); // valid binding partner
+      writeSpec(cawsDir, 'PURE-H3-1', { worktree: 'wt-purity-orphan' }); // H3
+      writeSpec(cawsDir, 'PURE-H4-1', { worktree: 'wt-purity-h4' }); // H4
+      writeSpec(cawsDir, 'PURE-H5-A-1', { worktree: 'wt-purity-h5' }); // H5 A
+      writeSpec(cawsDir, 'PURE-H5-B-1'); // H5 B
       writeRegistry(cawsDir, {
-        'wt-known': { specId: 'PURE-001' },
+        'wt-known': { specId: 'PURE-001' }, // valid binding
+        'wt-purity-h5': { specId: 'PURE-H5-B-1' }, // H5 registry side
       });
       fs.mkdirSync(path.join(cawsDir, 'worktrees', 'wt-known'));
+      // Add a real linked git worktree to trigger H6.
+      const foreignPath = path.join(
+        os.tmpdir(),
+        `caws-doctor-hs-pure-foreign-${Date.now()}`
+      );
+      execFileSync('git', [
+        '-C',
+        repo,
+        'worktree',
+        'add',
+        '--quiet',
+        '-b',
+        'pure-foreign-branch',
+        foreignPath,
+      ]);
+
+      // Seed events.jsonl with a single chained event. The exact shape
+      // matches what the kernel's events writer emits so the loader
+      // accepts it without raising store.events.malformed warnings.
+      const seedEvent = {
+        event: 'spec_created',
+        ts: '2026-05-22T00:00:00.000Z',
+        actor: { kind: 'system', id: 'test-seed' },
+        spec_id: 'PURE-001',
+        data: { title: 'seed', risk_tier: 3, mode: 'chore', lifecycle_state: 'active' },
+        seq: 1,
+        prev_hash: null,
+        hash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      };
+      fs.writeFileSync(
+        path.join(cawsDir, 'events.jsonl'),
+        JSON.stringify(seedEvent) + '\n'
+      );
 
       const pre = snapshotCawsDirBytes(cawsDir);
       const preGit = gitWorktreeListStable(repo);
+      const preEventsLines = eventsJsonlLineCount(cawsDir);
 
-      const { doctorInput } = composeDoctorSnapshot({
-        repoRoot: repo,
-        cawsDir,
-        now: NOW,
-      });
-      const report = inspectProjectState(doctorInput);
+      try {
+        const { doctorInput } = composeDoctorSnapshot({
+          repoRoot: repo,
+          cawsDir,
+          now: NOW,
+        });
+        const report = inspectProjectState(doctorInput);
 
-      // Sanity: the report actually has findings (otherwise purity is
-      // trivially true).
-      expect(report.findings.length).toBeGreaterThan(0);
+        // Sanity: the report actually has findings (otherwise purity is
+        // trivially true).
+        expect(report.findings.length).toBeGreaterThan(0);
 
-      const post = snapshotCawsDirBytes(cawsDir);
-      const postGit = gitWorktreeListStable(repo);
+        const post = snapshotCawsDirBytes(cawsDir);
+        const postGit = gitWorktreeListStable(repo);
+        const postEventsLines = eventsJsonlLineCount(cawsDir);
 
-      expect(post).toBe(pre);
-      expect(postGit).toBe(preGit);
+        // FOLLOWUP-001 A6: the byte snapshot includes events.jsonl, so
+        // any append would fail this comparison. The line-count
+        // assertion below is a secondary tripwire that names the
+        // intent explicitly.
+        expect(post).toBe(pre);
+        expect(postGit).toBe(preGit);
+        expect(postEventsLines).toBe(preEventsLines);
+        // Sanity that the seed was actually counted (otherwise the
+        // pre/post line-count comparison would be 0 === 0, trivially
+        // true).
+        expect(preEventsLines).toBe(1);
+      } finally {
+        try {
+          execFileSync('git', [
+            '-C',
+            repo,
+            'worktree',
+            'remove',
+            '--force',
+            foreignPath,
+          ]);
+        } catch {
+          /* best-effort */
+        }
+        rmrf(foreignPath);
+      }
     });
   });
 });

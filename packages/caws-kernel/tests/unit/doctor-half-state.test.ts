@@ -250,6 +250,79 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H1 — ghost registry entry', () => {
       )
     ).toBeUndefined();
   });
+
+  // FOLLOWUP-001 A3: defensive filter regression. The prior slice (commit
+  // a84ac60) added a defensive filter that skips non-object records when
+  // iterating worktrees during H1 emission. The motivating case is the
+  // v10.2 legacy envelope shape leaking through a future loader regression:
+  //   { version: 1, worktrees: { ... } }
+  // Both "version" (a number) and "worktrees" (an object) appear as top-
+  // level keys. Without the filter, the kernel would iterate "version: 1"
+  // and crash on registry[name] access or emit a malformed finding.
+  //
+  // This test pins the defensive filter by constructing the legacy
+  // envelope shape directly as a DoctorInput.worktrees and asserting:
+  //   - "version" (number record) produces NO H1 finding (filtered out)
+  //   - "worktrees" (object record) DOES produce an H1 finding (the
+  //     kernel cannot distinguish "a real worktree named worktrees" from
+  //     "a legacy envelope key" at the rule layer — operators see the
+  //     spurious finding as evidence of the underlying loader bug)
+  //
+  // Removing the defensive filter (e.g. by reverting commit a84ac60)
+  // would either crash this test or break the "version" expectation.
+  test('FOLLOWUP-001 A3: H1 defensive filter skips non-object records (v10.2 legacy envelope shape)', () => {
+    const input = makeInput({
+      specs: [],
+      // The shape that leaks: { version: 1, worktrees: { ... } }.
+      // We construct it directly as the kernel's WorktreeRegistry would
+      // see it post-leak. WorktreeRegistry is typed as
+      // Record<string, WorktreeRecord>; the cast lets us inject the
+      // pathological shape that exercises the defensive filter.
+      worktrees: {
+        version: 1,
+        worktrees: { 'real-wt': { specId: 'X' } },
+      } as unknown as WorktreeRegistry,
+      filesystem: {
+        cawsDirExists: true,
+        specsDirExists: true,
+        waiversDirExists: true,
+        policyYamlExists: true,
+        worktreesJsonExists: true,
+        agentsJsonExists: true,
+        eventsJsonlExists: true,
+        worktreeDirByName: {
+          version: false,
+          worktrees: false,
+          'real-wt': false,
+        },
+      },
+      gitWorktrees: [],
+    });
+
+    // Must not throw.
+    const report = inspectProjectState(input);
+
+    // "version" (number record) MUST NOT produce an H1 finding —
+    // defensive filter regression assertion.
+    const versionFinding = report.findings.find(
+      (f) =>
+        f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY &&
+        f.subject === 'version'
+    );
+    expect(versionFinding).toBeUndefined();
+
+    // "worktrees" (object record) DOES produce an H1 finding — the
+    // kernel cannot distinguish a real worktree named "worktrees" from
+    // a legacy envelope key, by design. This is the documented behavior:
+    // operators are expected to interpret the spurious finding as
+    // evidence of the underlying loader leak and migrate the file.
+    const worktreesFinding = report.findings.find(
+      (f) =>
+        f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY &&
+        f.subject === 'worktrees'
+    );
+    expect(worktreesFinding).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -282,6 +355,16 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H2 — discharged by BINDING_ONE_SIDED'
     expect(oneSided).toBeDefined();
     expect(oneSided!.severity).toBe('error');
     expect(oneSided!.subject).toBe('wt-h2');
+
+    // FOLLOWUP-001 A5: pin the data-payload shape so downstream
+    // authority logic (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001) can
+    // rely on these fields without re-inspecting the kernel rule.
+    expect(oneSided!.data).toMatchObject({
+      worktree_name: 'wt-h2',
+      spec_id: 'H2-1',
+      specHasWorktree: false,
+      registryHasSpecId: true,
+    });
 
     // Negative: BINDING_SPEC_MISSING_REGISTRY MUST NOT fire here.
     const wrongRule = report.findings.find(
@@ -321,6 +404,15 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H3 — discharged by BINDING_SPEC_MISSI
     expect(finding).toBeDefined();
     expect(finding!.severity).toBe('error');
     expect(finding!.subject).toBe('H3-1');
+    // FOLLOWUP-001 A5: pin the data-payload shape (active spec). The
+    // canonical_dir_observed: false comes from FOLLOWUP-001 H4 enrichment
+    // (no filesystem block → no spec-claim map → unobserved).
+    expect(finding!.data).toMatchObject({
+      spec_id: 'H3-1',
+      worktree_name: 'wt-h3-active',
+      canonical_dir_observed: false,
+    });
+    expect('canonical_dir_present' in (finding!.data ?? {})).toBe(false);
   });
 
   test('H3 fires for a DRAFT spec with worktree: but no registry entry (no lifecycle guard)', () => {
@@ -349,18 +441,37 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H3 — discharged by BINDING_SPEC_MISSI
 });
 
 // ---------------------------------------------------------------------------
-// H4 — destroyWorktree post-fault enrichment
+// H4 — destroyWorktree post-fault enrichment (FOLLOWUP-001 honest version)
 //
 // H4's registry/spec axis is identical to H3 (spec has worktree:, no
-// registry entry). The third fact (no git worktree dir) is delivered as
-// data enrichment on BINDING_SPEC_MISSING_REGISTRY, NOT as a new rule.
+// registry entry). The third fact (whether the canonical worktree dir is
+// present) is delivered as data enrichment on BINDING_SPEC_MISSING_REGISTRY.
+//
+// The original slice used the registry-keyed worktreeDirByName map for
+// this enrichment, which collapsed two distinct facts:
+//   (a) we observed the canonical path is absent
+//   (b) we never observed the canonical path
+// Both produced git_worktree_present: false, because the H4 case is
+// precisely "spec claims X, registry has no X" — so X is by construction
+// NOT a key in the registry-keyed map.
+//
+// FOLLOWUP-001 fix: use a SPEC-CLAIM-keyed map
+// (filesystem.specClaimedWorktreeDirByName) and surface the two facts
+// distinctly:
+//   - canonical_dir_observed: true when X is a key in the map, false
+//     when we have no observation (or the map is absent entirely)
+//   - canonical_dir_present: set only when observed, omitted otherwise
+//
+// The enrichment is an observable filesystem fact, NOT provenance proof
+// that destroyWorktree caused the state. Downstream authority logic
+// (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001) decides interpretation.
 // ---------------------------------------------------------------------------
 
-describe('WORKTREE-DOCTOR-HALF-STATE-001 H4 — enrichment on BINDING_SPEC_MISSING_REGISTRY', () => {
-  test('H4 fixture: BINDING_SPEC_MISSING_REGISTRY data includes git_worktree_present: false', () => {
+describe('WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001 H4 — enrichment uses spec-claim-keyed map', () => {
+  test('observed-present: canonical_dir_observed: true, canonical_dir_present: true', () => {
     const spec = makeSpec({
-      id: 'H4-1',
-      worktree: 'wt-h4',
+      id: 'H4-OBSPRES-1',
+      worktree: 'wt-h4-obspres',
     });
     const input = makeInput({
       specs: [spec],
@@ -373,7 +484,8 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H4 — enrichment on BINDING_SPEC_MISSI
         worktreesJsonExists: true,
         agentsJsonExists: true,
         eventsJsonlExists: true,
-        worktreeDirByName: { 'wt-h4': false },
+        worktreeDirByName: {},
+        specClaimedWorktreeDirByName: { 'wt-h4-obspres': true },
       },
     });
 
@@ -384,37 +496,19 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H4 — enrichment on BINDING_SPEC_MISSI
     );
     expect(finding).toBeDefined();
     expect(finding!.data).toMatchObject({
-      spec_id: 'H4-1',
-      worktree_name: 'wt-h4',
-      git_worktree_present: false,
+      spec_id: 'H4-OBSPRES-1',
+      worktree_name: 'wt-h4-obspres',
+      canonical_dir_observed: true,
+      canonical_dir_present: true,
     });
-  });
-
-  test('enrichment omitted when worktreeDirByName is undefined (graceful)', () => {
-    const spec = makeSpec({
-      id: 'H4-2',
-      worktree: 'wt-h4b',
-    });
-    const input = makeInput({
-      specs: [spec],
-      worktrees: makeRegistry({}),
-      // filesystem omitted entirely
-    });
-
-    const report = inspectProjectState(input);
-
-    const finding = report.findings.find(
-      (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
-    );
-    expect(finding).toBeDefined();
-    expect(finding!.data).toBeDefined();
+    // Honesty: the obsolete git_worktree_present field must not leak back.
     expect('git_worktree_present' in (finding!.data ?? {})).toBe(false);
   });
 
-  test('enrichment shows true when canonical dir is present (plain H3, not destroyWorktree post-fault)', () => {
+  test('observed-absent: canonical_dir_observed: true, canonical_dir_present: false', () => {
     const spec = makeSpec({
-      id: 'H4-3',
-      worktree: 'wt-h4c',
+      id: 'H4-OBSABS-1',
+      worktree: 'wt-h4-obsabs',
     });
     const input = makeInput({
       specs: [spec],
@@ -427,7 +521,8 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H4 — enrichment on BINDING_SPEC_MISSI
         worktreesJsonExists: true,
         agentsJsonExists: true,
         eventsJsonlExists: true,
-        worktreeDirByName: { 'wt-h4c': true },
+        worktreeDirByName: {},
+        specClaimedWorktreeDirByName: { 'wt-h4-obsabs': false },
       },
     });
 
@@ -437,7 +532,117 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H4 — enrichment on BINDING_SPEC_MISSI
       (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
     );
     expect(finding).toBeDefined();
-    expect(finding!.data).toMatchObject({ git_worktree_present: true });
+    expect(finding!.data).toMatchObject({
+      spec_id: 'H4-OBSABS-1',
+      worktree_name: 'wt-h4-obsabs',
+      canonical_dir_observed: true,
+      canonical_dir_present: false,
+    });
+    expect('git_worktree_present' in (finding!.data ?? {})).toBe(false);
+  });
+
+  test('unobserved (map omits the name): canonical_dir_observed: false, canonical_dir_present OMITTED', () => {
+    const spec = makeSpec({
+      id: 'H4-UNOBS-1',
+      worktree: 'wt-h4-unobs',
+    });
+    const input = makeInput({
+      specs: [spec],
+      worktrees: makeRegistry({}),
+      filesystem: {
+        cawsDirExists: true,
+        specsDirExists: true,
+        waiversDirExists: true,
+        policyYamlExists: true,
+        worktreesJsonExists: true,
+        agentsJsonExists: true,
+        eventsJsonlExists: true,
+        worktreeDirByName: {},
+        specClaimedWorktreeDirByName: {}, // intentionally empty
+      },
+    });
+
+    const report = inspectProjectState(input);
+
+    const finding = report.findings.find(
+      (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.data).toMatchObject({
+      spec_id: 'H4-UNOBS-1',
+      worktree_name: 'wt-h4-unobs',
+      canonical_dir_observed: false,
+    });
+    // The critical correctness assertion: when unobserved, the kernel
+    // does NOT synthesize a canonical_dir_present value.
+    expect('canonical_dir_present' in (finding!.data ?? {})).toBe(false);
+    expect('git_worktree_present' in (finding!.data ?? {})).toBe(false);
+  });
+
+  test('unobserved (specClaimedWorktreeDirByName entirely undefined): canonical_dir_observed: false, canonical_dir_present OMITTED', () => {
+    // Backward-compat: an older test fixture that does not construct the
+    // new map at all. Kernel must still produce the honest payload.
+    const spec = makeSpec({
+      id: 'H4-NOMAP-1',
+      worktree: 'wt-h4-nomap',
+    });
+    const input = makeInput({
+      specs: [spec],
+      worktrees: makeRegistry({}),
+      // filesystem omitted entirely → specClaimedWorktreeDirByName undefined
+    });
+
+    const report = inspectProjectState(input);
+
+    const finding = report.findings.find(
+      (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.data).toMatchObject({
+      spec_id: 'H4-NOMAP-1',
+      worktree_name: 'wt-h4-nomap',
+      canonical_dir_observed: false,
+    });
+    expect('canonical_dir_present' in (finding!.data ?? {})).toBe(false);
+    expect('git_worktree_present' in (finding!.data ?? {})).toBe(false);
+  });
+
+  test('registry-keyed worktreeDirByName is NOT consulted for H4 enrichment (semantic separation)', () => {
+    // Build a fixture where the OLD code path would have produced
+    // git_worktree_present: true (worktreeDirByName[name] === true). The
+    // new code path ignores that map entirely — only
+    // specClaimedWorktreeDirByName drives H4 enrichment. Since the
+    // spec-claim map is empty here, the data must report unobserved.
+    const spec = makeSpec({
+      id: 'H4-SEMSEP-1',
+      worktree: 'wt-h4-semsep',
+    });
+    const input = makeInput({
+      specs: [spec],
+      worktrees: makeRegistry({}),
+      filesystem: {
+        cawsDirExists: true,
+        specsDirExists: true,
+        waiversDirExists: true,
+        policyYamlExists: true,
+        worktreesJsonExists: true,
+        agentsJsonExists: true,
+        eventsJsonlExists: true,
+        // Misleading entry — old code would have used this to say
+        // git_worktree_present: true. Kernel must ignore it for H4.
+        worktreeDirByName: { 'wt-h4-semsep': true },
+        specClaimedWorktreeDirByName: {},
+      },
+    });
+
+    const report = inspectProjectState(input);
+
+    const finding = report.findings.find(
+      (f) => f.rule === DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
+    );
+    expect(finding).toBeDefined();
+    expect(finding!.data).toMatchObject({ canonical_dir_observed: false });
+    expect('canonical_dir_present' in (finding!.data ?? {})).toBe(false);
   });
 });
 
@@ -490,6 +695,19 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H5 — binding_contradiction_3way + UX 
   });
 
   test('H5 repair text is a non-actionable doctrine pointer (substring-refusal regression)', () => {
+    // NOTE on test design (FOLLOWUP-001 A7):
+    //
+    // Substring-refusal is a TRIPWIRE, not a structural invariant — a
+    // future regression could introduce an actionable phrase that uses
+    // different substrings (e.g. "execute X" instead of "$ X") and slip
+    // through. The forbidden-list is necessary but not sufficient.
+    //
+    // The structural assertion below (FOLLOWUP-001 A7) adds a positive
+    // shape constraint: the repair text must contain EXACTLY one
+    // CAWS-spec-id-shaped token (matching /[A-Z][A-Z0-9-]+-\d+[a-z]*/),
+    // and that token must be WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
+    // This catches "helpfully" rewriting the pointer to a different
+    // (wrong) authority or sneaking in additional identifiers.
     const specA = makeSpec({
       id: 'H5-A-2',
       worktree: 'wt-h5b',
@@ -533,6 +751,13 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H5 — binding_contradiction_3way + UX 
     for (const needle of forbidden) {
       expect(repair).not.toContain(needle);
     }
+
+    // FOLLOWUP-001 A7: structural assertion. Extract every CAWS-spec-id-
+    // shaped token from the repair text. Exactly one must appear, and it
+    // must be the doctrine pointer.
+    const specIdPattern = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d+[a-z]*/g;
+    const tokens = repair.match(specIdPattern) ?? [];
+    expect(tokens).toEqual(['WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001']);
   });
 
   test('does NOT fire H5 when specB also claims the same worktree (no contradiction)', () => {

@@ -136,6 +136,9 @@ describe('StoreSnapshot.filesystem', () => {
         // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
         // per-name canonical-dir map.
         worktreeDirByName: {},
+        // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: no specs loaded → no
+        // spec-claim entries to stat → empty spec-claim-keyed map.
+        specClaimedWorktreeDirByName: {},
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
@@ -164,6 +167,9 @@ describe('StoreSnapshot.filesystem', () => {
         // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
         // per-name canonical-dir map.
         worktreeDirByName: {},
+        // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: no specs loaded → no
+        // spec-claim entries to stat → empty spec-claim-keyed map.
+        specClaimedWorktreeDirByName: {},
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });

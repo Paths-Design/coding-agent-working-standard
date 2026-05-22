@@ -243,14 +243,28 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // 2b. Per spec, if spec.worktree is set but the registry has no matching
   //     entry pointing back, flag the orphan.
   //
-  //     WORKTREE-DOCTOR-HALF-STATE-001 H4 enrichment: when filesystem
-  //     observation is available, add `git_worktree_present` to the
-  //     finding's data. H4 (destroyWorktree post-fault) is observationally
-  //     the same as H3 on the registry/spec axis (this rule); the extra
-  //     fact tells operators whether the physical worktree is also gone
-  //     (the destroyWorktree post-fault signature) or still present (a
-  //     plain H3 where the registry entry was hand-removed).
+  //     WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001 H4 enrichment (replaces the
+  //     prior slice's git_worktree_present field):
+  //
+  //     The H4 case is precisely "spec claims worktree X, registry has no
+  //     entry for X." X is therefore by construction NOT a key in the
+  //     registry-keyed `worktreeDirByName` map. Consulting that map
+  //     collapsed "the canonical path was observably absent" and "we
+  //     never observed the canonical path" into the same `false` value.
+  //
+  //     The fix is to consult a SPEC-CLAIM-keyed map populated from
+  //     `spec.worktree` fields (`specClaimedWorktreeDirByName`). When the
+  //     spec-claimed name is a key in that map, the boolean value is the
+  //     observed presence. When it is NOT a key, we have no observation —
+  //     so the data payload says so explicitly with
+  //     `canonical_dir_observed: false` and omits `canonical_dir_present`.
+  //
+  //     The enrichment is an observable filesystem fact about the
+  //     canonical path, NOT provenance proof that destroyWorktree caused
+  //     the state. Downstream authority logic (the next slice) decides
+  //     what to do with the signal.
   const worktreeDirByName = input.filesystem?.worktreeDirByName;
+  const specClaimedWorktreeDirByName = input.filesystem?.specClaimedWorktreeDirByName;
   for (const spec of specs) {
     const worktreeName = spec.worktree;
     if (!worktreeName) continue;
@@ -260,10 +274,18 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         spec_id: spec.id,
         worktree_name: worktreeName,
       };
-      if (worktreeDirByName !== undefined) {
-        // H4 enrichment: surface the third fact (git worktree dir
-        // presence) when the store has observed it.
-        data.git_worktree_present = worktreeDirByName[worktreeName] === true;
+      if (
+        specClaimedWorktreeDirByName !== undefined &&
+        Object.prototype.hasOwnProperty.call(specClaimedWorktreeDirByName, worktreeName)
+      ) {
+        // H4 enrichment: we have an observation for this spec-claimed name.
+        data.canonical_dir_observed = true;
+        data.canonical_dir_present = specClaimedWorktreeDirByName[worktreeName] === true;
+      } else {
+        // No observation available (store layer did not stat this name,
+        // or specClaimedWorktreeDirByName itself is absent). Do NOT
+        // synthesize a `canonical_dir_present` value; surface the gap.
+        data.canonical_dir_observed = false;
       }
       findings.push(
         finding(

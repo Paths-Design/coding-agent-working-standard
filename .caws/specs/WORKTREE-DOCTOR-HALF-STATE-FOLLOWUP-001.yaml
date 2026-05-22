@@ -22,6 +22,7 @@ scope:
     - packages/caws-cli/src/store/types.ts
     - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
     - packages/caws-cli/tests/store/doctor-half-state.test.js
+    - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
     - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001.yaml
   out:
     - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
@@ -169,3 +170,30 @@ contracts:
 # fix, regression-signal tightening confirmations, the unchanged
 # next-slice routing, and the doctrine pointer that doctor remains
 # diagnose-only.
+#
+# Mid-implementation scope amendment (2026-05-22)
+# -----------------------------------------------
+# During commit 2 implementation, running tests/store/snapshot-vnext-facts.test.js
+# surfaced two failures in tests NOT originally listed in scope.in. Both
+# assert StoreSnapshot.filesystem via toEqual({...}) — exact-shape
+# comparison that pre-dates this slice's new specClaimedWorktreeDirByName
+# field. Both fixtures use empty registries AND no spec.worktree claims,
+# so the new map is correctly empty; the test just needs to mention it
+# in the expected shape.
+#
+# This is the same pattern as WORKTREE-DOCTOR-HALF-STATE-001's mid-
+# implementation amendment (see closed spec triage lines 219-261). The
+# same trap (#5 in CLAUDE.md: legitimate observable-contract changes
+# fan out to admitted-test assertion updates) applies.
+#
+# Decision: admit the one additional file
+# (packages/caws-cli/tests/store/snapshot-vnext-facts.test.js) and
+# mechanically update the two assertions to include
+# specClaimedWorktreeDirByName: {}. tests/store/doctor-snapshot.test.js
+# is unaffected by this slice (the only filesystem assertion in that
+# file is "doctorInput.filesystem === snapshot.filesystem" identity,
+# which automatically picks up new fields).
+#
+# NOT admitted: any other test file. The full store suite was scanned
+# and snapshot-vnext-facts.test.js is the only assertion site that
+# pins the exact filesystem shape.

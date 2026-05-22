@@ -60,7 +60,13 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   // consumes the booleans below without any I/O of its own.
   const initResidue = observeInitResidue(cawsDir);
   const worktrees = isOk(worktreesResult) ? worktreesResult.value : {};
-  const filesystem = observeFilesystem(cawsDir, worktrees);
+  // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: pass the loaded, validated
+  // specs so observeFilesystem can populate specClaimedWorktreeDirByName
+  // from each spec's worktree: field. The kernel's H4 enrichment uses
+  // this spec-claim-keyed map (NOT the registry-keyed worktreeDirByName)
+  // so it can distinguish "we observed the canonical path is absent"
+  // from "we never observed the canonical path."
+  const filesystem = observeFilesystem(cawsDir, worktrees, specsResult.specs);
   const registryDiagnostics = collectRegistryDiagnostics(
     worktreesResult,
     agentsResult
@@ -132,16 +138,35 @@ function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
 
 function observeFilesystem(
   cawsDir: string,
-  worktrees: Readonly<Record<string, unknown>>
+  worktrees: Readonly<Record<string, unknown>>,
+  specs: readonly { readonly worktree?: string }[]
 ): StoreSnapshot['filesystem'] {
   // WORKTREE-DOCTOR-HALF-STATE-001: per-registry-entry canonical
-  // worktree directory presence. Used by kernel H1/H4. Canonical path
+  // worktree directory presence. Used by kernel H1. Canonical path
   // matches worktrees-writer.ts:worktreePathFor (cawsDir/worktrees/<name>).
   // We use canonical-path-from-name (not entry.path) because entry.path
   // can be undefined on legacy entries.
   const worktreeDirByName: Record<string, boolean> = {};
   for (const name of Object.keys(worktrees)) {
     worktreeDirByName[name] = isDir(path.join(cawsDir, 'worktrees', name));
+  }
+  // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: per-spec-claim canonical
+  // worktree directory presence. Used by kernel H4 enrichment on
+  // BINDING_SPEC_MISSING_REGISTRY. Distinct from worktreeDirByName
+  // because the H4 case is precisely "spec claims X, registry has no
+  // X" — X is by construction NOT a registry key. Stat each unique
+  // spec-claimed name exactly once (multiple specs claiming the same
+  // name share one observation; the value is identical regardless).
+  const specClaimedWorktreeDirByName: Record<string, boolean> = {};
+  for (const spec of specs) {
+    const name = spec.worktree;
+    if (typeof name !== 'string' || name.length === 0) continue;
+    if (Object.prototype.hasOwnProperty.call(specClaimedWorktreeDirByName, name)) {
+      continue;
+    }
+    specClaimedWorktreeDirByName[name] = isDir(
+      path.join(cawsDir, 'worktrees', name)
+    );
   }
   return {
     cawsDirExists: isDir(cawsDir),
@@ -152,6 +177,7 @@ function observeFilesystem(
     agentsJsonExists: isFile(path.join(cawsDir, 'agents.json')),
     eventsJsonlExists: isFile(path.join(cawsDir, 'events.jsonl')),
     worktreeDirByName,
+    specClaimedWorktreeDirByName,
   };
 }
 
