@@ -17,11 +17,17 @@
 //   - Merge auto-closes the bound spec through specs-writer.closeSpec.
 //     The shell does not call appendEvent directly.
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type ActorKind, isOk } from '@paths.design/caws-kernel';
 
-import { resolveRepoRoot } from '../../store';
+import { loadSpecs, resolveRepoRoot, writeFileAtomic } from '../../store';
+import {
+  type MigrationPlan,
+  type RecordOmissionDecision,
+  planMigration,
+} from '../../store/worktrees-migration';
 import {
   bindWorktreeRepair,
   createWorktree,
@@ -317,5 +323,197 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   out(
     `merged ${outcome.name} (merge_commit: ${outcome.data?.merge_commit}; auto_closed_spec: ${outcome.data?.spec_id})`
   );
+  return 0;
+}
+
+// ─── caws worktree migrate-registry ──────────────────────────────────────
+//
+// WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001
+//
+// Convert v10.2 envelope-shaped .caws/worktrees.json into the v11
+// flat-map shape. Destroyed records may be omitted iff (a) no spec
+// claims their name AND (b) their recorded path does not exist on
+// disk; otherwise the migration refuses. Idempotent on already-flat
+// files.
+//
+// Decisions (locked in spec invariants):
+//   - No new event kind. Audit trail is the git commit.
+//   - Loader (worktrees-store.ts) stays permissive; this command
+//     does its own legacy-envelope detection.
+//   - Doctor H1 stays unchanged. The H1 finding on subject
+//     "worktrees" disappears post-migration because the envelope
+//     key no longer exists in the file.
+//   - writeFileAtomic provides file-content atomicity (fsync +
+//     rename on same filesystem). The migration does NOT claim
+//     crash-safety past power loss or parent-directory durability.
+//   - A12 spec-load gate: refuse only on the narrow conjunction
+//     (specs.length === 0 AND diagnostics contains READ_IO_FAILED).
+//     Benign loadSpecs diagnostics do NOT cause refusal.
+
+export interface WorktreeMigrateRegistryOptions extends BaseCommandOptions {
+  /** When true, classify and report but do not write. */
+  readonly dryRun?: boolean;
+}
+
+function formatDecision(d: RecordOmissionDecision): string {
+  if (d.omit) {
+    return `  - ${d.record.padEnd(28)} status=destroyed  -> omitted (no claiming spec; path absent)`;
+  }
+  const status = d.status ?? '(no status)';
+  if (d.reason === 'non_terminal') {
+    return `  - ${d.record.padEnd(28)} status=${status.padEnd(10)} -> preserved`;
+  }
+  if (d.reason === 'spec_claims') {
+    const sid = d.detail.specId ?? '(unknown)';
+    return `  - ${d.record.padEnd(28)} status=${status.padEnd(10)} -> BLOCKS: spec ${sid} still claims this worktree name`;
+  }
+  // path_present
+  const p = d.detail.path ?? '(unknown)';
+  return `  - ${d.record.padEnd(28)} status=${status.padEnd(10)} -> BLOCKS: recorded path ${p} exists on disk`;
+}
+
+function renderPlanReport(
+  plan: MigrationPlan,
+  worktreesJsonPath: string,
+  dryRun: boolean,
+  out: (line: string) => void
+): void {
+  if (plan.kind === 'no_op') {
+    if (plan.reason === 'already_flat') {
+      out(`${worktreesJsonPath} is already in v11 flat-map shape. No action required.`);
+      out(`Record count: ${plan.recordCount}.`);
+    } else {
+      // empty_object
+      out(`${worktreesJsonPath} is an empty object. No action required.`);
+    }
+    return;
+  }
+  if (plan.kind === 'apply') {
+    out(`Classified ${worktreesJsonPath} as legacy_envelope.`);
+    out('Migrating to v11 flat-map shape.');
+    out('');
+    out(`Nested records: ${plan.inputRecordCount}`);
+    for (const d of plan.decisions) {
+      out(formatDecision(d));
+    }
+    out('');
+    const byteCount = Buffer.byteLength(plan.outputBytes, 'utf8');
+    if (dryRun) {
+      out(`[dry-run] Would write ${byteCount} bytes to ${worktreesJsonPath}.`);
+      out(`[dry-run] Post-migration record count would be: ${plan.outputRecordCount}.`);
+      out('[dry-run] No files written.');
+    } else {
+      out(`Wrote ${byteCount} bytes to ${worktreesJsonPath}.`);
+      out(`Post-migration record count: ${plan.outputRecordCount}.`);
+    }
+  }
+  // refuse: handled separately on stderr
+}
+
+function renderPlanData(plan: MigrationPlan, out: (line: string) => void): void {
+  // --data: structured JSON dump of the plan for tooling consumers.
+  // Shape is the same kind/decisions/counts structure rendered above,
+  // but machine-parseable.
+  const payload =
+    plan.kind === 'no_op'
+      ? { kind: plan.kind, reason: plan.reason, ...('recordCount' in plan ? { recordCount: plan.recordCount } : {}) }
+      : plan.kind === 'apply'
+        ? {
+            kind: plan.kind,
+            inputRecordCount: plan.inputRecordCount,
+            outputRecordCount: plan.outputRecordCount,
+            outputByteLength: Buffer.byteLength(plan.outputBytes, 'utf8'),
+            decisions: plan.decisions,
+          }
+        : {
+            kind: plan.kind,
+            reason: plan.reason,
+            diagnostic: plan.diagnostic,
+            ...(plan.decisions ? { decisions: plan.decisions } : {}),
+          };
+  out(JSON.stringify(payload, null, 2));
+}
+
+export function runWorktreeMigrateRegistryCommand(
+  opts: WorktreeMigrateRegistryOptions
+): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'migrate-registry');
+  if (ctx === null) return 2;
+
+  const worktreesJsonPath = path.join(ctx.cawsDir, 'worktrees.json');
+
+  // Read worktrees.json. ENOENT means there is nothing to migrate.
+  let fileContents: string;
+  try {
+    fileContents = fs.readFileSync(worktreesJsonPath, 'utf8');
+  } catch (e) {
+    const cause = e as { code?: string; message?: string };
+    if (cause.code === 'ENOENT') {
+      out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
+      return 0;
+    }
+    err(`caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`);
+    return 2;
+  }
+
+  // Load specs for the destroyed-record policy check.
+  // We pass the loadSpecs result through unchanged; planMigration's
+  // A12 gate decides whether the load is verifiable.
+  const specsResult = loadSpecs(ctx.cawsDir);
+  const specs = specsResult.specs.map((s) => ({
+    id: s.id,
+    ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
+  }));
+
+  const plan = planMigration(
+    fileContents,
+    specs,
+    specsResult.diagnostics,
+    (p: string) => fs.existsSync(p)
+  );
+
+  const dryRun = opts.dryRun === true;
+
+  // Refusals: stderr + nonzero exit. No write under any refusal path.
+  if (plan.kind === 'refuse') {
+    err('caws worktree migrate-registry: refused.');
+    err(plan.diagnostic.message);
+    if (plan.decisions) {
+      err('');
+      err(`Nested records: ${plan.decisions.length}`);
+      for (const d of plan.decisions) {
+        err(formatDecision(d));
+      }
+    }
+    if (plan.diagnostic.narrowRepair !== undefined) {
+      err('');
+      err(plan.diagnostic.narrowRepair);
+    }
+    err('');
+    err('No changes were made.');
+    if (showData) {
+      renderPlanData(plan, err);
+    }
+    // read_failed -> 2 (IO/parse error class), everything else -> 1 (policy refusal).
+    return plan.reason === 'read_failed' ? 2 : 1;
+  }
+
+  // no_op or apply: stdout + zero exit.
+  renderPlanReport(plan, worktreesJsonPath, dryRun, out);
+
+  if (plan.kind === 'apply' && !dryRun) {
+    const writeResult = writeFileAtomic(worktreesJsonPath, plan.outputBytes);
+    if (!isOk(writeResult)) {
+      err('caws worktree migrate-registry: failed to write migrated file.');
+      err(renderDiagnostics(writeResult.errors, { showData }));
+      return 2;
+    }
+  }
+
+  if (showData) {
+    renderPlanData(plan, out);
+  }
+
   return 0;
 }

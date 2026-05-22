@@ -150,6 +150,7 @@ export {
   runWorktreeBindCommand,
   runWorktreeDestroyCommand,
   runWorktreeMergeCommand,
+  runWorktreeMigrateRegistryCommand,
 } from './commands/worktree';
 export type {
   WorktreeCreateOptions,
@@ -157,6 +158,7 @@ export type {
   WorktreeBindOptions,
   WorktreeDestroyOptions,
   WorktreeMergeOptions,
+  WorktreeMigrateRegistryOptions,
 } from './commands/worktree';
 
 export { renderInit } from './render/init';

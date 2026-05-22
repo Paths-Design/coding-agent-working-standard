@@ -37,6 +37,7 @@ import {
   runWorktreeDestroyCommand,
   runWorktreeListCommand,
   runWorktreeMergeCommand,
+  runWorktreeMigrateRegistryCommand,
   type EvidenceKind,
 } from './index';
 
@@ -684,6 +685,21 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  worktreeCmd
+    .command('migrate-registry')
+    .description(
+      'Convert v10.2 legacy-envelope .caws/worktrees.json into the v11 flat-map shape. Destroyed records are omitted iff no spec claims them and their path is absent; refuses otherwise. Idempotent on already-flat files.'
+    )
+    .option('--dry-run', 'Classify and report what would happen; do not write.')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { dryRun?: boolean; data?: boolean }) => {
+      const code = runWorktreeMigrateRegistryCommand({
+        ...(opts.dryRun === true ? { dryRun: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 }
 
 /** Commander value collector for repeatable string options. */
