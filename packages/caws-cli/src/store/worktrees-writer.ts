@@ -41,6 +41,7 @@ import {
 } from '@paths.design/caws-kernel';
 
 import { applyRegistryPatch } from './apply-patch';
+import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
 import { closeSpec } from './specs-writer';
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
@@ -352,9 +353,27 @@ export function createWorktree(
   const wtPath = worktreePathFor(cawsDir, input.name);
 
   // ─ Git operation: outside lifecycle-transaction ─
+  //
+  // Three-step sequence enforcing the control-plane-state-authority
+  // contract (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 A1):
+  //
+  //   1. `git worktree add --no-checkout` — register the linked
+  //      worktree without materializing any tracked files.
+  //   2. `configureWorktreeSparseCheckout(wtPath)` — install non-cone
+  //      sparse-checkout patterns that include everything EXCEPT
+  //      `.caws/specs/` so the .caws/specs/ tree is never written
+  //      to the worktree filesystem.
+  //   3. `git checkout` (inside the helper) — materialize the
+  //      included files.
+  //
+  // Net effect: the worktree carries the full source tree (so
+  // cross-module imports work) but does NOT carry an editable
+  // .caws/specs/<id>.yaml — preventing the v10.2 split-brain
+  // authority class where authority decisions could read divergent
+  // worktree-local copies.
 
   const gitResult = runGit(
-    ['worktree', 'add', '-b', branch, wtPath, baseBranch],
+    ['worktree', 'add', '--no-checkout', '-b', branch, wtPath, baseBranch],
     repoRoot
   );
   if (!gitResult.ok) {
@@ -363,6 +382,30 @@ export function createWorktree(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `git worktree add failed: ${gitResult.reason}`,
         { subject: input.name, data: { git_stderr: gitResult.reason } }
+      )
+    );
+  }
+
+  // Configure sparse-checkout to exclude .caws/specs/ from the worktree.
+  // Failure here triggers compensation: `git worktree remove --force`
+  // tears down the linked worktree (registered by the previous step)
+  // and its associated sparse-checkout state under
+  // `.git/worktrees/<name>/info/sparse-checkout`. The control-plane
+  // .caws/ directory is unchanged.
+  const sparseResult = configureWorktreeSparseCheckout(wtPath);
+  if (!sparseResult.ok) {
+    rollbackGitWorktree(repoRoot, wtPath);
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `git sparse-checkout configuration failed (step: ${sparseResult.step}): ${sparseResult.reason}`,
+        {
+          subject: input.name,
+          data: {
+            git_stderr: sparseResult.reason,
+            sparse_checkout_step: sparseResult.step,
+          },
+        }
       )
     );
   }
