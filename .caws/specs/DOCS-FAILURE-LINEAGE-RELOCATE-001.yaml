@@ -2,9 +2,11 @@ id: DOCS-FAILURE-LINEAGE-RELOCATE-001
 title: 'Relocate failure-lineage.md to docs/ and update all in-repo references'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Relocation completed. Move source packages/caws-cli/docs-status/failure-lineage.md to destination docs/failure-lineage.md preserved blame continuity via git mv (84% similarity index recorded by git). Entry 18 (silent-push-of-parallel-session-commit) appended in the same commit (3ab77c0). Seven reference files updated by literal string substitution: README.md, AGENTS.md, .claude/hooks/CLAUDE.md, docs/architecture/caws-vnext-command-surface.md, packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts, packages/caws-cli/src/init/hook-packs/types.ts, packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md. Two files explicitly NOT updated per A4 + invariants: .caws/specs/HOOK-SAFETY-001.yaml (closed spec, historical record) and docs/rewrite/corpus/gate-outputs/fail.json (fixture data). Hook pack version NOT bumped (path string is description, not runtime contract). Counts: file at new location 791 lines (was 692 at old location, +99 from Entry 18). No live references to old path remain in non-frozen files. caws doctor 0E/3W/0I unchanged. Template productization defect (in-repo path in template references a path that does not exist in user projects after caws init installs the pack) is pre-existing and NOT created by this slice; recorded as follow-up. Tree clean after the commit. Activation prereqs were direct maintainer authorization (Do it now); audit-quiet activation per v11.1.6 surface gap pattern. Next: relocation slice is closed by this command; no further work for this slice.'
 created_at: '2026-05-22T23:00:00.000Z'
-updated_at: '2026-05-22T23:00:00.000Z'
+updated_at: '2026-05-22T22:50:15.397Z'
 blast_radius:
   modules:
     - docs
