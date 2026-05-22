@@ -1,0 +1,457 @@
+id: MULTI-AGENT-HANDOFF-EVENT-001
+title: 'Typed handoff events when one agent picks up, restores, or transfers another agent''s in-flight work'
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-22T23:40:00.000Z'
+updated_at: '2026-05-22T23:40:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/schemas/events
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/commands
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/MULTI-AGENT-HANDOFF-EVENT-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src/scope
+    - .claude/hooks
+invariants:
+  - >-
+    Earned claim: when one agent restores another agent's stashed
+    work, picks up files claimed by another session, or otherwise
+    inherits in-flight state across the session boundary, a typed
+    hash-chained event is appended to .caws/events.jsonl naming the
+    source session, the receiving session, the affected paths, and
+    the inheritance mechanism (stash_restore, claim_transfer,
+    overlap_ack_proceed, manual_pickup). The next agent reading the
+    repo state sees the handoff explicitly, not via stash-name
+    inference.
+  - >-
+    Provenance, not authority. Handoff events are observability
+    records: they document what happened. They do NOT change which
+    session has authority over which files, do NOT revoke claims,
+    do NOT modify scope decisions. Authority transitions (worktree
+    claim --takeover, session ownership transfer) are owned by
+    other surfaces; handoff events are the audit trail those
+    surfaces (and ad hoc operator actions) emit.
+  - >-
+    Depends on SESSION-OWNERSHIP-METADATA-001 and
+    WORKING-TREE-PROVENANCE-GUARD-001. The event payload references
+    session ids, claimed_paths, and last_modified_paths fields from
+    point 1; the overlap_ack_proceed event variant is emitted by
+    the point-2 ack flow. Without those substrate slices, the
+    handoff events have no mechanical sources of truth to record.
+    A0 of this slice rejects activation until both prerequisites
+    are closed.
+  - >-
+    Hash-chained append-only. Handoff events use the same
+    append-only hash-chain shape as every other event in
+    .caws/events.jsonl. Each event has prev_hash and event_hash;
+    the chain cannot be retroactively rewritten. This is the
+    existing v11 event store invariant; this slice does NOT
+    introduce a parallel store.
+  - >-
+    Event taxonomy is locked at draft. Four event variants in v1,
+    all with the .v1 schema-version suffix:
+      - stash_restore.v1 — agent A restored a stash whose author
+        is agent B (B != A). Common case: full-stack-ds
+        "parallel-session restore" pattern.
+      - claim_transfer.v1 — agent A explicitly takes over a
+        claimed_paths set that previously belonged to agent B.
+        Analogous to worktree claim --takeover.
+      - overlap_ack_proceed.v1 — agent A acknowledged dirty
+        overlap with agent B's claimed_paths /
+        last_modified_paths and proceeded with a cleanup command
+        (per WORKING-TREE-PROVENANCE-GUARD-001 A3). The event
+        records WHICH command (target_command field).
+      - manual_pickup.v1 — operator explicitly declares "I am
+        continuing agent B's work" via a new CLI surface
+        (proposed: caws session pickup --from <session-id>
+        --paths <glob>...). Catches the case where stash_restore
+        / overlap_ack_proceed don't fire but the operator wants
+        a durable handoff record.
+  - >-
+    Event payload shape is structural, not heuristic. Every
+    variant includes: { source_session, receiving_session, paths
+    (array of strings), ts (ISO timestamp), actor (per the
+    existing event-actor shape), data: { variant-specific fields
+    }, plus the standard prev_hash / event_hash chain fields }.
+    No free-text "reason" field; structured data only. Operators
+    who want narrative attach commit-message body, not event
+    data.
+  - >-
+    No auto-detection of handoffs. The events fire on EXPLICIT
+    triggers (stash restore CLI call by another agent, ack
+    proceed, pickup command, claim takeover). The system does
+    NOT scan for "stale handoffs" or "implicit pickups" — those
+    are the heuristics the full-stack-ds transcripts proved
+    unreliable. If a handoff happens through fs operations or
+    direct git invocations that bypass the trigger surfaces,
+    no event fires and the handoff is unrecorded. That is
+    correct conservative behavior: we don't fabricate events.
+  - >-
+    Stash-restore variant requires session-id provenance on the
+    stash itself. Today, `git stash` records the stasher's git
+    author (which CAWS does not consistently set per-session),
+    not the CAWS session id. v1 of this slice REQUIRES the
+    stasher to mark stashes with a session-id-bearing convention
+    (proposed: stash message format includes "session:<id>" or
+    we extend the stash creation surface to write a sidecar
+    file under tmp/<sessionId>/stash-manifest.json). The
+    activation must pick a mechanism; without one, stash_restore
+    events cannot reliably attribute source_session and the
+    variant is dormant.
+  - >-
+    No new event-store infrastructure. Handoff events are
+    appended via the existing appendEvent function (or its
+    successor). The kernel's events schema (events.v1.json) is
+    amended to ADMIT the new four event types; no new index,
+    no new store, no parallel chain.
+  - >-
+    No kernel authority change. The kernel's worktree binding,
+    scope evaluation, lifecycle transactions, and spec resolver
+    are all unchanged. Handoff events are recorded against the
+    same .caws/events.jsonl as every other event; consumers
+    that filter by event type can extract handoff history
+    without joins or special-case logic.
+acceptance:
+  - id: A0
+    given: |
+      SESSION-OWNERSHIP-METADATA-001 OR
+      WORKING-TREE-PROVENANCE-GUARD-001 has not yet closed with
+      resolution: completed.
+    when: |
+      A reviewer evaluates whether this spec is ready to activate.
+    then: |
+      The spec is REJECTED for activation. Handoff events depend
+      on the ownership metadata (point 1) and the ack flow (point
+      2). The activator confirms both prerequisites are closed
+      before flipping this spec to active.
+  - id: A1
+    given: |
+      Session A (caws-aaa) created a git stash with message "parallel-
+      session contract refactor" and the configured session-marker
+      convention (e.g., trailing "session:caws-aaa" or a sidecar
+      manifest). Session B (caws-bbb) is now running.
+    when: |
+      Session B issues `caws stash restore --from caws-aaa
+      --stash <stash@{N}>` (or whatever surface the activator
+      chooses).
+    then: |
+      A stash_restore.v1 event is appended to .caws/events.jsonl
+      with source_session: caws-aaa, receiving_session: caws-bbb,
+      paths: <files restored from the stash>, ts: <now>, actor:
+      <caws-bbb's actor record>. The git stash pop / apply
+      operation runs as usual after the event is appended. Hash
+      chain integrity is preserved (prev_hash matches the tail
+      hash before this event).
+  - id: A2
+    given: |
+      Session A holds claimed_paths: ["packages/foo/**"]. Session
+      B explicitly takes over via the takeover surface (TBD by
+      the activator; proposed `caws claim --paths packages/foo/**
+      --takeover-from caws-aaa`).
+    when: |
+      The takeover command runs.
+    then: |
+      A claim_transfer.v1 event is appended naming source_session:
+      caws-aaa, receiving_session: caws-bbb, paths:
+      ["packages/foo/**"]. Session A's claimed_paths field is
+      updated (per SESSION-OWNERSHIP-METADATA-001 takeover
+      semantics) and session B's claimed_paths gains the
+      transferred entries. The atomic write of both records plus
+      the event append uses the existing lifecycle-transaction
+      shape (no half-state).
+  - id: A3
+    given: |
+      Per WORKING-TREE-PROVENANCE-GUARD-001 A3: session B has
+      acked overlap with session A on path packages/foo/bar.ts
+      via `caws working-tree ack --session caws-aaa --paths
+      packages/foo/bar.ts` and then runs `git stash`.
+    when: |
+      The cleanup proceeds after the ack.
+    then: |
+      An overlap_ack_proceed.v1 event is appended with
+      source_session: caws-aaa, receiving_session: caws-bbb,
+      paths: ["packages/foo/bar.ts"], target_command:
+      "git stash", and a reference to the prior_overlap_acks
+      record on session A (so consumers can join the event back
+      to the audit trail on the affected session). The ack write
+      and the event append are atomic (lifecycle transaction).
+  - id: A4
+    given: |
+      Session A worked on packages/baz/ for an hour and then
+      paused without committing. Session B starts and wants to
+      continue from where A left off. There is no stash, no
+      explicit overlap (because A's last_modified_paths may have
+      decayed past TTL).
+    when: |
+      Session B invokes `caws session pickup --from caws-aaa
+      --paths "packages/baz/**" --reason "user-authorized handoff"`.
+    then: |
+      A manual_pickup.v1 event is appended with source_session:
+      caws-aaa, receiving_session: caws-bbb, paths:
+      ["packages/baz/**"], data: { reason: "user-authorized
+      handoff" }. The event is the durable record that the
+      handoff happened, even though no automated trigger fired.
+  - id: A5
+    given: |
+      A series of handoff events have been appended over a multi-
+      session session sequence.
+    when: |
+      An operator runs `caws events query --type stash_restore
+      --type claim_transfer --type overlap_ack_proceed --type
+      manual_pickup` (or whatever query surface the activator
+      ships; minimum requirement is "filter events by type").
+    then: |
+      The full handoff history is returned in chain order. No
+      events are missing. No spurious events appear. Each event
+      can be joined back to the agents.json record for both
+      source_session and receiving_session at query time (if
+      those records still exist).
+  - id: A6
+    given: |
+      The kernel's events schema (events.v1.json or a new
+      events.v2.json — activator chooses) is loaded by the
+      validator.
+    when: |
+      Any of the four new event variants is validated against
+      the schema.
+    then: |
+      The variant validates successfully. additionalProperties:
+      false on the event-type discriminator does NOT reject the
+      new variants. Existing event types (worktree_created,
+      worktree_bound, spec_closed, etc.) continue to validate
+      unchanged.
+  - id: A7
+    given: |
+      The full-stack-ds failure-mode regression fixture: a session
+      restores three "parallel-session *" stashes.
+    when: |
+      Each restore runs through the configured surface.
+    then: |
+      Three stash_restore.v1 events fire, one per restored stash.
+      Each event names the original stasher's session id (per the
+      stash-marker convention), the receiving session id, and the
+      paths affected. A consumer querying the event log sees the
+      explicit handoff chain. The pattern that consumed cognitive
+      budget in full-stack-ds (agents inferring provenance from
+      stash names) is replaced by mechanically-recorded events.
+  - id: A8
+    given: |
+      All pre-existing CAWS tests.
+    when: |
+      The test suites run.
+    then: |
+      All pre-existing tests remain green. New tests cover A1-A7,
+      including the full-stack-ds regression (A7). Event schema
+      tests confirm A6. No production diff outside scope.in.
+non_functional:
+  reliability:
+    - >-
+      Events are written atomically with their triggering action
+      via the existing lifecycle-transaction surface. If the
+      transaction fails partway, no half-state appears (either the
+      event is appended and the action completed, or neither).
+      This is the existing v11 lifecycle invariant; this slice
+      does NOT introduce a separate atomicity model.
+    - >-
+      Hash-chain integrity is non-negotiable. The existing
+      events.jsonl verification tooling MUST validate the chain
+      including the new event types. Any change to the chain-
+      validation predicate that admits the new types MUST also
+      reject malformed chains as before — backward-compatibility
+      of the validation surface is required.
+  performance:
+    - >-
+      Event append latency is bounded by the existing appendEvent
+      performance (single-line JSON write + lock acquire). The
+      new event variants do not add per-event computation; they
+      are structurally identical to existing events except for
+      the variant-specific data payload.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin
+# ------
+# Filed 2026-05-22 as point 4 of the four-part multi-agent provenance
+# bar. The maintainer's framing:
+#
+#   > "Handoff must be first-class. If one agent restores another
+#   > agent's stashed work, that should create an explicit handoff
+#   > record or warning, not rely on the next agent reading stash
+#   > names and inferring what happened."
+#
+# This is the audit-trail layer above the data model (point 1) and
+# the cleanup-guard (point 2). Without explicit events, the
+# substrate is purely reactive (refuse cleanup when overlap
+# detected); with explicit events, the substrate also has
+# observable handoff history, which is what enables post-incident
+# review, regression analysis, and (eventually) cross-session
+# coordination doctrine.
+#
+# Direct evidence from full-stack-ds
+# ----------------------------------
+# Session 079d0ab9 turn-29 explicitly asked: "are these my edits or
+# someone else's restored stash?" The answer ("my edits, continue")
+# was correct, but the question itself cost cognitive budget. With
+# a stash_restore.v1 event in the chain, session B would have
+# read the event log at session start and seen "session A restored
+# stash 'parallel-session IR refactor' at 14:32; affected files:
+# packages/ds-codegen/src/ir.ts, contract.ts, dom-tree.test.ts" —
+# eliminating the entire question.
+#
+# Why this is point 4 (last)
+# --------------------------
+# Events depend on the substrate below them:
+#
+#   - SESSION-OWNERSHIP-METADATA-001 (point 1) provides session_id
+#     metadata for source_session / receiving_session fields and
+#     claimed_paths to distinguish claim_transfer from manual_pickup.
+#   - WORKING-TREE-PROVENANCE-GUARD-001 (point 2) is the ack
+#     surface that triggers overlap_ack_proceed events.
+#   - MULTI-AGENT-PUSH-RANGE-GUARD-001 (point 3, drafted) MAY
+#     consume handoff events as evidence (if a commit's
+#     last_modified_paths overlap a prior handoff, that's
+#     additional provenance for the classifier).
+#
+# Filing this slice now (alongside points 1 and 2) ensures the
+# event taxonomy is part of the coordinated design rather than
+# bolted on later. Activation still waits until points 1 and 2
+# close.
+#
+# Open design questions (ADR-gated)
+# ---------------------------------
+#
+#   Q1. Stash-marker convention.
+#       Two candidates:
+#         (a) Stash message includes "session:<sessionId>" as a
+#             suffix or prefix. Pros: visible in `git stash list`.
+#             Cons: relies on operator/CLI discipline; bare `git
+#             stash push` from a non-CAWS surface lacks the
+#             marker.
+#         (b) Sidecar manifest under tmp/<sessionId>/stash-
+#             manifest.json maps stash SHAs to session ids. Pros:
+#             unaffected by `git stash push -m "..."` from any
+#             source; the sidecar is the source of truth. Cons:
+#             extra fs write; tmp/ pollution.
+#       Proposed: (a) by default, (b) as a fallback if the
+#       message lacks the marker. Activator decides.
+#
+#   Q2. Event-type discriminator.
+#       The existing events.v1.json schema has a top-level event
+#       string. Adding four new strings (stash_restore,
+#       claim_transfer, overlap_ack_proceed, manual_pickup)
+#       requires either:
+#         (a) Extending the enum in events.v1.json.
+#         (b) Forking to events.v2.json with a backward-
+#             compatible loader.
+#       Proposed: (a) for v1 (additive enum extension). Activator
+#       confirms in the ADR.
+#
+#   Q3. Per-event schemas under events/.
+#       Existing events have per-type schemas under
+#       packages/caws-kernel/src/schemas/events/. Each new event
+#       type needs:
+#         packages/caws-kernel/src/schemas/events/stash_restore.v1.json
+#         packages/caws-kernel/src/schemas/events/claim_transfer.v1.json
+#         packages/caws-kernel/src/schemas/events/overlap_ack_proceed.v1.json
+#         packages/caws-kernel/src/schemas/events/manual_pickup.v1.json
+#       Each declares its data shape (additionalProperties: false
+#       per the existing pattern). Activator drafts these as part
+#       of the implementation commit.
+#
+#   Q4. Reading events from agent startup.
+#       Should agents automatically read recent handoff events
+#       targeting their session at startup? Proposed: YES, but
+#       as advisory output (printed to the agent's session-log
+#       hook), not as a blocking gate. The event surface is
+#       observability; agents that ignore the advisory output
+#       are not penalized.
+#
+#   Q5. Cross-repo handoffs.
+#       A multi-repo handoff (agent A is in repo X, restores work
+#       authored in repo Y by session B) is OUT OF SCOPE. v1
+#       covers single-repo handoffs only.
+#
+#   Q6. CLI surface for handoff queries.
+#       Proposed: `caws events query --type <type>` extends an
+#       existing or new events-query subcommand. The exact
+#       surface lives in the activator's commit, not this draft.
+#
+#   Q7. Event volume and pruning.
+#       Handoff events accumulate over the project lifetime. v1
+#       does NOT prune them — append-only is the invariant. If
+#       volume becomes operationally painful (millions of events),
+#       a future slice may add chain rotation
+#       (CAWS-MIGRATE-V10-EVENTS-001 by the parallel session is
+#       drafting exactly this surface; coordinate at activation
+#       time).
+#
+# Implementation sketch (sketch only, not authorized)
+# ---------------------------------------------------
+# Three commits expected after activation:
+#
+# Commit 1: kernel event schemas.
+#   - packages/caws-kernel/src/schemas/events/{stash_restore,
+#     claim_transfer, overlap_ack_proceed, manual_pickup}.v1.json
+#     (four new files).
+#   - packages/caws-kernel/src/schemas/events.v1.json: extend
+#     event enum.
+#   - kernel tests for schema validation (A6) and discriminator
+#     coverage.
+#
+# Commit 2: store layer + CLI surfaces.
+#   - packages/caws-cli/src/store/handoff-events.ts (new): typed
+#     helpers for appending each event variant via the existing
+#     appendEvent.
+#   - packages/caws-cli/src/shell/commands/stash.ts or events.ts
+#     extension: stash-restore wrapper that fires the event.
+#   - packages/caws-cli/src/shell/commands/session.ts (new or
+#     extending existing): pickup subcommand for manual_pickup.
+#   - integration tests for A1-A5 + A7 (full-stack-ds regression).
+#
+# Commit 3: closure.
+#   - closure_notes record event taxonomy chosen, stash-marker
+#     convention chosen, CLI surfaces shipped, test counts, and
+#     pointer to the closed four-part-bar status.
+#
+# Activation gate
+# ---------------
+# Activation requires:
+#   1. SESSION-OWNERSHIP-METADATA-001 closed with resolution:
+#      completed.
+#   2. WORKING-TREE-PROVENANCE-GUARD-001 closed with resolution:
+#      completed.
+#   3. Maintainer authorization.
+#   4. ADR (lightweight; can live in the activation commit
+#      message or a dedicated doc) answering Q1, Q2, Q3, Q6.
+#   5. Coordination with CAWS-MIGRATE-V10-EVENTS-001 (parallel
+#      session's slice) if event-chain rotation lands first —
+#      shouldn't block, but the handoff schemas must validate
+#      against whichever chain shape is canonical at activation.
+#
+# Non-goals (explicit guards)
+# ---------------------------
+#   * No auto-detection of handoffs. Only explicit-trigger events.
+#   * No event-stream replay or reconciliation. Append-only.
+#   * No cross-repo handoff support in v1.
+#   * No new doctor rule for "session has unrecorded handoff"
+#     (would require auto-detection, which is rejected).
+#   * No release / package version / CHANGELOG / template /
+#     hook-pack edits beyond what activation requires (e.g., if
+#     the stash-restore CLI is a new command, that may need a
+#     CHANGELOG entry at activation time; the draft does not
+#     authorize that).
+#   * No re-opening or amendment of any other slice.
+#
+# The slice's earned claim is "handoff is first-class and
+# observable." Detection (point 2) and metadata (point 1) are
+# substrate; classification (point 3) is push-time. This slice
+# closes the observability loop so future sessions inherit a
+# readable history of cross-session inheritance.
