@@ -63,6 +63,29 @@ export const STORE_RULES = {
   EVENTS_LOCK_CONTENTION: 'store.events.lock_contention',
   /** prepareAppend rejected the body. Carries the kernel diagnostics. */
   EVENTS_PREPARE_APPEND_REJECTED: 'store.events.prepare_append_rejected',
+  /** rotateEvents was called against a missing or empty events.jsonl.
+   *  There is nothing to archive; the operation refuses. */
+  EVENTS_ROTATE_NOTHING_TO_ROTATE: 'store.events.rotate.nothing_to_rotate',
+  /** rotateEvents was called against a clean v11 chain (all entries have
+   *  structured actor) without the explicit --allow-clean / allowClean
+   *  flag. Friction guard to prevent casual log rotation that could hide
+   *  evidence behind an archive boundary. */
+  EVENTS_ROTATE_CLEAN_CHAIN_REQUIRES_ALLOW_CLEAN:
+    'store.events.rotate.clean_chain_requires_allow_clean',
+  /** verify-archive recomputed the archive file's sha256 and it did not
+   *  match the prior_file_digest committed in the most recent
+   *  chain_rotated event. Tamper detection trip. */
+  EVENTS_ARCHIVE_DIGEST_MISMATCH: 'store.events.archive.digest_mismatch',
+  /** verify-archive recomputed the archive file's line count and it did
+   *  not match the prior_line_count committed in the most recent
+   *  chain_rotated event. */
+  EVENTS_ARCHIVE_LINE_COUNT_MISMATCH:
+    'store.events.archive.line_count_mismatch',
+  /** events migrate --apply refused because v10 spec YAMLs were detected
+   *  and --allow-partial-upgrade was not passed. The half-upgrade refusal
+   *  is structural (see CAWS-MIGRATE-V10-EVENTS-001 A10 invariant). */
+  EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED:
+    'store.events.migrate.partial_upgrade_refused',
 
   // ---- init (slice 7b) ----------------------------------------------------
   /** A legacy file (e.g., working-spec.yaml) blocks vNext init. */

@@ -18,6 +18,7 @@
 // events. All other code paths (CLI commands, hooks, future store
 // callers) must go through here.
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -26,6 +27,7 @@ import {
   ok,
   prepareAppend,
   validateChainedEvent,
+  type Actor,
   type ChainedEvent,
   type Diagnostic,
   type EventBody,
@@ -242,6 +244,364 @@ export function appendEvent(
   } finally {
     releaseLock(lockFd.value, lockPath);
   }
+}
+
+// ----------------------------------------------------------------------------
+// rotateEvents — sanctioned second writer for chain maintenance
+// ----------------------------------------------------------------------------
+//
+// Per doctrine invariant 14 (docs/architecture/caws-vnext-command-surface.md
+// §6), rotateEvents is the only writer of events.jsonl besides appendEvent.
+// Both functions live in this module, both hold the same lock. Shell commands
+// and migration tooling NEVER write events.jsonl directly; they invoke this
+// function through the exported store surface. The lock primitives below
+// (acquireLock/releaseLock/tryRecoverStaleLock) stay private — exporting them
+// would create a third writer surface by exposing lock acquisition to callers
+// that bypass the canonical functions.
+//
+// Atomicity:
+//   The operation is a same-lock single critical section that performs a
+//   two-step filesystem transition: rename old file → write new genesis file.
+//   On a single filesystem, fs.renameSync is atomic. The genesis write is
+//   fsynced before the lock is released. A crash BETWEEN the rename and the
+//   genesis write leaves the archive on disk but no new events.jsonl; the
+//   next caws command sees "no events.jsonl, create on first append" (per
+//   invariant 5: events.jsonl is never required at rest), and the archive
+//   is still verifiable by hash if the operator preserved the digest
+//   out-of-band. A crash DURING the rename is a no-op (rename is atomic).
+//
+// Validation chain (doctrine nuance — see invariant 1 amendment):
+//   The chain_rotated body is constructed in-memory by this function, then
+//   passed to prepareAppend(null, body). prepareAppend invokes
+//   validateEventBody, which runs the chain_rotated payload schema and
+//   rejects malformed payloads BEFORE any file write. This function does NOT
+//   hand-build a ChainedEvent — sequence numbers and hash linkage remain
+//   kernel authority.
+
+const ARCHIVE_PREFIX = 'events.jsonl.archive-';
+
+export interface RotateEventsOptions {
+  /**
+   * Operator-supplied reason recorded verbatim into chain_rotated.data.
+   * migration_reason. Required for every rotate invocation regardless of
+   * chain shape; see CAWS-MIGRATE-V10-EVENTS-001 A6/A8.
+   */
+  readonly reason: string;
+  /**
+   * Actor to attribute the chain_rotated event to. The kernel envelope
+   * requires a structured Actor; the shell command's buildActor() helper
+   * is the conventional source.
+   */
+  readonly actor: Actor;
+  /**
+   * Friction flag. When the prior chain has only structured (v11) actors,
+   * rotation is refused unless allowClean === true. Default false means
+   * rotation against a clean chain is treated as an operator slip; the
+   * caller must explicitly opt in to log rotation as a non-migration
+   * maintenance operation. See A8.
+   */
+  readonly allowClean?: boolean;
+  /**
+   * Override the wall-clock used for the archive timestamp. Tests inject
+   * a fixed Date; production omits this and the function uses new Date().
+   */
+  readonly now?: Date;
+}
+
+/**
+ * Rotate the events.jsonl chain: archive the existing file under a
+ * timestamped name and write a fresh chain whose genesis event is
+ * chain_rotated, cryptographically tying the archive to the new chain
+ * via prior_file_digest.
+ *
+ * Refusals (typed Diagnostic, no file mutations on any refusal path):
+ *   - EVENTS_ROTATE_NOTHING_TO_ROTATE: file missing or zero-length.
+ *   - EVENTS_ROTATE_CLEAN_CHAIN_REQUIRES_ALLOW_CLEAN: all entries are
+ *     structured (v11) actors and allowClean !== true.
+ *   - EVENTS_PREPARE_APPEND_REJECTED: the constructed chain_rotated body
+ *     failed kernel validation (programmer error in this function or a
+ *     schema change drift). Carries kernel diagnostics in data.source_rule.
+ *   - WRITE_IO_FAILED: rename or genesis-write failed at the FS layer.
+ *
+ * On success returns the new ChainedEvent (the chain_rotated genesis event
+ * that is now the entirety of the new events.jsonl).
+ */
+export function rotateEvents(
+  cawsDir: string,
+  opts: RotateEventsOptions
+): Result<ChainedEvent> {
+  const eventsPath = path.join(cawsDir, 'events.jsonl');
+  const lockPath = `${eventsPath}.lock`;
+
+  if (!fs.existsSync(cawsDir)) {
+    throw new Error(`rotateEvents: cawsDir does not exist: ${cawsDir}`);
+  }
+
+  const lockFd = acquireLock(lockPath);
+  if (!isOk(lockFd)) return err(lockFd.errors);
+
+  try {
+    // ── 1. Refuse if there is nothing to rotate. ──────────────────────────
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(eventsPath);
+    } catch (e) {
+      const cause = e as { code?: string };
+      if (cause.code === 'ENOENT') {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.EVENTS_ROTATE_NOTHING_TO_ROTATE,
+            'rotateEvents refuses: events.jsonl does not exist.',
+            { subject: eventsPath, data: { code: 'ENOENT' } }
+          )
+        );
+      }
+      throw e;
+    }
+    if (stat.size === 0) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.EVENTS_ROTATE_NOTHING_TO_ROTATE,
+          'rotateEvents refuses: events.jsonl is empty.',
+          { subject: eventsPath, data: { size: 0 } }
+        )
+      );
+    }
+
+    // ── 2. Read the file once for sha256 + tolerant scan. ────────────────
+    // Streaming is overkill for the sizes events.jsonl reaches in practice
+    // (sterling's worst case is 1500 lines ≈ a few hundred KB); a single
+    // readFileSync is simpler and the lock is held throughout anyway.
+    const rawBytes = fs.readFileSync(eventsPath);
+    const priorFileDigest = `sha256:${crypto
+      .createHash('sha256')
+      .update(rawBytes)
+      .digest('hex')}` as const;
+
+    const scanResult = tolerantScanEventsFile(rawBytes.toString('utf8'));
+
+    // ── 3. Clean-chain refusal (friction flag). ──────────────────────────
+    // A clean v11 chain has only structured actors. Refuse unless the
+    // operator explicitly opted in via allowClean: true. The intent is to
+    // make general log rotation explicit-and-auditable, not to forbid it.
+    const isCleanV11 =
+      scanResult.stats.v10_string_actor === 0 &&
+      scanResult.stats.unparseable === 0 &&
+      scanResult.stats.v11_object_actor > 0;
+    if (isCleanV11 && opts.allowClean !== true) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.EVENTS_ROTATE_CLEAN_CHAIN_REQUIRES_ALLOW_CLEAN,
+          'rotateEvents refuses: prior chain is a clean v11 chain (all structured actors); pass allowClean: true (CLI: --allow-clean) to rotate it anyway.',
+          {
+            subject: eventsPath,
+            data: { actor_shape_stats: scanResult.stats },
+          }
+        )
+      );
+    }
+
+    // ── 4. Build the chain_rotated body. ────────────────────────────────
+    const nowDate = opts.now ?? new Date();
+    const archiveName = `${ARCHIVE_PREFIX}${windowsSafeIso(nowDate)}`;
+    const archivePath = path.join(cawsDir, archiveName);
+
+    const priorChainStatus: 'parseable_unverified' | 'unparseable' | 'empty' =
+      scanResult.stats.unparseable > 0 &&
+      scanResult.stats.v10_string_actor === 0 &&
+      scanResult.stats.v11_object_actor === 0
+        ? 'unparseable'
+        : 'parseable_unverified';
+
+    const data: Record<string, unknown> = {
+      prior_tail_hash: scanResult.tailHash,
+      prior_file_path: archiveName,
+      prior_file_digest: priorFileDigest,
+      prior_line_count: scanResult.lineCount,
+      prior_chain_status: priorChainStatus,
+      actor_shape_stats: scanResult.stats,
+      migration_reason: opts.reason,
+    };
+    if (scanResult.tailSeq !== null) {
+      data.prior_seq = scanResult.tailSeq;
+    }
+
+    const body: EventBody = {
+      event: 'chain_rotated',
+      ts: nowDate.toISOString(),
+      actor: opts.actor,
+      data,
+    };
+
+    // ── 5. Kernel validation BEFORE any file mutation. ──────────────────
+    // prepareAppend invokes validateEventBody, which runs the chain_rotated
+    // payload schema. A malformed body fails here, no file is touched. This
+    // is the doctrine-compliant validation chain (invariant 1 amendment).
+    const prepared = prepareAppend(null, body);
+    if (!isOk(prepared)) {
+      const wrapped: Diagnostic[] = prepared.errors.map((d) => ({
+        ...d,
+        rule: STORE_RULES.EVENTS_PREPARE_APPEND_REJECTED,
+        data: { ...(d.data ?? {}), source_rule: d.rule },
+      }));
+      return err(wrapped);
+    }
+    const genesisEvent = prepared.value;
+    const genesisLine = JSON.stringify(genesisEvent) + '\n';
+
+    // ── 6. Two-step filesystem transition: rename then write+fsync. ────
+    // Both steps are inside the same lock critical section. Same-filesystem
+    // rename is atomic; the new genesis write is fsynced before lock
+    // release. A crash between rename and genesis-write leaves the archive
+    // intact and no events.jsonl, recoverable per invariant 5.
+    try {
+      fs.renameSync(eventsPath, archivePath);
+    } catch (e) {
+      const cause = e as { message?: string; code?: string };
+      return err(
+        storeDiagnostic(
+          STORE_RULES.WRITE_IO_FAILED,
+          `Failed to rename events.jsonl to archive: ${cause.message ?? 'unknown error'}.`,
+          {
+            subject: eventsPath,
+            data: { code: cause.code, archivePath },
+          }
+        )
+      );
+    }
+
+    let fd: number | undefined;
+    try {
+      fd = fs.openSync(eventsPath, 'w');
+      fs.writeFileSync(fd, genesisLine);
+      fs.fsyncSync(fd);
+    } catch (e) {
+      const cause = e as { message?: string; code?: string };
+      return err(
+        storeDiagnostic(
+          STORE_RULES.WRITE_IO_FAILED,
+          `Failed to write chain_rotated genesis event after archive rename: ${cause.message ?? 'unknown error'}. The archive at ${archivePath} is intact; the next caws command will see no events.jsonl and create one on first append (per doctrine invariant 5).`,
+          {
+            subject: eventsPath,
+            data: { code: cause.code, archivePath },
+          }
+        )
+      );
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    return ok(genesisEvent);
+  } finally {
+    releaseLock(lockFd.value, lockPath);
+  }
+}
+
+/**
+ * Tolerant scan of an events.jsonl file's raw text. Used by rotateEvents
+ * to extract the prior tail hash + seq and tally actor-shape stats WITHOUT
+ * invoking validateChainedEvent. Calling the strict validator on a v10 line
+ * is the exact failure mode the rotation slice exists to repair.
+ *
+ * Each non-empty line is JSON.parse'd defensively. Lines that fail parse
+ * are counted as unparseable. Lines that parse contribute their actor
+ * shape to the stats; the actor is classified by direct type inspection
+ * (typeof obj.actor === 'string' → v10; non-null object with kind → v11).
+ *
+ * The tail hash and tail seq come from the last non-empty line iff it
+ * parsed cleanly and carried the expected fields; otherwise they are null.
+ */
+interface TolerantScanResult {
+  readonly stats: {
+    readonly v10_string_actor: number;
+    readonly v11_object_actor: number;
+    readonly unparseable: number;
+  };
+  readonly lineCount: number;
+  readonly tailHash: string | null;
+  readonly tailSeq: number | null;
+}
+
+function tolerantScanEventsFile(raw: string): TolerantScanResult {
+  const trailingNewline = raw.endsWith('\n');
+  const parts = raw.split('\n');
+  const lines = trailingNewline ? parts.slice(0, -1) : parts;
+  const nonEmpty = lines.filter((l) => l.length > 0);
+
+  let v10 = 0;
+  let v11 = 0;
+  let bad = 0;
+  let tailHash: string | null = null;
+  let tailSeq: number | null = null;
+
+  for (let i = 0; i < nonEmpty.length; i++) {
+    const line = nonEmpty[i]!;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      bad += 1;
+      continue;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      bad += 1;
+      continue;
+    }
+    const obj = parsed as Record<string, unknown>;
+
+    const actor = obj['actor'];
+    if (typeof actor === 'string') {
+      v10 += 1;
+    } else if (
+      actor !== null &&
+      typeof actor === 'object' &&
+      !Array.isArray(actor) &&
+      typeof (actor as Record<string, unknown>)['kind'] === 'string'
+    ) {
+      v11 += 1;
+    } else {
+      bad += 1;
+    }
+
+    // Tail extraction: only the last non-empty line contributes; only
+    // accept event_hash/seq if their shapes look right (no full validation).
+    if (i === nonEmpty.length - 1) {
+      const eh = obj['event_hash'];
+      if (typeof eh === 'string' && /^sha256:[0-9a-f]{64}$/.test(eh)) {
+        tailHash = eh;
+      }
+      const sq = obj['seq'];
+      if (typeof sq === 'number' && Number.isInteger(sq) && sq >= 1) {
+        tailSeq = sq;
+      }
+    }
+  }
+
+  return {
+    stats: {
+      v10_string_actor: v10,
+      v11_object_actor: v11,
+      unparseable: bad,
+    },
+    lineCount: nonEmpty.length,
+    tailHash,
+    tailSeq,
+  };
+}
+
+/**
+ * Windows-safe ISO timestamp for archive filenames. Replaces ':' with '-'
+ * (colons are forbidden in Windows filesystem names) while keeping the
+ * sortable yyyy-mm-ddThh-mm-ss-sssZ shape.
+ */
+function windowsSafeIso(d: Date): string {
+  return d.toISOString().replace(/:/g, '-').replace(/\./g, '-');
 }
 
 // ----------------------------------------------------------------------------
