@@ -1,0 +1,304 @@
+id: SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001
+title: 'Detect specs whose scope.out entry shadows a scope.in entry within the same spec'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-22T17:00:00.000Z'
+updated_at: '2026-05-22T17:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/spec/validate-semantics.ts
+    - packages/caws-kernel/src/spec/rules.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001.yaml
+    - packages/caws-kernel/src/spec/validate-semantics.ts
+    - packages/caws-kernel/src/spec/rules.ts
+    - packages/caws-kernel/tests/unit/spec.test.ts
+    - packages/caws-cli/tests/store/specs-load-overbroad-scope.test.js
+  out:
+    - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.yaml
+    - .caws/specs/WORKTREE-CAWS-SHARED-STATE-001.yaml
+    - .caws/specs/PRUNE-REPAIR-WORKTREE-001.yaml
+    - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
+    - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001.yaml
+    - .caws/specs/WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001.yaml
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - .github/workflows
+    - packages/caws-kernel/src/scope
+    - packages/caws-cli/src/shell
+invariants:
+  - >-
+    Same-spec scope contradiction detection is a NEW kernel semantic
+    validation rule. It does NOT change scope-evaluation semantics
+    (the kernel's prefix-only matching of scope.in / scope.out at
+    decision time stays exactly as it is today). The rule fires at
+    spec parse/validate time, before scope decisions are ever
+    requested.
+  - >-
+    Cross-spec scope policy is NOT weakened. The kernel's existing
+    multi-spec union-mode behavior — where one spec's scope.out can
+    legitimately refuse another spec's scope.in — is preserved.
+    This slice only detects contradictions WITHIN a single spec.
+  - >-
+    The rule is structural, not heuristic. The check is "is any
+    scope.out entry a proper path-prefix of any scope.in entry in
+    the same spec?" — applied at the path-segment boundary so
+    `a/b` is a prefix of `a/b/c` but NOT a prefix of `a/bc`.
+    Exact equality between a scope.in and a scope.out entry is a
+    DIFFERENT defect class (already covered by other validators OR
+    legitimately surfaceable as a separate rule); this slice does
+    NOT collapse the two concepts.
+  - >-
+    The repair text is normative and excludes longest-prefix-wins
+    semantics. The kernel intentionally does NOT resolve same-spec
+    admit-over-refuse with longest-prefix-wins because that would
+    introduce ambiguity into the cross-spec model. The repair must
+    name only two acceptable resolutions: remove the broad scope.out
+    entry, OR move the documentary exclusion to a future
+    `non_goals` field (which is documentation-only and not consulted
+    by the scope kernel; the `non_goals` field itself is NOT added
+    by this slice but is named as a forward-looking option).
+  - >-
+    No strike-reset automation. The kernel-level detection prevents
+    contradictions from landing in active specs in the first place;
+    the strike-reset round-trip becomes much rarer but the existing
+    operator-driven reset model stays unchanged.
+  - >-
+    No changes to scope evaluation, no changes to the scope kernel
+    surface (packages/caws-kernel/src/scope is in scope.out), no
+    changes to shell binding or scope-show/scope-check commands.
+    The rule lives entirely in the spec validation layer.
+acceptance:
+  - id: A1
+    given: |
+      A spec with `scope.in: [a/b/c.ts]` and `scope.out: [a/b]`.
+    when: |
+      `parseAndValidateSpec` runs (e.g., via `loadSpecs` or any other
+      kernel entrypoint that exercises `validateSpecSemantics`).
+    then: |
+      The validation returns Err with at least one Diagnostic
+      whose `rule` is `spec.semantic.scope.overbroad_out`. The
+      diagnostic's `data` block carries both paths:
+        - `shadowing_out`: the scope.out entry (e.g., 'a/b')
+        - `shadowed_in`: the scope.in entry (e.g., 'a/b/c.ts')
+      The diagnostic's `subject` is the shadowed scope.in entry so
+      tooling can group findings by the impacted path.
+  - id: A2
+    given: |
+      A spec with disjoint `scope.in` and `scope.out` (no scope.out
+      entry is a path-prefix of any scope.in entry, AND no scope.in
+      entry is a path-prefix of any scope.out entry).
+    when: |
+      `parseAndValidateSpec` runs.
+    then: |
+      The validation does NOT emit `spec.semantic.scope.overbroad_out`.
+      Other existing validation rules are unaffected.
+  - id: A3
+    given: |
+      A spec with EXACT-EQUAL scope.in and scope.out entries
+      (e.g., `scope.in: [a/b/c]` and `scope.out: [a/b/c]`).
+    when: |
+      `parseAndValidateSpec` runs.
+    then: |
+      `spec.semantic.scope.overbroad_out` is NOT emitted for the
+      exact-equal pair. The defect class is distinct from prefix
+      shadowing: exact equality means "this path is both admitted
+      and refused" which is a different (and arguably stronger)
+      contradiction. Whether a separate rule
+      (`spec.semantic.scope.exact_conflict`) is added is OUT OF
+      SCOPE for this slice. This slice's test fixture for exact
+      equality asserts ONLY that the overbroad_out rule does not
+      misfire on it; it does NOT assert any other rule.
+  - id: A4
+    given: |
+      Two specs loaded together: SpecA admits `a/b/c.ts` in
+      scope.in; SpecB denies `a/b` in scope.out.
+    when: |
+      `loadSpecs` runs on a fixture directory containing both.
+    then: |
+      Neither spec emits `spec.semantic.scope.overbroad_out`. The
+      rule is same-spec only. Cross-spec admit-vs-refuse is the
+      scope-evaluation kernel's responsibility (and that behavior
+      is intentionally preserved by this slice).
+  - id: A5
+    given: |
+      The exact same-spec contradiction shape that bit the migration
+      slice (recorded as a regression fixture):
+        scope.in:
+          - packages/caws-cli/src/shell/commands/worktree.ts
+          - packages/caws-cli/src/shell/index.ts
+          - packages/caws-cli/src/shell/register.ts
+        scope.out:
+          - packages/caws-cli/src/shell
+    when: |
+      `parseAndValidateSpec` runs.
+    then: |
+      THREE distinct `spec.semantic.scope.overbroad_out` diagnostics
+      are emitted (one per shadowed scope.in entry), each naming
+      the same `shadowing_out: packages/caws-cli/src/shell` and a
+      distinct `shadowed_in` path. The validator does NOT deduplicate
+      the shadowing side; downstream tooling can group by
+      `shadowing_out` if it wants a single-row UX.
+  - id: A6
+    given: |
+      Any spec that violates the rule.
+    when: |
+      The diagnostic is rendered (via the standard diagnostic
+      renderer used by `caws specs show`, `caws doctor`, etc.).
+    then: |
+      The `narrowRepair` field instructs the operator to (1) remove
+      the broad `scope.out` entry, OR (2) move the documentation-
+      only exclusion to a `non_goals` field (which is documentary,
+      not enforcement). The repair text MUST NOT suggest that the
+      kernel implement longest-prefix-wins semantics or that the
+      operator wait for a future kernel change. The repair is
+      actionable today.
+  - id: A7
+    given: |
+      All currently-active and currently-draft specs in this repo.
+    when: |
+      A test (or one-shot script) loads every spec under .caws/specs/
+      and runs `parseAndValidateSpec` on each.
+    then: |
+      Either zero specs emit `spec.semantic.scope.overbroad_out`, OR
+      every emitting spec is named in the test fixture with a
+      reason. The test surfaces latent contradictions in existing
+      specs predictably (so a future agent doesn't get blocked by a
+      pre-existing defect mid-implementation). If new defects are
+      found in active specs, this slice does NOT amend them — that
+      is operator/maintainer work. The slice's job is detection;
+      remediation of pre-existing defects is a separate concern.
+  - id: A8
+    given: |
+      Path segments are matched exactly. The string `a/b` is a
+      prefix of `a/b/c` but NOT a prefix of `a/bc`. Trailing
+      slashes are normalized before comparison (both are treated
+      as the directory-prefix form).
+    when: |
+      A spec has `scope.out: [a/b]` and `scope.in: [a/bc.ts]`.
+    then: |
+      `spec.semantic.scope.overbroad_out` is NOT emitted. The
+      `bc.ts` file lives outside the `b/` directory; the apparent
+      prefix is a string-prefix artifact, not a path-prefix.
+  - id: A9
+    given: |
+      All pre-existing kernel and CLI tests.
+    when: |
+      Both test suites run.
+    then: |
+      All pre-existing tests remain green. Counts: kernel 482/482
+      (this slice adds N new tests; total = 482 + N); CLI
+      1764/1776 (the 2 pre-existing axe failures remain pre-
+      existing). No production diff outside scope.in.
+non_functional:
+  reliability:
+    - >-
+      The rule is pure semantic validation: it consumes the parsed
+      Spec object and returns Diagnostic[]. No fs access, no
+      process access, no git invocation.
+    - >-
+      The rule runs in O(|scope.in| × |scope.out|) per spec. Specs
+      have small scope arrays (typically <20 entries each), so
+      this is bounded. The implementation does NOT need to be
+      tree-based.
+  performance:
+    - >-
+      Validator latency must not measurably increase for typical
+      specs (< 1 ms per spec). Asserted via a microbenchmark or
+      observation; not a hard gate.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Provenance
+# ----------
+# Filed 2026-05-22 in response to the third recurrence of CLAUDE.md
+# trap #4 (over-broad scope.out entries shadowing explicitly-admitted
+# scope.in entries) during WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-
+# 001 commit 2 implementation (scope-strike 1 of 3 fired on
+# packages/caws-cli/src/shell/commands/worktree.ts; resolved by
+# commit 15c5ea3).
+#
+# Three recurrences in the same v11.2 worktree/authority line:
+#   1. WORKTREE-DOCTOR-HALF-STATE-001 (mid-implementation amendment)
+#   2. WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001 (mid-implementation
+#      amendment)
+#   3. WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001 (mid-
+#      implementation amendment + strike + reset)
+#
+# Documentation (CLAUDE.md trap #4) has failed to prevent the
+# recurrence. The durable fix is kernel-level detection at
+# spec validation time, before the contradictory spec can become
+# active.
+#
+# Why now (blocking authority activation)
+# ---------------------------------------
+# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 is the next substantive
+# v11.2 slice. Its implementation will touch scope-sensitive
+# surfaces (the scope kernel, the lifecycle transaction, the
+# spec resolver). Running into the same scope.out trap during
+# authority implementation would compound cost on a higher-blast-
+# radius slice. Insert this small validator first; authority
+# implementation then proceeds without burning cycles on the
+# avoidable mechanical trap.
+#
+# Implementation plan (sketch, not authorized)
+# --------------------------------------------
+# Three commits expected:
+#
+# Commit 1: spec authoring + activation (audit-quiet direct-YAML
+# flip per established v11.1.6 pattern). No implementation.
+#
+# Commit 2: implementation. Two sites:
+#   - packages/caws-kernel/src/spec/rules.ts: add SPEC_RULES.
+#     SCOPE_OVERBROAD_OUT (the rule id is
+#     'spec.semantic.scope.overbroad_out').
+#   - packages/caws-kernel/src/spec/validate-semantics.ts: add a
+#     new check after the existing tier-related checks. For each
+#     scope.out entry, compare against each scope.in entry; if the
+#     out is a path-prefix of the in (with segment-boundary
+#     normalization), emit one diagnostic per shadowed-in.
+#
+# Tests:
+#   - packages/caws-kernel/tests/unit/spec.test.ts: add the
+#     6 acceptance fixtures (A1-A6) as new test cases. A7's
+#     "scan all current specs" can be a separate small test under
+#     packages/caws-cli/tests/store/ that uses loadSpecs against
+#     this repo's .caws/specs/ directory.
+#
+# Commit 3: spec closure. Closure notes record:
+#   - rule id and exact firing condition
+#   - number of pre-existing specs that emit the rule (0 expected
+#     after this slice scans them; A7 may surface latent defects
+#     in which case closure_notes lists them but does NOT amend
+#     them — operator action)
+#   - test counts pre/post
+#   - next slice: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
+#
+# Non-goals (explicit guards)
+# ---------------------------
+#   - No scope-evaluation semantic change. The kernel still reads
+#     scope.in / scope.out at decision time with prefix-only
+#     matching; this slice changes nothing about how scope is
+#     evaluated, only what shapes of spec are allowed to load.
+#   - No same-spec longest-prefix-wins. The cross-spec model
+#     relies on scope.out always refusing; introducing same-spec
+#     admit-over-refuse would create ambiguity at the boundary.
+#   - No strike-reset automation. Kernel-level detection
+#     prevents the contradictions; strike resets become rare but
+#     stay operator-driven.
+#   - No `non_goals` field added to the spec schema. The repair
+#     text names it as a forward-looking option but the field
+#     itself is OUT OF SCOPE.
+#   - No touching of any other v11.2 slice (the four others are
+#     in scope.out).
+#   - No CHANGELOG/version/release/template edits.
+#
+# Activation gate
+# ---------------
+# Activation requires maintainer authorization. This is recon /
+# draft only; the operator's go-signal is the next gate.
