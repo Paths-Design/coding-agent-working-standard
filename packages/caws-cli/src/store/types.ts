@@ -14,6 +14,7 @@ import type {
   AgentRegistry,
   ChainedEvent,
   Diagnostic,
+  GitWorktreeEntry,
   Policy,
   Spec,
   Waiver,
@@ -118,6 +119,11 @@ export interface StoreSnapshot {
    * to surface "canonical layout drift" (e.g. specs/ dir missing on a
    * live project). `eventsJsonlExists` is reported but never required:
    * the first append creates it under lock.
+   *
+   * `worktreeDirByName` (WORKTREE-DOCTOR-HALF-STATE-001): for each name
+   * in `worktrees`, whether the canonical worktree directory
+   * (`.caws/worktrees/<name>/`) exists on disk. Used by kernel H1/H4
+   * detection.
    */
   readonly filesystem: {
     readonly cawsDirExists: boolean;
@@ -127,7 +133,17 @@ export interface StoreSnapshot {
     readonly worktreesJsonExists: boolean;
     readonly agentsJsonExists: boolean;
     readonly eventsJsonlExists: boolean;
+    readonly worktreeDirByName: Readonly<Record<string, boolean>>;
   };
+
+  /**
+   * WORKTREE-DOCTOR-HALF-STATE-001: linked git worktrees observed via
+   * `git worktree list --porcelain`. Main worktree filtered out before
+   * delivery. Undefined when observation failed; in that case
+   * `gitObservationFailure` carries the reason.
+   */
+  readonly gitWorktrees?: readonly GitWorktreeEntry[];
+  readonly gitObservationFailure?: string;
 
   /**
    * Diagnostics from worktrees.json / agents.json load failures that

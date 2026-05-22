@@ -148,7 +148,16 @@ describe('composeDoctorSnapshot → inspectProjectState (end-to-end)', () => {
 
     const report = inspectProjectState(doctorInput);
     expect(report.clean).toBe(true);
-    expect(report.findings).toEqual([]);
+    // WORKTREE-DOCTOR-HALF-STATE-001: this fixture uses `cawsDir` as
+    // repoRoot, which is a non-git tempdir. observeGitWorktrees fails
+    // (legitimately — there is no git repo to inspect), and doctor
+    // emits a single INFO finding to make the gap visible. clean is
+    // still true because INFO does not unset clean; H1/H6 silently
+    // skip; no other rules fire on this otherwise-valid fixture.
+    expect(report.findings.map((f) => f.rule)).toEqual([
+      DOCTOR_RULES.WORKTREE_GIT_OBSERVATION_UNAVAILABLE,
+    ]);
+    expect(report.findings[0].severity).toBe('info');
   });
 
   it('surfaces POLICY_MISSING when there is no policy.yaml', () => {

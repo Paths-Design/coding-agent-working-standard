@@ -5,6 +5,7 @@ export type {
   DoctorInput,
   DoctorReport,
   FindingSeverity,
+  GitWorktreeEntry,
   TemplateCheck,
 } from './types';
 

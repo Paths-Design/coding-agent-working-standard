@@ -242,11 +242,29 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
 
   // 2b. Per spec, if spec.worktree is set but the registry has no matching
   //     entry pointing back, flag the orphan.
+  //
+  //     WORKTREE-DOCTOR-HALF-STATE-001 H4 enrichment: when filesystem
+  //     observation is available, add `git_worktree_present` to the
+  //     finding's data. H4 (destroyWorktree post-fault) is observationally
+  //     the same as H3 on the registry/spec axis (this rule); the extra
+  //     fact tells operators whether the physical worktree is also gone
+  //     (the destroyWorktree post-fault signature) or still present (a
+  //     plain H3 where the registry entry was hand-removed).
+  const worktreeDirByName = input.filesystem?.worktreeDirByName;
   for (const spec of specs) {
     const worktreeName = spec.worktree;
     if (!worktreeName) continue;
     const record = registry[worktreeName];
     if (!record) {
+      const data: Record<string, unknown> = {
+        spec_id: spec.id,
+        worktree_name: worktreeName,
+      };
+      if (worktreeDirByName !== undefined) {
+        // H4 enrichment: surface the third fact (git worktree dir
+        // presence) when the store has observed it.
+        data.git_worktree_present = worktreeDirByName[worktreeName] === true;
+      }
       findings.push(
         finding(
           DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
@@ -255,7 +273,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           {
             subject: spec.id,
             narrowRepair: `Remove the worktree field on ${spec.id} or recreate the worktree.`,
-            data: { spec_id: spec.id, worktree_name: worktreeName },
+            data,
           }
         )
       );
@@ -308,6 +326,185 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         )
       );
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // 2c. WORKTREE-DOCTOR-HALF-STATE-001 H1: ghost registry entry.
+  //
+  // For each registry entry, when filesystem observation is available AND
+  // git worktree observation is available: if the canonical worktree dir
+  // is absent on disk AND the path is not present in
+  // `git worktree list --porcelain`, the entry is a ghost. The registry
+  // claims a worktree that is physically gone.
+  //
+  // Skips silently when either input is unavailable (preserves the
+  // "non-fatal git observation" invariant — incomplete observability
+  // is better than fail-closed).
+  // -------------------------------------------------------------------------
+
+  const gitWorktrees = input.gitWorktrees;
+  if (worktreeDirByName !== undefined && gitWorktrees !== undefined) {
+    const gitWorktreePaths = new Set<string>(gitWorktrees.map((w) => w.path));
+    for (const [worktreeName, record] of Object.entries(registry)) {
+      // Skip entries without specId — those are handled (or not) by §2a.
+      // Skip entries where the dir IS present — those are not ghosts.
+      if (worktreeDirByName[worktreeName] === true) continue;
+      // Cross-check git porcelain output by registry.path (preferred) or
+      // by canonical-name match against the entry's recorded path. The
+      // store also passes worktreeDirByName under the canonical path
+      // computation, so the canonical-path case is already covered by
+      // the dir-presence check above. If `record.path` is set, also
+      // accept that as evidence the worktree exists (just at a
+      // non-canonical location).
+      const recordPath = record?.path;
+      if (typeof recordPath === 'string' && gitWorktreePaths.has(recordPath)) {
+        continue;
+      }
+      findings.push(
+        finding(
+          DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY,
+          'error',
+          `Worktree "${worktreeName}" has a registry entry but no backing git worktree directory.`,
+          {
+            subject: worktreeName,
+            narrowRepair:
+              'Remove the entry from .caws/worktrees.json (the worktree was destroyed outside CAWS, or its creation never completed).',
+            data: {
+              worktree_name: worktreeName,
+              spec_id: record?.specId,
+              recorded_path: recordPath,
+              canonical_dir_present: false,
+              git_worktree_listed: false,
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 2d. WORKTREE-DOCTOR-HALF-STATE-001 H5: 3-way registry/spec
+  //     contradiction (the bindWorktreeRepair post-fault class).
+  //
+  //     For each registry entry where `specId === idB` and spec_B is
+  //     loaded but lacks `worktree:`, search for another spec_A that
+  //     claims `worktree: <name>`. When found, emit the unified
+  //     3-way finding. This rule fires IN ADDITION TO any per-perspective
+  //     findings (BINDING_ONE_SIDED from §2a, BINDING_SPEC_POINTS_TO_FOREIGN_BINDING
+  //     from §2b) — it is the only finding that names all three
+  //     contradictory facts in one place and carries the doctrine-pointer
+  //     repair text.
+  //
+  //     H5 doctor-UX rule (locked by spec invariant): the repair string
+  //     MUST NOT contain a shell command. It is intentionally
+  //     non-actionable. Picking a winner requires authority policy from
+  //     WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
+  // -------------------------------------------------------------------------
+
+  const specsByWorktreeClaim = new Map<string, Array<typeof specs[number]>>();
+  for (const s of specs) {
+    if (typeof s.worktree === 'string' && s.worktree.length > 0) {
+      const list = specsByWorktreeClaim.get(s.worktree) ?? [];
+      list.push(s);
+      specsByWorktreeClaim.set(s.worktree, list);
+    }
+  }
+  for (const [worktreeName, record] of Object.entries(registry)) {
+    const registrySpecId = record?.specId;
+    if (!registrySpecId) continue;
+    const specB = specsById.get(registrySpecId);
+    // Only fire when spec_B is loaded AND does NOT claim the worktree.
+    if (!specB || specB.worktree === worktreeName) continue;
+    const claimants = specsByWorktreeClaim.get(worktreeName) ?? [];
+    // Find a spec_A that claims this worktree and is NOT spec_B.
+    const specA = claimants.find((s) => s.id !== registrySpecId);
+    if (specA === undefined) continue;
+    findings.push(
+      finding(
+        DOCTOR_RULES.WORKTREE_BINDING_CONTRADICTION_3WAY,
+        'error',
+        `Worktree "${worktreeName}" has a 3-way binding contradiction: registry binds it to ${registrySpecId}; spec ${specA.id} claims it; spec ${registrySpecId} does not.`,
+        {
+          subject: worktreeName,
+          narrowRepair:
+            'Ambiguous authority split; no automatic repair available under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.',
+          data: {
+            worktree_name: worktreeName,
+            registry_spec_id: registrySpecId,
+            spec_a_id: specA.id,
+            spec_a_worktree: specA.worktree,
+            spec_b_id: specB.id,
+            spec_b_worktree: specB.worktree ?? null,
+          },
+        }
+      )
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 2e. WORKTREE-DOCTOR-HALF-STATE-001 H6: foreign physical worktree.
+  //
+  //     For each linked git worktree (the store has already filtered out
+  //     the main worktree before delivery), if no `.caws/worktrees.json`
+  //     entry references that path, emit an INFO finding. CAWS does not
+  //     govern raw git worktrees, but silent acceptance is a footgun.
+  //
+  //     Skips silently when git observation is unavailable.
+  // -------------------------------------------------------------------------
+
+  if (gitWorktrees !== undefined) {
+    const registryPaths = new Set<string>();
+    for (const record of Object.values(registry)) {
+      if (typeof record?.path === 'string') registryPaths.add(record.path);
+    }
+    for (const wt of gitWorktrees) {
+      if (registryPaths.has(wt.path)) continue;
+      findings.push(
+        finding(
+          DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL,
+          'info',
+          `Git worktree at ${wt.path} is not registered in .caws/worktrees.json.`,
+          {
+            subject: wt.path,
+            narrowRepair:
+              'CAWS does not govern this worktree. Register it via caws worktree bind if it should be governed, or ignore if intentional.',
+            data: {
+              path: wt.path,
+              branch: wt.branch,
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 2f. WORKTREE-DOCTOR-HALF-STATE-001: git observation unavailable.
+  //
+  //     When the store layer's `git worktree list --porcelain` call
+  //     failed, surface the gap as INFO. H1 and H6 silently skipped
+  //     above; the H4 enrichment on §2b also degraded gracefully. The
+  //     full report continues; operators see WHY git-backed half-state
+  //     classes are absent rather than mistaking absence for "no
+  //     ghosts."
+  // -------------------------------------------------------------------------
+
+  if (
+    typeof input.gitObservationFailure === 'string' &&
+    input.gitObservationFailure.length > 0
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.WORKTREE_GIT_OBSERVATION_UNAVAILABLE,
+        'info',
+        'git worktree observation unavailable; H1/H6 half-state detection skipped.',
+        {
+          narrowRepair:
+            'Verify git is installed and the repository is intact; rerun caws doctor.',
+          data: { reason: input.gitObservationFailure },
+        }
+      )
+    );
   }
 
   // -------------------------------------------------------------------------

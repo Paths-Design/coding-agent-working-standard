@@ -18,8 +18,11 @@ scope:
   in:
     - packages/caws-kernel/src/doctor
     - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/store/types.ts
     - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
     - packages/caws-cli/tests/store/doctor-half-state.test.js
+    - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
+    - packages/caws-cli/tests/store/doctor-snapshot.test.js
     - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
   out:
     - packages/caws-cli/src/shell
@@ -210,3 +213,47 @@ contracts:
 #   architecture preservation (no shell import in store), the deferred
 #   deduplication debt, and the next slice routing (control-plane
 #   authority, not prune/repair).
+#
+# Mid-implementation scope amendment (2026-05-22)
+# -----------------------------------------------
+# During commit 2 implementation, running the full store test suite
+# surfaced three failures in tests NOT originally listed in scope.in:
+#
+#   - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
+#       Two tests assert StoreSnapshot.filesystem matches an exact
+#       object shape that pre-dates this slice's filesystem.worktreeDirByName
+#       field addition. They need `worktreeDirByName: {}` added to the
+#       expected shape (both fixtures use empty registries, so the
+#       empty map is the correct new value).
+#
+#   - packages/caws-cli/tests/store/doctor-snapshot.test.js
+#       One test asserts report.findings === [] on a fixture that
+#       passes a non-git directory as repoRoot. The new
+#       WORKTREE_GIT_OBSERVATION_UNAVAILABLE INFO finding now legitimately
+#       fires on that fixture (non-fatal-but-visible behavior per the
+#       active spec invariant). The fix is to update the assertion to
+#       accept the INFO; the implementation is NOT weakened.
+#
+# Additionally, packages/caws-cli/src/store/types.ts required a small
+# edit to declare the new StoreSnapshot fields (filesystem.worktreeDirByName,
+# gitWorktrees, gitObservationFailure) that doctor-snapshot.ts populates.
+# That file was an oversight in the original scope.in list.
+#
+# Decision: narrow scope amendment per CLAUDE.md trap #5 (kernel-change
+# escape clause; applies equally to admitted-test fan-out from a
+# legitimately-scoped production change). Admitted:
+#   - packages/caws-cli/src/store/types.ts        (StoreSnapshot field declarations)
+#   - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
+#   - packages/caws-cli/tests/store/doctor-snapshot.test.js
+#
+# NOT admitted: the whole packages/caws-cli/tests/store/ directory.
+# Other store tests (worktree-merge-a2-fault-injection.test.js,
+# lifecycle-rollback-failure-harness.test.js, atomic-write.test.js, etc.)
+# are unaffected by this slice and stay out of scope.
+#
+# Rejected alternative: modifying observeGitWorktrees to silently
+# return an empty list on non-git directories. That would bury the
+# diagnostic signal and contradict the active spec invariant "Git
+# observation is non-fatal" (which mandates a single INFO finding to
+# surface the gap). The correct fix is at the test, not at the
+# production code.

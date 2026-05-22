@@ -18,6 +18,44 @@ export const DOCTOR_RULES = {
   /** A spec has worktree:<name> but no matching registry entry. */
   BINDING_SPEC_MISSING_REGISTRY: 'doctor.binding.spec_missing_registry',
   /**
+   * Registry entry exists for a worktree, but the backing git worktree
+   * directory is absent at the canonical path AND not present in
+   * `git worktree list --porcelain`. H1 in WORKTREE-DOCTOR-HALF-STATE-001.
+   * Authority split-brain: registry claims a worktree that is physically
+   * gone.
+   */
+  WORKTREE_GHOST_REGISTRY_ENTRY: 'doctor.worktree.ghost_registry_entry',
+  /**
+   * 3-way registry/spec contradiction (the bindWorktreeRepair post-fault
+   * class). Registry binds `<name>` to spec B; spec A still claims
+   * `worktree: <name>`; spec B has no `worktree:` field. H5 in
+   * WORKTREE-DOCTOR-HALF-STATE-001. The repair is intentionally a
+   * non-actionable doctrine pointer — no shell command — because
+   * picking a winner requires authority policy from
+   * WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
+   */
+  WORKTREE_BINDING_CONTRADICTION_3WAY:
+    'doctor.worktree.binding_contradiction_3way',
+  /**
+   * `git worktree list --porcelain` reports a linked worktree at some
+   * path; no `.caws/worktrees.json` entry references that path. H6 in
+   * WORKTREE-DOCTOR-HALF-STATE-001. Severity INFO — CAWS does not
+   * govern raw git worktrees, but silent acceptance is a footgun.
+   * The main worktree (path === repoRoot) is filtered out and never
+   * reported as foreign.
+   */
+  WORKTREE_FOREIGN_PHYSICAL: 'doctor.worktree.foreign_physical',
+  /**
+   * `git worktree list --porcelain` failed (no git, repo corruption,
+   * permission error). Doctor still produces a full report; this
+   * finding signals that git-backed half-state classes (H1, H6) and
+   * the H4 enrichment on BINDING_SPEC_MISSING_REGISTRY could not be
+   * evaluated. Severity INFO — incomplete observability is preferable
+   * to fail-closed.
+   */
+  WORKTREE_GIT_OBSERVATION_UNAVAILABLE:
+    'doctor.worktree.git_observation_unavailable',
+  /**
    * Bidirectional binding exists, but the spec's lifecycle_state is not
    * 'active' (it is draft, closed, or archived). Closed/archived specs
    * cannot authorize governed writes, so this is contradictory authority
@@ -176,4 +214,5 @@ export const DOCTOR_RULE_PREFIXES = [
   'doctor.waiver.',
   'doctor.init.',
   'doctor.registry.',
+  'doctor.worktree.',
 ] as const;

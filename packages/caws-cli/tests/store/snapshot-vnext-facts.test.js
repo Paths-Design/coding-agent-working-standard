@@ -133,6 +133,9 @@ describe('StoreSnapshot.filesystem', () => {
         worktreesJsonExists: false,
         agentsJsonExists: false,
         eventsJsonlExists: false,
+        // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
+        // per-name canonical-dir map.
+        worktreeDirByName: {},
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
@@ -158,6 +161,9 @@ describe('StoreSnapshot.filesystem', () => {
         worktreesJsonExists: true,
         agentsJsonExists: true,
         eventsJsonlExists: false,
+        // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
+        // per-name canonical-dir map.
+        worktreeDirByName: {},
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
