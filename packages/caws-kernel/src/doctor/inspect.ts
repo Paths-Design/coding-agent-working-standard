@@ -346,7 +346,23 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   if (worktreeDirByName !== undefined && gitWorktrees !== undefined) {
     const gitWorktreePaths = new Set<string>(gitWorktrees.map((w) => w.path));
     for (const [worktreeName, record] of Object.entries(registry)) {
-      // Skip entries without specId — those are handled (or not) by §2a.
+      // Defensive: skip entries that aren't plain object records. A
+      // legacy v10.2-format worktrees.json wraps entries inside a
+      // top-level `{ version: 1, worktrees: { ... } }` envelope; the
+      // v11 loader returns the outer object as-is, which means
+      // Object.entries surfaces `version: 1` and `worktrees: { ... }`
+      // as bogus "names". Pre-existing BINDING_* rules dodged this
+      // because they gate on `record?.specId` being truthy. H1 has
+      // no specId gate (legitimate ghosts can lack one), so we filter
+      // explicitly on record shape. Real ghosts always have an
+      // object-shaped record.
+      if (
+        record === null ||
+        typeof record !== 'object' ||
+        Array.isArray(record)
+      ) {
+        continue;
+      }
       // Skip entries where the dir IS present — those are not ghosts.
       if (worktreeDirByName[worktreeName] === true) continue;
       // Cross-check git porcelain output by registry.path (preferred) or

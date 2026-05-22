@@ -2,9 +2,11 @@ id: WORKTREE-DOCTOR-HALF-STATE-001
 title: 'Doctor diagnostics for worktree/registry/spec half-state classes (detect-only)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Six worktree half-state classes H1-H6 are now detected by caws doctor without mutating repository state. Three new rules (WORKTREE_GHOST_REGISTRY_ENTRY for H1, WORKTREE_BINDING_CONTRADICTION_3WAY for H5, WORKTREE_FOREIGN_PHYSICAL for H6). Two discharged by existing kernel rules with regression tests pinning the discharge (H2 by BINDING_ONE_SIDED, H3 by BINDING_SPEC_MISSING_REGISTRY with active+draft coverage closing the existing test gap). One delivered as data enrichment on an existing rule (H4 enrichment of BINDING_SPEC_MISSING_REGISTRY.data with git_worktree_present). Non-fatal git observation: WORKTREE_GIT_OBSERVATION_UNAVAILABLE INFO when git worktree list fails; rest of report continues. Tests: kernel half-state suite 23/23, store half-state suite 9/9, full kernel 479/479, full store 147/147, all pre-existing harness tests unaffected. Kernel purity preserved (no fs/process/git/Date.now in inspect.ts). Store/shell separation preserved (doctor-snapshot.ts implements local porcelain parser and local GitWorktreeEntry type; does NOT import from shell). H5 doctor-UX rule locked at kernel unit and store integration levels: substring-refusal regression asserts the repair field contains no actionable command. Phrase: transaction-layer recovery observed; governance/external-state recovery not guaranteed remains the doctrinal phrase routing future repair work. Mid-implementation scope amendment admitted packages/caws-cli/src/store/types.ts and two pre-existing test files for mechanical assertion updates required by legitimate observable-contract changes; spec authoring trap #5 honored. Follow-up debt deferred: shell/store parser/type deduplication (move GitWorktreeEntry and parser to a shared kernel-owned location). Next slice per §1.4 ordering: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 (Decide), NOT PRUNE-REPAIR-WORKTREE-001 (Repair, still blocked on Decide).'
 created_at: '2026-05-22T08:44:02.356Z'
-updated_at: '2026-05-22T09:30:00.000Z'
+updated_at: '2026-05-22T09:25:03.647Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/doctor
