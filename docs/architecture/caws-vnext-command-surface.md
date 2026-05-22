@@ -194,6 +194,100 @@ against a single resolved frame rather than re-deriving it.
    not implement either until the §1.1 disposition is acted on by a
    subsequent slice.
 
+### v11.2 worktree half-state doctrine (added by PRUNE-REPAIR-WORKTREE-RECON-001)
+
+Prune/repair was filed as one capability. It is three. Conflating
+them encodes doctrine decisions accidentally — a "helpful" repair
+command that wins today's workflow can permanently fix the wrong
+source of truth before the authority rule is written.
+
+#### Diagnose / Decide / Repair stratification
+
+| Level | Capability | Authority required | Status |
+|---|---|---|---|
+| **Diagnose** | Name contradictions; classify; surface evidence | None beyond read-only fs/git access | Implementable now under existing doctor invariants (§6.3 purity, §6.7 status/observability) |
+| **Decide** | Pick which state surface wins for a given contradiction class: registry, spec YAML, git worktree list, filesystem, event log, control-plane binding | Control-plane authority doctrine | Deliverable of `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` |
+| **Repair** | Mutate state to resolve a contradiction | Decide must have produced a policy first | Gated on Decide; `PRUNE-REPAIR-WORKTREE-001` blocked until then |
+
+Each level requires the prior one. Detection is the only authority-free level and the only one safe to ship in the next slice.
+
+#### Half-state taxonomy (H1–H6)
+
+| # | Class | Observable state | Witnessed by |
+|---|---|---|---|
+| H1 | Ghost registry entry | `worktrees.json[name]` exists; backing git worktree dir absent | Previously known (PRUNE-REPAIR-WORKTREE-001 A1) |
+| H2 | One-sided registry → spec | `worktrees.json[name].specId === id` but `spec_<id>.yaml` lacks `worktree:` field | Previously known; likely covered by existing kernel `BINDING_SPEC_MISSING_REGISTRY` |
+| H3 | One-sided spec → registry | `spec_<id>.yaml` has `worktree: <name>` but `worktrees.json[name]` absent | Previously known; likely covered by existing kernel `BINDING_REGISTRY_MISSING_SPEC` |
+| H4 | Ghost spec binding (destroyWorktree post-fault) | Registry entry absent; git worktree absent; `spec_<id>.yaml` still has `worktree: <name>` | `packages/caws-cli/tests/store/lifecycle-rollback-failure-harness.test.js:533-583` |
+| H5 | 3-way registry/spec contradiction (bindWorktreeRepair post-fault) | `worktrees.json[name].specId === idB`; `spec_<idA>.yaml` has `worktree: <name>`; `spec_<idB>.yaml` lacks `worktree:` | `packages/caws-cli/tests/store/lifecycle-rollback-failure-harness.test.js:438-506` |
+| H6 | Foreign physical worktree | `git worktree list --porcelain` shows a worktree at some path; no `.caws/worktrees.json` entry references it | Identified during recon; cheap to detect alongside H1 |
+
+#### H5 doctor-UX rule
+
+**Doctor MUST NOT suggest a mutating command for H5.** The repair
+field of an H5 diagnostic must be a non-actionable doctrine pointer
+(e.g., "Ambiguous authority split; no automatic repair available
+under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001"),
+not a shell command an operator could copy-paste. H5 cannot be
+resolved without an authority policy; any UX that implies it can will
+permanently encode the wrong source of truth at first use.
+
+#### Doctrinal phrase: lifecycle result honesty
+
+`LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001` proved that the
+lifecycle-transaction outcome `ok({kind: 'partial_failure_recovered'})`
+can be returned while governance state (registry vs. spec YAML
+coherence) and external state (git worktrees, filesystem) are NOT
+actually recovered. The closure phrase
+
+> **transaction-layer recovery observed; governance/external-state recovery not guaranteed**
+
+is hereby promoted to a doctrinal phrase. Future specs that describe
+operations composing writes outside `runLifecycleTransaction` MUST
+refuse to equate transaction-layer recovery with governance recovery.
+Stricter result kinds (`transaction_recovered`, `governance_recovered`,
+`external_state_recovered`) are deferred doctrinal debt; not required
+for v11.2 unless half-state detection surfaces a concrete UX failure.
+
+#### Functional-complete bar for the v11.2 worktree/authority line
+
+| # | Criterion | Current state |
+|---|---|---|
+| 1 | Authority doctrine is explicit: CAWS state is control-plane; worktrees are execution sandboxes; bindings may be present locally but control-plane state is not duplicated as mutable truth | Partial — phrased in `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` draft; not yet a top-level §6 invariant |
+| 2 | Overlapping specs reconciled: `WORKTREE-CAWS-SHARED-STATE-001` superseded, absorbed, or sequenced behind `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` | Pending — §1.1 disposition recorded ("likely absorbed"); not yet acted on |
+| 3 | Doctor detects all known half-states: H1–H6 have typed diagnostics and regression fixtures | Pending — `WORKTREE-DOCTOR-HALF-STATE-001` created by this recon, implementation-ready |
+| 4 | Detection is mutation-free: doctor/reconcile never writes specs, registry, event log, git worktrees, or repairs | Doctrinally true (§6.3); to be locked as a regression in slice #2 |
+| 5 | Repair is explicit and scoped: `prune`/`repair` operate only on unambiguous classes; H5 refuses until control-plane policy resolves it | Pending — `PRUNE-REPAIR-WORKTREE-001` blocked |
+| 6 | Lifecycle results stop overclaiming: either result naming changes, or every caller that mutates outside the transaction maps transaction-layer partial recovery into an honest diagnostic | Doctrinal phrase recorded (above); production-code change deferred |
+| 7 | Worktree-local spec copies are neutralized: editing `.caws/specs/*.yaml` inside a worktree cannot silently create false truth | Pending — `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` deliverable; doctor diagnostics alone are necessary but not sufficient (Bash hooks do not catch Edit/Write tool operations) |
+| 8 | Migration covered: pre-v11.2 and 10.2-created worktrees with materialized `.caws` state produce explicit diagnostics and a safe migration path | Pending — control-plane spec A7; H1/H6 diagnostics are partial coverage |
+| 9 | CI locks behavior: store/doctor tests cover all known states; a future refactor cannot reintroduce hidden split-brain without failing tests | Pending — slice #2 down payment |
+| 10 | Release discipline stays intact: branch pushes remain non-release | Holds — tag-driven release contract from `CAWS-RELEASE-TAG-DRIVEN-001` |
+
+#### Slice ordering for the v11.2 worktree/authority line
+
+1. `PRUNE-REPAIR-WORKTREE-RECON-001` (this slice) — recon/amendment; no implementation.
+2. `WORKTREE-DOCTOR-HALF-STATE-001` — mutation-free diagnostics for H1–H6. Diagnose only.
+3. `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` — authority rule per H-class (especially H5) and worktree-local spec materialization policy.
+4. `PRUNE-REPAIR-WORKTREE-001` — repair only for classes the authority rule has made unambiguous.
+5. `WORKTREE-NODE-MODULES-001` (or equivalent) — execution ergonomics so agents stop falling back to main for builds/tests. Promoted from deferred only if friction blocks every worktree slice.
+
+Other v11.2 deliverables from the §1 plan list — leases,
+`claim_taken_over` event emission, bridge bindings, `agents list/show`
+— are tracked separately and **not displaced** by this ordering. The
+worktree/authority line is a parallel lane.
+
+#### Drift note (recorded, not fixed)
+
+§1.3's framing implies `non_functional` permits only `reliability` and
+`performance`. The kernel schema at
+`packages/caws-kernel/src/schemas/spec.v1.json` actually permits
+`performance`, `security`, `accessibility`, and `reliability`. Several
+existing specs use `security` legitimately (e.g.,
+`WORKTREE-CAWS-SHARED-STATE-001`, `PRUNE-REPAIR-WORKTREE-001`).
+Recorded as doctrine-doc hygiene to track; not fixed in this slice
+to preserve recon's no-side-edit discipline.
+
 ---
 
 ## 2. v11.0.0 command surface (kept)
