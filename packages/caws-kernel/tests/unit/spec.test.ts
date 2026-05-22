@@ -416,3 +416,243 @@ describe('validateSpecSemantics direct API', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001 — same-spec scope contradiction
+// ---------------------------------------------------------------------------
+//
+// Acceptance fixtures A1, A2, A3, A4 (cross-spec is tested at store layer
+// in specs-load-overbroad-scope.test.js because the kernel never sees
+// two specs at once), A5 (the migration-slice regression shape), A6
+// (repair-text shape), A8 (path-segment boundary matching).
+//
+// A7 (scan all current specs) lives in the store-side test file because
+// it needs the loadSpecs entrypoint and a real .caws/specs/ directory.
+
+/**
+ * Build a synthetic spec YAML with custom scope.in / scope.out. Other
+ * fields are sufficient to pass shape validation; this lets the test
+ * exercise the semantics layer cleanly.
+ */
+function buildSpecYaml(opts: {
+  id?: string;
+  scopeIn?: readonly string[];
+  scopeOut?: readonly string[];
+}): string {
+  const id = opts.id ?? 'SCOPE-FIXTURE-1';
+  const indent = (arr: readonly string[]) =>
+    arr.length === 0
+      ? '[]'
+      : '\n' + arr.map((s) => `    - ${s}`).join('\n');
+  const scopeOutBlock =
+    opts.scopeOut === undefined
+      ? ''
+      : `  out:${indent(opts.scopeOut)}\n`;
+  return `
+id: ${id}
+title: Scope-shadow fixture
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+blast_radius:
+  modules:
+    - src/test
+scope:
+  in:${indent(opts.scopeIn ?? ['src/test'])}
+${scopeOutBlock}invariants:
+  - test invariant
+acceptance:
+  - id: A1
+    given: fixture
+    when: fixture
+    then: fixture
+non_functional: {}
+contracts: []
+`;
+}
+
+describe('SCOPE_OVERBROAD_OUT — A1: detect basic shadow', () => {
+  it('A1: scope.in [a/b/c.ts] + scope.out [a/b] → diagnostic with both paths', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c.ts'],
+      scopeOut: ['a/b'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const overbroad = r.errors.filter(
+        (e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT
+      );
+      expect(overbroad).toHaveLength(1);
+      expect(overbroad[0].subject).toBe('a/b/c.ts');
+      expect(overbroad[0].data).toMatchObject({
+        scope_out_prefix: 'a/b',
+        scope_in_shadowed: 'a/b/c.ts',
+      });
+      expect(overbroad[0].authority).toBe('kernel/spec');
+      expect(overbroad[0].location).toMatchObject({ pointer: '/scope/out' });
+    }
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — A2: disjoint scope.in / scope.out → no firing', () => {
+  it('A2: scope.in [src/a.ts] + scope.out [src/b] → no overbroad_out diagnostic', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['src/a.ts'],
+      scopeOut: ['src/b'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    // Other validation may or may not produce diagnostics; check only
+    // that SCOPE_OVERBROAD_OUT does not appear.
+    if (r.ok) {
+      // Pure pass: no diagnostics at all.
+      return;
+    }
+    expect(rules(r.errors)).not.toContain(SPEC_RULES.SCOPE_OVERBROAD_OUT);
+  });
+
+  it('A2: scope.in [a/b/c.ts] + scope.out [] → no firing', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c.ts'],
+      scopeOut: [],
+    });
+    const r = parseAndValidateSpec(yaml);
+    if (r.ok) return;
+    expect(rules(r.errors)).not.toContain(SPEC_RULES.SCOPE_OVERBROAD_OUT);
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — A3: exact equality is a DIFFERENT defect class', () => {
+  it('A3: scope.in [a/b/c] + scope.out [a/b/c] → SCOPE_OVERBROAD_OUT does NOT fire', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c'],
+      scopeOut: ['a/b/c'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    if (r.ok) return;
+    // This rule must NOT fire on exact equality. The test deliberately
+    // does NOT assert any other rule — exact_conflict is a separate
+    // defect class (potentially a future rule), out of scope for
+    // SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001.
+    expect(rules(r.errors)).not.toContain(SPEC_RULES.SCOPE_OVERBROAD_OUT);
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — A5: migration-slice regression fixture', () => {
+  it('A5: three shell files in scope.in + packages/caws-cli/src/shell in scope.out → 3 diagnostics', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: [
+        'packages/caws-cli/src/shell/commands/worktree.ts',
+        'packages/caws-cli/src/shell/index.ts',
+        'packages/caws-cli/src/shell/register.ts',
+      ],
+      scopeOut: ['packages/caws-cli/src/shell'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const overbroad = r.errors.filter(
+        (e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT
+      );
+      expect(overbroad).toHaveLength(3);
+      // All three name the same shadowing scope.out prefix.
+      for (const d of overbroad) {
+        expect(d.data?.scope_out_prefix).toBe('packages/caws-cli/src/shell');
+      }
+      // Each names a distinct shadowed scope.in entry.
+      const shadowed = overbroad
+        .map((d) => d.data?.scope_in_shadowed as string)
+        .sort();
+      expect(shadowed).toEqual(
+        [
+          'packages/caws-cli/src/shell/commands/worktree.ts',
+          'packages/caws-cli/src/shell/index.ts',
+          'packages/caws-cli/src/shell/register.ts',
+        ].sort()
+      );
+      // Subjects match the shadowed entries.
+      const subjects = overbroad.map((d) => d.subject).sort();
+      expect(subjects).toEqual(shadowed);
+    }
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — A6: repair text discipline', () => {
+  it('A6: repair text names the two acceptable remedies and does NOT mention longest-prefix-wins', () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c.ts'],
+      scopeOut: ['a/b'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    if (r.ok) throw new Error('expected validation to fail');
+    const overbroad = r.errors.find(
+      (e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT
+    );
+    expect(overbroad).toBeDefined();
+    const repair = overbroad!.narrowRepair ?? '';
+
+    // Must name remedy (1): remove or narrow the broad scope.out.
+    expect(repair).toMatch(/remove or narrow/i);
+    // Must name remedy (2): move to a future non_goals surface.
+    expect(repair).toMatch(/non_goals/);
+    // MUST NOT suggest longest-prefix-wins or any future kernel
+    // semantic change as a remedy.
+    expect(repair).not.toMatch(/longest[- ]prefix[- ]wins/i);
+    expect(repair).not.toMatch(/future kernel semantic/i);
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — A8: path-segment boundary matching', () => {
+  it("A8: scope.out [a/b] does NOT shadow scope.in [a/bc.ts] (sibling, not contained)", () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/bc.ts'],
+      scopeOut: ['a/b'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    if (r.ok) return;
+    expect(rules(r.errors)).not.toContain(SPEC_RULES.SCOPE_OVERBROAD_OUT);
+  });
+
+  it("A8: scope.out [a/b/] (trailing slash) DOES shadow scope.in [a/b/c.ts] after normalization", () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c.ts'],
+      scopeOut: ['a/b/'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const overbroad = r.errors.filter(
+        (e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT
+      );
+      expect(overbroad).toHaveLength(1);
+      // The original (un-normalized) string is preserved in the data
+      // so operators see what they actually wrote.
+      expect(overbroad[0].data?.scope_out_prefix).toBe('a/b/');
+    }
+  });
+
+  it("A8: scope.out [a] DOES shadow scope.in [a/b/c.ts] (one-segment prefix is fine)", () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a/b/c.ts'],
+      scopeOut: ['a'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const overbroad = r.errors.filter(
+        (e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT
+      );
+      expect(overbroad).toHaveLength(1);
+    }
+  });
+
+  it("A8: scope.out [a/b] does NOT shadow scope.in [a] (scope.in is shorter than scope.out)", () => {
+    const yaml = buildSpecYaml({
+      scopeIn: ['a'],
+      scopeOut: ['a/b'],
+    });
+    const r = parseAndValidateSpec(yaml);
+    if (r.ok) return;
+    expect(rules(r.errors)).not.toContain(SPEC_RULES.SCOPE_OVERBROAD_OUT);
+  });
+});

@@ -150,8 +150,88 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
     );
   }
 
+  // SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001: same-spec scope contradiction.
+  //
+  // Detect when a scope.out entry is a path-prefix of a scope.in entry
+  // within THIS spec. At scope-decision time the broad scope.out would
+  // refuse the explicitly-admitted scope.in path, producing a false
+  // negative the author almost certainly did not intend.
+  //
+  // Path-segment-boundary matching:
+  //   - "a/b" shadows "a/b/c.ts"        (b is a directory containing the file)
+  //   - "a/b" does NOT shadow "a/bc.ts" (bc is a sibling of b)
+  //   - exact equality (scope.in === scope.out) is a DIFFERENT defect
+  //     class; this rule intentionally does not fire on it. A future
+  //     spec.semantic.scope.exact_conflict rule may cover that case.
+  //
+  // Cross-spec policy is unweakened: this check looks only at THIS
+  // spec's scope.in and scope.out. The scope-evaluation kernel still
+  // resolves cross-spec admit-vs-refuse with its existing semantics.
+  //
+  // One diagnostic per shadowed scope.in entry: downstream tooling can
+  // group by scope_out_prefix if it wants a single-row UX.
+  const scopeIn = spec.scope?.in ?? [];
+  const scopeOut = spec.scope?.out ?? [];
+  for (const outEntry of scopeOut) {
+    const outNormalized = normalizeScopePath(outEntry);
+    for (const inEntry of scopeIn) {
+      const inNormalized = normalizeScopePath(inEntry);
+      if (isPathSegmentPrefix(outNormalized, inNormalized)) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SCOPE_OVERBROAD_OUT,
+            authority: 'kernel/spec',
+            message: `scope.out entry "${outEntry}" shadows scope.in entry "${inEntry}" within the same spec — the broad scope.out would refuse the explicitly-admitted scope.in path at decision time.`,
+            subject: inEntry,
+            location: { pointer: '/scope/out' },
+            narrowRepair:
+              'Either (1) remove or narrow the broad scope.out entry so it no longer covers the scope.in path, OR (2) move the documentary exclusion to a future non_goals field (documentation-only, not consulted by the scope kernel).',
+            data: {
+              scope_out_prefix: outEntry,
+              scope_in_shadowed: inEntry,
+              scope_out: scopeOut,
+              scope_in: scopeIn,
+            },
+          }),
+        );
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return err(errors);
   }
   return ok(spec);
+}
+
+/**
+ * Normalize a scope path for prefix comparison: strip a trailing slash
+ * if present. The schema permits both "a/b" and "a/b/" forms; treat
+ * them as equivalent for prefix-shadowing purposes.
+ */
+function normalizeScopePath(p: string): string {
+  if (p.length > 1 && p.endsWith('/')) return p.slice(0, -1);
+  return p;
+}
+
+/**
+ * Path-segment-boundary prefix check.
+ *
+ *   isPathSegmentPrefix('a/b', 'a/b/c')   === true
+ *   isPathSegmentPrefix('a/b', 'a/b')     === false  // exact equality is a different defect class
+ *   isPathSegmentPrefix('a/b', 'a/bc')    === false  // 'bc' is not within 'b/'
+ *   isPathSegmentPrefix('a',   'a/b')     === true
+ *   isPathSegmentPrefix('a/b', 'a')       === false  // not a prefix
+ *   isPathSegmentPrefix('',    'a/b')     === false  // empty prefix is degenerate; do not fire
+ *
+ * The exact-equality case returns false deliberately. See A3.
+ */
+function isPathSegmentPrefix(prefix: string, candidate: string): boolean {
+  if (prefix.length === 0) return false;
+  if (prefix === candidate) return false;
+  if (!candidate.startsWith(prefix)) return false;
+  // candidate is strictly longer than prefix and starts with it; the
+  // next character must be a path separator for this to be a true
+  // segment-boundary prefix.
+  return candidate.charAt(prefix.length) === '/';
 }
