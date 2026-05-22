@@ -2,9 +2,9 @@ id: SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001
 title: 'Detect specs whose scope.out entry shadows a scope.in entry within the same spec'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-22T17:00:00.000Z'
-updated_at: '2026-05-22T17:00:00.000Z'
+updated_at: '2026-05-22T17:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/spec/validate-semantics.ts
@@ -302,3 +302,41 @@ contracts: []
 # ---------------
 # Activation requires maintainer authorization. This is recon /
 # draft only; the operator's go-signal is the next gate.
+#
+# --- Activation (2026-05-22) ---------------------------------------------
+#
+# Activated 2026-05-22 by direct YAML edit (audit-quiet, per the
+# established v11.1.6 surface gap). Maintainer authorized option 1
+# (activate as drafted, no A3 amendment, no A10 performance criterion).
+#
+# Activation locks:
+#   - A3's exact-equal-pair separation stays as written. Exact equality
+#     is a distinct defect class and is intentionally NOT covered by
+#     this rule. A future slice may file spec.semantic.scope.exact_conflict
+#     if the need surfaces; this slice is bounded to over-broad prefix
+#     shadowing only.
+#   - No A10 performance criterion. Normal suite timing is sufficient
+#     unless implementation reveals a scan-cost issue.
+#
+# Locked commit-2 implementation discipline:
+#   - Diagnostic data MUST include scope_out_prefix and scope_in_shadowed
+#     as named fields (not just scope_in / scope_out arrays).
+#   - Repair text MUST NOT mention longest-prefix-wins or any future
+#     kernel semantic change as a remedy. The only acceptable repairs
+#     are: (1) remove or narrow the broad scope.out, or (2) move
+#     documentary exclusions to a future non_goals surface.
+#   - The exact migration-slice regression fixture (A5) MUST emit
+#     exactly THREE diagnostics, one per shadowed scope.in entry.
+#
+# Locked A7 gate (recorded for commit 2):
+#   - The all-current-specs scan converts this from "simple hardening"
+#     into "latent repo defect discovered" if it finds contradictions.
+#     If that happens, the implementing commit MUST stop and classify
+#     rather than silently auto-amend. Adjacent specs are explicitly
+#     in scope.out and may not be edited by this slice. Surfaced
+#     latent defects become operator/maintainer work after this slice
+#     closes.
+#
+# Next: commit 2 implementation. Commit 3 closes the slice. Authority
+# slice activation (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001) follows
+# after this slice closes.
