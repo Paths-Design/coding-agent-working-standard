@@ -2,9 +2,11 @@ id: LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001
 title: 'Adversarial fault-injection tests for lifecycle-transaction rollback (event-append boundary)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Earned claim: runLifecycleTransaction event-append failure boundary now covered across all current direct callers in specs-writer.ts (createSpec, closeSpec, archiveSpec) and worktrees-writer.ts (createWorktree, bindWorktreeRepair, destroyWorktree), using only the shipped CAWS_TEST_INJECT_LIFECYCLE_FAULT seam. mergeWorktree discharged by WORKTREE-MERGE-A2-FAULT-INJECTION-001 (sentinel A6, not duplicated). Evidence: focused harness 8/8 pass; full tests/store/ 138/138 pass; pre-existing worktree-merge-a2-fault-injection.test.js 5/5 still green; no production diff. Boundary honesty: this slice does NOT prove validate, write/fsync, yaml-patch, or lock-contention failure boundaries — those need separate mechanisms (proposed: LIFECYCLE-WRITE-FAILURE-HARNESS-001, LIFECYCLE-VALIDATE-FAILURE-HARNESS-001, LIFECYCLE-LOCK-CONTENTION-HARNESS-001). Two findings routed forward: (1) bindWorktreeRepair mutates worktrees.json via applyRegistryPatch at worktrees-writer.ts:551 BEFORE the lifecycle transaction; injected event-append failure returns ok({partial_failure_recovered}) while the registry can remain split from spec YAML; (2) destroyWorktree runs git worktree remove (line 653) and rollbackRegistryEntry (line 700) BEFORE the lifecycle transaction; injected event failure returns ok({partial_failure_recovered}) while the physical worktree and registry entry are already gone and spec YAML can still claim the worktree. Phrase: transaction-layer recovery observed; governance/external-state recovery not guaranteed for callers that mutate outside the transaction. Route both findings to PRUNE-REPAIR-WORKTREE-001 and WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001. Non-claims: no production behavior changed, no new event schema, no second fault-injection seam, no prune/repair implemented, no version bump, no CHANGELOG, no release tag.'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-22T03:50:00.000Z'
+updated_at: '2026-05-22T06:55:09.631Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/store/lifecycle-rollback-failure-harness.test.js
