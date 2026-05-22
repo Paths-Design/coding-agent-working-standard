@@ -134,6 +134,66 @@ prune      — operator-driven cleanup of ghost/stale entries
 A v11.2+ binding that does not define all applicable slots is a doctrine
 violation, not just a missing feature.
 
+### v11.2 reconciliation matrix (added by V11-2-STABILIZATION-RECON-001)
+
+The v11.2 plan list above remains authoritative. The matrix below
+records the disposition of every overlapping draft and proposed slice
+as of 2026-05-21, so the next 4–6 implementation slices execute
+against a single resolved frame rather than re-deriving it.
+
+| Draft / artifact | Disposition | Rationale |
+|---|---|---|
+| `WORKTREE-CAWS-SHARED-STATE-001` (draft, refactor, tier 3) | **Sequence after recon — likely absorbed** | "Shared state" is mechanism framing; the newer authority-control-plane spec carries the better invariant (§6.9 liveness ≠ authority). Useful implementation detail may be lifted into the control-plane spec before closure as `superseded`. Do not close in this slice. |
+| `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` (draft, feature, tier 3) | **Activate after recon, but reframe** | A1/A2 are largely already true on read (see §1.3 finding 1). Actual gap is worktree-checkout spec bytes + doctor drift + reconcile migration. On activation, amend to add a concrete contract (proposed: `control-plane-state-authority`) and re-evaluate to tier 2. |
+| `PRUNE-REPAIR-WORKTREE-001` (draft, feature, tier 2) | **Prerequisite for control-plane reconcile** | `caws worktree reconcile` belongs in this spec, not as a standalone command in the authority spec. Sequence before A7 of the control-plane spec. |
+| `LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001` (draft, chore, tier 3) | **Parallel-safe** | Fault-injection seam shipped (`CAWS_TEST_INJECT_LIFECYCLE_FAULT`, `packages/caws-cli/src/store/lifecycle-transaction.ts:225–273`). Test-only expansion across 7 callers (`createSpec`, `closeSpec`, `archiveSpec`, `createWorktree`, `bindWorktreeRepair`, `destroyWorktree`, `mergeWorktree`). Strengthens substrate before authority work increases transition count. Safe in its own worktree without blocking the authority lane. |
+| `SPECS-PROMOTE-DRAFT` (not yet drafted) | **Defer past v11.2** | Net-new doctrine: no `spec_promoted.v1.json` schema, no command-surface mention, no migration-guide entry. Requires its own doctrine decision (does `lifecycle_state: draft → active` warrant a typed event? does it need a 7-slot binding shape?). Do not draft in this tranche. |
+| v11.2 plan above (existing list) | **Authoritative** | The list (leases, claim_taken_over emission, bridge bindings, agents list/show, prune/repair/reconcile, rollback harness) stands as the v11.2 acceptance bar. Recon supplements, does not replace. |
+
+### v11.2 slice ordering
+
+| Bucket | Slice | Notes |
+|---|---|---|
+| Implementation-ready | `LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001` | Seam shipped. Pure test additions. Recommended as first post-recon slice. |
+| Needs recon | `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` | Reframe per §1.3 finding 1. Amend scope, add contract, decide tier on activation. |
+| Needs recon | `WORKTREE-CAWS-SHARED-STATE-001` | Likely absorbed into control-plane spec; do not close yet — extract any useful detail first. |
+| Needs recon | `PRUNE-REPAIR-WORKTREE-001` | Decide whether `reconcile` lives here or as A7 of control-plane spec. Recon recommends here. |
+| Defer past v11.2 | `SPECS-PROMOTE-DRAFT` | Net-new doctrine. Requires its own decision cycle. |
+| Defer past v11.2 | `WORKTREE-NODE-MODULES-*` (not drafted) | Execution ergonomics. Comfort, not correctness. Do not solve before authority. |
+| Defer past v11.2 | `TEMPLATES-V11-COMMAND-REFRESH-*` (not drafted) | Doc/template hygiene. Pre-public-release concern, not substrate. |
+| Defer past v11.2 | `SPEC-CONTRACTS-SCHEMA-RECONCILE-*` (not drafted) | Schema-vs-practice gap (tier 2 with empty contracts). Investigate across all specs separately. |
+
+### Recon findings (preserve so future agents do not re-derive)
+
+1. **Read-path authority is already control-plane.** `resolveRepoRoot`
+   (`packages/caws-cli/src/store/repo-root.ts:87`) uses
+   `git rev-parse --path-format=absolute --git-common-dir`. All four
+   read commands — `scope show`, `scope check`, `gates run --spec`,
+   `specs show` — invoked from a linked worktree resolve to the main
+   repo's `.caws/specs/`. The v11.2 control-plane authority work is
+   therefore not about read-path correction; it is about (a) the
+   worktree's git checkout still containing tracked `.caws/specs/*.yaml`
+   that look authoritative to humans/agents but are ignored by the
+   resolver, (b) absence of doctor drift diagnostics between
+   checked-out and resolver-loaded bytes, and (c) migration of
+   pre-v11.2 worktrees.
+
+2. **`specs promote` has zero doctrine footprint.** No
+   `spec_promoted.v1.json` in
+   `packages/caws-kernel/src/schemas/events/`. No mention in this
+   document or `docs/migration-v10-to-v11.md`. `caws specs` ships
+   ten subcommands (`list`, `conflicts`, `migrate`, `create`, `show`,
+   `update`, `delete`, `close`, `archive`, `types`); promote is not
+   among them and is not deferred — it has never been doctrine.
+   Treat as net-new if pursued.
+
+3. **`WORKTREE-CAWS-SHARED-STATE-001` and
+   `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` overlap.** The older
+   spec uses mechanism framing ("shared state"); the newer spec
+   uses authority framing (matches §6.9 — liveness ≠ authority). Do
+   not implement either until the §1.1 disposition is acted on by a
+   subsequent slice.
+
 ---
 
 ## 2. v11.0.0 command surface (kept)
