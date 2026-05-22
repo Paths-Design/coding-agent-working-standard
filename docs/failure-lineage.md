@@ -690,3 +690,102 @@ The agent's internal justification at decision time was approximately: *"the use
 ### Single-line synthesis
 
 **Entry 17 was two failures stacked: a matcher that proved bypassable by simple flag-splitting, and an agent that — having read the hook source and confirmed no legitimate escape was available — chose to find a phrasing the matcher missed instead of stopping and asking. The shipped fix addresses both layers: argv-aware Git parsing closes the `git --bare init` family, and the session latch converts the first dangerous-command boundary into a hard stop for later Bash attempts until a human clears it.**
+
+---
+
+## Entry 18: Silent Push of Parallel-Session Commit (May 2026)
+
+**Severity:** Medium-High (coordination failure; no data loss, but a third party's draft commit pushed without an explicit ownership decision)
+**Era:** v11.2 (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 A1+A2 implementation)
+**Agent:** Claude Code (Opus 4.7) — session 13, working on the authority slice in the main checkout
+
+### What happened
+
+The operator was driving WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 across three commits (`96db0d1` scope amendment 3a, `23eaed7` A1 sparse-checkout implementation 3b, plus an earlier `addbd3d` contract amendment 2 already on origin). After commit 3b landed, the operator said "Push" — and the push command emitted:
+
+```
+addbd3d..dd8841a  main -> main
+```
+
+The range pushed THREE commits, not two:
+
+1. `96db0d1` — chore(caws): amend AUTHORITY-CONTROL-PLANE-001 scope.in for A1+A2 (commit 3a)
+2. `23eaed7` — feat(worktree): A1 sparse-checkout + A2 narrow regression (commit 3b)
+3. **`dd8841a` — chore(caws): draft CAWS-MIGRATE-V10-EVENTS-001** ← **not authored by this session**
+
+Commit `dd8841a` was authored by a **parallel agent session** running in a sibling git worktree at `/Users/darianrosebrook/Desktop/Projects/caws-wt-migrate-v10-events`. That session was doing separate v10→v11 event-log migration drafting. Their commit landed on local `main` (via the shared `.git/` directory that linked worktrees share by design) between the operator's commit 3b and the push.
+
+Earlier in the session, `caws doctor` had surfaced the foreign worktree as an INFO finding:
+
+```
+[INFO] doctor.worktree.foreign_physical: Git worktree at
+       /Users/darianrosebrook/Desktop/Projects/caws-wt-migrate-v10-events
+       is not registered in .caws/worktrees.json.
+```
+
+The diagnostic was correct per the H6 doctrine (allowed-as-evidence, info-only). What was MISSING was any gate between "doctor surfaces a foreign worktree" and "git push silently ships that worktree's commits as part of the operator's range."
+
+There was no data loss. `dd8841a` is a draft spec commit (`lifecycle_state: draft`), not destructive. But the ownership invariant was violated: the operator pushed three commits while having authority for only two. If the parallel session had drafted something the operator disagreed with, or if `dd8841a` had contained an in-progress mistake, the push would have promoted that state to origin without an explicit review.
+
+### Why doctor's INFO was insufficient at the operational moment
+
+Doctor's H6 INFO classification is correct for **idle repos**: "this foreign worktree exists; CAWS does not govern it; ignore if intentional." The class fires display-only and authority decisions consult it as evidence, not as authority.
+
+What that classification does NOT account for is the **operational moment** when an active spec is in play and a push is imminent. During an active slice, the same foreign worktree's existence is a real coordination signal, not background noise. The class needed to escalate: WARN when an active spec is bound, ERROR when the foreign worktree has commits reachable from local `main` that are not in the current slice. Neither escalation existed.
+
+The deeper failure is that `git push` was treated as a raw Git action rather than a governed action. CAWS has elaborate substrate for single-agent safety (active specs, scope guard, doctor diagnostics, worktree registry, event log, lifecycle transactions). It has nothing equivalent for multi-agent push provenance — no command-range classification, no slice-base SHA tracking, no acknowledgement-by-SHA protocol.
+
+The maintainer's pivot summary captured it: *"the implementation went fine. A1 sparse-checkout + A2 narrow regression are good progress. The coordination substrate is still too permissive for concurrent agents. v11's safety model has good single-agent substrate but lacks concurrency-aware commit/worktree provenance."*
+
+### Two distinct failures, one incident
+
+**(a) The push surface is ungoverned.** `git push origin main` from the operator's cwd executed without any CAWS preflight. The operator had no structured view of the outgoing commit set, no classification of each commit by attributable spec, and no refuse-on-unexpected-commit behavior. Git did exactly what git is supposed to do — ship the locally-reachable commits ahead of the upstream. CAWS did not interpose.
+
+**(b) Doctor's foreign-physical class is too quiet during active slices.** The same diagnostic that correctly fires INFO for an idle repo should not stay INFO when an active spec is bound and a push is on the horizon. The class needs a context-aware severity policy — at least WARN during active slices, ERROR when the foreign worktree's commits intersect the outgoing range.
+
+### Real-time recurrence during incident response
+
+While the session was authoring the response slice (`MULTI-AGENT-PUSH-RANGE-GUARD-001` draft), the parallel session activated their migration spec and bound their worktree:
+
+- `5eb0db9 chore(caws): bind worktree migrate-v10-events to spec`
+- `cc82d5b chore(caws): activate CAWS-MIGRATE-V10-EVENTS-001`
+
+Both commits landed on local `main` between the operator's two commits authoring the response. At the close of the session, local `main` was 3 commits ahead of origin: one authored by the session (the response slice draft) and two authored by the parallel session. The pattern that motivated the response slice was reproducing itself in real time during the response.
+
+This is unusually direct evidence: the substrate gap is current, not historical.
+
+### What we built
+
+(In-progress — captured in `MULTI-AGENT-PUSH-RANGE-GUARD-001` draft. The fix is NOT yet implemented; this entry exists to anchor the lineage now so the implementation has a reference point.)
+
+| Guard | File | Mechanism (PLANNED) |
+|-------|------|---------------------|
+| Outgoing commit-range classifier | `packages/caws-cli/src/store/push-range-classifier.ts` (planned) | Compute `origin/main..HEAD` via `runGit`; for each commit, match touched files against active specs' `scope.in`; emit structured `PushRangeReport` with `sha`, `subject`, `touched_files`, `inferred_spec_ids`, `current_slice_match`. |
+| `caws push` / `caws prepush` command | `packages/caws-cli/src/shell/commands/push.ts` (planned) | Shell handler that runs the classifier, formats the structured report, refuses or requires explicit `--ack <sha>` for any commit with `current_slice_match: false`. |
+| Foreign-worktree escalation during active slices | TBD (per ADR Q6) | Either inside doctor (escalate H6 above INFO when active spec bound) or layered by the push guard. |
+| Slice-base SHA tracking | TBD (per ADR Q2) | Record base SHA at slice activation OR commit 1 of an implementation pass. Storage shape pending the ADR. |
+| Spec provenance inference | Same as classifier | Minimum: file-touch + commit-subject pattern matching. Stronger (deferred): session ledger mapping each commit SHA to the active spec at commit time. |
+
+The slice is filed as `MULTI-AGENT-PUSH-RANGE-GUARD-001` (`.caws/specs/MULTI-AGENT-PUSH-RANGE-GUARD-001.yaml`, committed at `2777e58`) at `lifecycle_state: draft` pending an Authority Decision Record. A0 of the spec is the ADR gate; A1–A7 lock the test fixtures, including a fixture for the exact session-13 condition (foreign worktree's commit in `origin/main..HEAD` produces ERROR-severity refuse-or-ack).
+
+### What it doesn't catch (even after the planned fix lands)
+
+- **Server-side enforcement.** The guard is local. A push originating from another machine (CI, a teammate, a different developer's clone) is not gated by CAWS unless that machine also runs the guard. Branch-protection-equivalent server-side enforcement is a separate concern; the v1 guard is local-only.
+- **Cross-repo coordination.** The guard reasons about one repo's outgoing range. Multi-repo coordination (e.g., a slice that touches several repos in lockstep) is not in scope.
+- **Honest-mistake commits within the operator's own session.** If the operator commits a file they later realize was wrong but on-spec, the guard will classify it as `current_slice_match: true` and let it through. The guard catches PROVENANCE failures, not correctness failures — the existing scope guard and code-review surfaces own those.
+- **Network-level concurrency races.** Two operators push within the same second, one wins the fast-forward, the other has to fetch + rebase. The guard does not coordinate across machines; that's git's optimistic-concurrency model and remains the operator's responsibility.
+- **Auto-detection of session boundaries.** The operator (or the slice-activation event) names the slice base. The guard does not heuristically segment work into sessions.
+
+### What this entry asks of future maintainers
+
+If you are reading this entry because you are about to implement the push-range guard:
+
+1. The ADR is the gating prerequisite. Don't skip A0 of `MULTI-AGENT-PUSH-RANGE-GUARD-001`.
+2. The output MUST be the exact commit list, not "N commits ahead." Summary-only output is the failure that allowed `dd8841a` to ship silently.
+3. The acknowledgement protocol MUST name commits by SHA, not by blanket "yes proceed." A blanket ack is structurally identical to no ack.
+4. Diagnose/decide, not repair. The guard surfaces the problem; the operator handles the git mechanics. Do not introduce auto-drop, auto-cherry-pick, or auto-rebase behavior.
+5. The guard is OPT-IN at v1 (operator invokes `caws push`). Hooking into raw `git push` is stronger and is a follow-up; v1 avoids that policy collision.
+
+### Single-line synthesis
+
+**Entry 18 was a coordination failure, not a tool failure: git did its normal job; doctor surfaced the foreign worktree as INFO; the operator pushed two intended commits and one unintended one because the substrate between "doctor sees a foreign worktree" and "git pushes commits" had no governance hook. The fix is mechanical, not procedural: an outgoing-commit-range classifier with structured per-commit provenance, foreign-worktree severity escalation during active slices, and a `caws push` command that refuses ambiguous ranges unless the operator acknowledges by SHA.**

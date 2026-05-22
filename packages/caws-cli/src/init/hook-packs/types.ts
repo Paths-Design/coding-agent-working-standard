@@ -21,7 +21,7 @@
 // without --adopt/--overwrite).
 //
 // Lineage: every pack must declare which failure-lineage entries it covers
-// (packages/caws-cli/docs-status/failure-lineage.md). Removing or weakening
+// (docs/failure-lineage.md). Removing or weakening
 // a pack file requires naming the entry and identifying the replacement
 // mechanism.
 

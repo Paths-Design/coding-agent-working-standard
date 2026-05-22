@@ -20,7 +20,7 @@ call).
 
 This pack is not optional scaffolding. Every script under
 `.claude/hooks/` traces to a specific entry in
-`packages/caws-cli/docs-status/failure-lineage.md`. Modifying or removing
+`docs/failure-lineage.md`. Modifying or removing
 a hook requires:
 
 1. Naming the lineage entry the hook covers.

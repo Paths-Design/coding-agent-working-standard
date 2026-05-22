@@ -147,7 +147,7 @@ Cleanup status (Slice 8c.1):
 
 - Files swept and rewritten v11-honest: this README, `AGENTS.md`, `CLAUDE.md`, `packages/caws-cli/README.md`, the doctrine doc.
 - Files swept for active v10 instructions removed: `docs/agents/`, `docs/guides/`, `docs/api/cli.md`, `docs/agent-workflow-tools.md`.
-- Files explicitly historical (allowed to retain v10 references): `docs/MIGRATION_GUIDE_V3.5.md`, `docs/ROLLBACK.md`, `docs/DEPLOYMENT.md`, `packages/caws-cli/docs-status/failure-lineage.md`, anything under `docs/internal/`.
+- Files explicitly historical (allowed to retain v10 references): `docs/MIGRATION_GUIDE_V3.5.md`, `docs/ROLLBACK.md`, `docs/DEPLOYMENT.md`, `docs/failure-lineage.md`, anything under `docs/internal/`.
 
 If you find a doc that still teaches removed commands as current workflow, file an issue or PR — it's a 8c.1 escapee.
 
