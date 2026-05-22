@@ -1,0 +1,357 @@
+id: SESSION-OWNERSHIP-METADATA-001
+title: 'Extend .caws/agents.json with claimed_paths and last_modified_paths so multi-agent coordination can read working-tree ownership mechanically'
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-22T23:30:00.000Z'
+updated_at: '2026-05-22T23:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/worktree
+    - packages/caws-cli/src/store
+    - packages/caws-kernel/src/schemas
+  data_migration: true
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .caws/waivers
+invariants:
+  - >-
+    Earned claim: every active session writes its currently-claimed file
+    paths (if any) and a TTL-bounded set of recently-modified paths into
+    its .caws/agents.json record. Other tools (working-tree provenance
+    guard, push-range classifier, handoff event emitter) consult that
+    metadata mechanically rather than inferring from git stash names,
+    commit subjects, or file timestamps.
+  - >-
+    Substrate before policy. This slice ONLY widens the data model. It
+    does NOT introduce any blocking behavior, refusal, or guard rule.
+    Consumers of the new fields are downstream slices
+    (WORKING-TREE-PROVENANCE-GUARD-001, MULTI-AGENT-PUSH-RANGE-GUARD-001,
+    MULTI-AGENT-HANDOFF-EVENT-001). If a consumer surface needs new
+    semantics beyond "read the field," that semantics is in the
+    consumer's spec, not here.
+  - >-
+    Backward compatibility is non-destructive. Existing agent records
+    written by current sessions (with the v1 shape — session_id,
+    platform, last_active, bound_worktree, bound_spec_id) MUST continue
+    to load and validate. The new fields are OPTIONAL on read. A
+    session that has not yet been updated to write the new fields is
+    not penalized; its record simply lacks claimed_paths and
+    last_modified_paths, and consumers MUST treat that as "no
+    information" rather than "no claims."
+  - >-
+    last_modified_paths is TTL-bounded, not historical. The field
+    answers "what has this session touched recently?" — typically
+    within a configurable TTL (proposed default: 30 minutes from
+    last_active, no longer than 24h). It is NOT a complete edit
+    journal. Sessions that have been idle longer than the TTL have
+    an empty or absent last_modified_paths array. The TTL is
+    operator-visible and does not silently grow.
+  - >-
+    claimed_paths is explicit, not inferred. Sessions DECLARE claims
+    via an explicit call (proposed: caws claim --paths <glob>...);
+    they do NOT silently accumulate claims from edit history. Implicit
+    claim-by-touch was the design considered and rejected (see the
+    triage block's open question Q1 below): it produces ambiguous
+    cross-session overlap when sessions touch the same shared files
+    for legitimate reasons (e.g., both edit package.json for
+    different dependencies). Explicit declaration matches the
+    existing scope.in discipline and is auditable.
+  - >-
+    Heartbeat semantics unchanged. last_active still serves the
+    existing display-only / stale-detection role (per
+    [[reference_caws_governed_paths]] and the worktree/types.ts
+    doctrine comment). Stale-heartbeat detection does NOT escalate
+    into claim revocation; another session cannot take over claimed
+    paths just because the claiming session went idle. Takeover
+    follows the same pattern as worktree claim takeover (explicit
+    --takeover flag with durable prior_owners audit) — that surface
+    lands in WORKING-TREE-PROVENANCE-GUARD-001, not here.
+  - >-
+    Schema versioning. The kernel's agents schema gains a v2 shape
+    that admits the two new fields (both optional). Existing v1
+    records load under v2 without rewrites. The data_migration is
+    write-on-next-update (no batch migration command needed): the
+    first time a session writes its record after the v2 shape ships,
+    it includes the new fields if applicable; older records sit at
+    v1 until their session next writes. agents.json itself does NOT
+    declare a top-level version field today (per the inspected
+    on-disk shape); this slice does NOT introduce one.
+  - >-
+    No kernel authority change. The kernel's worktree binding logic,
+    ownership decisions, and scope evaluation are all unchanged.
+    Consumers of claimed_paths / last_modified_paths are advisory
+    surfaces (guards, classifiers, event emitters); none of them
+    bypass the existing kernel authority path.
+  - >-
+    No event schema changes in this slice. A future
+    "agent_claimed_paths" event might be useful for audit, but it is
+    OUT OF SCOPE here. The agents.json record is the read source;
+    audit-via-events is a stronger posture deferred to the
+    MULTI-AGENT-HANDOFF-EVENT-001 slice or its successor.
+acceptance:
+  - id: A1
+    given: |
+      An existing .caws/agents.json with v1-shape records (session_id,
+      platform, last_active, bound_worktree, bound_spec_id) and no
+      claimed_paths or last_modified_paths fields.
+    when: |
+      The store layer's loadAgents (or equivalent) parses the file
+      under the v2 schema.
+    then: |
+      Every existing record loads without error. The new fields are
+      undefined on each record. No diagnostic fires. No data is
+      rewritten on read.
+  - id: A2
+    given: |
+      A session in lifecycle that has just declared claimed_paths via
+      the new explicit-claim surface (e.g., `caws claim --paths
+      "packages/foo/**" --paths "tests/foo.test.js"`).
+    when: |
+      The session's agents.json record is written.
+    then: |
+      The record contains a claimed_paths field whose value is the
+      list of declared paths. Path strings are stored verbatim as the
+      caller passed them (no glob expansion, no normalization that
+      would lose information). The existing v1 fields are preserved
+      unchanged.
+  - id: A3
+    given: |
+      A session has edited (Write/Edit) several files during a TTL
+      window of 30 minutes.
+    when: |
+      The session's agents.json record is updated (heartbeat or
+      explicit write).
+    then: |
+      The record's last_modified_paths field contains the paths
+      modified within the TTL window. Paths older than the TTL are
+      removed (the field is bounded, not append-only). Order is
+      insertion-order or last-modified-time order (locked at
+      implementation, not here).
+  - id: A4
+    given: |
+      A reader (consumer slice such as the working-tree provenance
+      guard) loads agents.json and queries "which sessions claim
+      <path>?" or "which sessions last touched <path>?".
+    when: |
+      The query runs against a registry with mixed v1 and v2 records.
+    then: |
+      v2 records contribute their claimed_paths / last_modified_paths
+      data normally. v1 records contribute nothing for those queries
+      (treated as "no information," not "no claims"). The reader does
+      NOT crash, does NOT panic, does NOT raise.
+  - id: A5
+    given: |
+      A session whose last_active is older than the TTL (e.g., 2
+      hours).
+    when: |
+      The agents.json record is read.
+    then: |
+      last_modified_paths is either empty array or absent. The
+      session is NOT removed from agents.json by this slice
+      (TTL-driven pruning is a separate concern owned by
+      [[reference_caws_commands]] hygiene). The stale record's
+      claimed_paths, if present, remain — claim takeover requires
+      explicit action, not TTL expiry.
+  - id: A6
+    given: |
+      The doctor surface (caws doctor) and status surface (caws
+      status) run against a registry with the new fields populated.
+    when: |
+      Each command renders its report.
+    then: |
+      Neither command introduces new diagnostics in THIS slice. The
+      additional fields may surface in the agent panel as additional
+      lines (read-only display), but no doctor rule fires on the
+      basis of the new fields. Display additions are non-normative
+      and OPTIONAL for v1 of this slice.
+  - id: A7
+    given: |
+      All existing kernel and CLI tests.
+    when: |
+      Both test suites run.
+    then: |
+      All pre-existing tests remain green. New tests cover schema
+      v2 loading (A1), explicit-claim write (A2), TTL window (A3),
+      mixed v1/v2 read (A4), and stale-record claim preservation
+      (A5). No production diff outside scope.in.
+non_functional:
+  reliability:
+    - >-
+      The schema change is additive-only. Removing a field from
+      AgentRecord (even one introduced by this slice) is a future
+      breaking change that requires its own slice. The
+      backward-compatibility guarantee is "v1 records load under v2"
+      and is structural, not aspirational.
+    - >-
+      Race conditions on agents.json writes are bounded by the
+      existing lifecycle-lock mechanism (whichever serializes writes
+      to .caws/state today). This slice does NOT introduce new
+      locking; if existing serialization is insufficient for
+      multi-session contention on claimed_paths writes, that is a
+      pre-existing reliability gap recorded as a follow-up.
+  performance:
+    - >-
+      A typical .caws/agents.json carries fewer than 20 sessions.
+      Reading + querying for claimed_paths / last_modified_paths
+      against this size is bounded; no indexing needed at v1. If
+      production agents.json files grow past ~100 sessions, the
+      activator MAY add an in-memory index but that is not a v1
+      requirement.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin
+# ------
+# Filed 2026-05-22 as point 1 of the four-part multi-agent provenance
+# bar (see project_multi_agent_provenance_functional_complete_bar.md in
+# the agent's memory). The bar was sharpened after reviewing the
+# full-stack-ds transcripts (turn-013 in 450b8c85, turns 28-29 in
+# 079d0ab9):
+#
+#   - Session A discovered three stashes named "parallel-session
+#     dom-tree test updates," "parallel-session contract refactor,"
+#     "parallel-session IR refactor" — exactly the capability area
+#     another session was working on.
+#   - Session A had to manually stash that work to clear pre-push
+#     gates, push, then restore the stashes.
+#   - Session B (a different session) later encountered the restored
+#     changes and had to ask "are these my edits or someone else's
+#     restored stash?" — answer: "my edits, continue."
+#
+# The cognitive cost — agents spending tokens reconstructing
+# provenance from stash names and file timestamps — is the failure
+# mode. Not lost work; reconstructed work.
+#
+# Why this is point 1
+# -------------------
+# Three downstream slices depend on this metadata:
+#
+#   - WORKING-TREE-PROVENANCE-GUARD-001 (point 2): refuses cleanup
+#     commands when another session has dirty overlap. Needs
+#     last_modified_paths.
+#   - MULTI-AGENT-PUSH-RANGE-GUARD-001 (point 3, already drafted at
+#     commit 2777e58): classifies outgoing commit range by attributable
+#     session. Stronger inference if claimed_paths exists; today's
+#     draft relies on file-touch + commit-subject fallback.
+#   - MULTI-AGENT-HANDOFF-EVENT-001 (point 4): typed events when one
+#     agent picks up another's work. Needs claimed_paths to know
+#     "this agent's work."
+#
+# Without this slice, points 2/3/4 rely on heuristic provenance
+# (file timestamps, stash names, commit-subject regex), which is
+# what the full-stack-ds transcripts show failing. With this slice,
+# they consult mechanically-recorded ownership.
+#
+# Open design questions (ADR-gated, but lighter than other slices)
+# ----------------------------------------------------------------
+#
+#   Q1. Implicit vs explicit claim semantics.
+#       Locked at draft: explicit declaration via a new surface
+#       (likely "caws claim --paths ..."). Implicit-by-touch was
+#       considered and rejected: it produces ambiguous overlap when
+#       legitimate cross-session shared-file edits happen (both
+#       sessions edit package.json for different deps). Open: is
+#       there a soft middle — "implicitly add to last_modified_paths
+#       but NOT to claimed_paths"? Likely yes, but the soft middle
+#       is implementation detail; the hard claim plane is explicit.
+#
+#   Q2. TTL default for last_modified_paths.
+#       Proposed: 30 minutes from last_active, capped at 24h. The
+#       activator decides whether this is operator-configurable
+#       (probably yes via policy.yaml) or fixed at v1.
+#
+#   Q3. Claim takeover mechanism.
+#       NOT part of this slice — takeover lands in WORKING-TREE-
+#       PROVENANCE-GUARD-001 where the refusal text actually
+#       prompts for it. This slice just records the claim; the
+#       guard slice owns the takeover semantic. Cross-reference
+#       the worktree claim --takeover pattern (existing v11 surface)
+#       as the prior art.
+#
+#   Q4. Path normalization.
+#       claimed_paths and last_modified_paths are stored verbatim
+#       as written. Normalization (relative vs absolute, trailing
+#       slash, symlink resolution) is the CONSUMER's responsibility,
+#       not the storage layer's. This matches existing scope.in /
+#       scope.out semantics where paths are also stored verbatim.
+#       Note that the cwd-relative-path-normalization defect
+#       recorded in [[project_scope_guard_path_normalization_followup]]
+#       is the related concern at a different layer (hook-side,
+#       not store-side).
+#
+#   Q5. Glob expansion timing.
+#       claimed_paths may contain globs. Expansion happens at
+#       consumer query time, not at storage time. This means a
+#       session that claims "packages/foo/**" and later modifies
+#       packages/foo/bar.ts is matched at query time, not at write
+#       time. The activator may choose to validate glob syntax at
+#       write time as a structural sanity check, but not expand.
+#
+#   Q6. Path-set bounded size.
+#       last_modified_paths could grow large in busy sessions.
+#       Proposed cap: 1000 entries, FIFO eviction. The activator
+#       may revisit if real telemetry shows different distributions.
+#       claimed_paths is operator-bounded (explicit declarations
+#       are limited by human attention) and does not need a cap.
+#
+# Implementation sketch (sketch only, not authorized)
+# ---------------------------------------------------
+# Three commits expected after activation:
+#
+# Commit 1: schema + types.
+#   - packages/caws-kernel/src/worktree/types.ts: extend AgentRecord
+#     with optional claimed_paths?: readonly string[] and
+#     last_modified_paths?: readonly string[].
+#   - packages/caws-kernel/src/schemas/agents.v2.json: new schema
+#     (v1 admitted by additive optional fields). Or amend
+#     agents.v1.json with additionalProperties: false relaxed for
+#     the two new keys. (Activator decides whether to fork v1/v2
+#     or extend in place.)
+#   - kernel tests for backward-compat load (A1) and v2 load (A2).
+#
+# Commit 2: store-layer write paths.
+#   - packages/caws-cli/src/store/agents-store.ts: writer adds the
+#     two fields when populated; reader returns them through the
+#     existing interface.
+#   - New explicit-claim surface (proposed: a small command or a
+#     library function called by other commands). Naming and shell
+#     binding land in the activator's decision; the kernel-level
+#     primitive is the data model.
+#
+# Commit 3: closure with consumer-slice references.
+#   - closure_notes record the schema version chosen (v1 extension
+#     vs v2 fork), the explicit-claim surface chosen, the TTL
+#     value picked, test counts, and a pointer to the three
+#     consumer slices.
+#
+# Activation gate
+# ---------------
+# Activation requires:
+#   1. Maintainer authorization (this is recon/draft only).
+#   2. Resolving Q1-Q6 (lightweight ADR or maintainer decision in
+#      the activation commit message; full ADR file optional).
+#   3. NO blocking on the other three multi-agent slices —
+#      ordering is THIS first, then the consumer slices, but the
+#      consumers don't need to be filed before this activates.
+#
+# Non-goals (explicit guards)
+# ---------------------------
+#   * No blocking behavior. No guard rules. No refusals.
+#   * No new event schemas.
+#   * No takeover surface (lives in WORKING-TREE-PROVENANCE-GUARD-001).
+#   * No kernel authority changes.
+#   * No release / package version / CHANGELOG / template /
+#     hook-pack edits.
+#   * No re-opening or amendment of any other slice.
+#   * No batch migration of existing agents.json — write-on-update
+#     is sufficient.
+#
+# The slice's earned claim is the data model and its
+# backward-compatible read/write paths. Everything that consumes
+# the data — guards, classifiers, handoff events — is a separate
+# concern owned by its own spec.
