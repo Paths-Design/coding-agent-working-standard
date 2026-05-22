@@ -998,7 +998,7 @@ find packages/*/dist -name '*.ts' -not -name '*.d.ts'      empty
 
 **Audit-only slice closes with zero new code changes.** Two doc-only
 sideband commits during this slice updated
-`packages/caws-cli/docs-status/failure-lineage.md` (worked-around
+`docs/failure-lineage.md` (worked-around
 session-attribution incidents — documented part of why CAWS exists,
 not part of the command-surface removal); they were committed as
 `wip(docs)` and pushed alongside this audit.

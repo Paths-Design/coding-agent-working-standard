@@ -6,7 +6,7 @@
 // session's tool calls.
 //
 // Lineage entries this pack covers — see
-// packages/caws-cli/docs-status/failure-lineage.md:
+// docs/failure-lineage.md:
 //   Entry 1  — git init catastrophic deletion (block-dangerous + classify_command)
 //   Entry 4  — worktree cross-contamination, inherited-dirty-state (worktree-guard)
 //   Entry 6  — stash-and-destroy (worktree-guard)
