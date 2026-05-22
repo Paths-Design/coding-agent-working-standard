@@ -34,6 +34,7 @@ import type { Result } from '../result/types';
 import envelopeSchema from '../schemas/events.v1.json';
 
 import acRecordedSchema from '../schemas/events/ac_recorded.v1.json';
+import chainRotatedSchema from '../schemas/events/chain_rotated.v1.json';
 import claimTakenOverSchema from '../schemas/events/claim_taken_over.v1.json';
 import doctorCompletedSchema from '../schemas/events/doctor_completed.v1.json';
 import evidenceRecordedSchema from '../schemas/events/evidence_recorded.v1.json';
@@ -77,6 +78,7 @@ const payloadValidators = new Map<string, ValidateFunction | null>();
 
 const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   ac_recorded: acRecordedSchema,
+  chain_rotated: chainRotatedSchema,
   claim_taken_over: claimTakenOverSchema,
   doctor_completed: doctorCompletedSchema,
   evidence_recorded: evidenceRecordedSchema,
@@ -479,6 +481,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'session_ended',
   'commit_made',
   'branch_switched',
+  'chain_rotated',
 ]);
 
 function isKnownEventType(s: string): boolean {
