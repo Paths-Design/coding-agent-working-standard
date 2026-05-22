@@ -1,0 +1,416 @@
+id: WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001
+title: 'Migrate or explicitly classify v10.2 legacy-envelope .caws/worktrees.json before authority-control-plane activation'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-05-22T13:00:00.000Z'
+updated_at: '2026-05-22T13:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/worktrees-store.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-kernel/src/doctor
+    - .caws/worktrees.json
+  data_migration: true
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001.yaml
+  out:
+    - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.yaml
+    - .caws/specs/WORKTREE-CAWS-SHARED-STATE-001.yaml
+    - .caws/specs/PRUNE-REPAIR-WORKTREE-001.yaml
+    - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
+    - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001.yaml
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - .github/workflows
+    - packages/caws-cli/src/shell
+invariants:
+  - >-
+    Format migration is NOT prune/repair. This slice converts the v10.2
+    envelope shape `{"version": 1, "worktrees": {<map>}}` into the v11
+    flat-map shape `{<map>}`. It does NOT resolve half-states, does NOT
+    consume the authority rule (which does not exist yet), and does NOT
+    introduce a general repair surface. Prune/repair lives in
+    `PRUNE-REPAIR-WORKTREE-001`, which remains blocked on
+    `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001`.
+  - >-
+    Non-terminal worktree records are preserved exactly. Every record
+    in the nested `worktrees` value whose `status` field is missing or
+    is not the literal string "destroyed" MUST be copied to the
+    top-level flat map byte/field-for-field, with no field added,
+    removed, or modified. The migration is a structural unwrap, not a
+    record-level rewrite.
+  - >-
+    Destroyed-record policy (explicit, per the recon's caution). A
+    record with `status: "destroyed"` MAY be omitted from the migrated
+    flat map IF AND ONLY IF BOTH of the following hold:
+      (a) NO loaded spec has its `worktree:` field set to the record's
+          key (i.e., no spec currently claims this worktree name); AND
+      (b) the record's `path` field is undefined, null, empty string,
+          OR the file/directory at that path does not exist on disk.
+    If EITHER condition fails (some spec still claims the name, OR the
+    recorded path still exists), the migration REFUSES with a precise
+    diagnostic naming the record, the failing condition(s), and the
+    spec id (if applicable). The operator must resolve the conflict
+    manually before re-running the migration. Silent preservation of
+    destroyed records is forbidden because it would create fresh H1
+    findings post-migration; silent deletion when a spec still claims
+    the name is forbidden because it would orphan the spec's binding.
+  - >-
+    Historical lifecycle evidence belongs in `events.jsonl`, not in
+    live registry state. The destroyed-record policy above reflects
+    this: the v11 `.caws/worktrees.json` registry represents current
+    governed worktree bindings, not historical destroyed entries. A
+    `worktree_destroyed` event already exists in the event log for
+    each terminated worktree; the registry does not need to also carry
+    that record forward.
+  - >-
+    Migration is idempotent. A second invocation against an already-
+    migrated registry MUST report "already migrated," emit no
+    diagnostic above INFO, mutate no bytes in `.caws/worktrees.json`,
+    and append no events to `.caws/events.jsonl`.
+  - >-
+    Migration is non-destructive on the control-plane spec/event side.
+    No spec file may be touched. The event log may be appended to ONLY
+    if the slice explicitly defines a new event kind for the migration
+    (see acceptance A9); otherwise events.jsonl bytes are stable
+    pre/post.
+  - >-
+    Mixed-shape files are refused. If the loader encounters a file
+    that is neither a pure flat map NOR a pure legacy envelope — e.g.,
+    a top-level object with BOTH a `version` number AND non-envelope
+    top-level worktree records adjacent to a nested `worktrees` object
+    — the migration refuses with a typed diagnostic and does not
+    attempt heuristic disambiguation. The format is the format; an
+    ambiguous mix is a human-induced corruption that requires manual
+    resolution.
+  - >-
+    Doctor diagnostics are NOT weakened. The kernel's H1 rule continues
+    to fire when its inputs say it should fire. The migration's
+    success criterion is that the legacy-envelope leak no longer
+    produces the inputs that make H1 fire on subject `"worktrees"` —
+    NOT that H1 is rendered silent for that case. If the migration
+    correctly converts shape, the kernel sees the flat map and the
+    `"worktrees"` H1 subject simply does not exist.
+  - >-
+    Control-plane authority activation
+    (`WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001`) remains blocked
+    until this slice closes. Authority decisions must consume the
+    post-migration shape.
+acceptance:
+  - id: A1
+    given: |
+      A `.caws/worktrees.json` file whose top-level object has keys
+      `version` (number) and `worktrees` (object), with the nested
+      `worktrees` value containing one or more records.
+    when: |
+      The legacy-envelope detector runs (either as a typed loader
+      diagnostic or as a migration precondition check).
+    then: |
+      The shape is classified as `legacy_envelope` explicitly, with a
+      dedicated diagnostic (NOT `doctor.worktree.ghost_registry_entry`
+      with subject `"worktrees"`). The diagnostic names the file
+      path, the envelope `version`, the count of nested records, and
+      the per-record kernel statuses (active / destroyed / unknown).
+      The exact diagnostic id is a slice design decision; suggested:
+      `doctor.worktree.registry_legacy_envelope_detected` or
+      `store.worktrees.legacy_envelope`.
+  - id: A2
+    given: |
+      A `.caws/worktrees.json` file in legacy-envelope shape whose
+      nested records are ALL non-terminal (no `status: destroyed`).
+    when: |
+      The migration command runs.
+    then: |
+      The file is rewritten to v11 flat-map shape. Every nested
+      record appears verbatim as a top-level key/value pair in the
+      new file, with byte-equal field values. The outer `version`
+      key and the outer `worktrees` key are removed. Atomic write via
+      the existing store-layer pattern (write to tempfile + rename;
+      same as worktrees-writer.ts).
+  - id: A3
+    given: |
+      A `.caws/worktrees.json` file in legacy-envelope shape with N
+      non-terminal records (status != "destroyed" or status absent).
+    when: |
+      The migration runs and the post-migration file is loaded
+      through the existing v11 loader.
+    then: |
+      The v11 loader returns exactly the same N records, with every
+      field byte-equal to the pre-migration nested value. Asserted
+      with `deepStrictEqual` over the loaded `WorktreeRegistry` and
+      the pre-migration nested object.
+  - id: A4
+    given: |
+      A `.caws/worktrees.json` file in legacy-envelope shape whose
+      nested records include `status: "destroyed"` entries. This
+      repo's actual `.caws/worktrees.json` (containing
+      `ci-caws-gate-wt` and `ci-caws-gate-exec-wt`, both destroyed,
+      no claiming spec, paths under `.caws/worktrees/<name>` that do
+      not exist on disk) is the canonical fixture.
+    when: |
+      The migration runs.
+    then: |
+      For each destroyed record, the policy check fires:
+        - (a) No loaded spec has `worktree:` equal to the record's
+              key (passes for both fixture records).
+        - (b) The record's path does not exist on disk (passes for
+              both fixture records — `.caws/worktrees/ci-caws-gate-wt`
+              and `.caws/worktrees/ci-caws-gate-exec-wt` are absent).
+      When BOTH conditions hold, the destroyed record is OMITTED
+      from the migrated flat map (silently — the event log already
+      records the destruction). When EITHER condition fails, the
+      migration REFUSES with a precise diagnostic naming the record
+      key, the failing condition(s), and the spec id if applicable;
+      it does NOT partially migrate.
+      The test fixture exercises BOTH paths: (i) all destroyed
+      records omittable → flat map has only the active records;
+      (ii) at least one destroyed record blocks omission → migration
+      refuses, file is unchanged.
+  - id: A5
+    given: |
+      A `.caws/worktrees.json` file with an ambiguous mixed shape:
+      top-level keys including BOTH `version` (number) AND non-
+      envelope top-level worktree records (objects with `specId`
+      etc.), possibly with a nested `worktrees` object as well.
+    when: |
+      The migration runs (or the legacy-envelope detector runs).
+    then: |
+      The shape is classified as `mixed_shape` and refused with a
+      typed diagnostic. Migration does NOT attempt heuristic
+      disambiguation. The file is unchanged. The operator is
+      directed to resolve manually.
+  - id: A6
+    given: |
+      A `.caws/worktrees.json` file that is already in v11 flat-map
+      shape (no `version` key, no nested `worktrees` object).
+    when: |
+      The migration runs.
+    then: |
+      No bytes are written to `.caws/worktrees.json`. No events are
+      appended to `.caws/events.jsonl`. The migration emits a single
+      INFO-level diagnostic `already_migrated` (or equivalent),
+      exits 0, and reports the record count. Idempotency proof:
+      running the migration a second time produces identical output.
+  - id: A7
+    given: |
+      A repo whose `.caws/worktrees.json` was in legacy-envelope
+      shape and has just been migrated successfully under A2 or A4
+      (omitting branch).
+    when: |
+      `caws doctor` runs.
+    then: |
+      The diagnostic `doctor.worktree.ghost_registry_entry` with
+      subject `"worktrees"` is NOT emitted (the envelope key no
+      longer exists). For active migrated records, H1 fires if and
+      only if their canonical worktree directory is also absent and
+      they are not in `git worktree list` — i.e., normal H1
+      semantics apply to real records. The migration does not
+      introduce ANY new H1 findings beyond what would have fired
+      for the same records had they been in flat-map shape from
+      the start.
+  - id: A8
+    given: |
+      The slice's scope.in deliberately excludes spec files, policy,
+      waivers, package.json, CHANGELOG, templates, .github/workflows,
+      and authority-control-plane production code.
+    when: |
+      The slice is implemented and tests + production code lands.
+    then: |
+      `git diff` against the parent commit shows changes ONLY to:
+      `packages/caws-cli/src/store/worktrees-store.ts`,
+      `packages/caws-cli/src/store/worktrees-writer.ts` (if needed),
+      `packages/caws-kernel/src/doctor/{rules.ts,inspect.ts}` (if a
+      new typed diagnostic is added for A1/A5), new test files under
+      `packages/caws-cli/tests/store/` and/or
+      `packages/caws-kernel/tests/unit/`, this spec file, and
+      `.caws/worktrees.json` itself (after the migration command
+      runs against this repo). No changes to package version,
+      CHANGELOG, release workflow, templates, or authority-control-
+      plane code.
+  - id: A9
+    given: |
+      The migration runs (any path: success, refusal, or idempotent
+      no-op).
+    when: |
+      A test snapshots `.caws/events.jsonl` byte-for-byte (or
+      line-count) before and after the migration.
+    then: |
+      events.jsonl is byte-equal pre/post UNLESS the slice's design
+      decision explicitly introduces a new event kind for the
+      migration itself (e.g., `worktrees_registry_migrated`). If
+      such an event is introduced, it MUST be defined with a kernel
+      schema under `packages/caws-kernel/src/schemas/events/`,
+      emitted exactly once per successful migration, never emitted
+      on refusal, never emitted on idempotent no-op, and the schema
+      addition is admitted to scope.in via a mid-implementation
+      amendment with explicit justification. The default posture
+      is NO new event kind; the migration's audit trail is the
+      commit that runs it.
+  - id: A10
+    given: |
+      `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` remains at
+      `lifecycle_state: draft` throughout this slice's lifecycle.
+    when: |
+      This slice closes with `resolution: completed`.
+    then: |
+      The authority slice's activation prerequisite #6 ("migration
+      slice must complete first") is now satisfiable. The closure
+      notes for this slice explicitly state: "Authority slice
+      activation prerequisite #6 satisfied; proceed to authority
+      activation per its prerequisite list." This slice does NOT
+      itself activate the authority spec.
+non_functional:
+  reliability:
+    - >-
+      Migration is non-destructive on every refusal path. Refusal
+      means the original file is untouched and the operator can
+      re-run after manual resolution. Partial-migration is forbidden.
+    - >-
+      Atomic write semantics match the existing
+      `worktrees-writer.ts` pattern (tempfile + rename + fsync). A
+      crash mid-migration must leave either the original legacy file
+      or the fully-migrated flat-map file, never a half-written
+      intermediate.
+    - >-
+      The migration is single-purpose: convert envelope to flat map,
+      with destroyed-record policy. It does NOT modify scope fields,
+      does NOT recompute canonical paths, does NOT alter
+      prior_owners or owner state, does NOT touch `events.jsonl`
+      bytes (per A9), and does NOT delete the file under any
+      condition.
+  performance:
+    - >-
+      The migration is O(N) in record count. Bounded; this repo's
+      fixture has N=2.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Provenance
+# ----------
+# Filed 2026-05-22 in response to the recon outcome of
+# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001's activation pass
+# (commit 001f9ee), which classified the v10.2 legacy-envelope
+# `.caws/worktrees.json` shape as a migration prerequisite, not an
+# accepted baseline.
+#
+# The recon pass identified this slice as a SEPARATE prerequisite,
+# not a fold-in to the authority slice (Q2 decision). The maintainer
+# approved the recon and selected option 1 (file separate migration
+# slice next), with an additional caution: the destroyed-record
+# policy must be made explicit BEFORE implementation because
+# converting the envelope mechanically may surface terminal records
+# as fresh H1 ERROR findings.
+#
+# Destroyed-record policy resolution
+# ----------------------------------
+# The maintainer's preferred policy, recorded verbatim in the
+# invariants above:
+#
+#   A v11 `.caws/worktrees.json` registry should represent current
+#   governed worktree bindings, not historical destroyed entries.
+#   Historical lifecycle evidence belongs in `events.jsonl`, not in
+#   live registry state. Therefore, during legacy-envelope migration,
+#   terminal `status: destroyed` entries may be omitted if and only
+#   if no spec currently claims their `worktree:` value and their
+#   recorded path is absent. If either condition fails, refuse
+#   migration and emit a precise diagnostic.
+#
+# This is implemented as the third invariant ("Destroyed-record
+# policy") and locked by acceptance A4 with both paths exercised.
+#
+# Concrete fixture from this repo
+# -------------------------------
+# `.caws/worktrees.json` currently contains:
+#   { "version": 1, "worktrees": {
+#       "ci-caws-gate-wt": {
+#         specId: "CI-CAWS-GATE-V11-SURFACE-001",
+#         status: "destroyed",
+#         path: ".../.caws/worktrees/ci-caws-gate-wt",
+#         destroyedAt: "2026-05-20T19:11:11.284Z",
+#         ... },
+#       "ci-caws-gate-exec-wt": {
+#         specId: "CI-CAWS-GATE-V11-SURFACE-001",
+#         status: "destroyed",
+#         path: ".../.caws/worktrees/ci-caws-gate-exec-wt",
+#         destroyedAt: "2026-05-20T22:08:02.009Z",
+#         ... } } }
+#
+# Manual verification at file time:
+#   - `CI-CAWS-GATE-V11-SURFACE-001` exists as a spec in
+#     `.caws/specs/`. Its `worktree:` field needs to be checked
+#     against the two record keys during migration. If either record
+#     key matches the spec's worktree:, condition (a) fails and the
+#     migration refuses.
+#   - The recorded paths `.caws/worktrees/ci-caws-gate-wt` and
+#     `.caws/worktrees/ci-caws-gate-exec-wt` are absent on disk
+#     (verified pre-file-time), so condition (b) passes for both.
+#
+# If the live `CI-CAWS-GATE-V11-SURFACE-001` spec has no
+# `worktree:` (the most likely case for a destroyed worktree's
+# spec), both destroyed records pass the policy and are omitted
+# during migration. The post-migration `.caws/worktrees.json` is
+# `{}` (empty flat map). After migration, the H1 finding on subject
+# `"worktrees"` disappears; no new H1 finding is created. Doctor
+# returns to 0E baseline for this finding class.
+#
+# Implementation plan (sketch, not authorized)
+# --------------------------------------------
+# Three commits expected:
+#
+# Commit 1: spec authoring + activation (audit-quiet via direct YAML
+# edit; same v11.1.6 surface gap as prior slices). Flip
+# lifecycle_state to active. No implementation.
+#
+# Commit 2: implementation. Three sites:
+#   - Store loader (`worktrees-store.ts`): detect legacy-envelope
+#     shape at load time; surface as a typed diagnostic; refuse to
+#     load it as a v11 registry (return Result.err with a structured
+#     reason). Existing call sites continue to receive Result; the
+#     migration command consumes the diagnostic and acts.
+#   - New migration command surface (most likely
+#     `caws worktree migrate-registry` or similar — the command name
+#     is a slice design decision, but the behavior is required).
+#     Reads the legacy file, applies the destroyed-record policy,
+#     atomically writes the flat-map output. Refuses on policy
+#     violation or mixed-shape.
+#   - Optional kernel doctor rule for A1: a typed H1-replacement
+#     diagnostic (`registry_legacy_envelope_detected`) so doctor
+#     reports the legacy state with operator-friendly text, not
+#     the actionably-wrong H1 repair text. Decision: include if the
+#     loader's typed diagnostic does not propagate to doctor cleanly;
+#     skip if it does. Sliced out of A1's acceptance to allow both
+#     implementation paths.
+#
+# Commit 3: closure. Closure notes:
+#   - Record the destroyed-record policy as ratified (per
+#     invariants).
+#   - Record whether the optional kernel rule was added.
+#   - Record post-migration doctor state on this repo (target:
+#     0E/3W/0I, matching FOLLOWUP-001 baseline minus the
+#     legacy-envelope ERROR).
+#   - Explicitly satisfy authority-slice activation prerequisite #6.
+#
+# What is NOT in this slice
+# -------------------------
+# - No prune/repair behavior. Half-state resolution belongs in
+#   `PRUNE-REPAIR-WORKTREE-001` after authority closes.
+# - No automatic migration on `caws init` or `caws doctor` runs.
+#   The migration is an explicit operator action. Doctor reports
+#   the legacy shape; the operator runs the migration.
+# - No version bump, CHANGELOG entry, release workflow change, or
+#   template change.
+# - No shell binding surface imports into store.
+# - No re-opening of any closed slice.
+# - No closure of `WORKTREE-CAWS-SHARED-STATE-001` (that happens in
+#   authority slice activation commit #1, not here).
+# - No activation of `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001`
+#   (gated on this slice closing; see A10).
+#
+# Activation gate
+# ---------------
+# Activation requires maintainer authorization. The recon delivered
+# a draft; the operator's go-signal is the next gate.
