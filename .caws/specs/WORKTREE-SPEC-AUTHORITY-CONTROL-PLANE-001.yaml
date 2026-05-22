@@ -2,9 +2,9 @@ id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
 title: 'CAWS state is control-plane; worktrees carry bindings, not mutable spec authority'
 risk_tier: 3
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-22T12:00:00.000Z'
+updated_at: '2026-05-22T21:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
@@ -591,3 +591,160 @@ contracts: []
 # The recon's deliverable is this amendment. The next gate is the
 # maintainer's go-signal on the activation prerequisites (6 and 7 in
 # particular).
+#
+# ============================================================================
+# Activation (2026-05-22)
+# ============================================================================
+#
+# lifecycle_state flipped from draft to active by direct YAML edit
+# (audit-quiet per the established v11.1.6 pattern, since no caws specs
+# promote surface exists; SPECS-PROMOTE-DRAFT remains deferred past v11.2
+# per V11-2-STABILIZATION-RECON-001 §1.3 finding 2). The git commit
+# message for this activation is the audit trail.
+#
+# Activation prerequisite status
+# ------------------------------
+# (Re-stated from the recon block above; each is now satisfied or
+# explicitly carried as a deferred concern.)
+#
+#   1. Doctrine pre-read: SATISFIED. The H4 honesty rule, legacy-envelope
+#      shape recognition, evidence allow/refuse lists, and the migration-
+#      as-dependency rule were all added by the recon pass and authorized
+#      by the maintainer (this activation is the go-signal).
+#
+#   2. Implementation-mechanism decision: SPARSE-CHECKOUT (locked at
+#      activation). Directory inversion is the v11.3+ architecture and
+#      is named in invariant §7; it is NOT a v11.2 deliverable. Sparse-
+#      checkout makes the control-plane invariant true in practice for
+#      v11.2 without rewriting every CLI path that reads
+#      .caws/specs/<id>.yaml.
+#
+#   3. Hooks-policy decision: DEFERRED to implementation commit #N (TBD).
+#      The worktree-guard hook's Edit/Write enforcement boundary is a
+#      defense-in-depth question, not an activation precondition. The
+#      kernel/store layer fix is the primary mechanism per invariant §3
+#      and the triage's "Hook-pack note." If the implementation slice
+#      determines hook expansion is required for A6 regression coverage,
+#      it can be added under a separate scope amendment with maintainer
+#      authorization.
+#
+#   4. Migration timeline: DEFERRED to implementation. Doctor ERROR
+#      severity for `worktree.spec_drift` is locked by A3 and invariant
+#      §6 ("Doctor's split-brain diagnostic is ERROR severity, not WARN").
+#      The forgiveness window for pre-v11.2 worktrees is the
+#      `caws worktree reconcile` repair semantics defined in A7, not a
+#      severity downgrade. The activation makes the severity choice
+#      non-negotiable; the implementation slice owns when the diagnostic
+#      starts firing in CI (a separate decision the implementer surfaces
+#      explicitly).
+#
+#   5. Risk_tier rationale: CARRIED FORWARD AT TIER 3 FOR ACTIVATION
+#      COMMIT 1 (this commit). The recon block flagged tier 2 as the
+#      activator's target (genuine kernel-authority change with broad
+#      blast radius), but tier 2 requires a non-empty contracts entry
+#      that does not exist at v11.2 schema level. Two options for a
+#      future amendment commit:
+#        (a) Amend the contracts schema to make `contracts: []` valid
+#            for tier 2 specs that don't declare cross-package
+#            contracts (this matches the existing v11.1 spec-line
+#            convention noted in CLAUDE.md).
+#        (b) Declare a real contract for the control-plane authority
+#            surface (e.g., a control-plane-state-authority contract
+#            naming the spec resolver's invariant interface).
+#      Either is a substantive content change beyond this commit's
+#      scope ("Activate ... no implementation"). The activator carries
+#      tier 3 forward and flags the choice for the first implementation
+#      commit. Mode remains `feature` because this introduces a new
+#      doctrine invariant and a new repair command.
+#
+#   6. WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001 prerequisite:
+#      SATISFIED. The migration slice was filed (commit 52c7b83 draft,
+#      87d38a9 activate, 841ebaf implementation), implemented, and
+#      closed (commit 6879404 closure with `caws worktree migrate-
+#      registry` applied to this repo's worktrees.json). The legacy
+#      envelope is gone; doctor no longer surfaces the H1 ERROR on
+#      subject "worktrees" (current baseline is 0E/3W/0I, where the
+#      3W are all `doctor.agent.stale_display_only` and unrelated to
+#      this slice).
+#
+#   7. WORKTREE-CAWS-SHARED-STATE-001 supersession: SATISFIED. The
+#      supersession is performed by this same activation commit, via a
+#      direct-YAML edit on .caws/specs/WORKTREE-CAWS-SHARED-STATE-001.yaml
+#      (lifecycle_state: closed, resolution: superseded, superseded_by:
+#      WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001, closure_notes recorded
+#      on the SHARED-STATE spec). The CLI's caws specs close refuses
+#      non-active specs ("only active specs can be closed"), and
+#      SHARED-STATE-001 never left draft, so an audit-quiet direct-YAML
+#      closure is the only available mechanism — matching the v11.1.6
+#      pattern. No spec_closed event is emitted for the supersession;
+#      the git commit message is the audit trail.
+#
+# Newly satisfied prerequisites recorded between recon and activation
+# -------------------------------------------------------------------
+#
+#   * SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001: CLOSED 2026-05-22 (commit
+#     b9c0b59). This was the THIRD recurrence of CLAUDE.md trap #4 (over-
+#     broad scope.out entries shadowing scope.in) in the v11.2 worktree/
+#     authority line; the kernel-level detection rule
+#     `spec.semantic.scope.overbroad_out` (in
+#     packages/caws-kernel/src/spec/validate-semantics.ts) now fires at
+#     spec parse/validate time, before contradictory specs become
+#     active. The repo-wide A7 scan during that slice's commit 2b
+#     confirmed zero offenders across 50 specs. This authority slice's
+#     own scope.in / scope.out arrays were validated by parseAndValidateSpec
+#     during commit 1 verification (specs show returned the active spec
+#     without diagnostic errors); no scope.out entry shadows the single
+#     scope.in entry. The recurrence guard is now structural, not
+#     documentary.
+#
+# Activation-pass invariant re-statement (locked at activation)
+# -------------------------------------------------------------
+#
+# The doctrine phrase locked at activation is: "CAWS state is control-
+# plane. Worktrees are execution sandboxes. The control plane is not
+# duplicated; bindings are." This phrase appears verbatim in invariant
+# §1 and MUST remain verbatim through every implementation commit. Any
+# implementation commit that drifts the phrase is in violation of the
+# activation contract and requires a scope amendment.
+#
+# Implementation deliverables (per amended acceptance matrix A1-A7)
+# -----------------------------------------------------------------
+# Activation does NOT carry implementation. The acceptance matrix at
+# lines ~564-578 is the implementer's contract:
+#
+#   A1: New worktrees do not materialize editable spec files.
+#       Mechanism: sparse-checkout config on the worktree post-create.
+#   A2: Spec resolution from worktree cwd reads control-plane bytes.
+#       Mechanism: kernel/store spec resolver consults control-plane root.
+#   A3: Doctor reports worktree.spec_drift ERROR on byte divergence.
+#       New diagnostic rule, severity ERROR, exit code 1.
+#   A4: Scope check + gates run consult control-plane, not worktree-local.
+#       Decision provenance names control-plane.
+#   A5: Lifecycle transactions mutate control-plane only.
+#       Worktree git status shows zero changes from lifecycle ops.
+#   A6: Authority-rule regression for the 10.2 failure mode.
+#       Full fixture suite covering scope-check, gates-run, doctor,
+#       specs show against a divergent fixture.
+#   A7: caws worktree reconcile <name> is idempotent and non-destructive.
+#       First invocation converts; second is a no-op; refuses on byte
+#       divergence (A3 case).
+#
+# Out-of-scope for the entire slice (re-asserted)
+# -----------------------------------------------
+#
+#   * No prune/repair behavior. PRUNE-REPAIR-WORKTREE-001 remains
+#     blocked on this slice closing; H1/H2/H3/H4 repairs land there,
+#     not here.
+#   * No automatic migration of pre-v11.2 worktrees. A7's reconcile is
+#     opt-in.
+#   * No release / package version / CHANGELOG / template edits.
+#   * No shell binding surface imports from store.
+#   * No weakening of doctor diagnostics.
+#   * No re-opening of any closed slice referenced by this one.
+#   * No tier or contracts amendment in commit 1; deferred to a later
+#     implementation commit (see prerequisite #5 above).
+#
+# Next step: commit 2 (first implementation slice). The implementer
+# should report the chosen tier/contracts amendment shape (option 5a
+# vs 5b above) before authoring code, since the choice affects schema
+# admittance and downstream contract validation.

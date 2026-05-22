@@ -2,9 +2,12 @@ id: WORKTREE-CAWS-SHARED-STATE-001
 title: 'Make .caws/ shared state across git worktrees instead of per-worktree copies'
 risk_tier: 3
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: superseded
+superseded_by: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
+closure_notes: 'Superseded by WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 (activated in the same commit). Both specs assert the same control-plane invariant at different abstraction levels: this spec named the physical filesystem topology (symlinks / junction-points / CLI-side resolution) and was mechanism-shaped; the superseding spec names the authority semantic ("CAWS state is control-plane; worktrees are execution sandboxes") and selects sparse-checkout as the v11.2 mechanism. The authority invariant is strictly stronger: "control-plane store" is topology-agnostic and survives later topology changes (dedicated control checkout, daemon-backed store, registry-backed state root), whereas "physical .caws/ directory" is sparse-checkout-incompatible. SHARED-STATE-001 A4 (cross-platform mechanism) folds into CONTROL-PLANE-001 mechanism choice. No implementation occurred in this supersession closure. No repair behavior introduced. No code, hook, or doctrine changes — the supersession is a precondition of CONTROL-PLANE-001 activation, recorded as activation prerequisite #7 on the superseding spec. Audit-quiet direct-YAML edit per the established v11.1.6 pattern (no spec_closed event in events.jsonl) because the CLI''s caws specs close refuses non-active specs ("only active specs can be closed") and SHARED-STATE-001 never left draft. The git commit message is the audit trail; this supersession is part of WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 activation commit #1.'
 created_at: '2026-05-19T00:00:00.000Z'
-updated_at: '2026-05-19T00:00:00.000Z'
+updated_at: '2026-05-22T21:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
