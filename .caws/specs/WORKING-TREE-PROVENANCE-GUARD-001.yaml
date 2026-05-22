@@ -1,0 +1,441 @@
+id: WORKING-TREE-PROVENANCE-GUARD-001
+title: 'Refuse cleanup commands (stash, restore, checkout --, broad clean) when another active session has dirty overlap in the working tree'
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+created_at: '2026-05-22T23:35:00.000Z'
+updated_at: '2026-05-22T23:35:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/store
+    - .claude/hooks
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/WORKING-TREE-PROVENANCE-GUARD-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src/scope
+invariants:
+  - >-
+    Earned claim: when an operator (agent or human) invokes a cleanup
+    command (`git stash`, `git stash push`, `git restore <path>`,
+    `git checkout -- <path>`, `git clean -f`) and the working tree
+    contains files that another active session has either CLAIMED or
+    RECENTLY MODIFIED, the command is refused with a structured
+    diagnostic naming the other session(s), the overlapping paths,
+    and the explicit acknowledgement command required to proceed.
+  - >-
+    Context-aware predicate, NOT blanket block. The existing v11
+    worktree-guard.sh (lineage Entry 6) blocks `git stash` when
+    worktrees are active. That rule covers the worktree case but
+    misses the shared-checkout multi-session case observed in
+    full-stack-ds (multiple sessions in the same physical checkout,
+    no git worktrees involved). This slice hardens the predicate
+    from "worktrees active" to "another active session has dirty
+    overlap" — same lineage, smarter trigger. Worktree-active
+    blocks remain in place; this slice ADDS a stricter case, does
+    NOT remove existing protection.
+  - >-
+    Depends on SESSION-OWNERSHIP-METADATA-001. The overlap predicate
+    consults .caws/agents.json's claimed_paths and
+    last_modified_paths fields. Without that metadata, the guard
+    falls back to legacy behavior (the existing worktree-guard.sh
+    block when worktrees are active). The fallback is NOT silent —
+    a diagnostic ("session ownership metadata unavailable; running
+    legacy worktree-active block") is emitted so operators know
+    the stronger predicate is dormant.
+  - >-
+    Diagnose/decide, NOT repair. The guard refuses or requires
+    acknowledgement; it does NOT auto-stash, auto-restore, or
+    auto-resolve. The operator handles the git mechanics after
+    the guard surfaces the problem. This matches the
+    MULTI-AGENT-PUSH-RANGE-GUARD-001 invariant pattern.
+  - >-
+    Acknowledgement is per-session and per-path, not blanket. The
+    refusal text names specific other sessions and specific
+    overlapping paths. The operator's acknowledgement command
+    (proposed: `caws working-tree ack --session <id> --paths
+    <glob>...` or equivalent) names which sessions+paths the
+    operator has reviewed. A blanket "yes proceed" is rejected by
+    design — it is structurally identical to no ack and reintroduces
+    the failure mode.
+  - >-
+    Takeover writes a durable audit. When the operator acknowledges
+    a per-session per-path overlap (effectively claiming the other
+    session's work or accepting that it will be lost to stash),
+    the guard writes a durable record on the affected session's
+    .caws/agents.json entry: a prior_overlap_acks audit list with
+    fields { acked_by_session, acked_at, paths, target_command }.
+    This is analogous to the worktree claim --takeover prior_owners
+    audit (existing v11 surface). The audit is the trail that
+    lets the original session later see "another session
+    overwrote my claim on these paths" without needing to scrape
+    stash names.
+  - >-
+    Hook-vs-CLI surface. The primary enforcement is a HOOK that
+    fires on PreToolUse for Bash commands matching the cleanup
+    patterns. This matches the existing v11 hook-pack model
+    (worktree-guard.sh, scope-guard.sh, block-dangerous.sh). The
+    CLI also exposes a `caws working-tree check` command that
+    returns the same classification report without performing the
+    cleanup, so non-Bash invocations (CI, scripted workflows,
+    direct API calls) can consult the same logic. Both surfaces
+    consume the same kernel/store predicate.
+  - >-
+    No bypass via spawn-not-Bash. The CLI-LOCAL-VERSION-PREFLIGHT-001
+    follow-up candidate (separate, unfiled) noted that the
+    distinction between hook-intercepted Bash and CLI-issued spawn
+    is a real coordination hazard. This slice's hook covers
+    agent-issued Bash; CLI-issued spawn calls are covered because
+    the CLI's lifecycle commands (caws stash, caws restore, etc.
+    if they exist) ALSO consult the kernel predicate. The shell
+    spawn surface (git directly invoked by some other tool) is
+    OUT of v1 scope — a stronger posture (git pre-stash / pre-
+    checkout hooks) is a follow-up.
+  - >-
+    Cleanup-command catalog is locked at draft. v1 covers:
+      - `git stash` / `git stash push` (any flag variant)
+      - `git restore <path>` / `git restore --staged <path>`
+      - `git checkout -- <path>` (NOT `git checkout <branch>`)
+      - `git clean -f` / `git clean -fd` / `git clean -fdx`
+    NOT covered in v1 (deferred to follow-ups if real failures
+    surface):
+      - `git reset --hard` (already blocked by block-dangerous.sh)
+      - `git rm --cached` (mutates index, not working tree)
+      - Direct fs operations (rm -rf, mv) — these are filesystem-
+        level and require a different guard layer
+      - `git worktree remove --force` (worktree lifecycle, owned
+        by worktree-guard.sh)
+  - >-
+    Stale ownership does NOT silently authorize. If session A's
+    last_active is older than the agents-stale TTL but its
+    last_modified_paths still overlaps the cleanup target, the
+    refusal STILL fires. Stale-heartbeat is evidence, not authority
+    (per the v11 doctrine in worktree/types.ts). Takeover requires
+    explicit operator acknowledgement; TTL expiry alone does not
+    revoke the overlap claim.
+  - >-
+    No kernel authority change. The kernel scope evaluator, the
+    spec resolver, the lifecycle transaction layer, and the worktree
+    binding all remain unchanged. This slice introduces an advisory
+    refusal surface; it does not redirect, override, or shadow any
+    existing kernel decision.
+acceptance:
+  - id: A0
+    given: |
+      SESSION-OWNERSHIP-METADATA-001 is not yet closed; agents.json
+      does not yet carry claimed_paths or last_modified_paths.
+    when: |
+      A reviewer evaluates whether this spec is ready to activate.
+    then: |
+      The spec is REJECTED for activation until
+      SESSION-OWNERSHIP-METADATA-001 has closed (resolution:
+      completed). The guard's overlap predicate has nothing
+      mechanical to consult until that substrate ships.
+  - id: A1
+    given: |
+      Two active sessions (session A: caws-aaa, session B: caws-bbb).
+      Session A has claimed_paths: ["packages/foo/**"] and
+      last_modified_paths: ["packages/foo/bar.ts"]. Session B's cwd
+      is in the main checkout (or a worktree, either is in scope).
+    when: |
+      Session B issues `git stash` while its working tree contains
+      a modified packages/foo/bar.ts.
+    then: |
+      The hook refuses the stash with a structured diagnostic naming
+      session A (caws-aaa), its bound spec (if any), the overlapping
+      path packages/foo/bar.ts, and the exact ack command:
+      `caws working-tree ack --session caws-aaa --paths
+      packages/foo/bar.ts`. Exit code is non-zero. The stash does
+      NOT execute.
+  - id: A2
+    given: |
+      The same setup as A1, but session B's working tree does NOT
+      modify any files in packages/foo/ — only files outside any
+      other session's claimed_paths / last_modified_paths.
+    when: |
+      Session B issues `git stash`.
+    then: |
+      The hook permits the stash. No diagnostic fires (or an
+      INFO-only "no overlap detected" line if verbose mode is
+      configured). Exit code 0.
+  - id: A3
+    given: |
+      The same setup as A1.
+    when: |
+      Session B issues `caws working-tree ack --session caws-aaa
+      --paths packages/foo/bar.ts`, then `git stash`.
+    then: |
+      The ack writes a durable record on session caws-aaa's
+      agents.json entry: prior_overlap_acks gains an entry with
+      { acked_by_session: caws-bbb, acked_at: <ISO>, paths:
+      ["packages/foo/bar.ts"], target_command: "git stash" }. The
+      subsequent git stash is permitted. Session caws-aaa, when
+      it next reads its own record, sees that caws-bbb stashed
+      changes affecting packages/foo/bar.ts.
+  - id: A4
+    given: |
+      The full-stack-ds failure-mode regression fixture: three
+      simulated sessions, one of which holds claimed_paths /
+      last_modified_paths overlapping a `parallel-session
+      <description>` set of files. A fourth session attempts
+      `git stash push -m "parallel-session work to clear gates"`.
+    when: |
+      The hook fires.
+    then: |
+      The stash is refused. The diagnostic names the overlapping
+      session(s), the overlapping paths, and the ack command. The
+      stash-as-coordination-mechanism pattern observed in
+      full-stack-ds is structurally prevented at the cleanup point,
+      not at recovery time.
+  - id: A5
+    given: |
+      The legacy v11 worktree-active stash block (Entry 6 lineage)
+      is still installed.
+    when: |
+      A session in a worktree issues `git stash` while no other
+      session has dirty overlap.
+    then: |
+      The legacy worktree-active block still fires (this slice does
+      NOT remove existing protection). The refusal text MAY be
+      updated to mention the stronger overlap-aware variant if
+      relevant, but the underlying block remains in place.
+  - id: A6
+    given: |
+      Session ownership metadata is unavailable (agents.json missing
+      claimed_paths / last_modified_paths fields because the
+      SESSION-OWNERSHIP-METADATA-001 migration has not run for those
+      records yet, even though that slice has closed).
+    when: |
+      A cleanup command is invoked.
+    then: |
+      The guard emits a structured "session ownership metadata
+      unavailable for sessions X, Y; falling back to legacy worktree-
+      active block" diagnostic. The legacy block fires if worktrees
+      are active; otherwise the cleanup proceeds. The fallback is
+      NOT silent — the diagnostic is the operator's signal that the
+      stronger predicate is dormant.
+  - id: A7
+    given: |
+      The CLI surface `caws working-tree check` is invoked
+      (the same predicate used by the hook, exposed as a
+      non-mutating query).
+    when: |
+      It runs against an arbitrary tree state.
+    then: |
+      Returns a structured report: { overlaps: [{ session_id,
+      overlapping_paths, source: "claimed_paths" | "last_modified_paths"
+      | "both" }], no_overlap_paths: [...], unknown_paths: [...] }.
+      Exit code 0 if no overlaps, 1 if overlaps exist (so the
+      command can be used in scripts as a precondition check). No
+      tree mutation under any circumstance.
+  - id: A8
+    given: |
+      All pre-existing CAWS tests.
+    when: |
+      The test suites run.
+    then: |
+      All pre-existing tests remain green. New tests cover A1-A7,
+      including fixture tests for the full-stack-ds regression
+      shape (A4) and the fallback-to-legacy case (A6). No
+      production diff outside scope.in.
+non_functional:
+  reliability:
+    - >-
+      The overlap predicate is pure: given an agents.json snapshot
+      and a current dirty-tree paths list, it produces a deterministic
+      classification. No fs side effects, no git invocations beyond
+      reading the dirty list (via `git status --porcelain`), no
+      timing-dependent behavior.
+    - >-
+      Hook latency must remain bounded. The existing hook-pack
+      latency budget (~50-100ms per PreToolUse) constrains the
+      predicate to O(active_sessions * dirty_paths) with small
+      constants. A typical session pair × small dirty set (< 50
+      files) completes well under budget.
+    - >-
+      Ack records are append-only on the affected session's record.
+      Once written, prior_overlap_acks entries are never modified
+      or removed by this slice. (Hygiene of the ack list, if
+      needed, is a future concern.)
+  performance:
+    - >-
+      Predicate evaluation is bounded by the size of the active-
+      session set (typically <10) times the dirty-tree size
+      (typically <100 paths). No indexing required at v1.
+contracts: []
+# --- Triage ----------------------------------------------------------------
+# Origin
+# ------
+# Filed 2026-05-22 as point 2 of the four-part multi-agent provenance
+# bar. This slice is the working-tree-time counterpart to
+# MULTI-AGENT-PUSH-RANGE-GUARD-001's push-time guard.
+#
+# Direct evidence: the full-stack-ds transcripts show session A
+# running git stash three times to clear parallel session B's
+# in-flight IR/contract/dom-tree changes from A's working tree
+# before A's push. The pattern (stash → push → restore) is
+# structurally identical to "treat git stash as a coordination
+# mechanism," which is exactly the hazard Entry 6 of the failure-
+# lineage doc warns about: "git stash is shared across all
+# worktrees, using it can destroy another agent's uncommitted
+# work."
+#
+# Session A in that case was careful enough to restore the stashes
+# afterward; session B then encountered the restored changes and
+# spent cognitive budget asking "are these my edits or someone
+# else's restored stash?" That cognitive overhead — agents
+# reconstructing provenance — is the failure mode.
+#
+# Why this is point 2 (not point 1)
+# ----------------------------------
+# This slice needs SESSION-OWNERSHIP-METADATA-001's claimed_paths /
+# last_modified_paths fields to compute overlap mechanically. A0
+# rejects activation until that substrate ships. Without it, the
+# guard would have to infer ownership from stash names + commit
+# subjects (the very heuristic full-stack-ds proved unreliable),
+# defeating the purpose.
+#
+# Why this is point 2, not point 3
+# ---------------------------------
+# Working-tree-time enforcement is upstream of push-time
+# enforcement. The full-stack-ds failure happens BEFORE push: the
+# agent recognizes overlap, manages it via stash, and the
+# coordination cost is already paid. Push-range classification
+# would have caught the stash-restored work if it had been
+# committed (which it eventually was, in some form), but the
+# stash dance itself is what consumed cognitive budget. Catching
+# the cleanup command is the higher-value surface.
+#
+# Relationship to MULTI-AGENT-PUSH-RANGE-GUARD-001
+# ------------------------------------------------
+# The two slices share infrastructure (claimed_paths /
+# last_modified_paths reads from agents.json, structured-report
+# diagnostic shape) but have orthogonal trigger points:
+#
+#   - This slice: PreToolUse on cleanup commands (stash, restore,
+#     checkout --, clean -f).
+#   - PUSH-RANGE-GUARD: explicit `caws push` invocation, classifies
+#     outgoing commit range.
+#
+# An operator who runs `git stash`, `git push`, in sequence trips
+# this slice first; if they ack and proceed, push-range guard then
+# evaluates the commit range. Neither guard depends on the other
+# for correctness — they cover different failure modes.
+#
+# Open design questions (ADR-gated)
+# ---------------------------------
+#
+#   Q1. Ack persistence vs ack ephemeral.
+#       Does an ack on session X+path Y persist for the rest of
+#       the operator's session, or does each cleanup command
+#       require a fresh ack? Proposed: persist for the session
+#       (ergonomic), but write a separate ack record per
+#       target_command so the audit is complete. The activator
+#       decides.
+#
+#   Q2. Worktree-cwd vs main-cwd asymmetry.
+#       Sessions in different worktrees may legitimately have
+#       overlapping last_modified_paths (e.g., both touch
+#       package.json for different reasons). Does the guard apply
+#       equally to worktree-cwd cleanups? Proposed: yes, treat
+#       all sessions equally; the operator's ack mechanism is the
+#       human-in-the-loop check. The activator may decide a
+#       softer threshold for worktree-cwd scenarios.
+#
+#   Q3. What counts as "active session"?
+#       Sessions in agents.json with last_active within the
+#       agents-stale TTL? Or any session in agents.json regardless
+#       of staleness? Proposed: include stale-but-claimed sessions
+#       (they may still hold non-revoked claims), but exclude
+#       sessions with empty claimed_paths AND last_modified_paths
+#       (no overlap is possible). Activator decides.
+#
+#   Q4. Self-overlap.
+#       If a session's own claimed_paths overlap its own cleanup
+#       target, the guard MUST NOT refuse — that's the session
+#       managing its own work. Detected by session_id comparison.
+#       This is locked at draft (not an open question), but worth
+#       calling out so the implementation tests it explicitly.
+#
+#   Q5. Glob expansion timing.
+#       claimed_paths may contain globs (per
+#       SESSION-OWNERSHIP-METADATA-001 Q5). Expansion happens at
+#       overlap-query time, using the existing scope.in glob
+#       semantics. last_modified_paths is concrete paths (no
+#       globs needed at write time per the parent slice's design).
+#
+#   Q6. Diagnostic format consistency.
+#       The refusal diagnostic should match the existing
+#       hook-pack diagnostic shape (structured fields, repair
+#       text, exit code 2 for hard refusal, exit code 1 for
+#       advisory refusal). Activator confirms via a sample
+#       diagnostic in the ADR.
+#
+# Implementation sketch (sketch only, not authorized)
+# ---------------------------------------------------
+# Three commits expected after activation:
+#
+# Commit 1: kernel + store predicate.
+#   - packages/caws-cli/src/store/working-tree-overlap.ts (new):
+#     pure function computing overlaps between an agents.json
+#     snapshot and a dirty-paths list. Returns structured
+#     report.
+#   - packages/caws-cli/src/store/agents-store.ts: extend to
+#     write prior_overlap_acks records.
+#   - kernel + store tests for the predicate (A1, A2, A6, A7,
+#     plus the self-overlap case Q4).
+#
+# Commit 2: hook + CLI exposure.
+#   - .claude/hooks/working-tree-guard.sh (new): PreToolUse hook
+#     that parses the Bash command, matches against the cleanup
+#     pattern catalog, calls the CLI predicate, formats the
+#     diagnostic.
+#   - packages/caws-cli/src/shell/commands/working-tree.ts (new
+#     or extending an existing surface): `caws working-tree
+#     check` and `caws working-tree ack` subcommands.
+#   - integration tests covering the full hook path.
+#
+# Commit 3: closure with the four-part-bar status.
+#   - closure_notes record predicate behavior, hook integration,
+#     ack semantics, test counts, and pointer to
+#     MULTI-AGENT-HANDOFF-EVENT-001 as the next slice (handoff
+#     events build on top of the overlap-detection substrate
+#     established here).
+#
+# Activation gate
+# ---------------
+# Activation requires:
+#   1. SESSION-OWNERSHIP-METADATA-001 closed with resolution:
+#      completed (per A0).
+#   2. Maintainer authorization.
+#   3. ADR (lightweight, possibly inline in the activation commit
+#      message) answering Q1-Q3 + Q5-Q6.
+#
+# Non-goals (explicit guards)
+# ---------------------------
+#   * No auto-repair behavior. No auto-stash, no auto-restore,
+#     no auto-resolve.
+#   * No event schema changes in this slice. Handoff events
+#     (point 4) lands in MULTI-AGENT-HANDOFF-EVENT-001.
+#   * No removal of the existing v11 worktree-active stash block.
+#     This slice ADDS a stricter case; it does NOT relax existing
+#     protection.
+#   * No new doctor rule for "session has unacked overlap" — that
+#     could be a follow-up but is OUT of v1 scope.
+#   * No release / package version / CHANGELOG / template /
+#     hook-pack-version-bump edits in this slice's source. The
+#     activation commit may need to bump the hook pack version
+#     for the new hook installation; that decision is the
+#     activator's, not the draft's.
+#   * No re-opening or amendment of any other slice.
+#
+# The slice's earned claim is "cleanup commands cannot silently
+# destroy another active session's in-flight work." Push-range
+# safety, handoff events, and ownership-metadata storage are
+# adjacent concerns owned by their own specs.
