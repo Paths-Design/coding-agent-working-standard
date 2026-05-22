@@ -1,10 +1,10 @@
 id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
 title: 'CAWS state is control-plane; worktrees carry bindings, not mutable spec authority'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-22T21:30:00.000Z'
+updated_at: '2026-05-22T21:45:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
@@ -267,7 +267,11 @@ non_functional:
       slower than from the control-plane cwd. The resolver walks
       upward once to find `.caws/`, then reads the spec file from
       there; no per-call drift check is required.
-contracts: []
+contracts:
+  - name: control-plane-state-authority
+    type: behavior
+    path: packages/caws-cli/src/store
+    description: 'CAWS commands, doctor, scope evaluation, gates, and lifecycle transactions MUST resolve mutable CAWS state from the control-plane store, never from worktree-local materialized copies. Worktrees may carry binding metadata (worktree name, spec id, branch/base, control-plane root pointer) but never carry mutable spec authority. (1) Control-plane state roots — exactly one canonical copy each, owned by the store layer: .caws/specs/<id>.yaml, .caws/worktrees.json, .caws/events.jsonl, .caws/policy.yaml, .caws/waivers.yaml. (2) Non-authoritative worktree surfaces — never consulted as authoritative by any CAWS command: worktree-local .caws/specs/*.yaml (the v10.2 failure mode), legacy .caws/working-spec.yaml, materialized stale spec copies, any per-worktree .caws copy not explicitly admitted as a read-only mirror. (3) Binding semantics — a worktree binding identifies worktree name, spec id, branch/base, and control-plane root; the binding is not the spec; the binding does not supersede control-plane bytes; mutation of bindings happens through caws worktree commands that write the control-plane registry. (4) Read authority — caws specs show, caws scope check, caws gates run, caws doctor, and all lifecycle operations MUST resolve through the control-plane authority path when invoked from inside a CAWS-managed worktree; the kernel/store layer is the single source of truth, regardless of cwd. (5) Mutation authority — lifecycle operations mutate the control-plane store ONLY; the worktree filesystem MUST NOT receive spec/event/policy/waiver mutations as a side effect of lifecycle operations; a git status in the worktree after a lifecycle operation must show zero changes from that operation. (6) Drift posture — divergent worktree-local spec copies are diagnostic evidence, not competing authority; byte divergence MUST surface as doctor.worktree.spec_drift at severity ERROR once A3 lands; authority decisions match what the control-plane spec alone would produce. (7) Non-goals — no prune/repair behavior in this contract; no sparse-checkout implementation declared by this contract (A1 selects sparse-checkout as the v11.2 mechanism, but the contract is mechanism-agnostic); no caws worktree reconcile implementation (A7); no shell hook enforcement changes (the kernel/store fix is the primary mechanism per invariant §3); no event schema changes; no package/version/release/template changes. This contract is the normative interface for all A1–A7 implementation commits; any implementation behavior that drifts from these clauses is in violation of the contract and requires a scope amendment, not silent reconciliation.'
 # --- Triage ----------------------------------------------------------------
 # Origin: two independent reproductions of the same authority split
 # observed within a single session window (2026-05-21):
@@ -748,3 +752,85 @@ contracts: []
 # should report the chosen tier/contracts amendment shape (option 5a
 # vs 5b above) before authoring code, since the choice affects schema
 # admittance and downstream contract validation.
+#
+# ============================================================================
+# Tier/contract amendment (2026-05-22, commit 2 of slice)
+# ============================================================================
+#
+# Option 5b selected: declare a real contract for the authority boundary
+# rather than amending the contracts schema to admit `contracts: []` for
+# tier 2 specs. Rationale: this slice exists to make a new authority
+# boundary explicit, so the contract surface must be named and
+# normative. Relaxing the schema to accept empty arrays would dilute the
+# tier-2 contract requirement project-wide and remove the natural place
+# to record the authority interface.
+#
+# Changes from activation commit 1:
+#   - risk_tier: 3 → 2 (re-evaluated per prereq #5; this is genuinely a
+#     kernel-authority change with broad blast radius across the scope
+#     guard, lifecycle transaction, and doctor diagnostics — tier 2 is
+#     the honest classification).
+#   - contracts: [] → one entry, name: control-plane-state-authority,
+#     type: behavior, path: packages/caws-cli/src/store. The description
+#     enumerates seven clauses (state roots, non-authoritative surfaces,
+#     binding semantics, read authority, mutation authority, drift
+#     posture, non-goals). See the contracts block at the top of this
+#     file for the full prose.
+#   - updated_at bumped to 2026-05-22T21:45:00.000Z.
+#   - Audit-quiet direct-YAML edit (no caws specs update or amend
+#     surface exists in v11.1.6; the git commit message is the audit
+#     trail).
+#
+# The contract path (packages/caws-cli/src/store) anchors the contract
+# at the spec resolver and lifecycle transaction layer because that is
+# where the authority decision is taken at runtime. The kernel scope
+# evaluator (packages/caws-kernel/src/scope) is named in the
+# description as a co-realization site but is intentionally NOT the
+# contract path — packages/caws-kernel/src/scope is in this spec's
+# scope.out and the implementation work targets the store-side
+# resolver first, with kernel changes (if any) admitted by scope
+# amendment.
+#
+# Type: behavior — the contract describes invariant behavior across
+# multiple CLI surfaces (specs show, scope check, gates run, doctor,
+# lifecycle), not a single api/schema/contract-test artifact. The
+# kernel schema's contract type enum is [api, schema, contract-test,
+# behavior]; `behavior` is the correct choice for a cross-surface
+# invariant.
+#
+# What changed and what did NOT change in this commit:
+#
+#   Changed:
+#     - risk_tier
+#     - contracts (array of one)
+#     - updated_at
+#     - this triage block (the amendment record itself)
+#
+#   Unchanged:
+#     - title (verbatim)
+#     - lifecycle_state (active, set by commit 1)
+#     - blast_radius (verbatim)
+#     - scope.in / scope.out (verbatim — and the new
+#       spec.semantic.scope.overbroad_out rule confirms no shadowing
+#       at validation time)
+#     - invariants (all 17, verbatim — including the doctrine phrase
+#       in §1)
+#     - acceptance A1–A7 (verbatim — the implementer's contract)
+#     - non_functional (verbatim)
+#     - mode (feature)
+#     - created_at (verbatim — only updated_at moves)
+#
+# Validation evidence (commit 2 of slice):
+#   - specs show returns the spec with tier 2 and the new contract;
+#     no spec.semantic.tier2.contracts_required diagnostic.
+#   - The new spec.semantic.scope.overbroad_out rule does NOT fire on
+#     this spec's scope.in / scope.out (single scope.in entry, three
+#     scope.out entries, no path-prefix relationship — confirmed
+#     during commit 1 and re-confirmed by specs show in commit 2).
+#   - doctor: 0E / 3W / 0I (unchanged from commit 1 baseline; the
+#     3W are pre-existing stale-agent display-only warnings).
+#
+# Stop point: end of commit 2. Implementation begins at commit 3,
+# starting with A1 + part of A2 (sparse-checkout configuration on
+# caws worktree create + spec resolver consulting control-plane
+# bytes from worktree cwd). A3/A4/A5/A6/A7 are downstream slices.
