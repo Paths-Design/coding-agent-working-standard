@@ -487,3 +487,68 @@ contracts: []
 # commit 1 and commit 2. Audit findings shape implementation comments
 # and test assertions; they may also surface scope amendments or plan
 # corrections.
+#
+# --- Audit findings (2026-05-22, between commit 1 and commit 2) ----------
+#
+# Finding 1: writeFileAtomic (packages/caws-cli/src/store/atomic-write.ts)
+# ----------------------------------------------------------------------
+# Verified semantics (read 2026-05-22):
+#   - fsyncs data + descriptor before rename (line 82).
+#   - rename-on-same-filesystem atomicity (line 97); temp file is
+#     a sibling of the target so rename(2) is atomic.
+#   - On error, the temp file is cleaned up (line 124).
+#   - Does NOT fsync the parent directory. Power-loss between rename
+#     and parent-directory fsync may leave the directory entry in
+#     page cache. Callers needing durability past power loss must
+#     call fsyncDir() separately. events-store does this for
+#     events.jsonl; the migration does NOT need parent-directory
+#     fsync because .caws/worktrees.json is the only file touched
+#     and the rename atomicity is sufficient for the visibility
+#     contract (readers see either old bytes or new bytes; never
+#     partial).
+#
+# Implementation comments and tests MUST claim only:
+#   "writeFileAtomic guarantees file-content atomicity via fsync +
+#    rename on the same filesystem; the migration relies on this
+#    contract, not on parent-directory durability."
+#
+# Do NOT claim:
+#   - "crash-safe" (without qualification)
+#   - "durable past power loss" (would require fsyncDir which the
+#     migration does not call)
+#   - "atomic across filesystems" (rename(2) is not atomic across
+#     filesystem boundaries)
+#
+# Finding 2: loadSpecs (packages/caws-cli/src/store/specs-store.ts)
+# ----------------------------------------------------------------------
+# Verified semantics (read 2026-05-22):
+#   - Read-only filesystem (fs.readdirSync + per-file readYamlSource).
+#   - No process.env mutation, no git invocation, no event append.
+#   - No Date.now usage.
+#   - Returns { specs: Spec[], diagnostics: Diagnostic[] }.
+#   - Diagnostics include READ_IO_FAILED (errors) and
+#     SPECS_NON_YAML_SKIPPED + SPECS_DUPLICATE_ID (info). These are
+#     spec-subsystem diagnostics, NOT migration diagnostics.
+#
+# Implication for the migration command's policy check:
+#   - The migration consumes ONLY `result.specs[]` (specifically the
+#     `id` and `worktree?` fields per spec). Diagnostics are NOT
+#     propagated into migration stdout/stderr.
+#   - HOWEVER, if loadSpecs returns zero specs AND at least one
+#     READ_IO_FAILED diagnostic, the migration MUST refuse with an
+#     explicit "cannot verify destroyed-record policy: spec loading
+#     failed" diagnostic. Silently treating an empty spec list as
+#     "no spec claims any worktree" would let the migration proceed
+#     on corrupted spec state and potentially omit records that
+#     would have been blocked under a successful spec load. This is
+#     a subtle correctness gap the audit surfaced.
+#
+# This adds an IMPLICIT acceptance bar to A4 (destroyed-record
+# policy enforcement): the spec-load step that feeds the policy
+# check must succeed cleanly, OR the migration refuses. Tests must
+# include a corrupted-specs-dir fixture that exercises this refusal.
+#
+# No scope amendment is needed for the audit findings — both audited
+# files were already understood to be unchanged dependencies, and
+# both are within paths the migration legitimately reads via
+# existing exports.
