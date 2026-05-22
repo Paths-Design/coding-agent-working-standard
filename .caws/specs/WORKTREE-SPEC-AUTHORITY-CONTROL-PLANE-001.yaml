@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-22T21:45:00.000Z'
+updated_at: '2026-05-22T22:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
@@ -17,6 +17,11 @@ operational_rollback_slo: 30m
 scope:
   in:
     - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.yaml
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/git-sparse-checkout.ts
+    - packages/caws-cli/tests/store/worktrees-writer.test.js
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/shell/specs-show-worktree-cwd.test.js
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
@@ -834,3 +839,172 @@ contracts:
 # starting with A1 + part of A2 (sparse-checkout configuration on
 # caws worktree create + spec resolver consulting control-plane
 # bytes from worktree cwd). A3/A4/A5/A6/A7 are downstream slices.
+#
+# ============================================================================
+# Scope amendment for A1 + narrow A2 (2026-05-22, commit 3a of slice)
+# ============================================================================
+#
+# Commit 3a is scope amendment only — no source or test implementation.
+# scope.in is widened to admit the files needed for A1 (sparse-checkout
+# materialization control) and the A2 regression coverage gap discovered
+# during recon. scope.out is unchanged.
+#
+# Files admitted to scope.in by this commit:
+#   - packages/caws-cli/src/store/worktrees-writer.ts
+#       The A1 site. createWorktree() at lines ~291-458 currently runs
+#       `git worktree add -b <branch> <wtPath> <baseBranch>` (line ~357)
+#       with no exclusion flags, materializing the full .caws/specs/
+#       tree inside the new worktree. A1 changes this to
+#       `--no-checkout` + sparse-checkout config + checkout so that
+#       .caws/specs/ is excluded while the rest of the worktree is a
+#       normal full checkout.
+#   - packages/caws-cli/src/store/git-sparse-checkout.ts
+#       OPTIONAL helper. If introduced, hosts the sparse-checkout init
+#       + set + checkout primitives so worktrees-writer.ts stays focused
+#       on the lifecycle transaction. Decision deferred to commit 3b
+#       implementer; admitted preemptively so its creation does not
+#       require a second scope amendment.
+#   - packages/caws-cli/tests/store/worktrees-writer.test.js
+#       A1 regression suite. New file; no prior test covers
+#       worktrees-writer in isolation (existing worktree tests are
+#       worktrees-migration.test.js and worktree-merge-a2-fault-
+#       injection.test.js, which target other surfaces).
+#   - packages/caws-cli/tests/store/  (directory entry)
+#       Defensive broader admittance for any incidental test file that
+#       lands alongside worktrees-writer.test.js during implementation.
+#       Does NOT authorize edits to existing test files in this
+#       directory — those would be pre-existing-state edits, which are
+#       a separate spec-authoring trap (#5) and need explicit
+#       enumeration. The directory entry covers NEW files only.
+#   - packages/caws-cli/tests/shell/specs-show-worktree-cwd.test.js
+#       A2 regression coverage. The recon established that
+#       resolveRepoRoot (in repo-root.ts) already uses
+#       `git rev-parse --git-common-dir` and correctly resolves to the
+#       control-plane checkout from any worktree cwd. Existing tests
+#       prove this for scope-command (scope-command.test.js:145-220)
+#       and for repo-root directly (repo-root.test.js:89-135). The
+#       gap is `caws specs show` specifically: no test invokes it
+#       from worktree cwd today. This test closes that gap with the
+#       adversarial divergent-copy fixture authorized in the
+#       maintainer's commit-3 directive.
+#
+# Out of scope (explicitly REFUSED for this slice, not just unmentioned):
+#
+#   - packages/caws-cli/src/store/repo-root.ts
+#       The A2 resolver is already correct (uses --git-common-dir per
+#       repo-root.ts:99 and the file-level design comment at lines
+#       1-16). Editing it would risk weakening the existing behavior
+#       that tests/store/repo-root.test.js:89-135 currently pins.
+#       Commit 3b MUST NOT touch this file. If implementation reveals
+#       a real need to touch it, stop and report — do not amend
+#       silently.
+#   - packages/caws-kernel/src/scope
+#       In scope.out (unchanged). A4 (scope check + gates run consult
+#       control-plane on edits) is a downstream slice. A2's narrow
+#       byte-resolution proof does not require kernel scope evaluator
+#       changes because the scope kernel already operates on the
+#       cawsDir provided by resolveRepoRoot, and resolveRepoRoot is
+#       already correct.
+#   - packages/caws-cli/src/shell/commands/worktree.ts
+#       The recon traced runWorktreeCreateCommand (worktree.ts:123) as
+#       a thin shell handler that calls createWorktree(cawsDir, input)
+#       in the writer with no transformation. The shell glue does not
+#       carry the A1 logic and should not change for commit 3b.
+#   - .claude/hooks (specifically worktree-guard.sh)
+#       The hook at .claude/hooks/worktree-guard.sh:52-56 currently
+#       blocks `git sparse-checkout` outright with the message "Use
+#       full worktrees without sparse-checkout. Sparse checkout breaks
+#       cross-module imports in most projects." Maintainer approved
+#       hook-doctrine resolution option 1: leave the hook alone. The
+#       hook intercepts agent-issued Bash commands only (line 27:
+#       `if [[ "$TOOL_NAME" != "Bash" ]]; then exit 0`). The CLI
+#       writer's `runGit` invokes git via child_process.spawn, which
+#       does NOT go through the Bash tool hook surface, so the CLI's
+#       narrow programmatic sparse-checkout (excluding only
+#       .caws/specs/ from CAWS-created worktrees) does not trip the
+#       hook. The hook's purpose — preventing agent-driven scope
+#       hiding that breaks imports — is preserved. The CLI's use is
+#       a structural control-plane isolation mechanism, NOT an agent
+#       scope-hiding mechanism. They are different things even
+#       though they share the underlying git primitive.
+#   - docs/architecture/caws-vnext-command-surface.md
+#       Doctrine amendment to add invariant §8 / §9 ("CAWS state is
+#       control-plane; worktrees carry bindings, not mutable spec
+#       authority") is deferred to a later commit per this spec's own
+#       structure (blast_radius lists the doc but scope.in
+#       intentionally does not yet). Doctrine update lands after A1+A2
+#       behavior is proven, not before.
+#   - prune/repair/reconcile surfaces (PRUNE-REPAIR-WORKTREE-001)
+#       Blocked on this slice closing. A7's reconcile semantics are
+#       defined here but the implementation is downstream.
+#
+# A1 mechanism (locked at scope amendment):
+#
+#   git worktree add --no-checkout -b <branch> <wtPath> <baseBranch>
+#   git -C <wtPath> sparse-checkout init --no-cone
+#   git -C <wtPath> sparse-checkout set --no-cone '/*' '!/.caws/specs/'
+#   git -C <wtPath> checkout
+#
+#   Pattern: non-cone mode (`/*` include + `!/.caws/specs/` exclude).
+#   Cone mode would require enumerating all top-level directories and
+#   would become brittle as the repo changes; non-cone is the
+#   appropriate choice for this narrow single-directory exclusion.
+#   Non-cone mode requires git 2.27+, which is already documented in
+#   this spec's non_functional.reliability clause (lines ~258-263).
+#
+#   The pattern MUST be verified by the implementation test, not
+#   trusted by inspection. Sparse-checkout semantics are easy to
+#   misread. A1's acceptance is the filesystem fact: after
+#   createWorktree returns, .caws/worktrees/<name>/.caws/specs/<id>.yaml
+#   does NOT exist on disk, AND at least one ordinary tracked source
+#   file (e.g., packages/caws-cli/src/index.ts or package.json) DOES
+#   exist on disk in the same worktree. The "ordinary file present"
+#   half is non-negotiable: the historic objection to sparse-checkout
+#   was that it breaks cross-module imports by producing nearly-empty
+#   worktrees. The intended behavior is "full worktree minus mutable
+#   spec authority," not "sparse worktree."
+#
+# A2 narrow regression shape (locked at scope amendment):
+#
+#   Setup: create a real temp repo with a control-plane spec
+#   <id>.yaml; create a worktree via createWorktree; then manually
+#   write a divergent .caws/specs/<id>.yaml inside the worktree
+#   filesystem using fs.writeFileSync (adversarial fixture — sparse-
+#   checkout prevents normal materialization but cannot prevent a
+#   hostile/manual file write).
+#
+#   Test: invoke showSpec / runSpecsShowCommand with cwd set to the
+#   worktree root. Assert the parsed/displayed spec bytes match the
+#   control-plane spec, NOT the divergent local copy. The point is
+#   not whether the file can exist; the point is that CAWS does not
+#   treat it as authority.
+#
+# Stop conditions for commit 3b implementation (locked):
+#
+#   * Non-cone sparse-checkout fails on the project's supported git
+#     version (test discovers this — implementer stops and reports,
+#     does not switch to cone mode silently).
+#   * `git worktree remove --force` does not clean up after a partial
+#     sparse-checkout setup failure (test discovers this — implementer
+#     stops and reports, does not patch rollback semantics silently).
+#   * Implementing A1 requires changing hook policy, scope kernel, or
+#     root resolution. Any of these is a scope amendment, not silent
+#     drift. Stop and report.
+#   * The A2 adversarial local-copy test unexpectedly reads the
+#     worktree-local bytes. This would mean resolveRepoRoot's
+#     control-plane resolution is broken in a way the existing
+#     repo-root.test.js does NOT catch; the implementer stops and
+#     reports rather than amending repo-root.ts.
+#
+# Non-goals (re-asserted for commit 3a):
+#
+#   * No source or test code in this commit. scope.in widening only,
+#     plus this triage note recording the maintainer's commit-3 plan.
+#   * No tier/contract changes; that happened in commit 2 (addbd3d).
+#   * No release/version/CHANGELOG/template/event-schema/hook-pack edits.
+#   * No re-opening of any closed slice.
+#
+# Audit-quiet direct-YAML edit (no caws specs amend surface in
+# v11.1.6; the git commit message is the audit trail). Matches the
+# established pattern for spec amendments (see ea0a7c0 and b8e0b9b
+# and addbd3d for prior art in this same line).
