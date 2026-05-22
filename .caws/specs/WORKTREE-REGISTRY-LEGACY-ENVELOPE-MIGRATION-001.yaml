@@ -2,9 +2,9 @@ id: WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001
 title: 'Migrate or explicitly classify v10.2 legacy-envelope .caws/worktrees.json before authority-control-plane activation'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-22T13:00:00.000Z'
-updated_at: '2026-05-22T13:00:00.000Z'
+updated_at: '2026-05-22T14:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-store.ts
@@ -16,6 +16,13 @@ operational_rollback_slo: 5m
 scope:
   in:
     - .caws/specs/WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001.yaml
+    - packages/caws-cli/src/store/worktrees-migration.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/store/worktrees-migration.test.js
+    - packages/caws-cli/tests/shell/worktree-migrate-registry.test.js
+    - .caws/worktrees.json
   out:
     - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.yaml
     - .caws/specs/WORKTREE-CAWS-SHARED-STATE-001.yaml
@@ -264,6 +271,17 @@ acceptance:
       activation prerequisite #6 satisfied; proceed to authority
       activation per its prerequisite list." This slice does NOT
       itself activate the authority spec.
+  - id: A11
+    given: |
+      Any migration fixture, including success, refusal, already-flat,
+      mixed-shape, and IO-error cases.
+    when: |
+      `caws worktree migrate-registry --dry-run` is invoked.
+    then: |
+      The command produces the same classification/refusal result as
+      the non-dry-run path, exits with the same code class, writes no
+      bytes to `.caws/worktrees.json`, and leaves `.caws/events.jsonl`
+      byte-stable.
 non_functional:
   reliability:
     - >-
@@ -414,3 +432,58 @@ contracts: []
 # ---------------
 # Activation requires maintainer authorization. The recon delivered
 # a draft; the operator's go-signal is the next gate.
+#
+# --- Activation amendment (2026-05-22) ------------------------------------
+#
+# Activated 2026-05-22 via direct YAML edit (audit-quiet, per the
+# established v11.1.6 surface gap — same pattern as WORKTREE-DOCTOR-
+# HALF-STATE-001 / FOLLOWUP-001 activations). The maintainer approved
+# the implementation plan at
+# /Users/darianrosebrook/.claude/plans/registry-legacy-envelope-
+# migration.md and selected "path 1: amend with A11, activate, require
+# audit gate before commit 2."
+#
+# Activation changes:
+#   - lifecycle_state: draft -> active
+#   - updated_at: 2026-05-22T14:00:00.000Z
+#   - scope.in: expanded from the spec-only draft to the planned
+#     production-code, test-file, and .caws/worktrees.json entries.
+#     .caws/worktrees.json admittance is required because A4's real-
+#     repo fixture and A7's doctor-delta assertion both depend on
+#     mutating that file in commit 3.
+#   - acceptance: added A11 (--dry-run criterion) verbatim from
+#     maintainer authorization.
+#
+# Doctor-output precision note (locked in writing for commit 3)
+# -------------------------------------------------------------
+# Per the maintainer's precision point: closure notes MUST NOT claim
+# "doctor returns to exactly 0E/3W/0I" as a hard assertion. The
+# stale-agent warning count is independent and may shift between
+# pre/post observations. The hard claim is:
+#
+#   (1) The H1 finding with subject "worktrees" disappears.
+#   (2) No new H1 findings are introduced by the migration.
+#
+# Closure-notes wording must use the (1)+(2) formulation. The stale-
+# agent W count may be reported as runtime observation context, not
+# as an invariant.
+#
+# Audit gate before commit 2 (locked)
+# -----------------------------------
+# Per maintainer: before any implementation code lands in commit 2,
+# the implementing agent MUST:
+#
+#   1. Read packages/caws-cli/src/store/atomic-write.ts. If it does
+#      not fsync, do NOT claim fsync semantics in code comments,
+#      tests, or closure notes. Claim only what the helper actually
+#      guarantees.
+#
+#   2. Read loadSpecs(cawsDir) and confirm it is acceptable for the
+#      migration command's policy check. If it has side effects or
+#      emits diagnostics that affect command output, STOP and report
+#      before coding.
+#
+# Both audits must be performed and their findings reported between
+# commit 1 and commit 2. Audit findings shape implementation comments
+# and test assertions; they may also surface scope amendments or plan
+# corrections.
