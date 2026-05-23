@@ -2,10 +2,11 @@ id: MULTI-AGENT-ACTIVITY-REGISTRY-001
 title: 'Agent liveness substrate (.caws/leases/<session_id>.json) with self-registration / heartbeat / soft-stop and prominent N-parallel-agent surfacing'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: multi-agent-activity-registry
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Visibility substrate shipped via 7 commits + 4 scope amendments. Merged via git merge --no-ff e8aa871 on feat/multi-agent-provenance-envelope (caws worktree merge tripped WORKTREE-MERGE-V11-SHAPE-001 v11 schema regression). Post-merge: install tests 39/39, fresh-install-smoke 11/12 PASS 1 principled SKIP. Doctrine, failure-lineage Entry 19, release-procedure footgun all recorded. Authority remains in worktrees.json and specs; leases are visibility only. Follow-ups filed: SESSION-LOG-RENDERER-MISSING-001, WORKTREE-MERGE-V11-SHAPE-001, caws-worktree-create-sparse-spec-bug, CANONICAL-CHECKOUT-WORKTREE-GUARD-001.'
 created_at: '2026-05-23T07:00:00.000Z'
-updated_at: '2026-05-23T11:00:00.000Z'
+updated_at: '2026-05-23T10:27:34.556Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
