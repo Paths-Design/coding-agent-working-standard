@@ -231,38 +231,88 @@ describe('runEventsVerifyArchiveCommand — EVENTS_ARCHIVE_LINE_COUNT_MISMATCH',
   let repoRoot;
   afterEach(() => rmrf(repoRoot));
 
-  it('returns 1 with the rule when bytes match but the rotation event was forged with wrong line count', () => {
-    // This failure is hard to trigger via tamper alone (any byte change
-    // breaks sha256 first). The cleanest way to isolate the line-count
-    // path is: rotate, then post-edit the chain_rotated event to claim
-    // a wrong line count, then re-canonicalize the chain. But that
-    // requires rebuilding the hash chain, which is exactly what we
-    // don't want to encourage.
-    //
-    // Alternative: use a tamper that the digest check would catch
-    // FIRST, and confirm that fact. The line-count check is
-    // structurally proven by the implementation order (line count is
-    // checked AFTER digest in the shell command). Document the
-    // limitation here rather than contort the test.
-    //
-    // The implementation guarantee: if a future code change reorders
-    // the checks (line count before digest), the digest mismatch test
-    // above would still pass — but a separate test would be needed
-    // for the line-count-only branch. Adding a synthetic harness that
-    // recomputes the hash chain is out of scope for this slice;
-    // documenting the gap is the honest move.
-    repoRoot = mkTempGitRepo('caws-verify-linecount-gap-');
-    writeV10EventsJsonl(repoRoot, 2);
-    const archivePath = rotateAndGetArchive(repoRoot);
-    fs.appendFileSync(archivePath, 'tampered\n');
+  // The line-count branch is structurally unreachable via simple tamper
+  // (any byte change to the archive breaks sha256 first, and the shell
+  // checks digest before line count). To isolate the branch we need a
+  // synthetic forged fixture: a chain_rotated event whose payload has
+  // the CORRECT prior_file_digest for some archive bytes but a WRONG
+  // prior_line_count. Then verify-archive's digest check passes and the
+  // line-count check fires.
+  //
+  // The forge uses kernel.prepareAppend(null, body) so the chain_rotated
+  // event is structurally valid (validateEventBody passes, event_hash
+  // chain field is real) — only the SEMANTIC content of the payload is
+  // wrong. This is the smallest harness that exercises the branch without
+  // contorting production code or skipping kernel validation.
+  it('returns 1 with the rule when archive digest matches but committed prior_line_count is wrong', () => {
+    repoRoot = mkTempGitRepo('caws-verify-linecount-');
+    const cawsDir = path.join(repoRoot, '.caws');
 
+    // 1. Write a 3-line archive directly under a known name.
+    const archiveName = 'events.jsonl.archive-2026-05-22T23-15-00-000Z';
+    const archivePath = path.join(cawsDir, archiveName);
+    const lines = [];
+    for (let seq = 1; seq <= 3; seq++) {
+      lines.push(JSON.stringify({
+        seq,
+        ts: '2026-04-11T01:00:00.000Z',
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'X-1',
+        data: { passed: true },
+        prev_hash: seq === 1 ? '' : `sha256:${String(seq - 1).padStart(64, '0')}`,
+        event_hash: `sha256:${String(seq).padStart(64, '0')}`,
+      }));
+    }
+    const archiveBytes = Buffer.from(lines.join('\n') + '\n');
+    fs.writeFileSync(archivePath, archiveBytes);
+    const realDigest =
+      'sha256:' + crypto.createHash('sha256').update(archiveBytes).digest('hex');
+    const realLineCount = 3;
+    const forgedLineCount = realLineCount + 5; // deliberately wrong
+
+    // 2. Forge a chain_rotated body with CORRECT digest but WRONG count.
+    //    Pass through kernel prepareAppend so the chain fields are real
+    //    (event_hash chains over the wrong-line-count payload) — the
+    //    semantic content is the only lie.
+    const {
+      prepareAppend,
+    } = require('@paths.design/caws-kernel');
+    const body = {
+      event: 'chain_rotated',
+      ts: '2026-05-22T23:15:00.000Z',
+      actor: { kind: 'agent', id: 'test', session_id: 'sess' },
+      data: {
+        prior_tail_hash: `sha256:${'3'.repeat(64)}`,
+        prior_file_path: archiveName,
+        prior_file_digest: realDigest, // correct → digest check passes
+        prior_line_count: forgedLineCount, // wrong → line-count check fails
+        prior_chain_status: 'parseable_unverified',
+        actor_shape_stats: { v10_string_actor: 3, v11_object_actor: 0, unparseable: 0 },
+        migration_reason: 'forged for line-count test',
+      },
+    };
+    const prepared = prepareAppend(null, body);
+    if (!prepared.ok) {
+      throw new Error(
+        `forge failed: prepareAppend rejected the body — ${JSON.stringify(prepared.errors)}`
+      );
+    }
+    fs.writeFileSync(
+      path.join(cawsDir, 'events.jsonl'),
+      JSON.stringify(prepared.value) + '\n'
+    );
+
+    // 3. verify-archive should pass the digest check (real digest) and
+    //    fail the line-count check (forged count).
     const r = captureRun(runEventsVerifyArchiveCommand, { cwd: repoRoot });
-    // Confirm digest fires first (the precedence guarantee).
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/store\.events\.archive\.digest_mismatch/);
-    // The line_count_mismatch path is unreachable via simple tamper;
-    // explicit harness for it is a follow-up if the precedence order
-    // ever changes.
+    // Critical: it must be the LINE-COUNT rule, NOT the digest rule.
+    expect(r.stderr).toMatch(/store\.events\.archive\.line_count_mismatch/);
+    expect(r.stderr).not.toMatch(/store\.events\.archive\.digest_mismatch/);
+    // Diagnostic must name expected vs actual.
+    expect(r.stderr).toMatch(new RegExp(`Expected ${forgedLineCount}`));
+    expect(r.stderr).toMatch(new RegExp(`got ${realLineCount}`));
   });
 });
 
