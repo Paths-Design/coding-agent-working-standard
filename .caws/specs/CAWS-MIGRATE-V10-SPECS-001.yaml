@@ -2,9 +2,9 @@ id: CAWS-MIGRATE-V10-SPECS-001
 title: 'caws specs migrate --from v10 — pure-transformer v10→v11 spec YAML migrator with durable lossy-field report'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-23T04:30:00.000Z'
-updated_at: '2026-05-23T04:30:00.000Z'
+updated_at: '2026-05-23T05:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/spec
