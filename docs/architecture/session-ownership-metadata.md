@@ -65,13 +65,27 @@ This is the minimum to prevent the new substrate (`claimed_paths`, `last_modifie
 
 This is **not** structural normalization. The on-disk shape is unchanged; `version` and `agents: {}` remain. The doctor's stale-agent warnings on those keys remain (this slice does NOT amend doctor's diagnostics — that's covered by A6). What changes is that the substrate-level enumeration helper, and any helper added by this slice that returns "active agent records," is guarded by the predicate. Full structural cleanup remains `AGENTS-JSON-STRUCTURE-NORMALIZATION-001`.
 
-### Drift: `bound_spec_id` is a spread extra
+### Drift: `bound_spec_id` is a spread extra — **WITHDRAWN / CORRECTED**
 
-The current writer (`apply-patch.ts:applyRefreshAgent`, lines 184-205) writes `bound_spec_id` into the record via `...(patch.bound_spec_id !== undefined ? { bound_spec_id: patch.bound_spec_id } : {})`. The field is **not** declared in the `AgentRecord` interface at `packages/caws-kernel/src/worktree/types.ts:113-118`. Existing consumers consult it via `as Record<string, unknown>` casts or by direct property access at call sites.
+**Original (incorrect) finding, preserved for honesty:**
 
-This is precedent for "extra fields without interface change," but it has a real cost: TypeScript cannot help consumers find or validate the field. The new fields (`claimed_paths`, `last_modified_paths`) are central to three downstream slices, so the cost of leaving them undeclared is higher.
+> The current writer (`apply-patch.ts:applyRefreshAgent`, lines 184-205) writes `bound_spec_id` into the record via `...(patch.bound_spec_id !== undefined ? { bound_spec_id: patch.bound_spec_id } : {})`. The field is **not** declared in the `AgentRecord` interface at `packages/caws-kernel/src/worktree/types.ts:113-118`.
+>
+> Decision: extend the `AgentRecord` interface with both new fields, and separately retrofit `bound_spec_id` into the interface in the same commit.
 
-**Decision (locked):** extend the `AgentRecord` interface with both new fields as `readonly ... | undefined`, and **separately** retrofit `bound_spec_id` into the interface in the same commit (the field already exists on disk; adding it to the type is documentation, not behavior change). The retrofit is included in this slice's scope.in because it is a structural alignment with the very same writer that this slice modifies.
+**Correction (pre-implementation, 2026-05-23):**
+
+Direct source inspection during the recon-stop before commit 1 showed that `bound_spec_id` is **already declared** in `AgentRecord` at `packages/caws-kernel/src/worktree/types.ts:118` as `readonly bound_spec_id?: string`. It is referenced consistently throughout the codebase:
+
+- `packages/caws-kernel/src/worktree/types.ts:118` — interface declaration
+- `packages/caws-kernel/src/worktree/types.ts:211` — second use in a related interface
+- `packages/caws-kernel/src/worktree/freshness.ts:21,45` — option type + spread on write
+- `packages/caws-cli/src/shell/commands/claim.ts:193` — read on claim
+- `packages/caws-cli/src/store/apply-patch.ts:202` — write in refreshAgent
+
+There is no retrofit to do. The original finding was reconstructed from a quick agent summary rather than direct file read; the summary was wrong. **A9 has been withdrawn in place** in the spec (its id is preserved with a "withdrawn / corrected" body so the audit trail of the mistake remains visible).
+
+This correction is itself an instance of the failure mode the four-part bar exists to prevent: an agent reconstructed provenance from a summary instead of reading the file. It was caught by the maintainer-instructed recon stop before commit 1. That is the value of the recon stop. The substrate work is unaffected: A1, A8, and A10 remain valid. Commit 1 only widens `AgentRecord` with `claimed_paths` and `last_modified_paths` and adds the `isAgentRecord` predicate.
 
 ## Q1 — Implicit vs explicit claim semantics
 
@@ -159,9 +173,9 @@ The maintainer-stated constraint is that **commit 1 widens substrate only; no sh
 - `packages/caws-kernel/src/worktree/types.ts`: extend `AgentRecord` with:
   - `readonly claimed_paths?: readonly string[]`
   - `readonly last_modified_paths?: readonly string[]`
-  - `readonly bound_spec_id?: string` (retrofit; field already on disk)
+  - (NO `bound_spec_id` change — already declared at types.ts:118; A9 withdrawn.)
 - `packages/caws-cli/src/store/agents-store.ts` (or `worktree/types.ts`): export `isAgentRecord(value: unknown): value is AgentRecord` per the drift-mitigation predicate. This is the only behavior addition in commit 1.
-- Tests: A1 (v1 records load with new fields undefined), A8 (non-agent top-level keys ignored by predicate), `bound_spec_id` retrofit (existing on-disk records expose the field through the typed interface).
+- Tests: A1 (v1 records load with new fields undefined), A8 (non-agent top-level keys ignored by predicate). A passive no-regression assertion for `bound_spec_id` (load a record carrying the field and confirm it is exposed through the typed interface) is **permitted but not required** — it is hardening, not new functionality.
 - No writer change in this commit. No policy schema change. No CLI surface.
 
 **Commit 2 — writer + policy key (still no shell-side claim surface):**
@@ -179,7 +193,7 @@ The maintainer-stated constraint is that **commit 1 widens substrate only; no sh
 **Commit 4 — closure:**
 
 - `caws specs close SESSION-OWNERSHIP-METADATA-001 --reason "<closure prose>"` via single bash invocation (not nested `bash -c`; see [[project_caws_known_defects]] for the audit-drift incident).
-- Closure notes record: schema strategy (no JSON schema; predicate helper instead), TTL default (1800 sec via policy), cap values (1000 last_modified / 256 claimed), `bound_spec_id` retrofit landed, A8 predicate landed, and pointers to the three consumer slices.
+- Closure notes record: schema strategy (no JSON schema; predicate helper instead), TTL default (1800 sec via policy), cap values (1000 last_modified / 256 claimed), A9 explicitly noted as **withdrawn** (no retrofit; the recon that motivated it was wrong), A8 predicate landed, and pointers to the three consumer slices.
 
 ## Activation gate
 
@@ -202,7 +216,7 @@ Activation requires:
      ```
      **Shell surfaces are deliberately excluded** from the activation amendment. They land later, as part of commit 3 (the explicit-claim CLI surface), via a follow-up scope amendment within the activated slice.
    - **(b)** correct the false invariant about `agents.json` top-level structure (delete the "agents.json itself does NOT declare a top-level version field today" wording; replace with the on-disk shape + the drift-mitigation predicate requirement).
-   - **(c)** add `bound_spec_id` retrofit to acceptance and scope. The new acceptance criterion records that the field, already present on disk, is formalized into `AgentRecord` and exposed through the typed interface.
+   - **(c)** ~~add `bound_spec_id` retrofit to acceptance and scope~~ **WITHDRAWN.** This bullet originally added A9 as a retrofit acceptance. Pre-implementation source inspection showed `bound_spec_id` is already declared in `AgentRecord` at `packages/caws-kernel/src/worktree/types.ts:118`; there is no retrofit work to do. A9 has been preserved in place with a "withdrawn / corrected" body so the audit trail is honest. The activation amendment commit `f02121c` shipped this bullet as written; the correction commit (this slice's predecessor to commit 1) brings the spec text into alignment with reality.
    - **(d)** add policy key acceptance for `agents.last_modified_paths_ttl_seconds` (integer, bounds 60–86400 seconds, default 1800).
 3. **New acceptance criterion A8** (load-bearing, gates the predicate from §Drift-mitigation predicate):
    ```text
@@ -213,8 +227,9 @@ Activation requires:
    `version` and `agents` are ignored, not warned on as stale sessions.
    ```
    This prevents the new substrate from being read in contexts that would silently apply it to non-agent values.
-4. The amendment commit is `chore(caws): amend SESSION-OWNERSHIP-METADATA-001 scope for activation`. It bundles the ADR doc + the four spec corrections + A8. **No implementation code is in this commit.**
-5. Activation itself is a separate commit (`chore(caws): activate SESSION-OWNERSHIP-METADATA-001`).
+4. The amendment commit is `chore(caws): amend SESSION-OWNERSHIP-METADATA-001 scope for activation` (`f02121c`). It bundled the ADR doc + four spec corrections + A8. **No implementation code was in this commit.**
+5. Activation itself is a separate commit (`chore(caws): activate SESSION-OWNERSHIP-METADATA-001` at `7d27f42`).
+6. **Correction commit** (`chore(caws): correct SESSION-OWNERSHIP-METADATA-001 bound_spec_id recon`) — spec/ADR only, no code. Withdraws A9 in place and corrects ADR drift-finding #2 because pre-implementation source inspection showed the original recon was wrong. This commit is the predecessor to commit 1 of implementation.
 
 The four implementation commits then follow per the plan above. Commit 3's scope-amendment for the shell surface is a separate, smaller amendment commit within the activated slice.
 

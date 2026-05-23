@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-22T23:30:00.000Z'
-updated_at: '2026-05-23T04:00:00.000Z'
+updated_at: '2026-05-23T04:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -82,9 +82,13 @@ invariants:
   - >-
     Schema versioning. No JSON schema for agents.json exists today;
     the contract is the AgentRecord TypeScript interface. This slice
-    extends that interface additively (both new fields optional;
-    bound_spec_id retrofit). Existing on-disk records load under the
-    widened interface trivially. The data_migration is
+    extends that interface additively (claimed_paths and
+    last_modified_paths, both optional). Existing on-disk records
+    load under the widened interface trivially. The original
+    activation amendment also called for a bound_spec_id retrofit,
+    but pre-implementation source inspection showed bound_spec_id
+    is ALREADY declared in AgentRecord; A9 was withdrawn rather
+    than implemented (see A9 below for the audit trail). The data_migration is
     write-on-next-update (no batch migration command needed): the
     first time a session writes its record after the widened
     interface ships, it includes the new fields if applicable;
@@ -208,9 +212,10 @@ acceptance:
       All pre-existing tests remain green. New tests cover schema
       v2 loading (A1), explicit-claim write (A2), TTL window (A3),
       mixed v1/v2 read (A4), stale-record claim preservation (A5),
-      non-agent top-level keys (A8), bound_spec_id retrofit (A9),
-      and policy key bounds (A10). No production diff outside
-      scope.in.
+      non-agent top-level keys (A8), and policy key bounds (A10).
+      A9 is WITHDRAWN (no retrofit needed); a passive no-regression
+      assertion for `bound_spec_id` is permitted but not required.
+      No production diff outside scope.in.
   - id: A8
     given: |
       agents.json contains top-level `version: 1` and `agents: {}`
@@ -229,21 +234,27 @@ acceptance:
       normalization slice's concern.)
   - id: A9
     given: |
-      The on-disk shape of agents.json already includes
-      `bound_spec_id` written via the spread-extras pattern in
-      applyRefreshAgent, but the AgentRecord TypeScript interface
-      does NOT declare the field today.
+      A9 was originally drafted to retrofit `bound_spec_id` into
+      AgentRecord. Pre-implementation source inspection
+      (packages/caws-kernel/src/worktree/types.ts:118; also
+      referenced in freshness.ts:21,45, claim.ts:193,
+      apply-patch.ts:202) showed that the field is ALREADY declared
+      and used consistently. The earlier recon claim that it was
+      "written via spread extras without being declared in
+      AgentRecord" was incorrect. The id A9 is preserved in place
+      rather than deleted, so the audit trail of the correction
+      remains visible to future readers.
     when: |
-      The widened AgentRecord interface ships and existing
-      on-disk records are read.
+      Implementation commit 1 of this slice ships.
     then: |
-      `bound_spec_id` is exposed through the typed interface as
-      `readonly bound_spec_id?: string`. Existing records that
-      carry the field expose it without rewrite. Existing records
-      that lack the field expose it as `undefined`. The writer
-      already populates the field correctly; this slice does NOT
-      change writer behavior for `bound_spec_id` — only the
-      interface declaration.
+      A9 is WITHDRAWN — there is no retrofit work to do. The
+      implementation MUST NOT modify or regress the existing
+      `bound_spec_id` declaration in AgentRecord. Tests MAY include
+      a passive no-regression assertion (e.g., that loading a
+      record with `bound_spec_id` exposes it through the typed
+      interface), but that is hardening, not new functionality.
+      Test counts and closure notes MUST identify A9 as withdrawn
+      so test gap analysis is honest.
   - id: A10
     given: |
       A `policy.yaml` that may or may not define
@@ -396,8 +407,15 @@ contracts: []
 #          invariant is corrected above. No version bump in this
 #          slice; structural normalization deferred to
 #          AGENTS-JSON-STRUCTURE-NORMALIZATION-001 (unfiled).
-# Drift 2. bound_spec_id retrofit into AgentRecord interface
-#          (A9). The field is already on disk; the type catches up.
+# Drift 2. WITHDRAWN. Originally framed as a bound_spec_id
+#          retrofit (A9). Pre-implementation source inspection
+#          showed bound_spec_id is ALREADY declared in
+#          packages/caws-kernel/src/worktree/types.ts:118 and
+#          referenced consistently throughout. The earlier recon
+#          was wrong; A9 has been withdrawn in place (its id is
+#          preserved with a "withdrawn / corrected" body). No
+#          retrofit work to do. See ADR §Discovered state for
+#          the full correction.
 # Schema strategy: no JSON schema for agents.json in this slice.
 # TypeScript interface widening + the isAgentRecord predicate
 # (A8) are sufficient. A future slice may introduce the first
@@ -405,7 +423,9 @@ contracts: []
 #
 # Four commits expected after activation (full detail in the ADR):
 #   Commit 1: types + reader predicate (no writer change, no shell).
-#             Covers A1, A8, A9.
+#             Covers A1, A8. A9 is WITHDRAWN — a passive
+#             no-regression assertion for bound_spec_id is
+#             permitted but not required.
 #   Commit 2: writer + policy key (TTL prune, cap, cross-session
 #             non-clobber). Covers A2, A3, A5, A6, A10.
 #   Commit 3: caws claim --paths CLI surface, behind a follow-up
