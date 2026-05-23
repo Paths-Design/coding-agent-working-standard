@@ -1,13 +1,1 @@
-{
-  "migrate-v10-events": {
-    "specId": "CAWS-MIGRATE-V10-EVENTS-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-22T22:29:19.244Z",
-    "branch": "migrate-v10-events",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-events"
-  }
-}
+{}
