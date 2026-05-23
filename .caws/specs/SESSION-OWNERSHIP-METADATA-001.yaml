@@ -3,6 +3,7 @@ title: 'Extend .caws/agents.json with claimed_paths and last_modified_paths so m
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: session-ownership-metadata
 created_at: '2026-05-22T23:30:00.000Z'
 updated_at: '2026-05-23T04:30:00.000Z'
 blast_radius:
