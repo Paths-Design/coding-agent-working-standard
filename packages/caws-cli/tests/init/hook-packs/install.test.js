@@ -232,6 +232,28 @@ describe('Claude Code pack manifest', () => {
       expect(stop).toContain('hook_pack_version: 3');
       expect(stop).toContain('agent-stop.sh');
     });
+
+    it('agent-heartbeat.sh does not invoke jq (parses via node only)', () => {
+      // The hook composes Claude Code's additionalContext envelope via
+      // node, not jq. Visibility into parallel agents cannot depend on
+      // a shell utility outside the CAWS toolchain — node is already a
+      // hard CAWS dependency (the CLI itself is node), jq is not.
+      // Smoke test A14.11 verifies this dynamically when an isolated
+      // PATH is constructible; this test verifies it statically so the
+      // assertion holds even on environments where jq is in /usr/bin.
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+      const heartbeat = fs.readFileSync(
+        path.join(packRoot, 'agent-heartbeat.sh'), 'utf8'
+      );
+      const codeLines = heartbeat.split('\n').filter((l) => {
+        const t = l.trim();
+        return t.length > 0 && !t.startsWith('#');
+      });
+      const jqInCode = codeLines.filter((l) => /\bjq\b/.test(l));
+      expect(jqInCode).toEqual([]);
+    });
   });
 });
 

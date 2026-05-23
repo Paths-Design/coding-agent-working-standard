@@ -33,6 +33,15 @@
 # reusing the same `caws agents heartbeat --json --include-active-summary`
 # command verbatim.
 #
+# RUNTIME DEPENDENCIES: bash + node. node is already required by the CAWS
+# CLI itself (which is a Node binary), so depending on it here adds no new
+# runtime surface area. We do NOT depend on jq — jq is not guaranteed
+# present on every install target (it is absent from many container base
+# images and minimal CI runners), and a missing jq would silently drop
+# every parallel-agent notice. The product goal is "agents see each
+# other": that visibility cannot depend on a shell utility outside the
+# CAWS toolchain.
+#
 # FAIL-CLOSED-NON-BLOCKING: if the CLI is absent, fails, or returns
 # malformed JSON, this hook exits 0 silently. Heartbeat is observability
 # and parallel-agent surfacing; a failure must never block the tool call.
@@ -71,55 +80,52 @@ if [[ -z "$CLI_OUT" ]]; then
   exit 0
 fi
 
-# Extract the active_agent_count. If jq can't parse the output, fall
-# through to silent exit (fail-closed-non-blocking).
-ACTIVE_COUNT="$(printf '%s' "$CLI_OUT" | jq -r '.active_agent_count // 0' 2>/dev/null)"
-if [[ -z "$ACTIVE_COUNT" || "$ACTIVE_COUNT" == "null" ]]; then
-  exit 0
-fi
-
-# Common case: self only (or zero). Silent.
-if [[ "$ACTIVE_COUNT" -le 1 ]]; then
-  exit 0
-fi
-
-# N>1: surface other-session presence to the agent via Claude Code's
-# hookSpecificOutput.additionalContext envelope. The summary lists peers
-# (excluding self) with bound_worktree / bound_spec_id / git_dir_kind /
-# branch / last_active_age_ms — exactly what the agent needs to know
-# before proceeding with a tool call.
-PEER_SUMMARY="$(printf '%s' "$CLI_OUT" | jq -r '
-  .active_agents
-  | map(select(.is_self == false))
-  | map(
-      "• " + .session_id +
-      " (" + (.bound_worktree // "no worktree") + ")" +
-      (if .bound_spec_id then " — spec " + .bound_spec_id else "" end) +
-      " — git_dir_kind=" + (.git_dir_kind // "unknown") +
-      " — branch=" + (.branch // "-") +
-      " — last active " + ((.last_active_age_ms // 0) / 1000 | floor | tostring) + "s ago"
-    )
-  | join("\n")
-' 2>/dev/null)"
-
-if [[ -z "$PEER_SUMMARY" ]]; then
-  exit 0
-fi
-
-# Compose the additionalContext envelope. Use jq to build the JSON so
-# embedded newlines and quotes in PEER_SUMMARY are encoded correctly.
-ADDITIONAL_CONTEXT="MULTI-AGENT NOTICE: ${ACTIVE_COUNT} agents active in this repo (including this session). Other active sessions:
-${PEER_SUMMARY}
-
-Coordinate via 'caws agents list' and 'caws status' before mutating shared state. Authority remains in .caws/worktrees.json (ownership) and .caws/specs/<id>.yaml (scope) — leases are visibility only."
-
-jq -nc \
-  --arg ctx "$ADDITIONAL_CONTEXT" \
-  '{
-     hookSpecificOutput: {
-       hookEventName: "PreToolUse",
-       additionalContext: $ctx
-     }
-   }' 2>/dev/null || exit 0
+# Parse the CAWS-native JSON and, when active_agent_count > 1, compose
+# Claude Code's hookSpecificOutput.additionalContext envelope. A single
+# node invocation does the whole pipeline: parse → filter peers → format
+# bullet list → wrap envelope → emit. Malformed input, parse errors, or
+# any thrown exception fall through to silent exit (fail-closed-non-
+# blocking). Node is already a hard CAWS dependency — the CLI binary
+# IS node — so this adds no new runtime surface vs. jq.
+printf '%s' "$CLI_OUT" | node -e '
+  let raw = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => { raw += chunk; });
+  process.stdin.on("end", () => {
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { process.exit(0); }
+    const count = Number(parsed && parsed.active_agent_count);
+    if (!Number.isFinite(count) || count <= 1) process.exit(0);
+    const agents = Array.isArray(parsed.active_agents) ? parsed.active_agents : [];
+    const peers = agents.filter((a) => a && a.is_self !== true);
+    if (peers.length === 0) process.exit(0);
+    const bullets = peers.map((a) => {
+      const worktree = a.bound_worktree || "no worktree";
+      const spec = a.bound_spec_id ? " — spec " + a.bound_spec_id : "";
+      const kind = a.git_dir_kind || "unknown";
+      const branch = a.branch || "-";
+      const ageMs = Number(a.last_active_age_ms);
+      const ageSec = Number.isFinite(ageMs) ? Math.floor(ageMs / 1000) : 0;
+      return "• " + (a.session_id || "<unknown>") +
+        " (" + worktree + ")" + spec +
+        " — git_dir_kind=" + kind +
+        " — branch=" + branch +
+        " — last active " + ageSec + "s ago";
+    }).join("\n");
+    const ctx = "MULTI-AGENT NOTICE: " + count +
+      " agents active in this repo (including this session). Other active sessions:\n" +
+      bullets + "\n\n" +
+      "Coordinate via '\''caws agents list'\'' and '\''caws status'\'' before " +
+      "mutating shared state. Authority remains in .caws/worktrees.json " +
+      "(ownership) and .caws/specs/<id>.yaml (scope) — leases are " +
+      "visibility only.";
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: ctx,
+      },
+    }));
+  });
+' 2>/dev/null || exit 0
 
 exit 0
