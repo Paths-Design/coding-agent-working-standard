@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: multi-agent-activity-registry
 created_at: '2026-05-23T07:00:00.000Z'
-updated_at: '2026-05-23T08:00:00.000Z'
+updated_at: '2026-05-23T09:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -47,7 +47,9 @@ scope:
     - packages/caws-cli/tests/store/leases-agents-independence.test.js
     - packages/caws-cli/tests/shell/agents-command.test.js
     - packages/caws-cli/tests/shell/agents-cli-no-hook-envelope.test.js
+    - packages/caws-cli/tests/shell/agents-linked-worktree.test.js
     - packages/caws-cli/tests/shell/status-command.test.js
+    - packages/caws-cli/tests/shell/status-leases.test.js
     - packages/caws-cli/tests/integration/lite-hooks.test.js
     - packages/caws-cli/tests/init/hook-packs/install.test.js
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
