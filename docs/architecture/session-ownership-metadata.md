@@ -93,25 +93,39 @@ Spec status: locked at draft — **explicit** declaration via a new surface (`ca
 
 This note: confirmed. The soft-middle question ("implicit `last_modified_paths` but explicit `claimed_paths`?") is answered **yes**:
 
-- `last_modified_paths` is **implicit**: the writer populates it from edits the session has actually performed within the TTL window. The session does not declare anything; the field is observed, not declared. This is the "no information vs no claims" gap the consumer slices need to read.
-- `claimed_paths` is **explicit**: only populated when the session runs `caws claim --paths <pattern>...`. Empty/absent means "this session has not declared a claim," which is operationally different from "this session has no edits in scope."
+- `last_modified_paths` is **implicit FROM THE SESSION'S PERSPECTIVE** but explicit at the call site: an upstream caller (a future collector hook, a test harness, or a downstream consumer surface) assembles the path set the writer should record. The session does not formally declare these paths the way it would a claim; the field is observed-by-the-caller, recorded-by-the-writer. This is the "no information vs no claims" gap the consumer slices need to read.
+- `claimed_paths` is **explicit**: only populated when the session (via `caws claim --paths <pattern>...` in commit 3 or equivalent) declares a claim. Empty/absent means "this session has not declared a claim," which is operationally different from "this session has no edits in scope."
 
 The two fields are independent. A session can have `last_modified_paths: ["packages/foo/a.ts"]` and `claimed_paths: undefined` simultaneously — meaning "I've touched a.ts recently but I haven't formally claimed any path." The consumer slices interpret the combination, not either alone.
 
-## Q2 — TTL default for `last_modified_paths`
+## Q2 — TTL default for `last_modified_paths` — CORRECTED to C1 storage-bounds interpretation
 
-Spec proposed: 30 minutes from `last_active`, capped at 24h, operator-configurable via `policy.yaml`.
+**Original (incorrect) decision, preserved for honesty:**
 
-This note refines:
+> The writer computes the window relative to `now()` at write time. Pruning policy: when the writer fires, paths older than `now() - ttl` are dropped from the set. Pruning happens on write, not on read.
 
-- **Default**: 30 minutes.
-- **Configurability**: via `policy.yaml` under a new key `agents.last_modified_paths_ttl_seconds` (seconds, not minutes, to match the rest of the policy schema which uses seconds for time-bounded fields).
-- **Hard cap**: 24h (86400 seconds). Values above the cap are clamped at load time with a `WARN` diagnostic; the file is not rewritten.
-- **Lower bound**: 60 seconds. Values below this are clamped at load with `WARN`.
-- **Source of truth for the TTL window**: the writer computes the window relative to **`now()` at write time**, not relative to `last_active`. This avoids the ambiguity where an idle session's TTL window "stretches" because its heartbeat is stale.
-- **Pruning policy**: when the writer fires, paths older than `now() - ttl` are dropped from the set. Pruning happens on write, not on read. If a session never writes, the field is **not** retroactively pruned by readers.
+**Correction (pre-commit-2, 2026-05-23):**
 
-The `policy.yaml` key is additive-optional. Sessions that load against a policy without the key use the 30-minute default.
+The original Q2 decision was structurally infeasible for the substrate shape locked in commit 1. `last_modified_paths` is `readonly string[]` — there are no per-path timestamps to consult, so the writer cannot identify which paths are "older than `now() - ttl`." Implementing the original wording would have required either (a) changing the substrate to `Array<{path, touched_at}>` (option C2 in the structural-question stop-and-report), which contradicts the "store verbatim" lock for paths and turns the slice into a timestamp-aware edit ledger; or (b) maintaining a side-channel timestamp map (C3), which is more complex and not designed for in this slice.
+
+The correct interpretation is **C1 with storage-bounds refinement**: the writer stores caller-pruned data subject to structural validation and a deterministic max-size cap, but does NOT enforce per-path TTL.
+
+| Concern | Owner |
+|---|---|
+| Per-path TTL membership ("was this path touched within N seconds?") | Caller (future collector hook, explicit-claim CLI, provenance surface, test harness) |
+| FIFO cap / max 1000 entries | Writer (storage-bound invariant) |
+| Path string validation (non-empty, no null bytes) | Writer |
+| Per-path timestamp storage | **NOT represented in agents.json** — would be a different substrate |
+| Policy key `agents.last_modified_paths_ttl_seconds` | Schema-validated config exposed to collectors/consumers; the substrate does NOT consume it |
+
+This preserves the substrate-vs-policy distinction the four-part bar exists to maintain. The writer's job is durable storage of caller-supplied data, not semantic freshness enforcement. The policy key still ships (A10) but its consumers are upstream of the writer, not the writer itself.
+
+Specifically:
+
+- **Policy key**: `policy.yaml` adds optional integer `agents.last_modified_paths_ttl_seconds`, bounds `[60, 86400]`, default `1800` (30 min). Validated by `policy.v1.json` schema.
+- **Default resolution**: absent key resolves to `1800`. Out-of-bounds values **fail schema validation** (block load with a clear diagnostic), not "clamp with WARN." The "clamp with WARN" pattern in the original Q2 was inconsistent with how the rest of the policy schema treats invalid values.
+- **No writer consumption**: `applyRefreshAgent` does NOT read the TTL value. The TTL is exposed to whichever upstream code assembles the `last_modified_paths` array; that code is responsible for filtering by age before invoking the patch.
+- **Writer-side enforcement is limited to storage bounds**: structural validation (string array, non-empty, no null bytes — fail closed on violation) and FIFO truncation at 1000 entries (caller-order preserved; if caller passes >1000, drop oldest until count = 1000).
 
 ## Q3 — Claim takeover mechanism
 
@@ -149,8 +163,8 @@ Spec proposed: `last_modified_paths` capped at 1000 entries, FIFO eviction. `cla
 
 This note refines:
 
-- **`last_modified_paths`**: 1000-entry cap with FIFO eviction at write time. If a write would produce more than 1000 entries, drop the oldest (lowest-time) entries until the count is ≤ 1000. The TTL prune happens first, then the cap is applied. In practice the TTL will usually dominate.
-- **`claimed_paths`**: soft cap of 256 entries enforced at write time. A `caws claim --paths` call that would produce more than 256 entries is rejected at the CLI layer with an error directing the user to use coarser globs. The reason: 256 is comfortably above realistic explicit-claim use (a human declaring "these paths are mine") and well below the size at which `agents.json` reads become noticeably slow. Operator override via policy is **not** added in v1; if production telemetry shows the cap is wrong, a follow-up slice can lift it.
+- **`last_modified_paths`**: 1000-entry cap, FIFO, enforced by the writer. If the caller passes >1000 entries, the writer preserves caller order and drops the lowest-index entries until the count is exactly 1000. No "TTL prune first" sequencing — per the corrected Q2, the writer does NOT TTL-prune. The cap is a pure storage-bound: it requires only ordered input and a max length, no per-path metadata. This is what makes FIFO cap and TTL **different kinds of rule** — FIFO is structurally enforceable; TTL is not, for this substrate shape.
+- **`claimed_paths`**: 256-entry cap enforced **at the CLI layer in commit 3**, NOT at the writer in commit 2. Rationale: commit 2's writer accepts caller-provided `claimed_paths` verbatim subject to structural validation (string array, non-empty, no null bytes); commit 3's `caws claim --paths` CLI surface is the natural place to enforce the 256 user-facing cap with a friendly error directing the user to coarser globs. If a future caller invokes the writer directly with >256 claimed_paths, the writer accepts them — it is not the writer's job to enforce CLI ergonomics. Operator override via policy is **not** added in v1; a follow-up slice can lift the cap if telemetry shows it is wrong.
 
 ## Schema strategy (related to top-level drift)
 
@@ -180,9 +194,18 @@ The maintainer-stated constraint is that **commit 1 widens substrate only; no sh
 
 **Commit 2 — writer + policy key (still no shell-side claim surface):**
 
-- `packages/caws-cli/src/store/apply-patch.ts`: extend `applyRefreshAgent` (and the `RegistryPatch` discriminated union) to accept and write `claimed_paths` and `last_modified_paths`. TTL prune happens here per Q2.
-- `packages/caws-kernel/src/schemas/policy.v1.json`: additive optional key `agents.last_modified_paths_ttl_seconds`, integer, bounds `[60, 86400]`, default `1800` (30 minutes).
-- Tests: A2 (writer accepts claim payload), A3 (TTL window prune), A5 (stale-record claim preservation), A6 (no new doctor diagnostics fire), cross-session non-interference (Q3 defensive test asserting that writing session A's record leaves session B's `claimed_paths` byte-identical).
+This is a **storage-contract commit**, not a policy-engine commit. The writer durably stores caller-provided data subject to structural validation and storage bounds; it does NOT enforce TTL semantics, because the substrate has no per-path timestamps to read.
+
+- `packages/caws-kernel/src/worktree/types.ts`: extend `RegistryPatch.refresh_agent` with optional `claimed_paths?: readonly string[]` and `last_modified_paths?: readonly string[]`. This is the kernel-side contract that propagates through to the writer.
+- `packages/caws-kernel/src/worktree/freshness.ts`: extend `RefreshAgentClaimOptions` and `refreshAgentClaim` to forward the new fields into the patch envelope. **Requires scope amendment** to admit this file — the commit-2 amendment should land that on the base branch before the kernel edit. Do not bypass the kernel patch envelope.
+- `packages/caws-cli/src/store/apply-patch.ts`: extend `applyRefreshAgent` to write `claimed_paths` and `last_modified_paths` to the targeted session's record when present, preserving all existing fields (existing v1 fields, sibling sessions' records, top-level `version`/`agents` non-record keys). Enforce writer-side invariants:
+  - Structural validation: each entry is a non-empty string with no null bytes. Invalid input fails the entire write closed with a clear diagnostic — no partial write.
+  - `last_modified_paths` max-size truncation: 1000 entries, FIFO, caller-order preserved. If caller passes >1000, drop lowest-index entries until count = 1000.
+  - `claimed_paths`: stored verbatim subject to structural validation. NO 256-cap at this layer (that lands in commit 3 at the CLI).
+  - **No TTL pruning**. The writer does NOT compute or apply TTL membership. Per the corrected Q2.
+  - Cross-session non-clobber: writing session A's record MUST leave session B's record byte-identical.
+- `packages/caws-kernel/src/schemas/policy.v1.json`: additive optional integer key `agents.last_modified_paths_ttl_seconds`, bounds `[60, 86400]`, default `1800` (30 minutes). Schema validation only; out-of-bounds values fail validation with a clear diagnostic, no clamp-with-warn. The writer does NOT consume this value.
+- Tests: A2 (writer accepts claim payload), A3 (revised — writer stores caller-pruned set verbatim subject to validation + FIFO cap; NO TTL behavior), A5 (stale-record claim preservation: a session whose `last_active` is older than the policy TTL still exposes `claimed_paths` and `last_modified_paths` if those were last written; the writer does not retroactively drop them), A6 (no new doctor diagnostics fire), A10 (policy key schema validates with default 1800 and bounds; out-of-bounds rejected), cross-session non-clobber, structural-validation rejection cases (empty string, null byte, non-string entries).
 
 **Commit 3 — explicit-claim CLI surface (`caws claim --paths`):**
 
@@ -193,7 +216,7 @@ The maintainer-stated constraint is that **commit 1 widens substrate only; no sh
 **Commit 4 — closure:**
 
 - `caws specs close SESSION-OWNERSHIP-METADATA-001 --reason "<closure prose>"` via single bash invocation (not nested `bash -c`; see [[project_caws_known_defects]] for the audit-drift incident).
-- Closure notes record: schema strategy (no JSON schema; predicate helper instead), TTL default (1800 sec via policy), cap values (1000 last_modified / 256 claimed), A9 explicitly noted as **withdrawn** (no retrofit; the recon that motivated it was wrong), A8 predicate landed, and pointers to the three consumer slices.
+- Closure notes record: schema strategy (no JSON schema; predicate helper instead), policy key (`agents.last_modified_paths_ttl_seconds` default 1800 sec, bounds 60–86400, validated but NOT writer-consumed under the C1 interpretation), cap values (writer enforces 1000 FIFO on `last_modified_paths`; commit 3 CLI enforces 256 on `claimed_paths`), A9 explicitly noted as **withdrawn** (no retrofit; the recon that motivated it was wrong), A8 predicate landed, the C1-storage-bounds correction to Q2/A3/A10 documented (substrate-vs-policy distinction preserved), and pointers to the three consumer slices.
 
 ## Activation gate
 
