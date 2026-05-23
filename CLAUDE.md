@@ -73,6 +73,62 @@ The scope-guard strike counter is **session-global and accumulative**, not per-f
 
 The right discipline: don't speculatively edit a file before verifying it's in scope. Use `caws scope show <path>` first if uncertain. The check costs nothing and avoids burning a strike on a file you'll have to revisit.
 
+## Scope authoring discipline (anticipate, don't react)
+
+Scope amendments are normal and welcome — they're git-tracked, attributed to a specific commit, and `caws specs show` will display the updated scope. The maintainer is comfortable with you amending scope when you discover a path you legitimately need to edit. What burns time is NOT amendments — it's discovering the gap one strike at a time during implementation.
+
+Avoid that pattern by planning scope BEFORE you start editing. Three concrete habits:
+
+### 1. Run scope.in through the file-list lens, not the file-pattern lens
+
+When you draft scope.in, mentally walk every file you'll create or modify in this slice:
+
+- For every new `.ts` file you intend to create: is its exact path in scope.in?
+- For every `*.test.js` / `*.test.ts` you'll write: does the test path with the correct extension match scope.in? (CLAUDE.md trap #1 — `.test.js` vs `.test.ts` mismatches are a common foot-gun.)
+- For every comment-only edit you intend (deprecation markers, doctrine annotations): is the file in scope.in? The invariant body saying "add comment to X" is NOT scope admission.
+- For every doctrine doc you'll touch (CLAUDE.md, AGENTS.md, COMMIT_CONVENTIONS.md, docs/architecture/*, docs/failure-lineage.md): is it in scope.in or admitted via `policy.root_passthrough`?
+- For every integration test that creates real fixtures (linked worktrees, git repos): is the new test file path in scope.in?
+
+If you're listing one or two paths and the rest are "in this directory," consider whether the directory itself is the right scope.in entry. The scope kernel treats scope.in entries as literal prefix matches (or globs where supported), not as documentation.
+
+### 2. Amend scope BEFORE the speculative edit, not after the strike
+
+When mid-implementation you realize a file isn't in scope:
+
+- **Stop editing that file immediately.** A single edit on an out-of-scope path is strike 1. Three strikes hard-block until reset.
+- **Run `caws scope show <path>`** to confirm the refusal and capture the spec id + exact missing entry.
+- **Make the scope amendment as a separate small chore commit** on the canonical branch:
+  ```
+  chore(caws): amend <SPEC-ID> scope for <what>
+  ```
+  Bump `updated_at`. Cherry-pick into your worktree branch. Then proceed with the original edit.
+- **Do not chain amendments**. If you need 3 files, amend once for all 3, not three commits.
+
+### 3. Blast-radius and scope-collision review at draft time
+
+When authoring a new spec, before flipping to `active`:
+
+- **List every package, every directory tree, every test file, every doc, every hook template, every CI surface you might touch.** Put them in scope.in. Easier to over-include and trim than to scramble mid-implementation.
+- **Cross-check `scope.out` against sibling specs' `scope.in`**. Per CLAUDE.md trap #4, listing a sibling's `scope.in` paths in your `scope.out` will refuse YOUR edits to those paths even when admitted. Either omit or accept the collision.
+- **Cross-check governed paths** (`.caws/policy.yaml`, `CODEOWNERS`, `change_budget` keys) and explicitly list them in `scope.out` so future agents know you intentionally excluded them.
+- **Cross-check active sibling worktrees**. If another agent is actively editing files in `packages/foo/`, putting `packages/foo` broadly in your scope.in creates a union-mode collision when both specs are active. Either narrow your scope or coordinate.
+
+### Recovery checklist (when you hit a strike anyway)
+
+If you accumulate strikes during a session:
+
+1. **Stop editing the hot file.** Don't retry on the same path — each retry is another strike.
+2. **Diagnose** with `caws scope show <path>` from inside the worktree. Capture the exact refusal message.
+3. **Decide**: is the path legitimately in scope (amend needed) or genuinely out (revert your edit, route through a different file)?
+4. **For "amend needed":** commit the scope amendment on canonical, cherry-pick to worktree, then ask the user to run `bash .claude/hooks/reset-strikes.sh --current`. The reset is required because fixing scope alone does NOT re-evaluate prior strikes — the file stays "hot" at its accumulated count.
+5. **For "genuinely out":** revert your edit, route the change through an in-scope file, and document the decision in the next commit message.
+
+### Why this matters
+
+Scope strikes don't just stop edits — they break the trust contract the user has with the slice. Each strike is evidence that the agent didn't think about scope before editing, which is the failure mode CAWS exists to prevent. A well-scoped slice with one or two clear amendments mid-implementation is healthy. A slice that burns three strikes on the same file mid-commit is a planning failure made visible.
+
+The user's stance: amendments are fine because they're auditable. The cost is the strike state, the explanation, the recovery commit chain, and the user's time deciding whether the amendment is legitimate. Plan to avoid that cost, not to pay it three times in a row.
+
 ## Worktree discipline
 
 When git worktrees are active for parallel agent work:
