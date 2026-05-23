@@ -3,6 +3,7 @@ title: 'Agent liveness substrate (.caws/leases/<session_id>.json) with self-regi
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: multi-agent-activity-registry
 created_at: '2026-05-23T07:00:00.000Z'
 updated_at: '2026-05-23T07:30:00.000Z'
 blast_radius:
