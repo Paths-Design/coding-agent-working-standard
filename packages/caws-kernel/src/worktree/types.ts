@@ -109,6 +109,12 @@ export interface WorktreeRegistry {
  *
  * This is freshness/display state for `caws agents list` and `caws status`.
  * It is not consulted for ownership decisions.
+ *
+ * `claimed_paths` and `last_modified_paths` are added by
+ * SESSION-OWNERSHIP-METADATA-001 as additive optional substrate for
+ * multi-agent coordination consumers (working-tree provenance guard,
+ * push-range classifier, handoff event emitter). The fields are
+ * stored verbatim; consumers canonicalize at query time.
  */
 export interface AgentRecord {
   readonly session_id: string;
@@ -116,6 +122,8 @@ export interface AgentRecord {
   readonly last_active: string;
   readonly bound_worktree?: string;
   readonly bound_spec_id?: string;
+  readonly claimed_paths?: readonly string[];
+  readonly last_modified_paths?: readonly string[];
 }
 
 /**
@@ -123,6 +131,37 @@ export interface AgentRecord {
  */
 export interface AgentRegistry {
   readonly [session_id: string]: AgentRecord;
+}
+
+/**
+ * Structural predicate: does a value look like a real agent record?
+ *
+ * `agents.json` currently carries top-level keys that are NOT per-session
+ * records (`version: 1`, `agents: {}`) alongside the actual session
+ * records. The loader returns the whole object verbatim, so consumers
+ * that iterate the registry would treat those non-record values as
+ * "agents" unless they filter.
+ *
+ * This predicate is the substrate that consumer surfaces — the
+ * working-tree provenance guard, push-range classifier, and handoff
+ * event emitter — route through to enumerate "active agents." It is
+ * structural disambiguation, NOT structural normalization: the
+ * on-disk shape is unchanged, and existing display-only warnings
+ * (e.g., doctor's stale_display_only on `version` and `agents`) are
+ * left alone here. Their cleanup belongs to a future normalization
+ * slice.
+ *
+ * Acceptance: SESSION-OWNERSHIP-METADATA-001 A8.
+ */
+export function isAgentRecord(value: unknown): value is AgentRecord {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.session_id === 'string' &&
+    typeof candidate.last_active === 'string'
+  );
 }
 
 // ----------------------------------------------------------------------------

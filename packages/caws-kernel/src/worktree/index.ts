@@ -16,6 +16,8 @@ export type {
   WorktreeRegistry,
 } from './types';
 
+export { isAgentRecord } from './types';
+
 export { WORKTREE_RULES, WORKTREE_RULE_PREFIXES } from './rules';
 export type { WorktreeRule } from './rules';
 
