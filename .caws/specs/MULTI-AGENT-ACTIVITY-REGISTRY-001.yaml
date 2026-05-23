@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: multi-agent-activity-registry
 created_at: '2026-05-23T07:00:00.000Z'
-updated_at: '2026-05-23T09:00:00.000Z'
+updated_at: '2026-05-23T10:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -42,7 +42,24 @@ scope:
     - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
     - packages/caws-cli/templates/hook-packs/claude-code/dispatch/session_start.sh
     - packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/post_tool_use.sh
     - packages/caws-cli/templates/hook-packs/claude-code/dispatch/stop.sh
+    # Pack-version header bump (v2 → v3). The install test asserts every
+    # installed file's managed header version matches the manifest. Every
+    # managed file gets a single-line header bump as part of this slice.
+    - packages/caws-cli/templates/hook-packs/claude-code/audit.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-strikes.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/guard-strikes.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/templates/hook-packs/claude-code/runtime-paths.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-log.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/run-handlers.sh
     - packages/caws-cli/tests/store/leases-store.test.js
     - packages/caws-cli/tests/store/leases-agents-independence.test.js
     - packages/caws-cli/tests/shell/agents-command.test.js
