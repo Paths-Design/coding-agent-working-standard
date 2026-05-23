@@ -29,7 +29,8 @@ export { loadSpecs } from './specs-store';
 export { loadPolicy } from './policy-store';
 export { loadWorktrees } from './worktrees-store';
 export { loadAgents } from './agents-store';
-export { appendEvent, loadEvents } from './events-store';
+export { appendEvent, loadEvents, rotateEvents } from './events-store';
+export type { RotateEventsOptions } from './events-store';
 
 export { applyRegistryPatch } from './apply-patch';
 

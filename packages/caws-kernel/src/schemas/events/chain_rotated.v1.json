@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/chain_rotated.v1.json",
+  "title": "chain_rotated event payload",
+  "$comment": "Class: NO_SPEC_ID. Genesis event of a new events.jsonl chain after rotateEvents archived the previous chain. Cryptographically ties the archive to the new chain via prior_file_digest so verify-archive can detect tampering post-rotation. See docs/architecture/caws-vnext-command-surface.md invariant 14 and CAWS-MIGRATE-V10-EVENTS-001 A2/A6.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prior_tail_hash",
+    "prior_file_path",
+    "prior_file_digest",
+    "prior_line_count",
+    "prior_chain_status",
+    "actor_shape_stats",
+    "migration_reason"
+  ],
+  "properties": {
+    "prior_tail_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Hash of the last event in the rotated chain (the archived file's tail), extracted by tolerant parse (NOT validateChainedEvent). null when the prior chain was empty/unparseable in a way that makes the tail unreadable; non-null sha256 when the tail event_hash field parsed cleanly. In v11.2 the rotateEvents function refuses against an empty prior chain (A7), so in practice this is always a sha256 string; null is admitted in the schema for forward-compatibility if rotation policy ever loosens."
+    },
+    "prior_file_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path (relative to .caws/) of the archive file, e.g. 'events.jsonl.archive-2026-05-22T23-15-00-000Z'. The new chain's first reader can locate the archived bytes via this field; verify-archive resolves it relative to the .caws/ directory."
+    },
+    "prior_file_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 of the full archive file bytes, computed by rotateEvents while the lock was held and before the rename. This is the cryptographic anchor that survives the rotation boundary: verify-archive recomputes the archive's sha256 and asserts match. Tamper detection on the archived chain depends on this field being trustworthy, which it is because (a) it was computed before the rename, (b) the rename is atomic on a single filesystem, and (c) the chain_rotated event itself is hash-chained into the new chain by prepareAppend."
+    },
+    "prior_line_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of non-empty lines in the prior chain. Counted during the actor-shape scan. verify-archive recomputes and asserts match as a second tamper check (cheaper than sha256 for the operator who wants quick reassurance)."
+    },
+    "prior_chain_status": {
+      "type": "string",
+      "enum": ["parseable_unverified", "unparseable", "empty"],
+      "description": "Honest classification of the archived chain's verifiability under v11 code. 'parseable_unverified': every line JSON-parsed but the v11 hash algorithm hashes a different envelope shape than v10 did (top-level session_id moved into actor.session_id; actor string → structured object), so re-hashing under v11 cannot reproduce the stored event_hash values. 'unparseable': at least one line failed JSON.parse. 'empty': the prior chain had zero lines (not currently reachable because rotateEvents refuses against empty; admitted for forward-compatibility). 'verified' is deliberately EXCLUDED from the enum for v10→v11 rotations because the v11 hash algorithm cannot verify v10 hashes; a future enum extension for v11→v11 rotations is permitted but is not a v11.2 deliverable. See CAWS-MIGRATE-V10-EVENTS-001 invariant about old chains being permanently parseable_unverified under v11 code."
+    },
+    "actor_shape_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v10_string_actor", "v11_object_actor", "unparseable"],
+      "properties": {
+        "v10_string_actor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of lines whose actor field is a string (v10 envelope shape)."
+        },
+        "v11_object_actor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of lines whose actor field is a structured object (v11 envelope shape)."
+        },
+        "unparseable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of lines that failed JSON.parse. Sums with the two above to prior_line_count."
+        }
+      },
+      "description": "Per-shape line counts gathered during the actor-shape scan. The sum of the three values equals prior_line_count. Operator can read this to understand what kind of rotation just happened (all v10, mixed, etc.)."
+    },
+    "migration_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator-supplied reason for the rotation, captured verbatim from the --reason CLI flag. Required for every rotate invocation regardless of chain shape (A1/A8). Read by 'caws events list' and post-mortem audits to explain why the chain boundary exists."
+    },
+    "prior_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional. The seq of the last event in the prior chain, extracted by tolerant parse. Present when the tail line parsed cleanly and contained a valid integer seq. Omitted when the tail was unparseable or seq was missing/invalid. Helps operators correlate the rotation boundary with the prior chain's last seq number."
+    }
+  }
+}

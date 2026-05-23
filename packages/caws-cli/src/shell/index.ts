@@ -56,6 +56,17 @@ export type {
   EvidenceRecordOptions,
 } from './commands/evidence';
 
+export {
+  runEventsMigrateCommand,
+  runEventsRotateCommand,
+  runEventsVerifyArchiveCommand,
+} from './commands/events';
+export type {
+  EventsMigrateCommandOptions,
+  EventsRotateCommandOptions,
+  EventsVerifyArchiveCommandOptions,
+} from './commands/events';
+
 export { runClaimCommand } from './commands/claim';
 export type { ClaimCommandOptions } from './commands/claim';
 

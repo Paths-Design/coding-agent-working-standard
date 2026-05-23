@@ -235,6 +235,134 @@ describe('validateEventBody — payload schemas (per type)', () => {
       expect(r.errors.map((e) => e.rule)).toContain(EVIDENCE_RULES.EVENT_DATA_MISSING);
     }
   });
+
+  // chain_rotated — see CAWS-MIGRATE-V10-EVENTS-001 A3. The payload
+  // is evidentiary, not decorative: it must cite the prior tail hash,
+  // archive path, archive sha256 digest, prior line count, chain
+  // status, actor-shape stats, and migration reason. Every required
+  // field is enforced by the AJV schema; the tests below pin the
+  // contract so a future schema edit cannot silently weaken it.
+
+  const goodChainRotatedData = () => ({
+    prior_tail_hash: HASH_A,
+    prior_file_path: 'events.jsonl.archive-2026-05-22T23-15-00-000Z',
+    prior_file_digest: HASH_B,
+    prior_line_count: 3,
+    prior_chain_status: 'parseable_unverified',
+    actor_shape_stats: { v10_string_actor: 3, v11_object_actor: 0, unparseable: 0 },
+    migration_reason: 'v10 → v11 migration smoke',
+  });
+
+  const goodChainRotatedBody = (over: Partial<EventBody> = {}): EventBody => ({
+    event: 'chain_rotated',
+    ts: goodTs,
+    actor: goodActor,
+    data: goodChainRotatedData(),
+    ...over,
+  });
+
+  it('accepts a fully-valid chain_rotated body', () => {
+    const r = validateEventBody(goodChainRotatedBody());
+    expect(isOk(r)).toBe(true);
+  });
+
+  it('accepts chain_rotated with optional prior_seq', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), prior_seq: 3 },
+      })
+    );
+    expect(isOk(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated missing prior_file_digest', () => {
+    const { prior_file_digest: _omit, ...partial } = goodChainRotatedData();
+    const r = validateEventBody(goodChainRotatedBody({ data: partial }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.errors.map((e) => e.rule)).toContain(EVIDENCE_RULES.EVENT_PAYLOAD_INVALID);
+    }
+  });
+
+  it('rejects chain_rotated missing migration_reason', () => {
+    const { migration_reason: _omit, ...partial } = goodChainRotatedData();
+    const r = validateEventBody(goodChainRotatedBody({ data: partial }));
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated with empty migration_reason', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), migration_reason: '' },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated with prior_chain_status outside the enum', () => {
+    // 'verified' is deliberately excluded — v10 hashes cannot be
+    // reverified under v11 code (different envelope shape).
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), prior_chain_status: 'verified' },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated with prior_file_digest not matching sha256 pattern', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), prior_file_digest: 'not-a-hash' },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated with additionalProperties on the data block', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), unexpected_field: 'nope' },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated with actor_shape_stats missing a count', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: {
+          ...goodChainRotatedData(),
+          actor_shape_stats: { v10_string_actor: 3, v11_object_actor: 0 },
+        },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+  });
+
+  it('rejects chain_rotated carrying spec_id (NO_SPEC_ID class)', () => {
+    const r = validateEventBody(
+      goodChainRotatedBody({ spec_id: 'FOO-1' })
+    );
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.errors.map((e) => e.rule)).toContain(
+        EVIDENCE_RULES.EVENT_SPEC_ID_FORBIDDEN
+      );
+    }
+  });
+
+  it('accepts chain_rotated with prior_tail_hash null', () => {
+    // Forward-compat: rotateEvents currently refuses against empty
+    // prior chains, but the schema admits null prior_tail_hash for a
+    // future policy that might rotate truly empty logs.
+    const r = validateEventBody(
+      goodChainRotatedBody({
+        data: { ...goodChainRotatedData(), prior_tail_hash: null },
+      })
+    );
+    expect(isOk(r)).toBe(true);
+  });
 });
 
 describe('validateEventBody — vocabulary', () => {

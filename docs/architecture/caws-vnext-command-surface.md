@@ -508,11 +508,18 @@ These are non-negotiable for v11. A change that violates one of these is
 either a regression to fix, or a deliberate doctrine shift requiring an
 update to this document.
 
-1. **`events.jsonl` is written ONLY through `appendEvent` in
-   `packages/caws-cli/src/store/events-store.ts`.** That function
-   acquires `events.jsonl.lock`, computes the hash chain, validates the
-   event against its JSON Schema, and writes atomically. No other code
-   in v11 writes to that file.
+1. **`events.jsonl` is written ONLY through the two sanctioned writers
+   in `packages/caws-cli/src/store/events-store.ts`.** Those are
+   `appendEvent` (evidence appends) and `rotateEvents` (chain
+   maintenance, v11.2+ — see invariant 14). Both functions acquire
+   `events.jsonl.lock`, both validate the event they produce against
+   its JSON Schema, both write atomically. No other code in v11 writes
+   to that file. Shell commands and migration tooling MUST invoke these
+   two functions through their exported store surface; the lock
+   primitives (`acquireLock`, `releaseLock`, `tryRecoverStaleLock`) are
+   private to `events-store.ts` and MUST NOT be exported — exporting
+   them would create a third writer surface by exposing lock
+   acquisition to callers that bypass the canonical functions.
 
 2. **`policy.yaml` owns gate `mode` (`block` / `warn` / `skip`).**
    Waivers filter violations *out of* the disposition calculation; they
@@ -600,6 +607,100 @@ fix or an explicit doctrine shift requiring an update to this document.
     A binding type that omits an applicable slot is a doctrine
     violation, not just a missing feature.
 
+14. **`events.jsonl` writers are closed and enumerated; chain
+    maintenance is a sanctioned second writer.** The writer surface
+    has exactly two functions, both in
+    `packages/caws-cli/src/store/events-store.ts`, both holding
+    `.caws/events.jsonl.lock`:
+    - `appendEvent(cawsDir, body)` — evidence appends. Validates the
+      new event body, reads the prior chain via `loadEvents` to compute
+      the next `seq` + `prev_hash`, calls `prepareAppend`, writes the
+      new line atomically.
+    - `rotateEvents(cawsDir, opts)` — chain maintenance (v11.2+).
+      Performs a tolerant tail scan (NOT `validateChainedEvent`) to
+      capture `prior_tail_hash` + `seq`, computes `prior_file_digest`
+      + `actor_shape_stats`, renames the existing file to
+      `events.jsonl.archive-<ISO timestamp>`, builds a `chain_rotated`
+      genesis body, calls `prepareAppend(null, body)`, writes the new
+      file.
+
+    No third writer is permitted. Shell commands and migration tooling
+    NEVER write `events.jsonl` directly; they invoke these two functions
+    through the exported store surface. The lock primitives stay
+    private to `events-store.ts` (per invariant 1's "ONLY through the
+    two sanctioned writers" clause). Adding a third writer is a
+    doctrine-level decision requiring an update to this document and a
+    new invariant, not an implementation choice.
+
+    The `chain_rotated` event payload carries enough evidence to
+    cryptographically tie the archive to the new chain externally:
+    `prior_tail_hash`, `prior_file_path`, `prior_file_digest` (sha256
+    of archive bytes), `prior_line_count`, `prior_chain_status` (enum
+    `["parseable_unverified", "unparseable", "empty"]` — `"verified"`
+    is deliberately excluded for v10→v11 rotations because the v11
+    hash algorithm hashes a structurally different envelope than v10),
+    `actor_shape_stats`, `migration_reason`. `caws events
+    verify-archive` recomputes the archive's digest + line count and
+    asserts match. Tamper detection survives the rotation boundary.
+
+---
+
+### Maintenance / control-plane command surface
+
+Most v11 command groups are evidence-producing operations: they read
+state, produce events through `appendEvent`, and progress a slice
+toward closure. A small set of operations is **maintenance** — they
+exist to repair, migrate, or rotate the underlying state stores
+themselves. Maintenance commands are explicitly enumerated here so
+their privileged surface is auditable and bounded.
+
+Maintenance commands are distinct from normal evidence operations in
+three ways. (1) They may invoke a sanctioned writer that the normal
+command path does not use (e.g., `rotateEvents` rather than
+`appendEvent`). (2) They typically require an explicit operator reason
+or a friction flag to prevent casual invocation (e.g., `--reason
+"<text>"` or `--allow-clean`). (3) They produce a typed audit event
+recording the operation (`chain_rotated`, `worktree_*_migrated`,
+forthcoming `spec_*_migrated`). They never silently rewrite state;
+either the operation is explicit and auditable, or it does not happen.
+
+The v11.2 maintenance surface:
+
+- **`caws worktree migrate-registry`** (shipped v11.1.x as part of
+  `WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001`). Converts v10.2
+  legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape.
+  Destroyed records are omitted iff no spec claims them and their
+  path is absent.
+- **`caws events rotate`** (v11.2+, `CAWS-MIGRATE-V10-EVENTS-001`).
+  Archives the existing `events.jsonl` and starts a fresh chain with
+  a `chain_rotated` genesis event. Requires `--reason "<text>"`.
+  Refuses against a clean v11 chain unless `--allow-clean` is
+  passed.
+- **`caws events migrate --from v10`** (v11.2+, same slice).
+  Dry-run-default scanner that classifies an existing `events.jsonl`
+  by actor shape (v10 string vs. v11 structured) and reports the
+  rotation plan. `--apply` invokes `rotateEvents`. Refuses with
+  `EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED` when v10 spec YAMLs are
+  detected unless `--allow-partial-upgrade` is passed.
+- **`caws events verify-archive`** (v11.2+, same slice). Recomputes
+  the archive file's sha256 and line count and asserts both match
+  the `chain_rotated` payload's `prior_file_digest` and
+  `prior_line_count`. Surfaces typed diagnostics on mismatch
+  (`EVENTS_ARCHIVE_DIGEST_MISMATCH`,
+  `EVENTS_ARCHIVE_LINE_COUNT_MISMATCH`).
+- **`caws specs migrate --from v10`** (v11.2+,
+  `CAWS-MIGRATE-V10-SPECS-001`, downstream of the events slice).
+  Per-file plan-and-apply migration for v10-era spec YAMLs to the
+  v11 schema. Writes a durable migration report at
+  `.caws/migrations/v10-to-v11/<timestamp>.json` recording
+  per-file before/after digests, warnings, dropped fields,
+  synthesized fields, and refusal causes.
+
+These commands are governance-state mutators, not evidence
+producers, and must remain a closed enumerated set. Adding a new
+maintenance command requires an entry in this list, not just a
+shell registration.
+
 ---
 
 ## 7. Migration guidance for legacy users
@@ -667,6 +768,15 @@ is the canonical writer. A second implementation lives in
 **Result: zero blockers. `utils/event-log.js` is fully orphaned by 8a3.**
 Invariant 1 ("events.jsonl ONLY through store appendEvent") will hold
 after 8a3 import removal.
+
+**Note (v11.2 amendment, `CAWS-MIGRATE-V10-EVENTS-001`):** Invariant 1
+has been amended to enumerate two sanctioned writers — `appendEvent`
+(evidence appends) and `rotateEvents` (chain maintenance). Both live
+in the same module, both hold the same lock. `rotateEvents` is
+explicitly permitted by invariant 14; the audit's "zero blockers"
+result is unchanged because the new writer is in the same canonical
+module as the original and the closed enumeration in invariants 1
+and 14 still excludes every legacy `utils/event-log.js` call site.
 
 ### Audit 2 — `working-spec.yaml` active authority paths
 

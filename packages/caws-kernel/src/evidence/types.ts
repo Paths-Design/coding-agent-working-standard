@@ -78,7 +78,8 @@ export type EventType =
   | 'session_started'
   | 'session_ended'
   | 'commit_made'
-  | 'branch_switched';
+  | 'branch_switched'
+  | 'chain_rotated';
 
 /**
  * REQUIRES_SPEC_ID: event MUST carry a non-empty spec_id.
@@ -128,6 +129,7 @@ export const NO_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'session_ended',
   'branch_switched',
   'doctor_completed',
+  'chain_rotated',
 ]);
 
 /**

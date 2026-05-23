@@ -260,6 +260,30 @@ try {
 
   const elapsedMs = Date.now() - startMs;
   log(colors.green(`\n[fresh-install-smoke] PASS in ${elapsedMs}ms — published tarball is install-safe`));
+
+  // Chain into the events-migration smoke (CAWS-MIGRATE-V10-EVENTS-001
+  // A12). This script (fresh-install-smoke.mjs) is already wired into
+  // prepublishOnly via packages/caws-cli/package.json:scripts, so
+  // appending the events smoke here means a fresh publish runs both
+  // smokes in sequence without touching the governed package.json.
+  //
+  // The events smoke packs BOTH kernel and CLI tarballs, installs them
+  // into its own scratch project, and runs the full migrate → verify
+  // lifecycle against the installed binary. Failure exits 1 with a
+  // structured diagnostic; the prepublishOnly chain then halts the
+  // publish.
+  step('chain into events-migration-smoke (A12)');
+  const eventsSmokePath = join(__dirname, 'events-migration-smoke.mjs');
+  const eventsResult = spawnSync('node', [eventsSmokePath], {
+    stdio: 'inherit',
+  });
+  if (eventsResult.status !== 0) {
+    fail('events-migration-smoke failed', {
+      exitCode: eventsResult.status,
+      hint: 'See its output above for the specific assertion that failed.',
+    });
+  }
+  log(colors.green(`\n[fresh-install-smoke] events-migration-smoke chained successfully`));
 } catch (err) {
   fail('unexpected error', { message: err.message, stack: err.stack?.slice(0, 1000) });
 }
