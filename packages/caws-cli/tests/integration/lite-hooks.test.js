@@ -509,3 +509,328 @@ describe('lite-hooks integration', () => {
     });
   });
 });
+
+// ============================================================================
+// MULTI-AGENT-ACTIVITY-REGISTRY-001 — agent-register / agent-heartbeat /
+// agent-stop hook templates.
+//
+// These hooks fan out from the SessionStart, PreToolUse, and Stop dispatchers
+// installed by the v3 Claude Code hook pack. Each invokes the CAWS CLI
+// (`caws agents register/heartbeat/stop`) and treats failure as silently
+// non-blocking. agent-heartbeat is the sole emitter of Claude Code's
+// hookSpecificOutput.additionalContext envelope; the CLI itself returns
+// CAWS-native JSON.
+//
+// Test approach: use the built CLI directly (bin/caws.js) as $CAWS_BIN so the
+// hooks can locate `caws` without requiring a global install on PATH. Each
+// test pipes a synthetic hook payload into the script and inspects the
+// resulting on-disk lease file plus the stdout envelope.
+// ============================================================================
+
+describe('agent-*.sh hooks integration (MULTI-AGENT-ACTIVITY-REGISTRY-001)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+  // Resolve the built CLI entry. The hook scripts invoke `caws agents ...`;
+  // we shim that by writing a tiny `caws` wrapper that delegates to the
+  // built dist/index.js, then prepending its directory to PATH. This
+  // proves the hook's invocation path without depending on global
+  // install state.
+  const cliBin = path.resolve(__dirname, '../../dist/index.js');
+
+  let testDir;
+  let originalCwd;
+  let shimDir;
+
+  beforeAll(() => {
+    if (!fs.existsSync(cliBin)) {
+      throw new Error(
+        `CLI bin not built at ${cliBin} — run "turbo run build --filter=@paths.design/caws-cli..."`
+      );
+    }
+  });
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-agent-hooks-'));
+    execFileSync('git', ['init', '-q', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.mkdirSync(path.join(testDir, '.caws'));
+
+    // Copy the three new hook templates + the shared lib + runtime-paths
+    // so parse-input.sh / read_hook_input_json work.
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+
+    for (const f of ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh']) {
+      const src = path.join(packDir, f);
+      const dest = path.join(hooksDir, f);
+      fs.copySync(src, dest);
+      fs.chmodSync(dest, 0o755);
+    }
+    fs.copySync(path.join(packDir, 'runtime-paths.sh'), path.join(hooksDir, 'runtime-paths.sh'));
+    fs.copySync(path.join(packDir, 'lib', 'parse-input.sh'), path.join(hooksDir, 'lib', 'parse-input.sh'));
+
+    // Make a shim that proxies `caws` to the built CLI binary.
+    shimDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-shim-'));
+    const shimPath = path.join(shimDir, 'caws');
+    fs.writeFileSync(shimPath, `#!/bin/bash\nexec node "${cliBin}" "$@"\n`);
+    fs.chmodSync(shimPath, 0o755);
+
+    process.chdir(testDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+    if (shimDir) fs.removeSync(shimDir);
+  });
+
+  function runAgentHook(hookName, payload, extraEnv = {}) {
+    const hookPath = path.join(testDir, '.claude', 'hooks', hookName);
+    const input = JSON.stringify(payload);
+    const inputFile = path.join(testDir, '.agent-hook-input.json');
+    fs.writeFileSync(inputFile, input);
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          PATH: `${shimDir}:${process.env.PATH}`,
+          ...extraEnv,
+        },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      fs.removeSync(inputFile);
+    }
+  }
+
+  function leasePath(sessionId) {
+    return path.join(testDir, '.caws', 'leases', `${sessionId}.json`);
+  }
+
+  // ───── agent-register.sh ─────────────────────────────────────────────
+
+  describe('agent-register.sh (SessionStart)', () => {
+    test('creates a lease file for a valid session_id', () => {
+      const sid = 'caws-hooktest-reg-1';
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        session_id: sid,
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(fs.existsSync(leasePath(sid))).toBe(true);
+      const lease = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(lease.session_id).toBe(sid);
+      expect(lease.platform).toBe('claude-code');
+      expect(lease.last_seen_reason).toBe('session_start');
+      expect(lease.status).toBe('active');
+    });
+
+    test('refuses silently when session_id is "unknown"', () => {
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        session_id: 'unknown',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // No leases directory should exist.
+      expect(fs.existsSync(path.join(testDir, '.caws', 'leases'))).toBe(false);
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // parse-input.sh falls back to "unknown" which our guard rejects.
+      expect(fs.existsSync(path.join(testDir, '.caws', 'leases'))).toBe(false);
+    });
+
+    test('exits 0 even when the CAWS binary is unavailable', () => {
+      // Override PATH to a directory without our shim. The hook must
+      // exit 0 silently — SessionStart cannot fail on a missing dep.
+      const r = runAgentHook(
+        'agent-register.sh',
+        {
+          hook_event_name: 'SessionStart',
+          session_id: 'caws-hooktest-no-bin',
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+      expect(fs.existsSync(leasePath('caws-hooktest-no-bin'))).toBe(false);
+    });
+  });
+
+  // ───── agent-heartbeat.sh ───────────────────────────────────────────
+
+  describe('agent-heartbeat.sh (PreToolUse)', () => {
+    function register(sessionId) {
+      execFileSync('node', [cliBin, 'agents', 'register',
+        '--session-id', sessionId,
+        '--platform', 'claude-code',
+        '--reason', 'manual_register',
+      ], { cwd: testDir, stdio: 'pipe' });
+    }
+
+    test('updates the current session lease on PreToolUse', () => {
+      const sid = 'caws-hooktest-hb-1';
+      register(sid);
+      const before = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+
+      // Force-throttle bypass by deleting and re-running after a small
+      // delay isn't possible here; instead invoke with the hook script,
+      // which calls `caws agents heartbeat --throttle 30000`. We assert
+      // the lease still exists and last_active is parseable.
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      const after = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(after.session_id).toBe(sid);
+      // Either updated (last_seen_reason switched to 'pre_tool_use') or
+      // throttled (last_seen_reason stays 'manual_register'). Both are
+      // valid outcomes; the assertion is that the lease was readable
+      // and the hook exited 0.
+      expect(['pre_tool_use', 'manual_register']).toContain(after.last_seen_reason);
+    });
+
+    test('emits NO additionalContext when only self is active (N=1)', () => {
+      const sid = 'caws-hooktest-hb-solo';
+      register(sid);
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // Silent in the common case — no envelope.
+      expect(r.stdout.trim()).toBe('');
+    });
+
+    test('emits hookSpecificOutput.additionalContext when N>1 (parallel peers)', () => {
+      // Register a peer session first so the heartbeat sees N=2.
+      register('caws-hooktest-hb-peer');
+      const sid = 'caws-hooktest-hb-self';
+      register(sid);
+
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      const trimmed = r.stdout.trim();
+      expect(trimmed.length).toBeGreaterThan(0);
+
+      const envelope = JSON.parse(trimmed);
+      expect(envelope.hookSpecificOutput).toBeDefined();
+      expect(envelope.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+      expect(envelope.hookSpecificOutput.additionalContext).toContain('MULTI-AGENT NOTICE');
+      // Must name the OTHER session, not self.
+      expect(envelope.hookSpecificOutput.additionalContext).toContain('caws-hooktest-hb-peer');
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.trim()).toBe('');
+    });
+
+    test('fails closed (exits 0, no output) when CAWS binary is unavailable', () => {
+      const r = runAgentHook(
+        'agent-heartbeat.sh',
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'caws-hooktest-hb-nobin',
+          tool_name: 'Bash',
+          tool_input: { command: 'ls' },
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.trim()).toBe('');
+    });
+  });
+
+  // ───── agent-stop.sh ────────────────────────────────────────────────
+
+  describe('agent-stop.sh (Stop)', () => {
+    function register(sessionId) {
+      execFileSync('node', [cliBin, 'agents', 'register',
+        '--session-id', sessionId,
+        '--platform', 'claude-code',
+        '--reason', 'manual_register',
+      ], { cwd: testDir, stdio: 'pipe' });
+    }
+
+    test('marks the lease as stopped', () => {
+      const sid = 'caws-hooktest-stop-1';
+      register(sid);
+      expect(JSON.parse(fs.readFileSync(leasePath(sid), 'utf8')).status).toBe('active');
+
+      const r = runAgentHook('agent-stop.sh', {
+        hook_event_name: 'Stop',
+        session_id: sid,
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+
+      const after = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(after.status).toBe('stopped');
+      expect(after.stopped_at).toBeDefined();
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-stop.sh', {
+        hook_event_name: 'Stop',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+    });
+
+    test('exits 0 even when the CAWS binary is unavailable', () => {
+      const r = runAgentHook(
+        'agent-stop.sh',
+        {
+          hook_event_name: 'Stop',
+          session_id: 'caws-hooktest-stop-nobin',
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+    });
+  });
+});

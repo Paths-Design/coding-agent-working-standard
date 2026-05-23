@@ -259,6 +259,47 @@ If the cli publish fails post-publish-of-kernel, **kernel is not rolled
 back**. Coupled-release atomicity is "ordered, observable, repairable" —
 not all-or-nothing. npm does not provide cross-package transactionality.
 
+### Footgun: registry-stale kernel resolution
+
+Any CLI release depending on **newly added kernel symbols** must prove
+the matching kernel tarball is the one npm will install — not a
+registry-stale kernel that happens to satisfy the semver range but
+predates the new symbols. Caught live during
+`MULTI-AGENT-ACTIVITY-REGISTRY-001` commit 6: the CLI's
+`agents register` shell command imports `registerAgentSession` from
+`@paths.design/caws-kernel`, and the CLI's dep range
+(`"^1.0.0"`) is satisfied by the registry's `1.1.1` — but that
+registry kernel was published **before** the lease symbols were added.
+`npm install <cli-tarball>` resolved kernel from the registry and the
+CLI crashed at runtime with
+`(0, caws_kernel_1.registerAgentSession) is not a function`.
+
+Two enforcement layers, in order of strength:
+
+1. **Pre-publish (preferred):** the
+   `packages/caws-cli/scripts/fresh-install-smoke.mjs` script (run by
+   `prepublishOnly`) packs BOTH the local kernel tarball AND the local
+   cli tarball and installs both into a scratch project. It then
+   probe-asserts that the installed kernel exports the symbols the CLI
+   imports (currently `registerAgentSession`; extend the probe as new
+   coupled symbols land). If npm resolution picks up a registry copy
+   instead of the local tarball, this assertion fails fast with a
+   structured diagnostic naming the missing symbol and the version
+   gap. This catches the footgun before any tag is pushed.
+
+2. **Post-publish (release-time):** within ~5 minutes of publishing
+   the kernel, run the smoke against the registry copy
+   (not the local tarball) to confirm `npm install
+   @paths.design/caws-cli@<new>` actually resolves
+   `@paths.design/caws-kernel@<new>`. If a downstream consumer's lock
+   file pins an older kernel, the same `not a function` failure
+   reappears for them on `npm ci`.
+
+The doctrinal rule: a CLI release that depends on coupled kernel
+symbols is incomplete until either the prepublishOnly smoke or a
+post-publish equivalent has run against installed artifacts (NOT
+against source). Source tests can pass while installed users crash.
+
 ## What to do if the bypass-2FA NPM_TOKEN expires or is revoked
 
 The token is stored as `NPM_TOKEN` in the `Release` GitHub environment.

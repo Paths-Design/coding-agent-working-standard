@@ -33,6 +33,22 @@ export { appendEvent, loadEvents } from './events-store';
 
 export { applyRegistryPatch } from './apply-patch';
 
+// ─── leases (MULTI-AGENT-ACTIVITY-REGISTRY-001) ──────────────────────────
+// Lease I/O surface — separate from applyRegistryPatch. LeasePatch is
+// applied ONLY through applyLeasePatch / applyLeasePatches.
+export {
+  safeLeaseFilename,
+  loadLeases,
+  applyLeasePatch,
+  applyLeasePatches,
+  pruneLeasesByStatus,
+} from './leases-store';
+export type {
+  LoadLeasesResult,
+  PruneOptions,
+  PruneResult,
+} from './leases-store';
+
 export { loadWaivers, writeWaiver, markRevoked } from './waivers-store';
 export type { WaiversLoadResult } from './waivers-store';
 

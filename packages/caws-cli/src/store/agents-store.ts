@@ -4,6 +4,15 @@
 // → empty, malformed → Err. Agents.json is freshness/display only and
 // never authority per CAWSFIX-31/32 doctrine; the store treats it like
 // any other data payload.
+//
+// MULTI-AGENT-ACTIVITY-REGISTRY-001 FREEZE: .caws/agents.json is frozen
+// as compatibility/identity metadata. The AgentRecord schema is NOT
+// extended. No new code reads or writes this file. New agent liveness
+// work uses .caws/leases/<safe-session-id>.json via leases-store.ts.
+// loadAgents() remains for the legacy `caws claim` → applyRefreshAgent
+// path and for the legacy `caws status` display when no leases exist
+// (transition rule from spec). Negative invariant: deleting or
+// corrupting agents.json MUST NOT break any lease operation.
 
 import * as path from 'path';
 import {

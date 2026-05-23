@@ -88,6 +88,17 @@ recovery ergonomics. The deliverables are:
 - **Leases** (ephemeral operational cache) under `.caws/leases/` — a
   per-session liveness file written by the store layer on write-class
   command dispatch. **Not authority. Not in `events.jsonl`.**
+  - The operational verbs (`caws agents register/heartbeat/stop/prune`)
+    that write and read this substrate shipped ahead of the full v11.2
+    release as `MULTI-AGENT-ACTIVITY-REGISTRY-001` (mid-v11.1.x).
+    Trigger: the canonical-checkout hijack documented in failure-lineage
+    Entry 19 was a live multi-agent incident with no visibility
+    substrate to make the conflict legible at the decision point.
+    Visibility could not wait for the full v11.2 authority slice
+    package. The `list/show` read surface remains a v11.2 deliverable;
+    `register/heartbeat/stop/prune` are the write/lifecycle/cleanup
+    verbs and are live from v11.1.x onward via the Claude Code hook
+    pack (SessionStart / PreToolUse / Stop). See §2.
 - **`claim_taken_over.v1` event emission** wired into `caws claim
   --takeover` inside the same lifecycle transaction as the worktrees.json
   mutation. Closes the existing audit gap.
@@ -330,6 +341,33 @@ multi-agent observability. Every command group is implemented in
 | `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
 | `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. |
 | `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
+
+### Shipped ahead of v11.2 (MULTI-AGENT-ACTIVITY-REGISTRY-001)
+
+These operational verbs ship the `.caws/leases/<session_id>` substrate
+the v11.2 `agents list/show` surface will read. They went live in
+v11.1.x ahead of the full v11.2 release because the canonical-checkout
+hijack incident (failure-lineage Entry 19) needed visibility
+immediately. The CLI surface is invoked exclusively by the Claude Code
+hook pack v3 at SessionStart / PreToolUse / Stop; humans rarely type
+them directly.
+
+| Command | Purpose |
+|---|---|
+| `caws agents register --session-id <id> --platform <name> --reason <reason>` | Upsert the calling session's lease at `.caws/leases/<id>.json` with status=active. Hook-invoked at SessionStart. |
+| `caws agents heartbeat --session-id <id> --throttle <ms> --json --include-active-summary` | Refresh `last_active` (respects throttle), and emit CAWS-native JSON describing all currently-active leases. Hook-invoked at PreToolUse; the hook script (not the CLI) composes Claude Code's `hookSpecificOutput.additionalContext` envelope from this JSON. |
+| `caws agents stop --session-id <id>` | Mark the session's lease as `status=stopped` with `stopped_at`. Hook-invoked at Stop; best-effort (SIGKILL/crash bypasses it — heartbeat staleness is the primary liveness signal). |
+| `caws agents prune --status <stopped\|stale> --older-than <duration> [--apply]` | Operator-driven cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs. |
+
+**Hook IO boundary:** the CLI is hook-protocol-agnostic. `caws agents
+heartbeat --json` emits CAWS-native JSON only. The Claude Code envelope
+(`hookSpecificOutput.additionalContext`) is composed by
+`templates/hook-packs/claude-code/agent-heartbeat.sh` via inline
+`node -e`, not via `jq` (the hook pack has no `jq` dependency). A future
+Cursor or terminal integration consumes the same CAWS-native JSON and
+emits its own protocol-specific envelope. Changing Claude Code's hook
+envelope format does not require changing kernel lease logic or store
+lease writes.
 
 ### Help banner (built CLI)
 
@@ -583,6 +621,11 @@ fix or an explicit doctrine shift requiring an update to this document.
     Lease write failure logs a warning and continues. Lease touches are
     NOT inside `lifecycle-transaction`. A failed lease write MUST NOT
     prevent a `caws claim` (or any other command) from succeeding.
+    Lease writes flow through `caws agents register/heartbeat/stop`
+    (composed by the agent hook pack, invoked from
+    SessionStart/PreToolUse/Stop). Hooks MUST NOT write `.caws/leases/`
+    directly; they invoke the CLI which routes through `leases-store.ts`
+    so the atomic-write + safe-filename invariants hold.
 
 12. **Bridge bindings do not bypass scope.** A bridge claim is an
     *authority binding* (session ↔ spec), not a *scope expansion*.
