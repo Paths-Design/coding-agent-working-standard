@@ -48,6 +48,7 @@ scope:
     # installed file's managed header version matches the manifest. Every
     # managed file gets a single-line header bump as part of this slice.
     - packages/caws-cli/templates/hook-packs/claude-code/audit.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
     - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
     - packages/caws-cli/templates/hook-packs/claude-code/reset-strikes.sh
     - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
