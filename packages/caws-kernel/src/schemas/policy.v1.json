@@ -119,6 +119,20 @@
         "require_signed_commits": { "type": "boolean" },
         "require_dual_control_for_governance": { "type": "boolean" }
       }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "SESSION-OWNERSHIP-METADATA-001 (C1 storage-bounds interpretation): configuration for multi-agent ownership metadata. Optional; consumed by upstream collectors and downstream guards, NOT by the agents.json writer.",
+      "properties": {
+        "last_modified_paths_ttl_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 86400,
+          "default": 1800,
+          "description": "Caller-visible TTL (seconds) for filtering last_modified_paths before invoking refreshAgentClaim. Bounds [60, 86400]; default 1800 (30 minutes). The CAWS store writer does NOT consume this value — it stores caller-pruned arrays verbatim subject to structural validation and FIFO cap. TTL enforcement lives in whichever upstream surface assembles the path set."
+        }
+      }
     }
   },
   "$defs": {

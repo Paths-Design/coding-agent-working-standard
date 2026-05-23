@@ -248,6 +248,8 @@ export type RegistryPatch =
       readonly last_active: string;
       readonly bound_worktree?: string;
       readonly bound_spec_id?: string;
+      readonly claimed_paths?: readonly string[];
+      readonly last_modified_paths?: readonly string[];
     };
 
 // ----------------------------------------------------------------------------

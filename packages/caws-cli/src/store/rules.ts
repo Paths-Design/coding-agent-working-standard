@@ -25,6 +25,12 @@ export const STORE_RULES = {
   WRITE_IO_FAILED: 'store.write.io_failed',
   /** Patch references a registry entry that does not exist (rebind/takeover). */
   WRITE_PATCH_TARGET_MISSING: 'store.write.patch_target_missing',
+  /** A path array entry in a refresh_agent patch is structurally invalid
+   *  (not a string, empty string, or contains a null byte). The writer
+   *  fails closed and does NOT perform a partial write.
+   *
+   *  Owner: SESSION-OWNERSHIP-METADATA-001 A3, A10 (structural validation). */
+  WRITE_AGENT_PATH_INVALID: 'store.write.agent_path_invalid',
 
   // ---- specs ---------------------------------------------------------------
   /** A single spec file failed validation; the load itself still succeeds. */

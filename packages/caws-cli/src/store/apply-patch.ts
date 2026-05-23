@@ -181,6 +181,86 @@ function applyTakeoverClaim(
   return writeRegistryJson(filePath, registry);
 }
 
+/**
+ * Maximum number of entries the writer will store in `last_modified_paths`.
+ *
+ * Storage-bound invariant from SESSION-OWNERSHIP-METADATA-001 Q6 (C1 framing).
+ * If the caller passes more than this many, the writer preserves caller order
+ * and drops the lowest-index overflow until the count equals the cap. This is
+ * distinct from TTL — TTL needs per-path timestamps the substrate does not
+ * carry; the FIFO cap needs only ordered input and a max length.
+ */
+export const LAST_MODIFIED_PATHS_MAX = 1000;
+
+/**
+ * Structural validation for a path array carried by a refresh_agent patch.
+ *
+ * Returns Ok with the (possibly-truncated) array on success; Err with a
+ * WRITE_AGENT_PATH_INVALID diagnostic on the first invalid entry. The writer
+ * MUST NOT perform a partial write on validation failure — callers fail closed.
+ *
+ * Validation rules:
+ *   - input is an array (already typed at the patch envelope, but defended)
+ *   - every entry is a string
+ *   - no entry is the empty string
+ *   - no entry contains a NUL byte (U+0000)
+ *
+ * FIFO truncation (when `cap` is provided): if the array length exceeds the
+ * cap, drop the lowest-index entries until length === cap. Caller order is
+ * preserved among the kept entries.
+ *
+ * SESSION-OWNERSHIP-METADATA-001 A3, A10.
+ */
+function validateAndCapAgentPaths(
+  field: 'claimed_paths' | 'last_modified_paths',
+  value: readonly string[],
+  cap: number | undefined
+): Result<readonly string[]> {
+  if (!Array.isArray(value)) {
+    return err(
+      storeErr(
+        STORE_RULES.WRITE_AGENT_PATH_INVALID,
+        `${field} must be an array`,
+        { field }
+      )
+    );
+  }
+  for (let i = 0; i < value.length; i++) {
+    const entry = value[i];
+    if (typeof entry !== 'string') {
+      return err(
+        storeErr(
+          STORE_RULES.WRITE_AGENT_PATH_INVALID,
+          `${field}[${i}] is not a string`,
+          { field, index: i, valueType: typeof entry }
+        )
+      );
+    }
+    if (entry.length === 0) {
+      return err(
+        storeErr(
+          STORE_RULES.WRITE_AGENT_PATH_INVALID,
+          `${field}[${i}] is empty`,
+          { field, index: i }
+        )
+      );
+    }
+    if (entry.indexOf(' ') !== -1) {
+      return err(
+        storeErr(
+          STORE_RULES.WRITE_AGENT_PATH_INVALID,
+          `${field}[${i}] contains a null byte`,
+          { field, index: i }
+        )
+      );
+    }
+  }
+  if (cap !== undefined && value.length > cap) {
+    return ok(value.slice(value.length - cap));
+  }
+  return ok(value);
+}
+
 function applyRefreshAgent(
   cawsDir: string,
   patch: Extract<RegistryPatch, { kind: 'refresh_agent' }>
@@ -191,6 +271,25 @@ function applyRefreshAgent(
     {}
   );
   if (!readResult.ok) return readResult;
+
+  // Validate path arrays BEFORE any write. Fail closed — no partial write.
+  let claimedPaths: readonly string[] | undefined;
+  if (patch.claimed_paths !== undefined) {
+    const vr = validateAndCapAgentPaths('claimed_paths', patch.claimed_paths, undefined);
+    if (!vr.ok) return vr;
+    claimedPaths = vr.value;
+  }
+  let lastModifiedPaths: readonly string[] | undefined;
+  if (patch.last_modified_paths !== undefined) {
+    const vr = validateAndCapAgentPaths(
+      'last_modified_paths',
+      patch.last_modified_paths,
+      LAST_MODIFIED_PATHS_MAX
+    );
+    if (!vr.ok) return vr;
+    lastModifiedPaths = vr.value;
+  }
+
   const registry: Record<string, AgentRegistry[string]> = { ...readResult.value };
   const prev = registry[patch.session.session_id] ?? { session_id: patch.session.session_id, last_active: patch.last_active };
   registry[patch.session.session_id] = {
@@ -200,6 +299,8 @@ function applyRefreshAgent(
     last_active: patch.last_active,
     ...(patch.bound_worktree !== undefined ? { bound_worktree: patch.bound_worktree } : {}),
     ...(patch.bound_spec_id !== undefined ? { bound_spec_id: patch.bound_spec_id } : {}),
+    ...(claimedPaths !== undefined ? { claimed_paths: claimedPaths } : {}),
+    ...(lastModifiedPaths !== undefined ? { last_modified_paths: lastModifiedPaths } : {}),
   };
   return writeRegistryJson(filePath, registry);
 }
