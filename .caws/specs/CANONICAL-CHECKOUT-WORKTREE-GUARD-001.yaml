@@ -1,0 +1,269 @@
+id: CANONICAL-CHECKOUT-WORKTREE-GUARD-001
+title: 'Guard canonical checkout writes while CAWS worktrees are active'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-23T11:44:45.090Z'
+updated_at: '2026-05-23T12:00:00.000Z'
+worktree: canonical-checkout-worktree-guard
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/integration/lite-hooks.test.js
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - docs/failure-lineage.md
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CANONICAL-CHECKOUT-WORKTREE-GUARD-001.yaml
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/integration/lite-hooks.test.js
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - docs/failure-lineage.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell
+    - .claude/hooks
+invariants:
+  - >-
+    The canonical checkout guard is HOOK-LAYER ENFORCEMENT, not an authority.
+    It refuses tool calls; it does not decide ownership. Authority for worktree
+    ownership remains in `.caws/worktrees.json:owner`. Authority for scope
+    admission remains in `.caws/specs/<id>.yaml`. The guard MUST NOT consult
+    leases or worktrees registry to make authority decisions; it consults
+    them only to decide REFUSE-OR-ALLOW for the current tool call.
+  - >-
+    Leases (`.caws/leases/*.json`) are visibility evidence ONLY. The guard
+    MAY read leases to enrich diagnostic context (which other sessions are
+    active, where they are bound). The guard MUST NOT use lease presence,
+    TTL, or staleness to authorize takeover, dismiss a worktree's authority,
+    or clean up state. A missing or corrupt lease MUST NOT block the agent
+    nor authorize a canonical-write that would otherwise be refused.
+  - >-
+    The guard's refusal predicate is conjunctive: (a) current session's
+    git_dir resolves to git_common_dir (canonical checkout); AND (b) at
+    least one entry in `.caws/worktrees.json` has `status: active` (per
+    the dual-shape entriesOf helper); AND (c) the proposed command is in
+    the mutation-keyword set (branch-switch, working-tree-mutating, or
+    history-rewriting). All three must hold; any one false MUST allow.
+  - >-
+    Read-only commands (status, log, diff, show, fetch without --prune,
+    rev-parse, ls-files, branch listing, stash list) MUST always be
+    allowed in canonical, regardless of worktree activity. The default
+    posture is allow; the block list is enumerated and conservative.
+  - >-
+    Bound-worktree sessions (where the agent's cwd is under
+    `.caws/worktrees/<name>/`) MUST NOT be blocked by this guard, even
+    when sibling worktrees are active. The guard's first check is
+    "am I in canonical?" — if no, exit 0 immediately.
+  - >-
+    Failure modes degrade SAFELY. Missing `.caws/worktrees.json` →
+    allow (no worktrees to protect). Corrupt JSON → allow with stderr
+    warning (do not block on parser errors). `git rev-parse` failure
+    (not a git repo) → exit 0 (the guard has nothing to enforce).
+    The guard NEVER fails closed on infrastructure errors; the
+    failure mode is "guard inert" not "agent blocked".
+  - >-
+    The guard MUST NOT solve adjacent problems. It does not implement
+    dirty-overlap cleanup protection. It does not implement push-range
+    classification or guarding. It does not implement first-class
+    handoff. It does not edit `.caws/agents.json`. It does not write
+    leases (read-only consumer). These are sibling-slice concerns and
+    explicitly out of scope.
+acceptance:
+  - id: A1
+    given: |
+      A session in the canonical checkout (git_dir == git_common_dir),
+      and `.caws/worktrees.json` contains at least one entry with
+      `status: active`.
+    when: |
+      The agent proposes a Bash tool call: `git checkout <other-branch>`,
+      `git switch <other-branch>`, `git branch -f <branch> HEAD`, or
+      `git reset --keep <commit>`.
+    then: |
+      The hook exits with code 2. Stderr contains: (a) "BLOCKED:" prefix,
+      (b) name of the offending command class (e.g., "branch switch"),
+      (c) literal phrase "canonical checkout", (d) one of the active
+      worktree names from the registry, (e) the operator escape
+      instruction (`cd .caws/worktrees/<name>` or `caws worktree destroy`).
+  - id: A2
+    given: |
+      A session inside a linked worktree at `.caws/worktrees/<name>/`
+      (git_dir under git_common_dir/worktrees/<name>/), and sibling
+      worktrees are also active.
+    when: |
+      The agent proposes the same `git checkout` / `git switch` / etc.
+      Bash tool call.
+    then: |
+      The hook exits 0. No "canonical" diagnostic is emitted. The
+      pre-existing sibling guards (amend, stash, reset --hard,
+      force-push) still fire normally; this guard is silent.
+  - id: A3
+    given: |
+      A session in the canonical checkout, worktrees active.
+    when: |
+      The agent proposes a read-only Bash call: `git status`,
+      `git log --oneline -5`, `git diff`, `git show HEAD`,
+      `git rev-parse HEAD`, `git ls-files`, `git branch -v`,
+      `git stash list`, `git fetch origin`.
+    then: |
+      The hook exits 0. No block, no warning. The default-allow
+      posture holds.
+  - id: A4
+    given: |
+      A session in the canonical checkout, but `.caws/worktrees.json`
+      is missing (no worktrees ever created) OR exists but contains
+      no entries with `status: active`.
+    when: |
+      The agent proposes `git checkout <other-branch>`.
+    then: |
+      The hook exits 0 with no diagnostic. The guard's predicate (b)
+      is false; the default-allow posture holds. The agent's normal
+      git workflow is unaffected when no worktrees exist.
+  - id: A5
+    given: |
+      A session in the canonical checkout, worktrees active, and
+      `.caws/leases/` exists with at least one lease whose JSON is
+      malformed (e.g., truncated mid-write).
+    when: |
+      The agent proposes `git checkout <other-branch>` (a block-eligible
+      command per A1).
+    then: |
+      The hook still exits 2 — the block decision does NOT depend on
+      leases being readable; leases only enrich diagnostic context. The
+      stderr diagnostic MAY omit the leases-derived "other active
+      sessions" block but MUST still name the offending command and
+      the active worktrees. A warning line about the malformed lease
+      file MAY appear on stderr but does not change the exit code.
+  - id: A6
+    given: |
+      A session in the canonical checkout, worktrees active.
+    when: |
+      The agent proposes a non-git mutating command, e.g.,
+      `npm install` or `rm -rf node_modules`.
+    then: |
+      The hook exits 0. The guard's mutation-keyword set is git-specific;
+      non-git commands are out of this guard's domain (other guards
+      handle dangerous shell patterns).
+  - id: A7
+    given: |
+      The CLAUDE_CODE_PACK manifest (manifest-claude-code.ts) and the
+      install reporter.
+    when: |
+      `caws init --agent-surface claude-code` runs against a fresh
+      project.
+    then: |
+      The manifest version is bumped to `CLAUDE_CODE_PACK_VERSION === 4`.
+      The lineage_refs in worktree-guard.sh include entry 19. The new
+      session-caws-status.sh banner section announces the guard's
+      protection when canonical+worktrees-active is detected. The
+      install reporter prints the activation/restart message as before.
+  - id: A8
+    given: |
+      The lite-hooks integration test suite.
+    when: |
+      The tests run after this slice lands.
+    then: |
+      A1, A2, A3, A4, A5, A6 each have a corresponding test case piping
+      synthetic Claude Code hook JSON (`{"tool_name":"Bash","tool_input":{"command":"..."}, "cwd":"...", "session_id":"sess-test"}`)
+      to `worktree-guard.sh` and asserting the expected exit code and
+      stderr content. The test harness provides a tmpdir fixture for
+      `.caws/worktrees.json` and `.caws/leases/`.
+non_functional:
+  reliability:
+    - >-
+      Failure-lineage anchor: Entry 19 (canonical-checkout hijack during
+      MULTI-AGENT-ACTIVITY-REGISTRY-001). The visibility substrate that
+      slice shipped lets sessions SEE each other; this slice turns that
+      visibility into mechanical refusal at the point of action. Until
+      this slice lands, the substrate is observation-only — the next
+      canonical-checkout hijack will be visible but not prevented.
+    - >-
+      Tier classification: tier 2. Surface is hook templates + manifest
+      + tests, but the consequence is behavioral enforcement over
+      branch-switching and working-tree mutation in the canonical
+      checkout. The hook-IO contract (canonical-checkout-pre-tool-use-guard-v1)
+      stabilizes the boundary for future implementations.
+  performance:
+    - >-
+      Hook overhead must remain under 50ms p95 for the canonical-write
+      decision path. The guard makes at most: one `git rev-parse
+      --git-dir`, one `git rev-parse --git-common-dir`, one
+      `node -e` lease+registry read. No subprocess fan-out, no network,
+      no fs walks beyond `.caws/`.
+contracts:
+  - name: canonical-checkout-pre-tool-use-guard-v1
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    description: >-
+      Hook-IO behavioral contract for the Claude Code PreToolUse canonical
+      checkout guard. Surface: claude-code PreToolUse. Owner: worktree-guard.sh.
+
+      INPUTS:
+      - Claude Code hook JSON on stdin (tool_name, tool_input.command, cwd,
+        session_id);
+      - .caws/worktrees.json (both v10 nested and v11 direct-key shapes,
+        via the existing entriesOf helper);
+      - .caws/leases/*.json (visibility context only, never authority);
+      - git rev-parse --git-dir;
+      - git rev-parse --git-common-dir;
+      - current working directory.
+
+      OUTPUTS:
+      - exit 0 with no Claude Code protocol envelope when allowed;
+      - exit 2 with stderr diagnostic naming the offending command, the
+        active worktree(s), and the operator escape instruction when refused;
+      - optional stderr warning when a lease file is malformed (does not
+        change the exit code).
+
+      GUARANTEES:
+      - canonical checkout mutating git commands are blocked when at least
+        one active CAWS worktree exists;
+      - bound worktree sessions are not blocked merely because sibling
+        worktrees exist;
+      - read-only commands remain allowed in canonical, always;
+      - leases are visibility evidence only, never ownership authority;
+      - TTL or staleness never authorizes takeover or cleanup;
+      - malformed or missing leases do not create authority and do not
+        block the agent;
+      - missing worktrees registry (no worktrees ever) does not block;
+      - corrupt worktrees registry produces a stderr warning but does not
+        block (fail-open per the v11.1 hook-pack discipline).
+
+      NON-CLAIMS:
+      - does not decide worktree ownership (authority remains in
+        .caws/worktrees.json:owner);
+      - does not replace scope admission (authority remains in
+        .caws/specs/<id>.yaml);
+      - does not implement dirty-overlap cleanup protection;
+      - does not implement push-range classification or protection;
+      - does not implement first-class handoff;
+      - does not edit .caws/agents.json;
+      - does not write to .caws/leases/.
+# --------------------------------------------------------------------------
+# History
+# --------------------------------------------------------------------------
+#
+# 2026-05-23 (draft scaffold): Created via `caws specs create ... --risk-tier 3`
+#   because `caws specs create` cannot accept initial contracts. This commit
+#   upgrades the spec to risk_tier: 2 and declares the hook-IO behavioral
+#   contract (canonical-checkout-pre-tool-use-guard-v1) before implementation.
+#   The tier bump is intentional: surface is hook-only but the consequence
+#   is doctrine-grade behavioral enforcement per failure-lineage Entry 19.
+#
+# Sibling slices (out of scope here, may be filed later):
+#   - MULTI-AGENT-PUSH-RANGE-GUARD-001 (push-range classification)
+#   - DIRTY-OVERLAP-CLEANUP-GUARD-001 (working-tree contamination at
+#     worktree boundaries)
+#   - MULTI-AGENT-FIRST-CLASS-HANDOFF-001 (clean handoff between sessions)
