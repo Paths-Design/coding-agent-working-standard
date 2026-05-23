@@ -2,9 +2,11 @@ id: WORKTREE-MERGE-V11-SHAPE-001
 title: 'caws worktree merge accepts v11 direct-key worktrees.json shape (regression lock)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'V11 mergeWorktree contract locked by regression tests A1+A2+A3; migration guide notes v10.2 asymmetry. Diagnosis pivot: original failure mode reproduces only against npm-installed v10.2.0 (legacy loadRegistry); v11.1.6 source already correct. See commit message for the side-by-side artifact.'
 created_at: '2026-05-23T10:29:11.308Z'
-updated_at: '2026-05-23T15:00:00.000Z'
+updated_at: '2026-05-23T11:34:26.074Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-store.ts
