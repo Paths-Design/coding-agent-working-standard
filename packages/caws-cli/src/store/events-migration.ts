@@ -46,6 +46,40 @@ export const MIGRATION_RULES = {
    *  so dry-run and apply paths agree. */
   PARTIAL_CORRUPTION_REFUSED:
     'store.events.migration.partial_corruption_refused',
+  /** The shell could not scan .caws/specs/ for v10-shape YAMLs (directory
+   *  missing, unreadable, or sparse-checkout-excluded). The half-upgrade
+   *  refusal CANNOT be enforced without a complete scan, so the migration
+   *  command refuses by default rather than silently bypass the guard.
+   *  No friction-flag escape in v11.2 scope. */
+  SPEC_SCAN_UNAVAILABLE: 'store.events.migration.spec_scan_unavailable',
+  /** Bug-class assertion: dry-run reported an archive name X and the
+   *  apply path (rotateEvents) returned a different archive name Y.
+   *  This indicates the dry-run's now-clock and the apply's now-clock
+   *  drifted, or windowsSafeIso diverged between events-migration.ts
+   *  and events-store.ts. Either way it is a programmer error, not an
+   *  operator error; the shell surfaces it as an internal failure. */
+  INTERNAL_DRYRUN_APPLY_MISMATCH:
+    'store.events.migration.internal_dryrun_apply_mismatch',
+  /** events migrate refused because the underlying log is fully
+   *  unparseable. Migration cannot claim it found a v10 chain. The
+   *  lower-level `caws events rotate` may still archive a fully
+   *  unparseable log under the honest 'unparseable' status as evidence
+   *  quarantine — that semantic is intentional and distinct from
+   *  migration. */
+  MIGRATE_UNPARSEABLE_REFUSED:
+    'store.events.migration.unparseable_refused',
+  /** verify-archive: events.jsonl exists but contains no chain_rotated
+   *  event. There is nothing to verify against. */
+  VERIFY_NO_ROTATION_EVENT:
+    'store.events.verify_archive.no_rotation_event',
+  /** verify-archive: the archive file named by the most recent
+   *  chain_rotated event does not exist on disk. */
+  VERIFY_ARCHIVE_MISSING: 'store.events.verify_archive.archive_missing',
+  /** verify-archive: the current events.jsonl could not be loaded
+   *  (e.g., malformed JSON line, invalid chain). The shell cannot
+   *  determine the most recent chain_rotated event. */
+  VERIFY_CURRENT_CHAIN_INVALID:
+    'store.events.verify_archive.current_chain_invalid',
 } as const;
 
 export type MigrationRule = (typeof MIGRATION_RULES)[keyof typeof MIGRATION_RULES];

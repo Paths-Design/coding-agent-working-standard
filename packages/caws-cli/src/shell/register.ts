@@ -18,6 +18,9 @@ import type { Command } from 'commander';
 import {
   runClaimCommand,
   runDoctorCommand,
+  runEventsMigrateCommand,
+  runEventsRotateCommand,
+  runEventsVerifyArchiveCommand,
   runEvidenceRecordCommand,
   runGatesRunCommand,
   runInitCommand,
@@ -315,6 +318,97 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // -------------------------------------------------------------------
+  // caws events migrate / rotate / verify-archive
+  //
+  // v11.2 maintenance command surface for the event-log writer. See
+  // docs/architecture/caws-vnext-command-surface.md §6 invariant 14 and
+  // the Maintenance / control-plane subsection. Distinct semantics:
+  //
+  //   - migrate: v10→v11 chain migration (planner-driven; refuses
+  //              fully-unparseable, requires spec-scan).
+  //   - rotate:  lower-level maintenance rotation (admits fully-
+  //              unparseable as evidence quarantine).
+  //   - verify-archive: recompute archive sha256+line count vs the
+  //              most recent chain_rotated event.
+  // -------------------------------------------------------------------
+  const eventsCmd = program
+    .command('events')
+    .description('Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)');
+
+  eventsCmd
+    .command('migrate')
+    .description('Migrate a v10-shape events.jsonl to a v11 chain via chain_rotated rotation. Dry-run by default; --apply executes.')
+    .requiredOption('--from <version>', 'Source schema version (only v10 supported in v11.2)')
+    .option('--apply', 'Execute the rotation (default is dry-run)')
+    .option('--reason <text>', 'Operator reason recorded into the chain_rotated payload (required for --apply)')
+    .option('--actor-kind <kind>', 'Actor kind: agent | human | system | automation', 'agent')
+    .option('--actor-id <id>', 'Override actor id (defaults to session id)')
+    .option('--allow-partial-upgrade', 'Allow rotation when v10 specs are still present (off by default; see CAWS-MIGRATE-V10-SPECS-001)')
+    .action(
+      (opts: {
+        from: string;
+        apply?: boolean;
+        reason?: string;
+        actorKind?: string;
+        actorId?: string;
+        allowPartialUpgrade?: boolean;
+      }) => {
+        if (opts.from !== 'v10') {
+          process.stderr.write(
+            `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.\n`
+          );
+          exit(1);
+          return;
+        }
+        const code = runEventsMigrateCommand({
+          from: 'v10',
+          ...(opts.apply === true ? { apply: true } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(opts.actorKind !== undefined
+            ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
+            : {}),
+          ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
+          ...(opts.allowPartialUpgrade === true ? { allowPartialUpgrade: true } : {}),
+        });
+        exit(code);
+      }
+    );
+
+  eventsCmd
+    .command('rotate')
+    .description('Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.')
+    .requiredOption('--reason <text>', 'Operator reason recorded into the chain_rotated payload')
+    .option('--actor-kind <kind>', 'Actor kind: agent | human | system | automation', 'agent')
+    .option('--actor-id <id>', 'Override actor id (defaults to session id)')
+    .option('--allow-clean', 'Allow rotation of a clean v11 chain (friction flag)')
+    .action(
+      (opts: {
+        reason: string;
+        actorKind?: string;
+        actorId?: string;
+        allowClean?: boolean;
+      }) => {
+        const code = runEventsRotateCommand({
+          reason: opts.reason,
+          ...(opts.actorKind !== undefined
+            ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
+            : {}),
+          ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
+          ...(opts.allowClean === true ? { allowClean: true } : {}),
+        });
+        exit(code);
+      }
+    );
+
+  eventsCmd
+    .command('verify-archive')
+    .description('Verify that the archive file named in the most recent chain_rotated event byte-matches its committed digest + line count.')
+    .action(() => {
+      const code = runEventsVerifyArchiveCommand({});
+      exit(code);
+    });
 
   // -------------------------------------------------------------------
   // caws waiver create / list / show / revoke
