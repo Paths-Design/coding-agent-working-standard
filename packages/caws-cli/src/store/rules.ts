@@ -72,6 +72,18 @@ export const STORE_RULES = {
    *  evidence behind an archive boundary. */
   EVENTS_ROTATE_CLEAN_CHAIN_REQUIRES_ALLOW_CLEAN:
     'store.events.rotate.clean_chain_requires_allow_clean',
+  /** rotateEvents was called against a log that has some unparseable
+   *  lines alongside parseable ones. 'parseable_unverified' cannot
+   *  honestly label such a chain; rotating would archive a partially
+   *  corrupt log under a status that implies all lines parsed.
+   *  Refuses by default. A future operator-facing escape hatch (e.g.
+   *  --allow-corrupt-archive paired with a new schema enum value) may
+   *  be added in a later slice if recovery from partial corruption is
+   *  needed; not in v11.2 scope. The fully-unparseable case is
+   *  handled separately (the planner refuses earlier with its own
+   *  diagnostic). */
+  EVENTS_ROTATE_PARTIAL_CORRUPTION:
+    'store.events.rotate.partial_corruption',
   /** verify-archive recomputed the archive file's sha256 and it did not
    *  match the prior_file_digest committed in the most recent
    *  chain_rotated event. Tamper detection trip. */

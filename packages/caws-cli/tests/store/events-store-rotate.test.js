@@ -388,3 +388,86 @@ describe('rotateEvents — doctrine: validates via prepareAppend → validateEve
     expect(fs.existsSync(eventsPath + '.lock')).toBe(false);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────
+// Partial corruption — writer-level refusal (defense in depth)
+// ──────────────────────────────────────────────────────────────────────
+//
+// The planner (events-migration.ts) also refuses this case, but
+// rotateEvents enforces the same property independently so any caller
+// that bypasses the planner (e.g. a future direct shell command, a
+// test, or a script) cannot ship a partially-corrupt archive under
+// the dishonest 'parseable_unverified' label. The chain_rotated
+// payload's prior_chain_status enum deliberately has no value for
+// 'some parsed, some not' in v11.2 scope.
+
+describe('rotateEvents — partial-corruption refusal', () => {
+  let cawsDir;
+  afterEach(() => fs.rmSync(cawsDir, { recursive: true, force: true }));
+
+  it('refuses when events.jsonl has both parseable and unparseable lines', () => {
+    cawsDir = mkTempCawsDir();
+    const eventsPath = path.join(cawsDir, 'events.jsonl');
+    // 2 v10 lines + 1 unparseable line. The chain_rotated payload
+    // cannot honestly label this (parseable_unverified would lie;
+    // unparseable would also lie). rotateEvents refuses.
+    const v10Line = (seq) =>
+      JSON.stringify({
+        seq,
+        ts: '2026-04-11T01:00:00.000Z',
+        session_id: 'standalone',
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'X-1',
+        data: { passed: true },
+        prev_hash: '',
+        event_hash: 'sha256:' + String(seq).padStart(64, '0'),
+      });
+    fs.writeFileSync(
+      eventsPath,
+      v10Line(1) + '\n' + v10Line(2) + '\n' + 'this is not json\n'
+    );
+    const originalSha = sha256OfFile(eventsPath);
+
+    const r = rotateEvents(cawsDir, { reason: 'try', actor: ACTOR });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(STORE_RULES.EVENTS_ROTATE_PARTIAL_CORRUPTION);
+    expect(r.errors[0].data.actor_shape_stats).toEqual({
+      v10_string_actor: 2,
+      v11_object_actor: 0,
+      unparseable: 1,
+    });
+    expect(r.errors[0].data.lineCount).toBe(3);
+
+    // CRITICAL: no archive was created. events.jsonl is byte-identical
+    // to the input (the refusal happens before any FS mutation).
+    expect(readArchiveFiles(cawsDir)).toEqual([]);
+    expect(sha256OfFile(eventsPath)).toBe(originalSha);
+    expect(fs.existsSync(eventsPath + '.lock')).toBe(false);
+  });
+
+  it('does NOT refuse when ALL lines are unparseable (allowed with status: unparseable)', () => {
+    // Sanity check the boundary: the partial-corruption refusal is
+    // specifically for mixed parseable + unparseable. A fully-corrupt
+    // log is an honest 'unparseable' status and operators may
+    // explicitly want to archive it.
+    cawsDir = mkTempCawsDir();
+    const eventsPath = path.join(cawsDir, 'events.jsonl');
+    fs.writeFileSync(eventsPath, 'not json\nstill not\nnope\n');
+
+    const r = rotateEvents(cawsDir, {
+      reason: 'archive corrupt log',
+      actor: ACTOR,
+      now: FIXED_DATE,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.event).toBe('chain_rotated');
+    expect(r.value.data.prior_chain_status).toBe('unparseable');
+    expect(r.value.data.actor_shape_stats).toEqual({
+      v10_string_actor: 0,
+      v11_object_actor: 0,
+      unparseable: 3,
+    });
+    expect(readArchiveFiles(cawsDir)).toHaveLength(1);
+  });
+});

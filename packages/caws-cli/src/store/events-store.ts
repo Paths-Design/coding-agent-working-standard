@@ -380,7 +380,37 @@ export function rotateEvents(
 
     const scanResult = tolerantScanEventsFile(rawBytes.toString('utf8'));
 
-    // ── 3. Clean-chain refusal (friction flag). ──────────────────────────
+    // ── 3a. Partial-corruption refusal. ───────────────────────────────────
+    // A log that has SOME unparseable lines alongside parseable ones
+    // cannot be honestly labeled by the prior_chain_status enum:
+    // 'parseable_unverified' implies every line parsed, and
+    // 'unparseable' implies every line did not. Refuse rather than ship
+    // a dishonest label. The fully-unparseable case is still admissible
+    // (status: 'unparseable' is the honest label) for operators who
+    // explicitly want to archive a fully-corrupt log; the trap is only
+    // mixed parseable + unparseable.
+    //
+    // A future opt-in path (e.g. opts.allowCorruptArchive + a new
+    // 'partially_unparseable' enum value on chain_rotated) may be added
+    // in a later slice if recovery from partial corruption becomes a
+    // first-class operator concern. Not in v11.2 scope.
+    const hasPartialCorruption =
+      scanResult.stats.unparseable > 0 &&
+      scanResult.stats.unparseable < scanResult.lineCount;
+    if (hasPartialCorruption) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.EVENTS_ROTATE_PARTIAL_CORRUPTION,
+          `rotateEvents refuses: events.jsonl has ${scanResult.stats.unparseable} unparseable line(s) alongside ${scanResult.stats.v10_string_actor + scanResult.stats.v11_object_actor} parseable line(s). Mixed parseable + unparseable cannot be honestly labeled by the chain_rotated payload (no enum value covers the case). Inspect the file and recover manually, or remove the corrupt lines before retrying.`,
+          {
+            subject: eventsPath,
+            data: { actor_shape_stats: scanResult.stats, lineCount: scanResult.lineCount },
+          }
+        )
+      );
+    }
+
+    // ── 3b. Clean-chain refusal (friction flag). ─────────────────────────
     // A clean v11 chain has only structured actors. Refuse unless the
     // operator explicitly opted in via allowClean: true. The intent is to
     // make general log rotation explicit-and-auditable, not to forbid it.

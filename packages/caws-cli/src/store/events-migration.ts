@@ -38,6 +38,14 @@ export const MIGRATION_RULES = {
   EMPTY_INPUT: 'store.events.migration.empty_input',
   /** A v10-shape spec YAML was detected during half-upgrade scan. */
   V10_SPEC_DETECTED: 'store.events.migration.v10_spec_detected',
+  /** events.jsonl has SOME unparseable lines alongside parseable ones.
+   *  The chain_rotated payload's prior_chain_status enum has no honest
+   *  label for this case (parseable_unverified implies every line
+   *  parsed; unparseable implies none did), so the planner refuses.
+   *  Mirrors STORE_RULES.EVENTS_ROTATE_PARTIAL_CORRUPTION in rotateEvents
+   *  so dry-run and apply paths agree. */
+  PARTIAL_CORRUPTION_REFUSED:
+    'store.events.migration.partial_corruption_refused',
 } as const;
 
 export type MigrationRule = (typeof MIGRATION_RULES)[keyof typeof MIGRATION_RULES];
@@ -283,6 +291,7 @@ export interface PlanOptions {
 export type PlanRefusalCause =
   | 'empty'
   | 'unparseable_only'
+  | 'partial_corruption'
   | 'clean_chain_requires_allow_clean'
   | 'v10_specs_require_allow_partial_upgrade';
 
@@ -336,9 +345,13 @@ const ARCHIVE_PREFIX = 'events.jsonl.archive-';
  * Order of refusal checks (highest precedence first):
  *   1. unparseable_only        — nothing to rotate; the log is corrupt
  *      and the operator must inspect before any archiving.
- *   2. v10_specs_present       — half-upgrade refusal; requires
+ *   2. partial_corruption      — some unparseable lines alongside
+ *      parseable ones; chain_rotated payload cannot honestly label
+ *      this case. Mirrors STORE_RULES.EVENTS_ROTATE_PARTIAL_CORRUPTION
+ *      in rotateEvents. No friction-flag escape in v11.2 scope.
+ *   3. v10_specs_present       — half-upgrade refusal; requires
  *      allowPartialUpgrade.
- *   3. clean_chain (all_v11)   — friction flag; requires allowClean.
+ *   4. clean_chain (all_v11)   — friction flag; requires allowClean.
  *
  * If all checks pass, returns RotatePlan with the proposed archive
  * name and the inputs the shell will pass to rotateEvents.
@@ -363,7 +376,37 @@ export function planEventsRotation(
     };
   }
 
-  // 2. Half-upgrade refusal. The planner only fires this when the
+  // 2. partial_corruption — some unparseable lines exist alongside
+  //    parseable ones. The chain_rotated payload's prior_chain_status
+  //    enum has no honest label for this case ('parseable_unverified'
+  //    implies every line parsed; 'unparseable' implies none did).
+  //    Refuse rather than archive a partially-corrupt log under a
+  //    misleading status. Mirrors rotateEvents's same-named refusal
+  //    so dry-run and apply paths agree exactly. No friction-flag
+  //    escape in v11.2 scope; a future opt-in path may be added
+  //    alongside a new 'partially_unparseable' enum value in a
+  //    later slice.
+  if (
+    detection.stats.unparseable > 0 &&
+    detection.stats.unparseable < detection.lineCount
+  ) {
+    const parseable =
+      detection.stats.v10_string_actor + detection.stats.v11_object_actor;
+    return {
+      kind: 'refuse',
+      cause: 'partial_corruption',
+      diagnostic: diagnostic({
+        rule: MIGRATION_RULES.PARTIAL_CORRUPTION_REFUSED,
+        authority: 'kernel/diagnostics',
+        message: `events.jsonl has ${detection.stats.unparseable} unparseable line(s) alongside ${parseable} parseable line(s) (${detection.lineCount} total). Mixed parseable + unparseable cannot be honestly labeled by the chain_rotated payload. Inspect the file and recover manually, or remove the corrupt lines before retrying.`,
+        narrowRepair:
+          'Open events.jsonl, identify the unparseable line(s) (often a truncated/crash-recovery tail), and either restore them or remove them. Re-run after the file has only parseable JSON lines.',
+      }),
+      detection,
+    };
+  }
+
+  // 3. Half-upgrade refusal. The planner only fires this when the
   //    caller has supplied a v10Specs scan AND detected: true. The
   //    contract is "if you scanned and found v10 specs, the planner
   //    enforces; if you didn't scan, the planner trusts you."
@@ -386,7 +429,7 @@ export function planEventsRotation(
     };
   }
 
-  // 3. Clean v11 chain friction flag. Mirrors rotateEvents's isCleanV11
+  // 4. Clean v11 chain friction flag. Mirrors rotateEvents's isCleanV11
   //    check in events-store.ts so dry-run and apply agree.
   const isCleanV11 =
     detection.kind === 'all_v11' &&

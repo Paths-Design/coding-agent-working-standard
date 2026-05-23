@@ -500,3 +500,114 @@ describe('planEventsRotation — refusal precedence', () => {
     expect(p.cause).toBe('clean_chain_requires_allow_clean');
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────
+// Partial-corruption refusal — second-highest precedence
+// ──────────────────────────────────────────────────────────────────────
+//
+// The detector continues to classify by actor shape (a v10 + corrupt
+// + v10 mix still classifies as all_v10 with unparseable: 1). The
+// planner refuses such logs because the chain_rotated payload's
+// prior_chain_status enum cannot honestly label them. The writer
+// (rotateEvents) enforces the same property independently as defense
+// in depth — see events-store-rotate.test.js's partial-corruption block.
+
+describe('detectEventsLogShape — partial corruption (detector still classifies)', () => {
+  it('counts unparseable lines alongside v10 parseable lines', () => {
+    const raw = joinLines([v10Line(1), 'not json', v10Line(3)]);
+    const r = detectEventsLogShape(raw);
+    expect(r.ok).toBe(true);
+    expect(r.value.lineCount).toBe(3);
+    expect(r.value.stats).toEqual({
+      v10_string_actor: 2,
+      v11_object_actor: 0,
+      unparseable: 1,
+    });
+    // Kind classification is still by actor shape; the detector does
+    // NOT promote partial corruption to its own kind. That decision is
+    // the planner's, downstream.
+    expect(r.value.kind).toBe('all_v10');
+  });
+});
+
+describe('planEventsRotation — partial corruption refusal', () => {
+  it('refuses when any line is unparseable and not all lines are unparseable', () => {
+    const detection = detectEventsLogShape(
+      joinLines([v10Line(1), 'not json', v10Line(3)])
+    ).value;
+    const p = planEventsRotation(detection, {
+      reason: 'try',
+      now: FIXED_DATE,
+    });
+    expect(p.kind).toBe('refuse');
+    expect(p.cause).toBe('partial_corruption');
+    expect(p.diagnostic.rule).toBe(MIGRATION_RULES.PARTIAL_CORRUPTION_REFUSED);
+    // The message names the counts so the operator can navigate.
+    expect(p.diagnostic.message).toContain('1 unparseable');
+    expect(p.diagnostic.message).toContain('2 parseable');
+    expect(p.diagnostic.narrowRepair).toContain('Open events.jsonl');
+  });
+
+  it('also refuses when v11 + unparseable mixed', () => {
+    // A clean v11 chain with one corrupt tail line is still partial
+    // corruption; the chain_rotated payload cannot label it honestly.
+    const detection = detectEventsLogShape(
+      joinLines([v11Line(1), v11Line(2), 'truncated{']
+    )).value;
+    const p = planEventsRotation(detection, {
+      reason: 'try',
+      now: FIXED_DATE,
+      allowClean: true, // even with --allow-clean, partial corruption wins
+    });
+    expect(p.kind).toBe('refuse');
+    expect(p.cause).toBe('partial_corruption');
+  });
+});
+
+describe('planEventsRotation — partial-corruption precedence', () => {
+  it('unparseable_only beats partial_corruption (fully-corrupt is its own case)', () => {
+    // unparseable_only and partial_corruption are mutually exclusive
+    // by construction (one means EVERY line bad, the other means SOME).
+    // The planner's order check picks unparseable_only first; verify
+    // that a fully-unparseable input never returns partial_corruption.
+    const detection = detectEventsLogShape('not json\nstill not\n').value;
+    const p = planEventsRotation(detection, {
+      reason: 'x',
+      now: FIXED_DATE,
+    });
+    expect(p.kind).toBe('refuse');
+    expect(p.cause).toBe('unparseable_only');
+  });
+
+  it('partial_corruption beats v10-specs presence', () => {
+    // Even when v10 specs are detected (which would normally trigger
+    // the half-upgrade refusal), partial corruption wins because it's
+    // a higher-precedence safety concern about the events log itself.
+    const detection = detectEventsLogShape(
+      joinLines([v10Line(1), 'not json'])
+    ).value;
+    const v10Specs = detectV10SpecsPresent([
+      { path: 'old.yaml', raw: 'type: feature\nstatus: active\n' },
+    ]);
+    const p = planEventsRotation(detection, {
+      reason: 'x',
+      now: FIXED_DATE,
+      v10Specs,
+    });
+    expect(p.kind).toBe('refuse');
+    expect(p.cause).toBe('partial_corruption');
+  });
+
+  it('partial_corruption beats clean-chain friction flag', () => {
+    const detection = detectEventsLogShape(
+      joinLines([v11Line(1), 'not json'])
+    ).value;
+    const p = planEventsRotation(detection, {
+      reason: 'x',
+      now: FIXED_DATE,
+      // both flags omitted; partial_corruption wins regardless
+    });
+    expect(p.kind).toBe('refuse');
+    expect(p.cause).toBe('partial_corruption');
+  });
+});
