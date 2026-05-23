@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: multi-agent-activity-registry
 created_at: '2026-05-23T07:00:00.000Z'
-updated_at: '2026-05-23T10:00:00.000Z'
+updated_at: '2026-05-23T10:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -128,11 +128,18 @@ invariants:
     kernel lease logic or store lease writes.
   - >-
     caws status is read-only by default. Status writes its own lease
-    ONLY when invoked with --heartbeat OR --session-id <id> (hook
-    context). Default human/CI/automation invocations of `caws status`
-    do NOT create lease records. This narrows the §6 invariant 7
-    "status may update leases" carve-out: status may mutate leases only
-    when explicit agent identity is presented.
+    ONLY when invoked with --heartbeat. `--session-id <id>` alone is
+    identity annotation and does NOT trigger a lease write — explicit
+    identity is the safer default (it prevents
+    `status --session-id <other>` from accidentally writing on someone
+    else's behalf). Default human/CI/automation invocations of
+    `caws status` do NOT create lease records. The rule is:
+      caws status                            → read-only
+      caws status --session-id X             → read-only, identity only
+      caws status --heartbeat                → may write self lease
+      caws status --heartbeat --session-id X → writes lease for X
+    This narrows the §6 invariant 7 "status may update leases"
+    carve-out: status mutates leases only on explicit --heartbeat.
   - >-
     Session-id filename safety. .caws/leases/<safe-session-id>.json
     uses a strict-allowlist filename: ^[A-Za-z0-9._:-]+$. The session_id
@@ -421,16 +428,38 @@ acceptance:
     when: |
       packages/caws-cli/scripts/fresh-install-smoke.mjs runs.
     then: |
-      The script: (1) confirms .claude/hooks/agent-register.sh,
-      agent-heartbeat.sh, agent-stop.sh exist with managed headers
-      naming hook_pack_version 3. (2) runs `caws agents register
-      --session-id smoke-test --platform claude-code` and asserts
-      .caws/leases/smoke-test.json exists. (3) runs `caws agents list
-      --json` and asserts smoke-test is in the active list. (4) runs
-      `caws agents stop --session-id smoke-test` and asserts the
-      lease file's status is 'stopped'. (5) runs `caws agents prune
-      --status stopped --older-than 0s` and asserts the file is gone.
-      The script wires into prepublishOnly so it runs at publish time.
+      The script proves the 12-point end-to-end packaging bar:
+      (1) `npm pack` produces a tarball under packages/caws-cli.
+      (2) That tarball installs into a fresh scratch project from
+      tarball, not source.
+      (3) `caws init --agent-surface claude-code` succeeds against
+      an empty git repo in that scratch project.
+      (4) The installed hook pack reports v3 and includes the three
+      new agent-*.sh files as managed+executable.
+      (5) `bash dispatch/session_start.sh` with synthetic SessionStart
+      payload creates .caws/leases/<session_id>.json containing
+      status=active.
+      (6) `bash dispatch/pre_tool_use.sh` with synthetic PreToolUse
+      payload and only one active lease emits empty stdout (silent).
+      (7) After seeding a second lease (mimicking a peer session),
+      `bash dispatch/pre_tool_use.sh` emits valid
+      hookSpecificOutput.additionalContext naming only the peer
+      session (not self).
+      (8) `bash dispatch/stop.sh` with synthetic Stop payload flips
+      the lease to status=stopped with stopped_at set.
+      (9) `caws status` from the scratch project renders the Agents
+      panel before Doctor (verified by inspecting render order).
+      (10) `caws agents heartbeat --json --include-active-summary`
+      stdout contains zero of: hookSpecificOutput, hookEventName,
+      permissionDecision, additionalContext (CLI is hook-protocol-
+      agnostic in the installed artifact too).
+      (11) The PATH used to invoke agent-heartbeat.sh during the
+      smoke run does NOT include jq; the hook still produces the
+      envelope correctly via node. This proves visibility does not
+      silently degrade when jq is absent (the original concern).
+      (12) The script is wired into a release-time validation
+      sequence (called from CI release workflow or prepublishOnly)
+      so a future regression cannot ship.
   - id: A15
     given: |
       docs/architecture/caws-vnext-command-surface.md and
