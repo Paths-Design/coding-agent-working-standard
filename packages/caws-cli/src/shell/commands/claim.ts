@@ -65,6 +65,55 @@ export interface ClaimCommandOptions {
   readonly staleTtlMs?: number;
   /** Show optional `data` block on rendered diagnostics. */
   readonly showData?: boolean;
+  /**
+   * Explicit path claims to record on the current session's agents.json
+   * record (SESSION-OWNERSHIP-METADATA-001 A2). Stored verbatim by the
+   * writer subject to structural validation; the CLI enforces a 256-entry
+   * cap here so user-facing ergonomics (claim too-broad → use coarser
+   * globs) is handled at the surface where the user typed the command.
+   *
+   * Passing an empty array `[]` explicitly clears any existing
+   * claimed_paths on the record. Omitting `paths` leaves any existing
+   * claimed_paths untouched (the writer reads `undefined` as
+   * "no change").
+   */
+  readonly paths?: readonly string[];
+}
+
+/**
+ * User-facing cap on `caws claim --paths`. Enforced at the CLI surface,
+ * not at the writer (the writer accepts caller-provided arrays verbatim
+ * subject only to structural validation; this cap is a coarser-globs
+ * usability hint that lives where the user typed the command).
+ *
+ * SESSION-OWNERSHIP-METADATA-001 Q6 (C1 storage-bounds interpretation).
+ */
+export const CLAIM_PATHS_MAX = 256;
+
+/**
+ * Structural validation of an incoming claimed_paths argument. Mirrors
+ * the writer-side validation in apply-patch.ts but fails earlier so the
+ * user sees a clear CLI-level error rather than a store diagnostic.
+ *
+ * Returns `null` on success; an error string on failure.
+ */
+function validateClaimPaths(paths: readonly string[]): string | null {
+  if (paths.length > CLAIM_PATHS_MAX) {
+    return `caws claim --paths: ${paths.length} entries exceeds the ${CLAIM_PATHS_MAX}-entry cap. Use coarser globs (e.g. "packages/foo/**") instead of listing individual files.`;
+  }
+  for (let i = 0; i < paths.length; i++) {
+    const p = paths[i];
+    if (typeof p !== 'string') {
+      return `caws claim --paths: entry at index ${i} is not a string (got ${typeof p}).`;
+    }
+    if (p.length === 0) {
+      return `caws claim --paths: entry at index ${i} is the empty string.`;
+    }
+    if (p.indexOf('\0') !== -1) {
+      return `caws claim --paths: entry at index ${i} contains a NUL byte.`;
+    }
+  }
+  return null;
 }
 
 export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
@@ -75,6 +124,18 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
   const wantsTakeover = opts.takeover === true;
+  const requestedPaths = opts.paths;
+
+  // 0. Validate --paths input before any side effects. The writer will
+  //    validate again at apply time (defense in depth), but failing here
+  //    keeps user-facing errors at the surface where they typed.
+  if (requestedPaths !== undefined) {
+    const violation = validateClaimPaths(requestedPaths);
+    if (violation !== null) {
+      err(violation);
+      return 2;
+    }
+  }
 
   // 1. Repo root.
   const repoRootResult = resolveRepoRoot(cwd);
@@ -191,6 +252,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   const refreshResult = refreshAgentClaim(snapshot.agents, session, now, {
     bound_worktree: worktreeName,
     ...(record.specId !== undefined ? { bound_spec_id: record.specId } : {}),
+    ...(requestedPaths !== undefined ? { claimed_paths: requestedPaths } : {}),
   });
   if (!refreshResult.ok) {
     err('caws claim: internal — refreshAgentClaim returned Err with a validated session.');

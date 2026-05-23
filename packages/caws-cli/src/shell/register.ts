@@ -207,27 +207,38 @@ export function registerShellCommands(
     });
 
   // -------------------------------------------------------------------
-  // caws claim [--takeover]
+  // caws claim [--takeover] [--paths <path...>]
   // -------------------------------------------------------------------
   program
     .command('claim')
     .description(
       'Surface ownership of the current worktree; with --takeover, ' +
-        'acquire ownership from a foreign session (writes prior_owners audit).'
+        'acquire ownership from a foreign session (writes prior_owners audit). ' +
+        "With --paths, also record an explicit claimed_paths set on the " +
+        "current session's agents.json record."
     )
     .option(
       '--takeover',
       'Forcibly take ownership of a foreign-owned worktree. Required when ' +
         'the current owner is a different session.'
     )
+    .option(
+      '--paths <path...>',
+      'Record an explicit claimed_paths set for the current session ' +
+        '(SESSION-OWNERSHIP-METADATA-001). Stored verbatim; max 256 entries. ' +
+        'Glob expansion happens at consumer query time, not at write time.'
+    )
     .option('--data', 'Show structured data block on diagnostics')
-    .action((opts: { takeover?: boolean; data?: boolean }) => {
-      const code = runClaimCommand({
-        takeover: opts.takeover === true,
-        showData: opts.data === true,
-      });
-      exit(code);
-    });
+    .action(
+      (opts: { takeover?: boolean; paths?: string[]; data?: boolean }) => {
+        const code = runClaimCommand({
+          takeover: opts.takeover === true,
+          showData: opts.data === true,
+          ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
+        });
+        exit(code);
+      }
+    );
 
   // -------------------------------------------------------------------
   // caws gates run --spec <id> [--context <ctx>]
