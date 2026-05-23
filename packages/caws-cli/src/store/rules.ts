@@ -89,6 +89,28 @@ export const STORE_RULES = {
   YAML_PATCH_AMBIGUOUS: 'store.yaml_patch.ambiguous',
   /** yaml-patch refused because the target key was not found in the document. */
   YAML_PATCH_KEY_NOT_FOUND: 'store.yaml_patch.key_not_found',
+
+  // ---- leases (MULTI-AGENT-ACTIVITY-REGISTRY-001) -------------------------
+  /** Lease directory exists but is unreadable (permission denied, etc).
+   *  Only failure mode for loadLeases — per-file failures are degraded
+   *  to diagnostics inside an ok result. */
+  LEASE_DIR_UNREADABLE: 'store.leases.dir_unreadable',
+  /** Per-file lease load failure: JSON parse, not-an-object, filename/payload
+   *  session_id mismatch, or unreadable file. The file is excluded from the
+   *  returned registry but loadLeases still returns ok. */
+  LEASE_FILE_MALFORMED: 'store.leases.file_malformed',
+  /** Atomic lease write failed (directory creation, write, rename). */
+  LEASE_WRITE_FAILED: 'store.leases.write_failed',
+  /** session_id is empty, the literal 'unknown', or not a string. Refused
+   *  at the I/O boundary by safeLeaseFilename. */
+  LEASE_SESSION_ID_INVALID: 'store.leases.session_id_invalid',
+  /** session_id contains characters outside the strict allowlist
+   *  ^[A-Za-z0-9._:-]+$. Refused at the I/O boundary by safeLeaseFilename. */
+  LEASE_SESSION_ID_UNSAFE: 'store.leases.session_id_unsafe',
+  /** mark_stopped patch received but no prior lease exists for the session.
+   *  Warning, not error — the store does NOT fabricate a historical record;
+   *  the caller is told that the stop is a lifecycle mismatch no-op. */
+  LEASE_STOP_NO_PRIOR_LEASE: 'store.leases.stop_no_prior_lease',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];
@@ -102,4 +124,5 @@ export const STORE_RULE_PREFIXES = [
   'store.registry.',
   'store.events.',
   'store.init.',
+  'store.leases.',
 ] as const;

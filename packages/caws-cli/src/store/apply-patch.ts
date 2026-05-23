@@ -17,6 +17,21 @@
 //   - worktrees.json[name].owner is the SOLE authority for ownership.
 //   - agents.json updates are display/freshness only.
 //   - prior_owners is append-only; takeover_claim never truncates.
+//
+// MULTI-AGENT-ACTIVITY-REGISTRY-001 boundary (load-bearing):
+//   - .caws/agents.json is FROZEN as compatibility/identity metadata.
+//     The AgentRecord schema (session_id, platform?, last_active,
+//     bound_worktree?, bound_spec_id?) is NOT extended; no new writers
+//     touch this file. The `refresh_agent` path here is the SOLE remaining
+//     writer, preserved for backward compat.
+//   - New agent liveness work goes through .caws/leases/<safe-session-id>.json
+//     via packages/caws-cli/src/store/leases-store.ts. LeasePatch
+//     (write_lease | mark_stopped | delete_lease) is a SEPARATE type from
+//     RegistryPatch and is NEVER added to this module's dispatcher.
+//     Routing lease writes through applyRegistryPatch would re-merge the
+//     operational-cache / governance-state boundary the leases substrate
+//     exists to preserve. See spec MULTI-AGENT-ACTIVITY-REGISTRY-001
+//     invariant 2 + contract `agent-lease-substrate`.
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
