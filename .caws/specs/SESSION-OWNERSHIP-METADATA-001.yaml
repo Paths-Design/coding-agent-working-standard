@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: session-ownership-metadata
 created_at: '2026-05-22T23:30:00.000Z'
-updated_at: '2026-05-23T04:30:00.000Z'
+updated_at: '2026-05-23T05:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -18,6 +18,7 @@ scope:
     - .caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml
     - docs/architecture/session-ownership-metadata.md
     - packages/caws-kernel/src/worktree/types.ts
+    - packages/caws-kernel/src/worktree/index.ts
     - packages/caws-cli/src/store/apply-patch.ts
     - packages/caws-cli/src/store/agents-store.ts
     - packages/caws-kernel/src/schemas/policy.v1.json
