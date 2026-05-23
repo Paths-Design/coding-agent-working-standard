@@ -1,106 +1,114 @@
 id: WORKTREE-MERGE-V11-SHAPE-001
-title: 'caws worktree merge --dry-run rejects v11 direct-key worktrees.json shape'
+title: 'caws worktree merge accepts v11 direct-key worktrees.json shape (regression lock)'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-23T10:29:11.308Z'
-updated_at: '2026-05-23T10:30:00.000Z'
+updated_at: '2026-05-23T15:00:00.000Z'
 blast_radius:
   modules:
-    - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/src/store/worktrees-store.ts
-    - packages/caws-kernel/src/worktree
+    - packages/caws-cli/src/store/worktrees-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - .caws/specs/WORKTREE-MERGE-V11-SHAPE-001.yaml
-    - packages/caws-cli/src/shell/commands/worktree.ts
-    - packages/caws-cli/src/store/worktrees-store.ts
-    - packages/caws-cli/src/store/lifecycle-transaction
-    - packages/caws-cli/tests/shell/worktree-merge.test.js
+    - packages/caws-cli/tests/store/worktree-merge-v11-shape.test.js
+    - docs/migration-v10-to-v11.md
   out:
     - .caws/policy.yaml
 invariants:
   - >-
-    Every worktree-lifecycle CLI command must accept BOTH the v10 nested
-    shape (`{version, worktrees: {<name>: {...}}}`) AND the v11 direct-key
-    shape (`{<name>: {status, ...}, ...}`) of .caws/worktrees.json. The
-    kernel writes v11; legacy installs may still have v10. Per the
-    session-caws-status.sh dual-shape entriesOf helper precedent (see
-    templates/hook-packs/claude-code/session-caws-status.sh:55-86),
-    every reader has the same dual-shape obligation.
+    The v11 `mergeWorktree` code path (packages/caws-cli/src/store/worktrees-writer.ts)
+    MUST accept .caws/worktrees.json in the v11 direct-key shape
+    (`{<name>: {status, ...}, ...}`) as the canonical on-disk form. The v11
+    `loadWorktrees` loader is shape-agnostic by design: it parses JSON
+    object-shaped payloads without enforcing a particular envelope.
+  - >-
+    The schema-validated v10 nested shape (`{version: 1, worktrees: {<name>: {...}}}`)
+    is enforced ONLY by the legacy `loadRegistry` in
+    packages/caws-cli/src/worktree/worktree-manager.js, which is dead code
+    for the `worktree merge` dispatch path in v11. Any future refactor that
+    routes `worktree merge` (or any v11 lifecycle command) through legacy
+    `loadRegistry` would reintroduce the documented `@paths.design/caws-cli@10.2.0`
+    failure mode and must be rejected.
 acceptance:
   - id: A1
     given: |
       A canonical checkout with .caws/worktrees.json in v11 direct-key
-      shape and at least one active worktree (`<name>: {status: active,
-      ...}`).
+      shape and at least one active worktree entry.
     when: |
-      The operator runs `caws worktree merge <name> --dry-run`.
+      The v11 mergeWorktree writer is invoked via the runWorktreeMergeCommand
+      shell wrapper with `dryRun: true`.
     then: |
-      The command succeeds, prints a conflict-preview summary (or "no
-      conflicts"), exits 0, and does not raise `Cannot read properties
-      of undefined`. It does NOT print "Worktree registry has schema
-      violations" for the direct-key shape.
+      The command succeeds with exit 0, returns a `dry_run` outcome whose
+      `findings` reflect actual prerequisite checks (uncommitted changes,
+      ownership mismatches, missing spec binding), and never raises
+      `Cannot read properties of undefined`. The phrase "Worktree registry
+      has schema violations" never appears in stderr.
   - id: A2
-    given: Same canonical state.
+    given: |
+      A controlled fixture .caws/worktrees.json containing a v11 direct-key
+      entry with `status: active`, `branch`, `baseBranch`, and `specId`.
     when: |
-      The operator runs `caws worktree merge <name>` without --dry-run.
+      mergeWorktree is invoked with dryRun: true and a clean working tree.
     then: |
-      The command destroys the worktree, merges the branch with the
-      enforced `merge(worktree):` commit format, deletes the branch
-      (unless --no-delete-branch), and exits 0. The merge commit is
-      identical in shape to the manual `git merge --no-ff` fallback
-      currently used.
+      The dry-run outcome's `canProceed` is true and `findings` is empty.
   - id: A3
     given: |
-      A canonical checkout with .caws/worktrees.json in the legacy
-      v10 nested shape (`{version: 1, worktrees: {<name>: {...}}}`).
+      The same fixture but with an entry owned by a foreign session id.
     when: |
-      The operator runs `caws worktree merge <name> --dry-run`.
+      mergeWorktree is invoked with dryRun: true.
     then: |
-      The command STILL succeeds and produces the same diagnostic shape
-      as A1. Backward compatibility is preserved for legacy installs.
+      The dry-run outcome's `canProceed` is false and `findings` contains
+      "worktree is owned by a different session". The command still exits 0
+      from the writer (the dry-run is a successful query); the CLI wrapper
+      maps `!canProceed` to exit 1, but the writer does not crash.
   - id: A4
-    given: A new test `tests/shell/worktree-merge.test.js`.
+    given: docs/migration-v10-to-v11.md.
     when: |
-      The test runs with fixture worktrees.json files in both shapes.
+      The file is read.
     then: |
-      Both shapes produce equivalent --dry-run output and equivalent
-      non-dry-run merge behavior. Regression coverage is permanent.
+      A subsection titled "v10.2 cannot read v11-shaped worktrees.json"
+      exists, documents the failure mode (literal stderr output), names the
+      affected command (`caws worktree merge`), and instructs users to
+      upgrade with `npm install -g @paths.design/caws-cli@latest`.
 non_functional:
   reliability:
     - >-
-      Defect class: silent v10/v11 schema drift. The worktree-merge
-      code path was not updated when worktrees-store moved to v11
-      direct-key shape; the validation schema and the dispatch loop
-      both assumed v10 nested. Discovered during the
-      MULTI-AGENT-ACTIVITY-REGISTRY-001 merge at end of slice
-      (2026-05-23). Operator workaround: fall back to `git merge --no-ff`
-      with manual `-F /tmp/msg.txt` for the merge commit message; the
-      commit-msg hook enforces the `merge(worktree):` format.
+      Defect class: cross-version artifact mismatch. The v11 source was
+      always correct; the bug only reproduces when an npm-globally-installed
+      v10.2.0 CLI reads a worktrees.json written by a v11 kernel. The
+      regression test locks the v11 source contract so any future refactor
+      that accidentally re-introduces v10 schema enforcement on the v11
+      dispatch path is caught at CI time.
+    - >-
+      Test coverage: tests/store/worktree-merge-v11-shape.test.js asserts
+      A1-A3 against the v11 mergeWorktree writer directly (no shell
+      subprocess), using a tmpdir fixture with a synthesized v11 registry.
+      The test does NOT execute git (mergeWorktree's git invocations only
+      run on the non-dry-run path).
 contracts: []
 # --------------------------------------------------------------------------
 # History
 # --------------------------------------------------------------------------
 #
-# 2026-05-23: Spec created in lifecycle_state: draft (parking state).
-#   Discovered during the merge of MULTI-AGENT-ACTIVITY-REGISTRY-001.
-#   Reproduction:
-#     1. Be in canonical checkout with v11 direct-key worktrees.json.
-#     2. Run `caws worktree merge <name> --dry-run`.
-#   Failure output (current):
-#     ```
-#     Worktree registry has schema violations: [
-#       { path: '', message: "must have required property 'version'", ... },
-#       { path: '', message: "must have required property 'worktrees'", ... },
-#       { path: '', message: 'must NOT have additional properties',
-#         params: { additionalProperty: '<name>' }, ... },
-#       ...
-#     ]
-#     Cannot read properties of undefined (reading '<name>')
-#     ```
-#   Manual workaround: git merge --no-ff -F /tmp/msg.txt <branch>.
-#   The commit-msg hook accepts the merge(worktree): format and the slice
-#   merges cleanly via the fallback; the lifecycle command is the gap.
+# 2026-05-23 (draft): Spec filed during merge of MULTI-AGENT-ACTIVITY-REGISTRY-001
+#   after `caws worktree merge multi-agent-activity-registry --dry-run` crashed
+#   with "Worktree registry has schema violations" + "Cannot read properties of
+#   undefined". Originally framed as "v11 mergeWorktree validator rejects
+#   direct-key shape".
+#
+# 2026-05-23 (active, retitled + rescoped): Diagnosis showed the v11.1.6 source
+#   already handles direct-key shape correctly. Bug reproduces only against the
+#   user's `which caws` → @paths.design/caws-cli@10.2.0 (a stale npm-global
+#   install whose legacy worktree-manager.js enforces v10 nested schema).
+#   Reproduction with HEAD-built CLI (v11.1.6):
+#     $ node packages/caws-cli/dist/index.js worktree merge migrate-v10-specs --dry-run
+#     caws worktree merge migrate-v10-specs --dry-run: NOT ready to merge.
+#       - worktree has uncommitted changes
+#   Clean, structured, no schema-violation noise. v11 source needs no fix.
+#   Slice converted from "fix loader" to "lock the v11 contract with a
+#   regression test + document the v10.2 incompatibility in the migration
+#   guide". Scope tightened to one new test + one doc edit + this spec.
