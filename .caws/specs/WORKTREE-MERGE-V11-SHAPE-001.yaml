@@ -32,7 +32,8 @@ invariants:
     every reader has the same dual-shape obligation.
 acceptance:
   - id: A1
-    given: A canonical checkout with .caws/worktrees.json in v11 direct-key
+    given: |
+      A canonical checkout with .caws/worktrees.json in v11 direct-key
       shape and at least one active worktree (`<name>: {status: active,
       ...}`).
     when: |
@@ -53,7 +54,8 @@ acceptance:
       identical in shape to the manual `git merge --no-ff` fallback
       currently used.
   - id: A3
-    given: A canonical checkout with .caws/worktrees.json in the legacy
+    given: |
+      A canonical checkout with .caws/worktrees.json in the legacy
       v10 nested shape (`{version: 1, worktrees: {<name>: {...}}}`).
     when: |
       The operator runs `caws worktree merge <name> --dry-run`.
