@@ -427,7 +427,10 @@ export function pruneLeasesByStatus(
   const nowMs = opts.now.getTime();
   const candidates: string[] = [];
 
-  for (const lease of Object.values(leases)) {
+  // Object.values widens index-signature types to unknown[] under
+  // strict TS; coerce back to the kernel-declared element type so the
+  // loop body can read fields without per-line casts.
+  for (const lease of Object.values(leases) as AgentLease[]) {
     if (opts.status === 'stopped') {
       if (lease.status !== 'stopped') continue;
       const stoppedAtMs = lease.stopped_at ? Date.parse(lease.stopped_at) : NaN;

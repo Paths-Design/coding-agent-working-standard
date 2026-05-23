@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 3
 # caws_min_major: 11
-# lineage_refs: 8,11,17
+# lineage_refs: 8,11,17,19
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 #
 # PreToolUse dispatcher for Claude Code hooks.
@@ -40,7 +40,16 @@ source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
 
 # Registered handlers in execution order. Each handler self-filters
 # on $HOOK_TOOL_NAME; non-matching cases return exit 0 cheaply.
+#
+# MULTI-AGENT-ACTIVITY-REGISTRY-001: agent-heartbeat.sh runs FIRST so the
+# lease is refreshed and parallel-agent presence is surfaced even when a
+# later guard short-circuits the chain with exit 2 (block). Heartbeat is
+# non-blocking and never produces a "block" decision — its stdout is a
+# Claude-Code additionalContext envelope (priority 1), so it does not
+# outrank a real block from scope-guard / worktree-guard. The dispatcher's
+# stdout-priority logic ensures a block from a later handler still wins.
 HANDLERS=(
+  agent-heartbeat.sh
   block-dangerous.sh
   worktree-guard.sh
   scope-guard.sh

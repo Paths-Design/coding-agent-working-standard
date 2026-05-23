@@ -148,6 +148,91 @@ describe('Claude Code pack manifest', () => {
       expect(fs.existsSync(src)).toBe(true);
     }
   });
+
+  // ─── MULTI-AGENT-ACTIVITY-REGISTRY-001 (v3 bump) ─────────────────────
+  describe('v3 lease-substrate hooks (MULTI-AGENT-ACTIVITY-REGISTRY-001)', () => {
+    const { CLAUDE_CODE_PACK_VERSION } = require(
+      '../../../dist/init/hook-packs/manifest-claude-code'
+    );
+
+    it('CLAUDE_CODE_PACK_VERSION is at least 3', () => {
+      expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(3);
+    });
+
+    it('manifest lists the three new agent-*.sh templates as managed + executable', () => {
+      const expected = [
+        '.claude/hooks/agent-register.sh',
+        '.claude/hooks/agent-heartbeat.sh',
+        '.claude/hooks/agent-stop.sh',
+      ];
+      for (const destPath of expected) {
+        const entry = CLAUDE_CODE_PACK.installedFiles.find((f) => f.destPath === destPath);
+        expect(entry).toBeDefined();
+        expect(entry.managed).toBe(true);
+        expect(entry.executable).toBe(true);
+      }
+    });
+
+    it('manifest stateModel covers .caws/leases/ on read and write', () => {
+      expect(CLAUDE_CODE_PACK.stateModel.reads).toContain('.caws/leases/');
+      expect(CLAUDE_CODE_PACK.stateModel.writes).toContain('.caws/leases/');
+    });
+
+    it('lineageRefs includes entry 19 (canonical-checkout hijack)', () => {
+      expect(CLAUDE_CODE_PACK.lineageRefs).toContain(19);
+    });
+
+    it('every agent-*.sh template carries a v3 managed header', () => {
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+      for (const name of ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh']) {
+        const src = path.join(packRoot, name);
+        expect(fs.existsSync(src)).toBe(true);
+        const content = fs.readFileSync(src, 'utf8');
+        expect(content).toContain('CAWS-MANAGED-HOOK');
+        expect(content).toContain('hook_pack: claude-code');
+        expect(content).toContain('hook_pack_version: 3');
+        expect(content).toContain('lineage_refs: 19');
+        // Templates are executable.
+        const mode = fs.statSync(src).mode & 0o777;
+        expect(mode & 0o111).not.toBe(0);
+      }
+    });
+
+    it('dispatchers are bumped to v3 and reference the new handlers', () => {
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+
+      const sessionStart = fs.readFileSync(
+        path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
+      );
+      expect(sessionStart).toContain('hook_pack_version: 3');
+      expect(sessionStart).toContain('agent-register.sh');
+
+      const preToolUse = fs.readFileSync(
+        path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
+      );
+      expect(preToolUse).toContain('hook_pack_version: 3');
+      // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
+      // HANDLERS before any other guard so the lease refreshes even if
+      // a later guard short-circuits.
+      const handlersMatch = preToolUse.match(/HANDLERS=\(([^)]+)\)/s);
+      expect(handlersMatch).not.toBeNull();
+      const handlers = handlersMatch[1]
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && !s.startsWith('#'));
+      expect(handlers[0]).toBe('agent-heartbeat.sh');
+
+      const stop = fs.readFileSync(
+        path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
+      );
+      expect(stop).toContain('hook_pack_version: 3');
+      expect(stop).toContain('agent-stop.sh');
+    });
+  });
 });
 
 // ============================================================
