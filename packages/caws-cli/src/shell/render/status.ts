@@ -24,9 +24,12 @@
 //     error/warning/info counts; top findings, capped.
 
 import type {
+  ActivitySummary,
+  AgentLease,
   AgentRegistry,
   BindingState,
   DoctorFinding,
+  LeaseRegistry,
   Spec,
   SessionIdentity,
   WorktreeRegistry,
@@ -62,6 +65,14 @@ export interface StatusRenderInput {
   readonly staleTtlMs?: number;
   /** Cap on rendered top findings. Default 5. */
   readonly findingCap?: number;
+
+  // ─── MULTI-AGENT-ACTIVITY-REGISTRY-001 (commit 4) ──────────────────────
+  /** Lease registry — operational cache for the Agents panel. */
+  readonly leases?: LeaseRegistry;
+  /** Pre-computed TTL-classified active/stale/stopped buckets. */
+  readonly leaseSummary?: ActivitySummary;
+  /** Caller's own session id so the panel can mark `← self`. */
+  readonly selfSessionId?: string | null;
 }
 
 const DEFAULT_FINDING_CAP = 5;
@@ -79,6 +90,49 @@ function fmtSessionTag(identity: SessionIdentity): string {
     return `${identity.session_id}:${identity.platform}`;
   }
   return identity.session_id;
+}
+
+/**
+ * Render one lease row for the Agents panel.
+ *
+ * Format:
+ *   <session-id-tag>  <platform>  <git_dir_kind>  <branch|->  <bound-spec|->  <age>  [← self]
+ *
+ * Distinguishes:
+ *   - self vs other (← self marker)
+ *   - canonical vs linked-worktree origin (git_dir_kind from realpath-
+ *     normalized git_common_dir vs git_dir comparison)
+ *   - bound spec / worktree when present
+ */
+function renderLeaseRow(lease: AgentLease, selfSessionId: string | null, now: Date): string {
+  const isSelf = selfSessionId !== null && lease.session_id === selfSessionId;
+  const gitKind = lease.git_common_dir === lease.git_dir ? 'canonical' : 'worktree';
+  const age = formatAge(now.getTime() - Date.parse(lease.last_active));
+  const branch = lease.branch ?? '-';
+  const spec = lease.bound_spec_id ?? '-';
+  const wtTag =
+    lease.bound_worktree !== undefined
+      ? `wt=${lease.bound_worktree}`
+      : '';
+  const parts = [
+    lease.session_id,
+    lease.platform,
+    gitKind,
+    `branch=${branch}`,
+    `spec=${spec}`,
+    wtTag,
+    `${age} ago`,
+  ].filter((s) => s.length > 0);
+  return parts.join('  ') + (isSelf ? '  ← self' : '');
+}
+
+function formatAge(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '?';
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 86_400_000) return `${Math.round(ms / 3600_000)}h`;
+  return `${Math.round(ms / 86_400_000)}d`;
 }
 
 function describeCwdRelation(binding: ResolvedBinding): string {
@@ -165,6 +219,34 @@ export function renderStatus(input: StatusRenderInput): string {
           ...(input.staleTtlMs !== undefined ? { staleTtlMs: input.staleTtlMs } : {}),
         })
       );
+    }
+  }
+
+  // -------- Agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) --------
+  // Renders BEFORE Doctor when leases exist. Distinguishes self/other,
+  // canonical/worktree, active/stale/stopped, bound spec/worktree.
+  // Transition rule: if leases exist, use leases; otherwise omit panel
+  // (agents.json legacy fallback is rendered inside the Claim panel
+  // already, when the worktree owner has an agents.json record).
+  if (input.leaseSummary !== undefined && input.leaseSummary.total > 0) {
+    lines.push('');
+    lines.push('Agents');
+    const s = input.leaseSummary;
+    const parallelTag = s.active.length > 1 ? '  (parallel)' : '';
+    lines.push(`  active:   ${s.active.length}${parallelTag}`);
+    lines.push(`  stale:    ${s.stale.length}`);
+    lines.push(`  stopped:  ${s.stopped.length}`);
+    if (s.active.length > 0 || s.stale.length > 0 || s.stopped.length > 0) {
+      lines.push('');
+    }
+    for (const lease of s.active) {
+      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}`);
+    }
+    for (const lease of s.stale) {
+      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  STALE`);
+    }
+    for (const lease of s.stopped) {
+      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  stopped`);
     }
   }
 
