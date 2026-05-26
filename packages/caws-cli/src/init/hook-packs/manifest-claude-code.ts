@@ -51,7 +51,7 @@ import type { HookPackV1 } from './types';
 // Closes the enforcement gap that failure-lineage Entry 19 documented
 // as visibility-without-enforcement. No new managed files; no stateModel
 // changes (leases/worktrees.json already declared).
-export const CLAUDE_CODE_PACK_VERSION = 4;
+export const CLAUDE_CODE_PACK_VERSION = 5;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
