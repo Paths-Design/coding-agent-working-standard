@@ -4,7 +4,7 @@ risk_tier: 3
 mode: chore
 lifecycle_state: active
 created_at: '2026-05-26T05:45:52.793Z'
-updated_at: '2026-05-26T05:45:52.793Z'
+updated_at: '2026-05-26T08:30:00.000Z'
 blast_radius:
   modules:
     - docs/reports/user_e2e_setup_rehearsal_001.md
@@ -16,6 +16,8 @@ scope:
     - .caws/specs/USER-E2E-SETUP-REHEARSAL-001.yaml
     - docs/reports/user_e2e_setup_rehearsal_001.md
     - docs/reports/user_e2e_setup_rehearsal_001_kit.md
+    - docs/reports/turn.10.2.json
+    - docs/reports/turn.11.6.json
   out:
     - packages
     - .caws/policy.yaml
