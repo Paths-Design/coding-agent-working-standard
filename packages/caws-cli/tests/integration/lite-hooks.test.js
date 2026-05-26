@@ -1235,3 +1235,329 @@ describe('worktree-guard.sh canonical-checkout enforcement (CANONICAL-CHECKOUT-W
     });
   });
 });
+
+// ============================================================================
+// CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001
+// ============================================================================
+//
+// Proves that the production dispatcher chain
+// (dispatch/pre_tool_use.sh → lib/run-handlers.sh → worktree-guard.sh)
+// preserves the canonical-checkout guard's refusal (exit 2 + canonical
+// diagnostic), instead of swallowing, rewriting, or downgrading it.
+//
+// The companion spec CANONICAL-CHECKOUT-WORKTREE-GUARD-001 already proves
+// worktree-guard.sh's refusal in isolation (26 tests above). Those tests
+// invoke worktree-guard.sh directly. The dispatcher tests below close the
+// production-path gap by exercising the full chain end-to-end.
+//
+// Fixture: copies ALL handlers from the PreToolUse HANDLERS array so the
+// dispatcher chain can find them. Handlers that need state (scope-guard,
+// worktree-write-guard) self-filter on tool name and exit 0 for non-
+// matching cases. agent-heartbeat.sh may fail with a non-zero non-2 exit
+// (warning) because no `caws agents heartbeat` is on the test PATH —
+// that's expected and the dispatcher classifies it as warning, not block.
+// We assert the chain's final exit code is 2 specifically from
+// worktree-guard.sh, not warning-pollution from heartbeat.
+// ============================================================================
+
+describe('PreToolUse dispatcher chain canonical-checkout propagation (CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  // Exact production HANDLERS array from
+  // packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh.
+  // Listed here so the fixture-build copies every handler the dispatcher
+  // will source — missing one would silently make the chain skip it
+  // (run_handlers ignores missing handler scripts via `[[ ! -x ]] continue`).
+  const HANDLERS = [
+    'agent-heartbeat.sh',
+    'block-dangerous.sh',
+    'worktree-guard.sh',
+    'scope-guard.sh',
+    'worktree-write-guard.sh',
+  ];
+
+  // Auxiliary scripts referenced by handlers:
+  //   - classify_command.py — block-dangerous.sh shells out to it
+  //   - guard-strikes.sh — sourced by scope-guard.sh:30 (line-source)
+  // Missing any of these would make the dependent handler emit a non-zero
+  // exit. block-dangerous.sh exits non-zero (warning) on the missing-
+  // classify path. scope-guard.sh exits 1 with a "No such file or
+  // directory" error from the bash source builtin. Both pollute the
+  // dispatcher's max_exit aggregation and would mask real propagation
+  // failures with fixture-level noise. They are NOT additions to the
+  // production HANDLERS array — they are dependencies of those handlers.
+  const AUX_FILES = ['classify_command.py', 'guard-strikes.sh'];
+
+  function writeV11Registry(entries) {
+    fs.writeFileSync(
+      path.join(testDir, '.caws', 'worktrees.json'),
+      JSON.stringify(entries, null, 2) + '\n'
+    );
+  }
+
+  function createLinkedWorktree(name, branch) {
+    execFileSync(
+      'git',
+      ['-C', testDir, 'worktree', 'add', '-b', branch, `.caws/worktrees/${name}`],
+      { stdio: 'ignore' }
+    );
+  }
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-dispatch-prop-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'worktrees'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'dispatch'));
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+
+    // Dispatcher entry point.
+    fs.copySync(
+      path.join(packDir, 'dispatch', 'pre_tool_use.sh'),
+      path.join(hooksDir, 'dispatch', 'pre_tool_use.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'dispatch', 'pre_tool_use.sh'), 0o755);
+
+    // Shared libraries the dispatcher sources.
+    for (const lib of ['parse-input.sh', 'run-handlers.sh']) {
+      fs.copySync(path.join(packDir, 'lib', lib), path.join(hooksDir, 'lib', lib));
+      fs.chmodSync(path.join(hooksDir, 'lib', lib), 0o755);
+    }
+
+    // Every handler in the production HANDLERS array.
+    for (const handler of HANDLERS) {
+      fs.copySync(path.join(packDir, handler), path.join(hooksDir, handler));
+      fs.chmodSync(path.join(hooksDir, handler), 0o755);
+    }
+
+    // Auxiliary scripts referenced by handlers.
+    for (const aux of AUX_FILES) {
+      fs.copySync(path.join(packDir, aux), path.join(hooksDir, aux));
+      fs.chmodSync(path.join(hooksDir, aux), 0o755);
+    }
+
+    // runtime-paths.sh is sourced by worktree-guard.sh for PROJECT_DIR.
+    fs.copySync(
+      path.join(packDir, 'runtime-paths.sh'),
+      path.join(hooksDir, 'runtime-paths.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'runtime-paths.sh'), 0o755);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runDispatchPreToolUse(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const toolName = opts.tool_name || 'Bash';
+    const toolInput = opts.tool_input || { command };
+    const payload = {
+      tool_name: toolName,
+      tool_input: toolInput,
+      cwd,
+      session_id: opts.session_id || 'caws-dispatch-test-1',
+    };
+    const inputFile = path.join(testDir, '.dispatch-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const dispatcherPath = path.join(testDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${dispatcherPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_DIR: testDir,
+        },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // ─── A1: mutating command from canonical with active worktree → exit 2 ──
+  describe('A1: canonical + active worktree + mutating command propagates as exit 2', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-001',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    it('dispatcher exits 2 for `git checkout main` from canonical', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      expect(r.exitCode).toBe(2);
+    });
+
+    it('dispatcher stderr preserves canonical BLOCKED diagnostic', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      // run-handlers.sh prefixes each handler's stderr with [<handler>].
+      // The canonical diagnostic body from worktree-guard.sh must survive.
+      expect(r.stderr).toMatch(
+        /BLOCKED: git checkout \(branch switch\) from the canonical checkout while CAWS worktrees are active\./
+      );
+    });
+
+    it('dispatcher stderr names the active worktree and a recovery path', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      expect(r.stderr).toMatch(/wt-other/);
+      // worktree-guard.sh emits two recovery paths in its diagnostic:
+      //   `cd .caws/worktrees/wt-other`
+      //   `caws worktree destroy <name>`
+      // At least one must survive run-handlers' prefixing.
+      expect(r.stderr).toMatch(/(cd \.caws\/worktrees\/wt-other|caws worktree destroy)/);
+    });
+
+    it('dispatcher prefixes worktree-guard.sh stderr per run-handlers convention', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      // run-handlers.sh:158-161 wraps each handler's stderr lines with
+      // `[<handler>] <line>`. This proves the chain actually went through
+      // run-handlers rather than calling worktree-guard.sh directly.
+      expect(r.stderr).toMatch(/\[worktree-guard\.sh\]/);
+    });
+  });
+
+  // ─── A2: read-only command from canonical with active worktree → exit 0 ──
+  describe('A2: canonical + active worktree + read-only command passes', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-001',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    test.each([
+      ['git status'],
+      ['git log --oneline -1'],
+      ['git diff'],
+    ])('dispatcher exits 0 for read-only command %s', (cmd) => {
+      const r = runDispatchPreToolUse(cmd);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/BLOCKED: git checkout/);
+    });
+  });
+
+  // ─── A3: mutating command from linked worktree → not blocked by canonical guard ──
+  describe('A3: linked worktree cwd + mutating command not blocked by canonical guard', () => {
+    let wtMinePath;
+
+    beforeEach(() => {
+      createLinkedWorktree('wt-mine', 'wt-mine-branch');
+      createLinkedWorktree('wt-sibling', 'wt-sibling-branch');
+      wtMinePath = path.join(testDir, '.caws', 'worktrees', 'wt-mine');
+      writeV11Registry({
+        'wt-mine': {
+          specId: 'GUARD-TEST-MINE-001',
+          owner: { session_id: 'caws-mine-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-mine-branch',
+          baseBranch: 'main',
+          path: wtMinePath,
+        },
+        'wt-sibling': {
+          specId: 'GUARD-TEST-SIBLING-001',
+          owner: { session_id: 'caws-sibling-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-sibling-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-sibling'),
+        },
+      });
+    });
+
+    it('dispatcher does not emit canonical BLOCKED for `git commit` inside linked worktree', () => {
+      // The cwd is the linked worktree's path. The canonical-guard
+      // predicate is: git_dir == git_common_dir. Inside a linked worktree
+      // git_dir is <main>/.git/worktrees/<name> while git_common_dir is
+      // <main>/.git — they differ. The guard must NOT fire.
+      const r = runDispatchPreToolUse('git commit --allow-empty -m test', { cwd: wtMinePath });
+      // We do not assert exitCode === 0 here: other guards (e.g. block-
+      // dangerous.sh, scope-guard.sh) might exit non-zero for legitimate
+      // reasons unrelated to canonical-checkout. The acceptance criterion
+      // is specifically that the canonical BLOCKED diagnostic is absent.
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git (checkout|switch|branch|reset).*from the canonical checkout/
+      );
+    });
+
+    it('dispatcher does not emit canonical BLOCKED for `git switch other` inside linked worktree', () => {
+      const r = runDispatchPreToolUse('git switch wt-sibling-branch', { cwd: wtMinePath });
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git (checkout|switch|branch|reset).*from the canonical checkout/
+      );
+    });
+  });
+
+  // ─── A4: regression guard — full lite-hooks suite remains green ───────────
+  // This is implicit: it's the test count and pass rate of the rest of the
+  // file. No additional test body needed here; the spec's A4 is satisfied
+  // by jest reporting the prior 65 tests still pass plus these new ones.
+
+  // ─── A5: no active worktrees → dispatcher does not block git checkout ────
+  describe('A5: no active worktrees → dispatcher does not emit canonical BLOCKED', () => {
+    test.each([
+      ['empty registry object', () => writeV11Registry({})],
+      ['registry with only inactive entries', () => writeV11Registry({
+        'wt-done': {
+          specId: 'GUARD-TEST-DONE-001',
+          owner: { session_id: 'caws-done-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-20T00:00:00.000Z',
+          status: 'stopped',
+          branch: 'wt-done-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-done'),
+        },
+      })],
+    ])('with %s, `git checkout main` is not blocked by canonical guard', (_label, setup) => {
+      setup();
+      const r = runDispatchPreToolUse('git checkout main');
+      // The canonical guard's diagnostic must not appear.
+      // Other handlers may legitimately produce non-zero exits unrelated
+      // to canonical-checkout; we assert specifically that the canonical
+      // BLOCKED text is absent.
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git checkout \(branch switch\) from the canonical checkout/
+      );
+    });
+  });
+});
