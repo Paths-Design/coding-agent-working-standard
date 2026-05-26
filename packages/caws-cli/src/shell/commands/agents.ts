@@ -41,6 +41,7 @@ import {
   heartbeatAgentSession,
   stopAgentSession,
   summarizeActiveAgents,
+  type ActivitySummary,
   type AgentLease,
   type LeaseContext,
   type LeaseReason,
@@ -57,6 +58,39 @@ import {
 } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { resolveSession } from '../session/resolve-session';
+
+// ─── kernel feature-detect guard ──────────────────────────────────────────
+//
+// Defends against the case where the kernel does not export
+// `summarizeActiveAgents` at runtime (Bug-001/002 from
+// USER-E2E-SETUP-REHEARSAL-001). The cli dep range was tightened to
+// `^1.1.0` in this slice; this guard is the second-half defense for
+// future kernel revs or broken/partial installs. Returns null when the
+// kernel symbol is unavailable so callers can fall back to an empty
+// summary and emit a diagnostic.
+
+function callSummarizeActiveAgentsSafe(
+  leases: LeaseRegistry,
+  now: Date,
+  ttlMs: number
+): ActivitySummary | null {
+  if (typeof summarizeActiveAgents !== 'function') {
+    return null;
+  }
+  return summarizeActiveAgents(leases, now, ttlMs);
+}
+
+const KERNEL_FEATURE_UNAVAILABLE_DIAGNOSTIC =
+  'caws agents: kernel does not export summarizeActiveAgents; agent activity unavailable. ' +
+  'This typically means caws-cli is paired with a pre-1.1.0 kernel. Reinstall: ' +
+  'npm install -g @paths.design/caws-cli@latest';
+
+const EMPTY_ACTIVITY_SUMMARY: ActivitySummary = {
+  total: 0,
+  active: [],
+  stale: [],
+  stopped: [],
+};
 
 // ─── shared option shape ──────────────────────────────────────────────────
 
@@ -244,7 +278,12 @@ function computeActiveSummary(
   now: Date,
   ttlMs: number = DEFAULT_STALE_TTL_MS
 ): ActiveSummary {
-  const summary = summarizeActiveAgents(registry, now, ttlMs);
+  // Defensive: kernel feature-detect. If summarizeActiveAgents is
+  // missing, fall back to an empty summary. Caller (register/heartbeat
+  // --include-active-summary) receives `active_agent_count: 0` and an
+  // empty active_agents array rather than a Node throw.
+  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs)
+    ?? EMPTY_ACTIVITY_SUMMARY;
   const entries: ActiveAgentSummaryEntry[] = summary.active.map((lease) => ({
     session_id: lease.session_id,
     bound_worktree: lease.bound_worktree ?? null,
@@ -534,7 +573,15 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
 
   const now = nowFn();
   const ttl = opts.staleTtlMs ?? DEFAULT_STALE_TTL_MS;
-  const summary = summarizeActiveAgents(loadRes.value.leases, now, ttl);
+  // Defensive: kernel feature-detect (Bug-001/002 from rehearsal). When
+  // summarizeActiveAgents is unavailable, emit a typed diagnostic and
+  // fall back to an empty summary so the command still renders "no
+  // agents to list" instead of crashing with "is not a function".
+  const summaryRes = callSummarizeActiveAgentsSafe(loadRes.value.leases, now, ttl);
+  if (summaryRes === null) {
+    err(KERNEL_FEATURE_UNAVAILABLE_DIAGNOSTIC);
+  }
+  const summary = summaryRes ?? EMPTY_ACTIVITY_SUMMARY;
 
   // --active means TTL-classified active, NOT raw status field.
   // Default surfacing rules: active is always shown; stale + stopped are
