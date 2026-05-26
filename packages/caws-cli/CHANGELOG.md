@@ -1,3 +1,82 @@
+## [11.1.7](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.6...caws-cli-v11.1.7) (2026-05-26)
+
+Ships the four closed P0 fixes identified by
+`USER-E2E-SETUP-REHEARSAL-001` so a first-contact user gets the
+v11.1 surface as documented. Two-package release train: this
+publishes alongside `@paths.design/caws-kernel@1.1.2`, which
+carries the kernel-side diagnostic fixes (6 of the 7 stale-advice
+sites live in kernel).
+
+### Fixes
+
+* **docs(v11):** reconcile install guidance with v11.1.x reality
+  (`DOCS-V11-CUTOVER-FINALIZE-01`, commit `3243a2f`). Removed the
+  README/AGENTS.md `pin to caws-cli@^10.2.x` downgrade trap;
+  updated the install snippet to `@^11.1.0`; corrected the "v11.1
+  ships eleven command groups" claim across README/AGENTS/CLAUDE.md
+  to match the actual v11.1.x surface.
+* **fix(cli):** defend `caws status` and `caws agents list` against
+  a missing kernel `summarizeActiveAgents` export
+  (`CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01`, commit
+  `10ee80b`). Two-half fix: tightened the kernel dep range from
+  `^1.0.0` to `^1.1.0` (the minimum kernel version that exports the
+  function) and added a defensive feature-detect guard at all four
+  call sites so a future kernel rev or a partial install produces
+  a typed diagnostic instead of a Node `is not a function` crash
+  with exit code 0.
+* **fix(diagnostics):** replace stale `v11.0.0` / pin-to-10.2
+  advice with current v11.1 command guidance
+  (`CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01`, commit `680f0bb`).
+  Patched 1 CLI site (`caws claim`) and 6 kernel sites (3 in
+  `doctor/inspect.ts`, 1 in `worktree/transitions.ts`, 2 in
+  `scope/evaluate.ts`). Diagnostics now name current canonical
+  commands (`caws worktree create/bind/merge/destroy`, `caws specs
+  close`) instead of advising users to pin to a 9-month-old CLI
+  line. Kernel-side fixes ship via `@paths.design/caws-kernel@1.1.2`
+  (see release train note below).
+* **chore(deps):** refresh `package-lock.json` for the kernel dep
+  edge (`CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01`, commit
+  `644713b`). The lockfile-recorded `@paths.design/caws-kernel`
+  range now matches the bumped `package.json` declaration
+  (`^1.1.0`).
+
+### Release train note
+
+This release ships in lockstep with `@paths.design/caws-kernel@1.1.2`.
+The CLI's dep edge (`@paths.design/caws-kernel: ^1.1.0`) is unchanged
+from v11.1.6, so the caret resolves cleanly. **However, users on
+kernel `1.1.1` will see only the CLI-side fixes** — the 6 kernel
+diagnostic-text fixes (the bulk of the stale-advice repair) require
+kernel `1.1.2`. A fresh `npm install -g @paths.design/caws-cli@11.1.7`
+will pull `@paths.design/caws-kernel@1.1.2` automatically.
+
+### Test evidence
+
+  - kernel: 525/525 pass across 25 suites (519 baseline + 6 new
+    from the stale-diagnostics regression suite)
+  - cli shell subset: 273/273 pass across 24 suites
+  - new regression tests:
+      `packages/caws-kernel/tests/unit/stale-version-advice.test.ts`
+        (6 sub-tests, one per kernel emission site)
+      `packages/caws-cli/tests/shell/status-kernel-feature-detect.test.js`
+        (4 sub-tests; jest-doMock injection of undefined kernel symbol)
+      `packages/caws-cli/tests/shell/claim-stale-version-advice.test.js`
+        (1 sub-test with stderr artifact capture)
+
+### Out of scope
+
+  - `@paths.design/caws-kernel@1.1.2` is a separate manual publish
+    per `CAWS-RELEASE-TAG-DRIVEN-001` v1 doctrine (kernel CI publish
+    is a follow-up slice).
+  - 27 npm-audit transitive-dep vulnerability findings (1 low, 7
+    moderate, 18 high, 1 critical) surfaced by the lockfile-hygiene
+    slice are NOT remediated by this release; tracked as candidate
+    follow-up `CAWS-DEPS-AUDIT-REMEDIATION-01`.
+  - Kernel `CHANGELOG.md` (currently absent) — introducing one is
+    the scope of follow-up `KERNEL-RELEASE-PROVENANCE-01`.
+
+---
+
 ## [11.1.6](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.5...caws-cli-v11.1.6) (2026-05-21)
 
 Calibrates the Claude Code hook pack's command classifier
