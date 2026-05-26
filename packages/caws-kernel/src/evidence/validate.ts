@@ -50,6 +50,15 @@ import worktreeCreatedSchema from '../schemas/events/worktree_created.v1.json';
 import worktreeDestroyedSchema from '../schemas/events/worktree_destroyed.v1.json';
 import worktreeMergedSchema from '../schemas/events/worktree_merged.v1.json';
 
+// v10 read-side compatibility (KERNEL-EVENT-V10-COMPAT-ALIAS-001). Used
+// ONLY by validateChainedEvent's legacy-detection pre-pass for events with
+// event === 'validation_completed'. New writes never emit this event type
+// — prepareAppend / appendEvent only emit canonical v11 events. The schema
+// exists so v11 kernels can load existing event logs from v10-migrant
+// repos without failing the full-log re-read on every event-append
+// lifecycle transaction.
+import validationCompletedSchema from '../schemas/events/validation_completed.v1.json';
+
 import { EVIDENCE_RULES } from './rules';
 import {
   HASH_REGEX,
@@ -183,6 +192,24 @@ export function validateEventBody(input: unknown): Result<EventBody> {
  * Validate a fully chained event (e.g. read from disk or returned by
  * prepareAppend). Validates body shape PLUS chain field shape. Does NOT
  * verify hash correctness — that's verifyChain's job.
+ *
+ * v10 read-side compatibility (KERNEL-EVENT-V10-COMPAT-ALIAS-001):
+ * If `input.event === 'validation_completed'`, route through the v10
+ * compat schema instead of the canonical v11 envelope. The v10 envelope
+ * differs in three ways:
+ *   - actor is a STRING (e.g. 'cli'), not a structured { kind, id }
+ *   - session_id lives at the top level, not nested in actor.session_id
+ *   - event is the literal 'validation_completed' (v11 renamed it to
+ *     'spec_validated')
+ *
+ * On success the legacy event is returned cast as ChainedEvent — the
+ * runtime shape (actor: string, top-level session_id) is preserved
+ * verbatim per spec invariant I4 (no normalization before hash
+ * verification, so the v10-writer-computed event_hash remains valid).
+ * Callers reading the event's actor sub-fields must check
+ * `event.event === 'validation_completed'` to detect legacy records
+ * (that field value IS the discriminator). The compat path is read-only;
+ * the writer (prepareAppend/appendEvent) emits only canonical v11 events.
  */
 export function validateChainedEvent(input: unknown): Result<ChainedEvent> {
   const errors: Diagnostic[] = [];
@@ -197,6 +224,14 @@ export function validateChainedEvent(input: unknown): Result<ChainedEvent> {
     );
   }
   const obj = input as Record<string, unknown>;
+
+  // v10 compat alias — route legacy validation_completed events through
+  // a narrow alternative schema. The compat path is invoked ONLY when the
+  // event name literally matches the deprecated v10 name. Every other
+  // event name falls through to the canonical v11 validator unchanged.
+  if (obj['event'] === 'validation_completed') {
+    return validateLegacyV10ValidationCompleted(input, obj);
+  }
 
   // Run AJV against the full envelope (chain fields + body fields).
   const validate = getEnvelopeValidator();
@@ -227,6 +262,93 @@ export function validateChainedEvent(input: unknown): Result<ChainedEvent> {
 
   if (errors.length > 0) return err(errors);
   return ok(input as ChainedEvent);
+}
+
+// ---------------------------------------------------------------------------
+// v10 read-side compatibility (KERNEL-EVENT-V10-COMPAT-ALIAS-001)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lazy-compiled validator for the v10 validation_completed envelope.
+ * Built on first use, then cached for the process lifetime. The schema
+ * itself is immutable (versioned at .v1).
+ */
+let validationCompletedValidator: ValidateFunction | null = null;
+
+function getValidationCompletedValidator(): ValidateFunction {
+  if (validationCompletedValidator !== null) return validationCompletedValidator;
+  validationCompletedValidator = getAjv().compile(validationCompletedSchema as object);
+  return validationCompletedValidator;
+}
+
+/**
+ * Accept a v10 validation_completed entry as a legacy chained event.
+ *
+ * Returns ok(ChainedEvent) — the runtime shape is preserved verbatim
+ * (actor as string, top-level session_id). The cast lets the caller
+ * treat the value as a chained event for chain-traversal purposes;
+ * callers that need to dereference actor sub-fields must first check
+ * `event === 'validation_completed'` and handle the legacy shape
+ * accordingly.
+ *
+ * On schema mismatch, returns err with a structured diagnostic naming
+ * the failing field. This is NOT a general bypass — malformed
+ * validation_completed records are still rejected (spec invariants I3).
+ *
+ * Hash chain semantics are unchanged. The v10 writer computed event_hash
+ * over its own canonical JSON serialization (which included the string
+ * actor and top-level session_id); the v11 verifier MUST hash the same
+ * bytes to get a matching event_hash. This function does not normalize,
+ * lift, or rewrite any field of the parsed event before returning it
+ * (spec invariant I4).
+ */
+function validateLegacyV10ValidationCompleted(
+  input: unknown,
+  obj: Record<string, unknown>
+): Result<ChainedEvent> {
+  const validate = getValidationCompletedValidator();
+  if (validate(input)) {
+    // The cast is structurally lossy at compile time (the runtime
+    // actor is `string`, the type declares it as `Actor`). The
+    // discriminator is `event === 'validation_completed'`, which is
+    // the v10 sentinel — no v11 event uses that name.
+    return ok(input as unknown as ChainedEvent);
+  }
+  const errors: Diagnostic[] = [];
+  for (const e of validate.errors ?? []) {
+    // Reuse ajvErrorToDiagnostic so the diagnostic shape is identical
+    // to the v11 path. The compat schema's error pointers
+    // (`/actor`, `/data/passed`, etc.) flow through naturally.
+    const d = ajvErrorToDiagnostic(e);
+    // Tag legacy diagnostics with a hint so downstream observers can
+    // distinguish "malformed v10 event" from "valid v10 event rejected
+    // by v11 rules" — useful for surfacing the compat path's failure
+    // mode without conflating it with the canonical path.
+    errors.push({
+      ...d,
+      data: { ...(d.data ?? {}), legacyCompat: 'validation_completed.v1' },
+    });
+  }
+  // checkSpecIdClass — validation_completed is v10's name for
+  // spec_validated which is REQUIRES_SPEC_ID; enforce the same class.
+  const specIdErrors = checkSpecIdClass('spec_validated', obj['spec_id']);
+  for (const d of specIdErrors) {
+    errors.push({
+      ...d,
+      data: { ...(d.data ?? {}), legacyCompat: 'validation_completed.v1' },
+    });
+  }
+  if (errors.length > 0) return err(errors);
+  // Shouldn't reach here — AJV failed but no errors collected. Defensive.
+  return err(
+    diagnostic({
+      rule: EVIDENCE_RULES.EVENT_ENVELOPE_INVALID,
+      authority: 'kernel/evidence',
+      message:
+        'v10 validation_completed event failed schema validation but no specific error was reported.',
+      data: { legacyCompat: 'validation_completed.v1' },
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
