@@ -1,26 +1,4 @@
 {
-  "session-ownership-metadata": {
-    "specId": "SESSION-OWNERSHIP-METADATA-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-23T03:14:55.612Z",
-    "branch": "caws/session-ownership-metadata",
-    "baseBranch": "feat/multi-agent-provenance-envelope",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/session-ownership-metadata"
-  },
-  "migrate-v10-specs": {
-    "specId": "CAWS-MIGRATE-V10-SPECS-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-23T04:07:22.037Z",
-    "branch": "migrate-v10-specs",
-    "baseBranch": "feat/multi-agent-provenance-envelope",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
-  },
   "release-caws-11-1-7-train": {
     "specId": "RELEASE-CAWS-11-1-7-TRAIN-01",
     "owner": {
