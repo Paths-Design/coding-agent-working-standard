@@ -894,3 +894,20 @@ If you are reading this entry because you are about to implement the canonical-c
 ### Single-line synthesis
 
 **Entry 19 was a control-plane failure made invisible by a missing substrate: CAWS's worktree isolation model assumed the canonical checkout was a passive coordination surface, but nothing structurally enforced that AND nothing surfaced "another agent is active in this repo" at any decision point. When a parallel agent silently turned the canonical checkout into an active implementation branch, every sibling worktree lost stable access to its own bound spec, and no session knew the other existed until the user diagnosed the conflict manually. `MULTI-AGENT-ACTIVITY-REGISTRY-001` ships the visibility substrate (`.caws/leases/<session_id>.json` written via `caws agents register/heartbeat/stop`, surfaced via the v3 Claude Code hook pack at SessionStart/PreToolUse/Stop, and a new Agents panel in `caws status`). It is the necessary precondition for `CANONICAL-CHECKOUT-WORKTREE-GUARD-001` to enforce the boundary — visibility first, enforcement next. The deeper invariant: visibility is doctrine, not feature. A system that cannot make a multi-agent conflict legible at the decision point cannot expect the agent to avoid it.**
+
+### Enforcement coda: CANONICAL-CHECKOUT-WORKTREE-GUARD-001 landed (May 2026)
+
+The enforcement slice the body anticipates landed under `CANONICAL-CHECKOUT-WORKTREE-GUARD-001` (Claude Code hook pack v4). `packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh` now refuses canonical-checkout mutating git commands (`checkout`, `switch`, `branch -f`, `reset` non-hard) when at least one active CAWS worktree exists. Implementation departed from the body's recommendation in one respect, deliberately:
+
+- The body said "read leases, not worktrees.json." The guard reads **worktrees.json** for the active-worktree check, not leases. Reasoning: per doctrine invariant 8, leases are visibility evidence and never authority. Using lease presence to gate the block decision would make stale-lease state authority-bearing — exactly the anti-invariant. The guard uses `git rev-parse --git-dir == --git-common-dir` (a now-state structural test, not registry membership) for the canonical-detection predicate, and `worktrees.json` active entries via the existing `entriesOf` helper for the worktree-existence predicate. Both are now-state reads, neither delegates authority to leases.
+
+The other six asks of future maintainers were honored: governance allowlist preserved, block message names the operator escape, no auto-repair, no kernel-side sparse-checkout coupling, leases NOT promoted to authority. Test coverage: 26 cases in `packages/caws-cli/tests/integration/lite-hooks.test.js` covering A1–A6 plus A1b (v10 nested envelope) and A4b (missing-status defensive fallback). Concrete blocked stderr:
+
+```
+BLOCKED: git checkout (branch switch) from the canonical checkout while CAWS worktrees are active.
+Active worktree(s) detected (e.g. 'wt-other' in .caws/worktrees.json).
+Switch into your worktree before mutating: cd .caws/worktrees/wt-other
+Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>
+```
+
+What this does NOT close: dirty-overlap cleanup at worktree boundaries; push-range classification; first-class handoff. Those remain sibling concerns, filed (or to be filed) under their own specs. Entry 19's body remains the canonical narrative of the original failure; this coda records the enforcement response only.

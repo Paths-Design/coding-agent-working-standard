@@ -1,9 +1,9 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 3
+# hook_pack_version: 4
 # caws_min_major: 11
-# lineage_refs: 1,4,6,8,11,12,13,16,17
+# lineage_refs: 1,4,6,8,11,12,13,16,17,19
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 -->
 
@@ -36,7 +36,7 @@ is wrong, stop and ask the user.
 | File | Lineage entries | What it prevents |
 |------|----------------|------------------|
 | `block-dangerous.sh` + `classify_command.py` | 1, 17 | catastrophic git operations; tokenized-argv bypasses; danger latch |
-| `worktree-guard.sh` | 4, 6, 11 | amend/stash/reset/force-push during active worktrees; cross-boundary file copies |
+| `worktree-guard.sh` | 4, 6, 11, 19 | amend/stash/reset/force-push during active worktrees; cross-boundary file copies; **canonical-checkout mutating git commands (checkout/switch/branch -f/reset non-hard) blocked when worktrees active** (CANONICAL-CHECKOUT-WORKTREE-GUARD-001) |
 | `worktree-write-guard.sh` | 4, 8, 13 | base-branch writes when worktrees are active (enforcement returns in CLI-WORKTREE-001); baseline-clobber |
 | `scope-guard.sh` | 8, 11, 12, 16 | edits outside the active spec's `scope.in`; cross-spec union interference; unbound → no authority |
 | `session-caws-status.sh` | 4, 11 | inherited-dirty-state collision; foreign-claim soft-block; version-skew |

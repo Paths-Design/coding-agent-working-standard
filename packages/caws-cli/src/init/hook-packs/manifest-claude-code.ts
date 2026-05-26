@@ -39,7 +39,19 @@ import type { HookPackV1 } from './types';
 // hook-protocol-agnostic; agent-heartbeat.sh is the sole emitter of
 // Claude Code's hookSpecificOutput.additionalContext envelope. Adds
 // .caws/leases/ to the stateModel read/write surface.
-export const CLAUDE_CODE_PACK_VERSION = 3;
+//
+// Version 4: CANONICAL-CHECKOUT-WORKTREE-GUARD-001. Adds a hook-IO
+// behavioral contract (canonical-checkout-pre-tool-use-guard-v1)
+// inside worktree-guard.sh that blocks mutating git commands
+// (checkout, switch, branch -f, reset non-hard) from the canonical
+// checkout when at least one active CAWS worktree exists. The guard
+// uses git_dir == git_common_dir as the canonical-detection predicate
+// and the existing entriesOf helper for v10/v11 dual-shape registry
+// reads. Leases are NOT consulted; visibility-only, never authority.
+// Closes the enforcement gap that failure-lineage Entry 19 documented
+// as visibility-without-enforcement. No new managed files; no stateModel
+// changes (leases/worktrees.json already declared).
+export const CLAUDE_CODE_PACK_VERSION = 4;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
