@@ -1,0 +1,54 @@
+id: USER-E2E-SETUP-REHEARSAL-V11-1-7-001
+title: 'Observational E2E setup rehearsal on full-stack-ds against published v11.1.7'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-26T22:00:02.850Z'
+updated_at: '2026-05-26T22:00:02.850Z'
+blast_radius:
+  modules:
+    - docs/reports/user_e2e_setup_rehearsal_v11_1_7_001.md
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/USER-E2E-SETUP-REHEARSAL-V11-1-7-001.yaml
+    - docs/reports/user_e2e_setup_rehearsal_v11_1_7_001.md
+  out:
+    - packages
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github
+invariants:
+  - 'I1 — Recon/observation slice. No production code, no installer behavior, no runtime semantics, no hook templates modified inside this slice. All findings land in the report; fixes are deferred to follow-up specs (mirrors USER-E2E-SETUP-REHEARSAL-001 invariant I1).'
+  - 'I2 — This is a post-publish rehearsal against @paths.design/caws-cli@11.1.7 specifically. The prior USER-E2E-SETUP-REHEARSAL-001 covered the v10.2 published surface + v11.6 development surface (which surfaced the published-surface skew leading to v11.1.7 release work). This run validates the NEW published surface.'
+  - 'I3 — The remote agent executed inside a fresh clone of full-stack-ds at SHA c604fb0 (live main HEAD at rehearsal start), not the live repo. Dirty-working-tree friction is explicitly out of scope.'
+  - 'I4 — The rehearsal records BOTH successes and friction with equal fidelity. The new v11.1.7 surface succeeded end-to-end with zero HANDOFFs; the friction is concentrated in scaffold-and-defaults UX and partial-install exit semantics.'
+  - 'I5 — Report acknowledges and is bounded by what was NOT exercised: hook enforcement (session pre-dated hook install per kit §5.5), gates/evidence/waiver flows, multi-agent collisions, CI integration. Follow-up rehearsals can probe those surfaces.'
+acceptance:
+  - id: A1
+    given: 'A fresh clone of full-stack-ds at SHA c604fb032eecd3d9c2b18531f05310e42a5d375e with no prior .caws/ state; published @paths.design/caws-cli@11.1.7 installed globally via npm install -g.'
+    when: 'The remote agent executes the rehearsal kit phase by phase (P1 install/source, P2 init, P3 doctor, P4 spec, P5 worktree, P6 governed change, P7 merge/close, P8 cleanup).'
+    then: 'A complete transcript exists with: commands run, exit codes, stdout/stderr (verbatim or quoted excerpts), files changed, and the agent honest assessment of clarity. Transcript captured at /tmp/fsds-caws-rehearsal/transcript/ with 9 phase markdown files + 28 raw command-output files (~200 KB uncompressed, ~37 KB tarball).'
+  - id: A2
+    given: 'The transcript from A1.'
+    when: 'The final report is composed per the kit 10-section structure.'
+    then: 'docs/reports/user_e2e_setup_rehearsal_v11_1_7_001.md contains all 10 sections (Repo chosen, Starting state, Command transcript, Files changed, Diagnostics encountered, Places where the user would stop, Evidence table, Readiness verdict, Prioritized fix backlog, Non-claims). 227 lines, ~26 KB markdown.'
+  - id: A3
+    given: 'The published v11.1.7 surface under exercise.'
+    when: 'The full P1-P8 lifecycle (init → spec create → worktree create → governed edit → merge → spec auto-close → worktree destroy → registry cleanup) is run end-to-end.'
+    then: 'All 8 phases complete with zero HANDOFFs. The merge transaction performs 5 actions atomically (branch merge, spec close with closure_notes, git worktree remove, registry cleanup to {}, three hash-chained audit events: spec_closed, worktree_merged, worktree_destroyed). Doctor delta from P3 to P8 is zero (0E/0W/0I both runs).'
+  - id: A4
+    given: 'The report identifies P1-priority friction (likely user abandonment).'
+    when: 'Follow-up slices are scoped from the report §9 fix backlog.'
+    then: 'Three P1-priority slices are nameable from the report evidence: (a) INIT-PARTIAL-SUCCESS-EXIT-CODE-001 — bare caws init exits 1 even when .caws/ fully populated and 6 of 22 hook files installed, conflating fully-clean-install with partial-install-pending-resolution; (b) SPEC-CREATE-SCAFFOLD-USABLE-DEFAULTS-001 — fresh spec ships with scope.in TODO placeholder that rejects every file until the user opens the YAML and replaces it; (c) WORKTREE-WORKSPACE-DEPS-GUIDANCE-001 — pnpm/yarn/npm-workspace projects fail their own test commands inside a CAWS worktree because node_modules is absent and create does not warn or guide.'
+  - id: A5
+    given: 'The report identifies P2-priority friction (confusing but recoverable).'
+    when: 'Lower-priority follow-up slices are scoped.'
+    then: 'Two P2-priority slices are nameable: SPECS-CREATE-CONSOLIDATED-REQUIRED-FLAGS-001 (three sequential single-flag errors instead of one consolidated diagnostic), WORKTREE-MERGE-DRYRUN-VERBOSE-001 (dry-run output too terse — just "ready to merge" with no detail on what will happen).'
+  - id: A6
+    given: 'The closed v10.2-era spec USER-E2E-SETUP-REHEARSAL-001 reported NOT-READY against the published surface.'
+    when: 'This v11.1.7 rehearsal is compared.'
+    then: 'The v11.1.7 published surface is READY-WITH-DOC-GAPS — a verdict upgrade. Bug-004 (published-surface skew between npm latest and host repo) is closed by the v11.1.7 release: npm latest now resolves to 11.1.7 which IS the v11 surface the docs describe. All four P0 fixes shipped (DOCS-V11-CUTOVER-FINALIZE-01, CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01, CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01, CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01) are observable on the rehearsed published surface.'
+non_functional: {}
+contracts: []
