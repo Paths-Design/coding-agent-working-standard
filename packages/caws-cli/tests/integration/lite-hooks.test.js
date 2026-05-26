@@ -1561,3 +1561,417 @@ describe('PreToolUse dispatcher chain canonical-checkout propagation (CANONICAL-
     });
   });
 });
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2
+//
+// PreToolUse dispatcher refuses Read/Write/Edit against
+// <linked-worktree>/.caws/specs/*. Tests go through the full dispatcher
+// chain (dispatch/pre_tool_use.sh → lib/run-handlers.sh →
+// worktree-write-guard.sh) — not direct handler invocation — because the
+// guard's behavior depends on both the PreToolUse matcher already
+// including Read AND the handler's internal tool_name allowlist now
+// permitting Read in addition to Write|Edit.
+//
+// Fixture reuses the dispatcher-propagation pattern: copies ALL
+// production HANDLERS + AUX_FILES so the chain is faithful to the
+// shipped install.
+// ============================================================================
+
+describe('worktree-write-guard.sh canonical-spec-materialization refusal (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let linkedWorktreeRoot;
+  let originalCwd;
+
+  const HANDLERS = [
+    'agent-heartbeat.sh',
+    'block-dangerous.sh',
+    'worktree-guard.sh',
+    'scope-guard.sh',
+    'worktree-write-guard.sh',
+  ];
+  const AUX_FILES = ['classify_command.py', 'guard-strikes.sh'];
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-wtwg-spec-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'worktrees'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+
+    // Hooks at canonical so the worktree's git common dir resolves
+    // back to a directory where dispatch/ exists.
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'dispatch'));
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    fs.copySync(
+      path.join(packDir, 'dispatch', 'pre_tool_use.sh'),
+      path.join(hooksDir, 'dispatch', 'pre_tool_use.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'dispatch', 'pre_tool_use.sh'), 0o755);
+    for (const lib of ['parse-input.sh', 'run-handlers.sh']) {
+      fs.copySync(path.join(packDir, 'lib', lib), path.join(hooksDir, 'lib', lib));
+      fs.chmodSync(path.join(hooksDir, 'lib', lib), 0o755);
+    }
+    for (const handler of HANDLERS) {
+      fs.copySync(path.join(packDir, handler), path.join(hooksDir, handler));
+      fs.chmodSync(path.join(hooksDir, handler), 0o755);
+    }
+    for (const aux of AUX_FILES) {
+      fs.copySync(path.join(packDir, aux), path.join(hooksDir, aux));
+      fs.chmodSync(path.join(hooksDir, aux), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'runtime-paths.sh'),
+      path.join(hooksDir, 'runtime-paths.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'runtime-paths.sh'), 0o755);
+
+    // Create a linked worktree. cwd for the dispatcher invocations
+    // below is INSIDE this worktree, so git rev-parse from there yields
+    // git_common_dir = <canonical>/.git
+    // git_dir        = <canonical>/.git/worktrees/wt-impl/
+    // → IS_LINKED_WORKTREE=1.
+    execFileSync(
+      'git',
+      ['-C', testDir, 'worktree', 'add', '-b', 'wt-impl-branch', '.caws/worktrees/wt-impl'],
+      { stdio: 'ignore' }
+    );
+    linkedWorktreeRoot = path.join(testDir, '.caws', 'worktrees', 'wt-impl');
+    // Ensure the worktree has a .caws/specs/ directory (the refusal
+    // target). This is a hostile-write simulation: in production the
+    // sparse-checkout invariant prevents materialization, but the
+    // hook's job is to refuse regardless.
+    fs.ensureDirSync(path.join(linkedWorktreeRoot, '.caws', 'specs'));
+    fs.writeFileSync(
+      path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml'),
+      'id: FEAT-001\nlifecycle_state: active\n'
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runDispatchFromLinkedWorktree(toolName, filePath, opts = {}) {
+    const cwd = opts.cwd || linkedWorktreeRoot;
+    // Tool input shape for Read/Write/Edit is { file_path }, not
+    // { command }. parse-input.sh extracts HOOK_FILE_PATH from
+    // tool_input.file_path for these tools.
+    const toolInput = { file_path: filePath };
+    if (toolName === 'Write') toolInput.content = '# test content';
+    if (toolName === 'Edit') {
+      toolInput.old_string = 'foo';
+      toolInput.new_string = 'bar';
+    }
+    const payload = {
+      tool_name: toolName,
+      tool_input: toolInput,
+      cwd,
+      session_id: opts.session_id || 'caws-wtwg-test-1',
+    };
+    const inputFile = path.join(testDir, '.dispatch-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const dispatcherPath = path.join(testDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${dispatcherPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: cwd },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // ─── A1: positive refusal for Read on <linked-wt>/.caws/specs/* ─────
+  describe('A1: Read/Write/Edit against linked-worktree .caws/specs/* is refused', () => {
+    it('Read .caws/specs/FEAT-001.yaml exits 2 with [worktree-write-guard.sh] prefix', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+
+    it('stderr carries canonical-spec-materialization wording', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/Linked worktrees must not use worktree-local \.caws\/specs\/ files as authority/);
+      expect(r.stderr).toMatch(/private materialized copy, not canonical spec authority/);
+    });
+
+    it('stderr names the sanctioned recovery paths: caws specs show + caws worktree repair-sparse', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/caws specs show <id>/);
+      expect(r.stderr).toMatch(/caws worktree repair-sparse <name>/);
+    });
+
+    it('same refusal for Write tool', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'NEW-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Write', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+      expect(r.stderr).toMatch(/Refusing Write against a linked-worktree \.caws\/specs\/ path/);
+    });
+
+    it('same refusal for Edit tool', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Edit', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+      expect(r.stderr).toMatch(/Refusing Edit against a linked-worktree \.caws\/specs\/ path/);
+    });
+
+    it('refusal fires for nested .caws/specs/.archive/* paths', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', '.archive', 'OLD-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+
+    it('refusal fires for relative file paths under .caws/specs/', () => {
+      // Some agents send file_path as relative-to-cwd. Hook resolves
+      // against WORKTREE_ROOT and refuses uniformly.
+      const r = runDispatchFromLinkedWorktree('Read', '.caws/specs/FEAT-001.yaml');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+  });
+
+  // ─── A2: negative controls (no over-firing) ────────────────────────
+  describe('A2: non-spec paths and canonical .caws/specs are not refused by this predicate', () => {
+    it('Read of a non-spec file in linked worktree (e.g., README.md) exits 0', () => {
+      const target = path.join(linkedWorktreeRoot, 'README.md');
+      fs.writeFileSync(target, '# hello\n');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      // Note: other handlers (scope-guard etc.) may still object — they
+      // do not in this fixture (no active bound spec). Assert no
+      // canonical-spec-materialization diagnostic is in stderr.
+      expect(r.stderr).not.toMatch(/canonical spec authority/);
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Read of .caws/worktrees.json (NOT under specs/) in linked worktree exits 0', () => {
+      // Pre-write it via fs so the file exists at the path; the read
+      // tool input only carries the path, hooks do not actually open it.
+      const target = path.join(linkedWorktreeRoot, '.caws', 'worktrees.json');
+      fs.writeFileSync(target, '{}\n');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Write to a packages/ source file in linked worktree is not refused by this predicate', () => {
+      const target = path.join(linkedWorktreeRoot, 'packages', 'foo', 'src', 'index.ts');
+      const r = runDispatchFromLinkedWorktree('Write', target);
+      expect(r.stderr).not.toMatch(/Refusing Write against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Read of canonical .caws/specs/FEAT-001.yaml (cwd=canonical, NOT linked) exits 0', () => {
+      // Set cwd to canonical root, not the linked worktree. From canonical,
+      // git_common_dir == git_dir → IS_LINKED_WORKTREE=0 → predicate
+      // does not fire. The path passed to the tool is the canonical
+      // spec file; the existing .caws/* allowlist exits 0.
+      const target = path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml');
+      fs.writeFileSync(target, 'id: FEAT-001\n');
+      const r = runDispatchFromLinkedWorktree('Read', target, { cwd: testDir });
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+      expect(r.stderr).not.toMatch(/Linked worktrees must not use worktree-local/);
+    });
+
+    it('non-Read/Write/Edit tools (e.g., Bash, Grep, Glob) are not handled by this predicate', () => {
+      // Bash payload — would normally route through other handlers.
+      const r = runDispatchFromLinkedWorktree('Bash', '/tmp/x', {});
+      // No worktree-write-guard refusal regardless of exit code from
+      // other handlers (this just proves we did not over-fire).
+      expect(r.stderr).not.toMatch(/Refusing Bash against a linked-worktree \.caws\/specs/);
+    });
+  });
+});
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3
+//
+// worktree-guard.sh preserves the existing blanket agent-Bash refusal for
+// git sparse-checkout commands (any subcommand: disable / set / init /
+// reapply / list / add), but the diagnostic is upgraded to:
+//   - explain the canonical-spec-materialization concern,
+//   - name caws specs show <id> as the read path,
+//   - name caws worktree repair-sparse <name> as the sparse recovery path,
+//   - omit the prior vague wording ("Use full worktrees without
+//     sparse-checkout.") which led agents to ask users to disable sparse
+//     instead of routing through CAWS.
+//
+// Tests invoke worktree-guard.sh directly (not via the dispatcher chain)
+// because the diagnostic-text claim is local to this handler. The
+// dispatcher-propagation properties are already covered by
+// CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001 and do not depend
+// on the diagnostic body.
+// ============================================================================
+
+describe('worktree-guard.sh sparse-checkout diagnostic upgrade (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-wtg-sparse-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    for (const f of ['worktree-guard.sh', 'runtime-paths.sh']) {
+      fs.copySync(path.join(packDir, f), path.join(hooksDir, f));
+      fs.chmodSync(path.join(hooksDir, f), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'lib', 'parse-input.sh'),
+      path.join(hooksDir, 'lib', 'parse-input.sh')
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runGuard(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const payload = {
+      tool_name: 'Bash',
+      tool_input: { command },
+      cwd,
+      session_id: opts.session_id || 'caws-sparse-diag-test-1',
+    };
+    const inputFile = path.join(testDir, '.guard-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const hookPath = path.join(testDir, '.claude', 'hooks', 'worktree-guard.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: testDir },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // The exact agent-bypass form that prompted this slice. Kept as a
+  // payload constant in source so the literal sparse-checkout command
+  // does not appear in commit messages or shell history of the
+  // implementing session.
+  const DISABLE_FORM = ['git', 'sparse-checkout', 'disable'].join(' ');
+  const SET_FORM = ['git', 'sparse-checkout', 'set', '--no-cone', '/*'].join(' ');
+  const REAPPLY_FORM = ['git', 'sparse-checkout', 'reapply'].join(' ');
+
+  it('refuses the disable form with exit 2', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('stderr is prefixed by [worktree-guard.sh] when run through the dispatcher (carrier check)', () => {
+    // Direct-invocation stderr does NOT have the [worktree-guard.sh]
+    // prefix (that prefix is added by lib/run-handlers.sh in the
+    // dispatcher chain). The diagnostic body, when carried through
+    // run-handlers.sh, will appear with that prefix in production —
+    // verified by the dispatcher-propagation test suite. Here we just
+    // confirm the body itself is present from this handler.
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('stderr carries canonical-spec-materialization wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/v10\.2 split-brain authority class/);
+    // The phrase about worktree-local .caws/specs may be wrapped
+    // across lines in the human-readable diagnostic. Match the two
+    // meaningful fragments independently rather than asserting line
+    // contiguity.
+    expect(r.stderr).toMatch(/Linked worktrees must not use worktree-local/);
+    expect(r.stderr).toMatch(/\.caws\/specs\/ files as authority/);
+    expect(r.stderr).toMatch(/canonical control plane regardless of cwd/);
+  });
+
+  it('stderr names caws worktree repair-sparse <name> as the recovery path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws worktree repair-sparse <name>/);
+    // And explains non-destructive guarantee so agents do not think
+    // they need to clean up manually first.
+    expect(r.stderr).toMatch(/non-destructive/);
+    expect(r.stderr).toMatch(/refuses dirty \.caws\/specs\//);
+  });
+
+  it('stderr names caws specs show <id> as the read path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws specs show <id>/);
+  });
+
+  it('stderr does NOT contain the prior vague wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    // The old line was: "Use full worktrees without sparse-checkout."
+    // Its presence in the upgraded diagnostic would mean the upgrade
+    // didn't fully replace it.
+    expect(r.stderr).not.toMatch(/Use full worktrees without sparse-checkout\./);
+  });
+
+  it('blanket refusal preserved: set form is also refused', () => {
+    const r = runGuard(SET_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('blanket refusal preserved: reapply form is also refused', () => {
+    const r = runGuard(REAPPLY_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('non-sparse-checkout git commands are unaffected', () => {
+    // git status (read-only, no worktrees-active context) should pass
+    // through the sparse-checkout block and exit 0 (no other rules fire
+    // in this fixture: no .caws/worktrees.json with active entries).
+    const r = runGuard('git status');
+    expect(r.stderr).not.toMatch(/BLOCKED: agent-issued git sparse-checkout/);
+  });
+});

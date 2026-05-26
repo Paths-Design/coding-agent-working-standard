@@ -55,6 +55,7 @@ const { createWorktree } = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 const { showSpec } = require('../../dist/store/specs-writer');
 const { resolveRepoRoot } = require('../../dist/store/repo-root');
+const { runScopeCommand } = require('../../dist/shell');
 
 const SESSION = { session_id: 'sess-a2-narrow', platform: 'jest' };
 const ACTOR = {
@@ -321,5 +322,169 @@ describe('WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 narrow A2 (specs show from w
       'Control-plane spec — the authoritative copy'
     );
     expect(showResult.value.source).not.toContain('HOSTILE-MUTATION');
+  });
+});
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A6
+//
+// Companion regression for caws scope show invoked from inside a linked
+// worktree cwd. The earned claim mirrors the existing A2 narrow regression
+// for caws specs show, but for the scope-inspection authority surface:
+// when cwd is inside a linked worktree, scope decisions must resolve
+// through the canonical control-plane scope authority (via
+// resolveRepoRoot's --git-common-dir walk), NOT through any adversarial
+// worktree-local .caws/specs/<id>.yaml copy that hostile or
+// manual writes may have materialized.
+//
+// Why this matters: A1/A2 (worktree-write-guard.sh refusal) prevent
+// agent-tool reads/writes of <wt>/.caws/specs/* from inside the
+// worktree. But the CLI layer above the hook surface — caws scope show /
+// caws scope check — also needs to resolve scope from canonical, not
+// from any worktree-local materialized file. The existing A2-narrow
+// test at the top of this file proves this for caws specs show; this
+// describe block extends the proof to caws scope show.
+// ============================================================================
+
+describe('WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A6 (scope show from worktree cwd)', () => {
+  let repo;
+  let cawsDir;
+
+  beforeEach(() => {
+    repo = mkRepo('caws-a6-scope-');
+    cawsDir = setupCaws(repo);
+  });
+
+  afterEach(() => {
+    rmrf(repo);
+  });
+
+  test('A6.1: runScopeCommand({ path, mode: show, cwd: <linked-worktree-cwd> }) resolves scope from canonical, not from adversarial worktree-local spec', () => {
+    // Setup: control-plane spec at canonical with scope.in matching a
+    // tests/control-plane/* path. The control-plane scope DOES NOT
+    // include tests/HOSTILE-MUTATION/* (the divergent body's scope.in).
+    const specId = 'A6SCOPE-001';
+    fs.writeFileSync(
+      path.join(cawsDir, 'specs', `${specId}.yaml`),
+      CONTROL_PLANE_SPEC_BODY(specId)
+    );
+
+    // Create linked worktree.
+    const createResult = createWorktree(cawsDir, {
+      name: 'wt-a6',
+      specId,
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(createResult.ok).toBe(true);
+    expect(createResult.value.kind).toBe('success');
+
+    const wtPath = path.join(cawsDir, 'worktrees', 'wt-a6');
+    expect(fs.existsSync(wtPath)).toBe(true);
+
+    // Hostile fixture: write the DIVERGENT spec body inside the worktree's
+    // .caws/specs/ directory. (Bypasses sparse-checkout by using fs.write
+    // directly; sparse-checkout only controls what git materializes.)
+    const adversarialSpecsDir = path.join(wtPath, '.caws', 'specs');
+    fs.mkdirSync(adversarialSpecsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(adversarialSpecsDir, `${specId}.yaml`),
+      DIVERGENT_LOCAL_SPEC_BODY(specId)
+    );
+
+    // Invoke caws scope show with cwd set to the linked worktree.
+    // Target path: a tests/control-plane/* file that ONLY the canonical
+    // spec admits in scope.in. If the resolver mistakenly reads the
+    // divergent worktree-local spec, the path would be REJECTED
+    // (because the divergent spec's scope.in is tests/HOSTILE-MUTATION/*,
+    // not tests/control-plane/*).
+    const probePath = 'tests/control-plane/example.test.js';
+    const out = [];
+    const err = [];
+    const code = runScopeCommand({
+      path: probePath,
+      mode: 'show',
+      cwd: wtPath,
+      out: (s) => out.push(s),
+      err: (s) => err.push(s),
+    });
+
+    // scope show always exits 0 (show is informational; check enforces).
+    expect(code).toBe(0);
+    const combined = [...out, ...err].join('\n');
+
+    // The canonical (control-plane) spec admits this path. The
+    // divergent worktree-local spec would NOT. So the rendered
+    // decision must reflect ADMIT (or at least not REJECT for
+    // scope.in_miss against the wrong scope set).
+    expect(combined).toMatch(/ADMIT|admit/);
+    expect(combined).toContain(specId);
+
+    // Negative invariant: the decision rendering MUST NOT reflect
+    // the divergent worktree-local spec's bytes. If the resolver
+    // had landed on DIVERGENT_LOCAL_SPEC_BODY, the rendered scope
+    // would show 'tests/HOSTILE-MUTATION' rather than 'tests/control-plane'.
+    expect(combined).not.toContain('HOSTILE-MUTATION');
+  });
+
+  test('A6.2: runScopeCommand({ mode: check }) from worktree cwd enforces canonical scope, not worktree-local', () => {
+    // Same setup as A6.1, but using mode: check (which exits 0 on
+    // admit, 1 on refuse) — proves the enforcement path also resolves
+    // canonical authority.
+    const specId = 'A6CHECK-001';
+    fs.writeFileSync(
+      path.join(cawsDir, 'specs', `${specId}.yaml`),
+      CONTROL_PLANE_SPEC_BODY(specId)
+    );
+    const createResult = createWorktree(cawsDir, {
+      name: 'wt-a6-check',
+      specId,
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(createResult.ok).toBe(true);
+
+    const wtPath = path.join(cawsDir, 'worktrees', 'wt-a6-check');
+    const adversarialSpecsDir = path.join(wtPath, '.caws', 'specs');
+    fs.mkdirSync(adversarialSpecsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(adversarialSpecsDir, `${specId}.yaml`),
+      DIVERGENT_LOCAL_SPEC_BODY(specId)
+    );
+
+    // Path admitted by canonical scope.in (tests/control-plane/) but
+    // NOT by divergent worktree-local scope.in (tests/HOSTILE-MUTATION/).
+    const admittedByCanonical = 'tests/control-plane/canonical-admits-this.js';
+    const out = [];
+    const err = [];
+    const code = runScopeCommand({
+      path: admittedByCanonical,
+      mode: 'check',
+      cwd: wtPath,
+      out: (s) => out.push(s),
+      err: (s) => err.push(s),
+    });
+
+    // Canonical admits => exit 0. If the resolver mistakenly used the
+    // divergent worktree-local spec, this path would not be in scope
+    // and check would exit 1.
+    expect(code).toBe(0);
+    const combined = [...out, ...err].join('\n');
+    expect(combined).not.toContain('HOSTILE-MUTATION');
+
+    // Cross-check the opposite direction: a path admitted ONLY by the
+    // divergent spec must NOT be admitted (proves we are using
+    // canonical authority, not the worktree-local file).
+    const admittedOnlyByDivergent = 'tests/HOSTILE-MUTATION/divergent-admits-this.js';
+    const out2 = [];
+    const err2 = [];
+    const code2 = runScopeCommand({
+      path: admittedOnlyByDivergent,
+      mode: 'check',
+      cwd: wtPath,
+      out: (s) => out2.push(s),
+      err: (s) => err2.push(s),
+    });
+    expect(code2).toBe(1);
   });
 });

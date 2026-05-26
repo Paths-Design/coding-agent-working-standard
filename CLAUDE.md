@@ -141,6 +141,30 @@ When git worktrees are active for parallel agent work:
 
 See `.claude/rules/worktree-isolation.md` for the full list.
 
+## Canonical spec authority and sparse-checkout recovery (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001)
+
+Linked worktrees must NOT use worktree-local `.caws/specs/*` files as authority. The canonical `.caws/specs/` directory at the main checkout is the only authoritative location for spec content. CAWS resolves spec reads through the canonical control plane regardless of cwd — the kernel's `resolveRepoRoot` walks `git rev-parse --git-common-dir` upward from any cwd to find canonical, then reads specs from there. The sparse-checkout invariant on linked worktrees (`/*` + `!/.caws/specs/`) is the mechanical guard that prevents canonical spec bytes from being materialized as a divergent private copy inside the worktree filesystem.
+
+**Do NOT:**
+
+- Run `git sparse-checkout disable` (or any other agent-Bash `git sparse-checkout` subcommand) in a CAWS worktree. The `worktree-guard.sh` hook refuses every agent-issued `git sparse-checkout` invocation. Disabling sparse-checkout would re-open the v10.2 split-brain authority class: an editable spec copy inside a worktree, divergent from canonical, silently consulted by anything that walks cwd upward.
+- `Read`, `Write`, or `Edit` files under `<linked-worktree>/.caws/specs/*`. The `worktree-write-guard.sh` hook refuses these tool calls before the broad `.caws/*` allowlist can exit 0. The files may exist via hostile or manual writes; CAWS does not treat them as authority and refuses the tool calls regardless.
+- Ask the user to disable sparse-checkout so you can read a spec. That is the wrong recovery path. The sanctioned paths below resolve through canonical authority from any cwd.
+
+**Do use:**
+
+- `caws specs show <id>` — read a spec from any cwd (canonical or linked worktree). Resolves through canonical control plane.
+- `caws specs list` — list specs from any cwd. Same resolver behavior.
+- `caws scope show <path>` — inspect the scope decision for a path. Reads canonical scope authority.
+- `caws scope check <path>` — enforce the scope decision (exit 0 admit, exit 1 reject).
+- `caws worktree repair-sparse <name>` — restore the sparse-checkout invariant on a linked worktree (e.g., after a human-authorized sparse-checkout reconfiguration left the tree with materialized `.caws/specs/*` files). **Non-destructive**: refuses dirty or untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting work. If `.caws/specs/` is dirty, the command emits a typed diagnostic and asks for manual commit-or-remove before re-running.
+
+**Doctrine boundary:**
+
+Sparse-checkout in this project is a **materialization/recovery invariant**, NOT the authority model and NOT the scope-enforcement model. Scope is enforced by `scope-guard.sh` reading the spec's `scope.in`/`scope.out` from canonical. The sparse-checkout exclusion of `.caws/specs/` exists to prevent the split-brain class; it does not encode or implement scope.
+
+See `.claude/rules/worktree-isolation.md` for the full list.
+
 ## v11 commands you'll use
 
 - `caws init` — bootstrap canonical `.caws/` (idempotent; refuses legacy single-spec residue; no `--force`)

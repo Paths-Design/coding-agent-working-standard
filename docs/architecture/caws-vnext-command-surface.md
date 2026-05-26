@@ -329,6 +329,7 @@ multi-agent observability. Every command group is implemented in
 | Command | Purpose |
 |---|---|
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws specs` | vNext spec lifecycle. |
 
 ### Planned in v11.2 (multi-agent authority and observability)
@@ -642,6 +643,26 @@ fix or an explicit doctrine shift requiring an update to this document.
     cleanup of ghost/stale entries). Each slot has at least one test.
     A binding type that omits an applicable slot is a doctrine
     violation, not just a missing feature.
+
+14. **Canonical `.caws/specs/` is the only spec authority surface.**
+    Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001` (contract
+    `canonical-spec-authority-materialization-guard-v1`). Linked
+    worktrees MUST NOT use worktree-local `.caws/specs/*` files as
+    authority. The sparse-checkout exclusion of `.caws/specs/` on
+    `caws worktree create` is the mechanical guard; the canonical
+    control-plane resolver (`resolveRepoRoot` walking
+    `git rev-parse --git-common-dir`) is the read-path guarantee.
+    Worktree-write-guard.sh refuses `Read`/`Write`/`Edit` of
+    `<linked-worktree>/.caws/specs/*` before the broad `.caws/*`
+    allowlist can exit 0. Worktree-guard.sh refuses every agent-Bash
+    `git sparse-checkout` invocation (any subcommand) with a
+    diagnostic pointing to `caws worktree repair-sparse <name>`.
+    Repair-sparse is non-destructive: refuses dirty/untracked content
+    under `<wt>/.caws/specs/` rather than stashing, cleaning,
+    resetting, or deleting work. Sparse-checkout is a
+    **materialization/recovery invariant**, NOT the authority model
+    and NOT the scope-enforcement model — scope authority is
+    `scope-guard.sh` reading the canonical spec's `scope.in`/`scope.out`.
 
 ---
 

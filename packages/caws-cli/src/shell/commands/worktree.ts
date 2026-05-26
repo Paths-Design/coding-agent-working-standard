@@ -17,12 +17,14 @@
 //   - Merge auto-closes the bound spec through specs-writer.closeSpec.
 //     The shell does not call appendEvent directly.
 
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type ActorKind, isOk } from '@paths.design/caws-kernel';
 
-import { loadSpecs, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { loadSpecs, loadWorktrees, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
 import {
   type MigrationPlan,
   type RecordOmissionDecision,
@@ -515,5 +517,202 @@ export function runWorktreeMigrateRegistryCommand(
     renderPlanData(plan, out);
   }
 
+  return 0;
+}
+
+// ─── caws worktree repair-sparse ─────────────────────────────────────────
+//
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A4 + A5.
+//
+// First-class subcommand to restore the sparse-checkout invariant on a
+// linked CAWS worktree (`/*` + `!/.caws/specs/`). Replaces the pattern
+// of agents asking the user to run `git sparse-checkout` commands by
+// hand or to invoke ad-hoc Node scripts that import
+// configureWorktreeSparseCheckout directly.
+//
+// Behavior:
+//   - Resolve <name> in .caws/worktrees.json registry; refuse if absent.
+//   - Resolve on-disk path; refuse if missing.
+//   - Refuse if the target IS the canonical checkout (realpath equality).
+//   - Refuse if the target is not a git worktree (no .git file/dir).
+//   - Refuse if <wt>/.caws/specs/ contains dirty or untracked files
+//     (`git status --porcelain .caws/specs/` non-empty). No stash, no
+//     git clean, no reset --hard, no file deletion is attempted. The
+//     lineage on stash/destroy as a work-loss class is explicit
+//     (see CLAUDE.md "Implementation hygiene"); the repair command
+//     must not regress it.
+//   - On success: call configureWorktreeSparseCheckout (kernel helper);
+//     verify post-condition (core.sparseCheckout=true and .caws/specs
+//     absent on disk); return 0.
+//   - Idempotent: invoking on a healthy worktree returns 0 with a
+//     no-op-shaped diagnostic.
+
+export interface WorktreeRepairSparseOptions extends BaseCommandOptions {
+  readonly name: string;
+}
+
+function realpathSafe(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+function isGitWorktree(p: string): boolean {
+  // A linked worktree has a `.git` file (not directory) pointing at the
+  // canonical checkout's `.git/worktrees/<name>/` directory. A canonical
+  // checkout has `.git/` as a directory. Either shape proves "is a git
+  // worktree of some kind." Absence of `.git` entirely → not a worktree.
+  const dotGit = path.join(p, '.git');
+  try {
+    return fs.existsSync(dotGit);
+  } catch {
+    return false;
+  }
+}
+
+function gitStatusPorcelain(cwd: string, pathspec: string): { ok: true; output: string } | { ok: false; reason: string } {
+  try {
+    const output = execFileSync('git', ['status', '--porcelain', '--', pathspec], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, output: output.toString() };
+  } catch (e) {
+    const cause = e as { message?: string; stderr?: Buffer | string };
+    const stderr =
+      cause.stderr instanceof Buffer
+        ? cause.stderr.toString()
+        : typeof cause.stderr === 'string'
+          ? cause.stderr
+          : (cause.message ?? 'unknown git error');
+    return { ok: false, reason: stderr.trim() };
+  }
+}
+
+function gitConfigGet(cwd: string, key: string): string | null {
+  try {
+    const output = execFileSync('git', ['config', '--get', key], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return output.toString().trim();
+  } catch {
+    // `git config --get` exits non-zero when the key is absent; treat as null.
+    return null;
+  }
+}
+
+export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'repair-sparse');
+  if (ctx === null) return 2;
+
+  // A5a: registry lookup.
+  const registryResult = loadWorktrees(ctx.cawsDir);
+  if (!isOk(registryResult)) {
+    err('caws worktree repair-sparse: failed to load worktrees registry.');
+    err(renderDiagnostics(registryResult.errors, { showData }));
+    return 2;
+  }
+  const entry = registryResult.value[opts.name];
+  if (entry === undefined) {
+    err(`caws worktree repair-sparse: missing-registry: '${opts.name}' is not in .caws/worktrees.json.`);
+    err(`  Recovery: run 'caws worktree list' to see registered worktrees, or 'caws worktree create ${opts.name} --spec <id>' if this is a new worktree.`);
+    return 1;
+  }
+
+  // A5b: on-disk path presence.
+  const recordedPath = entry.path;
+  if (typeof recordedPath !== 'string' || recordedPath.length === 0) {
+    err(`caws worktree repair-sparse: missing-path: registry entry for '${opts.name}' has no recorded path.`);
+    return 1;
+  }
+  if (!fs.existsSync(recordedPath)) {
+    err(`caws worktree repair-sparse: missing-path: recorded path for '${opts.name}' does not exist on disk.`);
+    err(`  Recorded path: ${recordedPath}`);
+    err(`  Recovery: re-create the worktree with 'caws worktree create ${opts.name} --spec <id>'.`);
+    return 1;
+  }
+
+  // A5c: canonical-checkout refusal. Use realpath comparison to be
+  // drift-immune to macOS /var vs /private/var symlinks.
+  const targetReal = realpathSafe(recordedPath);
+  const canonicalReal = realpathSafe(ctx.repoRoot);
+  if (targetReal === canonicalReal) {
+    err(`caws worktree repair-sparse: canonical-target-refused: '${opts.name}' resolves to the canonical checkout itself.`);
+    err(`  The canonical checkout IS spec authority — sparse-checkout is not applied there by design.`);
+    err(`  This command is only for linked worktrees created via 'caws worktree create'.`);
+    return 1;
+  }
+
+  // A5d: must be a git worktree (sanity — a stale directory after manual
+  // `git worktree remove` would pass A5b but fail this).
+  if (!isGitWorktree(targetReal)) {
+    err(`caws worktree repair-sparse: not-a-worktree: '${opts.name}' exists on disk but is not a git worktree.`);
+    err(`  Resolved path: ${targetReal}`);
+    err(`  No .git file or directory found at the target. The CAWS registry and git's worktree registry may have diverged.`);
+    err(`  Recovery: investigate manually. Do NOT delete or recreate without understanding why the divergence occurred.`);
+    return 1;
+  }
+
+  // A5e: dirty-specs refusal. Non-destructive — no stash, no clean, no
+  // reset, no deletion. If the user has uncommitted work under .caws/
+  // specs (e.g., from a previous sparse-disable + edit session), we
+  // refuse and direct them to a manual recovery path.
+  const dirtyCheck = gitStatusPorcelain(targetReal, '.caws/specs');
+  if (!dirtyCheck.ok) {
+    err(`caws worktree repair-sparse: git-status-failed: unable to check .caws/specs cleanliness in '${opts.name}'.`);
+    err(`  git stderr: ${dirtyCheck.reason}`);
+    return 2;
+  }
+  if (dirtyCheck.output.trim().length > 0) {
+    err(`caws worktree repair-sparse: dirty-specs-refused: '${opts.name}'/.caws/specs/ contains uncommitted changes.`);
+    err(`  git status --porcelain .caws/specs/ output:`);
+    for (const line of dirtyCheck.output.trim().split('\n')) {
+      err(`    ${line}`);
+    }
+    err(`  This command will NOT stash, clean, reset, or delete those files. Doing so risks losing work that was`);
+    err(`  authored under .caws/specs/ inside this worktree (which would be non-authoritative spec copies — but`);
+    err(`  may still represent intent worth preserving).`);
+    err(`  Recovery (manual): from inside the worktree, commit or remove the dirty files first, then re-run`);
+    err(`  'caws worktree repair-sparse ${opts.name}' from the canonical checkout.`);
+    return 1;
+  }
+
+  // Idempotency check: if sparse-checkout is already enabled and
+  // .caws/specs/ is already absent, we have nothing to do.
+  const sparseFlag = gitConfigGet(targetReal, 'core.sparseCheckout');
+  const specsDir = path.join(targetReal, '.caws', 'specs');
+  const specsAbsent = !fs.existsSync(specsDir);
+  if (sparseFlag === 'true' && specsAbsent) {
+    out(`caws worktree repair-sparse: ${opts.name} already has the sparse invariant (core.sparseCheckout=true, .caws/specs absent). No action taken.`);
+    return 0;
+  }
+
+  // A4: apply the kernel helper.
+  const repairResult = configureWorktreeSparseCheckout(targetReal);
+  if (!repairResult.ok) {
+    err(`caws worktree repair-sparse: failed at step '${repairResult.step}': ${repairResult.reason}`);
+    return 2;
+  }
+
+  // Post-condition verification. configureWorktreeSparseCheckout already
+  // calls `git checkout` to re-materialize, so .caws/specs/ should be
+  // absent now. Verify explicitly.
+  const postSparseFlag = gitConfigGet(targetReal, 'core.sparseCheckout');
+  const postSpecsAbsent = !fs.existsSync(specsDir);
+  if (postSparseFlag !== 'true' || !postSpecsAbsent) {
+    err(`caws worktree repair-sparse: post-condition violation for '${opts.name}'.`);
+    err(`  core.sparseCheckout=${postSparseFlag ?? '(absent)'} (expected: true)`);
+    err(`  .caws/specs/ absent=${postSpecsAbsent} (expected: true)`);
+    err(`  The kernel helper reported success but the invariant is not satisfied. This is likely a defect.`);
+    return 2;
+  }
+
+  out(`caws worktree repair-sparse: ${opts.name} sparse invariant restored (core.sparseCheckout=true, .caws/specs absent).`);
   return 0;
 }
