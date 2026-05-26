@@ -179,12 +179,15 @@ Interpretation: the v10.2 result is not a historical comparison. It is the **dis
 - **Why P0**: `caws status` is the second command after `init` that a first-contact user would naturally run (per `--help` ordering, per the kit's session-protocol "check project health" habit, per kit §5 doctrine #6 which calls out `status` as a documented v11.1 command). Receiving an internal stack-trace-like error message is a likely abandonment point. The bug is hit on a fresh CAWS install with no special preconditions. Additionally, the crashed commands exit with status code **0**, defeating any CI or scripted detection.
 - **Candidate follow-up slice**: `CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01`.
 
-#### P0-2: `caws claim` (outside worktree) prints stale v11.0.0 / pin-to-10.2.x advice
+#### P0-2: Shared stale v11.0.0 / pin-to-10.2.x diagnostic advice in multiple commands
 
-- **What**: Running `caws claim` from a CAWS-tracked repo root (i.e., outside a linked worktree) emits: `caws claim: cwd is not inside a CAWS-tracked worktree. v11.0.0 does not ship worktree lifecycle commands; create the worktree externally (git worktree add) and register it via a future caws worktree command (planned for v11.1). To use lifecycle commands today, pin to caws-cli@^10.2.x.`
-- **Traceability**: `transcript/p5-first-worktree.md`, raw `raw/p5-create.txt` (transcript captures this verbatim).
-- **Why P0**: this advises downgrading to caws-cli@10.2.x. The installed version is 11.1.6 and *does* ship worktree lifecycle commands (the user just used them). A diligent user who runs `npm install -g @paths.design/caws-cli@^10.2.x` would break their setup. The error string is a stale fragment from an earlier release; the diagnostic should be reduced to a simple "cwd is not inside a CAWS-tracked worktree. cd into a worktree under `.caws/worktrees/<name>` or specify --worktree <name>." (no version history.)
-- **Candidate follow-up slice**: `CAWS-CLAIM-STALE-VERSION-ADVICE-01`.
+- **What**: A stale lifecycle-gap diagnostic referring to "v11.0.0" and recommending `pin to caws-cli@^10.2.x` is emitted by at least two distinct commands in v11.6:
+  - `caws claim` (outside a worktree): `caws claim: cwd is not inside a CAWS-tracked worktree. v11.0.0 does not ship worktree lifecycle commands; create the worktree externally (git worktree add) and register it via a future caws worktree command (planned for v11.1). To use lifecycle commands today, pin to caws-cli@^10.2.x.`
+  - `caws scope show <path>` (canonical cwd): the `repair:` line of an unbound-decision diagnostic includes `... (v11.0.0 does not ship caws worktree bind; pin to caws-cli@^10.2.x for the convenience command.)`
+  The presence in two commands indicates a shared diagnostic template (or shared copy-pasted text) rather than a single localized bug.
+- **Traceability**: `transcript/p5-first-worktree.md` and raw `raw/p5-create.txt` for the `claim` site; live `caws scope show docs/reports/user_e2e_setup_rehearsal_001.md` invocation at amendment time for the `scope` site (the diagnostic was emitted while the maintainer was scope-checking the report itself before commit).
+- **Why P0**: this advises downgrading to caws-cli@10.2.x. The installed version is 11.1.6 and *does* ship worktree lifecycle commands (the user just used them). A diligent user who runs `npm install -g @paths.design/caws-cli@^10.2.x` would break their setup. The error string is a stale fragment from an earlier release. Because it appears in multiple commands, the fix must search the codebase for all diagnostics referencing `v11.0.0`, `pin to caws-cli@^10.2.x`, and related lifecycle-gap remnants — not just patch the one observed in `claim`.
+- **Candidate follow-up slice**: `CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01` (scope is broad — every diagnostic in the codebase containing those stale phrases — not just `caws claim`).
 
 ### P1 — causes likely user abandonment
 
@@ -424,16 +427,18 @@ Conventions:
 - **Disposition**: `code-fix` — same root cause as Bug-001; likely fixed by the same patch
 - **Cross-reference**: §9 P0-1
 
-### Bug-003 — `caws claim` (from canonical root) prints actively-misleading "pin to caws-cli@^10.2.x" advice
+### Bug-003 — Shared stale v11.0.0 / pin-to-10.2.x diagnostic advice in multiple commands
 
 - **Surface**: v11.6
 - **Severity**: critical (actively harmful)
-- **Symptom**: when run from a v11-tracked repo root (outside any linked worktree), the command emits: `caws claim: cwd is not inside a CAWS-tracked worktree. v11.0.0 does not ship worktree lifecycle commands; create the worktree externally (git worktree add) and register it via a future caws worktree command (planned for v11.1). To use lifecycle commands today, pin to caws-cli@^10.2.x.`
-- **When triggered**: `caws claim` from a canonical checkout when at least one worktree exists in `.caws/worktrees.json`
-- **Evidence**: `transcript/p5-first-worktree.md`; raw `transcript/raw/p5-create.txt`
-- **Disposition**: `code-fix` — the diagnostic is stale text from a pre-v11.1 release. A diligent user following the advice would `npm install -g @paths.design/caws-cli@^10.2.x` and break their working v11 setup, AND lose access to the very lifecycle commands they're trying to use (which v11.1 does ship). Reduce diagnostic to: `caws claim: cwd is not inside a CAWS-tracked worktree. cd into a worktree under .caws/worktrees/<name>, or specify --worktree <name>.`
+- **Symptom**: a stale lifecycle-gap diagnostic referring to "v11.0.0" and recommending `pin to caws-cli@^10.2.x` is emitted by at least two distinct commands in v11.6:
+  - `caws claim` (outside any linked worktree): `caws claim: cwd is not inside a CAWS-tracked worktree. v11.0.0 does not ship worktree lifecycle commands; create the worktree externally (git worktree add) and register it via a future caws worktree command (planned for v11.1). To use lifecycle commands today, pin to caws-cli@^10.2.x.`
+  - `caws scope show <path>` (canonical cwd, unbound case): the `repair:` line includes `... (v11.0.0 does not ship caws worktree bind; pin to caws-cli@^10.2.x for the convenience command.)`
+- **When triggered**: `caws claim` from a canonical checkout; `caws scope show` against a path when cwd is outside any CAWS-tracked worktree binding. Likely additional sites — the bug ledger names only what the rehearsal directly observed.
+- **Evidence**: `transcript/p5-first-worktree.md` and raw `transcript/raw/p5-create.txt` for the `claim` site; live `caws scope show docs/reports/user_e2e_setup_rehearsal_001.md` invocation at amendment time for the `scope` site (the maintainer was scope-checking the report itself before commit and observed the stale string in the `repair:` field).
+- **Disposition**: `code-fix` — the diagnostic is stale text from a pre-v11.1 release. The fact that it appears in at least two distinct commands indicates a shared diagnostic template (or shared copy-pasted text), not a single localized bug. The fix must search the codebase for ALL diagnostics referencing `v11.0.0`, `pin to caws-cli@^10.2.x`, and related lifecycle-gap remnants — not just patch the one observed in `claim`. A diligent user following the advice would `npm install -g @paths.design/caws-cli@^10.2.x` and break their working v11 setup, AND lose access to the very lifecycle commands they're trying to use (which v11.1 does ship).
 - **Cross-reference**: §9 P0-2
-- **Notes**: the v10.2 recovered HANDOFF independently observed surface-skew confusion (P0-0); Bug-003 is the *opposite* failure: a v11 binary advising a v10 downgrade. The two failure modes compound the distribution-channel confusion.
+- **Notes**: the v10.2 recovered HANDOFF independently observed surface-skew confusion (P0-0); Bug-003 is the *opposite* failure: a v11 binary advising a v10 downgrade. The two failure modes compound the distribution-channel confusion. The candidate follow-up slice is `CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01` (broadly scoped — every diagnostic in the codebase containing those stale phrases — not just `caws claim`).
 
 ### Bug-004 — published `@paths.design/caws-cli` resolves to v10.2.0 while host/kit/docs assume v11.x
 
