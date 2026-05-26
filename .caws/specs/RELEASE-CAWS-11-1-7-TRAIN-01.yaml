@@ -37,7 +37,10 @@ scope:
     - .caws/policy.yaml
     - CODEOWNERS
     - .github
-    - scripts
+    - packages/caws-kernel/scripts
+    - packages/caws-cli/scripts/build-cli.js
+    - packages/caws-cli/scripts/cleanup-tests.js
+    - packages/caws-cli/scripts/run-tests.js
 invariants:
   - 'I1: Release-prep slice with a HARD publish gate. NO `npm publish` invocation, NO `npm dist-tag` mutation, NO `git tag` push, NO `git push --tags` until the publish-gate report is returned AND the maintainer explicitly authorizes the external mutation as a separate step. The slice prepares the release artifacts (version bumps, CHANGELOG, lockfile sync, build, pack validation) and then STOPS.'
   - 'I2: Two-package release train, ordered: caws-kernel@1.1.2 publishes FIRST (manual `npm publish` from packages/caws-kernel/ — kernel has no CI publish path per CAWS-RELEASE-TAG-DRIVEN-001), then caws-cli@11.1.7 publishes SECOND (push `caws-cli-v11.1.7` tag; CI workflow handles the rest). The order is non-negotiable because caws-cli@11.1.7 depends on caws-kernel@^1.1.0 and the diagnostic fixes live IN kernel — publishing cli first would ship partial coverage (CLI fixes visible; kernel diagnostics still showing stale text via the npm-published kernel@1.1.1).'
