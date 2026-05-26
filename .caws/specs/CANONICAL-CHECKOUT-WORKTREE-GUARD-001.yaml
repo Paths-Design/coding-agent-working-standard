@@ -2,10 +2,11 @@ id: CANONICAL-CHECKOUT-WORKTREE-GUARD-001
 title: 'Guard canonical checkout writes while CAWS worktrees are active'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Slice ships canonical-checkout block (checkout/switch/branch -f/reset non-hard) when worktrees are active. Deliberate doctrinal correction vs failure-lineage Entry 19 body: the guard reads .caws/worktrees.json for active-worktree presence and live git rev-parse for canonical detection — leases remain visibility/evidence per invariant 8, never authority. Hook-pack v4 bumped in lockstep across all 22 managed files (per c300852 precedent + install.test.js line 348 per-file equality). Evidence: 26 canonical-guard tests + 65 full lite-hooks + 39 install tests, all pass post-merge.'
 created_at: '2026-05-23T11:44:45.090Z'
-updated_at: '2026-05-25T10:00:00.000Z'
-worktree: canonical-checkout-worktree-guard
+updated_at: '2026-05-26T01:27:27.853Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
