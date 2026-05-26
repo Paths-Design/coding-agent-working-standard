@@ -378,11 +378,47 @@ function readLease(projectDir, sessionId) {
   }
 }
 
-function assertHookPackV3(pack) {
-  step('A14.4 — installed hook pack reports v3 with three new agent-*.sh');
-  if (pack.packVersion !== 3) {
-    fail('installed manifest pack version mismatch', {
-      expected: 3, got: pack.packVersion,
+// Reads CLAUDE_CODE_PACK_VERSION from the source-tree TS manifest at test
+// time. This is the canonical version constant; the installed pack's
+// packVersion MUST equal this value (a mismatch means dist was built from
+// stale source or the installed tarball is not in sync with source).
+//
+// Reading source rather than hardcoding an integer prevents this assertion
+// from going stale when the pack version is bumped (per RELEASE-SMOKE-
+// PACKVERSION-HOTFIX-01).
+function readCanonicalPackVersion() {
+  const manifestSource = join(
+    PACKAGE_ROOT,
+    'src',
+    'init',
+    'hook-packs',
+    'manifest-claude-code.ts',
+  );
+  if (!existsSync(manifestSource)) {
+    fail('source-tree manifest missing', {
+      expected: manifestSource,
+      hint: 'cannot derive canonical CLAUDE_CODE_PACK_VERSION; ensure script runs from a checked-out repo',
+    });
+  }
+  const src = readFileSync(manifestSource, 'utf8');
+  const match = src.match(/export\s+const\s+CLAUDE_CODE_PACK_VERSION\s*=\s*(\d+)\s*;/);
+  if (!match) {
+    fail('could not parse CLAUDE_CODE_PACK_VERSION from source manifest', {
+      manifest: manifestSource,
+      hint: 'expected: export const CLAUDE_CODE_PACK_VERSION = <int>;',
+    });
+  }
+  return Number.parseInt(match[1], 10);
+}
+
+function assertHookPackVersionMatchesSource(pack) {
+  const canonicalVersion = readCanonicalPackVersion();
+  step(`A14.4 — installed hook pack reports v${canonicalVersion} with three new agent-*.sh`);
+  if (pack.packVersion !== canonicalVersion) {
+    fail('installed manifest pack version mismatch with source CLAUDE_CODE_PACK_VERSION', {
+      expected: canonicalVersion,
+      got: pack.packVersion,
+      hint: 'rebuild dist to bring installed pack in sync with source manifest',
     });
   }
   const required = ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh'];
@@ -392,7 +428,7 @@ function assertHookPackV3(pack) {
     if (!entry.managed) fail(`${name} is not managed:true`);
     if (!entry.executable) fail(`${name} is not executable:true`);
   }
-  ok('hook pack v3 with all three agent-*.sh as managed+executable');
+  ok(`hook pack v${canonicalVersion} with all three agent-*.sh as managed+executable`);
 }
 
 function assertSessionStartCreatesLease(projectDir, shimDir) {
@@ -671,8 +707,10 @@ try {
   runInit(projectDir, installedRoot);
   assertDestFilesPresent(projectDir, pack);
 
-  // A14.4 — hook pack v3 with the three new agent-*.sh templates.
-  assertHookPackV3(pack);
+  // A14.4 — installed pack version matches canonical source manifest
+  // (CLAUDE_CODE_PACK_VERSION) and the three agent-*.sh templates are
+  // present as managed+executable.
+  assertHookPackVersionMatchesSource(pack);
 
   // A14.5-A14.8 — multi-agent lease substrate end-to-end through the
   // installed dispatchers.
