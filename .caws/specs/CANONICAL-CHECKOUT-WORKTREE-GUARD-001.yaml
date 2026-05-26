@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-23T11:44:45.090Z'
-updated_at: '2026-05-23T12:00:00.000Z'
+updated_at: '2026-05-25T10:00:00.000Z'
 worktree: canonical-checkout-worktree-guard
 blast_radius:
   modules:
@@ -20,9 +20,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - .caws/specs/CANONICAL-CHECKOUT-WORKTREE-GUARD-001.yaml
-    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
-    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
-    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/templates/hook-packs/claude-code
     - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
     - packages/caws-cli/tests/integration/lite-hooks.test.js
     - packages/caws-cli/tests/init/hook-packs/install.test.js
@@ -261,6 +259,17 @@ contracts:
 #   contract (canonical-checkout-pre-tool-use-guard-v1) before implementation.
 #   The tier bump is intentional: surface is hook-only but the consequence
 #   is doctrine-grade behavioral enforcement per failure-lineage Entry 19.
+#
+# 2026-05-25 (scope amendment): broadened scope.in to admit the
+#   hook-pack template directory (packages/caws-cli/templates/hook-packs/
+#   claude-code) rather than enumerating individual files. The CLAUDE_CODE_PACK
+#   v4 bump touches all 22 managed hook files (each carries the version
+#   header in its own CAWS-MANAGED-HOOK block), and install.test.js line
+#   348 asserts per-file header version equality with the manifest's
+#   packVersion. The v3 bump (commit c300852) set the precedent of
+#   touching all 22 files in lockstep. The individual-file scope was a
+#   plan-time miscalibration; the directory entry is the doctrinally
+#   correct shape.
 #
 # Sibling slices (out of scope here, may be filed later):
 #   - MULTI-AGENT-PUSH-RANGE-GUARD-001 (push-range classification)
