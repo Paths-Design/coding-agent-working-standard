@@ -20,5 +20,16 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  },
+  "docs-v11-cutover-finalize": {
+    "specId": "DOCS-V11-CUTOVER-FINALIZE-01",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-26T08:47:06.734Z",
+    "branch": "docs-v11-cutover-finalize",
+    "baseBranch": "feat/multi-agent-provenance-envelope",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/docs-v11-cutover-finalize"
   }
 }
