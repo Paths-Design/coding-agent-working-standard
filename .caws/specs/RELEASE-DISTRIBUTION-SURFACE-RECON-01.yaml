@@ -2,9 +2,11 @@ id: RELEASE-DISTRIBUTION-SURFACE-RECON-01
 title: 'Recon: resolve published-surface skew (Bug-004 / P0-0)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Report committed at 2911446: docs/reports/release_distribution_surface_recon_01.md. Recon resolved Bug-004 / P0-0 from USER-E2E-SETUP-REHEARSAL-001. npm registry truth is @paths.design/caws-cli latest=11.1.6 and repo-local packages/caws-cli/package.json is 11.1.6; there is no registry-vs-repo skew. The observed 10.2 install was maintainer-local environment drift, not what first-contact users get from npm today. Remaining user-facing issue is stale/contradictory documentation: README lines 9/15/45 and CLAUDE.md stale 11.1.4 reference. Recommended next slice: DOCS-V11-CUTOVER-FINALIZE-01. Non-claims: no npm publish, no dist-tag mutation, no runtime code change, no .caws/agents.json repair, no amendment to closed USER-E2E-SETUP-REHEARSAL-001.'
 created_at: '2026-05-26T08:35:43.461Z'
-updated_at: '2026-05-26T08:35:43.461Z'
+updated_at: '2026-05-26T08:43:34.691Z'
 blast_radius:
   modules:
     - docs/reports/release_distribution_surface_recon_01.md
