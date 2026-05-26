@@ -1,16 +1,16 @@
-# CAWS — Agent Quick Reference (v11.0.0)
+# CAWS — Agent Quick Reference (v11.1)
 
-**Agent quickstart for working in CAWS-managed projects on the v11.0.0 substrate.**
+**Agent quickstart for working in CAWS-managed projects on the v11.1 substrate.**
 
 ## Read this first
 
-This repo is on the `caws-next` branch, mid-cutover to v11.0.0 (vNext kernel/store/shell rewrite, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
+The v11 cutover is complete. `main` runs the v11.1 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-**v11.0.0 ships exactly eight command groups.** Everything else listed in older docs (`specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `agents`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `sidecar`) is **removed in v11**. Do not invoke them — they will fail.
+**v11.1 ships eleven command groups.** Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `sidecar`) will fail if invoked. The multi-agent surface (`agents list/show`, `session`, `parallel`) is deferred to v11.2/v11.3+.
 
-If your project genuinely needs the legacy lifecycle commands today, pin to `caws-cli@^10.2.x`. v11.1 will reintroduce vNext spec and worktree lifecycle. The two CLIs cannot run side-by-side on the same project — they write to overlapping state.
+**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11.1 is not a drop-in replacement for every v10.2 workflow.
 
-## v11 command surface
+## v11.1 command surface
 
 | Command | Purpose |
 |---|---|
@@ -23,6 +23,8 @@ If your project genuinely needs the legacy lifecycle commands today, pin to `caw
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
+| `caws specs create / list / show / close / archive` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
+| `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
 
 Run `caws <group> --help` for full options and flag details.
 

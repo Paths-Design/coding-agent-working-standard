@@ -6,17 +6,17 @@ CAWS is a kernel/store/shell architecture that gives coding agents and humans a 
 
 This repository is the source for the `@paths.design/caws-cli` and `@paths.design/caws-kernel` npm packages. CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
 
-## Status: v11.0.0 cutover in progress
+## Status: v11.1.x is the canonical line
 
-The repo is mid-cutover from the legacy v10.x CLI to the **v11.0.0 vNext rewrite** on the `caws-next` branch. v11.0.0 is the **governed core** (A1 posture). It deliberately excludes spec/worktree lifecycle commands; those return in v11.1.
+The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core; v11.2 is in planning (multi-agent authority and observability — see the doctrine doc §1).
 
-**Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — Slice 8c.1 swept the high-traffic surface, but historical context in deeper docs may still describe v10 behavior.
+**Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — historical context in deeper docs may still describe v10 behavior.
 
-If your project depends on the legacy spec or worktree lifecycle commands (`specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `agents`, etc.), **pin to `caws-cli@^10.2.x`** until v11.1 ships. The two CLIs cannot coexist on the same project — they write to overlapping state.
+**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is not a drop-in replacement for every v10.2 workflow — some commands are removed, some renamed, some deferred. The guide classifies every v10.2 command and includes a rollback one-liner.
 
-## What v11 ships
+## What v11.1 ships
 
-Eight command groups. Nothing else.
+Eleven command groups.
 
 | Command | Purpose |
 |---|---|
@@ -29,6 +29,8 @@ Eight command groups. Nothing else.
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+| `caws specs create / list / show / close / archive` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
+| `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
 
 Run `caws <group> --help` for full options.
 
@@ -39,10 +41,10 @@ Run `caws <group> --help` for full options.
 - Node.js >= 18
 - Git
 
-### Install (post-cutover)
+### Install
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.0.0
+npm install -g @paths.design/caws-cli@^11.1.0
 caws --version
 ```
 

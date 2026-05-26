@@ -61,7 +61,7 @@ the complete doctrine, command surface, and architectural invariants.
 ## Installation
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.0.0
+npm install -g @paths.design/caws-cli@^11.1.0
 ```
 
 The package depends on `@paths.design/caws-kernel@^1.0.0` (the pure
