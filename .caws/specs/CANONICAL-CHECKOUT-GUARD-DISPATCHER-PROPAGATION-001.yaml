@@ -1,0 +1,64 @@
+id: CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001
+title: 'Dispatcher chain propagates canonical-checkout guard refusals'
+risk_tier: 2
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-26T01:29:15.414Z'
+updated_at: '2026-05-26T01:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001.yaml
+    - packages/caws-cli/tests/integration/lite-hooks.test.js
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/run-handlers.sh
+  out:
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - docs/failure-lineage.md
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'I1: The dispatcher chain MUST preserve worktree-guard.sh exit 2 as exit 2 at the dispatch entry point. Swallowing, downgrading to 0/1, or short-circuiting silently is a regression.'
+  - 'I2: The canonical diagnostic stderr from worktree-guard.sh MUST be visible at the dispatcher entry point. The dispatcher wraps it with a [worktree-guard.sh] prefix per run-handlers.sh convention but must not erase or truncate the BLOCKED message body or the active worktree name.'
+  - 'I3: The dispatcher MUST allow read-only commands (git status, git log, git diff, git show, git fetch without --prune) to pass through with exit 0 from the canonical checkout while worktrees are active. The block is for mutating commands only.'
+  - 'I4: The dispatcher MUST allow mutating git commands from a linked worktree to pass through with exit 0 even when other worktrees are active. The guard scope is the canonical checkout only.'
+  - 'I5: This slice MUST NOT modify worktree-guard.sh. The predicate is fixed by CANONICAL-CHECKOUT-WORKTREE-GUARD-001. Repairs needed here belong in dispatch/pre_tool_use.sh or lib/run-handlers.sh.'
+  - 'I6: This slice MUST NOT bump CLAUDE_CODE_PACK_VERSION. The pack v4 manifest is fixed by CANONICAL-CHECKOUT-WORKTREE-GUARD-001. Test-only changes do not require a version bump.'
+  - 'I7: The acceptance tests MUST construct a fixture that exercises the full dispatch path (dispatch/pre_tool_use.sh as the entry, run-handlers.sh sourced, worktree-guard.sh as a registered handler), not a direct worktree-guard.sh invocation. Direct-invocation already has 26 passing tests in CANONICAL-CHECKOUT-WORKTREE-GUARD-001.'
+acceptance:
+  - id: A1
+    given: 'A canonical checkout with .caws/worktrees.json containing an active linked worktree wt-other, with cwd set to the canonical checkout root.'
+    when: 'dispatch/pre_tool_use.sh is invoked end-to-end with a Bash tool payload containing the command `git checkout main` (a branch switch from the canonical checkout, a mutating operation that worktree-guard.sh refuses).'
+    then: 'The dispatcher exits 2. Stderr contains the canonical BLOCKED diagnostic (`BLOCKED: git checkout (branch switch) from the canonical checkout while CAWS worktrees are active.`) prefixed by `[worktree-guard.sh]`. Stderr names the active worktree wt-other and includes at least one recovery path (cd into the worktree or destroy it).'
+  - id: A2
+    given: 'A canonical checkout with .caws/worktrees.json containing an active linked worktree wt-other, with cwd set to the canonical checkout root.'
+    when: 'dispatch/pre_tool_use.sh is invoked with a Bash tool payload containing a read-only command `git status` (or equivalent: `git log --oneline -1`, `git diff`).'
+    then: 'The dispatcher exits 0. The canonical BLOCKED diagnostic is NOT present in stderr.'
+  - id: A3
+    given: 'A canonical checkout with .caws/worktrees.json containing an active linked worktree wt-mine, with cwd set INSIDE that linked worktree at .caws/worktrees/wt-mine.'
+    when: 'dispatch/pre_tool_use.sh is invoked with a Bash tool payload containing a mutating command (e.g., `git commit --allow-empty -m test` or `git branch -f local-test-branch`).'
+    then: 'The dispatcher exits 0 from the canonical-guard perspective. The canonical BLOCKED diagnostic is NOT present in stderr. (Other guards may still refuse for other reasons — this acceptance criterion only concerns the canonical-checkout guard not over-firing into linked worktrees.)'
+  - id: A4
+    given: 'The dispatcher-propagation tests at A1, A2, A3 are present in tests/integration/lite-hooks.test.js.'
+    when: 'The full lite-hooks.test.js suite is executed.'
+    then: 'All previously-passing tests still pass (no regression). The new dispatcher-propagation tests pass. Total pass count is at least 68 (65 prior + 3 new acceptance tests, plus any sub-cases).'
+  - id: A5
+    given: 'A canonical checkout with NO active worktrees in .caws/worktrees.json (registry empty or all entries status != active).'
+    when: 'dispatch/pre_tool_use.sh is invoked with the same `git checkout main` payload from A1.'
+    then: 'The dispatcher exits 0. The canonical BLOCKED diagnostic is NOT present in stderr.'
+non_functional:
+  reliability:
+    - 'Dispatcher chain MUST be fail-safe. The dispatcher itself errors before any handler runs (parser crash, missing run-handlers.sh) → exit 0 (per existing dispatch/pre_tool_use.sh comment block). This slice preserves that property; tests must not introduce a regression where a hook-pack subsystem error becomes a tool-call block.'
+contracts:
+  - type: behavior
+    name: canonical-checkout-dispatcher-propagation-v1
+    path: packages/caws-cli/tests/integration/lite-hooks.test.js
+    description: 'Behavioral contract: dispatch/pre_tool_use.sh end-to-end invocation preserves the canonical-checkout guard refusal (exit 2 + canonical diagnostic) for mutating commands from the canonical checkout while worktrees are active; allows read-only commands; allows mutating commands from inside a linked worktree; allows everything when no worktrees are active. Implemented as integration tests in lite-hooks.test.js that exercise the dispatcher entry point with synthetic Claude Code Bash tool payloads piped to stdin.'
+worktree: dispatcher-propagation
