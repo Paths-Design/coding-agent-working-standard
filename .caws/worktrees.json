@@ -20,16 +20,5 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
-  },
-  "worktree-spec-canonical-access-guard": {
-    "specId": "WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-26T02:59:57.363Z",
-    "branch": "worktree-spec-canonical-access-guard",
-    "baseBranch": "feat/multi-agent-provenance-envelope",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-spec-canonical-access-guard"
   }
 }
