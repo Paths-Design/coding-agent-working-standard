@@ -235,6 +235,53 @@ There's no way to dismiss this from the agent side. If you trip it, stop and ask
 
 Interactive `npm login` and `NPM_TOKEN` env-var auth are different identities to the registry. If your account has 2FA enabled, interactive `npm publish` still requires an OTP code (the `--otp=<code>` flag), even after `npm login`. Granular npm tokens can be configured with **"bypass 2FA for write actions"** — those work for `NPM_TOKEN`-based CI publishes but do NOT carry over to `npm whoami` sessions. If you see `EOTP` with a valid `npm whoami`, the token has 2FA-bypass and the session does not — use the token via env, not the interactive session.
 
+## Decision cadence (act from local authority)
+
+Default to making the narrowest reversible decision supported by local repo authority. Do not stop merely because there is ambiguity.
+
+Before asking the maintainer, do one cheap grounding pass against:
+
+1. The active spec: `scope.in`, `scope.out`, invariants, acceptance, closure notes.
+2. Repo doctrine: this file, command-surface docs, release docs, and relevant architecture notes.
+3. Existing code, tests, scripts, package metadata, and CLI help.
+4. Recent commits when they directly govern the current slice.
+
+If one path is locally supported, reversible, and within scope, take it. State the decision briefly and continue.
+
+Ask for direction only on true blockers:
+
+- External or irreversible mutation: `npm publish`, `npm dist-tag`, git tag push, force-push, unpublish, destructive deletion.
+- Scope conflict that cannot be resolved by using the correct bound worktree or existing CAWS command.
+- Direct contradiction between active specs, or between a spec and governed implementation.
+- Missing credentials, missing files, or inability to reproduce required evidence.
+- Any action that would edit guard state, spoof ownership/session state, bypass safety checks, or rewrite another active spec's contract.
+- Broad refactor or policy change outside the current spec.
+
+Do not ask merely because:
+
+- Multiple implementation shapes exist but one is narrowest and evidence-supported.
+- A test or CI failure has a clear local root cause.
+- A small follow-up/hotfix spec is the obvious governance shape.
+- A command failed once and the next diagnostic step is obvious.
+- Existing specs or docs already answer the question.
+
+Tool-call discipline:
+
+- Every command must advance the slice.
+- Do not repeatedly inspect the same help text, registry state, ownership state, or logs after the blocker is classified.
+- Prefer one decisive grounding pass over many intermediate probes.
+- Report meaningful work output, not a play-by-play of hesitation.
+
+Failure cadence:
+
+1. Classify the failure.
+2. Identify the narrowest admissible fix.
+3. If reversible and within scope, do it.
+4. If out of scope but small and local, open a focused hotfix spec and proceed under that spec.
+5. If external, irreversible, credential-bound, or safety-bound, stop with a precise handoff.
+
+Observed anti-pattern to avoid: turning a stale local assertion into a three-option menu when the active spec, script source, and CI log support a narrow hotfix. Correct cadence: classify, open hotfix spec, fix, test, then stop at the tag-push or publish boundary.
+
 ## Test suite
 
 - CLI tests (vNext shell + store): `cd packages/caws-cli && npx jest`
