@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 5
 # caws_min_major: 11
-# lineage_refs: 4,6,11
+# lineage_refs: 4,6,11,19
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 #
 # CAWS Worktree Safety Guard for Claude Code (v11-shape).
@@ -50,10 +50,136 @@ if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--sc
 fi
 
 if echo "$COMMAND" | grep -qE '(^|;|&&|\|)\s*git\s+sparse-checkout'; then
-  echo "BLOCKED: git sparse-checkout is not allowed in this project." >&2
-  echo "Use full worktrees without sparse-checkout." >&2
+  # WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3: blanket refusal stays.
+  # Agent-issued git sparse-checkout commands are refused regardless of
+  # subcommand (disable / set / init / reapply / list / add). Recovery
+  # of the canonical-spec-materialization invariant in a linked CAWS
+  # worktree is a CAWS worktree-repair concern routed through the CLI,
+  # not an agent-Bash git operation.
+  echo "BLOCKED: agent-issued git sparse-checkout is refused in CAWS projects." >&2
+  echo "" >&2
+  echo "Sparse-checkout in a CAWS linked worktree carries the mechanical guard" >&2
+  echo "against the v10.2 split-brain authority class: .caws/specs/ is excluded" >&2
+  echo "from the worktree by design, so canonical spec authority cannot be" >&2
+  echo "materialized inside the worktree as a divergent private copy. Disabling" >&2
+  echo "sparse-checkout (or any sparse-checkout reconfiguration via agent Bash)" >&2
+  echo "would re-open that class. Linked worktrees must not use worktree-local" >&2
+  echo ".caws/specs/ files as authority; CAWS resolves spec reads through the" >&2
+  echo "canonical control plane regardless of cwd." >&2
+  echo "" >&2
+  echo "To read a spec from any cwd (including this worktree), use:" >&2
+  echo "  caws specs show <id>" >&2
+  echo "" >&2
+  echo "To check scope from any cwd, use:" >&2
+  echo "  caws scope show <path>" >&2
+  echo "  caws scope check <path>" >&2
+  echo "" >&2
+  echo "To restore the sparse-checkout invariant on a linked worktree (e.g.," >&2
+  echo "after a human-authorized sparse-checkout reconfiguration left the tree" >&2
+  echo "with materialized .caws/specs/ files), run from the canonical checkout:" >&2
+  echo "  caws worktree repair-sparse <name>" >&2
+  echo "" >&2
+  echo "The repair command is non-destructive: it refuses dirty .caws/specs/" >&2
+  echo "rather than stashing, cleaning, or deleting work." >&2
   exit 2
 fi
+
+# ─── CANONICAL-CHECKOUT-WORKTREE-GUARD-001 (Entry 19) ────────────────
+# Block mutating git commands from the canonical checkout while at
+# least one active CAWS worktree exists. Hook-layer enforcement only:
+# authority remains in worktrees.json + specs. The guard's refusal
+# predicate is conjunctive: canonical + worktrees-active + mutating
+# command. Any one false MUST allow.
+#
+# Leases (.caws/leases/*.json) are NOT consulted by this decision —
+# stale-lease-is-evidence-never-authority. The block decision uses
+# worktrees.json's active entries only.
+canonical_guard_emit_block() {
+  local action="$1"
+  local first_active="$2"
+  echo "BLOCKED: $action from the canonical checkout while CAWS worktrees are active." >&2
+  echo "Active worktree(s) detected (e.g. '$first_active' in .caws/worktrees.json)." >&2
+  echo "Switch into your worktree before mutating: cd .caws/worktrees/$first_active" >&2
+  echo "Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>" >&2
+}
+
+# Determine whether the session's cwd is the canonical checkout.
+# git_dir == git_common_dir indicates canonical; a linked worktree has
+# git_dir under git_common_dir/worktrees/<name>/.
+CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
+if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
+  GIT_DIR_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-dir 2>/dev/null | head -1 || echo "")
+  GIT_COMMON_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-common-dir 2>/dev/null | head -1 || echo "")
+  if [[ -n "$GIT_DIR_RESOLVED" ]] && [[ -n "$GIT_COMMON_RESOLVED" ]]; then
+    # Normalize to absolute paths so equality is structural, not textual.
+    GIT_DIR_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_DIR_RESOLVED" 2>/dev/null && pwd || echo "$GIT_DIR_RESOLVED")
+    GIT_COMMON_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_COMMON_RESOLVED" 2>/dev/null && pwd || echo "$GIT_COMMON_RESOLVED")
+    if [[ "$GIT_DIR_ABS" == "$GIT_COMMON_ABS" ]]; then
+      # We are in the canonical checkout. Now check for active worktrees.
+      WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
+      if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
+        FIRST_ACTIVE_WT=$(node -e "
+          try {
+            var reg = JSON.parse(require('fs').readFileSync('$WORKTREES_JSON', 'utf8'));
+            function entriesOf(r) {
+              if (!r || typeof r !== 'object') return [];
+              if (r.worktrees && typeof r.worktrees === 'object') {
+                return Object.entries(r.worktrees);
+              }
+              var out = [];
+              for (var k in r) {
+                if (Object.prototype.hasOwnProperty.call(r, k)) {
+                  var v = r[k];
+                  if (v && typeof v === 'object') out.push([k, v]);
+                }
+              }
+              return out;
+            }
+            var entries = entriesOf(reg);
+            // 'active' is the documented status; entries without an
+            // explicit status (legacy/in-flight registry shapes) are
+            // also treated as active because the CLI's createWorktree
+            // does not always emit a status field.
+            var active = entries.filter(function(e) {
+              var s = e[1] && e[1].status;
+              return s === 'active' || s === undefined || s === null || s === '';
+            });
+            if (active.length > 0) console.log(active[0][0]);
+            else console.log('');
+          } catch(e) { console.log(''); }
+        " 2>/dev/null || echo "")
+        if [[ -n "$FIRST_ACTIVE_WT" ]]; then
+          # Predicate (a) canonical + (b) at least one active worktree
+          # is satisfied. Now check (c) mutation command keywords.
+          # Read-only commands (status, log, diff, show, fetch w/o --prune,
+          # rev-parse, ls-files, branch -v, stash list) are NOT in this
+          # set; they fall through to the existing guard rules.
+          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+checkout\s+[^[:space:]-]'; then
+            canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
+            exit 2
+          fi
+          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+switch\s+[^[:space:]-]'; then
+            canonical_guard_emit_block "git switch (branch switch)" "$FIRST_ACTIVE_WT"
+            exit 2
+          fi
+          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+branch\s+(-f|--force)'; then
+            canonical_guard_emit_block "git branch -f (force branch update)" "$FIRST_ACTIVE_WT"
+            exit 2
+          fi
+          # git reset variants other than --hard (already covered later in
+          # this file) — --keep, --merge, --soft, --mixed, or with no
+          # mode flag — mutate the canonical's working tree/HEAD.
+          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+reset\b' \
+             && ! echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
+            canonical_guard_emit_block "git reset (HEAD mutation)" "$FIRST_ACTIVE_WT"
+            exit 2
+          fi
+        fi
+      fi
+    fi
+  fi
+fi
+# ─── /CANONICAL-CHECKOUT-WORKTREE-GUARD-001 ──────────────────────────
 
 # Block cross-boundary file copies (worktree → main).
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"

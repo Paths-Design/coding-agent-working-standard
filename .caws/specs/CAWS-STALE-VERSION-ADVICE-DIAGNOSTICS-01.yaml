@@ -1,0 +1,115 @@
+id: CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01
+title: 'Replace stale v11.0/pin-to-10.2 advice in kernel + CLI diagnostics (Bug-003)'
+risk_tier: 3
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Strings-only fix across 7 source emission sites of the stale v11.0/pin-to-10.2 downgrade advice (Bug-003 from USER-E2E-SETUP-REHEARSAL-001). Implementation commit on worktree branch stale-version-advice-diagnostics; merged into feat/multi-agent-provenance-envelope at 08223a7b7ed479bdff7bdb64b9ac02222c35492b via caws worktree merge (auto-close + auto-destroy + registry cleanup in one transaction). Sites patched: kernel/doctor/inspect.ts lines 158/193/231 (3 narrowRepair strings: doctor.spec.unbound_active_stale, BINDING_REGISTRY_MISSING_SPEC, BINDING_SPEC_NOT_GOVERNABLE), kernel/worktree/transitions.ts line 82 (TRANSITION_BLOCKED_BY_ACTIVE_BINDING), kernel/scope/evaluate.ts lines 82/96 (NO_AUTHORITY_UNBOUND + NO_AUTHORITY_BINDING_ONE_SIDED narrowRepair fields), cli/shell/commands/claim.ts lines 121-125 (cwd-not-inside-worktree diagnostic). All replacements name current canonical v11.1 commands (caws worktree create / bind / merge / destroy, caws specs close) instead of telling users to pin to caws-cli@^10.2.x. A1 final grep verification: `grep -rn "v11.0.0 does not ship\|pin to caws-cli@\^10.2" packages/caws-cli/src packages/caws-kernel/src` returns ZERO matches. Tests: new kernel suite tests/unit/stale-version-advice.test.ts has 6 sub-tests (one per kernel emission site) with both negative regex assertions and positive current-command assertions; new CLI suite tests/shell/claim-stale-version-advice.test.js has 1 sub-test with stderr capture for runtime-artifact discipline. Test evidence: kernel 525/525 pass across 25 suites (519 baseline + 6 new); CLI relevant subset 37/37 pass across 5 suites (claim/scope/doctor/status/claim-stale). Concrete runtime artifact (from --verbose run of claim-stale-version-advice.test.js): exit code 2, stderr = "caws claim: cwd is not inside a CAWS-tracked worktree. cd into a worktree under .caws/worktrees/<name>, or create one with `caws worktree create <name> --spec <spec-id>`. Run `caws worktree list` to see registered worktrees." Zero existing tests asserted ON the stale text (verified by grep across packages/*/tests/ returning zero matches), so no test rewrites of pre-existing assertions were needed. Preflight finding recorded: package-lock.json line 13153 still declares @paths.design/caws-kernel:^1.0.0 (stale from the prior slice CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 which bumped package.json to ^1.1.0 without lockfile refresh). This slice did NOT repair the lockfile (out of scope per I4). Filed as follow-up candidate slice CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01. False-confidence risks noted in commit body: future refactor that moves advice text to a different field (longRepair, hint) would bypass the narrowRepair-targeted test; CLI test does not end-to-end exercise scope show / doctor command paths (covered structurally by kernel tests). Non-claims per spec invariants: no behavioral changes (I1), only the 3 named kernel files touched (I3), no package.json/lockfile changes (I4), no docs changes (I5), no status/agents code touched (I6), no public-API or new-export changes (I7), all replacements name canonical current commands (I8). Worktree branch stale-version-advice-diagnostics pushed for remote review.'
+created_at: '2026-05-26T15:16:29.973Z'
+updated_at: '2026-05-26T15:39:20.498Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/worktree/transitions.ts
+    - packages/caws-kernel/src/scope/evaluate.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/tests/shell
+    - packages/caws-kernel/tests
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01.yaml
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/worktree/transitions.ts
+    - packages/caws-kernel/src/scope/evaluate.ts
+    - packages/caws-kernel/tests
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/tests/shell
+  out:
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/commands/doctor.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/evidence.ts
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/commands/waiver.ts
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/init
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/config
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/templates
+    - packages/caws-cli/dist
+    - packages/caws-cli/package.json
+    - package-lock.json
+    - packages/caws-kernel/dist
+    - packages/caws-kernel/package.json
+    - packages/caws-kernel/src/index.ts
+    - packages/caws-kernel/src/spec
+    - packages/caws-kernel/src/policy
+    - packages/caws-kernel/src/result
+    - packages/caws-kernel/src/diagnostics
+    - packages/caws-kernel/src/schemas
+    - packages/caws-kernel/src/evidence
+    - packages/caws-kernel/src/waiver
+    - README.md
+    - AGENTS.md
+    - CLAUDE.md
+    - docs
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github
+    - scripts
+    - packages/caws-cli/CHANGELOG.md
+invariants:
+  - 'I1: Strings-only fix in the listed files. NO behavioral changes to any kernel function or CLI command. The diagnostic structure (rule, severity, subject, narrowRepair) and conditions under which each diagnostic fires MUST remain identical; only the text content of the stale-version-advice strings changes.'
+  - 'I2: The slice MUST patch every source-emission site of the stale-advice strings identified by the recon. There are 7 sites total: 6 in the kernel (packages/caws-kernel/src/doctor/inspect.ts:158/193/231, packages/caws-kernel/src/worktree/transitions.ts:82, packages/caws-kernel/src/scope/evaluate.ts:82/96), 1 in the CLI (packages/caws-cli/src/shell/commands/claim.ts:122-125). Leaving any of the 7 unpatched is a regression.'
+  - 'I3: Kernel is admitted by scope.in by necessity (CLAUDE.md trap #5 escape clause). The admitted kernel files are the EXACT three identified by recon (inspect.ts, transitions.ts, evaluate.ts). Other kernel files (index.ts, spec, policy, result, diagnostics, schemas, evidence, waiver) are explicitly scope.out — a regression that touches them is a defect in this slice.'
+  - 'I4: NO changes to packages/caws-cli/package.json or package-lock.json. The preflight check identified a lockfile drift caused by CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 (package.json says @paths.design/caws-kernel:^1.1.0; lockfile still says ^1.0.0). That drift is recorded as the follow-up candidate slice CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01 and MUST NOT be repaired here.'
+  - 'I5: NO changes to documentation. DOCS-V11-CUTOVER-FINALIZE-01 already handled the README/AGENTS.md/CLAUDE.md/architecture-doc surface. CHANGELOG entries are also out of scope (a release-bump slice may bundle this fix later).'
+  - 'I6: NO changes to the status/agents code path from CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 (status.ts, agents.ts). Disjoint scope is preserved.'
+  - 'I7: NO new diagnostic emission paths created. NO new exported kernel symbols. NO changes to public types or shapes. The fix is purely text-replacement within existing string literals.'
+  - 'I8: The replacement diagnostic text MUST point users at canonical current commands. Strings that say "pin to caws-cli@^10.2.x for caws worktree merge X" become "use caws worktree merge X" (the command exists in v11.1.x; the conditional has been false for months). Strings that say "v11.0.0 does not ship caws worktree bind; pin to caws-cli@^10.2.x for the convenience command" become text that names caws worktree bind directly. Strings that say "v11.0.0 does not ship worktree lifecycle commands" should be removed or rewritten to use caws worktree create/destroy/merge/bind/repair-sparse. The docs/migration-v10-to-v11.md doc is only mentioned for users migrating FROM v10.2, never as downgrade advice.'
+acceptance:
+  - id: A1
+    given: 'The 7 source emission sites of the stale-advice strings identified by recon.'
+    when: 'The slice patches them.'
+    then: 'A `grep -rn "v11.0.0 does not ship\|pin to caws-cli@\^10.2" packages/caws-cli/src packages/caws-kernel/src` returns ZERO matches. No source emission site retains the stale text. The grep MUST be exhaustive across both packages'' src trees.'
+  - id: A2
+    given: 'The replacement text in the 6 kernel sites + 1 CLI site.'
+    when: 'A reviewer reads each replacement against its surrounding context.'
+    then: 'Each replacement names the current canonical command for the situation: caws worktree bind (for scope-evaluate unbound), caws worktree merge/destroy (for transition blocks), the actual command corresponding to each doctor finding. No replacement invents a non-existent command. No replacement directs users to npm install commands or pin advice.'
+  - id: A3
+    given: 'A new regression test at packages/caws-kernel/tests/diagnostic-text.test.ts (or .js, matching kernel test convention).'
+    when: 'The test is run.'
+    then: 'The test imports the relevant kernel functions (inspectProjectState, the scope evaluator, the transition validators), invokes them against fixtures that trigger each of the 6 kernel-emitted stale-advice rules, asserts the resulting narrowRepair / message string does NOT match /pin to caws-cli@\^10\.2/ or /v11\.0\.0 does not ship/. At least 6 sub-tests (one per kernel rule).'
+  - id: A4
+    given: 'A new regression test at packages/caws-cli/tests/shell/claim-stale-version-advice.test.js.'
+    when: 'The test is run.'
+    then: 'The test invokes runClaimCommand with cwd outside any CAWS worktree, asserts stderr does NOT contain "v11.0.0 does not ship" or "pin to caws-cli@^10.2.x", asserts stderr DOES contain current v11.1-aware advice (cd into a worktree under .caws/worktrees/<name>, or use caws claim --takeover when appropriate).'
+  - id: A5
+    given: 'The fix applied.'
+    when: 'Existing kernel + CLI test suites are run.'
+    then: 'All existing tests pass. No regression in doctor.test.ts, scope-evaluate tests, transition tests, claim-command.test.js, or any other suite that exercises diagnostic content. A small number of existing tests may currently assert ON the stale text (e.g., snapshot tests). Such tests MUST be updated as part of this slice to assert on the new text; that is a legitimate scope-in change.'
+  - id: A6
+    given: 'The slice closes.'
+    when: 'The merged tree is inspected.'
+    then: 'Modified files are exactly the 4 source files (packages/caws-kernel/src/doctor/inspect.ts, packages/caws-kernel/src/worktree/transitions.ts, packages/caws-kernel/src/scope/evaluate.ts, packages/caws-cli/src/shell/commands/claim.ts), plus any test files added or updated under packages/caws-kernel/tests or packages/caws-cli/tests/shell. No docs, no package.json, no CHANGELOG, no release artifacts, no status/agents files, no other kernel files touched.'
+  - id: A7
+    given: 'Preflight identified lockfile drift (packages/caws-cli/package.json declares @paths.design/caws-kernel:^1.1.0, but package-lock.json line 13153 still says ^1.0.0).'
+    when: 'The slice closes.'
+    then: 'The lockfile is unchanged by this slice. The drift is recorded in closure_notes as the candidate follow-up CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01. A grep `grep -n "@paths.design/caws-kernel" package-lock.json` after the slice still shows ^1.0.0 — same as before the slice.'
+  - id: A8
+    given: 'The merged tree.'
+    when: 'A future CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01 slice is opened to repair the lockfile drift, OR a release-bump slice publishes v11.1.7 bundling this stale-advice fix.'
+    then: 'Zero scope conflict with this slice: this slice owns text-replacement in diagnostic emission sites; those slices own package.json/lockfile/CHANGELOG/release artifacts respectively. Disjoint.'
+non_functional:
+  reliability:
+    - 'The text replacements MUST be deterministic. No timestamps, session ids, runtime-dependent content. A future re-run of the same edits against the same HEAD MUST produce a byte-identical diff.'
+    - 'The new test assertions MUST be specific enough to catch a regression where the stale text is re-introduced (e.g., a future agent reverts a string). Substring negation (`expect(text).not.toMatch(/pin to caws-cli/)`) is preferred over equality checks because future doctor messages may legitimately reorder unrelated content.'
+contracts: []

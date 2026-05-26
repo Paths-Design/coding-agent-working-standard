@@ -30,6 +30,7 @@ const {
   runWorktreeListCommand,
   runWorktreeDestroyCommand,
   runWorktreeMergeCommand,
+  runWorktreeRepairSparseCommand,
   runSpecsCreateCommand,
   runSpecsCloseCommand,
 } = require('../../dist/shell');
@@ -515,5 +516,205 @@ describe('WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 — spec.worktree clearance on 
     const specClosed = events.find(e => e.event === 'spec_closed' && e.spec_id === 'FEAT-001');
     expect(specClosed).toBeDefined();
     expect(specClosed.data.prior_worktree).toBeUndefined();
+  });
+});
+
+// ============================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001
+//   A4: repair-sparse restores sparse invariant + is idempotent
+//   A5: refuses missing-registry / missing-path / canonical-target /
+//       not-a-worktree / dirty-specs without destructive cleanup
+// ============================================================
+describe('A4/A5: caws worktree repair-sparse', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setupRepoWithSpec('wt-repair-sparse-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  // Helper: write a spec file to the canonical .caws/specs/ so create's
+  // sparse-checkout configuration has something to exclude.
+  function ensureSpecAuthority(specId) {
+    const specPath = path.join(cawsDir, 'specs', `${specId}.yaml`);
+    if (!fs.existsSync(specPath)) {
+      throw new Error(`expected spec ${specPath} to exist (setupRepoWithSpec creates it)`);
+    }
+    // Commit the spec so it's part of HEAD. createWorktree's sparse-
+    // checkout init runs against HEAD, so unchecked spec files would
+    // be irrelevant. Stage and commit.
+    execFileSync('git', ['-C', repoRoot, 'add', '.caws/'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoRoot, '-c', 'user.email=t@t', '-c', 'user.name=t',
+      'commit', '--quiet', '-m', 'add spec authority'], { stdio: 'ignore' });
+  }
+
+  it('A4: repair-sparse restores sparse invariant after manual disable + is idempotent', () => {
+    ensureSpecAuthority('FEAT-001');
+
+    // Create the worktree (which configures sparse-checkout by design).
+    const cr = capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'wt-a4', specId: 'FEAT-001',
+    });
+    expect(cr.code).toBe(0);
+    const wtPath = path.join(cawsDir, 'worktrees/wt-a4');
+
+    // Pre-condition: sparse on, .caws/specs absent in the worktree.
+    expect(execFileSync('git', ['-C', wtPath, 'config', 'core.sparseCheckout'], { encoding: 'utf8' }).trim())
+      .toBe('true');
+    expect(fs.existsSync(path.join(wtPath, '.caws/specs'))).toBe(false);
+
+    // Simulate the agent-bypass scenario: disable sparse-checkout
+    // manually (e.g., via the very command this slice's hook upgrade
+    // refuses for agents but a human could still run).
+    execFileSync('git', ['-C', wtPath, 'sparse-checkout', 'disable'], { stdio: 'ignore' });
+    expect(fs.existsSync(path.join(wtPath, '.caws/specs/FEAT-001.yaml'))).toBe(true);
+
+    // First repair: should succeed.
+    const r1 = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'wt-a4',
+    });
+    expect(r1.code).toBe(0);
+    expect(r1.stdout).toMatch(/sparse invariant restored/);
+
+    // Post-condition: sparse on, .caws/specs absent again.
+    expect(execFileSync('git', ['-C', wtPath, 'config', 'core.sparseCheckout'], { encoding: 'utf8' }).trim())
+      .toBe('true');
+    expect(fs.existsSync(path.join(wtPath, '.caws/specs'))).toBe(false);
+
+    // Idempotency: second repair on the now-healthy worktree is a no-op.
+    const r2 = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'wt-a4',
+    });
+    expect(r2.code).toBe(0);
+    expect(r2.stdout).toMatch(/already has the sparse invariant/);
+    expect(r2.stdout).toMatch(/No action taken/);
+  });
+
+  it('A5a: refuses missing-registry (name not in worktrees.json)', () => {
+    const r = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'does-not-exist',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/missing-registry/);
+    expect(r.stderr).toMatch(/'does-not-exist' is not in \.caws\/worktrees\.json/);
+    // Recovery guidance present.
+    expect(r.stderr).toMatch(/caws worktree list/);
+  });
+
+  it('A5b: refuses missing-path (registry entry present, on-disk path absent)', () => {
+    ensureSpecAuthority('FEAT-001');
+    const cr = capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'wt-a5b', specId: 'FEAT-001',
+    });
+    expect(cr.code).toBe(0);
+
+    // Remove the on-disk worktree directory while leaving the registry entry.
+    // (Not via caws worktree destroy — that would also clean up the registry.)
+    const wtPath = path.join(cawsDir, 'worktrees/wt-a5b');
+    fs.rmSync(wtPath, { recursive: true, force: true });
+
+    const r = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'wt-a5b',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/missing-path/);
+    expect(r.stderr).toMatch(/does not exist on disk/);
+  });
+
+  it('A5c: refuses canonical-target (recorded path equals canonical checkout root)', () => {
+    // Write a registry entry whose path points at canonical itself.
+    const registryPath = path.join(cawsDir, 'worktrees.json');
+    const registry = fs.existsSync(registryPath) ? JSON.parse(fs.readFileSync(registryPath, 'utf8')) : {};
+    registry['canonical-ish'] = {
+      specId: 'FEAT-001',
+      branch: 'main',
+      baseBranch: 'main',
+      path: repoRoot,
+    };
+    fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+
+    const r = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'canonical-ish',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/canonical-target-refused/);
+    expect(r.stderr).toMatch(/canonical checkout IS spec authority/);
+  });
+
+  it('A5d: refuses not-a-worktree (path exists but no .git)', () => {
+    // Write a registry entry pointing at a real directory that is not
+    // a git worktree.
+    const fakePath = path.join(repoRoot, 'not-a-worktree-dir');
+    fs.mkdirSync(fakePath);
+    const registryPath = path.join(cawsDir, 'worktrees.json');
+    const registry = fs.existsSync(registryPath) ? JSON.parse(fs.readFileSync(registryPath, 'utf8')) : {};
+    registry['wt-a5d'] = {
+      specId: 'FEAT-001',
+      branch: 'irrelevant',
+      baseBranch: 'main',
+      path: fakePath,
+    };
+    fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+
+    const r = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'wt-a5d',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/not-a-worktree/);
+    expect(r.stderr).toMatch(/not a git worktree/);
+    // Manual-recovery guidance, and no PROMISE of destructive auto-cleanup
+    // (the diagnostic may WARN against destructive recovery, but must not
+    // claim to perform any).
+    expect(r.stderr).toMatch(/investigate manually/);
+    expect(r.stderr).not.toMatch(/will (stash|clean|reset|delete|remove)/i);
+    expect(r.stderr).not.toMatch(/auto-(cleanup|recover|delete|remove)/i);
+  });
+
+  it('A5e: refuses dirty-specs without stash, clean, reset, or deletion', () => {
+    ensureSpecAuthority('FEAT-001');
+    const cr = capture(runWorktreeCreateCommand, {
+      cwd: repoRoot, name: 'wt-a5e', specId: 'FEAT-001',
+    });
+    expect(cr.code).toBe(0);
+    const wtPath = path.join(cawsDir, 'worktrees/wt-a5e');
+
+    // Disable sparse to materialize .caws/specs/, then dirty it.
+    execFileSync('git', ['-C', wtPath, 'sparse-checkout', 'disable'], { stdio: 'ignore' });
+    const dirtySpec = path.join(wtPath, '.caws/specs/FEAT-001.yaml');
+    expect(fs.existsSync(dirtySpec)).toBe(true);
+    // Append unstaged content — makes the file dirty per git status.
+    fs.appendFileSync(dirtySpec, '\n# unauthorized edit from inside worktree\n');
+    // Also create an untracked file under .caws/specs/.
+    fs.writeFileSync(path.join(wtPath, '.caws/specs/DRAFT-XYZ.yaml'), 'id: DRAFT-XYZ\n');
+
+    // Capture state-before for the negative invariant.
+    const dirtySpecBytesBefore = fs.readFileSync(dirtySpec, 'utf8');
+    const draftExistsBefore = fs.existsSync(path.join(wtPath, '.caws/specs/DRAFT-XYZ.yaml'));
+
+    const r = capture(runWorktreeRepairSparseCommand, {
+      cwd: repoRoot, name: 'wt-a5e',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/dirty-specs-refused/);
+    expect(r.stderr).toMatch(/uncommitted changes/);
+    // Diagnostic must name the specific dirty paths so the user can
+    // act on them.
+    expect(r.stderr).toMatch(/FEAT-001\.yaml/);
+    expect(r.stderr).toMatch(/DRAFT-XYZ\.yaml/);
+    // Diagnostic explicitly disclaims destructive cleanup.
+    expect(r.stderr).toMatch(/will NOT stash, clean, reset, or delete/);
+    // Recovery guidance is manual: commit-or-remove THEN re-run.
+    expect(r.stderr).toMatch(/commit or remove the dirty files first/);
+
+    // CRITICAL negative invariant: the dirty file's bytes are unchanged,
+    // and the untracked file still exists. No stash/clean/reset/delete
+    // happened.
+    expect(fs.readFileSync(dirtySpec, 'utf8')).toBe(dirtySpecBytesBefore);
+    expect(fs.existsSync(path.join(wtPath, '.caws/specs/DRAFT-XYZ.yaml'))).toBe(draftExistsBefore);
+    // And sparse-checkout is still disabled (we did not flip it back).
+    let sparseFlag;
+    try {
+      sparseFlag = execFileSync('git', ['-C', wtPath, 'config', 'core.sparseCheckout'], { encoding: 'utf8' }).trim();
+    } catch {
+      sparseFlag = '(absent)';
+    }
+    expect(sparseFlag === 'false' || sparseFlag === '(absent)').toBe(true);
   });
 });

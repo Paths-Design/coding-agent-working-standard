@@ -509,3 +509,1469 @@ describe('lite-hooks integration', () => {
     });
   });
 });
+
+// ============================================================================
+// MULTI-AGENT-ACTIVITY-REGISTRY-001 — agent-register / agent-heartbeat /
+// agent-stop hook templates.
+//
+// These hooks fan out from the SessionStart, PreToolUse, and Stop dispatchers
+// installed by the v3 Claude Code hook pack. Each invokes the CAWS CLI
+// (`caws agents register/heartbeat/stop`) and treats failure as silently
+// non-blocking. agent-heartbeat is the sole emitter of Claude Code's
+// hookSpecificOutput.additionalContext envelope; the CLI itself returns
+// CAWS-native JSON.
+//
+// Test approach: use the built CLI directly (bin/caws.js) as $CAWS_BIN so the
+// hooks can locate `caws` without requiring a global install on PATH. Each
+// test pipes a synthetic hook payload into the script and inspects the
+// resulting on-disk lease file plus the stdout envelope.
+// ============================================================================
+
+describe('agent-*.sh hooks integration (MULTI-AGENT-ACTIVITY-REGISTRY-001)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+  // Resolve the built CLI entry. The hook scripts invoke `caws agents ...`;
+  // we shim that by writing a tiny `caws` wrapper that delegates to the
+  // built dist/index.js, then prepending its directory to PATH. This
+  // proves the hook's invocation path without depending on global
+  // install state.
+  const cliBin = path.resolve(__dirname, '../../dist/index.js');
+
+  let testDir;
+  let originalCwd;
+  let shimDir;
+
+  beforeAll(() => {
+    if (!fs.existsSync(cliBin)) {
+      throw new Error(
+        `CLI bin not built at ${cliBin} — run "turbo run build --filter=@paths.design/caws-cli..."`
+      );
+    }
+  });
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-agent-hooks-'));
+    execFileSync('git', ['init', '-q', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.mkdirSync(path.join(testDir, '.caws'));
+
+    // Copy the three new hook templates + the shared lib + runtime-paths
+    // so parse-input.sh / read_hook_input_json work.
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+
+    for (const f of ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh']) {
+      const src = path.join(packDir, f);
+      const dest = path.join(hooksDir, f);
+      fs.copySync(src, dest);
+      fs.chmodSync(dest, 0o755);
+    }
+    fs.copySync(path.join(packDir, 'runtime-paths.sh'), path.join(hooksDir, 'runtime-paths.sh'));
+    fs.copySync(path.join(packDir, 'lib', 'parse-input.sh'), path.join(hooksDir, 'lib', 'parse-input.sh'));
+
+    // Make a shim that proxies `caws` to the built CLI binary.
+    shimDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-shim-'));
+    const shimPath = path.join(shimDir, 'caws');
+    fs.writeFileSync(shimPath, `#!/bin/bash\nexec node "${cliBin}" "$@"\n`);
+    fs.chmodSync(shimPath, 0o755);
+
+    process.chdir(testDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+    if (shimDir) fs.removeSync(shimDir);
+  });
+
+  function runAgentHook(hookName, payload, extraEnv = {}) {
+    const hookPath = path.join(testDir, '.claude', 'hooks', hookName);
+    const input = JSON.stringify(payload);
+    const inputFile = path.join(testDir, '.agent-hook-input.json');
+    fs.writeFileSync(inputFile, input);
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd: testDir,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          PATH: `${shimDir}:${process.env.PATH}`,
+          ...extraEnv,
+        },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      fs.removeSync(inputFile);
+    }
+  }
+
+  function leasePath(sessionId) {
+    return path.join(testDir, '.caws', 'leases', `${sessionId}.json`);
+  }
+
+  // ───── agent-register.sh ─────────────────────────────────────────────
+
+  describe('agent-register.sh (SessionStart)', () => {
+    test('creates a lease file for a valid session_id', () => {
+      const sid = 'caws-hooktest-reg-1';
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        session_id: sid,
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(fs.existsSync(leasePath(sid))).toBe(true);
+      const lease = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(lease.session_id).toBe(sid);
+      expect(lease.platform).toBe('claude-code');
+      expect(lease.last_seen_reason).toBe('session_start');
+      expect(lease.status).toBe('active');
+    });
+
+    test('refuses silently when session_id is "unknown"', () => {
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        session_id: 'unknown',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // No leases directory should exist.
+      expect(fs.existsSync(path.join(testDir, '.caws', 'leases'))).toBe(false);
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-register.sh', {
+        hook_event_name: 'SessionStart',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // parse-input.sh falls back to "unknown" which our guard rejects.
+      expect(fs.existsSync(path.join(testDir, '.caws', 'leases'))).toBe(false);
+    });
+
+    test('exits 0 even when the CAWS binary is unavailable', () => {
+      // Override PATH to a directory without our shim. The hook must
+      // exit 0 silently — SessionStart cannot fail on a missing dep.
+      const r = runAgentHook(
+        'agent-register.sh',
+        {
+          hook_event_name: 'SessionStart',
+          session_id: 'caws-hooktest-no-bin',
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+      expect(fs.existsSync(leasePath('caws-hooktest-no-bin'))).toBe(false);
+    });
+  });
+
+  // ───── agent-heartbeat.sh ───────────────────────────────────────────
+
+  describe('agent-heartbeat.sh (PreToolUse)', () => {
+    function register(sessionId) {
+      execFileSync('node', [cliBin, 'agents', 'register',
+        '--session-id', sessionId,
+        '--platform', 'claude-code',
+        '--reason', 'manual_register',
+      ], { cwd: testDir, stdio: 'pipe' });
+    }
+
+    test('updates the current session lease on PreToolUse', () => {
+      const sid = 'caws-hooktest-hb-1';
+      register(sid);
+      const before = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+
+      // Force-throttle bypass by deleting and re-running after a small
+      // delay isn't possible here; instead invoke with the hook script,
+      // which calls `caws agents heartbeat --throttle 30000`. We assert
+      // the lease still exists and last_active is parseable.
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      const after = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(after.session_id).toBe(sid);
+      // Either updated (last_seen_reason switched to 'pre_tool_use') or
+      // throttled (last_seen_reason stays 'manual_register'). Both are
+      // valid outcomes; the assertion is that the lease was readable
+      // and the hook exited 0.
+      expect(['pre_tool_use', 'manual_register']).toContain(after.last_seen_reason);
+    });
+
+    test('emits NO additionalContext when only self is active (N=1)', () => {
+      const sid = 'caws-hooktest-hb-solo';
+      register(sid);
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      // Silent in the common case — no envelope.
+      expect(r.stdout.trim()).toBe('');
+    });
+
+    test('emits hookSpecificOutput.additionalContext when N>1 (parallel peers)', () => {
+      // Register a peer session first so the heartbeat sees N=2.
+      register('caws-hooktest-hb-peer');
+      const sid = 'caws-hooktest-hb-self';
+      register(sid);
+
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        session_id: sid,
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      const trimmed = r.stdout.trim();
+      expect(trimmed.length).toBeGreaterThan(0);
+
+      const envelope = JSON.parse(trimmed);
+      expect(envelope.hookSpecificOutput).toBeDefined();
+      expect(envelope.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+      expect(envelope.hookSpecificOutput.additionalContext).toContain('MULTI-AGENT NOTICE');
+      // Must name the OTHER session, not self.
+      expect(envelope.hookSpecificOutput.additionalContext).toContain('caws-hooktest-hb-peer');
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-heartbeat.sh', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.trim()).toBe('');
+    });
+
+    test('fails closed (exits 0, no output) when CAWS binary is unavailable', () => {
+      const r = runAgentHook(
+        'agent-heartbeat.sh',
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'caws-hooktest-hb-nobin',
+          tool_name: 'Bash',
+          tool_input: { command: 'ls' },
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.trim()).toBe('');
+    });
+  });
+
+  // ───── agent-stop.sh ────────────────────────────────────────────────
+
+  describe('agent-stop.sh (Stop)', () => {
+    function register(sessionId) {
+      execFileSync('node', [cliBin, 'agents', 'register',
+        '--session-id', sessionId,
+        '--platform', 'claude-code',
+        '--reason', 'manual_register',
+      ], { cwd: testDir, stdio: 'pipe' });
+    }
+
+    test('marks the lease as stopped', () => {
+      const sid = 'caws-hooktest-stop-1';
+      register(sid);
+      expect(JSON.parse(fs.readFileSync(leasePath(sid), 'utf8')).status).toBe('active');
+
+      const r = runAgentHook('agent-stop.sh', {
+        hook_event_name: 'Stop',
+        session_id: sid,
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+
+      const after = JSON.parse(fs.readFileSync(leasePath(sid), 'utf8'));
+      expect(after.status).toBe('stopped');
+      expect(after.stopped_at).toBeDefined();
+    });
+
+    test('refuses silently when session_id is missing', () => {
+      const r = runAgentHook('agent-stop.sh', {
+        hook_event_name: 'Stop',
+        cwd: testDir,
+      });
+      expect(r.exitCode).toBe(0);
+    });
+
+    test('exits 0 even when the CAWS binary is unavailable', () => {
+      const r = runAgentHook(
+        'agent-stop.sh',
+        {
+          hook_event_name: 'Stop',
+          session_id: 'caws-hooktest-stop-nobin',
+          cwd: testDir,
+        },
+        { PATH: '/usr/bin:/bin' }
+      );
+      expect(r.exitCode).toBe(0);
+    });
+  });
+});
+
+// ============================================================================
+// CANONICAL-CHECKOUT-WORKTREE-GUARD-001
+//
+// worktree-guard.sh: refuse canonical-checkout mutating git commands when
+// at least one active CAWS worktree exists. Authority remains in
+// worktrees.json + specs; this guard is hook-layer enforcement only.
+//
+// Test fixtures:
+//   <testDir>/                                 ← canonical checkout
+//     .caws/worktrees.json                     ← registry with one active entry
+//     .caws/worktrees/wt-other/                ← real linked git worktree
+//     .claude/hooks/worktree-guard.sh          ← copied from templates
+//     .claude/hooks/runtime-paths.sh
+//     .claude/hooks/lib/parse-input.sh
+//
+// runGuardHook payload:
+//   { tool_name: 'Bash', tool_input: { command }, cwd, session_id }
+// ============================================================================
+
+describe('worktree-guard.sh canonical-checkout enforcement (CANONICAL-CHECKOUT-WORKTREE-GUARD-001)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  function writeV11Registry(entries) {
+    fs.writeFileSync(
+      path.join(testDir, '.caws', 'worktrees.json'),
+      JSON.stringify(entries, null, 2) + '\n'
+    );
+  }
+
+  function createLinkedWorktree(name, branch) {
+    execFileSync(
+      'git',
+      ['-C', testDir, 'worktree', 'add', '-b', branch, `.caws/worktrees/${name}`],
+      { stdio: 'ignore' }
+    );
+  }
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-canonguard-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'worktrees'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    for (const f of ['worktree-guard.sh', 'runtime-paths.sh']) {
+      fs.copySync(path.join(packDir, f), path.join(hooksDir, f));
+      fs.chmodSync(path.join(hooksDir, f), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'lib', 'parse-input.sh'),
+      path.join(hooksDir, 'lib', 'parse-input.sh')
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runGuardHook(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const payload = {
+      tool_name: 'Bash',
+      tool_input: { command },
+      cwd,
+      session_id: opts.session_id || 'caws-guard-test-1',
+    };
+    const inputFile = path.join(testDir, '.guard-hook-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const hookPath = path.join(testDir, '.claude', 'hooks', 'worktree-guard.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_DIR: testDir,
+        },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // A1: canonical + active worktrees + mutating git command → BLOCK exit 2
+  describe('A1: canonical checkout + active worktrees + mutating command', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-001',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    test('blocks git checkout <other-branch> from canonical with exit 2', () => {
+      const r = runGuardHook('git checkout wt-other-branch');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+      expect(r.stderr).toMatch(/wt-other/);
+    });
+
+    test('blocks git switch <other-branch> from canonical with exit 2', () => {
+      const r = runGuardHook('git switch wt-other-branch');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+    });
+
+    test('blocks git branch -f <branch> HEAD from canonical with exit 2', () => {
+      const r = runGuardHook('git branch -f some-branch HEAD');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+    });
+
+    test('blocks git reset --keep <commit> from canonical with exit 2', () => {
+      const r = runGuardHook('git reset --keep HEAD~1');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+    });
+
+    test('diagnostic names the offending command class and the active worktree', () => {
+      const r = runGuardHook('git checkout main');
+      expect(r.exitCode).toBe(2);
+      // Names the command class (branch-switch / checkout etc.)
+      expect(r.stderr).toMatch(/branch switch|checkout/i);
+      // Names the active worktree by name
+      expect(r.stderr).toMatch(/wt-other/);
+      // Includes the escape instruction
+      expect(r.stderr).toMatch(/cd \.caws\/worktrees|caws worktree destroy/);
+    });
+  });
+
+  // A2: bound worktree session, sibling worktrees active → ALLOW
+  describe('A2: session inside a linked worktree, siblings active', () => {
+    let wtPath;
+
+    beforeEach(() => {
+      createLinkedWorktree('wt-mine', 'wt-mine-branch');
+      createLinkedWorktree('wt-sibling', 'wt-sibling-branch');
+      wtPath = path.join(testDir, '.caws', 'worktrees', 'wt-mine');
+      writeV11Registry({
+        'wt-mine': {
+          specId: 'GUARD-TEST-002',
+          owner: { session_id: 'caws-guard-test-1', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-mine-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: wtPath,
+        },
+        'wt-sibling': {
+          specId: 'GUARD-TEST-003',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-sibling-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-sibling'),
+        },
+      });
+    });
+
+    test('worktree session is NOT blocked by canonical guard', () => {
+      const r = runGuardHook('git checkout main', { cwd: wtPath });
+      // exit 0 — the canonical guard does not apply to worktree sessions.
+      // Other guards (amend, stash, hard-reset, force-push) may still
+      // fire on their own commands, but `git checkout` from inside a
+      // worktree is allowed by this guard.
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/canonical checkout/i);
+    });
+
+    test('worktree session: no "canonical" diagnostic emitted', () => {
+      const r = runGuardHook('git switch main', { cwd: wtPath });
+      expect(r.stderr).not.toMatch(/canonical checkout/i);
+    });
+  });
+
+  // A3: canonical + worktrees active + read-only command → ALLOW
+  describe('A3: read-only commands allowed in canonical with worktrees active', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-A3',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    test.each([
+      ['git status'],
+      ['git log --oneline -5'],
+      ['git diff'],
+      ['git show HEAD'],
+      ['git rev-parse HEAD'],
+      ['git ls-files'],
+      ['git branch -v'],
+      ['git stash list'],
+      ['git fetch origin'],
+    ])('allows %s (exit 0, no canonical diagnostic)', (cmd) => {
+      const r = runGuardHook(cmd);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/canonical checkout.*BLOCKED|BLOCKED.*canonical/i);
+    });
+  });
+
+  // A4: canonical + NO active worktrees → ALLOW even mutating commands
+  describe('A4: no active worktrees (or missing registry) → guard inert', () => {
+    test('missing .caws/worktrees.json: allows git checkout', () => {
+      // No registry file written.
+      const r = runGuardHook('git checkout other-branch');
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/canonical checkout.*BLOCKED/);
+    });
+
+    test('registry exists but no entries are active: allows git checkout', () => {
+      writeV11Registry({}); // empty
+      const r = runGuardHook('git checkout other-branch');
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/canonical checkout.*BLOCKED/);
+    });
+
+    test('registry has only stopped/destroyed entries: allows git checkout', () => {
+      writeV11Registry({
+        'wt-old': {
+          specId: 'GUARD-TEST-A4',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-22T00:00:00.000Z',
+          branch: 'wt-old-branch',
+          baseBranch: 'main',
+          status: 'destroyed',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-old'),
+        },
+      });
+      const r = runGuardHook('git checkout other-branch');
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/canonical checkout.*BLOCKED/);
+    });
+  });
+
+  // A4b: explicit witness for the missing-status-treated-as-active
+  // defensive fallback. The CLI's createWorktree does not always emit
+  // an explicit `status` field. The guard treats an entry without a
+  // status (or with status: null/'') as ACTIVE, so a freshly-created
+  // worktree starts protected even before the first status update.
+  // This test locks that fallback as a deliberate contract — if a
+  // future refactor removes it, the test must fail.
+  describe('A4b: missing status field is treated as active (defensive fallback)', () => {
+    test('worktree entry with NO status field blocks git checkout from canonical', () => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-A4B',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          // status field intentionally OMITTED
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+      const r = runGuardHook('git checkout wt-other-branch');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+      expect(r.stderr).toMatch(/wt-other/);
+    });
+  });
+
+  // A1b: v10 nested-envelope registry shape. The guard's entriesOf
+  // helper claims dual-shape support (v11 direct-key + v10 nested
+  // {version, worktrees: {<name>: {...}}}). This test witnesses the
+  // v10 branch; without it, the compatibility claim has no test.
+  describe('A1b: v10 nested-envelope registry shape', () => {
+    test('v10 {version, worktrees: {...}} shape blocks git checkout from canonical', () => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      const v10Registry = {
+        version: 1,
+        worktrees: {
+          'wt-other': {
+            specId: 'GUARD-TEST-A1B',
+            owner: 'caws-other-session', // v10 uses string owner, not object
+            branch: 'wt-other-branch',
+            baseBranch: 'main',
+            status: 'active',
+            path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+            createdAt: '2026-05-23T12:00:00.000Z',
+            name: 'wt-other',
+          },
+        },
+      };
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'worktrees.json'),
+        JSON.stringify(v10Registry, null, 2) + '\n'
+      );
+      const r = runGuardHook('git checkout wt-other-branch');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+      expect(r.stderr).toMatch(/wt-other/);
+    });
+  });
+
+  // A5: malformed lease must not prevent the block decision
+  describe('A5: malformed .caws/leases tolerated (still blocks block-eligible commands)', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-A5',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+      // Corrupt lease file: truncated mid-write.
+      fs.ensureDirSync(path.join(testDir, '.caws', 'leases'));
+      fs.writeFileSync(
+        path.join(testDir, '.caws', 'leases', 'caws-other-session.json'),
+        '{"session_id": "caws-other-session", "status": "act' // truncated
+      );
+    });
+
+    test('malformed lease does NOT prevent the canonical block', () => {
+      const r = runGuardHook('git checkout wt-other-branch');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/BLOCKED/);
+      expect(r.stderr).toMatch(/canonical checkout/i);
+      expect(r.stderr).toMatch(/wt-other/);
+    });
+  });
+
+  // A6: non-git mutating commands → ALLOW (out of this guard's domain)
+  describe('A6: non-git commands not in this guard\'s domain', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-A6',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-23T12:00:00.000Z',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          status: 'active',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    test.each([
+      ['npm install'],
+      ['ls -la'],
+      ['echo hello'],
+      ['node script.js'],
+    ])('allows %s from canonical', (cmd) => {
+      const r = runGuardHook(cmd);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/BLOCKED/);
+    });
+  });
+});
+
+// ============================================================================
+// CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001
+// ============================================================================
+//
+// Proves that the production dispatcher chain
+// (dispatch/pre_tool_use.sh → lib/run-handlers.sh → worktree-guard.sh)
+// preserves the canonical-checkout guard's refusal (exit 2 + canonical
+// diagnostic), instead of swallowing, rewriting, or downgrading it.
+//
+// The companion spec CANONICAL-CHECKOUT-WORKTREE-GUARD-001 already proves
+// worktree-guard.sh's refusal in isolation (26 tests above). Those tests
+// invoke worktree-guard.sh directly. The dispatcher tests below close the
+// production-path gap by exercising the full chain end-to-end.
+//
+// Fixture: copies ALL handlers from the PreToolUse HANDLERS array so the
+// dispatcher chain can find them. Handlers that need state (scope-guard,
+// worktree-write-guard) self-filter on tool name and exit 0 for non-
+// matching cases. agent-heartbeat.sh may fail with a non-zero non-2 exit
+// (warning) because no `caws agents heartbeat` is on the test PATH —
+// that's expected and the dispatcher classifies it as warning, not block.
+// We assert the chain's final exit code is 2 specifically from
+// worktree-guard.sh, not warning-pollution from heartbeat.
+// ============================================================================
+
+describe('PreToolUse dispatcher chain canonical-checkout propagation (CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  // Exact production HANDLERS array from
+  // packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh.
+  // Listed here so the fixture-build copies every handler the dispatcher
+  // will source — missing one would silently make the chain skip it
+  // (run_handlers ignores missing handler scripts via `[[ ! -x ]] continue`).
+  const HANDLERS = [
+    'agent-heartbeat.sh',
+    'block-dangerous.sh',
+    'worktree-guard.sh',
+    'scope-guard.sh',
+    'worktree-write-guard.sh',
+  ];
+
+  // Auxiliary scripts referenced by handlers:
+  //   - classify_command.py — block-dangerous.sh shells out to it
+  //   - guard-strikes.sh — sourced by scope-guard.sh:30 (line-source)
+  // Missing any of these would make the dependent handler emit a non-zero
+  // exit. block-dangerous.sh exits non-zero (warning) on the missing-
+  // classify path. scope-guard.sh exits 1 with a "No such file or
+  // directory" error from the bash source builtin. Both pollute the
+  // dispatcher's max_exit aggregation and would mask real propagation
+  // failures with fixture-level noise. They are NOT additions to the
+  // production HANDLERS array — they are dependencies of those handlers.
+  const AUX_FILES = ['classify_command.py', 'guard-strikes.sh'];
+
+  function writeV11Registry(entries) {
+    fs.writeFileSync(
+      path.join(testDir, '.caws', 'worktrees.json'),
+      JSON.stringify(entries, null, 2) + '\n'
+    );
+  }
+
+  function createLinkedWorktree(name, branch) {
+    execFileSync(
+      'git',
+      ['-C', testDir, 'worktree', 'add', '-b', branch, `.caws/worktrees/${name}`],
+      { stdio: 'ignore' }
+    );
+  }
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-dispatch-prop-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'worktrees'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'dispatch'));
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+
+    // Dispatcher entry point.
+    fs.copySync(
+      path.join(packDir, 'dispatch', 'pre_tool_use.sh'),
+      path.join(hooksDir, 'dispatch', 'pre_tool_use.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'dispatch', 'pre_tool_use.sh'), 0o755);
+
+    // Shared libraries the dispatcher sources.
+    for (const lib of ['parse-input.sh', 'run-handlers.sh']) {
+      fs.copySync(path.join(packDir, 'lib', lib), path.join(hooksDir, 'lib', lib));
+      fs.chmodSync(path.join(hooksDir, 'lib', lib), 0o755);
+    }
+
+    // Every handler in the production HANDLERS array.
+    for (const handler of HANDLERS) {
+      fs.copySync(path.join(packDir, handler), path.join(hooksDir, handler));
+      fs.chmodSync(path.join(hooksDir, handler), 0o755);
+    }
+
+    // Auxiliary scripts referenced by handlers.
+    for (const aux of AUX_FILES) {
+      fs.copySync(path.join(packDir, aux), path.join(hooksDir, aux));
+      fs.chmodSync(path.join(hooksDir, aux), 0o755);
+    }
+
+    // runtime-paths.sh is sourced by worktree-guard.sh for PROJECT_DIR.
+    fs.copySync(
+      path.join(packDir, 'runtime-paths.sh'),
+      path.join(hooksDir, 'runtime-paths.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'runtime-paths.sh'), 0o755);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runDispatchPreToolUse(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const toolName = opts.tool_name || 'Bash';
+    const toolInput = opts.tool_input || { command };
+    const payload = {
+      tool_name: toolName,
+      tool_input: toolInput,
+      cwd,
+      session_id: opts.session_id || 'caws-dispatch-test-1',
+    };
+    const inputFile = path.join(testDir, '.dispatch-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const dispatcherPath = path.join(testDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${dispatcherPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_DIR: testDir,
+        },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // ─── A1: mutating command from canonical with active worktree → exit 2 ──
+  describe('A1: canonical + active worktree + mutating command propagates as exit 2', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-001',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    it('dispatcher exits 2 for `git checkout main` from canonical', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      expect(r.exitCode).toBe(2);
+    });
+
+    it('dispatcher stderr preserves canonical BLOCKED diagnostic', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      // run-handlers.sh prefixes each handler's stderr with [<handler>].
+      // The canonical diagnostic body from worktree-guard.sh must survive.
+      expect(r.stderr).toMatch(
+        /BLOCKED: git checkout \(branch switch\) from the canonical checkout while CAWS worktrees are active\./
+      );
+    });
+
+    it('dispatcher stderr names the active worktree and a recovery path', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      expect(r.stderr).toMatch(/wt-other/);
+      // worktree-guard.sh emits two recovery paths in its diagnostic:
+      //   `cd .caws/worktrees/wt-other`
+      //   `caws worktree destroy <name>`
+      // At least one must survive run-handlers' prefixing.
+      expect(r.stderr).toMatch(/(cd \.caws\/worktrees\/wt-other|caws worktree destroy)/);
+    });
+
+    it('dispatcher prefixes worktree-guard.sh stderr per run-handlers convention', () => {
+      const r = runDispatchPreToolUse('git checkout main');
+      // run-handlers.sh:158-161 wraps each handler's stderr lines with
+      // `[<handler>] <line>`. This proves the chain actually went through
+      // run-handlers rather than calling worktree-guard.sh directly.
+      expect(r.stderr).toMatch(/\[worktree-guard\.sh\]/);
+    });
+  });
+
+  // ─── A2: read-only command from canonical with active worktree → exit 0 ──
+  describe('A2: canonical + active worktree + read-only command passes', () => {
+    beforeEach(() => {
+      createLinkedWorktree('wt-other', 'wt-other-branch');
+      writeV11Registry({
+        'wt-other': {
+          specId: 'GUARD-TEST-001',
+          owner: { session_id: 'caws-other-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-other-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-other'),
+        },
+      });
+    });
+
+    test.each([
+      ['git status'],
+      ['git log --oneline -1'],
+      ['git diff'],
+    ])('dispatcher exits 0 for read-only command %s', (cmd) => {
+      const r = runDispatchPreToolUse(cmd);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toMatch(/BLOCKED: git checkout/);
+    });
+  });
+
+  // ─── A3: mutating command from linked worktree → not blocked by canonical guard ──
+  describe('A3: linked worktree cwd + mutating command not blocked by canonical guard', () => {
+    let wtMinePath;
+
+    beforeEach(() => {
+      createLinkedWorktree('wt-mine', 'wt-mine-branch');
+      createLinkedWorktree('wt-sibling', 'wt-sibling-branch');
+      wtMinePath = path.join(testDir, '.caws', 'worktrees', 'wt-mine');
+      writeV11Registry({
+        'wt-mine': {
+          specId: 'GUARD-TEST-MINE-001',
+          owner: { session_id: 'caws-mine-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-mine-branch',
+          baseBranch: 'main',
+          path: wtMinePath,
+        },
+        'wt-sibling': {
+          specId: 'GUARD-TEST-SIBLING-001',
+          owner: { session_id: 'caws-sibling-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-25T00:00:00.000Z',
+          status: 'active',
+          branch: 'wt-sibling-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-sibling'),
+        },
+      });
+    });
+
+    it('dispatcher does not emit canonical BLOCKED for `git commit` inside linked worktree', () => {
+      // The cwd is the linked worktree's path. The canonical-guard
+      // predicate is: git_dir == git_common_dir. Inside a linked worktree
+      // git_dir is <main>/.git/worktrees/<name> while git_common_dir is
+      // <main>/.git — they differ. The guard must NOT fire.
+      const r = runDispatchPreToolUse('git commit --allow-empty -m test', { cwd: wtMinePath });
+      // We do not assert exitCode === 0 here: other guards (e.g. block-
+      // dangerous.sh, scope-guard.sh) might exit non-zero for legitimate
+      // reasons unrelated to canonical-checkout. The acceptance criterion
+      // is specifically that the canonical BLOCKED diagnostic is absent.
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git (checkout|switch|branch|reset).*from the canonical checkout/
+      );
+    });
+
+    it('dispatcher does not emit canonical BLOCKED for `git switch other` inside linked worktree', () => {
+      const r = runDispatchPreToolUse('git switch wt-sibling-branch', { cwd: wtMinePath });
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git (checkout|switch|branch|reset).*from the canonical checkout/
+      );
+    });
+  });
+
+  // ─── A4: regression guard — full lite-hooks suite remains green ───────────
+  // This is implicit: it's the test count and pass rate of the rest of the
+  // file. No additional test body needed here; the spec's A4 is satisfied
+  // by jest reporting the prior 65 tests still pass plus these new ones.
+
+  // ─── A5: no active worktrees → dispatcher does not block git checkout ────
+  describe('A5: no active worktrees → dispatcher does not emit canonical BLOCKED', () => {
+    test.each([
+      ['empty registry object', () => writeV11Registry({})],
+      ['registry with only inactive entries', () => writeV11Registry({
+        'wt-done': {
+          specId: 'GUARD-TEST-DONE-001',
+          owner: { session_id: 'caws-done-session', platform: 'darwin' },
+          last_heartbeat: '2026-05-20T00:00:00.000Z',
+          status: 'stopped',
+          branch: 'wt-done-branch',
+          baseBranch: 'main',
+          path: path.join(testDir, '.caws', 'worktrees', 'wt-done'),
+        },
+      })],
+    ])('with %s, `git checkout main` is not blocked by canonical guard', (_label, setup) => {
+      setup();
+      const r = runDispatchPreToolUse('git checkout main');
+      // The canonical guard's diagnostic must not appear.
+      // Other handlers may legitimately produce non-zero exits unrelated
+      // to canonical-checkout; we assert specifically that the canonical
+      // BLOCKED text is absent.
+      expect(r.stderr).not.toMatch(
+        /BLOCKED: git checkout \(branch switch\) from the canonical checkout/
+      );
+    });
+  });
+});
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2
+//
+// PreToolUse dispatcher refuses Read/Write/Edit against
+// <linked-worktree>/.caws/specs/*. Tests go through the full dispatcher
+// chain (dispatch/pre_tool_use.sh → lib/run-handlers.sh →
+// worktree-write-guard.sh) — not direct handler invocation — because the
+// guard's behavior depends on both the PreToolUse matcher already
+// including Read AND the handler's internal tool_name allowlist now
+// permitting Read in addition to Write|Edit.
+//
+// Fixture reuses the dispatcher-propagation pattern: copies ALL
+// production HANDLERS + AUX_FILES so the chain is faithful to the
+// shipped install.
+// ============================================================================
+
+describe('worktree-write-guard.sh canonical-spec-materialization refusal (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let linkedWorktreeRoot;
+  let originalCwd;
+
+  const HANDLERS = [
+    'agent-heartbeat.sh',
+    'block-dangerous.sh',
+    'worktree-guard.sh',
+    'scope-guard.sh',
+    'worktree-write-guard.sh',
+  ];
+  const AUX_FILES = ['classify_command.py', 'guard-strikes.sh'];
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-wtwg-spec-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'worktrees'));
+    fs.ensureDirSync(path.join(testDir, '.caws', 'specs'));
+
+    // Hooks at canonical so the worktree's git common dir resolves
+    // back to a directory where dispatch/ exists.
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'dispatch'));
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    fs.copySync(
+      path.join(packDir, 'dispatch', 'pre_tool_use.sh'),
+      path.join(hooksDir, 'dispatch', 'pre_tool_use.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'dispatch', 'pre_tool_use.sh'), 0o755);
+    for (const lib of ['parse-input.sh', 'run-handlers.sh']) {
+      fs.copySync(path.join(packDir, 'lib', lib), path.join(hooksDir, 'lib', lib));
+      fs.chmodSync(path.join(hooksDir, 'lib', lib), 0o755);
+    }
+    for (const handler of HANDLERS) {
+      fs.copySync(path.join(packDir, handler), path.join(hooksDir, handler));
+      fs.chmodSync(path.join(hooksDir, handler), 0o755);
+    }
+    for (const aux of AUX_FILES) {
+      fs.copySync(path.join(packDir, aux), path.join(hooksDir, aux));
+      fs.chmodSync(path.join(hooksDir, aux), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'runtime-paths.sh'),
+      path.join(hooksDir, 'runtime-paths.sh')
+    );
+    fs.chmodSync(path.join(hooksDir, 'runtime-paths.sh'), 0o755);
+
+    // Create a linked worktree. cwd for the dispatcher invocations
+    // below is INSIDE this worktree, so git rev-parse from there yields
+    // git_common_dir = <canonical>/.git
+    // git_dir        = <canonical>/.git/worktrees/wt-impl/
+    // → IS_LINKED_WORKTREE=1.
+    execFileSync(
+      'git',
+      ['-C', testDir, 'worktree', 'add', '-b', 'wt-impl-branch', '.caws/worktrees/wt-impl'],
+      { stdio: 'ignore' }
+    );
+    linkedWorktreeRoot = path.join(testDir, '.caws', 'worktrees', 'wt-impl');
+    // Ensure the worktree has a .caws/specs/ directory (the refusal
+    // target). This is a hostile-write simulation: in production the
+    // sparse-checkout invariant prevents materialization, but the
+    // hook's job is to refuse regardless.
+    fs.ensureDirSync(path.join(linkedWorktreeRoot, '.caws', 'specs'));
+    fs.writeFileSync(
+      path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml'),
+      'id: FEAT-001\nlifecycle_state: active\n'
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runDispatchFromLinkedWorktree(toolName, filePath, opts = {}) {
+    const cwd = opts.cwd || linkedWorktreeRoot;
+    // Tool input shape for Read/Write/Edit is { file_path }, not
+    // { command }. parse-input.sh extracts HOOK_FILE_PATH from
+    // tool_input.file_path for these tools.
+    const toolInput = { file_path: filePath };
+    if (toolName === 'Write') toolInput.content = '# test content';
+    if (toolName === 'Edit') {
+      toolInput.old_string = 'foo';
+      toolInput.new_string = 'bar';
+    }
+    const payload = {
+      tool_name: toolName,
+      tool_input: toolInput,
+      cwd,
+      session_id: opts.session_id || 'caws-wtwg-test-1',
+    };
+    const inputFile = path.join(testDir, '.dispatch-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const dispatcherPath = path.join(testDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${dispatcherPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: cwd },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // ─── A1: positive refusal for Read on <linked-wt>/.caws/specs/* ─────
+  describe('A1: Read/Write/Edit against linked-worktree .caws/specs/* is refused', () => {
+    it('Read .caws/specs/FEAT-001.yaml exits 2 with [worktree-write-guard.sh] prefix', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+
+    it('stderr carries canonical-spec-materialization wording', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/Linked worktrees must not use worktree-local \.caws\/specs\/ files as authority/);
+      expect(r.stderr).toMatch(/private materialized copy, not canonical spec authority/);
+    });
+
+    it('stderr names the sanctioned recovery paths: caws specs show + caws worktree repair-sparse', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/caws specs show <id>/);
+      expect(r.stderr).toMatch(/caws worktree repair-sparse <name>/);
+    });
+
+    it('same refusal for Write tool', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'NEW-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Write', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+      expect(r.stderr).toMatch(/Refusing Write against a linked-worktree \.caws\/specs\/ path/);
+    });
+
+    it('same refusal for Edit tool', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', 'FEAT-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Edit', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+      expect(r.stderr).toMatch(/Refusing Edit against a linked-worktree \.caws\/specs\/ path/);
+    });
+
+    it('refusal fires for nested .caws/specs/.archive/* paths', () => {
+      const target = path.join(linkedWorktreeRoot, '.caws', 'specs', '.archive', 'OLD-001.yaml');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+
+    it('refusal fires for relative file paths under .caws/specs/', () => {
+      // Some agents send file_path as relative-to-cwd. Hook resolves
+      // against WORKTREE_ROOT and refuses uniformly.
+      const r = runDispatchFromLinkedWorktree('Read', '.caws/specs/FEAT-001.yaml');
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/\[worktree-write-guard\.sh\]/);
+    });
+  });
+
+  // ─── A2: negative controls (no over-firing) ────────────────────────
+  describe('A2: non-spec paths and canonical .caws/specs are not refused by this predicate', () => {
+    it('Read of a non-spec file in linked worktree (e.g., README.md) exits 0', () => {
+      const target = path.join(linkedWorktreeRoot, 'README.md');
+      fs.writeFileSync(target, '# hello\n');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      // Note: other handlers (scope-guard etc.) may still object — they
+      // do not in this fixture (no active bound spec). Assert no
+      // canonical-spec-materialization diagnostic is in stderr.
+      expect(r.stderr).not.toMatch(/canonical spec authority/);
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Read of .caws/worktrees.json (NOT under specs/) in linked worktree exits 0', () => {
+      // Pre-write it via fs so the file exists at the path; the read
+      // tool input only carries the path, hooks do not actually open it.
+      const target = path.join(linkedWorktreeRoot, '.caws', 'worktrees.json');
+      fs.writeFileSync(target, '{}\n');
+      const r = runDispatchFromLinkedWorktree('Read', target);
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Write to a packages/ source file in linked worktree is not refused by this predicate', () => {
+      const target = path.join(linkedWorktreeRoot, 'packages', 'foo', 'src', 'index.ts');
+      const r = runDispatchFromLinkedWorktree('Write', target);
+      expect(r.stderr).not.toMatch(/Refusing Write against a linked-worktree \.caws\/specs/);
+    });
+
+    it('Read of canonical .caws/specs/FEAT-001.yaml (cwd=canonical, NOT linked) exits 0', () => {
+      // Set cwd to canonical root, not the linked worktree. From canonical,
+      // git_common_dir == git_dir → IS_LINKED_WORKTREE=0 → predicate
+      // does not fire. The path passed to the tool is the canonical
+      // spec file; the existing .caws/* allowlist exits 0.
+      const target = path.join(testDir, '.caws', 'specs', 'FEAT-001.yaml');
+      fs.writeFileSync(target, 'id: FEAT-001\n');
+      const r = runDispatchFromLinkedWorktree('Read', target, { cwd: testDir });
+      expect(r.stderr).not.toMatch(/Refusing Read against a linked-worktree \.caws\/specs/);
+      expect(r.stderr).not.toMatch(/Linked worktrees must not use worktree-local/);
+    });
+
+    it('non-Read/Write/Edit tools (e.g., Bash, Grep, Glob) are not handled by this predicate', () => {
+      // Bash payload — would normally route through other handlers.
+      const r = runDispatchFromLinkedWorktree('Bash', '/tmp/x', {});
+      // No worktree-write-guard refusal regardless of exit code from
+      // other handlers (this just proves we did not over-fire).
+      expect(r.stderr).not.toMatch(/Refusing Bash against a linked-worktree \.caws\/specs/);
+    });
+  });
+});
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3
+//
+// worktree-guard.sh preserves the existing blanket agent-Bash refusal for
+// git sparse-checkout commands (any subcommand: disable / set / init /
+// reapply / list / add), but the diagnostic is upgraded to:
+//   - explain the canonical-spec-materialization concern,
+//   - name caws specs show <id> as the read path,
+//   - name caws worktree repair-sparse <name> as the sparse recovery path,
+//   - omit the prior vague wording ("Use full worktrees without
+//     sparse-checkout.") which led agents to ask users to disable sparse
+//     instead of routing through CAWS.
+//
+// Tests invoke worktree-guard.sh directly (not via the dispatcher chain)
+// because the diagnostic-text claim is local to this handler. The
+// dispatcher-propagation properties are already covered by
+// CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001 and do not depend
+// on the diagnostic body.
+// ============================================================================
+
+describe('worktree-guard.sh sparse-checkout diagnostic upgrade (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-wtg-sparse-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    for (const f of ['worktree-guard.sh', 'runtime-paths.sh']) {
+      fs.copySync(path.join(packDir, f), path.join(hooksDir, f));
+      fs.chmodSync(path.join(hooksDir, f), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'lib', 'parse-input.sh'),
+      path.join(hooksDir, 'lib', 'parse-input.sh')
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runGuard(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const payload = {
+      tool_name: 'Bash',
+      tool_input: { command },
+      cwd,
+      session_id: opts.session_id || 'caws-sparse-diag-test-1',
+    };
+    const inputFile = path.join(testDir, '.guard-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const hookPath = path.join(testDir, '.claude', 'hooks', 'worktree-guard.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: testDir },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // The exact agent-bypass form that prompted this slice. Kept as a
+  // payload constant in source so the literal sparse-checkout command
+  // does not appear in commit messages or shell history of the
+  // implementing session.
+  const DISABLE_FORM = ['git', 'sparse-checkout', 'disable'].join(' ');
+  const SET_FORM = ['git', 'sparse-checkout', 'set', '--no-cone', '/*'].join(' ');
+  const REAPPLY_FORM = ['git', 'sparse-checkout', 'reapply'].join(' ');
+
+  it('refuses the disable form with exit 2', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('stderr is prefixed by [worktree-guard.sh] when run through the dispatcher (carrier check)', () => {
+    // Direct-invocation stderr does NOT have the [worktree-guard.sh]
+    // prefix (that prefix is added by lib/run-handlers.sh in the
+    // dispatcher chain). The diagnostic body, when carried through
+    // run-handlers.sh, will appear with that prefix in production —
+    // verified by the dispatcher-propagation test suite. Here we just
+    // confirm the body itself is present from this handler.
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('stderr carries canonical-spec-materialization wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/v10\.2 split-brain authority class/);
+    // The phrase about worktree-local .caws/specs may be wrapped
+    // across lines in the human-readable diagnostic. Match the two
+    // meaningful fragments independently rather than asserting line
+    // contiguity.
+    expect(r.stderr).toMatch(/Linked worktrees must not use worktree-local/);
+    expect(r.stderr).toMatch(/\.caws\/specs\/ files as authority/);
+    expect(r.stderr).toMatch(/canonical control plane regardless of cwd/);
+  });
+
+  it('stderr names caws worktree repair-sparse <name> as the recovery path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws worktree repair-sparse <name>/);
+    // And explains non-destructive guarantee so agents do not think
+    // they need to clean up manually first.
+    expect(r.stderr).toMatch(/non-destructive/);
+    expect(r.stderr).toMatch(/refuses dirty \.caws\/specs\//);
+  });
+
+  it('stderr names caws specs show <id> as the read path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws specs show <id>/);
+  });
+
+  it('stderr does NOT contain the prior vague wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    // The old line was: "Use full worktrees without sparse-checkout."
+    // Its presence in the upgraded diagnostic would mean the upgrade
+    // didn't fully replace it.
+    expect(r.stderr).not.toMatch(/Use full worktrees without sparse-checkout\./);
+  });
+
+  it('blanket refusal preserved: set form is also refused', () => {
+    const r = runGuard(SET_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('blanket refusal preserved: reapply form is also refused', () => {
+    const r = runGuard(REAPPLY_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('non-sparse-checkout git commands are unaffected', () => {
+    // git status (read-only, no worktrees-active context) should pass
+    // through the sparse-checkout block and exit 0 (no other rules fire
+    // in this fixture: no .caws/worktrees.json with active entries).
+    const r = runGuard('git status');
+    expect(r.stderr).not.toMatch(/BLOCKED: agent-issued git sparse-checkout/);
+  });
+});

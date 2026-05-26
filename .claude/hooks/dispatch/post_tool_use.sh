@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 4
 # caws_min_major: 11
 # lineage_refs: 8,16
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -51,7 +51,6 @@ source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
 # settings.json groups so ordering-sensitive behavior (stdout "last
 # wins" policy, audit log ordering) is preserved.
 HANDLERS=(
-  "block-dangerous.sh"
   # "quality-check.sh"
   # "validate-spec.sh"
   # "naming-check.sh"

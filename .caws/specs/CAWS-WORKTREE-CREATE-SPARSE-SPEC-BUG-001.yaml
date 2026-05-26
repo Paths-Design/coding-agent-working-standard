@@ -1,0 +1,97 @@
+id: CAWS-WORKTREE-CREATE-SPARSE-SPEC-BUG-001
+title: 'caws worktree create writes sparse-checkout that excludes .caws/specs/ from new worktrees'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-05-23T10:29:11.503Z'
+updated_at: '2026-05-23T10:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-store.ts
+    - packages/caws-kernel/src/worktree
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-WORKTREE-CREATE-SPARSE-SPEC-BUG-001.yaml
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-store.ts
+    - packages/caws-cli/tests/shell/worktree-create-sparse.test.js
+  out:
+    - .caws/policy.yaml
+invariants:
+  - >-
+    A worktree's bound spec MUST be visible to a CAWS CLI running inside
+    that worktree's working tree. Authority resolution depends on reading
+    .caws/specs/<spec-id>.yaml; if sparse-checkout hides it, the kernel
+    falls back to union mode and accumulates false strikes against
+    in-scope edits.
+  - >-
+    Either (a) .caws/specs/ is excluded from sparse-checkout's
+    deny-list (worktrees see all specs), OR (b) the kernel resolves
+    specs via `git show HEAD:.caws/specs/<id>.yaml` when the file is
+    missing on disk but tracked in HEAD. The current state — sparse
+    excludes the dir AND the kernel only reads from disk — is the
+    bug.
+acceptance:
+  - id: A1
+    given: A fresh canonical checkout with at least one active spec.
+    when: |
+      The operator runs `caws worktree create my-wt --spec <spec-id>`
+      and then `cd .caws/worktrees/my-wt && ls .caws/specs/`.
+    then: |
+      `.caws/specs/<spec-id>.yaml` is materialized in the worktree's
+      working tree (i.e., the sparse-checkout config does NOT exclude
+      .caws/specs/, OR the create command materializes the bound spec
+      explicitly via `git sparse-checkout add` before returning).
+  - id: A2
+    given: A fresh canonical checkout with the spec from A1.
+    when: |
+      Inside the newly-created worktree, the operator runs
+      `caws scope show <some-file>`.
+    then: |
+      The kernel reports `bound: <spec-id>` and `mode: authoritative`
+      (NOT `binding: unbound` and `mode: union`). Authority resolution
+      succeeds without requiring manual sparse-checkout edits.
+  - id: A3
+    given: Same canonical state as A1.
+    when: |
+      The operator runs `caws status` inside the new worktree.
+    then: |
+      The Claim panel shows the worktree's bound spec id correctly; no
+      "unbound" diagnostic appears.
+non_functional:
+  reliability:
+    - >-
+      Failure-mode: silent authority break. The current default produces
+      a worktree where the kernel cannot see the worktree's own bound
+      spec. This compounded the canonical-checkout hijack incident in
+      failure-lineage Entry 19 — the parallel-session canonical-branch
+      switch hid worktrees.json AND the worktree's own sparse-checkout
+      hid the spec, so the kernel had two reasons to claim "no authority"
+      and the operator could not easily diagnose which was load-bearing.
+    - >-
+      Choice between A1 option (a) and option (b) is a design decision.
+      Option (a) — broaden sparse-checkout to include .caws/specs/ — is
+      simpler but allows cross-spec visibility (a worktree sees sibling
+      specs). Option (b) — fix the kernel to read from git HEAD when the
+      file is missing — preserves the cross-spec isolation default but
+      requires a kernel-side change. Recommend (a) for v1; (b) for v2
+      if cross-spec isolation turns out to be desirable.
+contracts: []
+# --------------------------------------------------------------------------
+# History
+# --------------------------------------------------------------------------
+#
+# 2026-05-23: Spec created in lifecycle_state: draft (parking state).
+#   Captured in memory (project_caws_worktree_sparse_spec_bug.md) since
+#   2026-05-22; first formal spec on disk via this commit.
+#   Originally surfaced during MULTI-AGENT-ACTIVITY-REGISTRY-001 implementation
+#   when worktree authority resolution silently failed despite a valid
+#   spec binding. The compounding factor in failure-lineage Entry 19.
+#   Operator workaround:
+#     cd <worktree>
+#     git sparse-checkout disable
+#   Defeats the purpose of having `caws worktree create` do the right
+#   thing by default.

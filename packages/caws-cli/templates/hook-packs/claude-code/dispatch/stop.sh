@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 5
 # caws_min_major: 11
-# lineage_refs: 10
+# lineage_refs: 10,19
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # Stop dispatcher for Claude Code hooks.
 #
@@ -32,6 +32,11 @@ HANDLERS=(
   # "stop-worktree-check.sh"
   "plan-transcript-finalize.sh"
   "session-log.sh"
+  # MULTI-AGENT-ACTIVITY-REGISTRY-001: mark our lease as stopped so other
+  # sessions can distinguish "stopped cleanly" from "went stale and is
+  # presumed dead." Non-blocking; refuses silently when HOOK_SESSION_ID
+  # is empty or "unknown".
+  "agent-stop.sh"
 )
 
 run_handlers "${HANDLERS[@]}"

@@ -1,0 +1,606 @@
+id: CAWS-MIGRATE-V10-SPECS-001
+title: 'caws specs migrate --from v10 — pure-transformer v10→v11 spec YAML migrator with durable lossy-field report'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+worktree: migrate-v10-specs
+created_at: '2026-05-23T04:30:00.000Z'
+updated_at: '2026-05-23T05:30:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/spec
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/fixtures
+    - CLAUDE.md
+  data_migration: true
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/CAWS-MIGRATE-V10-SPECS-001.yaml
+    - CLAUDE.md
+    - packages/caws-kernel/src/spec/migrate-v10.ts
+    - packages/caws-kernel/src/spec/index.ts
+    - packages/caws-kernel/tests/unit/migrate-v10.test.ts
+    - packages/caws-cli/src/store/specs-migration.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/store/specs-migration.test.js
+    - packages/caws-cli/tests/shell/specs-migrate-command.test.js
+    - packages/caws-cli/tests/fixtures/specs-v10-sterling
+    - packages/caws-cli/scripts/specs-migration-smoke.mjs
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+  out:
+    - .caws/policy.yaml
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
+    - .github/workflows
+invariants:
+  - >-
+    The migrator NEVER synthesizes blast_radius.modules from scope.in.
+    scope.in is an edit-admission boundary; blast_radius.modules is an
+    affected-system claim. They are correlated but not interchangeable.
+    Auto-synthesis would launder uncertainty into v11 compliance. A spec
+    with blast_radius.modules == [] is refused with a typed diagnostic
+    and an explicit remediation: the author must declare modules or
+    re-author the spec.
+  - >-
+    The pure transformer (packages/caws-kernel/src/spec/migrate-v10.ts)
+    NEVER reads files, NEVER writes files, NEVER inspects Git state,
+    NEVER calls process.env, NEVER consults shell flags. Its surface
+    is migrateSpecV10(parsed: unknown, source: { path?: string,
+    contentDigest?: string }) -> Result<MigrateOutcome>. The CLI store
+    layer (packages/caws-cli/src/store/specs-migration.ts) owns
+    filesystem scan, atomic writes, and durable reports; the shell
+    owns flag parsing and rendering. This isolation is what makes the
+    transformer testable as a unit and re-usable as a v10-detection
+    primitive by the events-migration slice without coupling the two
+    deliverables.
+  - >-
+    The migrator's outcome shape is a discriminated union of exactly
+    three kinds: { kind: 'migrated' } (no warnings), { kind:
+    'migrated_with_warnings', warnings: [...] } (transformed; lossy
+    fields preserved in report), { kind: 'refused', reasons: [...] }
+    (one or more hard-refusal causes). 'migrated' with zero warnings
+    is permitted but rare — most real v10 specs hit at least one safe
+    rename. There is no fourth kind. The shell renders these three
+    deterministically.
+  - >-
+    Safe renames and value coercions are exhaustively enumerated and
+    table-driven, NOT pattern-matched ad-hoc. The table lives in
+    migrate-v10.ts as a const and is the single source of truth.
+    Top-level renames: status -> lifecycle_state; acceptance_criteria
+    -> acceptance; created -> created_at. non_functional subkey
+    renames: a11y -> accessibility; perf -> performance. Value
+    coercions: risk_tier string forms ('T1'/'1'/'T2'/'2'/'T3'/'3')
+    coerce to integer 1/2/3. Anything outside the table is reported
+    as an unhandled-field warning and preserved in the migration
+    report, NOT silently dropped or transformed.
+  - >-
+    Mode resolution is deterministic and tested. The rule is exactly:
+    (1) if spec.mode is in the v11 enum {feature, refactor, fix, doc,
+    chore}, use spec.mode; (2) else if spec.type coerces cleanly to a
+    v11 mode value, use the coerced value and emit a
+    'mode_overridden_from_type' warning naming both values; (3) else
+    refuse with 'mode_unresolvable'. The mode: 'development' v10
+    footgun resolves to type-fallback in every case where type is
+    valid (7/7 in the Sterling recon). The valid-vs-valid disagreement
+    case (REAL-LEGALITY-B-REVERT-01.yaml: type=fix, mode=chore)
+    preserves spec.mode (chore) because mode is the v11 field and
+    emits a 'mode_type_disagreement' warning naming both values for
+    operator review.
+  - >-
+    Lifecycle resolution requires explicit operator input for values
+    outside the v11 enum. The v11 lifecycle_state enum is {draft,
+    active, closed, archived}. v10 values 'superseded', 'proven',
+    'frozen' have no automatic mapping — they have distinct
+    operational semantics (closed = resolved-with-evidence; archived
+    = no longer relevant; superseded = replaced by another spec).
+    The transformer refuses with 'lifecycle_unmapped' unless a
+    per-spec mapping is supplied via the --lifecycle-mapping flag.
+    Auto-defaulting (e.g., 'superseded -> archived' as a built-in)
+    is explicitly FORBIDDEN — it would launder doctrine decisions
+    into the transformer.
+  - >-
+    Every lossy or dropped field lands in a durable migration report
+    at .caws/migrations/v10-specs/<ISO timestamp>.json with the
+    schema enumerated in contract spec-v10-migration-output. Fields
+    captured per migrated spec: file path, spec_id, old_digest
+    (sha256 of original YAML bytes), new_digest (sha256 of
+    transformed YAML bytes), verdict (migrated|migrated_with_warnings|
+    refused), safe_renames (array of {from, to} pairs applied),
+    coercions (array of {field, from, to} entries), mode_source
+    ('mode'|'type'|'unresolvable'), lifecycle_mapping_used (object
+    or null), report_only_fields (object mapping dropped v10 field
+    names to their verbatim values), refusal_reasons (array of typed
+    refusal codes). The report is written ONCE per --apply
+    invocation, atomically, after all spec writes have committed or
+    rolled back. A dry-run produces the same report in memory and
+    prints it to stdout but does NOT write to disk.
+  - >-
+    Fixture corpus discipline: the migrator's tests NEVER reach into
+    /Users/darianrosebrook/Desktop/Projects/sterling or any other
+    external project. A bounded fixture corpus is committed under
+    packages/caws-cli/tests/fixtures/specs-v10-sterling/ — a curated
+    representative sample of v10 spec shapes (one per refusal class
+    plus one per safe-migration class, minimum 6 fixtures). The
+    Sterling consumer smoke (acceptance A14) runs against the
+    real primary Sterling checkout but is the FINAL gate, not an
+    implementation dependency. Tests must pass against the fixture
+    corpus alone before Sterling is consulted.
+  - >-
+    Non-YAML cleanup is OUT OF SCOPE for this slice. registry.json
+    remains ignored (CLI bookkeeping). The two FIXTMPL Markdown
+    sidecars (FIXTMPL-01.evidence_note.md, FIXTMPL-01.preflight.md)
+    in Sterling are REPORTED by the migrator but NOT moved or
+    deleted. Relocation is a separate Sterling-side cleanup task
+    that lands after this slice ships. The migrator's job is YAML
+    migration; filesystem reorganization is a different authority
+    surface.
+  - >-
+    The migrator NEVER touches the .archive/ subdirectory. Active
+    spec migration only. The 553+ historical specs under
+    sterling/.caws/specs/.archive/ are out of scope. The
+    .caws/migrations/v10-specs/ report directory is created if
+    missing but never reads from .archive/.
+  - >-
+    Apply behavior is crisp and refusal-by-default. --apply (no
+    --partial) refuses if ANY spec in the scan hits a refused
+    verdict; no writes occur. --apply --partial writes only the
+    auto-migratable specs, skips refused ones, and emits both
+    migrated and skipped entries in the durable report. The
+    --lifecycle-mapping <path> flag accepts a per-spec mapping
+    config (NOT a global default) and unblocks the lifecycle-refused
+    cluster. There is no --force flag. Operators who want refused
+    specs migrated must edit the spec by hand or supply a mapping.
+  - >-
+    Post-write validation runs the standard v11 validator
+    (parseAndValidateSpec from packages/caws-kernel/src/spec) on
+    every written file. A write that produces a spec that does NOT
+    validate cleanly is a transformer bug, not an operator problem;
+    the apply layer rolls back the write, emits
+    'post_write_validation_failed' with the validator's diagnostics
+    in the report, and exits non-zero. This is the structural guard
+    that the transformer's claimed output matches the schema's
+    actual requirements.
+  - >-
+    Functional completeness is not "unit tests pass." The slice is
+    complete only when (a) the CLAUDE.md doctrine-drift correction
+    is published, (b) the fixture corpus reproduces the Sterling
+    recon's 14/13/0 distribution (or an intentionally updated
+    distribution after doctrine decisions on lifecycle mapping),
+    (c) the specs-migration-smoke.mjs script runs the full
+    dry-run/apply/post-validate flow against the fixture corpus
+    using packaged tarballs (not source), and (d) the Sterling
+    smoke (in a disposable Sterling copy or against the real
+    primary checkout with operator authorization) confirms the
+    27-active-spec corpus migrates to the expected distribution
+    and caws doctor reports zero spec.schema.* errors against the
+    migrated subset. Sterling smoke is the final acceptance gate.
+acceptance:
+  - id: A1
+    given: |
+      packages/caws-kernel/src/spec/ currently exports
+      parseAndValidateSpec, parseSpecYaml, validateSpecShape,
+      validateSpecSemantics. No migrate-v10 surface exists.
+    when: |
+      The kernel slice of this work lands.
+    then: |
+      A new module packages/caws-kernel/src/spec/migrate-v10.ts
+      exports: (1) migrateSpecV10(parsed: unknown, source: {
+      path?: string, contentDigest?: string }): Result<MigrateOutcome>,
+      where MigrateOutcome is the discriminated union { kind:
+      'migrated' | 'migrated_with_warnings' | 'refused', ... }
+      enumerated in invariant 3. (2) detectSpecVersion(parsed:
+      unknown): 'v10' | 'v11' | 'unknown', a pure classifier that
+      checks for top-level v10 markers (status, acceptance_criteria,
+      type co-present with status). (3) SAFE_RENAMES, NF_SUBKEY_RENAMES,
+      RISK_TIER_COERCIONS, MODE_COERCIONS, and MIGRATE_RULES (refusal
+      codes namespaced spec.migrate.*) as exported constants.
+      packages/caws-kernel/src/spec/index.ts re-exports the new surface.
+      The transformer has zero filesystem, network, or process imports
+      (verified by static import inspection in the kernel test).
+  - id: A2
+    given: |
+      The migrate-v10 transformer and a parsed v10 spec object with
+      every safe-rename source field present.
+    when: |
+      migrateSpecV10 is called.
+    then: |
+      The returned outcome's value has: lifecycle_state from old
+      status; acceptance from old acceptance_criteria; created_at
+      from old created; non_functional.accessibility from old a11y;
+      non_functional.performance from old perf. risk_tier is an
+      integer 1/2/3 (coerced from string T1/T2/T3 or numeric strings).
+      The outcome.warnings array contains one 'safe_rename' entry
+      per applied rename (each entry has { from, to, value_preserved:
+      true }). No safe-rename source field appears in the output's
+      transformed spec (verified by Object.keys inspection). The
+      outcome.report_only_fields object captures verbatim every
+      v10-dropped field NOT in the rename table (change_budget,
+      bounded_claim, description, etc.).
+  - id: A3
+    given: |
+      A v10 spec object where mode is 'development' (the v10 footgun)
+      and type is 'feature' (or any v11-coercible mode value).
+    when: |
+      migrateSpecV10 is called.
+    then: |
+      The transformed spec has mode = 'feature' (sourced from type).
+      The outcome is 'migrated_with_warnings' and warnings contains
+      a 'mode_overridden_from_type' entry naming both values
+      ({ original_mode: 'development', resolved_mode: 'feature',
+      source: 'type' }). The report_only_fields preserves the
+      original spec.type verbatim (type is dropped from the output
+      because v11 has no type field).
+  - id: A4
+    given: |
+      A v10 spec object where both mode and type are valid v11
+      values but disagree (e.g., type=fix, mode=chore — the
+      REAL-LEGALITY-B-REVERT-01.yaml case).
+    when: |
+      migrateSpecV10 is called.
+    then: |
+      The transformed spec has mode = 'chore' (preserved from
+      spec.mode, the v11 field). The outcome is
+      'migrated_with_warnings' and warnings contains a
+      'mode_type_disagreement' entry ({ mode: 'chore', type: 'fix' })
+      for operator review. The report_only_fields preserves type
+      verbatim.
+  - id: A5
+    given: |
+      A v10 spec object with blast_radius.modules == [] (an empty
+      array — the structural refusal class affecting 11/27 Sterling
+      specs).
+    when: |
+      migrateSpecV10 is called.
+    then: |
+      The outcome is { kind: 'refused', reasons: [...] } and reasons
+      contains a 'blast_radius_modules_empty' refusal entry. The
+      transformer does NOT synthesize modules from scope.in even
+      if scope.in is present and populated (verified by a test
+      fixture where scope.in has 3 paths but modules is []). The
+      refusal entry includes a remediation hint: 'Author must
+      declare blast_radius.modules; auto-synthesis from scope.in
+      is intentionally refused.'
+  - id: A6
+    given: |
+      A v10 spec object with status outside the v11 lifecycle_state
+      enum (e.g., status: 'superseded', 'proven', or 'frozen') and
+      no --lifecycle-mapping supplied.
+    when: |
+      migrateSpecV10 is called without options.lifecycleMapping.
+    then: |
+      The outcome is { kind: 'refused', reasons: [...] } and reasons
+      contains a 'lifecycle_unmapped' entry with the unmapped value
+      verbatim ({ value: 'superseded' }). When the same call is
+      made with options.lifecycleMapping = { 'SPEC-ID-X':
+      { lifecycle_state: 'archived', closure_notes: 'superseded
+      by Y' } } and the spec id matches, the transformer uses the
+      mapped values and the outcome is 'migrated_with_warnings'
+      with a 'lifecycle_mapping_applied' warning entry naming the
+      source ('mapping') and the original v10 value.
+  - id: A7
+    given: |
+      A v11-shape spec object (already migrated, has lifecycle_state,
+      no status, no acceptance_criteria).
+    when: |
+      detectSpecVersion is called, and migrateSpecV10 is called.
+    then: |
+      detectSpecVersion returns 'v11'. migrateSpecV10 returns
+      { kind: 'refused', reasons: [...] } with a
+      'already_v11_no_migration_needed' refusal entry (idempotency
+      guard — accidentally re-migrating a v11 spec is a no-op
+      refusal, not a silent transformation).
+  - id: A8
+    given: |
+      A built caws-cli package with specs-migration.ts in the store.
+    when: |
+      runSpecsMigrateScan({ cawsDir, from: 'v10' }) is called against
+      a directory containing the fixture corpus (at least one spec
+      per migration class).
+    then: |
+      The scan iterates .caws/specs/*.yaml (NOT *.json, NOT subdirs,
+      explicitly excludes .archive/ if present), invokes
+      migrateSpecV10 on each, and returns a ScanReport with
+      per-file outcomes, a distribution summary (migrated,
+      migrated_with_warnings, refused counts), and a non_yaml
+      array listing any non-YAML files in the spec directory
+      (e.g., the FIXTMPL Markdown sidecars). registry.json is
+      explicitly omitted from the non_yaml list because the CLI
+      writes it. The scan is read-only — no files are modified
+      and no events are appended.
+  - id: A9
+    given: |
+      The fixture corpus and runSpecsMigrateApply({ cawsDir, from:
+      'v10', apply: true, partial: false }) called against it.
+    when: |
+      Any fixture has a 'refused' verdict.
+    then: |
+      The function returns err with STORE_RULES.
+      SPECS_MIGRATE_REFUSALS_PRESENT and a diagnostic that names
+      the first refused file and counts remaining. NO files are
+      written. NO migration report is written. The .caws/specs/
+      directory is byte-identical before and after the call
+      (verified by directory digest in the test).
+  - id: A10
+    given: |
+      The fixture corpus and runSpecsMigrateApply({ cawsDir, from:
+      'v10', apply: true, partial: true }) called against it.
+    when: |
+      Some fixtures are auto-migratable and some are refused.
+    then: |
+      Only the auto-migratable fixtures are rewritten. Refused
+      fixtures are byte-identical before and after the call. A
+      durable migration report is written to .caws/migrations/
+      v10-specs/<ISO>.json containing entries for ALL scanned
+      fixtures (both migrated and skipped) per the contract
+      spec-v10-migration-output schema. Each migrated file's
+      new contents parse cleanly via parseAndValidateSpec
+      (verified per-file by the apply layer's post-write
+      validation gate). The function returns ok with a summary.
+  - id: A11
+    given: |
+      The fixture corpus and runSpecsMigrateApply called with a
+      transformer that has been DELIBERATELY broken (e.g., a
+      test-only injection that produces a spec missing a v11
+      required field).
+    when: |
+      The apply layer runs post-write validation on the broken
+      output.
+    then: |
+      The write for that file is rolled back (the on-disk YAML
+      is byte-identical to the pre-call state, verified by
+      digest comparison). The function returns err with
+      STORE_RULES.SPECS_MIGRATE_POST_WRITE_VALIDATION_FAILED
+      and the diagnostic includes the validator's spec.schema.*
+      output. The migration report records the file with
+      verdict='post_write_validation_failed' and includes the
+      validator's full diagnostic list. Other files in the batch
+      are NOT rolled back if their post-write validation passed;
+      the report distinguishes successful writes from rolled-back
+      writes.
+  - id: A12
+    given: |
+      A packaged caws-cli installed into a scratch directory via
+      npm pack + npm install (NOT source-tree imports) and the
+      fixture corpus copied into the scratch directory's .caws/specs/.
+    when: |
+      packages/caws-cli/scripts/specs-migration-smoke.mjs runs.
+    then: |
+      The script: (1) runs `node bin/caws specs migrate --from v10
+      --dry-run` and asserts the printed distribution matches the
+      fixture corpus's known distribution; (2) runs `node bin/caws
+      specs migrate --from v10 --apply --partial` and asserts exit
+      0; (3) runs `node bin/caws doctor` and asserts the spec.schema.*
+      error count for the migrated files is zero; (4) reads the
+      most recent .caws/migrations/v10-specs/*.json and asserts
+      it contains an entry per fixture with the expected verdict.
+      The script is wired into packages/caws-cli/scripts/
+      fresh-install-smoke.mjs so it runs as part of the
+      prepublishOnly chain.
+  - id: A13
+    given: |
+      CLAUDE.md line 62 currently states 'non_functional only admits
+      reliability and performance' and lists 'security' as one of
+      the rejected keys. The v11 schema actually admits four:
+      accessibility, performance, reliability, security (verified
+      by packages/caws-kernel/src/schemas/spec.v1.json lines 146-155).
+    when: |
+      The CLAUDE.md correction commit in this slice lands.
+    then: |
+      CLAUDE.md line 62 (trap #6) is rewritten to enumerate the four
+      admitted subkeys (accessibility, performance, reliability,
+      security) and lists the actually-forbidden keys (observability,
+      maintainability, any custom key) as the rejection examples.
+      The 'observability concerns belong under reliability' note is
+      preserved because it remains correct. The correction is a
+      single contiguous edit in trap #6; no other CLAUDE.md sections
+      are touched in this slice.
+  - id: A14
+    given: |
+      The merged slice (kernel transformer + CLI store/shell +
+      packaging smoke) installed via npm pack into a disposable
+      Sterling copy at /tmp/sterling-migrate-smoke or against the
+      real Sterling primary checkout with operator authorization.
+    when: |
+      `caws specs migrate --from v10 --dry-run` is run against
+      sterling/.caws/specs/.
+    then: |
+      The printed distribution matches the Sterling recon's known
+      14/13/0 split (14 migrate_with_warnings, 13 refused, 0
+      clean_migrate) OR an intentionally updated distribution
+      after operator-supplied --lifecycle-mapping resolves
+      doctrine on the superseded/proven/frozen cluster. The report
+      enumerates the two FIXTMPL Markdown sidecars as non_yaml
+      observations (NOT errors). registry.json is not in the
+      non_yaml list. When --apply --partial is then run with an
+      operator-authored lifecycle mapping file, `caws doctor`
+      after the apply reports zero spec.schema.* errors for the
+      migrated subset and the residue equals the structurally-refused
+      cluster (blast_radius.modules: [] without operator
+      intervention).
+non_functional:
+  reliability:
+    - >-
+      Apply is atomic per-file via the existing atomic-write
+      primitive (packages/caws-cli/src/store/atomic-write.ts). A
+      partial apply that fails mid-batch leaves the already-written
+      files in their migrated v11 form and the not-yet-written files
+      in their original v10 form — there is no per-batch lock and
+      no requirement of all-or-nothing across the batch (rejecting
+      that requirement is intentional; a full-batch rollback would
+      require holding the entire .caws/specs/ directory in memory
+      for the duration of the write, which scales poorly for the
+      Sterling-sized 27-spec case and unboundedly for archives).
+      The migration report distinguishes successful, refused, and
+      validation-failed entries so an operator can recover a partial
+      apply by re-running with the same flags.
+    - >-
+      The transformer is a pure function: identical input always
+      produces identical output. The contentDigest in the source
+      parameter is recorded in the report but not consumed by the
+      transformer's logic — it exists solely to thread the digest
+      from the CLI's read-then-transform pipeline into the report
+      for verification purposes.
+    - >-
+      Post-write validation uses the exact same parseAndValidateSpec
+      pipeline that caws doctor and caws gates run use. There is no
+      "lenient validator" or "migration-only validator" — if the
+      output doesn't validate by the canonical authority, the write
+      is rolled back. This guarantees that a successful --apply
+      produces a corpus that the rest of the v11 surface accepts
+      without any special-casing.
+  performance:
+    - >-
+      The scan is linear in spec count and reads each YAML file
+      once. For the Sterling corpus (27 active specs), the scan
+      completes in well under 500ms on a typical workstation.
+      Memory pressure is bounded by single-file YAML size, not
+      total corpus size — files are processed one at a time and
+      released before the next is read.
+    - >-
+      The pure transformer has no I/O and is benchmarked at
+      under 5ms per spec for typical v10 inputs (verified by a
+      microbenchmark in the kernel test). The dominant cost of
+      apply is the YAML serialize + atomic-write, not the
+      transform.
+contracts:
+  - name: spec-v10-migration-output
+    type: behavior
+    path: packages/caws-cli/src/store/specs-migration.ts
+    description: >-
+      The durable migration report at .caws/migrations/v10-specs/<ISO>.json
+      is a stable, versioned audit surface. Its schema is:
+      { schema_version: 1, generated_at: <ISO>, command:
+      'caws specs migrate --from v10 [--apply [--partial]]',
+      cwd: <repoRoot>, distribution: { migrated: <int>,
+      migrated_with_warnings: <int>, refused: <int>, total: <int> },
+      non_yaml_observations: [{ file, kind: 'markdown_sidecar' |
+      'unknown_non_yaml' }], entries: [{ file: <relative path>,
+      spec_id: <string|null>, old_digest: <sha256>, new_digest:
+      <sha256|null>, verdict: 'migrated'|'migrated_with_warnings'|
+      'refused'|'post_write_validation_failed', safe_renames:
+      [{ from, to }], coercions: [{ field, from, to }],
+      mode_source: 'mode'|'type'|'unresolvable', lifecycle_mapping_used:
+      <object|null>, report_only_fields: <object mapping dropped
+      v10 field names to verbatim values>, refusal_reasons:
+      [<typed refusal code string>], post_write_validation_errors:
+      [<diagnostic object>] }] }. The new_digest is null for
+      refused and post_write_validation_failed entries. The
+      report is written ATOMICALLY via the same atomic-write
+      primitive used for spec writes. Concurrent dry-runs do
+      not write reports. The report file name uses the same
+      Windows-safe ISO timestamp pattern as events archive
+      naming (colons replaced with hyphens). The
+      report-directory creation is best-effort idempotent
+      (mkdir recursive). The contract is the normative
+      interface for downstream tooling that wants to consume
+      migration history (e.g., a future caws migrations list
+      command). Implementation that drifts from this schema
+      breaks the contract and requires a scope amendment.
+# --- Triage ----------------------------------------------------------------
+# Origin: this slice is deliverable 2 of the v10→v11 migration line. The
+# Sterling recon (recorded at /tmp/sterling-v10-specs-recon-summary.md and
+# the JSON full-inventory at /tmp/sterling-v10-specs-recon-20260523T034418Z.json)
+# established the load-bearing facts:
+#   - 27 active YAML specs in sterling/.caws/specs/.
+#   - 3 non-YAML files (2 Markdown sidecars + registry.json); doctor flags
+#     only the .md files.
+#   - Distribution after conservative mapping: 0 clean, 14 migrate_with_warnings,
+#     13 refused. The 13 refusals split into: 11 blast_radius modules empty;
+#     9 lifecycle outside v11 enum (superseded/proven/frozen); 3 scope.in empty
+#     (overlapping with modules-empty).
+#   - v10 footgun: mode='development' appears in 7 specs, ALL co-occurring
+#     with a valid type value.
+#   - Doctrine drift: CLAUDE.md trap #6 says non_functional admits only
+#     reliability + performance; schema admits 4 (adds accessibility +
+#     security). CLAUDE.md is wrong; this slice corrects it.
+#
+# Design discipline (the maintainer's directive, recorded verbatim from the
+# slice-acceptance message):
+#
+#   "The most important design decision is this: do not make the migrator
+#   'helpful' by inventing missing authority claims. In particular, the
+#   recon is right that blast_radius.modules: [] cannot be safely
+#   synthesized from scope.in; those fields are correlated but not
+#   equivalent. Auto-filling one from the other would launder
+#   uncertainty into v11 compliance."
+#
+# This is invariant 1 verbatim. Synthesis is FORBIDDEN. The lifecycle
+# mapping cluster (superseded/proven/frozen) is similarly refused without
+# operator input; auto-defaulting would similarly launder doctrine
+# decisions.
+#
+# Commit ordering within the slice (the implementer's contract):
+#
+#   1. CLAUDE.md doctrine-drift correction (A13) — small, reviewable
+#      on its own.
+#   2. Kernel: migrate-v10.ts transformer + tests (A1-A7).
+#   3. CLI store: specs-migration.ts scan/apply + tests (A8-A11).
+#   4. CLI shell: specs migrate subcommand wired into register.ts
+#      and shell/commands/specs.ts.
+#   5. Fixture corpus committed under
+#      packages/caws-cli/tests/fixtures/specs-v10-sterling/.
+#   6. Packaging smoke (A12) + extend fresh-install-smoke.mjs.
+#   7. Sterling smoke (A14) — final acceptance gate.
+#
+# Coupling to CAWS-MIGRATE-V10-EVENTS-001 (deliverable 1):
+#
+#   Independent. The events slice's A10 half-upgrade refusal will need a
+#   v10-spec detector. This slice ships detectSpecVersion as a pure
+#   classifier in the kernel surface; the events slice may re-import it
+#   when that slice lands, replacing its minimal scanner. No reverse
+#   dependency: this slice does NOT need the events slice to ship.
+#
+# Out of scope (explicitly REFUSED for this slice, not just unmentioned):
+#
+#   - Event-log migration. Owned by CAWS-MIGRATE-V10-EVENTS-001
+#     (deliverable 1).
+#   - Markdown sidecar relocation in Sterling. Owned by a future
+#     Sterling-side cleanup task; this slice reports the sidecars
+#     but does not move them.
+#   - Migration of specs under .archive/. The 553+ historical specs
+#     are scoped out.
+#   - Synthesis of blast_radius.modules from scope.in. Forbidden
+#     (invariant 1).
+#   - Default lifecycle mapping for superseded/proven/frozen.
+#     Forbidden (invariant 6); requires --lifecycle-mapping.
+#   - Changes to CHANGELOG, package.json, .github/workflows. Release
+#     tooling is tag-driven (see CLAUDE.md trap #7); this slice
+#     produces a feature-complete branch and the release procedure
+#     owns publishing.
+#   - Changes to .caws/policy.yaml. Governed path; out of scope.
+#
+# Activation prerequisites (must all be true before lifecycle_state
+# flips from draft to active):
+#
+#   1. Maintainer approval of this spec as the scoping input. (The
+#      acceptance message provides this for the slice as a concept;
+#      activation requires a final spec-content review.)
+#   2. Worktree created: caws worktree create migrate-v10-specs
+#      --spec CAWS-MIGRATE-V10-SPECS-001 off
+#      feat/multi-agent-provenance-envelope. This slice runs in
+#      isolation from the active session-ownership-metadata
+#      worktree.
+#   3. Local caws CLI mismatch awareness: the globally-installed
+#      caws binary may be older than the in-repo source. This slice
+#      uses `node packages/caws-cli/dist/index.js` for all CLI
+#      invocations during development and verifies against built
+#      artifacts via npm pack for A12/A14.
+#
+# Risk_tier rationale: tier 2 (not 3). This slice touches the kernel
+# spec module (the schema authority surface), the CLI store layer, the
+# shell command surface, the doctrine doc (CLAUDE.md), and creates a
+# new durable audit surface (.caws/migrations/v10-specs/). Blast
+# radius spans both packages and one doctrine doc. A bug in the
+# transformer could corrupt the active spec corpus for downstream
+# consumers (Sterling and any other v10-pinned project). Tier 2
+# requires at least one contract entry; the spec-v10-migration-output
+# contract above is the normative interface for the durable report
+# schema. mode: feature because this introduces a new command surface,
+# a new kernel module, a new audit surface, and a doctrine correction
+# — not a fix.

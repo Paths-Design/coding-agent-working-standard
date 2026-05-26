@@ -79,7 +79,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       path,
       normalizedPath: normPath,
       message: 'No spec is bound to this worktree; the kernel cannot decide scope authority.',
-      narrowRepair: 'Bind a spec to this worktree by adding {specId: <id>} to the worktree entry in .caws/worktrees.json AND `worktree: <name>` on the spec. (v11.0.0 does not ship `caws worktree bind`; pin to caws-cli@^10.2.x for the convenience command.)',
+      narrowRepair: 'Bind a spec to this worktree by running `caws worktree bind <worktree-name> --spec <spec-id>` (writes the bidirectional binding atomically). If no worktree exists yet, create one with `caws worktree create <name> --spec <spec-id>` instead.',
       bindingState: 'unbound',
     };
   }
@@ -93,7 +93,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       message:
         'Spec/worktree binding is one-sided (corrupt). The kernel refuses to evaluate scope.',
       narrowRepair:
-        'Repair the binding by aligning .caws/worktrees.json[name].specId and the spec\'s `worktree:` field, or run `caws doctor` for details. (v11.0.0 does not ship `caws worktree bind`; pin to caws-cli@^10.2.x for the convenience command.)',
+        'Repair the one-sided binding by running `caws worktree bind <worktree-name> --spec <spec-id>` (atomically writes both sides of the binding), or run `caws doctor` for full details on which side is missing.',
       bindingState: 'one_sided',
       data: {
         specHasWorktree: binding.detail.specHasWorktree,

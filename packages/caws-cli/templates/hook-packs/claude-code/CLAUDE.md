@@ -1,9 +1,9 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 5
 # caws_min_major: 11
-# lineage_refs: 1,4,6,8,11,12,13,16,17
+# lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 -->
 
@@ -36,8 +36,8 @@ is wrong, stop and ask the user.
 | File | Lineage entries | What it prevents |
 |------|----------------|------------------|
 | `block-dangerous.sh` + `classify_command.py` | 1, 17 | catastrophic git operations; tokenized-argv bypasses; danger latch |
-| `worktree-guard.sh` | 4, 6, 11 | amend/stash/reset/force-push during active worktrees; cross-boundary file copies |
-| `worktree-write-guard.sh` | 4, 8, 13 | base-branch writes when worktrees are active (enforcement returns in CLI-WORKTREE-001); baseline-clobber |
+| `worktree-guard.sh` | 4, 6, 11, 19, 20 | amend/stash/reset/force-push during active worktrees; cross-boundary file copies; **canonical-checkout mutating git commands (checkout/switch/branch -f/reset non-hard) blocked when worktrees active** (CANONICAL-CHECKOUT-WORKTREE-GUARD-001); **agent-Bash `git sparse-checkout` (any subcommand) refused with canonical-spec-materialization wording pointing to `caws worktree repair-sparse <name>`** (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3) |
+| `worktree-write-guard.sh` | 4, 8, 13, 20 | base-branch writes when worktrees are active (enforcement returns in CLI-WORKTREE-001); baseline-clobber; **Read/Write/Edit refusal against `<linked-worktree>/.caws/specs/*` to prevent canonical spec authority from being materialized as a divergent private copy inside a worktree, before the broad `.caws/*` allowlist can exit 0** (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2, contract `canonical-spec-authority-materialization-guard-v1`) |
 | `scope-guard.sh` | 8, 11, 12, 16 | edits outside the active spec's `scope.in`; cross-spec union interference; unbound → no authority |
 | `session-caws-status.sh` | 4, 11 | inherited-dirty-state collision; foreign-claim soft-block; version-skew |
 | `reset-strikes.sh` | 8, 16 | human-authorized strike reset (escape hatch, not auto-resettable) |

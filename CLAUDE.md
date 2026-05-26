@@ -6,7 +6,7 @@ Project-specific guidance for Claude Code agents working on the CAWS repository.
 
 CAWS (Coding Agent Working Standard) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
 
-The v11 cutover is complete. `main` runs the v11 surface (currently published as `@paths.design/caws-cli@11.1.4`). v11.2 is in planning — see `docs/architecture/caws-vnext-command-surface.md` §1 ("v11.2 plan") for the multi-agent authority and observability work. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (cutover posture and v11.2 plan) and §6 (architectural invariants — invariants 1–7 are v11 core; 8–13 are v11.2 additions) before making decisions.
+The v11 cutover is complete. `main` runs the v11.1 surface, published to npm as `@paths.design/caws-cli` on the `latest` dist-tag. v11.2 is in planning — see `docs/architecture/caws-vnext-command-surface.md` §1 ("v11.2 plan") for the multi-agent authority and observability work. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (cutover posture and v11.2 plan) and §6 (architectural invariants — invariants 1–7 are v11 core; 8–13 are v11.2 additions) before making decisions.
 
 **For teams migrating from v10.2:** read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is the canonical line for new work but is **not a drop-in replacement** for every v10.2 workflow — some commands (`sidecar`, `burnup`, `verify-acs`, `evaluate`, `test-analysis`) are removed without v11.1 replacements, and the multi-agent surface (`agents list/show`, `session`, `parallel`) is deferred to v11.2/v11.3+. The migration guide classifies every v10.2 command into one of four buckets (Replaced / Renamed / Removed-no-replacement / Deferred), documents the rollback one-liner, and includes CI migration recipes.
 
@@ -73,6 +73,62 @@ The scope-guard strike counter is **session-global and accumulative**, not per-f
 
 The right discipline: don't speculatively edit a file before verifying it's in scope. Use `caws scope show <path>` first if uncertain. The check costs nothing and avoids burning a strike on a file you'll have to revisit.
 
+## Scope authoring discipline (anticipate, don't react)
+
+Scope amendments are normal and welcome — they're git-tracked, attributed to a specific commit, and `caws specs show` will display the updated scope. The maintainer is comfortable with you amending scope when you discover a path you legitimately need to edit. What burns time is NOT amendments — it's discovering the gap one strike at a time during implementation.
+
+Avoid that pattern by planning scope BEFORE you start editing. Three concrete habits:
+
+### 1. Run scope.in through the file-list lens, not the file-pattern lens
+
+When you draft scope.in, mentally walk every file you'll create or modify in this slice:
+
+- For every new `.ts` file you intend to create: is its exact path in scope.in?
+- For every `*.test.js` / `*.test.ts` you'll write: does the test path with the correct extension match scope.in? (CLAUDE.md trap #1 — `.test.js` vs `.test.ts` mismatches are a common foot-gun.)
+- For every comment-only edit you intend (deprecation markers, doctrine annotations): is the file in scope.in? The invariant body saying "add comment to X" is NOT scope admission.
+- For every doctrine doc you'll touch (CLAUDE.md, AGENTS.md, COMMIT_CONVENTIONS.md, docs/architecture/*, docs/failure-lineage.md): is it in scope.in or admitted via `policy.root_passthrough`?
+- For every integration test that creates real fixtures (linked worktrees, git repos): is the new test file path in scope.in?
+
+If you're listing one or two paths and the rest are "in this directory," consider whether the directory itself is the right scope.in entry. The scope kernel treats scope.in entries as literal prefix matches (or globs where supported), not as documentation.
+
+### 2. Amend scope BEFORE the speculative edit, not after the strike
+
+When mid-implementation you realize a file isn't in scope:
+
+- **Stop editing that file immediately.** A single edit on an out-of-scope path is strike 1. Three strikes hard-block until reset.
+- **Run `caws scope show <path>`** to confirm the refusal and capture the spec id + exact missing entry.
+- **Make the scope amendment as a separate small chore commit** on the canonical branch:
+  ```
+  chore(caws): amend <SPEC-ID> scope for <what>
+  ```
+  Bump `updated_at`. Cherry-pick into your worktree branch. Then proceed with the original edit.
+- **Do not chain amendments**. If you need 3 files, amend once for all 3, not three commits.
+
+### 3. Blast-radius and scope-collision review at draft time
+
+When authoring a new spec, before flipping to `active`:
+
+- **List every package, every directory tree, every test file, every doc, every hook template, every CI surface you might touch.** Put them in scope.in. Easier to over-include and trim than to scramble mid-implementation.
+- **Cross-check `scope.out` against sibling specs' `scope.in`**. Per CLAUDE.md trap #4, listing a sibling's `scope.in` paths in your `scope.out` will refuse YOUR edits to those paths even when admitted. Either omit or accept the collision.
+- **Cross-check governed paths** (`.caws/policy.yaml`, `CODEOWNERS`, `change_budget` keys) and explicitly list them in `scope.out` so future agents know you intentionally excluded them.
+- **Cross-check active sibling worktrees**. If another agent is actively editing files in `packages/foo/`, putting `packages/foo` broadly in your scope.in creates a union-mode collision when both specs are active. Either narrow your scope or coordinate.
+
+### Recovery checklist (when you hit a strike anyway)
+
+If you accumulate strikes during a session:
+
+1. **Stop editing the hot file.** Don't retry on the same path — each retry is another strike.
+2. **Diagnose** with `caws scope show <path>` from inside the worktree. Capture the exact refusal message.
+3. **Decide**: is the path legitimately in scope (amend needed) or genuinely out (revert your edit, route through a different file)?
+4. **For "amend needed":** commit the scope amendment on canonical, cherry-pick to worktree, then ask the user to run `bash .claude/hooks/reset-strikes.sh --current`. The reset is required because fixing scope alone does NOT re-evaluate prior strikes — the file stays "hot" at its accumulated count.
+5. **For "genuinely out":** revert your edit, route the change through an in-scope file, and document the decision in the next commit message.
+
+### Why this matters
+
+Scope strikes don't just stop edits — they break the trust contract the user has with the slice. Each strike is evidence that the agent didn't think about scope before editing, which is the failure mode CAWS exists to prevent. A well-scoped slice with one or two clear amendments mid-implementation is healthy. A slice that burns three strikes on the same file mid-commit is a planning failure made visible.
+
+The user's stance: amendments are fine because they're auditable. The cost is the strike state, the explanation, the recovery commit chain, and the user's time deciding whether the amendment is legitimate. Plan to avoid that cost, not to pay it three times in a row.
+
 ## Worktree discipline
 
 When git worktrees are active for parallel agent work:
@@ -82,6 +138,30 @@ When git worktrees are active for parallel agent work:
 - Commits to the base branch during active worktrees should use the `merge(worktree):` format.
 - `caws claim` shows worktree ownership; `caws claim --takeover` acquires it from a foreign session and writes a durable `prior_owners` audit.
 - v11 does not ship orchestration commands for worktree create/destroy/merge — use `git worktree` directly. Lifecycle helpers return in v11.1.
+
+See `.claude/rules/worktree-isolation.md` for the full list.
+
+## Canonical spec authority and sparse-checkout recovery (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001)
+
+Linked worktrees must NOT use worktree-local `.caws/specs/*` files as authority. The canonical `.caws/specs/` directory at the main checkout is the only authoritative location for spec content. CAWS resolves spec reads through the canonical control plane regardless of cwd — the kernel's `resolveRepoRoot` walks `git rev-parse --git-common-dir` upward from any cwd to find canonical, then reads specs from there. The sparse-checkout invariant on linked worktrees (`/*` + `!/.caws/specs/`) is the mechanical guard that prevents canonical spec bytes from being materialized as a divergent private copy inside the worktree filesystem.
+
+**Do NOT:**
+
+- Run `git sparse-checkout disable` (or any other agent-Bash `git sparse-checkout` subcommand) in a CAWS worktree. The `worktree-guard.sh` hook refuses every agent-issued `git sparse-checkout` invocation. Disabling sparse-checkout would re-open the v10.2 split-brain authority class: an editable spec copy inside a worktree, divergent from canonical, silently consulted by anything that walks cwd upward.
+- `Read`, `Write`, or `Edit` files under `<linked-worktree>/.caws/specs/*`. The `worktree-write-guard.sh` hook refuses these tool calls before the broad `.caws/*` allowlist can exit 0. The files may exist via hostile or manual writes; CAWS does not treat them as authority and refuses the tool calls regardless.
+- Ask the user to disable sparse-checkout so you can read a spec. That is the wrong recovery path. The sanctioned paths below resolve through canonical authority from any cwd.
+
+**Do use:**
+
+- `caws specs show <id>` — read a spec from any cwd (canonical or linked worktree). Resolves through canonical control plane.
+- `caws specs list` — list specs from any cwd. Same resolver behavior.
+- `caws scope show <path>` — inspect the scope decision for a path. Reads canonical scope authority.
+- `caws scope check <path>` — enforce the scope decision (exit 0 admit, exit 1 reject).
+- `caws worktree repair-sparse <name>` — restore the sparse-checkout invariant on a linked worktree (e.g., after a human-authorized sparse-checkout reconfiguration left the tree with materialized `.caws/specs/*` files). **Non-destructive**: refuses dirty or untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting work. If `.caws/specs/` is dirty, the command emits a typed diagnostic and asks for manual commit-or-remove before re-running.
+
+**Doctrine boundary:**
+
+Sparse-checkout in this project is a **materialization/recovery invariant**, NOT the authority model and NOT the scope-enforcement model. Scope is enforced by `scope-guard.sh` reading the spec's `scope.in`/`scope.out` from canonical. The sparse-checkout exclusion of `.caws/specs/` exists to prevent the split-brain class; it does not encode or implement scope.
 
 See `.claude/rules/worktree-isolation.md` for the full list.
 
@@ -154,6 +234,53 @@ There's no way to dismiss this from the agent side. If you trip it, stop and ask
 ### `npm whoami` vs token-based auth
 
 Interactive `npm login` and `NPM_TOKEN` env-var auth are different identities to the registry. If your account has 2FA enabled, interactive `npm publish` still requires an OTP code (the `--otp=<code>` flag), even after `npm login`. Granular npm tokens can be configured with **"bypass 2FA for write actions"** — those work for `NPM_TOKEN`-based CI publishes but do NOT carry over to `npm whoami` sessions. If you see `EOTP` with a valid `npm whoami`, the token has 2FA-bypass and the session does not — use the token via env, not the interactive session.
+
+## Decision cadence (act from local authority)
+
+Default to making the narrowest reversible decision supported by local repo authority. Do not stop merely because there is ambiguity.
+
+Before asking the maintainer, do one cheap grounding pass against:
+
+1. The active spec: `scope.in`, `scope.out`, invariants, acceptance, closure notes.
+2. Repo doctrine: this file, command-surface docs, release docs, and relevant architecture notes.
+3. Existing code, tests, scripts, package metadata, and CLI help.
+4. Recent commits when they directly govern the current slice.
+
+If one path is locally supported, reversible, and within scope, take it. State the decision briefly and continue.
+
+Ask for direction only on true blockers:
+
+- External or irreversible mutation: `npm publish`, `npm dist-tag`, git tag push, force-push, unpublish, destructive deletion.
+- Scope conflict that cannot be resolved by using the correct bound worktree or existing CAWS command.
+- Direct contradiction between active specs, or between a spec and governed implementation.
+- Missing credentials, missing files, or inability to reproduce required evidence.
+- Any action that would edit guard state, spoof ownership/session state, bypass safety checks, or rewrite another active spec's contract.
+- Broad refactor or policy change outside the current spec.
+
+Do not ask merely because:
+
+- Multiple implementation shapes exist but one is narrowest and evidence-supported.
+- A test or CI failure has a clear local root cause.
+- A small follow-up/hotfix spec is the obvious governance shape.
+- A command failed once and the next diagnostic step is obvious.
+- Existing specs or docs already answer the question.
+
+Tool-call discipline:
+
+- Every command must advance the slice.
+- Do not repeatedly inspect the same help text, registry state, ownership state, or logs after the blocker is classified.
+- Prefer one decisive grounding pass over many intermediate probes.
+- Report meaningful work output, not a play-by-play of hesitation.
+
+Failure cadence:
+
+1. Classify the failure.
+2. Identify the narrowest admissible fix.
+3. If reversible and within scope, do it.
+4. If out of scope but small and local, open a focused hotfix spec and proceed under that spec.
+5. If external, irreversible, credential-bound, or safety-bound, stop with a precise handoff.
+
+Observed anti-pattern to avoid: turning a stale local assertion into a three-option menu when the active spec, script source, and CI log support a narrow hotfix. Correct cadence: classify, open hotfix spec, fix, test, then stop at the tag-push or publish boundary.
 
 ## Test suite
 

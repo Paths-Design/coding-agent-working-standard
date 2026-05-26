@@ -16,15 +16,42 @@
 //   Entry 13 — working-spec.yaml baseline clobber (worktree-write-guard)
 //   Entry 16 — adjudicator overstep / role partitioning (the pack itself)
 //   Entry 17 — git --bare init bypass + danger latch (classify_command + block-dangerous + reset-danger-latch)
+//   Entry 19 — canonical-checkout hijack: parallel agent silently switched the
+//              canonical checkout off the coordination branch, breaking authority
+//              resolution for the worktree-bound session. MULTI-AGENT-ACTIVITY-
+//              REGISTRY-001 ships the lease substrate (agent-register/heartbeat/
+//              stop) so the next time two sessions touch this repo, both see
+//              each other at SessionStart and on every tool call when N > 1.
 
 import type { HookPackV1 } from './types';
 
 // Pack version bumps when managed file contents change in a way that
 // existing installs should pick up via the managed_old_version → auto-
-// update path. Version 2 ships the strike-level diagnostic triage,
-// activation-banner wording fix, settings.json "why we don't write it"
-// note, and tightened ask/block semantics in block-dangerous.
-export const CLAUDE_CODE_PACK_VERSION = 2;
+// update path.
+//
+// Version 2: strike-level diagnostic triage, activation-banner wording
+// fix, settings.json "why we don't write it" note, tightened ask/block
+// semantics in block-dangerous.
+//
+// Version 3: MULTI-AGENT-ACTIVITY-REGISTRY-001. Adds three new managed
+// files (agent-register.sh, agent-heartbeat.sh, agent-stop.sh) wired
+// into the SessionStart, PreToolUse, and Stop dispatchers. The CLI is
+// hook-protocol-agnostic; agent-heartbeat.sh is the sole emitter of
+// Claude Code's hookSpecificOutput.additionalContext envelope. Adds
+// .caws/leases/ to the stateModel read/write surface.
+//
+// Version 4: CANONICAL-CHECKOUT-WORKTREE-GUARD-001. Adds a hook-IO
+// behavioral contract (canonical-checkout-pre-tool-use-guard-v1)
+// inside worktree-guard.sh that blocks mutating git commands
+// (checkout, switch, branch -f, reset non-hard) from the canonical
+// checkout when at least one active CAWS worktree exists. The guard
+// uses git_dir == git_common_dir as the canonical-detection predicate
+// and the existing entriesOf helper for v10/v11 dual-shape registry
+// reads. Leases are NOT consulted; visibility-only, never authority.
+// Closes the enforcement gap that failure-lineage Entry 19 documented
+// as visibility-without-enforcement. No new managed files; no stateModel
+// changes (leases/worktrees.json already declared).
+export const CLAUDE_CODE_PACK_VERSION = 5;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
@@ -41,6 +68,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       '.caws/specs/*.yaml',
       '.caws/worktrees.json',
       '.caws/agents.json',
+      '.caws/leases/',
       '.caws/policy.yaml',
       'package.json',
     ],
@@ -49,10 +77,11 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       '.claude/logs/session-*.log',
       '.claude/hooks/state/danger-latch-*.json',
       '.claude/hooks/state/guard-strikes-*.json',
+      '.caws/leases/',
       'tmp/<session-id>/',
     ],
   },
-  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17],
+  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19],
 
   // Installed files. Order is deterministic (used by tests and by the
   // install reporter). destPath is relative to repo root.
@@ -119,6 +148,31 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     {
       destPath: '.claude/hooks/session-caws-status.sh',
       sourcePath: 'session-caws-status.sh',
+      executable: true,
+      managed: true,
+    },
+
+    // -- MULTI-AGENT-ACTIVITY-REGISTRY-001 (lineage entry 19) --
+    // Lease-substrate hooks. agent-register fires at SessionStart;
+    // agent-heartbeat fires FIRST at PreToolUse (throttled, surfaces
+    // parallel-agent presence via Claude Code additionalContext when
+    // N>1); agent-stop fires at Stop to mark the lease stopped.
+    // All three are best-effort and never block their dispatchers.
+    {
+      destPath: '.claude/hooks/agent-register.sh',
+      sourcePath: 'agent-register.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      destPath: '.claude/hooks/agent-heartbeat.sh',
+      sourcePath: 'agent-heartbeat.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      destPath: '.claude/hooks/agent-stop.sh',
+      sourcePath: 'agent-stop.sh',
       executable: true,
       managed: true,
     },

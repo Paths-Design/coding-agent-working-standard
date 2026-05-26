@@ -35,14 +35,20 @@ this doc — do not silently regress an invariant.
 
 ## 1. Cutover posture
 
-**A1 chosen.**
+**Current state: v11.1.x is the canonical line.** The v11 cutover is complete; v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core. The original A1 doctrine and the v11.0 → v11.1 plan are preserved below as historical context.
+
+### Historical: A1 chosen
+
+The cutover posture chosen at v11.0.0 was:
 
 > v11.0.0 is the governed core.
 > v11.0.0 deliberately excludes spec/worktree lifecycle.
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-### Why A1
+The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.1.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+
+### Why A1 was chosen
 
 The vNext rewrite established a coherent kernel/store/shell substrate
 across slices 1–7c, including:
@@ -88,6 +94,17 @@ recovery ergonomics. The deliverables are:
 - **Leases** (ephemeral operational cache) under `.caws/leases/` — a
   per-session liveness file written by the store layer on write-class
   command dispatch. **Not authority. Not in `events.jsonl`.**
+  - The operational verbs (`caws agents register/heartbeat/stop/prune`)
+    that write and read this substrate shipped ahead of the full v11.2
+    release as `MULTI-AGENT-ACTIVITY-REGISTRY-001` (mid-v11.1.x).
+    Trigger: the canonical-checkout hijack documented in failure-lineage
+    Entry 19 was a live multi-agent incident with no visibility
+    substrate to make the conflict legible at the decision point.
+    Visibility could not wait for the full v11.2 authority slice
+    package. The `list/show` read surface remains a v11.2 deliverable;
+    `register/heartbeat/stop/prune` are the write/lifecycle/cleanup
+    verbs and are live from v11.1.x onward via the Claude Code hook
+    pack (SessionStart / PreToolUse / Stop). See §2.
 - **`claim_taken_over.v1` event emission** wired into `caws claim
   --takeover` inside the same lifecycle transaction as the worktrees.json
   mutation. Closes the existing audit gap.
@@ -318,6 +335,7 @@ multi-agent observability. Every command group is implemented in
 | Command | Purpose |
 |---|---|
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws specs` | vNext spec lifecycle. |
 
 ### Planned in v11.2 (multi-agent authority and observability)
@@ -330,6 +348,33 @@ multi-agent observability. Every command group is implemented in
 | `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
 | `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. |
 | `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
+
+### Shipped ahead of v11.2 (MULTI-AGENT-ACTIVITY-REGISTRY-001)
+
+These operational verbs ship the `.caws/leases/<session_id>` substrate
+the v11.2 `agents list/show` surface will read. They went live in
+v11.1.x ahead of the full v11.2 release because the canonical-checkout
+hijack incident (failure-lineage Entry 19) needed visibility
+immediately. The CLI surface is invoked exclusively by the Claude Code
+hook pack v3 at SessionStart / PreToolUse / Stop; humans rarely type
+them directly.
+
+| Command | Purpose |
+|---|---|
+| `caws agents register --session-id <id> --platform <name> --reason <reason>` | Upsert the calling session's lease at `.caws/leases/<id>.json` with status=active. Hook-invoked at SessionStart. |
+| `caws agents heartbeat --session-id <id> --throttle <ms> --json --include-active-summary` | Refresh `last_active` (respects throttle), and emit CAWS-native JSON describing all currently-active leases. Hook-invoked at PreToolUse; the hook script (not the CLI) composes Claude Code's `hookSpecificOutput.additionalContext` envelope from this JSON. |
+| `caws agents stop --session-id <id>` | Mark the session's lease as `status=stopped` with `stopped_at`. Hook-invoked at Stop; best-effort (SIGKILL/crash bypasses it — heartbeat staleness is the primary liveness signal). |
+| `caws agents prune --status <stopped\|stale> --older-than <duration> [--apply]` | Operator-driven cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs. |
+
+**Hook IO boundary:** the CLI is hook-protocol-agnostic. `caws agents
+heartbeat --json` emits CAWS-native JSON only. The Claude Code envelope
+(`hookSpecificOutput.additionalContext`) is composed by
+`templates/hook-packs/claude-code/agent-heartbeat.sh` via inline
+`node -e`, not via `jq` (the hook pack has no `jq` dependency). A future
+Cursor or terminal integration consumes the same CAWS-native JSON and
+emits its own protocol-specific envelope. Changing Claude Code's hook
+envelope format does not require changing kernel lease logic or store
+lease writes.
 
 ### Help banner (built CLI)
 
@@ -508,18 +553,11 @@ These are non-negotiable for v11. A change that violates one of these is
 either a regression to fix, or a deliberate doctrine shift requiring an
 update to this document.
 
-1. **`events.jsonl` is written ONLY through the two sanctioned writers
-   in `packages/caws-cli/src/store/events-store.ts`.** Those are
-   `appendEvent` (evidence appends) and `rotateEvents` (chain
-   maintenance, v11.2+ — see invariant 14). Both functions acquire
-   `events.jsonl.lock`, both validate the event they produce against
-   its JSON Schema, both write atomically. No other code in v11 writes
-   to that file. Shell commands and migration tooling MUST invoke these
-   two functions through their exported store surface; the lock
-   primitives (`acquireLock`, `releaseLock`, `tryRecoverStaleLock`) are
-   private to `events-store.ts` and MUST NOT be exported — exporting
-   them would create a third writer surface by exposing lock
-   acquisition to callers that bypass the canonical functions.
+1. **`events.jsonl` is written ONLY through `appendEvent` in
+   `packages/caws-cli/src/store/events-store.ts`.** That function
+   acquires `events.jsonl.lock`, computes the hash chain, validates the
+   event against its JSON Schema, and writes atomically. No other code
+   in v11 writes to that file.
 
 2. **`policy.yaml` owns gate `mode` (`block` / `warn` / `skip`).**
    Waivers filter violations *out of* the disposition calculation; they
@@ -590,6 +628,11 @@ fix or an explicit doctrine shift requiring an update to this document.
     Lease write failure logs a warning and continues. Lease touches are
     NOT inside `lifecycle-transaction`. A failed lease write MUST NOT
     prevent a `caws claim` (or any other command) from succeeding.
+    Lease writes flow through `caws agents register/heartbeat/stop`
+    (composed by the agent hook pack, invoked from
+    SessionStart/PreToolUse/Stop). Hooks MUST NOT write `.caws/leases/`
+    directly; they invoke the CLI which routes through `leases-store.ts`
+    so the atomic-write + safe-filename invariants hold.
 
 12. **Bridge bindings do not bypass scope.** A bridge claim is an
     *authority binding* (session ↔ spec), not a *scope expansion*.
@@ -643,63 +686,25 @@ fix or an explicit doctrine shift requiring an update to this document.
     verify-archive` recomputes the archive's digest + line count and
     asserts match. Tamper detection survives the rotation boundary.
 
----
-
-### Maintenance / control-plane command surface
-
-Most v11 command groups are evidence-producing operations: they read
-state, produce events through `appendEvent`, and progress a slice
-toward closure. A small set of operations is **maintenance** — they
-exist to repair, migrate, or rotate the underlying state stores
-themselves. Maintenance commands are explicitly enumerated here so
-their privileged surface is auditable and bounded.
-
-Maintenance commands are distinct from normal evidence operations in
-three ways. (1) They may invoke a sanctioned writer that the normal
-command path does not use (e.g., `rotateEvents` rather than
-`appendEvent`). (2) They typically require an explicit operator reason
-or a friction flag to prevent casual invocation (e.g., `--reason
-"<text>"` or `--allow-clean`). (3) They produce a typed audit event
-recording the operation (`chain_rotated`, `worktree_*_migrated`,
-forthcoming `spec_*_migrated`). They never silently rewrite state;
-either the operation is explicit and auditable, or it does not happen.
-
-The v11.2 maintenance surface:
-
-- **`caws worktree migrate-registry`** (shipped v11.1.x as part of
-  `WORKTREE-REGISTRY-LEGACY-ENVELOPE-MIGRATION-001`). Converts v10.2
-  legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape.
-  Destroyed records are omitted iff no spec claims them and their
-  path is absent.
-- **`caws events rotate`** (v11.2+, `CAWS-MIGRATE-V10-EVENTS-001`).
-  Archives the existing `events.jsonl` and starts a fresh chain with
-  a `chain_rotated` genesis event. Requires `--reason "<text>"`.
-  Refuses against a clean v11 chain unless `--allow-clean` is
-  passed.
-- **`caws events migrate --from v10`** (v11.2+, same slice).
-  Dry-run-default scanner that classifies an existing `events.jsonl`
-  by actor shape (v10 string vs. v11 structured) and reports the
-  rotation plan. `--apply` invokes `rotateEvents`. Refuses with
-  `EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED` when v10 spec YAMLs are
-  detected unless `--allow-partial-upgrade` is passed.
-- **`caws events verify-archive`** (v11.2+, same slice). Recomputes
-  the archive file's sha256 and line count and asserts both match
-  the `chain_rotated` payload's `prior_file_digest` and
-  `prior_line_count`. Surfaces typed diagnostics on mismatch
-  (`EVENTS_ARCHIVE_DIGEST_MISMATCH`,
-  `EVENTS_ARCHIVE_LINE_COUNT_MISMATCH`).
-- **`caws specs migrate --from v10`** (v11.2+,
-  `CAWS-MIGRATE-V10-SPECS-001`, downstream of the events slice).
-  Per-file plan-and-apply migration for v10-era spec YAMLs to the
-  v11 schema. Writes a durable migration report at
-  `.caws/migrations/v10-to-v11/<timestamp>.json` recording
-  per-file before/after digests, warnings, dropped fields,
-  synthesized fields, and refusal causes.
-
-These commands are governance-state mutators, not evidence
-producers, and must remain a closed enumerated set. Adding a new
-maintenance command requires an entry in this list, not just a
-shell registration.
+15. **Canonical `.caws/specs/` is the only spec authority surface.**
+    Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001` (contract
+    `canonical-spec-authority-materialization-guard-v1`). Linked
+    worktrees MUST NOT use worktree-local `.caws/specs/*` files as
+    authority. The sparse-checkout exclusion of `.caws/specs/` on
+    `caws worktree create` is the mechanical guard; the canonical
+    control-plane resolver (`resolveRepoRoot` walking
+    `git rev-parse --git-common-dir`) is the read-path guarantee.
+    Worktree-write-guard.sh refuses `Read`/`Write`/`Edit` of
+    `<linked-worktree>/.caws/specs/*` before the broad `.caws/*`
+    allowlist can exit 0. Worktree-guard.sh refuses every agent-Bash
+    `git sparse-checkout` invocation (any subcommand) with a
+    diagnostic pointing to `caws worktree repair-sparse <name>`.
+    Repair-sparse is non-destructive: refuses dirty/untracked content
+    under `<wt>/.caws/specs/` rather than stashing, cleaning,
+    resetting, or deleting work. Sparse-checkout is a
+    **materialization/recovery invariant**, NOT the authority model
+    and NOT the scope-enforcement model — scope authority is
+    `scope-guard.sh` reading the canonical spec's `scope.in`/`scope.out`.
 
 ---
 
@@ -768,15 +773,6 @@ is the canonical writer. A second implementation lives in
 **Result: zero blockers. `utils/event-log.js` is fully orphaned by 8a3.**
 Invariant 1 ("events.jsonl ONLY through store appendEvent") will hold
 after 8a3 import removal.
-
-**Note (v11.2 amendment, `CAWS-MIGRATE-V10-EVENTS-001`):** Invariant 1
-has been amended to enumerate two sanctioned writers — `appendEvent`
-(evidence appends) and `rotateEvents` (chain maintenance). Both live
-in the same module, both hold the same lock. `rotateEvents` is
-explicitly permitted by invariant 14; the audit's "zero blockers"
-result is unchanged because the new writer is in the same canonical
-module as the original and the closed enumeration in invariants 1
-and 14 still excludes every legacy `utils/event-log.js` call site.
 
 ### Audit 2 — `working-spec.yaml` active authority paths
 

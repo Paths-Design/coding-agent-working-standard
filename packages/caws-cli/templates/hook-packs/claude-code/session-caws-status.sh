@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 5
 # caws_min_major: 11
 # lineage_refs: 4,11
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -108,6 +108,12 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
       echo ""
       echo "  Worktree lifecycle commands (create/destroy/merge) return in"
       echo "  CAWS v11.1+; if you are on v11.0 they are not yet available."
+      echo ""
+      echo "  CANONICAL-CHECKOUT-WORKTREE-GUARD-001 active:"
+      echo "    Mutating git commands from this checkout (checkout, switch,"
+      echo "    branch -f, reset non-hard) are now BLOCKED while worktrees"
+      echo "    are active. Read-only commands remain allowed. To act on a"
+      echo "    worktree's branch, enter the worktree first."
       echo ""
     else
       echo ""

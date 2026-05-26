@@ -2,9 +2,10 @@ id: SESSION-OWNERSHIP-METADATA-001
 title: 'Extend .caws/agents.json with claimed_paths and last_modified_paths so multi-agent coordination can read working-tree ownership mechanically'
 risk_tier: 3
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: session-ownership-metadata
 created_at: '2026-05-22T23:30:00.000Z'
-updated_at: '2026-05-22T23:30:00.000Z'
+updated_at: '2026-05-23T06:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
@@ -15,6 +16,19 @@ operational_rollback_slo: 30m
 scope:
   in:
     - .caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml
+    - docs/architecture/session-ownership-metadata.md
+    - packages/caws-kernel/src/worktree/types.ts
+    - packages/caws-kernel/src/worktree/index.ts
+    - packages/caws-kernel/src/worktree/freshness.ts
+    - packages/caws-cli/src/store/apply-patch.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-kernel/src/schemas/policy.v1.json
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/shell
+    - packages/caws-kernel/tests
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
@@ -45,13 +59,24 @@ invariants:
     last_modified_paths, and consumers MUST treat that as "no
     information" rather than "no claims."
   - >-
-    last_modified_paths is TTL-bounded, not historical. The field
-    answers "what has this session touched recently?" — typically
-    within a configurable TTL (proposed default: 30 minutes from
-    last_active, no longer than 24h). It is NOT a complete edit
-    journal. Sessions that have been idle longer than the TTL have
-    an empty or absent last_modified_paths array. The TTL is
-    operator-visible and does not silently grow.
+    last_modified_paths is TTL-bounded, not historical, but the bound
+    is CALLER-enforced, not writer-enforced. The field answers "what
+    has this session touched recently?" relative to a TTL the caller
+    consults (configurable via the policy key
+    `agents.last_modified_paths_ttl_seconds`; default 1800, bounds
+    60–86400). The stored value is `readonly string[]` with no
+    per-path timestamps, so the writer cannot remove "paths older
+    than the TTL" by inspection alone — it has no source of truth
+    for per-path age. The caller (a future collector hook, the
+    explicit-claim CLI, or any provenance surface) is responsible
+    for assembling an already-TTL-pruned set and passing it to the
+    writer. The writer enforces ONLY storage-bound invariants:
+    structural validation (non-empty strings, no null bytes) and
+    deterministic max-size truncation at 1000 entries (FIFO,
+    caller-order preserved). last_modified_paths is NOT a complete
+    edit journal, and this slice does NOT introduce per-path
+    timestamps; that would be a different substrate (a
+    timestamp-aware edit ledger) and is out of scope.
   - >-
     claimed_paths is explicit, not inferred. Sessions DECLARE claims
     via an explicit call (proposed: caws claim --paths <glob>...);
@@ -73,15 +98,41 @@ invariants:
     --takeover flag with durable prior_owners audit) — that surface
     lands in WORKING-TREE-PROVENANCE-GUARD-001, not here.
   - >-
-    Schema versioning. The kernel's agents schema gains a v2 shape
-    that admits the two new fields (both optional). Existing v1
-    records load under v2 without rewrites. The data_migration is
+    Schema versioning. No JSON schema for agents.json exists today;
+    the contract is the AgentRecord TypeScript interface. This slice
+    extends that interface additively (claimed_paths and
+    last_modified_paths, both optional). Existing on-disk records
+    load under the widened interface trivially. The original
+    activation amendment also called for a bound_spec_id retrofit,
+    but pre-implementation source inspection showed bound_spec_id
+    is ALREADY declared in AgentRecord; A9 was withdrawn rather
+    than implemented (see A9 below for the audit trail). The data_migration is
     write-on-next-update (no batch migration command needed): the
-    first time a session writes its record after the v2 shape ships,
-    it includes the new fields if applicable; older records sit at
-    v1 until their session next writes. agents.json itself does NOT
-    declare a top-level version field today (per the inspected
-    on-disk shape); this slice does NOT introduce one.
+    first time a session writes its record after the widened
+    interface ships, it includes the new fields if applicable;
+    older records sit unchanged until their session next writes.
+    DRIFT NOTE: contrary to a draft-time assumption, agents.json
+    DOES carry a top-level `version: 1` field (and an unused
+    `agents: {}` key) on disk today. Per-session records sit
+    alongside these top-level keys at the same level, not nested.
+    This slice does NOT change that top-level structure. Full
+    structural normalization is deferred to a separate slice
+    (AGENTS-JSON-STRUCTURE-NORMALIZATION-001, unfiled). See
+    docs/architecture/session-ownership-metadata.md §Discovered
+    state for the full drift correction.
+  - >-
+    Drift-mitigation predicate. Because non-agent top-level keys
+    (`version`, `agents`) live alongside per-session records, the
+    substrate introduces a single reader-side predicate (e.g.,
+    isAgentRecord) that admits a value as an agent record IFF it
+    is an object with a string `session_id` AND a string
+    `last_active`. All consumer surfaces in this slice and the
+    three downstream slices route enumeration of "active agents"
+    through that predicate. This is structural disambiguation,
+    NOT structural normalization: the on-disk shape is unchanged
+    and doctor's existing stale-agent display-only warnings on
+    `version` / `agents` remain (their cleanup belongs to the
+    normalization slice, not this one).
   - >-
     No kernel authority change. The kernel's worktree binding logic,
     ownership decisions, and scope evaluation are all unchanged.
@@ -122,17 +173,29 @@ acceptance:
       unchanged.
   - id: A3
     given: |
-      A session has edited (Write/Edit) several files during a TTL
-      window of 30 minutes.
+      A caller (a future collector hook, the explicit-claim CLI, or a
+      test harness) has assembled a TTL-bounded set of recently-touched
+      paths for the current session and is about to refresh the agent
+      record.
     when: |
-      The session's agents.json record is updated (heartbeat or
-      explicit write).
+      The caller invokes the kernel patch path (refreshAgentClaim or
+      equivalent) with that path set, and the store writer applies the
+      patch to agents.json.
     then: |
-      The record's last_modified_paths field contains the paths
-      modified within the TTL window. Paths older than the TTL are
-      removed (the field is bounded, not append-only). Order is
-      insertion-order or last-modified-time order (locked at
-      implementation, not here).
+      The record's last_modified_paths field contains the caller's path
+      set, stored verbatim except for two writer-side guarantees:
+        (1) structural validation — every entry is a non-empty string
+            with no null bytes; otherwise the write fails closed with a
+            diagnostic, no partial write;
+        (2) deterministic max-size truncation — at most 1000 entries.
+            If the caller passes more than 1000, the writer preserves
+            caller order and drops the oldest (lowest-index) overflow
+            until the count is 1000.
+      TTL membership ("was this path touched within the last N
+      seconds?") is the CALLER's responsibility. The writer has no
+      per-path timestamps to consult and does NOT compute TTL membership
+      from persisted state. The substrate stores; semantic freshness is
+      enforced upstream of the writer.
   - id: A4
     given: |
       A reader (consumer slice such as the working-tree provenance
@@ -178,8 +241,70 @@ acceptance:
     then: |
       All pre-existing tests remain green. New tests cover schema
       v2 loading (A1), explicit-claim write (A2), TTL window (A3),
-      mixed v1/v2 read (A4), and stale-record claim preservation
-      (A5). No production diff outside scope.in.
+      mixed v1/v2 read (A4), stale-record claim preservation (A5),
+      non-agent top-level keys (A8), and policy key bounds (A10).
+      A9 is WITHDRAWN (no retrofit needed); a passive no-regression
+      assertion for `bound_spec_id` is permitted but not required.
+      No production diff outside scope.in.
+  - id: A8
+    given: |
+      agents.json contains top-level `version: 1` and `agents: {}`
+      keys alongside per-session records (the on-disk shape
+      verified during activation recon).
+    when: |
+      Ownership metadata readers enumerate active agent records
+      via the new predicate (isAgentRecord or equivalent).
+    then: |
+      Only object values with a string `session_id` AND a string
+      `last_active` are treated as agent records. `version` and
+      `agents` are ignored: not enumerated as agents, not warned
+      on as stale sessions by any new diagnostic added by this
+      slice. (Existing doctor stale-agent display-only warnings
+      on those keys remain — their cleanup is the structural
+      normalization slice's concern.)
+  - id: A9
+    given: |
+      A9 was originally drafted to retrofit `bound_spec_id` into
+      AgentRecord. Pre-implementation source inspection
+      (packages/caws-kernel/src/worktree/types.ts:118; also
+      referenced in freshness.ts:21,45, claim.ts:193,
+      apply-patch.ts:202) showed that the field is ALREADY declared
+      and used consistently. The earlier recon claim that it was
+      "written via spread extras without being declared in
+      AgentRecord" was incorrect. The id A9 is preserved in place
+      rather than deleted, so the audit trail of the correction
+      remains visible to future readers.
+    when: |
+      Implementation commit 1 of this slice ships.
+    then: |
+      A9 is WITHDRAWN — there is no retrofit work to do. The
+      implementation MUST NOT modify or regress the existing
+      `bound_spec_id` declaration in AgentRecord. Tests MAY include
+      a passive no-regression assertion (e.g., that loading a
+      record with `bound_spec_id` exposes it through the typed
+      interface), but that is hardening, not new functionality.
+      Test counts and closure notes MUST identify A9 as withdrawn
+      so test gap analysis is honest.
+  - id: A10
+    given: |
+      A `policy.yaml` that may or may not define
+      `agents.last_modified_paths_ttl_seconds`.
+    when: |
+      The policy schema (packages/caws-kernel/src/schemas/policy.v1.json)
+      validates the file and the store loads the policy.
+    then: |
+      The key is optional, integer-valued. Values below 60 or above
+      86400 fail schema validation with a clear diagnostic. Absent key
+      resolves to the default 1800 seconds (30 minutes).
+      A10 covers ONLY the schema validation and default resolution.
+      The writer does NOT consume this value for TTL pruning of
+      last_modified_paths — see A3, which clarifies that TTL membership
+      is the caller/collector's responsibility, not the writer's. The
+      key is exposed configuration for downstream collectors (future
+      hooks, the explicit-claim CLI's bounded-recent-modifications view,
+      the working-tree provenance guard). Commit 2 proves the key
+      can be loaded and defaulted; it does NOT prove any pruning
+      semantics, because the substrate does not have any.
 non_functional:
   reliability:
     - >-
@@ -299,43 +424,94 @@ contracts: []
 #       claimed_paths is operator-bounded (explicit declarations
 #       are limited by human attention) and does not need a cap.
 #
-# Implementation sketch (sketch only, not authorized)
-# ---------------------------------------------------
-# Three commits expected after activation:
+# Implementation plan (resolved by ADR; see docs/architecture/session-ownership-metadata.md)
+# ---------------------------------------------------------------------------------------
+# Q1-Q6 plus two drift findings resolved in the design note. Summary
+# of locked choices:
+#   Q1. Explicit claimed_paths; implicit last_modified_paths.
+#   Q2. CORRECTED to C1-storage-bounds interpretation.
+#       Policy key `agents.last_modified_paths_ttl_seconds` ships
+#       (integer, bounds [60, 86400], default 1800), but is
+#       CALLER-VISIBLE CONFIG, not writer-enforced semantics. The
+#       writer cannot prune by per-path age because the substrate
+#       (last_modified_paths: readonly string[]) carries no
+#       timestamps. Original Q2 phrase "Prune at write time relative
+#       to now()" was structurally infeasible for this shape and is
+#       withdrawn; TTL enforcement is the caller's responsibility,
+#       which is the substrate-vs-policy distinction the four-part
+#       bar exists to preserve. See A3 (writer accepts caller-pruned
+#       set verbatim) and A10 (policy key validates + defaults; does
+#       NOT drive writer pruning) for the correct shape.
+#   Q3. Takeover stays in WORKING-TREE-PROVENANCE-GUARD-001.
+#       Defensive test for cross-session non-clobber added.
+#   Q4. Verbatim storage; consumer canonicalizes.
+#   Q5. Query-time glob expansion; write-time validates non-empty
+#       and no null bytes only.
+#   Q6. last_modified_paths cap 1000 entries, FIFO, ENFORCED BY
+#       THE WRITER (caller-order preserved; if caller passes >1000,
+#       oldest overflow dropped until count=1000). This is a
+#       storage-bound invariant — distinct from TTL because it
+#       needs no information beyond ordered input and a max length.
+#       claimed_paths cap 256 (enforced at CLI in commit 3); the
+#       writer accepts caller-provided claimed_paths verbatim
+#       subject only to structural validation.
+# Drift 1. agents.json HAS a top-level version: 1; the original
+#          invariant is corrected above. No version bump in this
+#          slice; structural normalization deferred to
+#          AGENTS-JSON-STRUCTURE-NORMALIZATION-001 (unfiled).
+# Drift 2. WITHDRAWN. Originally framed as a bound_spec_id
+#          retrofit (A9). Pre-implementation source inspection
+#          showed bound_spec_id is ALREADY declared in
+#          packages/caws-kernel/src/worktree/types.ts:118 and
+#          referenced consistently throughout. The earlier recon
+#          was wrong; A9 has been withdrawn in place (its id is
+#          preserved with a "withdrawn / corrected" body). No
+#          retrofit work to do. See ADR §Discovered state for
+#          the full correction.
+# Schema strategy: no JSON schema for agents.json in this slice.
+# TypeScript interface widening + the isAgentRecord predicate
+# (A8) are sufficient. A future slice may introduce the first
+# JSON schema.
 #
-# Commit 1: schema + types.
-#   - packages/caws-kernel/src/worktree/types.ts: extend AgentRecord
-#     with optional claimed_paths?: readonly string[] and
-#     last_modified_paths?: readonly string[].
-#   - packages/caws-kernel/src/schemas/agents.v2.json: new schema
-#     (v1 admitted by additive optional fields). Or amend
-#     agents.v1.json with additionalProperties: false relaxed for
-#     the two new keys. (Activator decides whether to fork v1/v2
-#     or extend in place.)
-#   - kernel tests for backward-compat load (A1) and v2 load (A2).
-#
-# Commit 2: store-layer write paths.
-#   - packages/caws-cli/src/store/agents-store.ts: writer adds the
-#     two fields when populated; reader returns them through the
-#     existing interface.
-#   - New explicit-claim surface (proposed: a small command or a
-#     library function called by other commands). Naming and shell
-#     binding land in the activator's decision; the kernel-level
-#     primitive is the data model.
-#
-# Commit 3: closure with consumer-slice references.
-#   - closure_notes record the schema version chosen (v1 extension
-#     vs v2 fork), the explicit-claim surface chosen, the TTL
-#     value picked, test counts, and a pointer to the three
-#     consumer slices.
+# Four commits expected after activation (full detail in the ADR):
+#   Commit 1: types + reader predicate (no writer change, no shell).
+#             Covers A1, A8. A9 is WITHDRAWN — a passive
+#             no-regression assertion for bound_spec_id is
+#             permitted but not required.
+#   Commit 2: writer + policy key.
+#             - Extends RegistryPatch.refresh_agent with optional
+#               claimed_paths?: readonly string[] and
+#               last_modified_paths?: readonly string[].
+#             - Extends applyRefreshAgent to write the new fields
+#               when present, preserving existing fields.
+#             - Structural validation: strings only, non-empty,
+#               no null bytes. Invalid input fails closed.
+#             - Storage cap: last_modified_paths truncates at 1000
+#               FIFO (caller-order preserved). claimed_paths
+#               accepted verbatim from caller (256-cap is CLI-side
+#               in commit 3).
+#             - Policy key schema adds
+#               agents.last_modified_paths_ttl_seconds (integer,
+#               bounds [60, 86400], default 1800). Schema validation
+#               only; no writer consumption.
+#             - Cross-session non-clobber test: writing session A's
+#               record leaves session B's claimed_paths byte-identical.
+#             - NO TTL prune in the writer (C1 interpretation locked).
+#             - Covers A2, A3 (revised), A5, A6, A10 (revised).
+#   Commit 3: caws claim --paths CLI surface, behind a follow-up
+#             scope amendment that adds shell paths. Covers
+#             explicit-claim end-to-end. Acceptance covered by
+#             A2 with shell wiring.
+#   Commit 4: closure with consumer-slice pointers.
 #
 # Activation gate
 # ---------------
 # Activation requires:
 #   1. Maintainer authorization (this is recon/draft only).
-#   2. Resolving Q1-Q6 (lightweight ADR or maintainer decision in
-#      the activation commit message; full ADR file optional).
-#   3. NO blocking on the other three multi-agent slices —
+#   2. ADR sign-off (docs/architecture/session-ownership-metadata.md).
+#   3. This amendment commit lands first; the activation commit
+#      is separate.
+#   4. NO blocking on the other three multi-agent slices —
 #      ordering is THIS first, then the consumer slices, but the
 #      consumers don't need to be filed before this activates.
 #

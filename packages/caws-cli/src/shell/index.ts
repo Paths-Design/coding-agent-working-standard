@@ -162,6 +162,7 @@ export {
   runWorktreeDestroyCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreeRepairSparseCommand,
 } from './commands/worktree';
 export type {
   WorktreeCreateOptions,
@@ -170,10 +171,29 @@ export type {
   WorktreeDestroyOptions,
   WorktreeMergeOptions,
   WorktreeMigrateRegistryOptions,
+  WorktreeRepairSparseOptions,
 } from './commands/worktree';
 
 export { renderInit } from './render/init';
 export type { RenderInitInput } from './render/init';
+
+// ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ─────────────────────
+export {
+  runAgentsRegisterCommand,
+  runAgentsHeartbeatCommand,
+  runAgentsStopCommand,
+  runAgentsListCommand,
+  runAgentsShowCommand,
+  runAgentsPruneCommand,
+} from './commands/agents';
+export type {
+  RegisterOpts as AgentsRegisterOptions,
+  HeartbeatOpts as AgentsHeartbeatOptions,
+  StopOpts as AgentsStopOptions,
+  ListOpts as AgentsListOptions,
+  ShowOpts as AgentsShowOptions,
+  PruneOpts as AgentsPruneOptions,
+} from './commands/agents';
 
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';

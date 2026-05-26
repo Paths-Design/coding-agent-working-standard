@@ -1,1 +1,25 @@
+<<<<<<< HEAD
 {}
+=======
+{
+  "release-caws-11-1-7-train": {
+    "specId": "RELEASE-CAWS-11-1-7-TRAIN-01",
+    "owner": {
+      "session_id": "caws-a04b2dad7803",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-26T18:47:18.066Z",
+    "branch": "release-caws-11-1-7-train",
+    "baseBranch": "feat/multi-agent-provenance-envelope",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/release-caws-11-1-7-train",
+    "prior_owners": [
+      {
+        "session_id": "caws-d66262ddcd76",
+        "platform": "darwin",
+        "last_seen": "2026-05-26T18:18:03.772Z",
+        "takenOver_at": "2026-05-26T18:47:18.066Z"
+      }
+    ]
+  }
+}
+>>>>>>> feat/multi-agent-provenance-envelope

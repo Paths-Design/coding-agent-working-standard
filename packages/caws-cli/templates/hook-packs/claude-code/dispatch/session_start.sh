@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 2
+# hook_pack_version: 5
 # caws_min_major: 11
-# lineage_refs: 10,11
+# lineage_refs: 10,11,19
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # SessionStart dispatcher for Claude Code hooks.
 #
@@ -36,6 +36,10 @@ HANDLERS=(
   "audit.sh session-start"
   # "session-caws-status.sh session-start"
   "session-log.sh"
+  # MULTI-AGENT-ACTIVITY-REGISTRY-001: self-register into the leases
+  # substrate so other sessions can see this one. Non-blocking; refuses
+  # silently when HOOK_SESSION_ID is empty or "unknown".
+  "agent-register.sh"
 )
 
 run_handlers "${HANDLERS[@]}"

@@ -1,0 +1,658 @@
+id: MULTI-AGENT-ACTIVITY-REGISTRY-001
+title: 'Agent liveness substrate (.caws/leases/<session_id>.json) with self-registration / heartbeat / soft-stop and prominent N-parallel-agent surfacing'
+risk_tier: 2
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Visibility substrate shipped via 7 commits + 4 scope amendments. Merged via git merge --no-ff e8aa871 on feat/multi-agent-provenance-envelope (caws worktree merge tripped WORKTREE-MERGE-V11-SHAPE-001 v11 schema regression). Post-merge: install tests 39/39, fresh-install-smoke 11/12 PASS 1 principled SKIP. Doctrine, failure-lineage Entry 19, release-procedure footgun all recorded. Authority remains in worktrees.json and specs; leases are visibility only. Follow-ups filed: SESSION-LOG-RENDERER-MISSING-001, WORKTREE-MERGE-V11-SHAPE-001, caws-worktree-create-sparse-spec-bug, CANONICAL-CHECKOUT-WORKTREE-GUARD-001.'
+created_at: '2026-05-23T07:00:00.000Z'
+updated_at: '2026-05-23T10:27:34.556Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/worktree
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/render
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/init/hook-packs
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/failure-lineage.md
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .caws/specs/MULTI-AGENT-ACTIVITY-REGISTRY-001.yaml
+    - packages/caws-kernel/src/worktree/leases.ts
+    - packages/caws-kernel/src/worktree/index.ts
+    - packages/caws-kernel/tests/unit/leases.test.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/store/apply-patch.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/render/status.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-register.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-heartbeat.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-stop.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/session_start.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/post_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/stop.sh
+    # Pack-version header bump (v2 → v3). The install test asserts every
+    # installed file's managed header version matches the manifest. Every
+    # managed file gets a single-line header bump as part of this slice.
+    - packages/caws-cli/templates/hook-packs/claude-code/audit.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-strikes.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/guard-strikes.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/templates/hook-packs/claude-code/runtime-paths.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-log.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/run-handlers.sh
+    - packages/caws-cli/tests/store/leases-store.test.js
+    - packages/caws-cli/tests/store/leases-agents-independence.test.js
+    - packages/caws-cli/tests/shell/agents-command.test.js
+    - packages/caws-cli/tests/shell/agents-cli-no-hook-envelope.test.js
+    - packages/caws-cli/tests/shell/agents-linked-worktree.test.js
+    - packages/caws-cli/tests/shell/status-command.test.js
+    - packages/caws-cli/tests/shell/status-leases.test.js
+    - packages/caws-cli/tests/integration/lite-hooks.test.js
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/failure-lineage.md
+    - docs/release-procedure.md
+  out:
+    - .caws/policy.yaml
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
+    - .github/workflows
+    - packages/caws-cli/src/commands/agents.js
+    - packages/caws-cli/src/utils/agent-display.js
+    - packages/caws-cli/src/utils/agent-session.js
+invariants:
+  - >-
+    Leases (.caws/leases/<safe-session-id>.json) are operational cache,
+    NEVER authority. No code path in this slice or any future slice may
+    consult lease state to authorize ownership, scope admission, takeover,
+    worktree destruction, merge, spec lifecycle transition, or any other
+    governance decision. TTL never authorizes anything. Stale lease is
+    evidence, not permission. This invariant matches doctrine §6 invariants
+    8-9 and the failure-lineage history that rejected TTL-as-authorization.
+  - >-
+    LeasePatch is a SEPARATE type from RegistryPatch. RegistryPatch
+    mutates governance state (worktrees.json, agents.json); LeasePatch
+    mutates operational-cache state (.caws/leases/). They do not share
+    a union, do not share an apply function, and do not share a lock.
+    leases-store.ts owns lease I/O exclusively; apply-patch.ts is NOT
+    extended with lease handling. Routing lease writes through the
+    governance apply path would re-merge the boundary this slice exists
+    to preserve.
+  - >-
+    The on-disk AgentLease.status enum is exactly {active, stopping,
+    stopped}. 'stale' is NEVER written to disk. Stale is computed at
+    read time by summarizeActiveAgents(now, ttlMs) — a record whose
+    status === 'active' but whose (now - last_active) > ttlMs is bucketed
+    as 'stale' in the returned ActivitySummary. Auto-materializing 'stale'
+    would mean session A writes session B's lease file, which violates
+    the per-session-file ownership model that makes per-file atomic
+    writes safe in the first place.
+  - >-
+    Hard deletion of stopped/stale lease files happens only via the
+    explicit operator command `caws agents prune --status <stopped|stale>
+    --older-than <duration>`, which defaults to --dry-run. Heartbeat
+    and status flows never delete other sessions' lease files. cull-via-
+    hook is forbidden.
+  - >-
+    The CLI is hook-protocol-agnostic. `caws agents heartbeat --json
+    --include-active-summary` returns CAWS-native JSON only:
+    { ok, session_id, lease_path, wrote, throttled, active_agent_count,
+    active_agents: [...] }. The JSON does NOT contain the strings
+    'hookSpecificOutput', 'hookEventName', 'permissionDecision', or
+    'additionalContext'. The Claude Code hook envelope is composed by
+    agent-heartbeat.sh wrapping the CAWS JSON. A future Cursor or terminal
+    integration consumes the same CAWS JSON and emits its own envelope.
+    Changing Claude Code's hook envelope format must not require changing
+    kernel lease logic or store lease writes.
+  - >-
+    caws status is read-only by default. Status writes its own lease
+    ONLY when invoked with --heartbeat. `--session-id <id>` alone is
+    identity annotation and does NOT trigger a lease write — explicit
+    identity is the safer default (it prevents
+    `status --session-id <other>` from accidentally writing on someone
+    else's behalf). Default human/CI/automation invocations of
+    `caws status` do NOT create lease records. The rule is:
+      caws status                            → read-only
+      caws status --session-id X             → read-only, identity only
+      caws status --heartbeat                → may write self lease
+      caws status --heartbeat --session-id X → writes lease for X
+    This narrows the §6 invariant 7 "status may update leases"
+    carve-out: status mutates leases only on explicit --heartbeat.
+  - >-
+    Session-id filename safety. .caws/leases/<safe-session-id>.json
+    uses a strict-allowlist filename: ^[A-Za-z0-9._:-]+$. The session_id
+    'unknown' (parse-input.sh's default when no session_id is in the
+    hook payload) is REFUSED — writing 'unknown.json' would collide
+    across all anonymous sessions. The store enforces this at the I/O
+    boundary via safeLeaseFilename(); the kernel constructs records but
+    does not touch filesystems. Hook scripts MUST guard
+    [ -z "$HOOK_SESSION_ID" ] || [ "$HOOK_SESSION_ID" = "unknown" ] →
+    exit 0 silently before invoking the CLI.
+  - >-
+    Git path classification (canonical vs worktree) uses fs.realpathSync-
+    normalized absolute paths. git_dir_kind = canonical iff
+    fs.realpathSync(git_common_dir) === fs.realpathSync(git_dir). String
+    equality without normalization is unreliable because git may return
+    '.git' relative in one context and absolute in another. The
+    realpath normalization happens in the shell command layer
+    (LeaseContext construction); the kernel receives already-normalized
+    values.
+  - >-
+    loadLeases is lenient. A malformed individual lease file produces
+    a diagnostic (rule store.leases.file_malformed) and is excluded
+    from the returned registry; the call still succeeds with the
+    parseable subset. Only an unreadable lease directory (permission
+    denied on the dir itself) causes the call to fail. This is
+    operational-cache discipline: a single corrupted file must never
+    block liveness observation. Compare to governance-state loaders
+    (loadWorktrees, loadPolicy) which fail on malformed input — that
+    discipline is correct for authority surfaces but wrong here.
+  - >-
+    .caws/agents.json is FROZEN by this slice. No new fields, no new
+    writers. The existing AgentRecord schema (session_id, platform?,
+    last_active, bound_worktree?, bound_spec_id?) is unchanged. The
+    existing caws claim → applyRefreshAgent write path is preserved
+    for backward compat. Other than a deprecation comment at the top
+    of agents-store.ts and apply-patch.ts:applyRefreshAgent, no code
+    in this slice touches agents.json. This avoids re-evolving the
+    legacy substrate under new naming.
+  - >-
+    Leases and agents.json are independent: deleting or corrupting
+    .caws/agents.json must not break lease load, write, list, register,
+    heartbeat, stop, status, or the future canonical-checkout guard.
+    The negative-invariant test asserts this directly. The transition
+    rule: if any .caws/leases/*.json exist, status uses leases; if
+    none exist, status may read agents.json as legacy display-only
+    fallback. No ownership/scope decision consults either.
+  - >-
+    No heartbeat events in events.jsonl. Per doctrine §6 invariant 10,
+    lease writes MUST NOT append events. Events are durable governance
+    facts; leases are operational cache. The two stores do not overlap.
+    Lease write failure is warn-and-continue; events.jsonl is untouched
+    by every code path in this slice.
+  - >-
+    Hook pack is managed. All hook changes flow through the pack
+    manifest (CLAUDE_CODE_PACK_VERSION bumped 2 → 3) and the
+    templates/ subtree. Direct edits to .claude/hooks/*.sh in this
+    repo are forbidden. Activation requires session restart per the
+    pack's activation: 'restart_required' attribute; the live two-
+    session test MUST include caws init + new Claude Code session
+    start, not source-tree hook invocation.
+  - >-
+    Stop is best-effort, heartbeat is primary. Claude Code's Stop
+    hook fires on clean session exit but not on crash, SIGKILL,
+    /compact, or /clear. agent-stop.sh MUST NOT be relied on for
+    liveness correctness. The system stays consistent under crash
+    because: heartbeat is the primary liveness signal; (now -
+    last_active) > ttlMs computes 'stale' on read; explicit prune
+    handles cleanup. A session that dies between heartbeats appears
+    as stale within TTL, which is the desired behavior.
+  - >-
+    This slice ships VISIBILITY, not enforcement. It does NOT prevent
+    canonical-checkout branch switching, does NOT block implementation
+    writes from the canonical checkout, and does NOT refuse any tool
+    call. Visibility surfaces the parallel-agent presence to humans
+    and to the future CANONICAL-CHECKOUT-WORKTREE-GUARD-001 slice,
+    which consumes lease fields (git_common_dir, git_dir, branch,
+    bound_worktree, bound_spec_id) to make blocking decisions.
+    Calling THIS slice complete does not mean the canonical-checkout
+    hijack pattern is fixed.
+  - >-
+    Functional completeness is not "unit tests pass." The slice is
+    complete only when (a) all kernel + store + shell tests pass, (b)
+    hook integration tests against installed (not source-tree) hooks
+    pass, (c) the negative invariant tests (CLI never emits hook
+    envelope; agents.json independence) pass, (d) the packaging smoke
+    confirms `caws agents register/heartbeat/stop/list` work after
+    npm pack + scratch install, and (e) the live two-session test —
+    two real Claude Code sessions in separate worktrees, after caws
+    init + session restart — confirms each sees the other in
+    SessionStart banner and PreToolUse additionalContext when N > 1.
+    Sterling-side validation is not required for this slice (no
+    Sterling coupling).
+acceptance:
+  - id: A1
+    given: |
+      packages/caws-kernel/src/worktree/ exports refreshAgentClaim,
+      heartbeatAge, isStaleByTTL (the legacy freshness surface for
+      agents.json). No lease module exists.
+    when: |
+      The kernel slice of this work lands.
+    then: |
+      A new module packages/caws-kernel/src/worktree/leases.ts exports:
+      (1) AgentLease, LeaseRegistry, LeaseContext, ActivitySummary, and
+      LeasePatch types — where LeasePatch is a discriminated union
+      {write_lease, mark_stopped, delete_lease} (NO mark_stale).
+      AgentLease.status enum is {active, stopping, stopped} (NO 'stale').
+      AgentLease.lease_version is the literal 1. (2) Pure functions
+      registerAgentSession, heartbeatAgentSession, stopAgentSession,
+      summarizeActiveAgents — all time-injected via positional now: Date,
+      all returning Result<T>. (3) The transformer has zero filesystem,
+      network, env, or process imports (verified by source inspection
+      in the kernel test). worktree/index.ts re-exports the new surface
+      alongside the existing freshness exports.
+  - id: A2
+    given: |
+      A LeaseRegistry containing one existing AgentLease for session-A
+      with started_at = T0.
+    when: |
+      registerAgentSession is called for session-A with new context at
+      time T1 > T0.
+    then: |
+      Returns ok({ kind: 'write_lease', session_id: 'session-A', lease })
+      where lease.started_at === T0 (preserved), lease.last_active === T1,
+      lease.status === 'active', and all context fields (cwd, branch,
+      bound_*) reflect the new context. The input registry is not mutated
+      (verified by structural equality assertion).
+  - id: A3
+    given: |
+      A LeaseRegistry containing one AgentLease for session-A with
+      status 'active' and last_active T0.
+    when: |
+      heartbeatAgentSession is called for session-A at time T1, then
+      stopAgentSession is called at time T2.
+    then: |
+      Heartbeat returns write_lease with last_active = T1, status =
+      'active', started_at unchanged. Stop returns ok({ kind: 'mark_stopped',
+      session_id: 'session-A', transitioned_at: T2 }). The kernel does
+      NOT emit a write_lease for the stop — the store layer interprets
+      mark_stopped as a transition that updates only status and stopped_at,
+      preserving the rest of the on-disk record.
+  - id: A4
+    given: |
+      A LeaseRegistry with three records: session-A status 'active'
+      last_active 10s ago, session-B status 'active' last_active 5min
+      ago, session-C status 'stopped' last_active 1h ago.
+    when: |
+      summarizeActiveAgents is called with ttlMs = 60_000.
+    then: |
+      Returns ActivitySummary { total: 3, active: [session-A], stale:
+      [session-B], stopped: [session-C] }. The function returns the same
+      result whether called once or a hundred times — it does NOT emit
+      any patch (no write side effect, verified by capturing all calls
+      and asserting summarize is invoked solely for reads in store and
+      shell layers).
+  - id: A5
+    given: |
+      packages/caws-cli/src/store/leases-store.ts exposes loadLeases,
+      applyLeasePatch, applyLeasePatches, pruneLeasesByStatus,
+      safeLeaseFilename. applyRegistryPatch in apply-patch.ts is
+      UNCHANGED (only a top-of-file deprecation comment added to
+      apply-patch.ts and agents-store.ts).
+    when: |
+      Inspection of apply-patch.ts after the slice lands.
+    then: |
+      grep '"write_lease"|"mark_stopped"|"delete_lease"' apply-patch.ts
+      returns ZERO matches. The RegistryPatch union in
+      kernel/worktree/types.ts is unchanged. Lease patches are applied
+      ONLY through leases-store.ts. Verified by a static-import test
+      asserting apply-patch.ts does not import from leases-store.ts
+      and leases-store.ts does not import applyRegistryPatch.
+  - id: A6
+    given: |
+      The store's safeLeaseFilename validator.
+    when: |
+      Called with various session_id inputs.
+    then: |
+      'caws-2e94385548fa' returns ok('caws-2e94385548fa.json').
+      'caws_2e94385548fa' returns ok('caws_2e94385548fa.json').
+      'bc73ba3b-534f-4932-a7e2-8f3f699db486' returns ok with .json
+      suffix. '' returns err(LEASE_SESSION_ID_INVALID). 'unknown'
+      returns err(LEASE_SESSION_ID_INVALID). '../escape' returns
+      err(LEASE_SESSION_ID_UNSAFE). 'has spaces' returns
+      err(LEASE_SESSION_ID_UNSAFE). 'with/slash' returns
+      err(LEASE_SESSION_ID_UNSAFE). The store NEVER writes a file
+      for any err case.
+  - id: A7
+    given: |
+      A .caws/leases/ directory containing two valid lease files and
+      one file with malformed JSON.
+    when: |
+      loadLeases is called.
+    then: |
+      Returns ok({ leases: { <two valid sessions> }, diagnostics:
+      [Diagnostic{rule: 'store.leases.file_malformed', subject:
+      <path-of-bad-file>, severity: 'warning'}] }). The two valid
+      records are present and parseable; the malformed file is
+      excluded but not silently dropped. Call returns ok despite
+      the malformed file. A subsequent applyLeasePatch for a
+      different session writes successfully alongside the bad file.
+  - id: A8
+    given: |
+      A .caws/leases/ directory that the user lacks read permission
+      on (chmod 000).
+    when: |
+      loadLeases is called.
+    then: |
+      Returns err with rule store.leases.dir_unreadable. This is the
+      ONLY load path that fails the call. Per-file failures are
+      degraded to diagnostics inside an ok result (A7).
+  - id: A9
+    given: |
+      A built caws-cli with the new `caws agents` command group.
+    when: |
+      `caws agents heartbeat --session-id caws-test1 --platform claude-code
+      --reason pre_tool_use --json --include-active-summary` is run against
+      a scratch cawsDir.
+    then: |
+      Stdout is valid JSON matching the contract:
+      { ok: true, session_id: 'caws-test1', lease_path:
+      '.caws/leases/caws-test1.json', wrote: true, throttled: false,
+      active_agent_count: <integer>, active_agents: [<entries>] }.
+      The .caws/leases/caws-test1.json file exists with AgentLease
+      shape. The CAWS-native JSON does NOT contain the strings
+      'hookSpecificOutput', 'hookEventName', 'permissionDecision',
+      or 'additionalContext' (negative invariant — proves the CLI
+      is hook-protocol-agnostic).
+  - id: A10
+    given: |
+      A lease file for session-A with last_active 5 seconds ago.
+    when: |
+      `caws agents heartbeat --session-id session-A --throttle 30000` is
+      run.
+    then: |
+      Returns ok with wrote: false, throttled: true. The lease file's
+      last_active is byte-identical before and after (verified by sha256).
+      The active-summary is still computed and returned even when
+      throttled. When the same command is run with --throttle 1000
+      (less than 5s elapsed), wrote: true. When --throttle is omitted,
+      default is 30000ms.
+  - id: A11
+    given: |
+      The new agent-register.sh / agent-heartbeat.sh / agent-stop.sh
+      hook templates and the integration-test harness in
+      tests/integration/lite-hooks.test.js.
+    when: |
+      Each script is invoked with `echo '{ "session_id": "caws-test2",
+      "tool_name": "Bash" }' | bash <script>`.
+    then: |
+      agent-register.sh exits 0 and produces .caws/leases/caws-test2.json
+      with status active. agent-heartbeat.sh exits 0; when its CLI
+      response shows active_agent_count > 1, the script wraps the
+      summary into Claude Code's hookSpecificOutput envelope on stdout.
+      agent-stop.sh exits 0 and the lease file's status becomes 'stopped'.
+      For all three: when HOOK_SESSION_ID is 'unknown' or empty, the
+      script exits 0 silently and writes nothing (per filename-safety
+      invariant).
+  - id: A12
+    given: |
+      .caws/leases/ contains two valid lease files. .caws/agents.json
+      is deleted (or corrupted to "not json").
+    when: |
+      `caws agents list`, `caws agents register --session-id sess3
+      --platform claude-code`, and `caws status` are each run.
+    then: |
+      All three commands succeed. Lease operations are unaffected by
+      agents.json absence/corruption. Status renders the Agents panel
+      from leases. This is the agents.json-independence negative
+      invariant — proves the new model is not secretly dependent on
+      the legacy substrate.
+  - id: A13
+    given: |
+      A .caws/leases/ directory containing 2 active leases.
+    when: |
+      `caws status` is run from a human terminal (no --heartbeat flag,
+      no --session-id flag).
+    then: |
+      The Agents panel renders with active count 2. NO new lease file
+      is written or updated. The directory listing is byte-identical
+      before and after (verified by directory digest). When the same
+      command is run with --heartbeat, the caller's own lease is
+      written/refreshed.
+  - id: A14
+    given: |
+      The packaged caws-cli installed into a scratch project via
+      npm pack + caws init --agent-surface claude-code.
+    when: |
+      packages/caws-cli/scripts/fresh-install-smoke.mjs runs.
+    then: |
+      The script proves the 12-point end-to-end packaging bar:
+      (1) `npm pack` produces a tarball under packages/caws-cli.
+      (2) That tarball installs into a fresh scratch project from
+      tarball, not source.
+      (3) `caws init --agent-surface claude-code` succeeds against
+      an empty git repo in that scratch project.
+      (4) The installed hook pack reports v3 and includes the three
+      new agent-*.sh files as managed+executable.
+      (5) `bash dispatch/session_start.sh` with synthetic SessionStart
+      payload creates .caws/leases/<session_id>.json containing
+      status=active.
+      (6) `bash dispatch/pre_tool_use.sh` with synthetic PreToolUse
+      payload and only one active lease emits empty stdout (silent).
+      (7) After seeding a second lease (mimicking a peer session),
+      `bash dispatch/pre_tool_use.sh` emits valid
+      hookSpecificOutput.additionalContext naming only the peer
+      session (not self).
+      (8) `bash dispatch/stop.sh` with synthetic Stop payload flips
+      the lease to status=stopped with stopped_at set.
+      (9) `caws status` from the scratch project renders the Agents
+      panel before Doctor (verified by inspecting render order).
+      (10) `caws agents heartbeat --json --include-active-summary`
+      stdout contains zero of: hookSpecificOutput, hookEventName,
+      permissionDecision, additionalContext (CLI is hook-protocol-
+      agnostic in the installed artifact too).
+      (11) The PATH used to invoke agent-heartbeat.sh during the
+      smoke run does NOT include jq; the hook still produces the
+      envelope correctly via node. This proves visibility does not
+      silently degrade when jq is absent (the original concern).
+      (12) The script is wired into a release-time validation
+      sequence (called from CI release workflow or prepublishOnly)
+      so a future regression cannot ship.
+  - id: A15
+    given: |
+      docs/architecture/caws-vnext-command-surface.md and
+      docs/failure-lineage.md as of the slice's first commit.
+    when: |
+      The doctrine + failure-lineage updates in this slice land.
+    then: |
+      §2 of the command-surface doc adds `caws agents register/heartbeat/
+      stop/prune` to the v11.2 surface (extending the existing §1 plan
+      of list/show). §6 invariant 11 is amended with a note that lease
+      writes go through `caws agents heartbeat` (NOT direct hook writes).
+      docs/failure-lineage.md Entry 19 is re-authored with the content
+      from preserved commit 5997dc0, attributed to this slice's worktree
+      branch (not the wrong branch the original landed on). The Entry
+      19 body explicitly names this slice's design (lease substrate,
+      separated patch types, hook-CLI boundary, no auto-stale-write,
+      no agents.json extension) rather than the earlier framing the
+      misrouted commit captured.
+non_functional:
+  reliability:
+    - >-
+      Operational-cache discipline: lease writes never block the user's
+      work. Hook scripts exit 0 on CLI failure (the heartbeat is best-
+      effort). Lease write failures inside the CLI return ok-with-
+      warnings, not err. The store's writeFileAtomic primitive guarantees
+      partial writes are never visible (temp + fsync + rename).
+    - >-
+      Crash safety. Stop hook is best-effort; a session that crashes
+      between heartbeats leaves its lease file with status 'active' and
+      a stale last_active. summarizeActiveAgents correctly classifies
+      it as 'stale' on next read. No accumulated breakage from missed
+      Stop signals.
+    - >-
+      Concurrent-write safety. Per-session file ownership means
+      session A only writes its own file; session B only writes its
+      own. There is no shared registry file to contend on. The
+      writeFileAtomic call is the cross-process safety primitive.
+      No lifecycle-lock is acquired (per doctrine §6 invariant 11).
+  performance:
+    - >-
+      Heartbeat throttle (default 30s) keeps PreToolUse hook overhead
+      bounded. A typical tool-heavy turn fires ~10 PreToolUse events
+      in 30s; the throttle reduces lease writes to 1 per 30s instead
+      of 10. CLI invocation overhead (~50ms node startup) dominates;
+      the throttle decision happens INSIDE the CLI before any I/O.
+    - >-
+      loadLeases is linear in lease count. Typical N is 1-5; even
+      a corrupted lease file produces a warning diagnostic, not a
+      latency cliff. Status render for 5 leases completes in <100ms
+      on a typical workstation.
+contracts:
+  - name: agent-lease-substrate
+    type: behavior
+    path: packages/caws-cli/src/store/leases-store.ts
+    description: >-
+      The .caws/leases/<safe-session-id>.json substrate is the normative
+      v11.2-early liveness cache. (1) safeLeaseFilename enforces a strict
+      character allowlist (^[A-Za-z0-9._:-]+$) and refuses the literal
+      'unknown' — both the kernel and shell layers MUST route filename
+      derivation through this single function. (2) loadLeases is lenient
+      under per-file corruption (returns ok-with-diagnostics) and strict
+      under directory unreadability (returns err). (3) applyLeasePatch
+      writes a single file per session via writeFileAtomic; no shared
+      registry file; no lifecycle-lock acquired. (4) Lease writes never
+      append events.jsonl. (5) Lease state is NEVER consulted for
+      ownership, scope admission, takeover, or any governance decision.
+      (6) Hard deletion of stopped/stale lease files happens only via
+      explicit `caws agents prune` with --older-than gating. (7) The
+      AgentLease.status on-disk enum is exactly {active, stopping,
+      stopped}; 'stale' is read-side classification only. The contract
+      is the normative interface for downstream consumers: a future
+      CANONICAL-CHECKOUT-WORKTREE-GUARD-001 slice MUST consume this
+      surface for git_common_dir/git_dir/branch/bound_worktree
+      visibility without re-implementing lease I/O. Implementation
+      that drifts from any clause violates the contract and requires
+      a scope amendment.
+  - name: cli-hook-protocol-boundary
+    type: behavior
+    path: packages/caws-cli/src/shell/commands/agents.ts
+    description: >-
+      The CLI emits CAWS-native JSON only; never Claude Code's
+      hookSpecificOutput envelope. (1) `caws agents heartbeat --json
+      --include-active-summary` returns
+      { ok, session_id, lease_path, wrote, throttled,
+      active_agent_count, active_agents: [...] }. (2) The output
+      contains no occurrence of 'hookSpecificOutput', 'hookEventName',
+      'permissionDecision', or 'additionalContext' — verified by
+      regex-grep on captured stdout. (3) The hook script
+      (agent-heartbeat.sh) is the SOLE composer of Claude Code's
+      hook envelope. (4) A future Cursor/Codex/terminal integration
+      consumes the same CAWS JSON and emits its own envelope.
+      (5) Changing Claude Code's hook envelope format must not
+      require changing kernel lease logic, store lease writes, or
+      CLI JSON shape — only the hook-pack script changes. Contract
+      violation: any CLI command output containing the Claude
+      Code envelope strings. This contract is the structural guard
+      that keeps CAWS portable across agent surfaces.
+# --- Triage ----------------------------------------------------------------
+# Origin: real-time control-plane failure during the CAWS-MIGRATE-V10-SPECS-001
+# implementation. A parallel Claude Code session silently switched the
+# canonical checkout from feat/multi-agent-provenance-envelope to
+# caws/session-ownership-claim-scope. The CLI's resolveRepoRoot walks up to
+# the canonical checkout's .caws/, so every worktree's view of worktrees.json
+# came from the now-stale canonical checkout. Authority resolution collapsed,
+# scope guard fell into union mode, a false strike accumulated, and a doc
+# commit landed on the wrong branch (5997dc0, since reverted by 0504f64).
+#
+# The user discovered the conflict only by manually inspecting
+# `git branch --show-current` in the canonical checkout. No CAWS surface
+# exposed "another agent is active in this repo, here is what they are doing."
+# This slice ships that visibility surface ahead of the v11.2 release timeline
+# because the failure already happened.
+#
+# Doctrine alignment (verified during planning):
+#   - §1 (v11.2 plan): `caws agents list/show` is the planned eleventh group.
+#     This slice extends to include register/heartbeat/stop/prune.
+#   - §4 (state files): .caws/agents.json is "compatibility/identity
+#     metadata only" from v11.2 onward; canonical liveness is
+#     .caws/leases/<session_id>.
+#   - §6 invariants 7-11: status carve-out narrowed; stale = evidence
+#     not authority; liveness vs governance separated; no heartbeat
+#     events; lease writes never block work.
+#
+# Pre-implementation investigations completed:
+#   - resolveRepoRoot uses `git rev-parse --git-common-dir --path-format=absolute`,
+#     which returns <main>/.git regardless of cwd. Confirmed: .caws/leases/
+#     lives at the canonical control-plane root, shared visibility across all
+#     worktrees. No per-worktree isolation.
+#   - resolveSession reads CLAUDE_SESSION_ID (env), capsule, CURSOR_TRACE_ID
+#     (env), then mints. Hooks expose HOOK_SESSION_ID (parsed from payload,
+#     defaults to 'unknown'). These are different env names. Decision: hook-
+#     invoked commands use explicit --session-id flag rather than env
+#     compatibility.
+#   - CLAUDE_CODE_PACK has activation: 'restart_required'. Two-session
+#     acceptance test (A14) explicitly includes caws init + new session.
+#
+# Commit ordering within the slice (the implementer's contract):
+#   1. Kernel: leases.ts + types extension + tests (A1-A4).
+#   2. CLI store: leases-store.ts (lenient load, atomic per-session write,
+#      safeLeaseFilename, prune) + tests (A5-A8, A12).
+#   3. CLI shell: agents.ts command group + register integration + status
+#      narrowing + tests (A9-A10, A13).
+#   4. Hook pack: agent-register.sh / agent-heartbeat.sh / agent-stop.sh
+#      templates + manifest version bump + dispatcher updates + install
+#      test extension + lite-hooks integration tests (A11).
+#   5. Packaging smoke (A14) + fresh-install-smoke.mjs extension.
+#   6. Doctrine + failure-lineage (A15) — last so the docs name the
+#      shipped design, not a planned shape.
+#
+# Sibling slice: CANONICAL-CHECKOUT-WORKTREE-GUARD-001 (to be drafted)
+# consumes lease fields (git_common_dir, git_dir, branch, bound_worktree,
+# bound_spec_id) to block implementation edits and branch switches from
+# the canonical checkout when active worktrees exist. That slice CANNOT
+# ship before this one, because it needs the lease substrate to read.
+# Visibility ships first; enforcement second.
+#
+# Out of scope (REFUSED, not just unmentioned):
+#   - Canonical-checkout write-guard hook (sibling slice).
+#   - Branch-switch guard in canonical checkout (sibling slice).
+#   - Removal of legacy packages/caws-cli/src/commands/agents.js
+#     (separate cleanup slice; tests/agent-claim.test.js:248 must be
+#     migrated as part of that cleanup).
+#   - Extension of .caws/agents.json schema (FROZEN by this slice).
+#   - Migration of tests/agent-claim.test.js:248.
+#   - Hard deletion of stopped/stale leases on automatic cull (operator-
+#     invoked prune only).
+#   - Cross-machine coordination (leases are local to clone).
+#   - ANY lease-based authority decision (load-bearing invariant).
+#   - Replacing caws claim with lease-based ownership (worktrees.json
+#     remains authority).
+#   - Adding heartbeat events to events.jsonl (doctrine §6 invariant 10).
+#
+# Activation prerequisites:
+#   1. Plan reviewed and corrections applied (DONE; see
+#      ~/.claude/plans/moonlit-brewing-sedgewick.md).
+#   2. Worktree created: caws worktree create multi-agent-activity-registry
+#      --spec MULTI-AGENT-ACTIVITY-REGISTRY-001 off
+#      feat/multi-agent-provenance-envelope. Runs alongside any other
+#      active worktree (session-ownership-metadata, migrate-v10-specs).
+#   3. Local caws CLI mismatch awareness: development uses
+#      `node packages/caws-cli/dist/index.js`; packaging tests use
+#      npm pack + scratch install.
+#
+# Risk_tier rationale: tier 2 (not 3). This slice touches the kernel
+# (new module in worktree/), the CLI store (new module), the CLI shell
+# (new command group), the hook pack (managed-pack version bump), the
+# doctrine doc, and the failure-lineage. Blast radius spans both
+# packages plus templates. A bug in the lease substrate could mislead
+# operators into thinking a session is or isn't active, which in turn
+# could cause coordination failures (the exact pattern this slice
+# exists to prevent). Tier 2 requires at least one contract entry; two
+# are provided (agent-lease-substrate, cli-hook-protocol-boundary).
+# mode: feature because this introduces a new state surface, a new
+# command group, and a new hook-pack version — not a fix.

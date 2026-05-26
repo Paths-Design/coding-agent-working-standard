@@ -16,6 +16,12 @@
 import type { Command } from 'commander';
 
 import {
+  runAgentsHeartbeatCommand,
+  runAgentsListCommand,
+  runAgentsPruneCommand,
+  runAgentsRegisterCommand,
+  runAgentsShowCommand,
+  runAgentsStopCommand,
   runClaimCommand,
   runDoctorCommand,
   runEventsMigrateCommand,
@@ -41,8 +47,10 @@ import {
   runWorktreeListCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreeRepairSparseCommand,
   type EvidenceKind,
 } from './index';
+import type { LeaseReason } from '@paths.design/caws-kernel';
 
 export interface RegisterShellCommandsOptions {
   /**
@@ -794,6 +802,197 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  worktreeCmd
+    .command('repair-sparse <name>')
+    .description(
+      'Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if .caws/specs/ has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it. Use this after a `git sparse-checkout disable` has materialized canonical spec files into the worktree.'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((name: string, opts: { data?: boolean }) => {
+      const code = runWorktreeRepairSparseCommand({
+        name,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ────────────────────
+  const agentsCmd = program
+    .command('agents')
+    .description(
+      'Agent liveness substrate: register/heartbeat/stop/list/show/prune. ' +
+        'Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.'
+    );
+
+  agentsCmd
+    .command('register')
+    .description('Register this session in .caws/leases/. Hook-invoked at SessionStart.')
+    .option('--session-id <id>', 'Explicit session id (required for hook-invoked usage; overrides resolveSession)')
+    .option('--platform <p>', 'Platform tag (e.g., claude-code, cursor, manual)')
+    .option('--reason <r>', 'session_start | pre_tool_use | manual_register | claim | status')
+    .option('--json', 'Emit CAWS-native JSON to stdout (never hookSpecificOutput)')
+    .option('--include-active-summary', 'Include active_agent_count + active_agents in JSON output')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        sessionId?: string;
+        platform?: string;
+        reason?: string;
+        json?: boolean;
+        includeActiveSummary?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runAgentsRegisterCommand({
+          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+          ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
+          json: opts.json === true,
+          includeActiveSummary: opts.includeActiveSummary === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  agentsCmd
+    .command('heartbeat')
+    .description('Refresh this session\'s lease. Hook-invoked at PreToolUse. Throttle-aware.')
+    .option('--session-id <id>', 'Explicit session id (required for hook-invoked usage)')
+    .option('--platform <p>', 'Platform tag')
+    .option('--reason <r>', 'pre_tool_use | claim | status | manual_register')
+    .option('--throttle <ms>', 'Skip write if last_active within this many ms (default: 0 — no throttle)')
+    .option('--json', 'Emit CAWS-native JSON to stdout')
+    .option('--include-active-summary', 'Include active_agent_count + active_agents in JSON output')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        sessionId?: string;
+        platform?: string;
+        reason?: string;
+        throttle?: string;
+        json?: boolean;
+        includeActiveSummary?: boolean;
+        data?: boolean;
+      }) => {
+        const throttleMs = opts.throttle !== undefined ? Number(opts.throttle) : 0;
+        const code = runAgentsHeartbeatCommand({
+          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+          ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
+          throttleMs: Number.isFinite(throttleMs) && throttleMs > 0 ? throttleMs : 0,
+          json: opts.json === true,
+          includeActiveSummary: opts.includeActiveSummary === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  agentsCmd
+    .command('stop')
+    .description('Mark this session\'s lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.')
+    .option('--session-id <id>', 'Explicit session id')
+    .option('--platform <p>', 'Platform tag')
+    .option('--json', 'Emit CAWS-native JSON to stdout')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { sessionId?: string; platform?: string; json?: boolean; data?: boolean }) => {
+      const code = runAgentsStopCommand({
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+        ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  agentsCmd
+    .command('list')
+    .description('List active / stale / stopped agents. Read-only.')
+    .option('--include-stale', 'Include stale (active-but-TTL-expired) records')
+    .option('--include-stopped', 'Include stopped records')
+    .option('--active', 'Active-only (overrides --include-* flags); TTL-classified active, not raw status field')
+    .option('--stale-ttl-ms <ms>', 'TTL for stale classification (default: 1800000 = 30m)')
+    .option('--json', 'Emit CAWS-native JSON to stdout')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        includeStale?: boolean;
+        includeStopped?: boolean;
+        active?: boolean;
+        staleTtlMs?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+        const code = runAgentsListCommand({
+          includeStale: opts.includeStale === true,
+          includeStopped: opts.includeStopped === true,
+          activeOnly: opts.active === true,
+          ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  agentsCmd
+    .command('show <id>')
+    .description('Show one lease by session id. Read-only.')
+    .option('--json', 'Emit CAWS-native JSON to stdout')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((id: string, opts: { json?: boolean; data?: boolean }) => {
+      const code = runAgentsShowCommand({
+        id,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  agentsCmd
+    .command('prune')
+    .description(
+      'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. ' +
+        'Never invoked by hooks.'
+    )
+    .requiredOption('--status <s>', 'stopped | stale')
+    .requiredOption('--older-than-ms <ms>', 'Retention threshold in milliseconds')
+    .option('--stale-ttl-ms <ms>', 'TTL for stale classification (used with --status stale; default 30m)')
+    .option('--apply', 'Actually delete (default: dry-run)')
+    .option('--json', 'Emit CAWS-native JSON to stdout')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        status: string;
+        olderThanMs: string;
+        staleTtlMs?: string;
+        apply?: boolean;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const status = opts.status === 'stopped' || opts.status === 'stale' ? opts.status : null;
+        const olderThanMs = Number(opts.olderThanMs);
+        if (status === null || !Number.isFinite(olderThanMs)) {
+          process.stderr.write(
+            'caws agents prune: --status must be stopped|stale and --older-than-ms must be a number.\n'
+          );
+          exit(1);
+          return;
+        }
+        const staleTtl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+        const code = runAgentsPruneCommand({
+          status,
+          olderThanMs,
+          ...(staleTtl !== undefined && Number.isFinite(staleTtl) ? { staleTtlMs: staleTtl } : {}),
+          apply: opts.apply === true,
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 }
 
 /** Commander value collector for repeatable string options. */

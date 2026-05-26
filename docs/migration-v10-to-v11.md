@@ -202,7 +202,33 @@ caws init
 
 ### `.caws/worktrees.json` shape
 
-Both v10 (`{"worktrees": {"<name>": {...}}}`) and v11 (`{"<name>": {...}}`) shapes are accepted by the v11 hook-pack reader. No conversion required.
+The v11 CLI reads both shapes: v10 (`{"worktrees": {"<name>": {...}}}`) and v11 (`{"<name>": {...}}`). All v11 lifecycle commands (`caws worktree create/list/bind/destroy/merge`) write the v11 direct-key shape. The hook-pack helper (`session-caws-status.sh`'s `entriesOf`) also reads both.
+
+#### Asymmetry: v10.2 CANNOT read v11-shaped registries
+
+This is a one-way migration with respect to `caws worktree merge` (and the legacy worktree subcommands). Once a v11 CLI has written `.caws/worktrees.json` in the direct-key shape, the v10.2 CLI's `loadRegistry` will reject it. The failure surfaces as:
+
+```
+$ caws worktree merge <name> --dry-run
+Worktree registry has schema violations: [
+  { path: '', message: "must have required property 'version'", ... },
+  { path: '', message: "must have required property 'worktrees'", ... },
+  { path: '', message: 'must NOT have additional properties',
+    params: { additionalProperty: '<name>' }, ... },
+  ...
+]
+Cannot read properties of undefined (reading '<name>')
+```
+
+This is the documented failure mode behind `WORKTREE-MERGE-V11-SHAPE-001` and is a property of the legacy artifact, not the source tree.
+
+**If you see this output, your `which caws` is resolving to a v10.2 install.** The fix is to upgrade:
+
+```bash
+npm install -g @paths.design/caws-cli@latest
+```
+
+The v11 CLI handles the same registry without error; the regression is locked by `packages/caws-cli/tests/store/worktree-merge-v11-shape.test.js`.
 
 ### `.caws/events.jsonl`
 
@@ -231,7 +257,7 @@ npm install -g @paths.design/caws-cli@^10.2
 
 - `.caws/specs/*.yaml` files: v11 spec format is a superset of v10.2's; v10.2 will read v11-authored specs (with some warnings about unknown fields like the v11 `lifecycle_state` or `contracts` arrays).
 - `.caws/events.jsonl`: append-only; v10.2 can read it.
-- `.caws/worktrees.json`: both shapes accepted by both versions.
+- `.caws/worktrees.json`: the v11 CLI reads both shapes. The v10.2 CLI accepts the v10 nested shape only — see the "Asymmetry" note above. If you have created any worktrees under v11, pin-back will require converting `.caws/worktrees.json` to the v10 nested shape (wrap entries in `{"version": 1, "worktrees": {...}}`) for v10.2 to read it. The forward direction does not require conversion.
 - `.caws/policy.yaml`: schema-compatible.
 - `.caws/waivers/`: v11 uses singular `waiver`; the v10.2 plural `waivers` directory still works.
 

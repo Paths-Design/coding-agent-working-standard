@@ -789,3 +789,125 @@ If you are reading this entry because you are about to implement the push-range 
 ### Single-line synthesis
 
 **Entry 18 was a coordination failure, not a tool failure: git did its normal job; doctor surfaced the foreign worktree as INFO; the operator pushed two intended commits and one unintended one because the substrate between "doctor sees a foreign worktree" and "git pushes commits" had no governance hook. The fix is mechanical, not procedural: an outgoing-commit-range classifier with structured per-commit provenance, foreign-worktree severity escalation during active slices, and a `caws push` command that refuses ambiguous ranges unless the operator acknowledges by SHA.**
+
+---
+
+## Entry 19: Canonical Checkout Hijack and the Visibility Substrate Response (May 2026)
+
+**Severity:** High (false strike accumulation; agent flagged authority violation despite being in scope; multi-agent control-plane collapse)
+**Era:** v11.1.x, mid-`CAWS-MIGRATE-V10-SPECS-001` implementation pass
+**Agents involved:** two concurrent Claude Code sessions
+**Implementation history:** the original Entry 19 commit (`5997dc0`) landed on the wrong branch (`caws/session-ownership-claim-scope`) during the very incident this entry documents — a parallel session had silently switched the canonical checkout off the coordination branch, so the docs commit followed the canonical checkout's then-current HEAD rather than the coordination branch. The body below is the canonical re-authoring on the correct branch as the closing commit of `MULTI-AGENT-ACTIVITY-REGISTRY-001` (commit 7 of 7). The misrouted `5997dc0` is preserved as historical record but is not the canonical Entry 19.
+
+### What happened
+
+Session A (the "this session" in the contemporaneous account) had created worktree `migrate-v10-specs` bound to `CAWS-MIGRATE-V10-SPECS-001`, fast-forwarded into it, and was authoring commit 2 (the kernel transformer + tests for A1–A7). Session B (parallel) was concurrently working on `SESSION-OWNERSHIP-METADATA-001` in a sibling worktree (`session-ownership-metadata`).
+
+Mid-implementation, Session A's PreToolUse hook reported:
+
+> Scope guard strike 1 of 3 for 'packages/caws-kernel/src/spec/migrate-v10.ts'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit.
+
+This was a false-positive strike. Diagnosis from inside the worktree:
+
+```
+$ caws scope show packages/caws-kernel/src/spec/migrate-v10.ts
+NO AUTHORITY scope.no_authority.unbound (cwd is outside any CAWS-tracked worktree)
+             binding: unbound
+```
+
+But Session A WAS inside the worktree (`pwd` confirmed `.caws/worktrees/migrate-v10-specs`), and the spec WAS bound (verified in earlier turns). The kernel was claiming "no spec bound."
+
+Root cause traced through two compounding bugs:
+
+1. **The worktree's sparse-checkout pattern excluded `.caws/specs/`**. `caws worktree create` had written `info/sparse-checkout` with the line `!/.caws/specs/`, hiding the worktree's own bound spec from the kernel's view when invoked from inside the worktree.
+
+2. **The canonical checkout had been silently switched off the coordination branch by Session B.** `git rev-parse` in the main checkout showed branch `caws/session-ownership-claim-scope` at HEAD `0f3db3f`, not `feat/multi-agent-provenance-envelope` where Session A's binding commit (`a6a52c7`) lived. Session A's binding entry in `.caws/worktrees.json` existed only in commits on the coordination branch; switching the canonical checkout's branch made those commits invisible. The CLI's `resolveRepoRoot` walks up from cwd and lands on the canonical checkout's `.caws/`, so EVERY worktree's view of `worktrees.json` came from the now-stale canonical checkout — not from the worktree's own materialized copy.
+
+The combined effect: a worktree-isolated agent doing perfectly scoped work was told it had no authority because an unrelated parallel agent had moved the canonical checkout out from under it. The user discovered the conflict by inspecting `git branch --show-current` in the canonical checkout — no surface exposed "another agent is active in this repo, here is what they are doing."
+
+### Why the existing guards didn't catch it
+
+The deep doctrinal cause is **the canonical checkout had no liveness substrate**. v11.0 deliberately removed the legacy `agents list/show` surface as "peripheral/non-core." The kernel surfaces for agent freshness (`AgentRecord`, `AgentRegistry`, `refreshAgentClaim`, `heartbeatAge`, `isStaleByTTL`) existed and were used by `caws claim`, but nothing self-registered a session, nothing surfaced "N parallel agents active" at the decision point, and nothing prevented one session from undermining another. There was no signal in any session that another session was even alive — let alone what it was doing.
+
+`.claude/hooks/worktree-write-guard.sh` was the obvious candidate to catch the canonical-checkout edits, but it is **intentionally fail-open at v11.1** (awaiting CLI-WORKTREE-001) and even when active, its enforcement model would have missed Session B's pattern (ad-hoc branch outside `worktrees.json`). The hook is doctrinally correct — that's the canonical-checkout-write-guard slice's domain (`CANONICAL-CHECKOUT-WORKTREE-GUARD-001`) — but enforcement was not the missing piece. The missing piece was **visibility**: both sessions should have known about each other before either took an action that affected the other.
+
+### What this slice (MULTI-AGENT-ACTIVITY-REGISTRY-001) shipped
+
+This entry documents the **visibility substrate** that closes the diagnostic gap. It does NOT prevent the canonical-checkout hijack — that block is the sibling slice `CANONICAL-CHECKOUT-WORKTREE-GUARD-001`. Calling this slice complete does not mean canonical-checkout safety is repaired; it means the next two parallel sessions in this repo can see each other.
+
+**What shipped (as actually implemented across 7 commits):**
+
+| Surface | What | How visibility works |
+|---|---|---|
+| **Kernel** (`packages/caws-kernel/src/worktree/leases.ts`) | Pure patch logic: `registerAgentSession`, `heartbeatAgentSession`, `stopAgentSession`, `summarizeActiveAgents`, `pruneLeasesByStatus`. Time-injected. No I/O. Patches are a separate `LeasePatch` type, not mixed into `RegistryPatch`. | Renders three buckets (active / stale / stopped) from per-session lease files. |
+| **Store** (`packages/caws-cli/src/store/leases-store.ts`) | Atomic per-session-file I/O at `.caws/leases/<safe-session-id>.json`. Strict-allowlist filename (`^[A-Za-z0-9._:-]+$`); refuses `unknown`. Lenient `loadLeases` (a corrupted lease emits a diagnostic but does not block the rest). No lifecycle-lock — per-session file ownership eliminates contention. | Each session writes only its own file; reads are concurrent-safe. |
+| **Shell** (`packages/caws-cli/src/shell/commands/agents.ts`) | New `caws agents register / heartbeat / stop / list / show / prune` group. `--session-id` flag overrides env-walking session resolution; required for hook-invoked commands. `--json --include-active-summary` returns CAWS-native JSON describing all currently-active leases — never Claude Code's `hookSpecificOutput` envelope. | The hook-protocol-agnostic JSON the hook script consumes. |
+| **Status panel** (`packages/caws-cli/src/shell/render/status.ts`) | New "Agents" panel rendering BEFORE the Doctor panel. Annotates the current session and marks peers when N>1. Status remains read-only by default; `--heartbeat` (not `--session-id` alone) is the explicit write trigger. | Visibility at every `caws status` invocation. |
+| **Hook pack** (`packages/caws-cli/templates/hook-packs/claude-code/`) | v3 pack adds `agent-register.sh` (SessionStart), `agent-heartbeat.sh` (PreToolUse, FIRST in the chain), `agent-stop.sh` (Stop). The heartbeat hook is the ONLY surface that composes Claude Code's `hookSpecificOutput.additionalContext` envelope — via inline `node -e`, not `jq` (the hook pack has zero `jq` dependency, so visibility doesn't silently degrade on minimal CI/container environments). | Every parallel session sees every other parallel session at SessionStart and on every tool call when N>1. |
+| **Packaging proof** (`packages/caws-cli/scripts/fresh-install-smoke.mjs`) | 12-point release-time smoke that packs BOTH kernel and CLI tarballs, installs into scratch, exercises SessionStart/PreToolUse/Stop dispatchers end-to-end, and proves the installed CLI stays hook-protocol-free. Wired into `prepublishOnly`. | Future regressions caught before any tag is pushed. |
+
+**Design discipline that emerged across the slice:**
+
+1. **Leases are visibility only. TTL never authorizes anything.** No takeover decision, no scope admission, no merge/destroy gate may consult a lease. Stale lease is evidence; never authority. (Doctrine invariant 8.) On-disk `status` enum is exactly `{active, stopping, stopped}` — no `stale`. Stale is a read-side classification computed at render time.
+2. **Liveness and authority are separate substrates.** `.caws/leases/<session_id>.json` is canonical liveness from v11.2 onward. `.caws/agents.json` is frozen as compatibility/identity metadata — this slice did NOT extend its schema, did NOT add any new writer, and explicitly tested that the lease substrate works when `agents.json` is missing or corrupted. (Doctrine invariant 9.)
+3. **No heartbeat events in `events.jsonl`.** Lease writes are operational cache; events are governance. (Doctrine invariant 10.)
+4. **Lease writes never block work.** Hook script exits 0 on any CLI failure; CLI returns ok-with-warnings on any lease-write failure; lease touches are NOT inside `lifecycle-transaction`. (Doctrine invariant 11.)
+5. **`caws status` is read-only by default.** Only `--heartbeat` triggers a lease write. `--session-id <id>` alone is identity annotation, not a write trigger — this prevents `status --session-id <other>` from accidentally writing on someone else's behalf.
+6. **Per-session file ownership.** Session A writes only `caws-<A>.json`; Session B writes only `caws-<B>.json`. No shared registry file to contend on. The atomic-write primitive is the cross-process safety boundary.
+7. **PreToolUse heartbeat fires FIRST in the dispatcher chain.** Even if a later guard short-circuits with `block`, the lease has already been refreshed and the parallel-presence surfacing has happened. The dispatcher's stdout-priority logic ensures a `block` decision from a later guard still wins.
+8. **CLI is hook-protocol-agnostic. Bash hook wraps Claude Code envelope.** The CLI emits CAWS-native JSON only. The Claude Code `hookSpecificOutput.additionalContext` wrapping lives in `agent-heartbeat.sh`. A future Cursor or terminal integration consumes the same CAWS JSON and emits its own protocol-specific output. This is verified by both a runtime negative test (`tests/shell/agents-cli-no-hook-envelope.test.js`) AND a static grep on the heartbeat hook for any `jq` token in non-comment lines.
+9. **`git_common_dir` and `git_dir` captured at lease write time.** Observers can identify which leases originated from the canonical checkout (where `git_common_dir == git_dir`) vs from linked worktrees. This is the substrate the future `CANONICAL-CHECKOUT-WORKTREE-GUARD-001` slice will read to refuse implementation edits/branch switches from the canonical checkout while active worktrees exist. Visibility now; enforcement next.
+
+### What this slice does NOT do
+
+- **Does NOT prevent the canonical-checkout hijack.** It supplies the substrate that makes the hijack detectable. Enforcement belongs to `CANONICAL-CHECKOUT-WORKTREE-GUARD-001`.
+- **Does NOT extend `.caws/agents.json`.** Frozen schema; no new writer.
+- **Does NOT replace `caws claim` with lease-based ownership.** Ownership remains in `worktrees.json`.
+- **Does NOT add heartbeat events to `events.jsonl`.** Violates invariant 10.
+- **Does NOT consult TTL for any authority decision.** Violates invariant 8.
+- **Does NOT prevent cross-machine canonical-checkout coordination.** Leases are local to the clone. Multi-machine coordination requires upstream protocol.
+- **Does NOT fix the sparse-checkout exclusion of `.caws/specs/` by `caws worktree create`** that compounded the original incident. Captured separately as `[caws worktree create sparse-spec bug]` for a sibling slice.
+- **Does NOT fix the missing `session_log_renderer.py` packaging gap** surfaced by the commit-6 smoke run. Captured separately as `SESSION-LOG-RENDERER-MISSING-001`.
+
+### Release coupling lesson (commit-6 footgun)
+
+Commit 6 of this slice caught a release footgun worth recording here so the next person implementing a coupled CLI/kernel slice doesn't relearn it:
+
+The CLI's `agents register` shell command imports `registerAgentSession` from `@paths.design/caws-kernel`. The CLI's dependency range is `"^1.0.0"`. The registry's most recent kernel (`1.1.1`) satisfies that range — but was published **before** the lease symbols were added. The first version of the smoke script installed only the CLI tarball, leaving npm to resolve the kernel from the registry. The CLI crashed at runtime with `(0, caws_kernel_1.registerAgentSession) is not a function`.
+
+The fix landed in `scripts/fresh-install-smoke.mjs`: pack BOTH kernel and CLI tarballs from the local worktree, install both into the scratch project, and probe-assert that the installed kernel exports the symbols the CLI imports before continuing. The probe gives a structured diagnostic naming the missing symbol and the version gap if npm resolution picks up a registry copy instead.
+
+**The doctrinal rule (recorded in `docs/release-procedure.md`):** any CLI release depending on newly added kernel symbols must prove the matching kernel tarball is the one npm will install — not a registry-stale kernel that happens to satisfy the semver range but predates the new symbols. Source tests can pass while installed users crash. The `prepublishOnly` smoke is the load-bearing check; tag-pushing without it is incomplete.
+
+### What this entry asks of future maintainers
+
+If you are reading this entry because you are about to implement the canonical-checkout guard (`CANONICAL-CHECKOUT-WORKTREE-GUARD-001`):
+
+1. **Read the leases from `.caws/leases/<session_id>.json`, not `worktrees.json`.** Leases capture `git_common_dir` and `git_dir` at write time — those are the canonical-vs-linked indicators. `worktrees.json` membership has the Entry 19 staleness problem (the file's view depends on which branch the canonical checkout is currently on).
+2. **Detection uses `git rev-parse --git-common-dir` vs `--git-dir` AT GUARD INVOCATION TIME, not at lease-write time.** The lease records what the writer saw; the guard records what's true now. They will usually agree, but the guard's authority comes from now-state.
+3. **The governance allowlist MUST permit `.caws/specs/*.yaml`, `.caws/worktrees.json`, `.caws/policy.yaml`, `CLAUDE.md`, `AGENTS.md`, `COMMIT_CONVENTIONS.md`, and `docs/`.** Binding/amendment/activation commits in MULTI-AGENT-ACTIVITY-REGISTRY-001 were authored from the canonical checkout deliberately (the spec scope amendments alone), and that pattern must continue to work after the guard lands.
+4. **The block message MUST surface the exact `caws worktree create <name> --spec <id>` command.** Operator hostility is not the goal; recovery path inline is.
+5. **Diagnose/decide, not repair.** The guard surfaces the problem; the operator handles the branch-switch. Do not auto-switch, auto-stash, or auto-worktree-create.
+6. **The kernel-side sparse-checkout gap is a separate concern.** Don't bundle it into the canonical-checkout guard slice; file the ADR and a sibling spec.
+7. **Lease state remains visibility, not authority, even after the guard lands.** The guard reads leases as input; it does NOT promote them to authority. The transition is: guard sees canonical-checkout-write + active leases of OTHER sessions → guard refuses. The refusal cites the lease but does not derive authority from it. Authority remains in `worktrees.json` and `specs/<id>.yaml`.
+
+### Single-line synthesis
+
+**Entry 19 was a control-plane failure made invisible by a missing substrate: CAWS's worktree isolation model assumed the canonical checkout was a passive coordination surface, but nothing structurally enforced that AND nothing surfaced "another agent is active in this repo" at any decision point. When a parallel agent silently turned the canonical checkout into an active implementation branch, every sibling worktree lost stable access to its own bound spec, and no session knew the other existed until the user diagnosed the conflict manually. `MULTI-AGENT-ACTIVITY-REGISTRY-001` ships the visibility substrate (`.caws/leases/<session_id>.json` written via `caws agents register/heartbeat/stop`, surfaced via the v3 Claude Code hook pack at SessionStart/PreToolUse/Stop, and a new Agents panel in `caws status`). It is the necessary precondition for `CANONICAL-CHECKOUT-WORKTREE-GUARD-001` to enforce the boundary — visibility first, enforcement next. The deeper invariant: visibility is doctrine, not feature. A system that cannot make a multi-agent conflict legible at the decision point cannot expect the agent to avoid it.**
+
+### Enforcement coda: CANONICAL-CHECKOUT-WORKTREE-GUARD-001 landed (May 2026)
+
+The enforcement slice the body anticipates landed under `CANONICAL-CHECKOUT-WORKTREE-GUARD-001` (Claude Code hook pack v4). `packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh` now refuses canonical-checkout mutating git commands (`checkout`, `switch`, `branch -f`, `reset` non-hard) when at least one active CAWS worktree exists. Implementation departed from the body's recommendation in one respect, deliberately:
+
+- The body said "read leases, not worktrees.json." The guard reads **worktrees.json** for the active-worktree check, not leases. Reasoning: per doctrine invariant 8, leases are visibility evidence and never authority. Using lease presence to gate the block decision would make stale-lease state authority-bearing — exactly the anti-invariant. The guard uses `git rev-parse --git-dir == --git-common-dir` (a now-state structural test, not registry membership) for the canonical-detection predicate, and `worktrees.json` active entries via the existing `entriesOf` helper for the worktree-existence predicate. Both are now-state reads, neither delegates authority to leases.
+
+The other six asks of future maintainers were honored: governance allowlist preserved, block message names the operator escape, no auto-repair, no kernel-side sparse-checkout coupling, leases NOT promoted to authority. Test coverage: 26 cases in `packages/caws-cli/tests/integration/lite-hooks.test.js` covering A1–A6 plus A1b (v10 nested envelope) and A4b (missing-status defensive fallback). Concrete blocked stderr:
+
+```
+BLOCKED: git checkout (branch switch) from the canonical checkout while CAWS worktrees are active.
+Active worktree(s) detected (e.g. 'wt-other' in .caws/worktrees.json).
+Switch into your worktree before mutating: cd .caws/worktrees/wt-other
+Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>
+```
+
+What this does NOT close: dirty-overlap cleanup at worktree boundaries; push-range classification; first-class handoff. Those remain sibling concerns, filed (or to be filed) under their own specs. Entry 19's body remains the canonical narrative of the original failure; this coda records the enforcement response only.
