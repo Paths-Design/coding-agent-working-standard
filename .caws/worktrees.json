@@ -20,5 +20,16 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  },
+  "caws-status-agents-summarize": {
+    "specId": "CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-26T13:54:18.069Z",
+    "branch": "caws-status-agents-summarize",
+    "baseBranch": "feat/multi-agent-provenance-envelope",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/caws-status-agents-summarize"
   }
 }
