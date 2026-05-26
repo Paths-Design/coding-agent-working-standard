@@ -35,14 +35,20 @@ this doc — do not silently regress an invariant.
 
 ## 1. Cutover posture
 
-**A1 chosen.**
+**Current state: v11.1.x is the canonical line.** The v11 cutover is complete; v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core. The original A1 doctrine and the v11.0 → v11.1 plan are preserved below as historical context.
+
+### Historical: A1 chosen
+
+The cutover posture chosen at v11.0.0 was:
 
 > v11.0.0 is the governed core.
 > v11.0.0 deliberately excludes spec/worktree lifecycle.
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-### Why A1
+The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.1.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+
+### Why A1 was chosen
 
 The vNext rewrite established a coherent kernel/store/shell substrate
 across slices 1–7c, including:
