@@ -64,6 +64,52 @@ import { resolveSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
 
+/**
+ * Safe wrapper around `summarizeActiveAgents` that defends against the
+ * kernel symbol being absent at runtime.
+ *
+ * The crash this guards (Bug-001/002 from USER-E2E-SETUP-REHEARSAL-001)
+ * occurs when caws-cli@11.1.x was installed against an older kernel
+ * version (1.0.0) that predates the leases substrate. The cli's dep
+ * range (`^1.0.0` at the time of the rehearsal) could resolve to a
+ * kernel without `summarizeActiveAgents`, producing the symptom:
+ *
+ *   `(0 , caws_kernel_1.summarizeActiveAgents) is not a function`
+ *
+ * The dep range was tightened to `^1.1.0` in this slice, which prevents
+ * future installs from hitting this case. The defensive guard below is
+ * the second-half belt-and-suspenders: future kernel revs that remove
+ * or rename the function, or partial/broken installs that strip the
+ * dist artifact, still produce a typed diagnostic instead of a Node
+ * "is not a function" crash with exit 0.
+ *
+ * Returns `null` when the kernel function is unavailable so callers can
+ * route to a typed empty `ActivitySummary` + emit a one-line diagnostic.
+ * Returns the kernel's summary unchanged when the function is present.
+ */
+function callSummarizeActiveAgentsSafe(
+  leases: LeaseRegistry,
+  now: Date,
+  ttlMs: number
+): ActivitySummary | null {
+  if (typeof summarizeActiveAgents !== 'function') {
+    return null;
+  }
+  return summarizeActiveAgents(leases, now, ttlMs);
+}
+
+const KERNEL_FEATURE_UNAVAILABLE_DIAGNOSTIC =
+  'caws: kernel does not export summarizeActiveAgents; agent activity unavailable. ' +
+  'This typically means caws-cli is paired with a pre-1.1.0 kernel. Reinstall: ' +
+  'npm install -g @paths.design/caws-cli@latest';
+
+const EMPTY_ACTIVITY_SUMMARY: ActivitySummary = {
+  total: 0,
+  active: [],
+  stale: [],
+  stopped: [],
+};
+
 export interface StatusCommandOptions {
   readonly cwd?: string;
   readonly now?: () => Date;
@@ -232,8 +278,16 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   }
 
   // 7. Summarize (pure read-side classification; no write side effect).
+  //    Defensive feature-detect: if the kernel does not export
+  //    summarizeActiveAgents (e.g., a partial/stale install or a future
+  //    kernel rev that removes it), fall back to an empty summary and
+  //    emit a typed diagnostic on stderr rather than crashing.
   const leaseTtl = opts.leaseStaleTtlMs ?? DEFAULT_LEASE_STALE_TTL_MS;
-  const summary: ActivitySummary = summarizeActiveAgents(leases, now, leaseTtl);
+  const initialSummary = callSummarizeActiveAgentsSafe(leases, now, leaseTtl);
+  if (initialSummary === null) {
+    err(KERNEL_FEATURE_UNAVAILABLE_DIAGNOSTIC);
+  }
+  const summary: ActivitySummary = initialSummary ?? EMPTY_ACTIVITY_SUMMARY;
 
   // 8. OPT-IN heartbeat write. Only fires when --heartbeat is set.
   // --session-id alone never triggers this.
@@ -287,7 +341,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
       agents: snapshot.agents,
       leases,
       leaseSummary: wantsHeartbeat
-        ? summarizeActiveAgents(leases, now, leaseTtl)
+        ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
         : summary,
       selfSessionId: sessionIdentity?.session_id ?? null,
       eventCount: snapshot.events.length,
