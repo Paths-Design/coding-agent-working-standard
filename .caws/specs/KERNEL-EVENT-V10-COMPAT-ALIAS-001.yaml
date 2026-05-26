@@ -1,0 +1,80 @@
+id: KERNEL-EVENT-V10-COMPAT-ALIAS-001
+title: 'Read-side compatibility for legacy v10 validation_completed events in v11 kernel'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-26T22:23:07.958Z'
+updated_at: '2026-05-26T22:23:07.958Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/evidence
+    - packages/caws-kernel/src/schemas/events
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/KERNEL-EVENT-V10-COMPAT-ALIAS-001.yaml
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/schemas/events/validation_completed.v1.json
+    - packages/caws-kernel/tests/unit
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/tests/store
+    - docs/failure-lineage.md
+  out:
+    - packages/caws-kernel/src/spec
+    - packages/caws-kernel/src/scope
+    - packages/caws-kernel/src/policy
+    - packages/caws-kernel/src/worktree
+    - packages/caws-kernel/src/doctor
+    - packages/caws-kernel/src/waiver
+    - packages/caws-kernel/src/result
+    - packages/caws-kernel/src/diagnostics
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/src/init
+    - packages/caws-cli/templates
+    - packages/caws-cli/scripts
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - package-lock.json
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github
+    - CLAUDE.md
+    - AGENTS.md
+    - README.md
+invariants:
+  - 'I1 — Read-only compatibility: v11 kernel accepts legacy v10 validation_completed chained events when reading existing event logs. NEW writes still emit only the canonical v11 spec_validated event; no API path emits validation_completed.'
+  - 'I2 — Event-log content is preserved verbatim. No rotation, no in-place rename, no chain-hash recomputation, no migration of existing entries. The historical line is evidence and stays evidence.'
+  - 'I3 — Validation is narrow. The compat path admits the specific Sterling-shape legacy event (event=validation_completed, actor=cli, top-level session_id, data shape with passed/compliance_score/grade/error_count/warning_count). Malformed validation_completed records are still rejected; the alias is not a general bypass.'
+  - 'I4 — Hash chain semantics unchanged. validateChainedEvent on a legacy entry produces the same prev_hash/event_hash relationship the original v10 writer produced. The compat path does not normalize the parsed event before hash verification.'
+  - 'I5 — Sterling repo files are explicitly out of scope. This is a kernel read-compatibility patch, NOT a Sterling workaround. No edits to any Sterling path.'
+  - 'I6 — Release path: kernel patch ships as @paths.design/caws-kernel@1.1.3 (manual publish); CLI patch ships as @paths.design/caws-cli@11.1.8 via tag-driven CI per CAWS-RELEASE-TAG-DRIVEN-001. Release-train and publish-gate work is OUT of scope for THIS slice — they belong to a follow-up RELEASE-CAWS-11-1-8-TRAIN-01 slice.'
+  - 'I7 — Failure-lineage entry added to docs/failure-lineage.md documenting this defect class: v10→v11 event-name renames (validation_completed → spec_validated) were applied to writers but not to the full-log read-side validator, breaking every v10-migrant repo on the first lifecycle event after upgrade. The lineage entry records the symptom (partial_failure_recovered on caws worktree create), root cause (validateChainedEvent re-validates every line on load with no v10 alias), and the bounded fix (read-only compat alias for the specific Sterling shape).'
+acceptance:
+  - id: A1
+    given: 'An events.jsonl file containing a v10-shape validation_completed entry (event=validation_completed, actor=cli string-form, top-level session_id, data block with passed/compliance_score/grade/error_count/warning_count) preceded and/or followed by valid v11 entries.'
+    when: 'validateChainedEvent is called on the legacy entry.'
+    then: 'It returns ok(ChainedEvent) with the parsed legacy fields preserved. The returned value is recognizable as a legacy/compat record (e.g., a marker on the discriminated union, or the original event name retained). The hash-chain prev_hash/event_hash linkage is identical to what verifyChain would expect from the original v10 writer.'
+  - id: A2
+    given: 'The same events.jsonl as A1.'
+    when: 'events-store loadEvents reads the full file.'
+    then: 'Load succeeds with all events parsed (no LOAD_FAILED, no INVALID_EVENT_SHAPE). The legacy entries appear in the returned events array. No warning is emitted that would constitute noise; if a deprecation INFO is appropriate, it MAY be emitted once per file rather than per line.'
+  - id: A3
+    given: 'A repo whose .caws/events.jsonl contains legacy validation_completed entries (modeled on Sterling seq 117-119 shape).'
+    when: 'caws worktree create <name> --spec <id> is invoked.'
+    then: 'The lifecycle-transaction re-read of the events log succeeds, the new worktree_created event is appended, and the transaction returns kind: success (NOT partial_failure_recovered). The events log gains one new worktree_created entry chained from the prior legacy entry.'
+  - id: A4
+    given: 'A new event-append API call from any internal code path that historically wrote validation_completed in v10.'
+    when: 'The kernel processes the append.'
+    then: 'The event is written as spec_validated (canonical v11 name), not validation_completed. There is no internal code path that produces a new validation_completed write. (Verification: grep packages/caws-kernel/src for validation_completed string literals; only the schema file and read-side accept logic should reference it.)'
+  - id: A5
+    given: 'A malformed legacy validation_completed entry (missing data.passed, invalid grade enum, wrong actor shape, malformed timestamp).'
+    when: 'validateChainedEvent is called.'
+    then: 'It returns err with a structured diagnostic naming the specific field that failed validation. The compat alias does not accept arbitrary objects under event=validation_completed; it accepts only the v10 shape.'
+  - id: A6
+    given: 'The fix landed in @paths.design/caws-kernel@1.1.3 + @paths.design/caws-cli@11.1.8.'
+    when: 'The Sterling agent upgrades to caws-cli@11.1.8 (which depends on caws-kernel@^1.1.0 resolving to 1.1.3 or later).'
+    then: 'caws worktree create succeeds against Sterling current events.jsonl without rotation, rename, or hash recomputation. The PostToolUse hook chain still false-blocks on quality-check.sh/validate-spec.sh — that is the Sterling-side bootstrap slice CAWS-1117-COMPAT-BOOTSTRAP-01 which is INDEPENDENT of this kernel fix and proceeds separately.'
+non_functional: {}
+contracts: []
