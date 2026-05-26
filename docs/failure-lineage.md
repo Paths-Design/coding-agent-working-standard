@@ -911,3 +911,86 @@ Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name
 ```
 
 What this does NOT close: dirty-overlap cleanup at worktree boundaries; push-range classification; first-class handoff. Those remain sibling concerns, filed (or to be filed) under their own specs. Entry 19's body remains the canonical narrative of the original failure; this coda records the enforcement response only.
+
+---
+
+## Entry 20: v10→v11 Event-Name Rename Broke Every Migrant Repo's First Lifecycle Operation (May 2026)
+
+**Severity:** High (cross-repo migration blocker; every v10→v11 migrant repo with `validation_completed` entries in `events.jsonl` could not complete the first `caws worktree create`/`caws specs close`/any event-appending lifecycle command after upgrade — and the failure mode masqueraded as `partial_failure_recovered (no state change)`, which appears benign)
+**Era:** v11.1.7, immediately post-publish
+**Surface that failed:** `validateChainedEvent` in `packages/caws-kernel/src/evidence/validate.ts`
+**Substrate that exposed it:** Sterling-side `caws worktree create` invocation, surfaced via Sterling's bootstrap-slice diagnosis recorded in `/Users/darianrosebrook/Desktop/Projects/sterling/tmp/14320677-a846-4c89-a2c0-b540397f0bac/turn-020.json`
+
+### What happened
+
+The Sterling agent attempted `caws worktree create` against a repo whose `.caws/events.jsonl` contained entries written by the v10 CLI before the v10→v11 migration. The relevant entries (seq 117, 118, 119 in Sterling's actual log) have the v10 envelope shape:
+
+```jsonl
+{"seq":117,"ts":"2026-05-26T21:25:04.659Z","session_id":"standalone","actor":"cli","event":"validation_completed","spec_id":"DOC-RECON-AUDIT-RETIREMENT-EXECUTE-01","data":{"passed":true,"compliance_score":0.7,"grade":"C","error_count":0,"warning_count":3},"prev_hash":"sha256:...","event_hash":"sha256:..."}
+```
+
+Three v10-vs-v11 envelope differences:
+
+- `actor: "cli"` — v10 stored actor as a STRING. v11 mandates a structured `{ kind, id }` object.
+- `session_id: "standalone"` — v10 placed `session_id` at the TOP LEVEL of the envelope. v11 nests it under `actor.session_id`.
+- `event: "validation_completed"` — v10's name for what v11 calls `spec_validated`. The rename happened during the v10→v11 migration but was applied only to writers; the read-side validator's enumerated event vocabulary (events.v1.json `properties.event.enum`) was tightened to v11 names with no v10 aliases.
+
+Every event-appending lifecycle command (e.g., `caws worktree create`, `caws specs close`, `caws evidence record`) goes through this sequence inside `events-store.ts`:
+
+1. Acquire `.caws/events.jsonl.lock`.
+2. **Re-read the full events file** to get the prior chain tail (`loadEvents`).
+3. Compute `next_seq = prior.seq + 1`, `prev_hash = prior.event_hash`.
+4. Build the new event body, call `prepareAppend(prior, body)`, get `next ChainedEvent`.
+5. Append the JSON line atomically.
+6. Release the lock.
+
+Step 2 calls `loadEvents`, which iterates every line and invokes `validateChainedEvent` per line (see line 139 of `events-store.ts` at the time of the incident). The v10 entries fail because:
+
+- `additionalProperties: false` on the v11 envelope rejects the top-level `session_id`.
+- The `actor` schema requires an object but receives a string.
+- `event` is not in the v11 closed enum.
+
+`validateChainedEvent` returns `err(...)`; `loadEvents` returns `err(...)`; the lifecycle transaction's read step fails; the wrapping `applyLifecycleTransaction` catches this and rolls back the entire transaction, surfacing it to the caller as `Result<SpecWriterOutcome>` wrapping `{ kind: 'partial_failure_recovered', ... }`. The caller — `caws worktree create` — sees `isOk(result) === true` (because the `partial_failure_recovered` case is wrapped in `ok()`, not `err()` — see the CLAUDE.md "Outcome inspection is not the same as Result inspection" lesson) and prints `"caws worktree create: partial failure recovered (no state change)."` That message is technically accurate but actively misleading — it sounds like "the transaction was attempted but safely undone," when the root cause is that the events log can never be read again under v11.1.7 without first dealing with the legacy entries.
+
+The Sterling agent burned ~20 turns reconstructing the failure mode because the diagnostic surface said `partial_failure_recovered`, not `legacy v10 event format detected — kernel cannot read entry at line 117`. The user's bootstrap-slice directive correctly identified the two hook-side issues (`quality-check.sh` calls removed `caws quality-gates`; `validate-spec.sh` calls removed `caws validate`) — but the kernel-side blocker was invisible until full-stack diagnosis happened in a sibling agent (the one that wrote this entry).
+
+### Why the existing guards didn't catch it
+
+Two structural reasons.
+
+**First, v11.1.7's prepublish smoke** (`fresh-install-smoke.mjs`) exercises a FRESH install into a scratch project. A scratch project has no pre-existing `events.jsonl`. The smoke's full lifecycle (init → spec create → worktree create → governed edit → merge → close) succeeds because every event in that log is v11-shaped. The Sterling failure mode requires PRE-EXISTING v10 entries — the v11 smoke could not have caught it. This is the same defect class as the `CAWS-MIGRATE-V10-EVENTS-001 A12` smoke, but that smoke covers the migrate-and-rotate workflow, not the "v10 entries already present, no migration done yet, kernel must still load" path.
+
+**Second, `validateChainedEvent` does not differentiate "this is a known legacy shape" from "this is malformed."** Both produce the same `EVENT_ENVELOPE_INVALID` diagnostic. There is no surface that says "we recognize this as v10; here is the migration path." The Sterling diagnostic `store.events.invalid_event_shape` is technically accurate but missing the operational context: "this is fixable by `caws events migrate --from v10`."
+
+**Third, related but separate**: `CAWS-MIGRATE-V10-EVENTS-001` shipped `caws events migrate --from v10` which is the operator-driven rotation path for full v10 logs. That command works. But it requires the operator to KNOW the events log is v10-shaped — which they will not know until a lifecycle command fails for unclear reasons. The migration command is a fix; this slice provides the silent read-side compatibility that lets v11.1.x continue to read mixed-content logs without forcing rotation.
+
+### What this slice (KERNEL-EVENT-V10-COMPAT-ALIAS-001) shipped
+
+A narrow read-side compatibility alias: `validateChainedEvent` routes inputs whose `event === 'validation_completed'` through a separate compat schema (`packages/caws-kernel/src/schemas/events/validation_completed.v1.json`) that admits the exact v10 envelope shape. Every other event name flows through the canonical v11 path unchanged.
+
+Five load-bearing properties of the implementation:
+
+1. **Read-only.** No writer path emits `validation_completed`. Static-grep test in `evidence-validate-v10-compat.test.ts` proves no kernel source file outside `validate.ts` and the schema itself references the string.
+2. **No event-log mutation.** The events file is read verbatim; the v10 entry is returned cast to `ChainedEvent` with its runtime shape (`actor: string`, top-level `session_id`) preserved. The v10-writer-computed `event_hash` remains valid because the bytes that hashed to it are unchanged.
+3. **Narrow.** Only `event === 'validation_completed'` triggers the compat path. Malformed legacy entries are still rejected with structured diagnostics tagged `legacyCompat: 'validation_completed.v1'` so observers can distinguish "valid v10 entry" from "legacy alias path rejected this."
+4. **Hash chain semantics unchanged.** The function deliberately does NOT normalize, lift, or rewrite any field before returning. This is invariant I4 of the spec; tested via `does not lift session_id from top level into a synthesized actor object`.
+5. **Spec-id discipline preserved.** v10's `validation_completed` is the same semantic event as v11's `spec_validated` — both are in `REQUIRES_SPEC_ID` class. The compat path enforces the same class check via `checkSpecIdClass('spec_validated', obj['spec_id'])`. A v10 entry missing `spec_id` is rejected.
+
+Test counts: 557/557 kernel tests pass (15 new tests for this slice, 542 pre-existing unchanged). Packaging tests confirm the new schema ships in `dist/`.
+
+### What this slice does NOT do
+
+- **Does NOT migrate the on-disk events.** The log stays untouched. Operators who want canonicalized v11 entries continue to use `caws events migrate --from v10` (CAWS-MIGRATE-V10-EVENTS-001).
+- **Does NOT extend the writer surface.** Appending a new `validation_completed` event is still impossible — `validateEventBody` (the write-side validator) is unchanged.
+- **Does NOT cover other v10→v11 event renames.** If other v10 event names exist in real logs, each requires its own compat alias and schema. Tested today: `validation_completed` only. The Sterling log carries only `chain_rotated`, `spec_created`, `test_recorded`, `validation_completed`; the first three are v11-compatible already.
+- **Does NOT fix the misleading `partial_failure_recovered` diagnostic.** That belongs to a downstream slice — the caller should surface "events log contains legacy entries; run `caws events migrate --from v10` or wait for kernel ≥1.1.3" instead of "partial failure recovered."
+
+### Release coupling
+
+This slice ships in `@paths.design/caws-kernel@1.1.3`. The CLI's existing `^1.1.0` dep range satisfies it, so `@paths.design/caws-cli@11.1.7` users will pick up the kernel fix on `npm install -g @paths.design/caws-cli@11.1.7` reinstall (cache-bust). The Sterling agent should `npm install -g @paths.design/caws-cli@11.1.7` after kernel 1.1.3 publishes to resolve the block.
+
+A follow-up release-train slice (`RELEASE-CAWS-11-1-8-TRAIN-01`) will bump the CLI to 11.1.8 to force the kernel-version pin and ensure new installs always pick up the compat alias. That release is OUT of scope for this slice.
+
+### Single-line synthesis
+
+**Entry 20 was a silent migration-compatibility failure: a writer-side event rename (v10 `validation_completed` → v11 `spec_validated`) was not paired with a read-side compatibility alias, so every v10-migrant repo's event-appending lifecycle commands failed during the full-log re-read step that lifecycle-transaction does before computing the next chain hash. The failure was made invisible by the wrapper outcome `partial_failure_recovered`, which sounds benign but actually means "the substrate cannot be read anymore." The fix is a narrow read-only compat alias in `validateChainedEvent` — the v10 envelope shape is admitted under one specific event name, the parsed event is returned verbatim (preserving the v10-writer-computed hash), and new writes still emit only canonical v11. The deeper invariant: any vocabulary rename in an append-only log substrate MUST ship a read-side compatibility alias paired with the rename, not as a follow-up — otherwise the first lifecycle operation under the new version stops being possible on every existing-data repo.**

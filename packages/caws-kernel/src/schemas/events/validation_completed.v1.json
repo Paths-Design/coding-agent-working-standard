@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/validation_completed.v1.json",
+  "title": "validation_completed event (v10 read-side compatibility)",
+  "$comment": "LEGACY READ-ONLY. This is the v10 envelope shape for what v11 calls 'spec_validated'. The schema exists so v11 kernels can load existing event logs containing v10 entries without failing. NEW WRITES MUST USE spec_validated. There is no internal code path that emits this event type — only the read-side validator accepts it.\n\nDifferences from the canonical v11 envelope (events.v1.json):\n  - 'actor' is a STRING (e.g. 'cli'), not a structured object.\n  - 'session_id' lives at the TOP LEVEL, not nested in actor.session_id.\n  - 'event' is the literal string 'validation_completed' (renamed to 'spec_validated' in v11).\n\nAll other envelope fields (seq, ts, spec_id, data, prev_hash, event_hash) match v11. The chain hash was computed by the v10 writer over the v10 canonical JSON; the v11 hash chain semantics are preserved by NOT re-normalizing the parsed event before hash verification.\n\nAuthority: this schema is added by KERNEL-EVENT-V10-COMPAT-ALIAS-001 as a narrow read-side compatibility surface. The compat path is invoked ONLY when the input's 'event' field equals 'validation_completed'; all other event names fall through to the canonical v11 validator and behave unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seq",
+    "ts",
+    "actor",
+    "event",
+    "spec_id",
+    "data",
+    "prev_hash",
+    "event_hash"
+  ],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "v10 placed session_id at the top level of the envelope. v11 nests it under actor.session_id. The compat schema admits this top-level placement; the runtime accept logic preserves it verbatim and does not lift it into actor."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "v10 actor is a string (e.g. 'cli', 'agent', 'user'). v11 actor is a structured { kind, id } object. The compat path preserves the string form verbatim; it does NOT synthesize a v11 actor object during the read."
+    },
+    "event": {
+      "type": "string",
+      "const": "validation_completed",
+      "description": "Literal v10 event name. The v11 equivalent is 'spec_validated'. New writes MUST use 'spec_validated'; this constant fences the compat path so it cannot accidentally match any other event."
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Spec identifier. validation_completed is spec-scoped (mirrors the REQUIRES_SPEC_ID class of its v11 successor)."
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "compliance_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "grade": {
+          "type": "string",
+          "enum": ["A", "B", "C", "D", "F"]
+        },
+        "error_count": { "type": "integer", "minimum": 0 },
+        "warning_count": { "type": "integer", "minimum": 0 }
+      },
+      "description": "v10 payload. Matches the Sterling-observed shape (seq 117-119 in the v10->v11 migrant repo that motivated this compat alias). The 'passed' field is required; the others are optional because some v10 emitters omitted them."
+    },
+    "prev_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}
