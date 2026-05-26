@@ -3,6 +3,7 @@ title: 'Two-package release train: caws-kernel@1.1.2 then caws-cli@11.1.7 (gated
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: release-caws-11-1-7-train
 created_at: '2026-05-26T17:53:37.915Z'
 updated_at: '2026-05-26T17:53:37.915Z'
 blast_radius:

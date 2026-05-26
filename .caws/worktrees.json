@@ -20,5 +20,16 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  },
+  "release-caws-11-1-7-train": {
+    "specId": "RELEASE-CAWS-11-1-7-TRAIN-01",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-26T18:18:03.772Z",
+    "branch": "release-caws-11-1-7-train",
+    "baseBranch": "feat/multi-agent-provenance-envelope",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/release-caws-11-1-7-train"
   }
 }
