@@ -2,10 +2,11 @@ id: RELEASE-CAWS-11-1-7-TRAIN-01
 title: 'Two-package release train: caws-kernel@1.1.2 then caws-cli@11.1.7 (gated)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: release-caws-11-1-7-train
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Two-package release train complete. KERNEL: @paths.design/caws-kernel@1.1.2 published 2026-05-26T19:14:50Z (manual npm publish; shasum d7e96842dc904c861e8f6402141b9124e6d3e9f9). CLI: @paths.design/caws-cli@11.1.7 published 2026-05-26T21:16:09Z via tag-driven CI (run 26475585577, signed provenance at sigstore logIndex 1635366244, shasum 8e404ec74d136f3d8b60cfdaf03eeb2c841ca5f1, 293 files, 298.0 kB). First CI publish attempt failed at prepublish smoke gate due to stale hardcoded pack.packVersion assertion; auto-deleted per asymmetric-failure invariant. Hotfix slice RELEASE-SMOKE-PACKVERSION-HOTFIX-01 replaced hardcoded integer with dynamic CLAUDE_CODE_PACK_VERSION read; tag retagged at b463d9a; second CI attempt succeeded. Fresh-install verification in /tmp/v11.1.7-verify: caws-cli@11.1.7 resolves kernel@1.1.2 via ^1.1.0; stale-text grep for both v11.0.0-does-not-ship (kernel) and pin-to-cli@^10.2 (CLI) returns zero matches in installed tarballs; dist/index.js executable. All four shipped P0 fixes (DOCS-V11-CUTOVER-FINALIZE-01, CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01, CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01, CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01) confirmed live. Side findings: (1) global caws on dev machine is 10.2.0; (2) scope-guard hook regex vs kernel matchPrefix divergence filed as SCOPE-GUARD-HOOK-KERNEL-REGEX-DIVERGENCE-001; (3) npm view from inside monorepo returns stale-cached 404s for newly-published versions, use registry HTTP API or query outside workspace. Out-of-scope follow-ups: KERNEL-RELEASE-PROVENANCE-01, CAWS-DEPS-AUDIT-REMEDIATION-01, BUG-018-CROSS-SHELL-SESSION-ID-RESOLUTION-01. All ten acceptance criteria (A1-A10) satisfied.'
 created_at: '2026-05-26T17:53:37.915Z'
-updated_at: '2026-05-26T20:05:00.000Z'
+updated_at: '2026-05-26T21:26:17.991Z'
 blast_radius:
   modules:
     - packages/caws-kernel/package.json
