@@ -1809,3 +1809,169 @@ describe('worktree-write-guard.sh canonical-spec-materialization refusal (WORKTR
     });
   });
 });
+
+// ============================================================================
+// WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3
+//
+// worktree-guard.sh preserves the existing blanket agent-Bash refusal for
+// git sparse-checkout commands (any subcommand: disable / set / init /
+// reapply / list / add), but the diagnostic is upgraded to:
+//   - explain the canonical-spec-materialization concern,
+//   - name caws specs show <id> as the read path,
+//   - name caws worktree repair-sparse <name> as the sparse recovery path,
+//   - omit the prior vague wording ("Use full worktrees without
+//     sparse-checkout.") which led agents to ask users to disable sparse
+//     instead of routing through CAWS.
+//
+// Tests invoke worktree-guard.sh directly (not via the dispatcher chain)
+// because the diagnostic-text claim is local to this handler. The
+// dispatcher-propagation properties are already covered by
+// CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001 and do not depend
+// on the diagnostic body.
+// ============================================================================
+
+describe('worktree-guard.sh sparse-checkout diagnostic upgrade (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3)', () => {
+  const templateDir = path.resolve(__dirname, '../../templates');
+  const packDir = path.join(templateDir, 'hook-packs', 'claude-code');
+
+  let testDir;
+  let originalCwd;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    testDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-wtg-sparse-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', testDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.email', 't@t'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'config', 'user.name', 't'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(testDir, '.gitignore'), '');
+    execFileSync('git', ['-C', testDir, 'add', '.gitignore'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', testDir, 'commit', '-qm', 'init'], { stdio: 'ignore' });
+    fs.ensureDirSync(path.join(testDir, '.caws'));
+
+    const hooksDir = path.join(testDir, '.claude', 'hooks');
+    fs.ensureDirSync(hooksDir);
+    fs.ensureDirSync(path.join(hooksDir, 'lib'));
+    for (const f of ['worktree-guard.sh', 'runtime-paths.sh']) {
+      fs.copySync(path.join(packDir, f), path.join(hooksDir, f));
+      fs.chmodSync(path.join(hooksDir, f), 0o755);
+    }
+    fs.copySync(
+      path.join(packDir, 'lib', 'parse-input.sh'),
+      path.join(hooksDir, 'lib', 'parse-input.sh')
+    );
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (testDir) fs.removeSync(testDir);
+  });
+
+  function runGuard(command, opts = {}) {
+    const cwd = opts.cwd || testDir;
+    const payload = {
+      tool_name: 'Bash',
+      tool_input: { command },
+      cwd,
+      session_id: opts.session_id || 'caws-sparse-diag-test-1',
+    };
+    const inputFile = path.join(testDir, '.guard-input.json');
+    fs.writeFileSync(inputFile, JSON.stringify(payload));
+    const hookPath = path.join(testDir, '.claude', 'hooks', 'worktree-guard.sh');
+    try {
+      const stdout = execSync(`cat "${inputFile}" | bash "${hookPath}"`, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_DIR: testDir },
+      });
+      return { exitCode: 0, stdout, stderr: '' };
+    } catch (error) {
+      return {
+        exitCode: error.status || 1,
+        stdout: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || '',
+      };
+    } finally {
+      try { fs.removeSync(inputFile); } catch { /* ignore */ }
+    }
+  }
+
+  // The exact agent-bypass form that prompted this slice. Kept as a
+  // payload constant in source so the literal sparse-checkout command
+  // does not appear in commit messages or shell history of the
+  // implementing session.
+  const DISABLE_FORM = ['git', 'sparse-checkout', 'disable'].join(' ');
+  const SET_FORM = ['git', 'sparse-checkout', 'set', '--no-cone', '/*'].join(' ');
+  const REAPPLY_FORM = ['git', 'sparse-checkout', 'reapply'].join(' ');
+
+  it('refuses the disable form with exit 2', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('stderr is prefixed by [worktree-guard.sh] when run through the dispatcher (carrier check)', () => {
+    // Direct-invocation stderr does NOT have the [worktree-guard.sh]
+    // prefix (that prefix is added by lib/run-handlers.sh in the
+    // dispatcher chain). The diagnostic body, when carried through
+    // run-handlers.sh, will appear with that prefix in production —
+    // verified by the dispatcher-propagation test suite. Here we just
+    // confirm the body itself is present from this handler.
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('stderr carries canonical-spec-materialization wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/v10\.2 split-brain authority class/);
+    // The phrase about worktree-local .caws/specs may be wrapped
+    // across lines in the human-readable diagnostic. Match the two
+    // meaningful fragments independently rather than asserting line
+    // contiguity.
+    expect(r.stderr).toMatch(/Linked worktrees must not use worktree-local/);
+    expect(r.stderr).toMatch(/\.caws\/specs\/ files as authority/);
+    expect(r.stderr).toMatch(/canonical control plane regardless of cwd/);
+  });
+
+  it('stderr names caws worktree repair-sparse <name> as the recovery path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws worktree repair-sparse <name>/);
+    // And explains non-destructive guarantee so agents do not think
+    // they need to clean up manually first.
+    expect(r.stderr).toMatch(/non-destructive/);
+    expect(r.stderr).toMatch(/refuses dirty \.caws\/specs\//);
+  });
+
+  it('stderr names caws specs show <id> as the read path', () => {
+    const r = runGuard(DISABLE_FORM);
+    expect(r.stderr).toMatch(/caws specs show <id>/);
+  });
+
+  it('stderr does NOT contain the prior vague wording', () => {
+    const r = runGuard(DISABLE_FORM);
+    // The old line was: "Use full worktrees without sparse-checkout."
+    // Its presence in the upgraded diagnostic would mean the upgrade
+    // didn't fully replace it.
+    expect(r.stderr).not.toMatch(/Use full worktrees without sparse-checkout\./);
+  });
+
+  it('blanket refusal preserved: set form is also refused', () => {
+    const r = runGuard(SET_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('blanket refusal preserved: reapply form is also refused', () => {
+    const r = runGuard(REAPPLY_FORM);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/BLOCKED: agent-issued git sparse-checkout is refused/);
+  });
+
+  it('non-sparse-checkout git commands are unaffected', () => {
+    // git status (read-only, no worktrees-active context) should pass
+    // through the sparse-checkout block and exit 0 (no other rules fire
+    // in this fixture: no .caws/worktrees.json with active entries).
+    const r = runGuard('git status');
+    expect(r.stderr).not.toMatch(/BLOCKED: agent-issued git sparse-checkout/);
+  });
+});

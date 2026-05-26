@@ -50,8 +50,37 @@ if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--sc
 fi
 
 if echo "$COMMAND" | grep -qE '(^|;|&&|\|)\s*git\s+sparse-checkout'; then
-  echo "BLOCKED: git sparse-checkout is not allowed in this project." >&2
-  echo "Use full worktrees without sparse-checkout." >&2
+  # WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3: blanket refusal stays.
+  # Agent-issued git sparse-checkout commands are refused regardless of
+  # subcommand (disable / set / init / reapply / list / add). Recovery
+  # of the canonical-spec-materialization invariant in a linked CAWS
+  # worktree is a CAWS worktree-repair concern routed through the CLI,
+  # not an agent-Bash git operation.
+  echo "BLOCKED: agent-issued git sparse-checkout is refused in CAWS projects." >&2
+  echo "" >&2
+  echo "Sparse-checkout in a CAWS linked worktree carries the mechanical guard" >&2
+  echo "against the v10.2 split-brain authority class: .caws/specs/ is excluded" >&2
+  echo "from the worktree by design, so canonical spec authority cannot be" >&2
+  echo "materialized inside the worktree as a divergent private copy. Disabling" >&2
+  echo "sparse-checkout (or any sparse-checkout reconfiguration via agent Bash)" >&2
+  echo "would re-open that class. Linked worktrees must not use worktree-local" >&2
+  echo ".caws/specs/ files as authority; CAWS resolves spec reads through the" >&2
+  echo "canonical control plane regardless of cwd." >&2
+  echo "" >&2
+  echo "To read a spec from any cwd (including this worktree), use:" >&2
+  echo "  caws specs show <id>" >&2
+  echo "" >&2
+  echo "To check scope from any cwd, use:" >&2
+  echo "  caws scope show <path>" >&2
+  echo "  caws scope check <path>" >&2
+  echo "" >&2
+  echo "To restore the sparse-checkout invariant on a linked worktree (e.g.," >&2
+  echo "after a human-authorized sparse-checkout reconfiguration left the tree" >&2
+  echo "with materialized .caws/specs/ files), run from the canonical checkout:" >&2
+  echo "  caws worktree repair-sparse <name>" >&2
+  echo "" >&2
+  echo "The repair command is non-destructive: it refuses dirty .caws/specs/" >&2
+  echo "rather than stashing, cleaning, or deleting work." >&2
   exit 2
 fi
 
