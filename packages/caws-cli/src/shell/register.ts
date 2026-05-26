@@ -44,6 +44,7 @@ import {
   runWorktreeListCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreeRepairSparseCommand,
   type EvidenceKind,
 } from './index';
 import type { LeaseReason } from '@paths.design/caws-kernel';
@@ -703,6 +704,20 @@ export function registerShellCommands(
     .action((opts: { dryRun?: boolean; data?: boolean }) => {
       const code = runWorktreeMigrateRegistryCommand({
         ...(opts.dryRun === true ? { dryRun: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  worktreeCmd
+    .command('repair-sparse <name>')
+    .description(
+      'Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if .caws/specs/ has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it. Use this after a `git sparse-checkout disable` has materialized canonical spec files into the worktree.'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((name: string, opts: { data?: boolean }) => {
+      const code = runWorktreeRepairSparseCommand({
+        name,
         showData: opts.data === true,
       });
       exit(code);
