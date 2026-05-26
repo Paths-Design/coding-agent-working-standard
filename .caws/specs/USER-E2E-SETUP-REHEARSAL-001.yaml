@@ -2,9 +2,11 @@ id: USER-E2E-SETUP-REHEARSAL-001
 title: 'Observational E2E setup rehearsal on full-stack-ds'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Report committed at a2a2526 (docs/reports/user_e2e_setup_rehearsal_001.md, 12 sections, 648 lines + amendment). Amendment commit b4e0b99 broadened Bug-003/P0-2 from caws-claim-only to shared stale v11.0.0/pin-to-10.2.x diagnostic advice (observed in both caws claim outside-worktree AND caws scope show unbound-case repair: field). Provenance preserved in-repo at docs/reports/turn.10.2.json and docs/reports/turn.11.6.json. Verdict: NOT-READY for first-contact external users. Surface split: v11.6 development surface READY-WITH-DOC-GAPS with P0 defects (Bug-001/002 status+agents crash on summarizeActiveAgents; Bug-003 shared stale diagnostic advice across multiple commands); v10.2 published/global surface NOT-READY (Bug-005 destructive init, Bug-006 false git-hooks-active claim, Bug-007 status-vs-scope contradiction, Bug-009 broken diagnose on monorepos). Governing readiness blocker is Bug-004/P0-0 published-surface skew: npm install -g resolves to v10.2.0 while host repo, kit, CLAUDE.md, docs/architecture/* describe v11.x. Bug ledger (12) enumerates 20 discrete bugs across both surfaces with provenance, severity, disposition, and §9 cross-reference: 4 critical, 5 high, 8 medium, 3 low, 1 process bug (Bug-020 kit allowed shared-workspace overwrite of 10.2 evidence). Follow-up candidate slices to open from this closed evidence base, in maintainer-prescribed order: RELEASE-DISTRIBUTION-SURFACE-RECON-01 (Bug-004), CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 (Bug-001/002), CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01 (Bug-003, broadly scoped per amendment), CAWS-INIT-SAFE-COLLISION-PUBLISHED-SURFACE-01 (Bug-005, downstream of Bug-004 release decision). Non-claim: no fixes were implemented in this recon slice; all findings deferred to follow-up specs per spec invariant I1.'
 created_at: '2026-05-26T05:45:52.793Z'
-updated_at: '2026-05-26T08:30:00.000Z'
+updated_at: '2026-05-26T08:33:02.641Z'
 blast_radius:
   modules:
     - docs/reports/user_e2e_setup_rehearsal_001.md
