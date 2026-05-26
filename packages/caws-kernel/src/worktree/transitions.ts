@@ -79,7 +79,7 @@ export function canTransitionSpecWithWorktree(
         authority: 'kernel/worktree',
         message: `Spec ${spec.id} cannot ${transition} while worktree "${offending}" is bound.`,
         subject: spec.id,
-        narrowRepair: `Detach worktree "${offending}" from spec ${spec.id} first. (v11.0.0 does not ship worktree lifecycle commands; remove the binding from .caws/worktrees.json directly, or pin to caws-cli@^10.2.x for \`caws worktree merge ${offending}\` / \`caws worktree destroy ${offending}\`.)`,
+        narrowRepair: `Detach worktree "${offending}" from spec ${spec.id} first by running \`caws worktree merge ${offending}\` (if the worktree branch is ready to merge) or \`caws worktree destroy ${offending}\` (if the work is abandoned).`,
         data: {
           transition,
           spec_id: spec.id,
