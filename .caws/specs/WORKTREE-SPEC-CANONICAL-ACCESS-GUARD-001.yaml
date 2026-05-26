@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: worktree-spec-canonical-access-guard
 created_at: '2026-05-26T02:54:19.822Z'
-updated_at: '2026-05-26T03:30:00.000Z'
+updated_at: '2026-05-26T03:40:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
@@ -20,9 +20,7 @@ operational_rollback_slo: 10m
 scope:
   in:
     - .caws/specs/WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001.yaml
-    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
-    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
-    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/templates/hook-packs/claude-code
     - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/src/shell/register.ts
@@ -35,8 +33,6 @@ scope:
     - CLAUDE.md
   out:
     - packages/caws-cli/src/store/git-sparse-checkout.ts
-    - packages/caws-cli/templates/hook-packs/claude-code/dispatch
-    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
     - packages/caws-kernel/src
     - .caws/policy.yaml
     - CODEOWNERS
@@ -45,10 +41,10 @@ invariants:
   - 'I2: The refusal MUST distinguish WORKTREE_ROOT (cwd / Claude project dir being operated from) from CANONICAL_ROOT (repo root resolved upward from GIT_COMMON_DIR). The refused path is under the LINKED worktree''s .caws/specs/*, not necessarily under the canonical root. The existing PROJECT_DIR-rewrites-to-canonical pattern in worktree-write-guard.sh is useful for broad allowlisting but MUST NOT be reused for this specific path check.'
   - 'I3: Linked-worktree detection MUST use git as primary signal — GIT_COMMON_DIR != GIT_DIR after realpath normalization. CAWS registry (.caws/worktrees.json) is consulted for diagnostic enrichment only (naming the bound spec); a registry desync MUST NOT suppress the refusal.'
   - 'I4: This slice MUST NOT modify packages/caws-cli/src/store/git-sparse-checkout.ts. The repair-sparse command calls configureWorktreeSparseCheckout as-is.'
-  - 'I5: This slice MUST NOT modify any dispatcher file under templates/hook-packs/claude-code/dispatch/. The PreToolUse dispatcher already routes Read|Write|Edit|Bash to the handler chain; only the handler''s internal tool_name allowlist is widened.'
+  - 'I5: This slice MUST NOT change BEHAVIOR of any dispatcher file under templates/hook-packs/claude-code/dispatch/ or of scope-guard.sh. Per-file hook_pack_version header bumps to the same value as CLAUDE_CODE_PACK_VERSION are mandatory (install.test.js line 348 lockstep) and are explicitly NOT behavioral changes. The scope was broadened from the initial draft to admit the whole templates/hook-packs/claude-code/ directory because the v4->v5 pack bump requires every managed template''s header to advance in lockstep; refusing scope on the unrelated templates would force a smaller pack-version bump that conflicts with the manifest test.'
   - 'I6: The git sparse-checkout refusal in worktree-guard.sh MUST remain a blanket agent-Bash refusal (no per-subcommand allowlist for `set` / `init`). The CLI repair path bypasses Claude Bash hooks via configureWorktreeSparseCheckout, so allowing `set` from agent Bash is unnecessary. Only the diagnostic text changes.'
   - 'I7: repair-sparse MUST be non-destructive. No stash, no git clean, no reset --hard, no file deletion. Dirty or untracked content under <worktree>/.caws/specs/ MUST cause repair-sparse to refuse with a typed diagnostic and a manual recovery path. The lineage record on stash/destroy as a work-loss class is explicit; do not regress it.'
-  - 'I8: CLAUDE_CODE_PACK_VERSION MUST be bumped from 4 to 5. Both worktree-write-guard.sh and worktree-guard.sh per-file hook_pack_version headers MUST be bumped to 5 (matching the manifest constant), per the precedent that template-behavior changes require version lockstep.'
+  - 'I8: CLAUDE_CODE_PACK_VERSION MUST be bumped from 4 to 5. Per install.test.js line 348 (`expect(header.hookPackVersion).toBe(CLAUDE_CODE_PACK.packVersion)`) every managed template''s per-file hook_pack_version header MUST be bumped to 5 in the same commit (not just worktree-write-guard.sh and worktree-guard.sh). The lockstep is across the full pack, not the two named files. Template body changes outside worktree-write-guard.sh and worktree-guard.sh are limited to the header value alone.'
   - 'I9: The refusal MUST be canonical-spec-materialization refusal, not generic spec-access refusal. The diagnostic wording MUST NOT claim that linked worktrees cannot materialize .caws/specs/ as an absolute fact — hostile/manual writes can create those files. The claim is that CAWS does not treat such files as authority and that creating/reading them via tool calls is refused.'
 acceptance:
   - id: A1
