@@ -2,9 +2,11 @@ id: KERNEL-EVENT-V10-COMPAT-ALIAS-001
 title: 'Read-side compatibility for legacy v10 validation_completed events in v11 kernel'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge kernel-event-v10-compat at 349d14583c48c6bde6938dcfe180b39f5536ac4f'
 created_at: '2026-05-26T22:23:07.958Z'
-updated_at: '2026-05-26T22:23:07.958Z'
+updated_at: '2026-05-26T22:57:11.033Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/evidence

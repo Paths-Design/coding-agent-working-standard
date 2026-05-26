@@ -245,6 +245,158 @@ describe('validateChainedEvent — v11 path unchanged when event is not validati
   });
 });
 
+describe('Hardening (S1) — spec-id-class diagnostic redundancy', () => {
+  it('produces EVENT_SPEC_ID_REQUIRED specifically (not just generic schema-required) when spec_id is missing', () => {
+    // Locks the defense-in-depth between (a) the compat schema's
+    // `required: ["spec_id"]` and (b) the `checkSpecIdClass('spec_validated', ...)`
+    // call in validateLegacyV10ValidationCompleted. If a future mutation
+    // changes the second-argument to an OPTIONAL_SPEC_ID class (e.g.,
+    // 'worktree_created') or removes the call entirely, the schema's
+    // `required` would still catch missing spec_id with a generic
+    // diagnostic — but the specific EVENT_SPEC_ID_REQUIRED rule would
+    // no longer fire, silently weakening the contract.
+    const noSpec = legacyValidationCompleted();
+    delete (noSpec as Record<string, unknown>)['spec_id'];
+    const r = validateChainedEvent(noSpec);
+    expect(isErr(r)).toBe(true);
+    if (!isErr(r)) return;
+
+    // The specific rule MUST appear — not just any schema rejection.
+    const specIdRequired = r.errors.filter(
+      (e) => e.rule === EVIDENCE_RULES.EVENT_SPEC_ID_REQUIRED
+    );
+    expect(specIdRequired.length).toBeGreaterThan(0);
+
+    // And it MUST be tagged as a legacy-path diagnostic (came through
+    // the compat function, not the v11 path).
+    for (const e of specIdRequired) {
+      expect((e.data as Record<string, unknown>)?.['legacyCompat']).toBe(
+        'validation_completed.v1'
+      );
+    }
+  });
+});
+
+describe('Hardening (S2) — I4 byte-identity / no-normalization', () => {
+  it('returns the input by reference; no normalization happens', () => {
+    // I4: "no normalization before hash verification." The v10-writer-
+    // computed event_hash is only valid if the bytes that hash to it are
+    // unchanged. Locking object identity prevents any future AJV reconfig
+    // (coerceTypes: true, useDefaults: true, removeAdditional: true) from
+    // silently mutating the input and breaking the hash invariant.
+    const input = legacyValidationCompleted();
+    const before = JSON.stringify(input);
+
+    const r = validateChainedEvent(input);
+    expect(isOk(r)).toBe(true);
+    if (!isOk(r)) return;
+
+    // Object identity: returned value IS the input. AJV configured without
+    // any coercion/default/removal preserves this.
+    expect(r.value as unknown).toBe(input);
+
+    // Byte-identity: serialized form is unchanged. Belt to the suspenders
+    // of object identity — if a future AJV reconfig defeats the ===
+    // identity check via deep cloning, this byte check catches it.
+    const after = JSON.stringify(r.value);
+    expect(after).toBe(before);
+  });
+
+  it('preserves a v10 entry with no top-level session_id by reference', () => {
+    // Variant of the identity check ensuring it does not depend on the
+    // optional session_id field being present.
+    const input = legacyValidationCompleted();
+    delete (input as Record<string, unknown>)['session_id'];
+    const before = JSON.stringify(input);
+
+    const r = validateChainedEvent(input);
+    expect(isOk(r)).toBe(true);
+    if (!isOk(r)) return;
+    expect(r.value as unknown).toBe(input);
+    expect(JSON.stringify(r.value)).toBe(before);
+  });
+});
+
+describe('Hardening (S3) — data block remains closed', () => {
+  it('rejects unknown extra fields inside data and tags the diagnostic as legacyCompat', () => {
+    // Compat schema has additionalProperties: false on the data block.
+    // No test exercised this before, so a mutation removing it would
+    // silently broaden the alias. Tests it now and asserts the legacyCompat
+    // tag so the diagnostic provenance is also locked.
+    const r = validateChainedEvent(
+      legacyValidationCompleted({
+        data: {
+          passed: true,
+          compliance_score: 0.7,
+          grade: 'C',
+          error_count: 0,
+          warning_count: 3,
+          surprise: 1, // not in the v10 data schema
+        },
+      })
+    );
+    expect(isErr(r)).toBe(true);
+    if (!isErr(r)) return;
+    // At least one diagnostic must report the extra field and carry the
+    // legacyCompat marker.
+    const tagged = r.errors.filter(
+      (e) => (e.data as Record<string, unknown>)?.['legacyCompat'] === 'validation_completed.v1'
+    );
+    expect(tagged.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Hardening (S4) — invalid spec_id pattern', () => {
+  it('rejects a spec_id that does not match the v11 pattern', () => {
+    // Compat schema enforces the same regex as v11. Tests this directly
+    // so a mutation loosening the regex (e.g., to .* ) is caught.
+    const r = validateChainedEvent(
+      legacyValidationCompleted({ spec_id: 'lower-case-123' })
+    );
+    expect(isErr(r)).toBe(true);
+    if (!isErr(r)) return;
+    // Either the schema-pattern path OR the EVENT_SPEC_ID_INVALID rule
+    // should appear. Both are valid signals; we accept either.
+    const hasPatternFailure = r.errors.some((e) => {
+      const data = e.data as Record<string, unknown> | undefined;
+      const ajvKw = (data?.['ajvKeyword'] as string | undefined) ?? '';
+      return (
+        e.rule === EVIDENCE_RULES.EVENT_SPEC_ID_INVALID ||
+        ajvKw === 'pattern' ||
+        (typeof e.subject === 'string' && e.subject.includes('spec_id'))
+      );
+    });
+    expect(hasPatternFailure).toBe(true);
+    // legacyCompat tag MUST be present on at least one diagnostic
+    // (provenance for the compat path).
+    const tagged = r.errors.filter(
+      (e) => (e.data as Record<string, unknown>)?.['legacyCompat'] === 'validation_completed.v1'
+    );
+    expect(tagged.length).toBeGreaterThan(0);
+  });
+
+  it('rejects another pattern-violating spec_id (kebab-case)', () => {
+    const r = validateChainedEvent(legacyValidationCompleted({ spec_id: 'foo-bar' }));
+    expect(isErr(r)).toBe(true);
+  });
+});
+
+describe('Hardening (C2) — session_id absence behavior (locked)', () => {
+  it('accepts a legacy validation_completed without top-level session_id', () => {
+    // Compat schema lists session_id in properties but NOT in required.
+    // Locking the current behavior: absence is admitted. v10 may have
+    // omitted session_id in some emitter paths; the Sterling fixture
+    // always carries it but the schema deliberately does not require it.
+    // If future evidence shows v10 always included session_id, this test
+    // should be inverted and the schema should add session_id to required
+    // — that is a deliberate decision, not a silent drift.
+    const noSession = legacyValidationCompleted();
+    delete (noSession as Record<string, unknown>)['session_id'];
+    const r = validateChainedEvent(noSession);
+    expect(isOk(r)).toBe(true);
+  });
+});
+
 describe('A4 — no internal code path emits validation_completed', () => {
   // This is a static-evidence test: grep the kernel src for new writes
   // of validation_completed. The schema file references the string

@@ -991,6 +991,21 @@ This slice ships in `@paths.design/caws-kernel@1.1.3`. The CLI's existing `^1.1.
 
 A follow-up release-train slice (`RELEASE-CAWS-11-1-8-TRAIN-01`) will bump the CLI to 11.1.8 to force the kernel-version pin and ensure new installs always pick up the compat alias. That release is OUT of scope for this slice.
 
+### Residual: verifyChain compatibility (caveat, not a blocker)
+
+This slice closes the read-side validator (`validateChainedEvent`) compatibility gap that blocks every event-appending lifecycle command. It does **not** close `verifyChain` compatibility for legacy entries. `verifyChain` re-hashes every event via `computeEventHash → canonicalJson(event minus event_hash)` and compares to the stored `event_hash`. A v10 entry will verify under v11 only if the v10 writer used a canonical-JSON serialization byte-identical to v11's `canonicalJson` (sorted keys, omit undefined, throw on non-finite). If v10 used `JSON.stringify` directly or a different canonicalizer, `verifyChain` will fail with `evidence.chain.event_hash_mismatch` on every Sterling-shape entry.
+
+This is **not a Sterling worktree-create blocker.** The hot path is `loadEvents → prepareAppend(prev, body) → atomic append`, which reads only `prev.seq` and `prev.event_hash` from the previous event — both are well-formed strings/integers on the legacy shape and `prepareAppend` does NOT re-hash `prev`. The slice ships a complete fix for the immediate Sterling block.
+
+The verify-chain gap surfaces only when (a) an operator runs `caws events verify-archive` against an archive containing legacy entries, or (b) a future explicit chain audit walks the log end-to-end. Both are diagnostic paths, not lifecycle paths.
+
+**Follow-up slice:** `KERNEL-EVENT-V10-VERIFYCHAIN-COMPAT-001`. Two possible resolutions:
+
+1. **Verify-chain-side compatibility:** for entries whose `event === 'validation_completed'`, route `computeEventHash` through a v10-canonical-JSON implementation that matches the v10 writer's algorithm. Requires sampling actual Sterling entries to determine the v10 algorithm.
+2. **Sanctioned archive/rotation:** document that legacy entries must be rotated via `caws events rotate --reason "..."` before chain verification can pass over the v10→v11 boundary. The `chain_rotated` event carries `prior_chain_status: parseable_unverified` precisely for this case — the v11 verifier explicitly excludes pre-rotation entries from end-to-end verification.
+
+The right resolution depends on whether v10 entries are evidentiarily load-bearing for any compliance/audit use case. Until that's decided, treat the gap as documented residual.
+
 ### Single-line synthesis
 
 **Entry 20 was a silent migration-compatibility failure: a writer-side event rename (v10 `validation_completed` → v11 `spec_validated`) was not paired with a read-side compatibility alias, so every v10-migrant repo's event-appending lifecycle commands failed during the full-log re-read step that lifecycle-transaction does before computing the next chain hash. The failure was made invisible by the wrapper outcome `partial_failure_recovered`, which sounds benign but actually means "the substrate cannot be read anymore." The fix is a narrow read-only compat alias in `validateChainedEvent` — the v10 envelope shape is admitted under one specific event name, the parsed event is returned verbatim (preserving the v10-writer-computed hash), and new writes still emit only canonical v11. The deeper invariant: any vocabulary rename in an append-only log substrate MUST ship a read-side compatibility alias paired with the rename, not as a follow-up — otherwise the first lifecycle operation under the new version stops being possible on every existing-data repo.**
