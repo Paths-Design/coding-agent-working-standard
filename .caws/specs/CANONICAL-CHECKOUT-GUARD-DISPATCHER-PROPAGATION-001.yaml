@@ -2,9 +2,11 @@ id: CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001
 title: 'Dispatcher chain propagates canonical-checkout guard refusals'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Test-only slice proving the production dispatcher chain (dispatch/pre_tool_use.sh -> lib/run-handlers.sh -> worktree-guard.sh) preserves the canonical-checkout guard''s refusal semantics end-to-end. Evidence: 11/11 targeted dispatcher tests pass; 76/76 full lite-hooks suite passes (no regression). A1 runtime artifact: canonical + active worktree + ''git checkout main'' returns exit 2 with the 4-line [worktree-guard.sh]-prefixed canonical BLOCKED diagnostic preserved verbatim. A2 runtime artifact: canonical + active worktree + ''git status'' returns exit 0 with empty stderr/stdout. Fixture correction landed: guard-strikes.sh is an auxiliary dependency of scope-guard.sh, not an addition to the production HANDLERS array. Invariants I5 (worktree-guard.sh NOT modified) and I6 (CLAUDE_CODE_PACK_VERSION NOT bumped) honored. Non-claim recorded for future slice: no assertion is made about Claude Code''s precedence between dispatcher exit code (2) and a prior handler''s stdout permissionDecision envelope (''ask'' from block-dangerous.sh). That question, if it ever proves authority-bearing, belongs to a separate slice (candidate id: HOOK-STDOUT-EXIT-PRECEDENCE-01).'
 created_at: '2026-05-26T01:29:15.414Z'
-updated_at: '2026-05-26T01:30:00.000Z'
+updated_at: '2026-05-26T02:27:33.344Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/dispatch/pre_tool_use.sh
@@ -61,4 +63,3 @@ contracts:
     name: canonical-checkout-dispatcher-propagation-v1
     path: packages/caws-cli/tests/integration/lite-hooks.test.js
     description: 'Behavioral contract: dispatch/pre_tool_use.sh end-to-end invocation preserves the canonical-checkout guard refusal (exit 2 + canonical diagnostic) for mutating commands from the canonical checkout while worktrees are active; allows read-only commands; allows mutating commands from inside a linked worktree; allows everything when no worktrees are active. Implemented as integration tests in lite-hooks.test.js that exercise the dispatcher entry point with synthetic Claude Code Bash tool payloads piped to stdin.'
-worktree: dispatcher-propagation
