@@ -2,9 +2,11 @@ id: USER-E2E-SETUP-REHEARSAL-V11-1-7-001
 title: 'Observational E2E setup rehearsal on full-stack-ds against published v11.1.7'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Post-publish rehearsal against @paths.design/caws-cli@11.1.7 executed inside fresh clone of full-stack-design-system at SHA c604fb0. Report landed at docs/reports/user_e2e_setup_rehearsal_v11_1_7_001.md (227 lines, 10 sections per kit). All P1-P8 phases complete with zero HANDOFFs. Verdict: READY-WITH-DOC-GAPS (verdict upgrade from prior v10.2-era USER-E2E-SETUP-REHEARSAL-001 NOT-READY). Bug-004 published-surface skew closed by v11.1.7 release. Three P1 follow-ups nameable from report 9 fix backlog: INIT-PARTIAL-SUCCESS-EXIT-CODE-001, SPEC-CREATE-SCAFFOLD-USABLE-DEFAULTS-001, WORKTREE-WORKSPACE-DEPS-GUIDANCE-001. Two P2 follow-ups: SPECS-CREATE-CONSOLIDATED-REQUIRED-FLAGS-001, WORKTREE-MERGE-DRYRUN-VERBOSE-001. Six acceptance criteria all satisfied. Evidence base at /tmp/fsds-caws-rehearsal/transcript/.'
 created_at: '2026-05-26T22:00:02.850Z'
-updated_at: '2026-05-26T22:00:02.850Z'
+updated_at: '2026-05-26T22:02:31.102Z'
 blast_radius:
   modules:
     - docs/reports/user_e2e_setup_rehearsal_v11_1_7_001.md
