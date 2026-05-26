@@ -20,16 +20,5 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
-  },
-  "dispatcher-propagation": {
-    "specId": "CANONICAL-CHECKOUT-GUARD-DISPATCHER-PROPAGATION-001",
-    "owner": {
-      "session_id": "caws-2e94385548fa",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-26T01:31:07.232Z",
-    "branch": "dispatcher-propagation",
-    "baseBranch": "feat/multi-agent-provenance-envelope",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/dispatcher-propagation"
   }
 }
