@@ -20,5 +20,16 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "feat/multi-agent-provenance-envelope",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  },
+  "lockfile-hygiene": {
+    "specId": "CAWS-CLI-KERNEL-DEP-LOCKFILE-HYGIENE-01",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-26T15:44:47.208Z",
+    "branch": "lockfile-hygiene",
+    "baseBranch": "feat/multi-agent-provenance-envelope",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/lockfile-hygiene"
   }
 }
