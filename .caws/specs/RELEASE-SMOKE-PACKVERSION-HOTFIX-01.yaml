@@ -2,9 +2,11 @@ id: RELEASE-SMOKE-PACKVERSION-HOTFIX-01
 title: 'Hotfix stale fresh-install smoke pack version assertion (unblock CLI 11.1.7 publish)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Hotfix landed at b463d9a on release-caws-11-1-7-train. Replaced hardcoded pack.packVersion !== 3 with dynamic read of CLAUDE_CODE_PACK_VERSION from packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts. Local smoke (bash -c ''node packages/caws-cli/scripts/fresh-install-smoke.mjs'') ran PASS in 11527ms with A14.4 reporting v5 dynamically. CI publish of caws-cli@11.1.7 succeeded at 21:16:09Z (CI run 26475585577, registry.verify.ok, signed provenance at sigstore logIndex 1635366244, shasum 8e404ec74d136f3d8b60cfdaf03eeb2c841ca5f1, 293 files, 298.0 kB). All five acceptance criteria (A1 dynamic read, A2 future-proof, A3 mismatch diagnostic shape preserved, A4 file-presence assertions unchanged, A5 CI exit-0 + publish) satisfied. Side finding: scope-guard hook uses regex matching while kernel uses boundary-safe matchPrefix, causing bare scripts pattern to match packages/caws-cli/scripts/* in the hook but not in the kernel. Strike 1 accumulated on the smoke script before scope.out amendment. Follow-up: file SCOPE-GUARD-HOOK-KERNEL-REGEX-DIVERGENCE-001.'
 created_at: '2026-05-26T20:00:52.658Z'
-updated_at: '2026-05-26T20:01:30.000Z'
+updated_at: '2026-05-26T21:22:50.098Z'
 blast_radius:
   modules:
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
