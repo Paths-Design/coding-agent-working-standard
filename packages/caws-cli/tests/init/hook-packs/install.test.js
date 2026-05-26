@@ -155,8 +155,8 @@ describe('Claude Code pack manifest', () => {
       '../../../dist/init/hook-packs/manifest-claude-code'
     );
 
-    it('CLAUDE_CODE_PACK_VERSION is at least 3', () => {
-      expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(3);
+    it('CLAUDE_CODE_PACK_VERSION is at least 4', () => {
+      expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(4);
     });
 
     it('manifest lists the three new agent-*.sh templates as managed + executable', () => {
@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 3');
+        expect(content).toContain('hook_pack_version: 4');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 3');
+      expect(sessionStart).toContain('hook_pack_version: 4');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 3');
+      expect(preToolUse).toContain('hook_pack_version: 4');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 3');
+      expect(stop).toContain('hook_pack_version: 4');
       expect(stop).toContain('agent-stop.sh');
     });
 
