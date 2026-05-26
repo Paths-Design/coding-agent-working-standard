@@ -1,0 +1,56 @@
+id: RELEASE-SMOKE-PACKVERSION-HOTFIX-01
+title: 'Hotfix stale fresh-install smoke pack version assertion (unblock CLI 11.1.7 publish)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-26T20:00:52.658Z'
+updated_at: '2026-05-26T20:01:30.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - .caws/specs/RELEASE-SMOKE-PACKVERSION-HOTFIX-01.yaml
+  out:
+    - packages/caws-kernel
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - package-lock.json
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
+invariants:
+  - I1 — assertion reads CLAUDE_CODE_PACK_VERSION from the source-tree TS manifest at test time and compares against the installed pack's packVersion; no hardcoded integer remains as the canonical version.
+  - I2 — the three required hook scripts (agent-register.sh, agent-heartbeat.sh, agent-stop.sh) continue to be asserted as managed+executable; that requirement is independent of the version-number assertion.
+  - I3 — no kernel, src, or template files are modified; this is a smoke-script-only edit.
+  - I4 — no package version bumps; no CHANGELOG entry (smoke fix is internal release-engineering, not a user-facing change).
+  - I5 — when the canonical pack version is bumped in source, this assertion does not require manual update.
+acceptance:
+  - id: A1
+    given: a fresh install of the packed caws-cli tarball into a temp project
+    when: fresh-install-smoke.mjs runs assertHookPackV3 (or its renamed successor)
+    then: the assertion compares pack.packVersion against the value read from packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts (CLAUDE_CODE_PACK_VERSION export), and exits 0 when they match
+  - id: A2
+    given: a future bump of CLAUDE_CODE_PACK_VERSION in source (e.g., 5 → 6) with a corresponding dist rebuild
+    when: fresh-install-smoke.mjs runs
+    then: the assertion still passes without any edit to fresh-install-smoke.mjs
+  - id: A3
+    given: a fresh install where dist was built from a stale source (installed pack.packVersion < canonical version, or installed > canonical)
+    when: fresh-install-smoke.mjs runs
+    then: the assertion fails with a structured diagnostic naming both the canonical version (from source) and the installed version, and exits 1
+  - id: A4
+    given: an installed pack missing any of agent-register.sh, agent-heartbeat.sh, or agent-stop.sh
+    when: fresh-install-smoke.mjs runs the assertion
+    then: it fails with a diagnostic naming the missing file (unchanged from prior behavior)
+  - id: A5
+    given: the hotfix commit on the release-caws-11-1-7-train branch
+    when: a new caws-cli-v11.1.7 tag is pushed pointing at that commit
+    then: CI's prepublish smoke step exits 0 and the publish proceeds
+non_functional: {}
+contracts: []
