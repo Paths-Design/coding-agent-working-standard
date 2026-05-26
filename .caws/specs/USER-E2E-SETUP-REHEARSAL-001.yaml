@@ -1,0 +1,58 @@
+id: USER-E2E-SETUP-REHEARSAL-001
+title: 'Observational E2E setup rehearsal on full-stack-ds'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-26T05:45:52.793Z'
+updated_at: '2026-05-26T05:45:52.793Z'
+blast_radius:
+  modules:
+    - docs/reports/user_e2e_setup_rehearsal_001.md
+    - docs/reports/user_e2e_setup_rehearsal_001_kit.md
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/USER-E2E-SETUP-REHEARSAL-001.yaml
+    - docs/reports/user_e2e_setup_rehearsal_001.md
+    - docs/reports/user_e2e_setup_rehearsal_001_kit.md
+  out:
+    - packages
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'I1: This is a recon/observation slice. No production code, no installer behavior, no runtime semantics, no hook templates may be modified inside this slice. All findings land in the report; fixes are deferred to follow-up specs.'
+  - 'I2: The rehearsal is executed by a remote Claude Code agent inside an external target repo (full-stack-ds), not from within the CAWS repo. The kit (docs/reports/user_e2e_setup_rehearsal_001_kit.md) is the agent''s self-contained brief. The host CAWS repo only holds the kit and the eventual report.'
+  - 'I3: The target repo MUST be in a clean, isolated state when the rehearsal begins. Either (a) a fresh clone at a named SHA, or (b) the live repo with explicit user authorization and a recorded uncommitted-state snapshot. The kit prescribes a fresh clone by default.'
+  - 'I4: The rehearsal records BOTH successes and friction with equal fidelity. A diagnostic that says nothing is a finding (silent failure mode). A command that requires private maintainer knowledge to interpret is a finding.'
+  - 'I5: The kit MUST tell the remote agent what command surface to use (global `caws` vs. published npm vs. local repo build), and the report MUST identify which command surface was actually exercised. A rehearsal against the unpublished local build is a weaker signal than against the published surface a new user would obtain.'
+  - 'I6: No commits to the target repo''s base branch unless the rehearsal explicitly requires a merge step; any merge MUST follow CAWS-native flow and be reported with full SHA evidence.'
+acceptance:
+  - id: A1
+    given: 'A clean clone of full-stack-ds (or a recorded-state live repo with explicit authorization) at a named git SHA, with no prior .caws/ directory or CAWS state.'
+    when: 'The remote agent executes the rehearsal kit (docs/reports/user_e2e_setup_rehearsal_001_kit.md) phase by phase.'
+    then: 'A complete transcript exists with: (a) install/source check (binary path, version, command surface identity), (b) first-init result (files created, commands explained), (c) doctor comprehension classification, (d) first-spec creation attempt, (e) first-worktree creation attempt, (f) first governed change, (g) merge/close attempt, (h) cleanup verification. Each phase records commands run, exit codes, full stdout/stderr (or quoted excerpts where complete capture is impractical), files changed, and the agent''s honest assessment of clarity.'
+  - id: A2
+    given: 'The transcript from A1.'
+    when: 'The agent composes the final report at docs/reports/user_e2e_setup_rehearsal_001.md.'
+    then: 'The report contains all 10 required sections: (1) repo chosen and why, (2) starting state, (3) command transcript grouped by phase, (4) files changed by each phase, (5) diagnostics encountered, (6) places where the user would likely stop or ask for help, (7) evidence table, (8) readiness verdict (READY | READY-WITH-DOC-GAPS | NOT-READY | BLOCKED), (9) prioritized fix backlog (P0 blocks setup / P1 likely abandonment / P2 confusing but recoverable / P3 polish), (10) non-claims and limits of rehearsal.'
+  - id: A3
+    given: 'The kit at docs/reports/user_e2e_setup_rehearsal_001_kit.md.'
+    when: 'The kit is read in isolation (without access to the CAWS maintainer or the conversation in which it was authored).'
+    then: 'A competent Claude Code agent can: identify the target repo, identify the command surface to use, execute all 7 phases, capture the required evidence in the prescribed format, produce the final report on its own host repo (returning artifacts to caws), and know what to do if any phase blocks (escalation procedure).'
+  - id: A4
+    given: 'The full rehearsal completes.'
+    when: 'The target repo (full-stack-ds) is inspected post-rehearsal.'
+    then: 'Either the target repo is left in the same state it started (clean clone deleted, or live repo restored to its pre-rehearsal HEAD with no committed CAWS state) OR the residue is explicitly documented in §10 of the report with a justification and a cleanup recipe the user can run.'
+  - id: A5
+    given: 'The report and the prioritized fix backlog.'
+    when: 'A future slice consults this report to plan setup-experience improvements.'
+    then: 'Every P0 and P1 item in the backlog is specific enough to inform a slice plan: it names the command, diagnostic, doc, or behavior that needs to change, and references the transcript line(s) that motivated it. P0/P1 items without that traceability are a defect in the report itself.'
+  - id: A6
+    given: 'The rehearsal kit''s "Other Things You Might Need to Gather" section.'
+    when: 'The remote agent encounters an unanticipated situation (broken install, version skew, hook conflict, permissions, etc.).'
+    then: 'The kit describes the escalation procedure: pause, record the unanticipated situation in the transcript with full context, attempt the smallest safe recovery if one is obvious from the kit''s decision table, otherwise stop and emit a HANDOFF block requesting human input. The agent MUST NOT silently work around blockers.'
+non_functional:
+  reliability:
+    - 'The rehearsal MUST be reproducible. Given the same target repo at the same SHA and the same kit, two independent executions should produce substantially similar transcripts (small variation in timestamps and session ids is expected; substantive divergence in commands run or diagnostics emitted is a finding).'
+contracts: []
