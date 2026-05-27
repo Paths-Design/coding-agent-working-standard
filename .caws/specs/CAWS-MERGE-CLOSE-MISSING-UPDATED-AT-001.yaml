@@ -3,6 +3,7 @@ title: 'closeSpec and archiveSpec insert updated_at when absent'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: merge-close-updated-at
 created_at: '2026-05-27T21:17:04.469Z'
 updated_at: '2026-05-27T21:17:04.469Z'
 blast_radius:
