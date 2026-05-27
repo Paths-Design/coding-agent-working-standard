@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 8
+# hook_pack_version: 9
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
