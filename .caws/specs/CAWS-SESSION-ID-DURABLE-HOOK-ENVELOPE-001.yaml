@@ -2,10 +2,11 @@ id: CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
 title: 'durable hook-session envelope bridges HOOK_SESSION_ID across agent Bash invocations'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: session-id-durable-envelope
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge session-id-durable-envelope at c865d942e10acd58478ec3f651218d2c70df15cc'
 created_at: '2026-05-27T19:33:54.370Z'
-updated_at: '2026-05-27T19:42:30.000Z'
+updated_at: '2026-05-27T20:46:26.564Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
