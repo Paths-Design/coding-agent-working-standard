@@ -37,7 +37,7 @@ import {
   type Diagnostic,
 } from '@paths.design/caws-kernel';
 
-import { appendEvent } from './events-store';
+import { appendEvent, loadEvents } from './events-store';
 import {
   autoCommit,
   isPathDirty,
@@ -136,6 +136,35 @@ function findSpecPath(cawsDir: string, id: string): string | null {
   const archived = archivedSpecPath(cawsDir, id);
   if (fs.existsSync(archived)) return archived;
   return null;
+}
+
+/**
+ * TOMBSTONE-SHELL-TEST-RECONCILIATION-001: detect whether a spec id
+ * has been archived via the tombstone path (spec_archived event in
+ * the event log). CAWS-ARCHIVE-AS-TOMBSTONE-001 removed the
+ * `.caws/specs/.archive/<id>.yaml` body write; the spec_archived
+ * event is now the authoritative archive signal.
+ *
+ * Cold-path predicate used only when both `specs/<id>.yaml` AND
+ * `specs/.archive/<id>.yaml` are absent. Scans the event log
+ * sequentially for a matching `spec_archived` event. Returns true on
+ * any match. Returns false if the event log is unreadable or empty
+ * (no events means no archive can have happened in this repo).
+ *
+ * Diagnostic-only signal: the caller uses the result to choose
+ * between "archived; cannot close" vs "not found" error messages.
+ * Not consulted by any non-diagnostic code path.
+ */
+function isArchivedViaTombstone(cawsDir: string, id: string): boolean {
+  const result = loadEvents(cawsDir);
+  if (!result.ok) return false;
+  for (const event of result.value.events) {
+    const body = event as { event?: string; spec_id?: string };
+    if (body.event === 'spec_archived' && body.spec_id === id) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ─── Git query helpers (CAWS-ARCHIVE-AS-TOMBSTONE-001) ─────────────────
@@ -429,10 +458,22 @@ export function closeSpec(
 
   const targetPath = specPath(cawsDir, input.id);
   if (!fs.existsSync(targetPath)) {
-    // Check archive too — if it's already archived, this is a different
-    // kind of error than "not found."
+    // TOMBSTONE-SHELL-TEST-RECONCILIATION-001: archived-id detection
+    // moved from `.caws/specs/.archive/<id>.yaml` file existence to
+    // the event log. CAWS-ARCHIVE-AS-TOMBSTONE-001 made archive a
+    // deletion + spec_archived event (no body written under .archive/),
+    // so the legacy file check always returned false post-tombstone
+    // and the diagnostic fell through to generic "not found at <path>".
+    //
+    // The legacy check is preserved as a first pass (pre-tombstone
+    // archives may still exist as on-disk bodies; legitimate
+    // backward-compat). If the legacy file is absent, scan the event
+    // log for a `spec_archived` event matching this id — the
+    // authoritative tombstone signal. The scan is O(events) and only
+    // happens on the cold path (active file absent), not on every
+    // close.
     const archived = archivedSpecPath(cawsDir, input.id);
-    if (fs.existsSync(archived)) {
+    if (fs.existsSync(archived) || isArchivedViaTombstone(cawsDir, input.id)) {
       return err(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
