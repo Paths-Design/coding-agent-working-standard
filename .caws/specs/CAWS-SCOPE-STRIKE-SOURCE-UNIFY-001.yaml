@@ -1,0 +1,148 @@
+id: CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001
+title: 'scope-guard strike counter and caws scope show must read the same authority'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T04:46:16.996Z'
+updated_at: '2026-05-27T04:46:16.996Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/store/scope-kernel.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/store/scope-kernel.ts
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/init/hook-packs
+    - .caws/specs/CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+invariants:
+  - >-
+    For any given (path, project-state) tuple, `caws scope show <path>`
+    and the scope-guard hook's pre-edit decision MUST return the same
+    ADMIT/REFUSE result. There is no execution path that returns ADMIT
+    from one and REFUSE from the other.
+  - >-
+    After a scope.in amendment that newly admits a previously-rejected
+    path, the NEXT edit to that path does not increment the strike
+    counter. Strikes accumulated against a path when the scope said
+    REFUSE are either auto-invalidated when the scope decision flips
+    or are explicitly time-stamped with the spec version that produced
+    them so the hook can detect staleness.
+  - >-
+    There is exactly ONE authoritative scope source. The hook layer
+    does not maintain a parallel `.caws/scope.json` cache that diverges
+    from the kernel's spec-derived scope; if such a cache exists, it
+    is invalidated on every spec write, OR it is removed entirely in
+    favor of direct kernel reads.
+acceptance:
+  - id: A1
+    given: |
+      a worktree bound to a spec whose scope.in initially excludes
+      <path>, and the agent has burned strikes 1 and 2 on <path>
+      under that spec
+    when: |
+      the spec is amended to admit <path>, AND the agent then edits
+      <path> a third time
+    then: |
+      the edit is admitted. The strike counter does NOT increment to
+      strike 3 (which would hard-block). Asserted via integration test
+      that primes the strike state, amends scope, and edits the file.
+  - id: A2
+    given: |
+      a path that `caws scope show` returns ADMIT for
+    when: |
+      the scope-guard hook fires on an edit to that same path
+    then: |
+      the hook also returns ADMIT (decision: allow). No divergence.
+      Asserted via a property-style test that runs both surfaces on
+      a random sample of (path, spec) pairs and asserts agreement.
+  - id: A3
+    given: |
+      a `.caws/scope.json` cache file exists with stale contents
+      (e.g. written by an earlier spec version that has since been
+      amended)
+    when: |
+      the scope-guard hook reads scope for any path
+    then: |
+      EITHER the cache has been invalidated (no longer used as
+      authority), OR the hook detects the staleness and refreshes
+      from the kernel. The hook does NOT silently consult a stale
+      cache that disagrees with `caws scope show`. The implementing
+      agent picks the cleaner of the two designs; both satisfy the
+      invariant.
+  - id: A4
+    given: |
+      a project where strike state has accumulated from session N-1
+      against a path that is now in scope as of session N (spec
+      amendment landed between sessions)
+    when: |
+      session N starts and the agent edits the path
+    then: |
+      the edit is admitted with no strike increment. The
+      `reset-strikes.sh --current` script is NOT required for normal
+      workflow recovery; it is reserved for actually-broken state
+      not covered by the auto-invalidation rule.
+non_functional:
+  reliability:
+    - >-
+      The unification must be backward compatible: existing
+      `.caws/scope.json` files in consumer projects must not become
+      unreadable. The kernel either continues to read them (with
+      invalidation on spec change) or migrates them to a kernel-derived
+      shape on first read.
+  performance:
+    - >-
+      Scope-decision agreement check must add no measurable latency to
+      the hook's pre-edit decision path. Caching is permitted as long
+      as the invalidation contract is correct.
+contracts: []
+closure_notes: |
+  DRAFT SPEC — investigation + fix not yet started.
+
+  Precedent: Sterling turn-043 (2026-05-26) burned strikes 1+2 on
+  python/core/proofs/induction/native_itm_bridge.py under spec
+  MH-2C-NATIVE-ITM-VERIFIER-ADAPTER-01. After the agent later amended
+  scope.in to admit the file, `caws scope show` returned ADMIT and
+  `caws gates run` passed, but the third edit still hit strike 3/3
+  hard-block. Recovery required user-authorized
+  `bash .claude/hooks/reset-strikes.sh --current`. The strike counter
+  was reading from a different scope authority than the kernel.
+
+  Root cause hypothesis (working theory, not verified):
+  - The hook reads `.caws/scope.json` (a cache file that pre-dates
+    the v11 cutover and may not be invalidated when specs change), OR
+  - The hook caches the (file, strike_count, ts) tuple without
+    recording WHICH scope decision was active when the strikes were
+    earned, so it cannot detect post-amendment staleness.
+
+  Investigation steps for the implementing agent:
+  - grep packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    for "scope.json" / strike read paths
+  - confirm what writes .caws/scope.json (if anything in v11) and when
+  - audit the strike-state file format (probably
+    .claude/logs/guard-strikes-<session>.json) for what context it
+    captures alongside the strike count
+  - decide between two designs:
+    (a) drop the parallel cache; hook calls into the kernel directly
+        via the same code path as `caws scope show`
+    (b) keep the cache but tag every strike record with the spec
+        version (or content hash) that produced it, and auto-invalidate
+        when the spec version changes
+  - write the A1-A4 integration tests in tests/init/hook-packs
+
+  Companion spec to CAWS-WORKTREE-SESSION-ID-AUTHORITY-001 — the two
+  together address the bulk of the turn-043 failure stack.
+
+  No implementation in this draft.

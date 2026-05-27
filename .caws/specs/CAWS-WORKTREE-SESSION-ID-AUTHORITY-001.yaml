@@ -1,0 +1,139 @@
+id: CAWS-WORKTREE-SESSION-ID-AUTHORITY-001
+title: 'worktree create must use current session id, not stale agents.json'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T04:46:16.996Z'
+updated_at: '2026-05-27T04:46:16.996Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/store/leases-store.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/shell
+    - .caws/specs/CAWS-WORKTREE-SESSION-ID-AUTHORITY-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+invariants:
+  - >-
+    `caws worktree create <name> --spec <id>` writes a registry entry
+    whose `owner.session_id` is the SESSION ID OF THE INVOKING SESSION,
+    not the most-recent entry in `.caws/agents.json` (which may be from
+    a paused sibling session).
+  - >-
+    The current session id is sourced from the heartbeat/lease layer
+    (`.caws/leases/<session-id>.json` + the active SessionIdentity
+    passed by the CLI shell), not from a freeform read of
+    `.caws/agents.json`.
+  - >-
+    A fresh `caws worktree create` immediately followed by `caws status`
+    from the same session shows `OWNED (yours)` not `OWNED (foreign)`.
+    No `--takeover` is needed because no takeover happened.
+acceptance:
+  - id: A1
+    given: |
+      a project with at least one stale session entry in
+      .caws/agents.json (e.g. caws-deadbeef:darwin, last_heartbeat
+      hours ago) and a current active session with a different id
+    when: |
+      the current session runs `caws worktree create <name> --spec <id>`
+    then: |
+      the resulting .caws/worktrees.json entry's owner.session_id
+      equals the current session's id, not the stale entry's id.
+      Asserted via integration test in tests/store that primes
+      agents.json with a stale entry then invokes createWorktree
+      via the writer.
+  - id: A2
+    given: |
+      a project with an empty .caws/agents.json (no prior sessions)
+      and a current active session
+    when: |
+      the current session runs `caws worktree create`
+    then: |
+      the registry entry's owner.session_id equals the current session's
+      id (sourced from the heartbeat/lease layer). The writer does not
+      fail or fall back to a placeholder id.
+  - id: A3
+    given: |
+      the same conditions as A1
+    when: |
+      the user (same session) immediately runs `caws status`
+    then: |
+      the Claim panel shows "OWNED (yours)" for the new worktree, not
+      "OWNED (foreign)". No --takeover is required.
+  - id: A4
+    given: |
+      a project where the current session id has rotated mid-session
+      (e.g. the shell capsule was re-minted between commands)
+    when: |
+      the new session runs `caws worktree create`
+    then: |
+      the writer records the CURRENT session id (the one the heartbeat
+      layer reports), not a cached id from earlier in the same shell
+      lifetime. This protects against the case observed in upstream
+      caws and Sterling where a single user-shell saw two session ids
+      and the writer picked the wrong one.
+non_functional:
+  reliability:
+    - >-
+      The session-id resolution must NEVER throw. If the heartbeat layer
+      cannot resolve a current session, the writer falls back to a
+      typed diagnostic that names the resolution failure — it does NOT
+      silently pick a wrong id.
+  security:
+    - >-
+      The writer does not accept an --owner-session-id flag from the
+      CLI. Session id is sourced exclusively from the harness layer
+      so it cannot be spoofed by a caller.
+contracts: []
+closure_notes: |
+  DRAFT SPEC — investigation + fix not yet started.
+
+  Precedent observed in two places during USER-E2E-SETUP-REHEARSAL-001
+  (2026-05-26) follow-up work:
+
+  1. Sterling turn-043: agent created a worktree in session
+     caws-f7797e0fb490, but .caws/worktrees.json:owner recorded
+     caws-e25f24e68f66 (an earlier session id from before a spec-flip
+     commit on main rotated identity). The agent then hit foreign-claim
+     soft-block on its own worktree, requiring user-authorized
+     --takeover to proceed.
+
+  2. Upstream caws CAWS-FIRST-CONTACT-UX-001 implementation session:
+     same failure mode — `caws worktree create first-contact-ux`
+     recorded `caws-d66262ddcd76` (a sibling session's id from
+     .caws/agents.json) instead of the invoking session's id. Caught
+     pre-impact this time because the writer was scoped (just one
+     worktree, not contended).
+
+  Root cause hypothesis: worktrees-writer.ts reads agents.json at
+  create time and picks an entry (probably most-recent-by-timestamp
+  or first-by-iteration-order). When agents.json contains a sibling's
+  entry whose heartbeat is newer than the invoking session's first
+  registration, the wrong id wins.
+
+  Investigation steps for the implementing agent:
+  - grep packages/caws-cli/src/store/worktrees-writer.ts for the
+    owner-resolution logic
+  - confirm it reads agents.json (vs reading the heartbeat layer or
+    accepting an explicit SessionIdentity from the caller)
+  - design a fix that takes session identity from the CLI shell's
+    runtime context (which the heartbeat hook already populates)
+  - add the A1/A2/A3/A4 integration tests
+
+  No implementation in this draft. The spec describes what success
+  looks like and where to look; an implementing agent owns the
+  design choice.
