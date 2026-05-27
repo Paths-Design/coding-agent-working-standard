@@ -146,6 +146,7 @@ export {
   runSpecsShowCommand,
   runSpecsCloseCommand,
   runSpecsArchiveCommand,
+  runSpecsMigrateCommand,
 } from './commands/specs';
 export type {
   SpecsCreateOptions,
@@ -153,6 +154,7 @@ export type {
   SpecsShowOptions,
   SpecsCloseOptions,
   SpecsArchiveOptions,
+  SpecsMigrateOptions,
 } from './commands/specs';
 
 export {

@@ -1,0 +1,54 @@
+id: STERLING-REPORT-ONLY-001
+title: real-Sterling-shape spec with all 14 round-2 report-only fields
+status: active
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: starting state
+    when: action
+    then: outcome
+created: '2026-01-01T00:00:00.000Z'
+risk_tier: T3
+blast_radius:
+  modules:
+    - pkg/foo
+scope:
+  in:
+    - pkg/foo/bar.ts
+non_functional:
+  a11y:
+    - keyboard navigation
+  perf:
+    - p95 < 500ms
+contracts: []
+invariants:
+  - the migrator preserves authority
+description: 'long-form description (round-1 report-only)'
+target:
+  canonical: src/foo
+migrations:
+  - id: m1
+    from: old
+    to: new
+threats:
+  - 'stride: T-001'
+dependencies:
+  - legacy-shim
+related_specs:
+  - SPEC-OTHER-001
+related_docs:
+  - docs/migration.md
+kind: feature
+test_strategy:
+  coverage: '80%'
+closure_path:
+  merges_into: main
+determinism:
+  seed_locked: true
+fail_closed: true
+byte_identity: 'sha256:abc'
+acceptance_criteria_summary: 'two AC, one happy + one error'
+authority_boundary:
+  kernel: false
+  store: true

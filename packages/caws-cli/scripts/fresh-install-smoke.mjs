@@ -717,6 +717,24 @@ try {
     });
   }
   log(colors.green(`\n[fresh-install-smoke] events-migration-smoke chained successfully`));
+
+  // Chain into specs-migration-smoke (CAWS-MIGRATE-V10-SPECS-001 A12).
+  // Same chain pattern as the events smoke above: the smoke does its own
+  // npm pack + install + run-from-binary; failure exits 1 and halts the
+  // prepublishOnly chain. This certifies the migrator command and its
+  // runtime dependencies are present in the published tarballs.
+  step('chain into specs-migration-smoke (A12)');
+  const specsSmokePath = join(__dirname, 'specs-migration-smoke.mjs');
+  const specsResult = spawnSync('node', [specsSmokePath], {
+    stdio: 'inherit',
+  });
+  if (specsResult.status !== 0) {
+    fail('specs-migration-smoke failed', {
+      exitCode: specsResult.status,
+      hint: 'See its output above for the specific assertion that failed.',
+    });
+  }
+  log(colors.green(`\n[fresh-install-smoke] specs-migration-smoke chained successfully`));
 } catch (err) {
   fail('unexpected error', { message: err.message, stack: err.stack?.slice(0, 1000) });
 }

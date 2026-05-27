@@ -1,0 +1,22 @@
+id: STERLING-REFUSE-MODE-001
+title: neither mode nor type is a valid v11 mode
+status: active
+type: experiment
+mode: prototype
+acceptance_criteria:
+  - id: A1
+    given: starting state
+    when: action
+    then: outcome
+created: '2026-05-01T00:00:00.000Z'
+risk_tier: 3
+blast_radius:
+  modules:
+    - pkg/x
+scope:
+  in:
+    - pkg/x/y.ts
+non_functional: {}
+contracts: []
+invariants:
+  - operator must declare a v11-valid mode by hand

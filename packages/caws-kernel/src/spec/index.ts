@@ -10,6 +10,28 @@ export { SPEC_RULES, type SpecRule } from './rules';
 export { parseSpecYaml } from './parse';
 export { validateSpecShape } from './validate-shape';
 export { validateSpecSemantics } from './validate-semantics';
+export {
+  MIGRATE_RULES,
+  type MigrateRule,
+  SAFE_RENAMES,
+  NF_SUBKEY_RENAMES,
+  RISK_TIER_COERCIONS,
+  V11_MODES,
+  V11_LIFECYCLE_STATES,
+  KNOWN_REPORT_ONLY_TOP_LEVEL,
+  type LifecycleMapping,
+  type MigrateOptions,
+  type MigrateSource,
+  type SafeRenameApplied,
+  type CoercionApplied,
+  type ModeSource,
+  type MigratedOutcome,
+  type MigratedWithWarningsOutcome,
+  type RefusedOutcome,
+  type MigrateOutcome,
+  detectSpecVersion,
+  migrateSpecV10,
+} from './migrate-v10';
 
 /**
  * Parse YAML, validate against the schema, and run semantic checks.
