@@ -5,22 +5,75 @@ mode: chore
 lifecycle_state: active
 worktree: dead-test-cleanup
 created_at: '2026-05-27T22:37:27.390Z'
-updated_at: '2026-05-27T22:37:27.390Z'
+updated_at: '2026-05-27T23:30:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests
+    - packages/caws-cli/jest.config.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/commands/burnup.test.js
+    - packages/caws-cli/tests/commands/evaluate.test.js
+    - packages/caws-cli/tests/commands/iterate.test.js
+    - packages/caws-cli/tests/verify-acs.test.js
+    - packages/caws-cli/tests/sidecars/provenance-summary.test.js
+    - packages/caws-cli/tests/sidecars/quality-gaps.test.js
+    - packages/caws-cli/tests/sidecars/schema.test.js
+    - packages/caws-cli/tests/sidecars/spec-drift.test.js
+    - packages/caws-cli/tests/sidecars/waiver-draft.test.js
+    - packages/caws-cli/tests/migration-tools.test.js
+    - packages/caws-cli/tests/tools.test.js
+    - packages/caws-cli/tests/parallel-manager.test.js
+    - packages/caws-cli/tests/multi-spec-integration.test.js
+    - packages/caws-cli/tests/working-state.test.js
+    - packages/caws-cli/tests/integration/working-state-integration.test.js
+    - packages/caws-cli/tests/error-handling.test.js
+    - packages/caws-cli/tests/scope-conflicts.test.js
+    - packages/caws-cli/tests/spec-resolver.test.js
+    - packages/caws-cli/jest.config.js
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - No test in packages/caws-cli imports any removed v10 command source (commands/{burnup,evaluate,iterate,verify-acs,sidecar,validate,archive,provenance,parallel,tool,plan,workflow,mode,tutorial,quality-monitor,diagnose,templates}.js or sidecars/* or test-analysis.js or parallel/parallel-manager.js).
+  - jest.config.js testPathIgnorePatterns references only test files that exist on disk.
+  - No surviving test asserts behavior of commands removed in v11.0 (per the REMOVED_COMMANDS list in tests/error-handler-v11-surface.test.js).
+  - Live v11.1 lifecycle coverage (agent-claim, agent-claim-wiring, shell/worktree, shell/specs, shell/claim, shell/doctor, shell/status, shell/gates, shell/evidence, shell/waiver, store/*) is preserved unchanged.
+  - No edits to packages/caws-cli/src, packages/caws-kernel/src, .caws/policy.yaml, or CODEOWNERS in this slice.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a test file under packages/caws-cli/tests that imports src/commands/{burnup,evaluate,iterate,verify-acs}.js or src/sidecars/* or src/parallel/parallel-manager.js
+    when: the slice completes
+    then: the file no longer exists OR the offending require has been removed and the file's remaining content covers only live v11.1 surface
+  - id: A2
+    given: jest.config.js testPathIgnorePatterns
+    when: the slice completes
+    then: every listed path resolves to an existing file on disk
+  - id: A3
+    given: packages/caws-cli/tests/multi-spec-integration.test.js
+    when: the slice completes
+    then: no describe block targets a removed command (Validate, Iterate, Plan, Archive, Verify-ACs, Provenance Command Integration). If no live describe blocks remain, the file is deleted.
+  - id: A4
+    given: packages/caws-cli/tests/working-state.test.js and tests/integration/working-state-integration.test.js
+    when: the slice completes
+    then: surviving assertions only cover working-state APIs reachable from live v11.1 callers (currently mergeFilesTouched via session-manager.js). If no live coverage remains, files are deleted.
+  - id: A5
+    given: packages/caws-cli/tests/error-handling.test.js
+    when: the slice completes
+    then: any assertion superseded by tests/error-handler-v11-surface.test.js is removed. If wholly superseded, the file is deleted.
+  - id: A6
+    given: the full packages/caws-cli jest test suite
+    when: invoked after all cleanup commits
+    then: it runs to completion with pass/fail results documented per the CLAUDE.md test-interpretation protocol. Any pre-existing failures are classified and not introduced by this slice.
+  - id: A7
+    given: this slice's commits
+    when: reviewed
+    then: zero modifications to packages/caws-cli/src, packages/caws-kernel/src, .caws/policy.yaml, or CODEOWNERS appear in the diff (adjacent dead source cleanup is deferred to a separate spec).
+non_functional:
+  reliability:
+    - cleanup is purely subtractive at the test layer; no production behavior changes
 contracts: []
