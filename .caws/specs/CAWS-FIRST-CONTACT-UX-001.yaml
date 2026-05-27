@@ -3,6 +3,7 @@ title: 'First-contact UX fixes: init/worktree/specs hints + registry auto-commit
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: first-contact-ux
 created_at: '2026-05-27T03:36:26.465Z'
 updated_at: '2026-05-27T03:36:26.465Z'
 blast_radius:
