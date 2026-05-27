@@ -1,0 +1,256 @@
+id: CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
+title: 'durable hook-session envelope bridges HOOK_SESSION_ID across agent Bash invocations'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T19:33:54.370Z'
+updated_at: '2026-05-27T19:33:54.370Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - .claude/hooks/lib/parse-input.sh
+    - templates/hook-packs/claude-code/lib/parse-input.sh
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001.yaml
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/src/shell/rules.ts
+    - packages/caws-cli/tests/shell/session/resolve-session.test.js
+    - packages/caws-cli/tests/shell/session
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/session_start.sh
+    - .claude/hooks/lib/parse-input.sh
+    - .claude/hooks/dispatch/session_start.sh
+  out:
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+invariants:
+  - >-
+    resolveSession admits a new authority source between priority 2
+    (HOOK_SESSION_ID env) and priority 3 (capsule lookup): a durable
+    hook-session envelope file written by the hook scripts during
+    SessionStart. The envelope file is the cross-process bridge that
+    lets agent-issued Bash CLI invocations recover the harness
+    session_id even when HOOK_SESSION_ID is absent from their env.
+  - >-
+    The envelope file path is deterministic relative to repo root:
+    `<repo_root>/tmp/<HOOK_SESSION_ID>/.session-envelope.json`. The
+    same `tmp/<session-id>/` directory that session-log.sh already
+    creates is reused. The envelope is written by a small extension to
+    parse-input.sh (or the session_start dispatcher) the first time
+    HOOK_SESSION_ID is parsed in a session. The file contains exactly
+    the binding metadata required for unambiguous resolution: session_id
+    (the UUID from the hook envelope), repo_root (resolveRepoRoot of
+    HOOK_CWD), written_at (ISO8601), hook_event (the originating event
+    name, typically SessionStart).
+  - >-
+    resolveSession's new priority-2.5 path scans
+    `<repo_root>/tmp/*/.session-envelope.json`. Only envelopes whose
+    repo_root field matches the resolveSession caller's repo_root AND
+    whose written_at is within a freshness window (24h) are candidates.
+    If exactly ONE candidate matches, its session_id is returned with
+    source 'durable_hook_envelope'. If ZERO candidates match, the
+    resolver falls through to priority 3 (capsule). If TWO OR MORE
+    candidates match, the resolver REFUSES with a typed ambiguity
+    diagnostic (SESSION_DURABLE_ENVELOPE_AMBIGUOUS) — it MUST NOT
+    pick the newest, oldest, or any heuristic winner.
+  - >-
+    The new authority source outranks capsule/mint but does NOT outrank
+    explicit env. Priority order after this slice is exactly:
+    (1) CLAUDE_SESSION_ID env, (2) HOOK_SESSION_ID env, (2.5) durable
+    hook envelope, (3) capsule lookup, (4) CURSOR_TRACE_ID env, (5) mint.
+    Operator overrides at priorities 1 and 2 are preserved verbatim.
+  - >-
+    The envelope file is operational cache, not governance state. Write
+    failures are non-fatal warnings (the hook still completes, the
+    session-log directory is still created, the agent still functions
+    with capsule/mint fallback). Stale envelopes (>24h) are silently
+    skipped on read, NEVER deleted from the read path; explicit cleanup
+    is operator-driven via existing `rm -rf tmp/<id>/` or a future
+    cleanup command. NO event is appended for envelope read/write.
+  - >-
+    The fix is backward-compatible. Existing v11.1.x sessions that
+    upgrade get the bridge as soon as the next SessionStart hook fires.
+    Sessions with no envelope on disk continue to behave exactly as
+    before (capsule/mint fallback). Sessions with HOOK_SESSION_ID set
+    in env continue to use priority 2 verbatim. No state migration is
+    required.
+  - >-
+    The hook-pack template change MUST be reflected in BOTH the
+    template source (packages/caws-cli/templates/hook-packs/claude-code/
+    lib/parse-input.sh OR session_start.sh) AND the canonical install
+    at .claude/hooks/. The kernel's hook-pack install path copies from
+    template to canonical; both surfaces are in scope.in for this slice
+    to make the dogfooding loop closeable in one commit.
+acceptance:
+  - id: A1
+    given: |
+      Two concurrent Claude Code sessions on the same machine running
+      against the same repo. Session A has HOOK_SESSION_ID="uuid-A" in
+      its hook envelope; session B has HOOK_SESSION_ID="uuid-B".
+      Neither session's HOOK_SESSION_ID is present in the agent's
+      direct-Bash env (the documented Claude Code harness limitation).
+    when: |
+      Both sessions invoke `caws worktree create <name> --spec <id>`
+      from agent-Bash tool calls (NOT from inside a hook script).
+    then: |
+      Pre-fix: both worktrees.json:owner.session_id end up as the same
+      minted "caws-<hex>" because resolveSession falls through to the
+      shared capsule keyed by canonical worktree_root.
+      Post-fix: each worktree's owner.session_id is the distinct UUID
+      from its session's durable hook envelope. Owner audit and
+      --takeover semantics work correctly across the two sessions.
+  - id: A2
+    given: |
+      A SessionStart hook fires for HOOK_SESSION_ID="uuid-A" in repo
+      with cwd = canonical checkout.
+    when: |
+      The hook-pack template (or parse-input.sh extension) runs.
+    then: |
+      A file is written at
+      `<canonical>/tmp/uuid-A/.session-envelope.json` containing:
+      `{ "session_id": "uuid-A", "repo_root": "<canonical>",
+         "written_at": "<iso8601>", "hook_event": "SessionStart" }`.
+      The write is non-fatal on failure (hook still exits 0). The
+      existing session-log.sh `tmp/uuid-A/` directory is reused
+      verbatim — no new directory layout is introduced.
+  - id: A3
+    given: |
+      A repo with TWO durable envelopes on disk (uuid-A and uuid-B)
+      both matching the current repo_root and both within freshness
+      window. HOOK_SESSION_ID is absent from env. No capsule exists.
+    when: |
+      resolveSession is invoked.
+    then: |
+      Returns Err with rule SESSION_DURABLE_ENVELOPE_AMBIGUOUS and
+      diagnostic message naming both candidate session_ids and the
+      envelope file paths. The resolver MUST NOT pick a winner; the
+      operator (or upstream caller) must disambiguate by setting
+      CLAUDE_SESSION_ID or by routing through a hook context that
+      sets HOOK_SESSION_ID.
+  - id: A4
+    given: |
+      Same as A3 but exactly ONE durable envelope matches (uuid-A).
+    when: |
+      resolveSession is invoked.
+    then: |
+      Returns Ok with identity { session_id: "uuid-A",
+      platform: "claude-code" } and source: "durable_hook_envelope".
+      No capsule is consulted; no new capsule is minted.
+  - id: A5
+    given: |
+      HOOK_SESSION_ID="uuid-A" is set in env AND a durable envelope
+      for uuid-B exists on disk.
+    when: |
+      resolveSession is invoked.
+    then: |
+      Returns identity.session_id = "uuid-A" with source: "hook_env"
+      (priority 2 wins). The durable envelope is NOT consulted —
+      the priority 2 admission short-circuits before priority 2.5
+      runs. This proves explicit env still outranks the bridge.
+  - id: A6
+    given: |
+      Zero durable envelopes match the current repo_root, no env,
+      and an existing capsule for this worktree_root.
+    when: |
+      resolveSession is invoked with allowMint: false.
+    then: |
+      Returns the capsule identity (source: 'capsule'). The durable-
+      envelope path falls through cleanly when no candidates match;
+      capsule fallback is unchanged.
+  - id: A7
+    given: |
+      A durable envelope on disk whose written_at is older than 24h.
+    when: |
+      resolveSession is invoked.
+    then: |
+      The stale envelope is silently skipped (not a candidate). The
+      resolver falls through to capsule. No write to delete the
+      stale envelope (cleanup is operator-driven).
+  - id: A8
+    given: |
+      A durable envelope whose file is unreadable or unparseable JSON.
+    when: |
+      resolveSession is invoked.
+    then: |
+      The malformed envelope is skipped with a non-fatal diagnostic
+      warning. The resolver falls through to remaining candidates
+      and then to capsule. Malformed envelopes never block resolution.
+  - id: A9
+    given: |
+      An existing v11.1.x repo with no `tmp/<id>/.session-envelope.json`
+      files (the bridge has not yet fired for any session).
+    when: |
+      `caws worktree create` is invoked from a hook context that DOES
+      set HOOK_SESSION_ID.
+    then: |
+      Returns the hook env session_id (priority 2). The absence of any
+      durable envelope is not an error condition — the new path is
+      additive.
+non_functional:
+  reliability:
+    - >-
+      Cross-process session-identity propagation is reliability work.
+      The bridge cannot be ambiguous; refusing ambiguity with a typed
+      diagnostic is mandatory. A bridge that picks the newest envelope
+      reproduces the same authority-collapse class in a different shape
+      and is explicitly forbidden by invariant 3.
+contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: discovered 2026-05-27 during CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001
+# post-merge inspection. Two concurrent Claude Code sessions had distinct
+# HOOK_SESSION_ID values (visible in .caws/leases/*.json and tmp/<UUID>/
+# directories) but identical worktrees.json:owner.session_id
+# ("caws-d66262ddcd76"), proving resolveSession fell through to capsule/
+# mint fallback for both sessions and reused the same minted id.
+#
+# CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 (closed 2026-05-27, commit 469f419)
+# made resolveSession ADMIT HOOK_SESSION_ID at priority 2. This slice fixes
+# the DURABILITY gap: HOOK_SESSION_ID is set by parse-input.sh inside the
+# hook process tree but is NOT present in env for agent-issued Bash tool
+# invocations (the harness does not propagate it). Both fixes are required
+# for full coverage: admission alone is insufficient when the env var
+# never reaches the resolver.
+#
+# Fix shape:
+#   1. Hook side: extend parse-input.sh (or session_start.sh dispatcher)
+#      to write `<repo_root>/tmp/<HOOK_SESSION_ID>/.session-envelope.json`
+#      on SessionStart. The `tmp/<id>/` directory already exists for
+#      session-log.sh artifacts; we reuse it verbatim.
+#   2. CLI side: insert a new resolveSession priority 2.5 between
+#      hook_env and capsule. Scan tmp/*/.session-envelope.json, filter
+#      by repo_root + freshness, refuse on ambiguity, accept on exactly
+#      one match.
+#
+# Authority discipline (verbatim from triage):
+#   - Do NOT scan tmp/* blindly without filtering. Repo-root filter is
+#     mandatory.
+#   - Do NOT pick the newest envelope on ambiguity. Refuse with typed
+#     diagnostic.
+#   - Do NOT outrank explicit env HOOK_SESSION_ID. Priority 2 still
+#     wins.
+#   - Do NOT make the bridge the sole authority. Capsule fallback
+#     remains the safety net.
+#   - Do NOT mutate .caws/worktrees.json:owner or any other governance
+#     surface. The bridge is purely a session-resolution input.
+#
+# Out of scope:
+#   - Claude Code harness changes (we cannot make the harness export
+#     HOOK_SESSION_ID into Bash tool env; the bridge works around that)
+#   - Lease registry redesign (.caws/leases/ already has correct UUIDs;
+#     this slice does not consult or modify leases)
+#   - Worktree merge / specs-writer / merge-close-updated-at fixes
+#     (separate slices)
+#   - Hook-pack version bump (pure additive change; no version bump
+#     unless an existing field schema changes)
+#   - Release tooling (tag-driven per CLAUDE.md trap #7)
