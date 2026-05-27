@@ -410,3 +410,230 @@ describe('describeSessionSource handles hook_env variant', () => {
     expect(diag.message).toContain('caws-hook-abc');
   });
 });
+
+// ─── CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001 ───────────────────────────
+//
+// Durable hook-session envelope bridges HOOK_SESSION_ID across agent-Bash
+// invocations where the env var doesn't propagate. The resolver scans
+// `<repo_root>/tmp/<id>/.session-envelope.json`, filters by repo_root +
+// freshness (last_seen_at within 24h), refuses ambiguity, accepts on
+// exactly-one-match. Priority is between hook_env (2) and capsule (3).
+
+function writeDurableEnvelope(repoRoot, sessionId, opts = {}) {
+  const envelopeDir = path.join(repoRoot, 'tmp', sessionId);
+  fs.mkdirSync(envelopeDir, { recursive: true });
+  const envelopePath = path.join(envelopeDir, '.session-envelope.json');
+  const payload = {
+    session_id: sessionId,
+    repo_root: opts.repoRoot ?? repoRoot,
+    created_at: opts.createdAt ?? '2026-05-27T06:00:00Z',
+    last_seen_at: opts.lastSeenAt ?? '2026-05-27T06:55:00Z',
+    hook_event: opts.hookEvent ?? 'SessionStart',
+  };
+  fs.writeFileSync(envelopePath, JSON.stringify(payload) + '\n');
+  return envelopePath;
+}
+
+describe('CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: priority 2.5 bridge', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.root));
+
+  // A4: exactly one fresh repo-matching envelope is accepted.
+  it('A4: single fresh repo-matching envelope wins over capsule fallback', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', {
+      repoRoot: tmp.root,
+      lastSeenAt: '2026-05-27T06:55:00Z', // 5 min before NOW
+    });
+    // Also seed a capsule that would otherwise win at priority 3 —
+    // the durable envelope MUST take precedence.
+    writeCapsule(tmp.cawsDir, 'caws-capsule-loser', tmp.worktreeRoot);
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {}, // no env hints — pure disk resolution
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-A');
+    expect(r.value.identity.platform).toBe('claude-code');
+    expect(r.value.source).toBe('durable_hook_envelope');
+    expect(r.value.envelopePath).toMatch(/uuid-A\/\.session-envelope\.json$/);
+    // Capsule was NOT consulted.
+    expect(r.value.capsulePath).toBeUndefined();
+  });
+
+  // A3: two or more fresh repo-matching envelopes refuse with typed
+  //     ambiguity diagnostic — NEVER newest-wins.
+  it('A3: two fresh matching envelopes → refuse with SESSION_DURABLE_ENVELOPE_AMBIGUOUS', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:58:00Z' }); // newer
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors).toBeDefined();
+    const ambig = r.errors.find(
+      (e) => e.rule === 'shell.session.durable_envelope_ambiguous'
+    );
+    expect(ambig).toBeDefined();
+    // Diagnostic data must enumerate both candidates — no newest-wins
+    // heuristic must have been applied.
+    expect(ambig.data.candidateCount).toBe(2);
+    expect(ambig.data.candidateSessionIds).toEqual(
+      expect.arrayContaining(['uuid-A', 'uuid-B'])
+    );
+    expect(ambig.data.candidateEnvelopePaths.length).toBe(2);
+  });
+
+  // A5: explicit HOOK_SESSION_ID env outranks durable envelope.
+  it('A5: HOOK_SESSION_ID env wins over durable envelope (priority 2 > 2.5)', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-disk', {});
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: { HOOK_SESSION_ID: 'uuid-env' },
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-env');
+    expect(r.value.source).toBe('hook_env');
+    expect(r.value.envelopePath).toBeUndefined();
+  });
+
+  // A6: zero matching envelopes falls through to capsule (priority 3).
+  it('A6: zero matching envelopes → capsule fallback (priority 3 unchanged)', () => {
+    tmp = mkTempCaws();
+    // Envelope for a DIFFERENT repo_root — must be filtered out.
+    writeDurableEnvelope(tmp.root, 'uuid-foreign', {
+      repoRoot: '/some/other/repo',
+    });
+    writeCapsule(tmp.cawsDir, 'caws-capsule-winner', tmp.worktreeRoot);
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('caws-capsule-winner');
+    expect(r.value.source).toBe('capsule');
+  });
+
+  // A7: stale envelope (last_seen_at > 24h ago) silently skipped.
+  it('A7: stale envelope (>24h on last_seen_at) silently skipped', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-stale', {
+      // NOW is 2026-05-27T07:00:00Z; 48h earlier = 2026-05-25T07:00:00Z
+      lastSeenAt: '2026-05-25T07:00:00Z',
+    });
+    writeCapsule(tmp.cawsDir, 'caws-capsule-takes-over', tmp.worktreeRoot);
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    // Stale envelope was skipped; capsule wins.
+    expect(r.value.source).toBe('capsule');
+    expect(r.value.identity.session_id).toBe('caws-capsule-takes-over');
+  });
+
+  // A8: malformed envelope is skipped (resolution continues; NOT fatal).
+  it('A8: malformed envelope skipped, fresh sibling still wins', () => {
+    tmp = mkTempCaws();
+    // Malformed JSON
+    const badDir = path.join(tmp.root, 'tmp', 'uuid-bad');
+    fs.mkdirSync(badDir, { recursive: true });
+    fs.writeFileSync(path.join(badDir, '.session-envelope.json'), '{not json');
+    // Valid sibling
+    writeDurableEnvelope(tmp.root, 'uuid-good', {});
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-good');
+    expect(r.value.source).toBe('durable_hook_envelope');
+  });
+
+  // A9: absent envelope is NOT an error (additive change).
+  it('A9: no envelopes on disk → capsule fallback, no diagnostic about envelopes', () => {
+    tmp = mkTempCaws();
+    // No tmp/ directory at all.
+    writeCapsule(tmp.cawsDir, 'caws-only-source', tmp.worktreeRoot);
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.source).toBe('capsule');
+    expect(r.value.identity.session_id).toBe('caws-only-source');
+  });
+
+  // A1 mechanism: agent-Bash semantics. Two sessions on the same
+  // canonical checkout, neither with HOOK_SESSION_ID in env, write
+  // their envelopes. Each session's RESOLVER should see its own
+  // envelope only IF only its envelope exists. The ambiguity check
+  // (A3) proves the resolver refuses to pick when both are present.
+  // This test proves single-session use: one session at a time → its
+  // own envelope wins, no capsule collapse.
+  it('A1-mechanism: single-session agent-Bash invocation resolves to its own envelope (not minted capsule)', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'agent-session-uuid-1', {});
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {}, // exactly the agent-Bash failure-mode env: no HOOK_SESSION_ID
+      now: NOW,
+      // allowMint: true would force the mint path if envelope resolution
+      // failed. The fact that we return durable_hook_envelope source
+      // PROVES the mint path was not reached.
+      allowMint: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.source).toBe('durable_hook_envelope');
+    expect(r.value.identity.session_id).toBe('agent-session-uuid-1');
+    // No capsule was minted (would have shown up in sessions/ dir).
+    expect(listCapsules(tmp.cawsDir)).toHaveLength(0);
+  });
+
+  // Envelope-write semantics smoke test: the hook script wrote both
+  // created_at and last_seen_at; the resolver reads last_seen_at for
+  // freshness. Confirm a freshly-written envelope (created_at ==
+  // last_seen_at) is accepted.
+  it('refresh-semantics smoke: envelope with created_at == last_seen_at is accepted', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-fresh', {
+      createdAt: '2026-05-27T06:55:00Z',
+      lastSeenAt: '2026-05-27T06:55:00Z', // same as created_at — first hook fire
+    });
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-fresh');
+  });
+});
