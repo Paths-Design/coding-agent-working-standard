@@ -32,6 +32,7 @@ import {
   closeSpec,
   createSpec,
   listSpecs,
+  recoverArchivedSpec,
   showSpec,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '@paths.design/caws-kernel';
@@ -224,6 +225,14 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
 
 export interface SpecsShowOptions extends BaseCommandOptions {
   readonly id: string;
+  /**
+   * CAWS-ARCHIVE-AS-TOMBSTONE-001: when true, look up the spec body
+   * via the event log + git blob_sha (recoverArchivedSpec). Default
+   * false → showSpec walks only the active path. This split makes the
+   * archive surface explicit, eliminating the v11.1.x transparent
+   * fallback that surfaced archived specs as if they were current.
+   */
+  readonly archived?: boolean;
 }
 
 export function runSpecsShowCommand(opts: SpecsShowOptions): number {
@@ -231,15 +240,69 @@ export function runSpecsShowCommand(opts: SpecsShowOptions): number {
   const ctx = resolveCawsCtx(cwd, err, showData, 'show');
   if (ctx === null) return 2;
 
+  if (opts.archived === true) {
+    const result = recoverArchivedSpec(ctx.cawsDir, opts.id);
+    if (!isOk(result)) {
+      err('caws specs show: failed.');
+      err(renderDiagnostics(result.errors, { showData }));
+      return 1;
+    }
+    out(result.value.source);
+    return 0;
+  }
+
   const result = showSpec(ctx.cawsDir, opts.id);
   if (!isOk(result)) {
     err('caws specs show: failed.');
     err(renderDiagnostics(result.errors, { showData }));
     return 1;
   }
-  // Print the raw source so the user gets byte-faithful output
-  // (comments preserved, etc).
   out(result.value.source);
+  return 0;
+}
+
+// ─── caws specs recover ──────────────────────────────────────────────────
+//
+// CAWS-ARCHIVE-AS-TOMBSTONE-001: dedicated command for recovering an
+// archived spec body via the event log's blob_sha + git show. Distinct
+// from `show --archived` for callers who think of recovery as a
+// first-class operation (e.g. piping into an editor, writing to a
+// specific path). Either surface returns the same bytes; both delegate
+// to recoverArchivedSpec.
+
+export interface SpecsRecoverOptions extends BaseCommandOptions {
+  readonly id: string;
+  /**
+   * When set, write the recovered body to this path instead of stdout.
+   * Named `outPath` (not `out`) to avoid shadowing
+   * BaseCommandOptions.out, which is the stdout-writer callback.
+   */
+  readonly outPath?: string;
+}
+
+export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
+  const { cwd, out: stdoutFn, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'recover');
+  if (ctx === null) return 2;
+
+  const result = recoverArchivedSpec(ctx.cawsDir, opts.id);
+  if (!isOk(result)) {
+    err('caws specs recover: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  if (typeof opts.outPath === 'string' && opts.outPath.length > 0) {
+    try {
+      fs.writeFileSync(opts.outPath, result.value.source);
+      stdoutFn(`recovered ${opts.id} to ${opts.outPath}`);
+    } catch (e) {
+      err(`caws specs recover: failed to write to ${opts.outPath}: ${(e as Error).message}`);
+      return 1;
+    }
+  } else {
+    stdoutFn(result.value.source);
+  }
   return 0;
 }
 

@@ -149,16 +149,17 @@ function findSpecPath(cawsDir: string, id: string): string | null {
 
 function runGitQuery(
   args: ReadonlyArray<string>,
-  repoRoot: string
+  repoRoot: string,
+  opts: { trim?: boolean } = {}
 ): string | null {
+  const trim = opts.trim !== false; // default true
   try {
-    return execFileSync('git', [...args], {
+    const output = execFileSync('git', [...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-    })
-      .toString()
-      .trim();
+    }).toString();
+    return trim ? output.trim() : output;
   } catch {
     return null;
   }
@@ -886,7 +887,18 @@ export function listSpecs(
   return ok({ active, archived });
 }
 
-/** Find a spec by id under active or archive locations. */
+/**
+ * Find a spec by id in the ACTIVE location only
+ * (.caws/specs/<id>.yaml). CAWS-ARCHIVE-AS-TOMBSTONE-001 invariant:
+ * `caws specs show` defaults to active specs only. Archived specs
+ * require explicit opt-in via `--archived` (which routes through
+ * `recoverArchivedSpec` below).
+ *
+ * Pre-tombstone: showSpec searched both active AND .caws/specs/.archive/
+ * transparently. That transparent fallback was a context-rot vector
+ * (agents grep'd and cited stale specs as authority); it is removed
+ * by design.
+ */
 export function showSpec(
   cawsDir: string,
   id: string
@@ -894,21 +906,228 @@ export function showSpec(
   const idValidation = validateSpecId(id);
   if (!idValidation.ok) return idValidation;
 
-  const fullPath = findSpecPath(cawsDir, id);
-  if (fullPath === null) {
+  const activePath = specPath(cawsDir, id);
+  if (!fs.existsSync(activePath)) {
+    // Distinguish "never existed" from "exists but archived". The
+    // event log tells us if there's a spec_archived event; if yes,
+    // surface a typed diagnostic pointing the user at --archived /
+    // recover. If no, the spec is genuinely unknown.
+    const archived = findArchivedSpecEvent(cawsDir, id);
+    if (archived !== null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${id}" is not in active specs. It was archived; to view its body, use \`caws specs show ${id} --archived\` or \`caws specs recover ${id}\`.`,
+          {
+            subject: id,
+            data: {
+              archived_at: archived.ts,
+              blob_sha: archived.blob_sha,
+              from_path: archived.from_path,
+            },
+          }
+        )
+      );
+    }
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${id}" not found in .caws/specs/ or .caws/specs/.archive/.`,
+        `Spec "${id}" not found in .caws/specs/.`,
         { subject: id }
       )
     );
   }
-  const sourceResult = readYamlSource(fullPath);
+  const sourceResult = readYamlSource(activePath);
   if (!isOk(sourceResult)) return err(sourceResult.errors);
   const parsed = parseAndValidateSpec(sourceResult.value);
   if (!isOk(parsed)) return err(parsed.errors);
-  return ok({ spec: parsed.value, path: fullPath, source: sourceResult.value });
+  return ok({ spec: parsed.value, path: activePath, source: sourceResult.value });
+}
+
+// ─── recoverArchivedSpec (CAWS-ARCHIVE-AS-TOMBSTONE-001 A2/A5) ──────────
+//
+// Resolves an archived spec's body via the event log + git blob_sha.
+// Topology-independent: works on rebased histories, cherry-picks,
+// shallow clones that have fetched the blob. NEVER mutates
+// .caws/specs/. Returns the raw yaml bytes.
+
+interface ArchivedSpecEvent {
+  readonly ts: string;
+  readonly from_path: string;
+  readonly blob_sha: string | null; // null for legacy events with only to_path
+  readonly to_path?: string; // present on legacy events only
+}
+
+/**
+ * Walk .caws/events.jsonl, return the most recent spec_archived
+ * event for the given spec_id, or null if none exists. Handles both
+ * legacy (from_path + to_path) and tombstone (from_path + blob_sha)
+ * shapes.
+ *
+ * "Most recent" semantics: events.jsonl is append-only; the LAST
+ * matching event wins. If a spec was archived, recovered, recreated,
+ * and re-archived, only the latest spec_archived is relevant for
+ * recovery.
+ */
+function findArchivedSpecEvent(
+  cawsDir: string,
+  specId: string
+): ArchivedSpecEvent | null {
+  const eventsPath = path.join(cawsDir, 'events.jsonl');
+  if (!fs.existsSync(eventsPath)) return null;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(eventsPath, 'utf8');
+  } catch {
+    return null;
+  }
+  let latest: ArchivedSpecEvent | null = null;
+  for (const line of raw.split('\n')) {
+    if (line.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      (parsed as { event?: unknown }).event !== 'spec_archived' ||
+      (parsed as { spec_id?: unknown }).spec_id !== specId
+    ) {
+      continue;
+    }
+    const evt = parsed as {
+      ts?: string;
+      data?: { from_path?: string; blob_sha?: string; to_path?: string };
+    };
+    if (
+      typeof evt.ts !== 'string' ||
+      typeof evt.data !== 'object' ||
+      evt.data === null ||
+      typeof evt.data.from_path !== 'string'
+    ) {
+      continue;
+    }
+    latest = {
+      ts: evt.ts,
+      from_path: evt.data.from_path,
+      blob_sha: typeof evt.data.blob_sha === 'string' ? evt.data.blob_sha : null,
+      ...(typeof evt.data.to_path === 'string' ? { to_path: evt.data.to_path } : {}),
+    };
+  }
+  return latest;
+}
+
+/**
+ * Recover an archived spec's body from git history.
+ *
+ * Resolution order:
+ *   1. New-shape event with blob_sha → `git show <blob_sha>`.
+ *   2. Legacy event with to_path only → `git log --all --follow --
+ *      <from_path>` to find a containing commit, then
+ *      `git show <commit>:<from_path>`. If zero commits, Err.
+ *
+ * NEVER mutates .caws/specs/. Returns the raw yaml bytes.
+ */
+export function recoverArchivedSpec(
+  cawsDir: string,
+  id: string
+): Result<{ readonly source: string; readonly blob_sha: string | null; readonly from_path: string }> {
+  const idValidation = validateSpecId(id);
+  if (!idValidation.ok) return idValidation;
+
+  const evt = findArchivedSpecEvent(cawsDir, id);
+  if (evt === null) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${id}" was never archived (no spec_archived event in .caws/events.jsonl).`,
+        { subject: id }
+      )
+    );
+  }
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+
+  // Tombstone shape: recover via blob_sha (topology-independent).
+  if (evt.blob_sha !== null) {
+    if (!/^[0-9a-f]{40}$/.test(evt.blob_sha)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `spec_archived event for "${id}" has malformed blob_sha "${evt.blob_sha}" (expected 40-hex).`,
+          { subject: id }
+        )
+      );
+    }
+    // trim:false preserves the spec yaml's trailing newline so the
+    // recovered body is byte-identical to the pre-archive content.
+    const body = runGitQuery(['show', evt.blob_sha], repoRoot, { trim: false });
+    if (body === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Blob ${evt.blob_sha} for spec "${id}" is not in the local git object store. Try \`git fetch --unshallow\` or \`git fetch --all\` if this is a shallow clone.`,
+          { subject: id, data: { blob_sha: evt.blob_sha, from_path: evt.from_path } }
+        )
+      );
+    }
+    return ok({ source: body, blob_sha: evt.blob_sha, from_path: evt.from_path });
+  }
+
+  // Legacy shape: fall back to git log --follow on from_path. Walk
+  // commits in newest-first order and pick the first one where the
+  // file exists at from_path (skip deletion commits). The `git log
+  // --follow` output includes BOTH commits where the file existed
+  // and the commit that removed it; we want the first one before
+  // the deletion.
+  const commitListing = runGitQuery(
+    ['log', '--all', '--follow', '--format=%H', '--', evt.from_path],
+    repoRoot
+  );
+  if (commitListing === null || commitListing.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${id}" is a legacy archive (event has no blob_sha) and no commit on the current branch contains "${evt.from_path}". The body is unrecoverable from this clone.`,
+        { subject: id, data: { from_path: evt.from_path } }
+      )
+    );
+  }
+  const commits = commitListing
+    .split('\n')
+    .map((c) => c.trim())
+    .filter((c) => /^[0-9a-f]{40}$/.test(c));
+  if (commits.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `git log returned no valid commit shas for "${evt.from_path}".`,
+        { subject: id }
+      )
+    );
+  }
+  // Walk newest-first; pick the first commit where the file blob
+  // exists at from_path. trim:false preserves trailing newlines.
+  for (const commit of commits) {
+    const body = runGitQuery(
+      ['show', `${commit}:${evt.from_path}`],
+      repoRoot,
+      { trim: false }
+    );
+    if (body !== null) {
+      return ok({ source: body, blob_sha: null, from_path: evt.from_path });
+    }
+  }
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+      `Spec "${id}" is a legacy archive; git log --follow returned ${commits.length} commits referencing "${evt.from_path}" but none contained the file body (all were deletion commits or renames). Body unrecoverable from this clone.`,
+      { subject: id, data: { from_path: evt.from_path, candidates: commits.length } }
+    )
+  );
 }
 
 // Re-export appendEvent type for downstream tests that want to inject.
