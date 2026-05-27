@@ -1,0 +1,25 @@
+id: AUTOCOMMIT-DOGFOOD-001
+title: 'Dogfood test of v11.1.6 specs-writer autocommit'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-27T19:38:32.765Z'
+updated_at: '2026-05-27T19:38:32.765Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
