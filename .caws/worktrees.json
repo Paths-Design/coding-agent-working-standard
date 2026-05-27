@@ -9,5 +9,16 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  },
+  "renderer-hotfix": {
+    "specId": "CAWS-HOOK-PACK-RENDERER-MISSING-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T05:46:01.578Z",
+    "branch": "renderer-hotfix",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/renderer-hotfix"
   }
 }

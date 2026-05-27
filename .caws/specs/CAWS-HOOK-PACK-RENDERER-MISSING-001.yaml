@@ -3,6 +3,7 @@ title: 'ship session_log_renderer.py with v11 hook pack (fixes broken session-lo
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: renderer-hotfix
 created_at: '2026-05-27T05:40:03.559Z'
 updated_at: '2026-05-27T05:40:03.559Z'
 blast_radius:
