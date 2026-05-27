@@ -447,3 +447,60 @@ describe('caws init — dist hygiene', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// ============================================================
+// 12. first-contact commit hint (CAWS-FIRST-CONTACT-UX-001 A1/A2)
+// ============================================================
+describe('caws init — first-contact commit hint', () => {
+  let repo;
+  afterEach(() => rmrf(repo));
+
+  // A1: git repo → hint present
+  it('prints a git add/commit hint when .caws/ is newly created inside a git repo', () => {
+    repo = mkBareGitRepo('caws-fc-ux-git-');
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+    // The hint mentions both git verbs and the .caws/ target.
+    expect(r.stdout).toMatch(/git add \.caws\//);
+    expect(r.stdout).toMatch(/git commit/);
+    expect(r.stdout).toMatch(/chore: add caws governance state/);
+  });
+
+  // A2: non-git tmpdir → no hint (the hint would mislead)
+  it('does NOT print the git commit hint outside a git working tree', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-fc-ux-nogit-'));
+    repo = tmp;
+    // Confirm the fixture really has no git: rev-parse should fail.
+    let isGit = false;
+    try {
+      execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+        cwd: tmp,
+        stdio: 'pipe',
+      });
+      isGit = true;
+    } catch {
+      isGit = false;
+    }
+    expect(isGit).toBe(false);
+
+    // initProject needs a git repo for resolveRepoRoot. So this path
+    // should fail with exit 2 (resolve failure), and the hint must not
+    // appear in either stdout or stderr.
+    const r = capture(runInitCommand, { cwd: tmp });
+    expect(r.code).toBe(2);
+    expect(r.stdout + r.stderr).not.toMatch(/git add \.caws\//);
+    expect(r.stdout + r.stderr).not.toMatch(/chore: add caws governance state/);
+  });
+
+  // A1 regression: idempotent re-run on an already-initialized repo
+  // does NOT re-emit the hint (outcome === 'already_initialized').
+  it('does NOT print the commit hint when init is idempotent (already_initialized)', () => {
+    repo = mkBareGitRepo('caws-fc-ux-idem-');
+    expect(capture(runInitCommand, { cwd: repo }).code).toBe(0);
+    // Second run: already_initialized branch
+    const r2 = capture(runInitCommand, { cwd: repo });
+    expect(r2.code).toBe(0);
+    expect(r2.stdout).toMatch(/already initialized/);
+    expect(r2.stdout).not.toMatch(/git add \.caws\//);
+  });
+});
