@@ -3,6 +3,7 @@ title: 'durable hook-session envelope bridges HOOK_SESSION_ID across agent Bash 
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: session-id-durable-envelope
 created_at: '2026-05-27T19:33:54.370Z'
 updated_at: '2026-05-27T19:33:54.370Z'
 blast_radius:

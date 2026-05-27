@@ -1,1 +1,13 @@
-{}
+{
+  "session-id-durable-envelope": {
+    "specId": "CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T19:35:36.377Z",
+    "branch": "session-id-durable-envelope",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/session-id-durable-envelope"
+  }
+}
