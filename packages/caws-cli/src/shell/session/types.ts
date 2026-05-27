@@ -104,11 +104,26 @@ export interface CandidateTraceEntry {
    *   - 'rejected': the source produced raw data that was refused for a
    *     specific reason (e.g. HOOK_SESSION_ID = 'unknown', malformed
    *     capsule file). The `reason` field is populated.
+   *   - 'race': a capsule that existed at directory-listing time was
+   *     gone by the time we tried to read it (concurrent removal,
+   *     e.g. another process's `cleanupSupersededCapsules` mid-mint).
+   *     Reported distinctly from 'rejected' because the file was not
+   *     malformed, just absent at read time — operators should not
+   *     debug it as a content problem.
    */
-  readonly outcome: 'admitted' | 'absent' | 'rejected';
+  readonly outcome: 'admitted' | 'absent' | 'rejected' | 'race';
   readonly reason?: string;
   /** Number of identities admitted from this source (0 unless outcome === 'admitted'). */
   readonly count?: number;
+  /**
+   * For `outcome: 'admitted'`, the session_ids that were admitted from
+   * this source. Used by `describeCandidateTrace` to render the
+   * candidate IDs in refusal diagnostics so an operator can see EXACTLY
+   * which identities were considered against the registered owner.
+   * Truncated to a manageable display form by the renderer; the raw
+   * IDs are preserved here for callers that want to log or inspect them.
+   */
+  readonly admittedIds?: ReadonlyArray<string>;
 }
 
 export interface ResolveCandidatesOptions {

@@ -462,9 +462,16 @@ function readAllCapsules(
       },
     };
   }
+  // CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 L7: pin iteration
+  // order so candidate ordering and diagnostic rendering are stable
+  // across runs (readdirSync returns FS-order, which is not portable).
+  entries.sort();
+
   const candidates: SessionCandidate[] = [];
   let rejectedCount = 0;
+  let raceCount = 0;
   const rejectionReasons: string[] = [];
+  const raceReasons: string[] = [];
   for (const name of entries) {
     if (!name.endsWith('.json')) continue;
     const capsulePath = path.join(sessionsDir, name);
@@ -472,8 +479,19 @@ function readAllCapsules(
     try {
       raw = fs.readFileSync(capsulePath, 'utf8');
     } catch (e) {
-      rejectedCount++;
-      rejectionReasons.push(`unreadable: ${name}: ${(e as Error).message}`);
+      // CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 L1: ENOENT
+      // between readdir and readFile means a sibling process (e.g.,
+      // another mint's cleanupSupersededCapsules) removed the file.
+      // Surface as 'race' so operators don't debug it as a content
+      // problem. Any other error (EACCES, EIO) is a real read failure.
+      const err = e as NodeJS.ErrnoException;
+      if (err.code === 'ENOENT') {
+        raceCount++;
+        raceReasons.push(`concurrent-removal: ${name}`);
+      } else {
+        rejectedCount++;
+        rejectionReasons.push(`unreadable: ${name}: ${err.message}`);
+      }
       continue;
     }
     let parsed: unknown;
@@ -499,9 +517,18 @@ function readAllCapsules(
     });
   }
   if (candidates.length > 0) {
+    // CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 L2: record the
+    // admitted session_ids so describeCandidateTrace can render them
+    // in refusal diagnostics. The trace's job is to let an operator
+    // see EXACTLY which identities were considered, not just a count.
     return {
       candidates,
-      trace: { source: 'capsule', outcome: 'admitted', count: candidates.length },
+      trace: {
+        source: 'capsule',
+        outcome: 'admitted',
+        count: candidates.length,
+        admittedIds: candidates.map((c) => c.identity.session_id),
+      },
     };
   }
   if (rejectedCount > 0) {
@@ -511,6 +538,17 @@ function readAllCapsules(
         source: 'capsule',
         outcome: 'rejected',
         reason: rejectionReasons.join('; '),
+        count: 0,
+      },
+    };
+  }
+  if (raceCount > 0) {
+    return {
+      candidates: [],
+      trace: {
+        source: 'capsule',
+        outcome: 'race',
+        reason: raceReasons.join('; '),
         count: 0,
       },
     };
@@ -547,7 +585,12 @@ export function resolveSessionCandidates(
       identity: { session_id: claudeId, platform: 'claude-code' },
       source: 'claude_env',
     });
-    trace.push({ source: 'claude_env', outcome: 'admitted', count: 1 });
+    trace.push({
+      source: 'claude_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [claudeId],
+    });
   } else {
     trace.push({
       source: 'claude_env',
@@ -563,7 +606,12 @@ export function resolveSessionCandidates(
       identity: { session_id: hookId, platform: 'claude-code' },
       source: 'hook_env',
     });
-    trace.push({ source: 'hook_env', outcome: 'admitted', count: 1 });
+    trace.push({
+      source: 'hook_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [hookId],
+    });
   } else if (hookId === 'unknown') {
     trace.push({
       source: 'hook_env',
@@ -591,7 +639,12 @@ export function resolveSessionCandidates(
       identity: { session_id: cursorId, platform: 'cursor' },
       source: 'cursor_env',
     });
-    trace.push({ source: 'cursor_env', outcome: 'admitted', count: 1 });
+    trace.push({
+      source: 'cursor_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [cursorId],
+    });
   } else {
     trace.push({
       source: 'cursor_env',
@@ -637,13 +690,25 @@ export function describeCandidateTrace(
   const lines: string[] = [];
   for (const entry of candidates.trace) {
     const base = `  - ${entry.source}: ${entry.outcome}`;
-    const detail =
-      entry.outcome === 'admitted'
-        ? ` (count=${entry.count ?? 0})`
-        : entry.reason !== undefined
-          ? ` — ${entry.reason}`
-          : '';
-    lines.push(base + detail);
+    if (entry.outcome === 'admitted') {
+      const count = entry.count ?? 0;
+      lines.push(`${base} (count=${count})`);
+      // CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 L2: render the
+      // admitted session_ids so the operator can compare them against
+      // the registered owner. IDs are truncated to the first 16 chars
+      // (display-friendly; collision-resistant given the 12-hex-char
+      // entropy of caws-${hex6} mint format). Full IDs remain on
+      // entry.admittedIds for programmatic inspection.
+      if (entry.admittedIds !== undefined && entry.admittedIds.length > 0) {
+        for (const id of entry.admittedIds) {
+          const display = id.length > 16 ? `${id.slice(0, 16)}…` : id;
+          lines.push(`      candidate: ${display}`);
+        }
+      }
+    } else {
+      const detail = entry.reason !== undefined ? ` — ${entry.reason}` : '';
+      lines.push(base + detail);
+    }
   }
   return lines.join('\n');
 }

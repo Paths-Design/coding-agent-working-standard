@@ -198,6 +198,98 @@ describe('resolveSessionCandidates: exhaustive multi-source resolution', () => {
     const capTrace = r.trace.find((t) => t.source === 'capsule');
     expect(capTrace.outcome).toBe('admitted');
     expect(capTrace.count).toBe(1);
+    expect(capTrace.admittedIds).toEqual(['caws-good']);
+  });
+
+  it('L7: sorts capsule entries for deterministic iteration order', () => {
+    tmp = mkTempCaws();
+    // Write capsules with names that would sort in alphabetical order
+    // distinct from FS-creation order.
+    writeCapsule(tmp.cawsDir, 'caws-zzz', '/wt-z');
+    writeCapsule(tmp.cawsDir, 'caws-aaa', '/wt-a');
+    writeCapsule(tmp.cawsDir, 'caws-mmm', '/wt-m');
+
+    const r1 = resolveSessionCandidates({ cawsDir: tmp.cawsDir, env: {} });
+    const r2 = resolveSessionCandidates({ cawsDir: tmp.cawsDir, env: {} });
+
+    // Both calls return candidates in the same alphabetical order.
+    const ids1 = r1.candidates.map((c) => c.identity.session_id);
+    const ids2 = r2.candidates.map((c) => c.identity.session_id);
+    expect(ids1).toEqual(['caws-aaa', 'caws-mmm', 'caws-zzz']);
+    expect(ids2).toEqual(ids1);
+  });
+
+  it('L1: ENOENT during read surfaces as outcome=race, not unreadable', () => {
+    tmp = mkTempCaws();
+    // Simulate the race: monkey-patch fs.readFileSync briefly to throw
+    // ENOENT, mimicking a sibling process's cleanupSupersededCapsules
+    // unlinking the file between our readdir and readFile.
+    const realRead = fs.readFileSync;
+    const fakePath = path.join(tmp.cawsDir, 'sessions', 'caws-races.json');
+    fs.writeFileSync(fakePath, '{}'); // exists at readdir time
+    const origRead = fs.readFileSync;
+    fs.readFileSync = function (p, opts) {
+      if (typeof p === 'string' && p === fakePath) {
+        const err = new Error(`ENOENT: no such file or directory, open '${p}'`);
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return origRead.call(this, p, opts);
+    };
+    try {
+      const r = resolveSessionCandidates({ cawsDir: tmp.cawsDir, env: {} });
+      const capTrace = r.trace.find((t) => t.source === 'capsule');
+      expect(capTrace.outcome).toBe('race');
+      expect(capTrace.reason).toContain('concurrent-removal');
+      expect(capTrace.reason).not.toContain('unreadable');
+    } finally {
+      fs.readFileSync = realRead;
+    }
+  });
+
+  it('L1: non-ENOENT read errors stay classified as unreadable/rejected', () => {
+    tmp = mkTempCaws();
+    const fakePath = path.join(tmp.cawsDir, 'sessions', 'caws-eperm.json');
+    fs.writeFileSync(fakePath, '{}');
+    const origRead = fs.readFileSync;
+    fs.readFileSync = function (p, opts) {
+      if (typeof p === 'string' && p === fakePath) {
+        const err = new Error('EACCES: permission denied');
+        err.code = 'EACCES';
+        throw err;
+      }
+      return origRead.call(this, p, opts);
+    };
+    try {
+      const r = resolveSessionCandidates({ cawsDir: tmp.cawsDir, env: {} });
+      const capTrace = r.trace.find((t) => t.source === 'capsule');
+      expect(capTrace.outcome).toBe('rejected');
+      expect(capTrace.reason).toContain('unreadable');
+      expect(capTrace.reason).toContain('EACCES');
+    } finally {
+      fs.readFileSync = origRead;
+    }
+  });
+
+  it('L2: trace records admittedIds for each admitted source', () => {
+    tmp = mkTempCaws();
+    writeCapsule(tmp.cawsDir, 'caws-cap1', '/wt-1');
+    writeCapsule(tmp.cawsDir, 'caws-cap2', '/wt-2');
+
+    const r = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {
+        CLAUDE_SESSION_ID: 'caws-env-claude',
+        HOOK_SESSION_ID: 'caws-env-hook',
+        CURSOR_TRACE_ID: 'caws-env-cursor',
+      },
+    });
+
+    const byName = (s) => r.trace.find((t) => t.source === s);
+    expect(byName('claude_env').admittedIds).toEqual(['caws-env-claude']);
+    expect(byName('hook_env').admittedIds).toEqual(['caws-env-hook']);
+    expect(byName('capsule').admittedIds.sort()).toEqual(['caws-cap1', 'caws-cap2']);
+    expect(byName('cursor_env').admittedIds).toEqual(['caws-env-cursor']);
   });
 
   it('rejects all-malformed capsule directory with reason in trace', () => {
@@ -303,7 +395,25 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
     expect(text).toContain('cursor_env: absent');
   });
 
-  it('produces a multi-line string with one line per source', () => {
+  it('renders one line per source PLUS one candidate line per admitted ID', () => {
+    tmp = mkTempCaws();
+    // Two capsules + one env => 3 candidates; trace has 4 source lines.
+    writeCapsule(tmp.cawsDir, 'caws-cap1', '/wt-1');
+    writeCapsule(tmp.cawsDir, 'caws-cap2', '/wt-2');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: { CLAUDE_SESSION_ID: 'caws-env-c' },
+    });
+
+    const text = describeCandidateTrace(candidates);
+    const lines = text.split('\n');
+    // 4 source lines + 1 admitted-id line for claude_env + 2 admitted-id
+    // lines for capsule = 7 lines total.
+    expect(lines).toHaveLength(7);
+  });
+
+  it('renders empty trace as four absent lines (no candidate lines)', () => {
     tmp = mkTempCaws();
 
     const candidates = resolveSessionCandidates({
@@ -314,5 +424,38 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
     const text = describeCandidateTrace(candidates);
     const lines = text.split('\n');
     expect(lines).toHaveLength(4);
+  });
+
+  it('L2: refusal-diagnostic-grade trace includes admitted session_ids inline', () => {
+    tmp = mkTempCaws();
+    writeCapsule(tmp.cawsDir, 'caws-target-id', '/wt');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+    });
+
+    const text = describeCandidateTrace(candidates);
+    // The session_id is rendered (so an operator can compare against
+    // the registered owner) — not just the count.
+    expect(text).toContain('candidate: caws-target-id');
+  });
+
+  it('L2: truncates long session_ids in the rendered trace (raw IDs preserved on admittedIds)', () => {
+    tmp = mkTempCaws();
+    const longId = 'caws-extremely-long-session-id-that-exceeds-display';
+    writeCapsule(tmp.cawsDir, longId, '/wt');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+    });
+
+    const text = describeCandidateTrace(candidates);
+    // Render truncated to first 16 chars + ellipsis.
+    expect(text).toContain('candidate: caws-extremely-l…');
+    // But the raw ID is preserved for callers that need it.
+    const capTrace = candidates.trace.find((t) => t.source === 'capsule');
+    expect(capTrace.admittedIds).toEqual([longId]);
   });
 });
