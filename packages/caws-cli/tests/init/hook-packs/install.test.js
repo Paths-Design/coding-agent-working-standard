@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 8');
+        expect(content).toContain('hook_pack_version: 9');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 8');
+      expect(sessionStart).toContain('hook_pack_version: 9');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 8');
+      expect(preToolUse).toContain('hook_pack_version: 9');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 8');
+      expect(stop).toContain('hook_pack_version: 9');
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -681,7 +681,7 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
     const content = fs.readFileSync(rendererPath, 'utf8');
     expect(content).toContain('CAWS-MANAGED-HOOK');
     expect(content).toContain('hook_pack: claude-code');
-    expect(content).toContain('hook_pack_version: 8');
+    expect(content).toContain('hook_pack_version: 9');
     expect(content).toContain('caws_min_major: 11');
   });
 
@@ -781,7 +781,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
       const content = fs.readFileSync(path.join(packRoot, h.name), 'utf8');
       expect(content).toContain('CAWS-MANAGED-HOOK');
       expect(content).toContain('hook_pack: claude-code');
-      expect(content).toContain('hook_pack_version: 8');
+      expect(content).toContain('hook_pack_version: 9');
       expect(content).toContain('caws_min_major: 11');
       // Each promoted hook cites at least one lineage entry from
       // the 22-25 range.
@@ -994,5 +994,99 @@ describe('CAWS-LITE-MODE-RETIREMENT-001 — pack v8', () => {
     // The section should explicitly mention .caws/mode.json and the
     // recommended action (delete it).
     expect(content).toMatch(/mode\.json/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 — pack v9
+//
+// scope-guard.sh now delegates to `caws scope check` (the kernel-backed
+// authority) before falling back to its inline node block. This unifies
+// the scope-decision source: invariant 1 (hook and kernel agree),
+// invariant 2 (strikes auto-invalidate when current scope says ADMIT),
+// invariant 3 (one authoritative source).
+// ════════════════════════════════════════════════════════════════════
+describe('CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 — pack v9', () => {
+  const packRoot = path.resolve(
+    __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+  );
+
+  it('invariant 1: scope-guard.sh delegates to `caws scope check` before falling back to inline node', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    // The delegation block must reference `caws scope check` and exit
+    // on success — that's what guarantees ADMIT skips the strike
+    // counter and matches `caws scope show`.
+    expect(content).toMatch(/command -v caws/);
+    expect(content).toMatch(/caws scope check "\$REL_PATH"/);
+    // The ADMIT branch must exit 0 immediately (no emit_scope_progression).
+    // We assert the structural shape: a `caws scope check` invocation
+    // followed by `exit 0` before any strike-emitting code path.
+    const cawsCheckIdx = content.indexOf('caws scope check "$REL_PATH"');
+    expect(cawsCheckIdx).toBeGreaterThan(0);
+    // Within ~10 lines of the caws check, there must be an `exit 0`.
+    const window = content.slice(cawsCheckIdx, cawsCheckIdx + 500);
+    expect(window).toMatch(/exit 0/);
+    // And the retirement marker comment must be present so future
+    // readers know this delegation is intentional, not a regression
+    // of the inline-node-only design.
+    expect(content).toMatch(/CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001/);
+  });
+
+  it('invariant 2: ADMIT exit path skips emit_scope_progression entirely', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    // The kernel-ADMIT path must be: `caws scope check` → exit 0.
+    // No call to emit_scope_progression on this path. We assert by
+    // structural distance: the `exit 0` after `caws scope check`
+    // appears BEFORE the first emit_scope_progression CALL SITE
+    // (not the function definition; we match the call shape with
+    // a quoted argument).
+    const cawsCheckInvocationIdx = content.indexOf('caws scope check "$REL_PATH"');
+    const firstEmitCallIdx = content.search(/emit_scope_progression "/);
+    expect(cawsCheckInvocationIdx).toBeGreaterThan(0);
+    expect(firstEmitCallIdx).toBeGreaterThan(0);
+    expect(cawsCheckInvocationIdx).toBeLessThan(firstEmitCallIdx);
+    // The kernel-ADMIT exit 0 lives between the caws check call and
+    // the first emit_scope_progression call — proving the early-exit
+    // path bypasses strike emission.
+    const between = content.slice(cawsCheckInvocationIdx, firstEmitCallIdx);
+    expect(between).toMatch(/exit 0/);
+  });
+
+  it('invariant 3: hook falls back to inline node when caws is unavailable', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    // Backwards-compatible fallback: if `command -v caws` is missing,
+    // the existing `command -v node` block must still be reachable.
+    // We assert both gates are present and ordered correctly (caws
+    // check is gated behind `command -v caws`; the node block is
+    // gated behind `command -v node` and appears after).
+    const cawsGuardIdx = content.indexOf('command -v caws >/dev/null 2>&1');
+    const nodeGuardIdx = content.indexOf('command -v node >/dev/null 2>&1');
+    expect(cawsGuardIdx).toBeGreaterThan(0);
+    expect(nodeGuardIdx).toBeGreaterThan(0);
+    expect(cawsGuardIdx).toBeLessThan(nodeGuardIdx); // caws first, node fallback
+  });
+
+  it('pack version bumped to 9', () => {
+    const { CLAUDE_CODE_PACK_VERSION } = require(
+      '../../../dist/init/hook-packs/manifest-claude-code'
+    );
+    expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(9);
+  });
+
+  it('scope-guard.sh header bumped to v9', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    expect(content).toMatch(/^# hook_pack_version: 9$/m);
   });
 });

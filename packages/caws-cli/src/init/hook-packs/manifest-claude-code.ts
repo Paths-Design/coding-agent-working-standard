@@ -116,7 +116,33 @@ import type { HookPackV1 } from './types';
 // already excluded from the v11 npm package by build-cli.js's
 // allowlist, so deleting them is hygiene, not a behavior change.
 // Companion docs section in docs/migration-v10-to-v11.md.
-export const CLAUDE_CODE_PACK_VERSION = 8;
+//
+// Version 9: CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001. Makes scope-guard.sh
+// delegate to `caws scope check <path>` (the kernel-backed authority)
+// before falling through to its inline node block. This unifies the
+// scope-decision source: the hook's ADMIT/REFUSE matches what
+// `caws scope show <path>` would report, eliminating the divergence
+// class that Sterling turn-043 (2026-05-26) hit, where
+// `caws scope show` returned ADMIT but the hook kept incrementing
+// strikes against a previously-rejected path.
+//
+// Side effect (intentional): strike-state staleness is auto-resolved.
+// When the kernel says ADMIT, the hook exits 0 immediately without
+// invoking the strike counter, regardless of prior strikes accumulated
+// against the path. The user no longer needs to run
+// `reset-strikes.sh --current` after a scope.in amendment that newly
+// admits a hot file.
+//
+// The inline node block (which was the only scope-decision path in
+// pack v8) remains as the fallback when `caws` is not on PATH, and as
+// the source of structured diagnostic detail (out_of_scope vs
+// not_in_scope, the offending pattern, union vs authoritative mode)
+// since `caws scope check` only exposes admit/refuse via exit code.
+// A future iteration can collapse the fallback once
+// `caws scope check --explain` exposes the structured detail.
+//
+// No new managed files; no stateModel changes.
+export const CLAUDE_CODE_PACK_VERSION = 9;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

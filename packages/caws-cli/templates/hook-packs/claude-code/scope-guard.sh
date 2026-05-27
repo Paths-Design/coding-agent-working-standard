@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 8
+# hook_pack_version: 9
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -172,6 +172,41 @@ done
 
 # Full mode: per-feature specs under .caws/specs/ (v11-shape aware)
 SPECS_DIR="$SPECS_BASE/.caws/specs"
+
+# CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001: delegate to `caws scope check`
+# (the kernel-backed authority) before falling back to the inline node
+# block below. This guarantees the hook's ADMIT/REFUSE decision matches
+# what `caws scope show <path>` would report — the spec's invariant 1.
+#
+# Why it matters: when the kernel says ADMIT for a path, this hook exits
+# 0 immediately without invoking `emit_scope_progression`. That means
+# strikes do NOT increment, even if the path was previously rejected by
+# an earlier scope decision (e.g., before a `scope.in` amendment landed).
+# This auto-invalidates stale strike state by treating the current
+# kernel decision as the only authority — the spec's invariant 2 and A1.
+#
+# Fall-through to the inline node block happens when:
+#   (a) `caws` is not on PATH (e.g. a non-global install during early
+#       bootstrap), OR
+#   (b) `caws scope check` exits non-zero AND we need the inline node
+#       logic to compute the structured diagnostic (out_of_scope vs
+#       not_in_scope, the union/authoritative mode label, the
+#       offending pattern) for emit_scope_progression's user-facing
+#       message. The inline node block is the SAME logic the kernel
+#       runs, evaluated on the same YAML — so they must agree on
+#       REFUSE shape too.
+if command -v caws >/dev/null 2>&1; then
+  if caws scope check "$REL_PATH" >/dev/null 2>&1; then
+    # Kernel-authoritative ADMIT. Skip strike counter entirely.
+    exit 0
+  fi
+  # Kernel-authoritative REFUSE. The exact diagnostic still comes from
+  # the inline node block below (it parses scope.out vs scope.in miss
+  # vs union vs authoritative, all data the kernel knows but doesn't
+  # expose via `caws scope check`'s exit code). Future work: have
+  # `caws scope check --explain` emit the structured detail so the
+  # fallback inline node block can be deleted entirely.
+fi
 
 if command -v node >/dev/null 2>&1; then
   SCOPE_CHECK=$(node -e "
