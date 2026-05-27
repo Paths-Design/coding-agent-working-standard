@@ -210,20 +210,18 @@ describe('A3: archiveSpec auto-commits the move as ONE atomic commit', () => {
     const audit = result.value.data.audit_commit;
     expect(audit.kind).toBe('committed');
 
-    // Tree is clean; the new archived path is committed AND the
-    // unlink of the original path is also committed.
+    // Tree is clean; the active path's deletion is committed.
+    // CAWS-ARCHIVE-AS-TOMBSTONE-001 changed archive semantics: no
+    // body is written to .caws/specs/.archive/ anymore; the spec
+    // body is recoverable via `git show <blob_sha>` only. The
+    // commit therefore shows a single DELETE entry, not a rename.
     expect(gitStatus(fixture.root)).toBe('');
     expect(gitHeadSha(fixture.root)).not.toBe(headBeforeArchive);
     expect(gitLastSubject(fixture.root)).toBe('chore(caws): archive FEAT-003');
 
-    // Critically: ONE commit covers the entire move. Git detects the
-    // unlink + new write as a rename (R<similarity>), so the commit
-    // shows ONE entry that names both the from-path and the to-path.
-    // This is HEALTHIER than two separate add+delete entries because
-    // it preserves file history through the move.
     const status = gitNameStatusInCommit(fixture.root, 'HEAD');
     expect(status).toHaveLength(1);
-    expect(status[0]).toMatch(/^R\d+\t.caws\/specs\/FEAT-003\.yaml\t.caws\/specs\/\.archive\/FEAT-003\.yaml$/);
+    expect(status[0]).toBe('D\t.caws/specs/FEAT-003.yaml');
   });
 });
 

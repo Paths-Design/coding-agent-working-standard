@@ -32,6 +32,8 @@ import {
   runInitCommand,
   runScopeCommand,
   runSpecsArchiveCommand,
+  runSpecsPruneArchiveCommand,
+  runSpecsRecoverCommand,
   runSpecsCloseCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
@@ -596,12 +598,35 @@ export function registerShellCommands(
 
   specsCmd
     .command('show <id>')
-    .description('Show a spec by id (searches active and archived locations).')
+    .description(
+      'Show a spec by id. Defaults to active specs only; pass --archived to recover an archived spec body from the event log + git history.'
+    )
     .option('--data', 'Show structured data block on diagnostics')
-    .action((id: string, opts: { data?: boolean }) => {
+    .option(
+      '--archived',
+      'Recover an archived spec body via the event log + git show <blob_sha>. The body is NOT loaded from .caws/specs/.archive/ (which the post-CAWS-ARCHIVE-AS-TOMBSTONE-001 archive flow does not write).'
+    )
+    .action((id: string, opts: { data?: boolean; archived?: boolean }) => {
       const code = runSpecsShowCommand({
         id,
         showData: opts.data === true,
+        ...(opts.archived === true ? { archived: true } : {}),
+      });
+      exit(code);
+    });
+
+  specsCmd
+    .command('recover <id>')
+    .description(
+      'Recover an archived spec body via the event log + git show <blob_sha>. Topology-independent (works with merge commits, rebases, cherry-picks). Reads .caws/events.jsonl for the spec_archived event, validates the blob_sha, runs git show, prints to stdout (or --out <path>). Does NOT mutate .caws/specs/.'
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .option('--out <path>', 'Write the recovered body to this path instead of stdout')
+    .action((id: string, opts: { data?: boolean; out?: string }) => {
+      const code = runSpecsRecoverCommand({
+        id,
+        showData: opts.data === true,
+        ...(typeof opts.out === 'string' && opts.out.length > 0 ? { outPath: opts.out } : {}),
       });
       exit(code);
     });
@@ -676,6 +701,21 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  specsCmd
+    .command('prune-archive')
+    .description(
+      'Migrate legacy .caws/specs/.archive/<id>.yaml bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass --apply to execute. Recoverable bodies (reachable via git log --follow) are removed from the working tree; unrecoverable bodies are QUARANTINED to .caws/specs/.archive/.unrecoverable/ (never silently deleted, no override flag). Emits one spec_archive_pruned event per id on --apply.'
+    )
+    .option('--apply', 'Execute the migration. Default is dry-run.')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { apply?: boolean; data?: boolean }) => {
+      const code = runSpecsPruneArchiveCommand({
+        ...(opts.apply === true ? { apply: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   specsCmd
     .command('migrate')

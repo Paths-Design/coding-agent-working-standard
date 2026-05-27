@@ -2,12 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events/spec_archived.v1.json",
   "title": "spec_archived event payload",
-  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition closed -> archived (filesystem move into .archive/).",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition closed -> archived. ADDITIVE EVOLUTION (CAWS-ARCHIVE-AS-TOMBSTONE-001): admits TWO shapes under oneOf. Legacy shape ({from_path, to_path}) preserved for events written before the tombstone slice; the writer no longer produces this shape but historical events in events.jsonl remain valid. New shape ({from_path, blob_sha, source_commit_sha?}) used by the post-tombstone writer; blob_sha is the authoritative recovery target via `git show <blob_sha>` (topology-independent — works under fast-forward, no-ff merge, rebase, cherry-pick, and squash-merge).",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["from_path", "to_path"],
-  "properties": {
-    "from_path": { "type": "string", "minLength": 1 },
-    "to_path": { "type": "string", "minLength": 1 }
-  }
+  "oneOf": [
+    {
+      "$comment": "Legacy shape (pre-CAWS-ARCHIVE-AS-TOMBSTONE-001). Records a filesystem move into .caws/specs/.archive/<id>.yaml.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_path", "to_path"],
+      "properties": {
+        "from_path": { "type": "string", "minLength": 1 },
+        "to_path": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "$comment": "Tombstone shape (post-CAWS-ARCHIVE-AS-TOMBSTONE-001). Records the spec yaml's git blob_sha at the moment of archive. Recovery resolves the body via `git show <blob_sha>`. source_commit_sha is optional human-audit metadata recording the commit that last contained the file at from_path; it is NOT used by recover.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_path", "blob_sha"],
+      "properties": {
+        "from_path": { "type": "string", "minLength": 1 },
+        "blob_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-hex git blob sha of the spec yaml content at the moment of archive."
+        },
+        "source_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Optional. Commit that last contained from_path. Recorded for human audit only; recover uses blob_sha."
+        }
+      }
+    }
+  ]
 }

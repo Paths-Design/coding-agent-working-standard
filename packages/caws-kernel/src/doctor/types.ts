@@ -180,6 +180,18 @@ export interface DoctorInput {
     readonly eventsJsonlExists: boolean;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
+    /**
+     * CAWS-ARCHIVE-AS-TOMBSTONE-001: count of yaml files at the top
+     * of `.caws/specs/.archive/` (excludes `.unrecoverable/`
+     * subdirectory). When >0, doctor emits
+     * `doctor.archive.legacy_bodies_present` WARN finding pointing
+     * at `caws specs prune-archive`.
+     *
+     * Optional for compatibility with older snapshot writers; when
+     * undefined, doctor skips the check (treats as "unobserved" not
+     * "absent").
+     */
+    readonly legacyArchiveBodyCount?: number;
   };
 
   /**
