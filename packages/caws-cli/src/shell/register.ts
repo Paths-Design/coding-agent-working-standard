@@ -611,9 +611,10 @@ export function registerShellCommands(
     .description(
       'Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed event.'
     )
-    .requiredOption(
+    .option(
       '--resolution <r>',
-      'Resolution: completed | superseded | abandoned'
+      'Resolution: completed | superseded | abandoned',
+      'completed'
     )
     .option(
       '--reason <text>',
