@@ -7,20 +7,36 @@
 //   4. resolveSession({ allowMint: true }) — we will append events
 //   5. runQualityGates(adapter)            — subprocess + JSON validation
 //   6. deriveDispositions(report, policy)  — policy decides block/warn/skip
-//   7. For each disposition, appendEvent(`gate_evaluated`)
+//   6c. zero-disposition guard             — refuse to "succeed" with no evidence
+//   7. For each disposition, appendEvent(`gate_evaluated`); per-gate isolation —
+//      one append failure does NOT abort the loop, subsequent gates are still
+//      attempted so partial evidence is captured.
 //   8. Render summary
 //   9. Exit code:
-//      0 if no disposition blocks
-//      1 if any disposition blocks
+//      0 if no disposition blocks AND every gate's evidence was durably appended
+//      1 if any disposition blocks AND every gate's evidence was durably appended
 //      2 on hard composition errors (no policy, subprocess contract failure,
-//        event append failure)
+//        spec not found, session resolution failure)
+//      3 on evidence-integrity failure: any gate's gate_evaluated event was
+//        rejected by the store (schema violation, lock contention, I/O failure)
+//        OR zero gates were dispositioned (no evidence ever appended). Exit 3
+//        is distinct from exit 1 so CI can distinguish "policy said block" from
+//        "evidence was lost" — both are non-zero, but only one means the
+//        coverage signal itself is suspect.
 //
 // The subprocess does NOT decide blocking. The policy does. The subprocess
 // reports violations; this command groups them per policy-declared gate
 // and applies policy.gates[gate].mode to compute outcome.
+//
+// CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001: prior to this slice the append
+// loop fail-fast'd on first failure and returned 2; that masked sibling gates'
+// outcomes and conflated evidence-integrity with composition failure. The
+// zero-disposition guard was absent entirely — a run with no policy-declared
+// known-gate intersections silently exited 0 with no audit trail.
 
 import {
   type Actor,
+  type Diagnostic,
   type EventBody,
 } from '@paths.design/caws-kernel';
 
@@ -65,6 +81,18 @@ export interface GatesRunCommandOptions {
 }
 
 const MAX_EVENT_VIOLATIONS = 100;
+
+/** Exit code reserved for evidence-integrity failures (see file header §9). */
+const EXIT_EVIDENCE_INTEGRITY = 3;
+
+/**
+ * Inline rule strings for diagnostics this command owns. These are kept
+ * here rather than added to SHELL_RULES because shell/rules.ts is outside
+ * this slice's scope.in; the strings are still typed (string literal),
+ * still grep-able, and still propagated verbatim to stderr.
+ */
+const GATES_NO_DISPOSITIONS_RULE = 'shell.gates.no_dispositions';
+const GATES_EVIDENCE_LOST_RULE = 'shell.gates.evidence_lost';
 
 function dispositionToEventBody(args: {
   disposition: GateDisposition;
@@ -245,9 +273,39 @@ export function runGatesRunCommand(
     policy
   );
 
+  // 6c. Zero-disposition guard. A "run" that emits zero gate_evaluated
+  //     events is a silent CI false-green: the dashboard goes green with
+  //     no evidence that any gate was actually evaluated. Refuse before
+  //     reaching the (empty) append loop. This catches the case where
+  //     policy.gates intersects KNOWN_GATE_IDS only with `enabled: false`
+  //     gates, or where the policy declares no gates that the disposition
+  //     module recognizes.
+  if (dispositionResult.dispositions.length === 0) {
+    err(
+      `caws gates run: no policy-declared gates were dispositioned — ` +
+        `zero gate_evaluated events would be appended. A run with no ` +
+        `evidence is treated as evidence-integrity failure, not success.`
+    );
+    err(`(rule: ${GATES_NO_DISPOSITIONS_RULE})`);
+    return EXIT_EVIDENCE_INTEGRITY;
+  }
+
   // 7. Append one gate_evaluated event per policy-declared gate.
-  //    Failure to append is a hard error: evidence integrity matters.
+  //
+  //    Per-gate isolation: a failure to append for one gate MUST NOT abort
+  //    the loop. Subsequent gates are still attempted so partial evidence
+  //    is captured and operators can see which gates' evidence survived.
+  //    At the end of the loop, if ANY gate's append failed, the command
+  //    exits 3 (evidence integrity) with a summary listing every lost
+  //    gate. This is the fix for the silent-success class: prior behavior
+  //    fail-fast'd on first failure and returned 2, which conflated
+  //    evidence-integrity failure with composition failure and (worse)
+  //    hid subsequent gates' outcomes.
   const ts = now.toISOString();
+  const lostEvidenceGates: Array<{
+    readonly gateId: string;
+    readonly errors: readonly Diagnostic[];
+  }> = [];
   for (const d of dispositionResult.dispositions) {
     const body = dispositionToEventBody({
       disposition: d,
@@ -262,13 +320,30 @@ export function runGatesRunCommand(
     if (!append.ok) {
       err(`caws gates run: failed to append gate_evaluated event for ${d.gate_id}.`);
       err(renderDiagnostics(append.errors, { showData }));
-      return 2;
+      lostEvidenceGates.push({ gateId: d.gate_id, errors: append.errors });
+      // Per-gate isolation: continue the loop, do NOT early-return.
     }
   }
 
-  // 8. Render summary
+  // 8. Render summary (always — partial evidence is still operator-useful).
   out(renderGatesRun(dispositionResult));
 
-  // 9. Exit by policy disposition.
+  // 9. Exit code, in priority order:
+  //    - exit 3 if any gate's evidence was lost (evidence integrity beats
+  //      policy disposition; a green-looking policy decision over a chain
+  //      with holes is worse than a clean fail).
+  //    - exit 1 if any disposition blocks (policy fail).
+  //    - exit 0 otherwise (all gates appended, no policy block).
+  if (lostEvidenceGates.length > 0) {
+    const lostIds = lostEvidenceGates.map((e) => e.gateId).join(', ');
+    err(
+      `caws gates run: evidence-integrity failure — ` +
+        `${lostEvidenceGates.length} of ${dispositionResult.dispositions.length} ` +
+        `gate_evaluated events were rejected by the events store. ` +
+        `Gates with lost evidence: ${lostIds}. Per-gate diagnostics above.`
+    );
+    err(`(rule: ${GATES_EVIDENCE_LOST_RULE})`);
+    return EXIT_EVIDENCE_INTEGRITY;
+  }
   return dispositionResult.anyBlocks ? 1 : 0;
 }
