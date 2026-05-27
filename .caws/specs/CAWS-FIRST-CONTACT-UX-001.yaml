@@ -5,12 +5,13 @@ mode: chore
 lifecycle_state: active
 worktree: first-contact-ux
 created_at: '2026-05-27T03:36:26.465Z'
-updated_at: '2026-05-27T03:36:26.465Z'
+updated_at: '2026-05-27T03:50:00.000Z'
 blast_radius:
   modules:
-    - packages/caws-cli/src/commands/init.js
-    - packages/caws-cli/src/commands/specs.js
-    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/render/init.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/git-autocommit.ts
     - packages/caws-cli/templates/.git/hooks/pre-commit
@@ -19,17 +20,14 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - packages/caws-cli/src/commands/init.js
-    - packages/caws-cli/src/commands/specs.js
-    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/render/init.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/git-autocommit.ts
     - packages/caws-cli/templates/.git/hooks/pre-commit
-    - packages/caws-cli/tests/commands
-    - packages/caws-cli/tests/store
-    - packages/caws-cli/tests/init
-    - packages/caws-cli/tests/integration/first-contact-ux.test.js
-    - packages/caws-cli/tests/store/git-autocommit.test.js
+    - packages/caws-cli/tests
     - docs/guides/worktree-isolation.md
     - docs/reports/user_e2e_setup_rehearsal_001.md
     - .caws/specs/CAWS-FIRST-CONTACT-UX-001.yaml
