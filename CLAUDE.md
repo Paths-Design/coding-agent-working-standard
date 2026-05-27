@@ -129,6 +129,66 @@ Scope strikes don't just stop edits — they break the trust contract the user h
 
 The user's stance: amendments are fine because they're auditable. The cost is the strike state, the explanation, the recovery commit chain, and the user's time deciding whether the amendment is legitimate. Plan to avoid that cost, not to pay it three times in a row.
 
+## Pre-edit admission protocol (mandatory)
+
+`caws scope show <path>` is a **pre-edit admission check**, not a post-failure diagnostic. Every commit you author inside a bound worktree begins with an explicit proof block before any file write.
+
+This protocol is non-optional. Strike reset is **not** part of normal workflow — a strike means the procedure failed, and the procedure must be explained and corrected before another reset is requested.
+
+### The preflight proof block
+
+The first thing you produce when starting a new commit is this block (literally — output it as text in your response before any tool call that writes a file):
+
+```text
+Commit <N> preflight:
+
+Branch:
+- <branch name>
+
+Planned write targets:
+- <path> (CREATE | MODIFY)
+- <path> (CREATE | MODIFY)
+- ...
+
+Scope proof:
+- caws scope show <path> => <ADMIT | REFUSE>
+- caws scope show <path> => <ADMIT | REFUSE>
+- ...
+
+No edits before this proof is complete.
+```
+
+Then run the `caws scope show` calls. Then — only if every target returns ADMIT — start editing.
+
+If any target returns REFUSE:
+
+1. Stop. Do not edit anything.
+2. Author **one** scope amendment commit on canonical that adds all missing paths in a single edit (per the existing "do not chain amendments" rule).
+3. Cherry-pick the amendment into the worktree branch.
+4. Rerun the scope-proof block. Every target must now return ADMIT.
+5. Begin editing.
+
+### Post-edit verification (every commit)
+
+After the edit phase and before `git commit`:
+
+- Run the targeted tests for the surface you touched (`jest <path>`, kernel `npm test`, etc.).
+- Run the relevant typecheck/build (`tsc`, turbo build for the package).
+- Run `caws scope check <path>` on each written file (admission proof, not just show).
+- Run `git status --short` to verify only the planned write targets are dirty.
+
+Commit only when all checks pass or you can explain in the commit message why a check was deliberately skipped or expected to fail.
+
+### Demote intuition; trust proof
+
+If your mental model says "this file is obviously in scope" but you haven't run `caws scope show`, your mental model has no authority. The kernel's scope decision is the only authority. The cost of running four `caws scope show` calls before commit 3 is roughly six seconds; the cost of one strike + amendment + cherry-pick + reset + explanation is several minutes of your turn and several minutes of the user's attention. The asymmetry is severe.
+
+This rule exists because the failure mode it catches — agent edits before authority proof — compounds the exact class of control-plane drift the system is trying to eliminate (half-state worktrees, active specs without clean bindings, stale references, unfiled defects). One agent edit without scope proof creates the same kind of "guard exists but invariant was bypassed" defect that failure-lineage Entry 21 names as a load-bearing v11 lesson.
+
+### Why this is in CLAUDE.md and not just a hook
+
+The hook fires after the edit attempt. By then the strike is already on the counter, the file is hot, and recovery requires user intervention. The preflight protocol is the only mechanism that prevents the strike — it runs **before** the edit, in the agent's reasoning, not after, in the kernel's enforcement.
+
 ## Worktree discipline
 
 When git worktrees are active for parallel agent work:
