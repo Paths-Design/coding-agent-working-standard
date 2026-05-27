@@ -1,11 +1,11 @@
 id: CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
 title: 'durable hook-session envelope bridges HOOK_SESSION_ID across agent Bash invocations'
-risk_tier: 3
+risk_tier: 2
 mode: fix
 lifecycle_state: active
 worktree: session-id-durable-envelope
 created_at: '2026-05-27T19:33:54.370Z'
-updated_at: '2026-05-27T19:33:54.370Z'
+updated_at: '2026-05-27T19:42:30.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
@@ -47,24 +47,33 @@ invariants:
     The envelope file path is deterministic relative to repo root:
     `<repo_root>/tmp/<HOOK_SESSION_ID>/.session-envelope.json`. The
     same `tmp/<session-id>/` directory that session-log.sh already
-    creates is reused. The envelope is written by a small extension to
-    parse-input.sh (or the session_start dispatcher) the first time
-    HOOK_SESSION_ID is parsed in a session. The file contains exactly
-    the binding metadata required for unambiguous resolution: session_id
-    (the UUID from the hook envelope), repo_root (resolveRepoRoot of
-    HOOK_CWD), written_at (ISO8601), hook_event (the originating event
-    name, typically SessionStart).
+    creates is reused. The envelope is written/refreshed atomically by
+    parse-input.sh EVERY time HOOK_SESSION_ID is parsed cleanly (i.e.
+    on every hook fire: SessionStart, PreToolUse, PostToolUse, Stop).
+    The file contains: session_id (the UUID from the hook envelope),
+    repo_root (resolveRepoRoot of HOOK_CWD), created_at (ISO8601 of
+    first write, preserved across refreshes when an existing envelope
+    is readable), last_seen_at (ISO8601 of the current refresh —
+    updated EVERY fire), hook_event (the most recent hook event name).
+    The refresh-on-every-fire semantics MUST defeat the 24h freshness
+    rule for long-lived sessions: as long as the session is taking
+    actions, last_seen_at stays current and the envelope remains a
+    valid candidate. Write failures are non-fatal; the hook still exits
+    0.
   - >-
     resolveSession's new priority-2.5 path scans
     `<repo_root>/tmp/*/.session-envelope.json`. Only envelopes whose
     repo_root field matches the resolveSession caller's repo_root AND
-    whose written_at is within a freshness window (24h) are candidates.
-    If exactly ONE candidate matches, its session_id is returned with
-    source 'durable_hook_envelope'. If ZERO candidates match, the
-    resolver falls through to priority 3 (capsule). If TWO OR MORE
-    candidates match, the resolver REFUSES with a typed ambiguity
-    diagnostic (SESSION_DURABLE_ENVELOPE_AMBIGUOUS) — it MUST NOT
-    pick the newest, oldest, or any heuristic winner.
+    whose last_seen_at is within a freshness window (24h) are
+    candidates. The freshness check uses last_seen_at (refreshed on
+    every hook fire), NOT created_at — long-lived active sessions
+    remain fresh as long as their hooks keep firing. If exactly ONE
+    candidate matches, its session_id is returned with source
+    'durable_hook_envelope'. If ZERO candidates match, the resolver
+    falls through to priority 3 (capsule). If TWO OR MORE candidates
+    match, the resolver REFUSES with a typed ambiguity diagnostic
+    (SESSION_DURABLE_ENVELOPE_AMBIGUOUS) — it MUST NOT pick the
+    newest, oldest, or any heuristic winner.
   - >-
     The new authority source outranks capsule/mint but does NOT outrank
     explicit env. Priority order after this slice is exactly:
@@ -121,10 +130,12 @@ acceptance:
       A file is written at
       `<canonical>/tmp/uuid-A/.session-envelope.json` containing:
       `{ "session_id": "uuid-A", "repo_root": "<canonical>",
-         "written_at": "<iso8601>", "hook_event": "SessionStart" }`.
-      The write is non-fatal on failure (hook still exits 0). The
-      existing session-log.sh `tmp/uuid-A/` directory is reused
-      verbatim — no new directory layout is introduced.
+         "created_at": "<iso8601>", "last_seen_at": "<iso8601>",
+         "hook_event": "SessionStart" }`. The write is atomic
+      (temp-then-rename) and non-fatal on failure. The existing
+      session-log.sh `tmp/uuid-A/` directory is reused verbatim.
+      A subsequent PreToolUse fire updates last_seen_at to a newer
+      ISO8601 timestamp while preserving created_at.
   - id: A3
     given: |
       A repo with TWO durable envelopes on disk (uuid-A and uuid-B)
@@ -171,13 +182,18 @@ acceptance:
       capsule fallback is unchanged.
   - id: A7
     given: |
-      A durable envelope on disk whose written_at is older than 24h.
+      A durable envelope on disk whose last_seen_at is older than 24h
+      (the session has been idle long enough that no hook has fired
+      to refresh the timestamp).
     when: |
       resolveSession is invoked.
     then: |
       The stale envelope is silently skipped (not a candidate). The
       resolver falls through to capsule. No write to delete the
-      stale envelope (cleanup is operator-driven).
+      stale envelope (cleanup is operator-driven). NOTE: the refresh
+      semantics in invariant 2 mean stale envelopes only appear when
+      a session is genuinely abandoned; active long-lived sessions
+      stay fresh forever via per-hook refresh.
   - id: A8
     given: |
       A durable envelope whose file is unreadable or unparseable JSON.
@@ -206,7 +222,18 @@ non_functional:
       diagnostic is mandatory. A bridge that picks the newest envelope
       reproduces the same authority-collapse class in a different shape
       and is explicitly forbidden by invariant 3.
-contracts: []
+contracts:
+  - name: 'durable-hook-envelope-priority-bridge-v1'
+    type: behavior
+    path: packages/caws-cli/src/shell/session/resolve-session.ts
+    description: >-
+      resolveSession admits a new authority source (durable_hook_envelope)
+      between hook_env (priority 2) and capsule (priority 3). The
+      envelope is written/refreshed by the hook-pack on every fire and
+      read by the resolver with repo_root + freshness filtering and
+      typed ambiguity refusal. Both the writer (hook script) and reader
+      (TypeScript resolver) implement this contract; both surfaces are
+      in scope.in.
 # --- Triage ---------------------------------------------------------------
 # Origin: discovered 2026-05-27 during CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001
 # post-merge inspection. Two concurrent Claude Code sessions had distinct
