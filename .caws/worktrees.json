@@ -9,5 +9,16 @@
     "branch": "doctor-severity-recal",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-severity-recal"
+  },
+  "dead-test-cleanup-merge": {
+    "specId": "CAWS-DEAD-TEST-CLEANUP-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T23:18:40.570Z",
+    "branch": "dead-test-cleanup-merge",
+    "baseBranch": "wip/doctor-severity-recal-checkpoint",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/dead-test-cleanup-merge"
   }
 }
