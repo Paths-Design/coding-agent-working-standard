@@ -287,15 +287,25 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         // synthesize a `canonical_dir_present` value; surface the gap.
         data.canonical_dir_observed = false;
       }
+      // Lifecycle-aware severity (CAWS-DOCTOR-SEVERITY-RECALIBRATION-001).
+      // ERROR for active specs (the binding-lie is live governance drift
+      // requiring repair). INFO for closed/archived specs (the binding is
+      // dormant historical residue with no operator action — the spec is
+      // terminal). Unknown lifecycle_state values default to ERROR per the
+      // fail-safe rule: treat unknown as governance-relevant.
+      const missingRegistrySeverity: FindingSeverity =
+        spec.lifecycle_state === 'closed' || spec.lifecycle_state === 'archived'
+          ? 'info'
+          : 'error';
       findings.push(
         finding(
           DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
-          'error',
+          missingRegistrySeverity,
           `Spec ${spec.id} points to worktree "${worktreeName}", but no registry entry exists.`,
           {
             subject: spec.id,
             narrowRepair: `Remove the worktree field on ${spec.id} or recreate the worktree.`,
-            data,
+            data: { ...data, lifecycle_state: spec.lifecycle_state },
           }
         )
       );

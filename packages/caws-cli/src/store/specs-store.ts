@@ -18,6 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
+  diagnostic,
   isOk,
   parseAndValidateSpec,
   type Diagnostic,
@@ -69,11 +70,13 @@ export function loadSpecs(cawsDir: string): SpecsLoadResult {
     // Explicit guard: working-spec.yaml is forbidden in vNext.
     if (entry.name === 'working-spec.yaml' || entry.name === 'working-spec.yml') {
       diagnostics.push(
-        storeDiagnostic(
-          STORE_RULES.SPECS_NON_YAML_SKIPPED,
-          `Skipping ${entry.name}: project-level working spec is not supported in vNext.`,
-          { subject: path.join(specsDir, entry.name) }
-        )
+        diagnostic({
+          rule: STORE_RULES.SPECS_NON_YAML_SKIPPED,
+          authority: 'kernel/diagnostics',
+          severity: 'info',
+          message: `Skipping ${entry.name}: project-level working spec is not supported in vNext.`,
+          subject: path.join(specsDir, entry.name),
+        })
       );
       continue;
     }
@@ -82,11 +85,13 @@ export function loadSpecs(cawsDir: string): SpecsLoadResult {
 
     if (!isYamlPath(entry.name)) {
       diagnostics.push(
-        storeDiagnostic(
-          STORE_RULES.SPECS_NON_YAML_SKIPPED,
-          `Skipping non-YAML file in .caws/specs/: ${entry.name}.`,
-          { subject: fullPath }
-        )
+        diagnostic({
+          rule: STORE_RULES.SPECS_NON_YAML_SKIPPED,
+          authority: 'kernel/diagnostics',
+          severity: 'info',
+          message: `Skipping non-YAML file in .caws/specs/: ${entry.name}.`,
+          subject: fullPath,
+        })
       );
       continue;
     }
