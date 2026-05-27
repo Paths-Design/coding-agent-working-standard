@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: migrate-v10-specs
 created_at: '2026-05-23T04:30:00.000Z'
-updated_at: '2026-05-26T00:00:00.000Z'
+updated_at: '2026-05-26T22:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/spec
@@ -27,6 +27,7 @@ scope:
     - packages/caws-cli/src/store/index.ts
     - packages/caws-cli/src/store/rules.ts
     - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/index.ts
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/tests/store/specs-migration.test.js
     - packages/caws-cli/tests/shell/specs-migrate-command.test.js
