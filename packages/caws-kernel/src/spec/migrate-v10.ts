@@ -107,11 +107,31 @@ export const V11_LIFECYCLE_STATES: ReadonlySet<string> = new Set([
  * Top-level v10 fields that have no v11 home and are reported (not
  * silently dropped). Per invariant 4 they go to `report_only_fields`.
  *
- * This list is the union of what Sterling's 27-spec recon surfaced
- * and what we know v11 doesn't admit. NOT a refusal list — these
- * fields are preserved verbatim in the report for operator review.
+ * Membership semantics (load-bearing):
+ *   - Fields IN this set are deleted from migrated output, preserved
+ *     verbatim under `report_only_fields`, and surfaced as
+ *     `spec.migrate.unhandled_field_preserved` warnings.
+ *   - Fields NOT in this set stay in output. The post-write validator
+ *     (`parseAndValidateSpec`) rejects them via `additionalProperties:
+ *     false` on spec.v1, which triggers `post_write_validation_failed`
+ *     and an apply-time rollback.
+ *
+ * This list is the union of two evidence rounds against real corpora:
+ *   1. Sterling's 27-spec recon (pre-7.1): change_budget, bounded_claim,
+ *      description, type, feature_id, success_criteria, human_override,
+ *      reasoning_engine, tools.
+ *   2. Commit 7 Sterling real-checkout smoke (560 specs, 38 migratable)
+ *      surfaced 14 additional v10-only top-level names. PWF=38/38 until
+ *      they were classified as report-only and excluded from output.
+ *
+ * NOT a refusal list — these fields are preserved verbatim in the
+ * report for operator review. Adding a name here does NOT weaken
+ * spec.v1 schema strictness; it only changes the migrator's
+ * classification from "leave in output → kernel rejects → PWF" to
+ * "delete from output → warning + report entry → migrated".
  */
 export const KNOWN_REPORT_ONLY_TOP_LEVEL: ReadonlySet<string> = new Set([
+  // Round 1 (Sterling 27-spec recon)
   'change_budget',
   'bounded_claim',
   'description',
@@ -121,6 +141,21 @@ export const KNOWN_REPORT_ONLY_TOP_LEVEL: ReadonlySet<string> = new Set([
   'human_override',
   'reasoning_engine',
   'tools',
+  // Round 2 (commit 7 Sterling 560-spec real-checkout smoke)
+  'target',
+  'migrations',
+  'threats',
+  'dependencies',
+  'related_specs',
+  'related_docs',
+  'kind',
+  'test_strategy',
+  'closure_path',
+  'determinism',
+  'fail_closed',
+  'byte_identity',
+  'acceptance_criteria_summary',
+  'authority_boundary',
 ]);
 
 export interface LifecycleMapping {

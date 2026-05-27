@@ -54,10 +54,35 @@ describe('A1: kernel surface', () => {
     }
   });
 
-  it('KNOWN_REPORT_ONLY_TOP_LEVEL includes Sterling-observed dropped fields', () => {
+  it('KNOWN_REPORT_ONLY_TOP_LEVEL includes Sterling-observed dropped fields (recon + 7.1 smoke)', () => {
+    // Round 1 — Sterling 27-spec recon (commit 2 / 3.1)
     expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('change_budget')).toBe(true);
     expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('bounded_claim')).toBe(true);
     expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('description')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('type')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('feature_id')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('success_criteria')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('human_override')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('reasoning_engine')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('tools')).toBe(true);
+    // Round 2 — commit 7 Sterling real-checkout smoke (560 specs).
+    // Before 7.1 these caused 38/38 migratable specs to PWF on
+    // spec.schema.violation. Adding them to the allowlist routes
+    // them through the delete + warning + reportOnly branch.
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('target')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('migrations')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('threats')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('dependencies')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('related_specs')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('related_docs')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('kind')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('test_strategy')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('closure_path')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('determinism')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('fail_closed')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('byte_identity')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('acceptance_criteria_summary')).toBe(true);
+    expect(KNOWN_REPORT_ONLY_TOP_LEVEL.has('authority_boundary')).toBe(true);
   });
 
   it('migrate-v10 module has zero filesystem/network/process imports', () => {
@@ -245,6 +270,78 @@ describe('A2: safe-rename happy path', () => {
     expect('change_budget' in r.value.value).toBe(false);
     expect('bounded_claim' in r.value.value).toBe(false);
     expect('description' in r.value.value).toBe(false);
+  });
+
+  // --- 7.1 Sterling report-only allowlist extension --------------------
+  //
+  // Before this fix, the 14 Sterling-surfaced v10-only top-level names
+  // fell through to the post-write validator which rejected them via
+  // spec.v1 additionalProperties:false. That produced PWF=38/38 on the
+  // commit 7 real-checkout smoke. Adding them to the allowlist routes
+  // them through the delete + warning + reportOnly branch identically
+  // to the round-1 names.
+  //
+  // This test asserts the new behavior for the 14 added fields at once:
+  //   (a) the migration succeeds with kind=migrated_with_warnings
+  //   (b) every added field is DELETED from the migrated output
+  //   (c) every added field is preserved verbatim under
+  //       report_only_fields
+  //   (d) every added field produces exactly one
+  //       spec.migrate.unhandled_field_preserved warning
+  //   (e) schema strictness is preserved: the migrated output (with
+  //       these fields stripped) is a valid v11 spec (proved via the
+  //       post-write validator at the store layer; here we assert the
+  //       transformer doesn't smuggle the fields back into output).
+  it('routes 7.1 Sterling-surfaced v10 fields through delete + warning + reportOnly', () => {
+    const round2Fields = {
+      target: { canonical: 'src/foo' },
+      migrations: [{ id: 'm1', from: 'old', to: 'new' }],
+      threats: ['stride: T-001'],
+      dependencies: ['legacy-shim'],
+      related_specs: ['SPEC-OTHER-001'],
+      related_docs: ['docs/migration.md'],
+      kind: 'feature',
+      test_strategy: { coverage: '80%' },
+      closure_path: { merges_into: 'main' },
+      determinism: { seed_locked: true },
+      fail_closed: true,
+      byte_identity: 'sha256:abc',
+      acceptance_criteria_summary: 'two AC, one happy + one error',
+      authority_boundary: { kernel: false, store: true },
+    };
+    const inputWithRound2 = {
+      ...v10Input,
+      ...round2Fields,
+    };
+    const r = migrateSpecV10(inputWithRound2);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') {
+      throw new Error(
+        `unexpected outcome: ${r.ok ? r.value.kind : JSON.stringify(r.error)}`,
+      );
+    }
+
+    const out = r.value.value as Record<string, unknown>;
+    const reportOnly = r.value.report_only_fields;
+    const warningFields = r.value.warnings
+      .filter((w) => w.rule === 'spec.migrate.unhandled_field_preserved')
+      .map((w) => (w.data as { field: string }).field);
+
+    for (const [field, value] of Object.entries(round2Fields)) {
+      // (b) deleted from output
+      expect(field in out).toBe(false);
+      // (c) preserved verbatim under report_only_fields
+      expect(reportOnly[field]).toEqual(value);
+      // (d) exactly one unhandled-field warning per field
+      expect(warningFields.filter((f) => f === field).length).toBe(1);
+    }
+
+    // (e) None of the round-2 names leak back into output via any route
+    // (renames, coercions, NF subkeys). Explicitly assert the migrated
+    // output's top-level key set is disjoint from round-2 field names.
+    const outKeys = new Set(Object.keys(out));
+    for (const field of Object.keys(round2Fields)) {
+      expect(outKeys.has(field)).toBe(false);
+    }
   });
 });
 

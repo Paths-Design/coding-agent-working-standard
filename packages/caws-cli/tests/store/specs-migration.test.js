@@ -734,11 +734,13 @@ describe('fixture corpus end-to-end (commit 5)', () => {
 
     const r = runSpecsMigrateScan({ cawsDir: tmp.cawsDir, from: 'v10' });
     expect(r.ok).toBe(true);
+    // 5 migration-class fixtures (4 originals + 7.1 Sterling report-only).
+    // 6 refusal-class fixtures unchanged.
     expect(r.value.distribution).toEqual({
       migrated: 0,
-      migrated_with_warnings: 4,
+      migrated_with_warnings: 5,
       refused: 6,
-      total: 10,
+      total: 11,
     });
   });
 
@@ -769,11 +771,14 @@ describe('fixture corpus end-to-end (commit 5)', () => {
       r.value.entries.map((e) => [path.basename(e.file), e.outcome.kind]),
     );
 
-    // 4 migration-class fixtures → migrated_with_warnings.
+    // 5 migration-class fixtures → migrated_with_warnings.
     expect(verdictByFile['migrate-happy-renames.yaml']).toBe('migrated_with_warnings');
     expect(verdictByFile['migrate-mode-from-type.yaml']).toBe('migrated_with_warnings');
     expect(verdictByFile['migrate-mode-type-disagree.yaml']).toBe('migrated_with_warnings');
     expect(verdictByFile['migrate-bare-date-created.yaml']).toBe('migrated_with_warnings');
+    expect(verdictByFile['migrate-sterling-report-only-fields.yaml']).toBe(
+      'migrated_with_warnings',
+    );
 
     // 5 refuse-* fixtures + 1 lifecycle-mapped (no mapping supplied) → refused.
     expect(verdictByFile['refuse-empty-modules.yaml']).toBe('refused');
@@ -830,13 +835,14 @@ describe('fixture corpus end-to-end (commit 5)', () => {
     expect(r.ok).toBe(true);
     expect(r.value.distribution).toEqual({
       migrated: 0,
-      migrated_with_warnings: 5,
+      // 5 originals (+1 from mapping) + 7.1 Sterling report-only = 6.
+      migrated_with_warnings: 6,
       refused: 5,
-      total: 10,
+      total: 11,
     });
   });
 
-  it('apply --partial writes 4 migrated specs (no mapping), refuses 6, emits report', () => {
+  it('apply --partial writes 5 migrated specs (no mapping), refuses 6, emits report', () => {
     tmp = makeTempCaws();
     copyCorpusInto(tmp.cawsDir);
 
@@ -890,12 +896,12 @@ describe('fixture corpus end-to-end (commit 5)', () => {
     // Report on disk.
     expect(fs.existsSync(r.value.report_path)).toBe(true);
     const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
-    expect(reportJson.distribution.migrated_with_warnings).toBe(4);
+    expect(reportJson.distribution.migrated_with_warnings).toBe(5);
     expect(reportJson.distribution.refused).toBe(6);
     expect(reportJson.distribution.post_write_validation_failed).toBe(0);
   });
 
-  it('apply --partial with mapping writes 5 migrated specs (lifecycle-mapped now lands)', () => {
+  it('apply --partial with mapping writes 6 migrated specs (lifecycle-mapped now lands)', () => {
     tmp = makeTempCaws();
     copyCorpusInto(tmp.cawsDir);
     const mapping = loadMappingFromCorpus();
@@ -915,13 +921,14 @@ describe('fixture corpus end-to-end (commit 5)', () => {
     expect(mapped).toContain('lifecycle_state: archived');
     expect(mapped).toContain('resolution: superseded');
     expect(mapped).toContain('closure_notes: superseded by STERLING-HAPPY-001');
-    // Report shows 5 migrated, 5 refused, 0 post-write failures.
+    // Report shows 6 migrated, 5 refused, 0 post-write failures.
+    // (4 originals + lifecycle-mapped via mapping + 7.1 Sterling report-only.)
     const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
     expect(reportJson.distribution).toEqual({
       migrated: 0,
-      migrated_with_warnings: 5,
+      migrated_with_warnings: 6,
       refused: 5,
-      total: 10,
+      total: 11,
       post_write_validation_failed: 0,
     });
   });
@@ -945,6 +952,90 @@ describe('fixture corpus end-to-end (commit 5)', () => {
     expect(sha256(readSpec(tmp.cawsDir, 'migrate-happy-renames.yaml'))).toBe(happyBefore);
     // No report written.
     expect(fs.existsSync(path.join(tmp.cawsDir, 'migrations', 'v10-specs'))).toBe(false);
+  });
+
+  // ─── 7.1 Sterling report-only fields end-to-end ──────────────────────
+  //
+  // The migrate-sterling-report-only-fields.yaml fixture carries all 14
+  // round-2 v10-only top-level field names that surfaced in commit 7's
+  // real-checkout Sterling smoke (560 specs, 38 migratable). Before 7.1
+  // they triggered post_write_validation_failed for every one of the
+  // migratable Sterling specs because spec.v1's additionalProperties:false
+  // rejected them. The 7.1 fix routes them through delete + warning +
+  // reportOnly identically to round-1 (change_budget, bounded_claim, ...).
+  //
+  // This test proves the end-to-end behavior on a representative
+  // Sterling-shaped fixture:
+  //   (a) migrate-sterling-report-only-fields.yaml lands as
+  //       migrated_with_warnings (NOT post_write_validation_failed)
+  //   (b) the on-disk v11 YAML contains none of the 14 round-2 names
+  //   (c) the entry's report_only_fields contains all 14 names with
+  //       their original values preserved verbatim
+  //   (d) the entry's warnings include exactly one
+  //       spec.migrate.unhandled_field_preserved warning per field
+  //   (e) schema strictness is unchanged: post_write_validation_failed
+  //       remains 0 across the whole corpus (canary test below covers
+  //       this independently after 7.1).
+  it('Sterling 7.1 report-only fixture: migrates without PWF and surfaces all 14 fields', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      now: FIXED_NOW,
+    });
+    expect(r.ok).toBe(true);
+
+    // (a) PWF=0 in the corpus distribution.
+    expect(r.value.report.distribution.post_write_validation_failed).toBe(0);
+
+    // (b) on-disk migrated file has no round-2 field names at top level.
+    const migrated = readSpec(tmp.cawsDir, 'migrate-sterling-report-only-fields.yaml');
+    const round2Names = [
+      'target',
+      'migrations',
+      'threats',
+      'dependencies',
+      'related_specs',
+      'related_docs',
+      'kind',
+      'test_strategy',
+      'closure_path',
+      'determinism',
+      'fail_closed',
+      'byte_identity',
+      'acceptance_criteria_summary',
+      'authority_boundary',
+    ];
+    for (const name of round2Names) {
+      // YAML top-level keys appear as "\n<name>:" or as the first line
+      // "<name>:". Assert both shapes are absent.
+      expect(migrated).not.toMatch(new RegExp(`\\n${name}:`));
+      expect(migrated).not.toMatch(new RegExp(`^${name}:`));
+    }
+
+    // (c) report entry surfaces every round-2 field under report_only_fields.
+    // (d) is asserted at the kernel layer in
+    // packages/caws-kernel/tests/unit/migrate-v10.test.ts (raw warnings
+    // are kernel-layer artifacts; the store-layer report contract surfaces
+    // report-only evidence via the `report_only_fields` map, not raw
+    // warnings — verdict alone proves the warning-class semantics).
+    const sterlingEntry = r.value.report.entries.find(
+      (e) => path.basename(e.file) === 'migrate-sterling-report-only-fields.yaml',
+    );
+    expect(sterlingEntry).toBeDefined();
+    expect(sterlingEntry.verdict).toBe('migrated_with_warnings');
+    const reportOnly = sterlingEntry.report_only_fields;
+    for (const name of round2Names) {
+      expect(reportOnly[name]).toBeDefined();
+    }
+    // Plus 'description' (round 1, also in the fixture) is also reported.
+    expect(reportOnly['description']).toBe(
+      'long-form description (round-1 report-only)',
+    );
   });
 
   it('all migrated outputs pass post-write validation (zero PWF in the corpus)', () => {
