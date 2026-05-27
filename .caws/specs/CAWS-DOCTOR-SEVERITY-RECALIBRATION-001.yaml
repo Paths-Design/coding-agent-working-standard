@@ -3,6 +3,7 @@ title: 'Lifecycle-aware and source-aware doctor severities for benign skips'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: doctor-severity-recal
 created_at: '2026-05-27T23:04:42.538Z'
 updated_at: '2026-05-27T23:04:42.538Z'
 blast_radius:
