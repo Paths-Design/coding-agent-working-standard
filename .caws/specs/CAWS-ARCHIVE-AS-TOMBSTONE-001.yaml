@@ -1,10 +1,10 @@
 id: CAWS-ARCHIVE-AS-TOMBSTONE-001
 title: 'Archived specs are tombstones + git history, not authoritative file-tree surface'
-risk_tier: 3
+risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-27T20:03:15.092Z'
-updated_at: '2026-05-27T20:03:15.092Z'
+updated_at: '2026-05-27T20:35:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
@@ -40,12 +40,14 @@ scope:
 invariants:
   - >-
     `caws specs archive <id>` MUST NOT write a yaml body to
-    `.caws/specs/.archive/<id>.yaml`. The archive operation removes the
-    live spec from `.caws/specs/<id>.yaml` (via `git rm` inside the
-    lifecycle transaction so the deletion is staged for the autocommit
-    landed in CAWS-SPECS-WRITER-AUTOCOMMIT-001) and appends a
-    `spec_archived` event carrying enough metadata to recover the body
-    from git history.
+    `.caws/specs/.archive/<id>.yaml`. The archive operation captures
+    the spec yaml's blob_sha (via `git hash-object` or `git ls-tree
+    HEAD <path>`) BEFORE the deletion, removes the live spec from
+    `.caws/specs/<id>.yaml` (via `git rm` inside the lifecycle
+    transaction so the deletion is staged for the autocommit landed
+    in CAWS-SPECS-WRITER-AUTOCOMMIT-001), and appends a
+    `spec_archived` event carrying `blob_sha` as the authoritative
+    recovery target.
   - >-
     The default file-tree surface MUST NOT contain archived spec
     bodies. `ls .caws/specs/` returns only active and draft specs. An
@@ -53,14 +55,25 @@ invariants:
     a hit, eliminating the context-rot vector where stale spec shapes
     re-enter agent reasoning as if they were current authority.
   - >-
+    `caws specs show <id>` defaults to ACTIVE specs only. Archived
+    specs are NOT silently surfaced through `show`. To access an
+    archived spec body, the caller must explicitly opt in via
+    `caws specs show <id> --archived` (which reads the event log's
+    blob_sha and runs `git show <blob_sha>`) or use the dedicated
+    `caws specs recover <id>` command. This breaks the v11.1.x
+    transparent-fallback behavior (where `show` walked
+    `.caws/specs/.archive/`) by design — the transparent fallback
+    was the bug, not a feature.
+  - >-
     Archived specs remain RECOVERABLE on demand. `caws specs recover
-    <id>` (new command) reconstructs the body from the
-    `spec_archived` event's `commit_sha` (the post-archive commit)
-    via `git show <sha>^:.caws/specs/<id>.yaml`. The recovery is
-    explicit, audited (emits a `spec_recovered` info event if we
-    decide to track recovery actions; out-of-scope for this slice
-    unless trivially co-shippable), and never silently re-materializes
-    a body on disk.
+    <id>` reconstructs the body via `git show <blob_sha>`, where
+    `blob_sha` is read from the `spec_archived` event's payload.
+    blob_sha is content-addressed and topology-independent — recovery
+    works regardless of whether the archive commit was a fast-forward,
+    a merge, or rebased. Recovery NEVER mutates `.caws/specs/`; the
+    body is written to stdout or to `--out <path>`. The recovery is
+    explicit (caller must invoke the command), not implicit (no
+    fallback path silently re-reads from disk).
   - >-
     Consumers with a legacy `.caws/specs/.archive/` directory (e.g.,
     Sterling has 554 such files) get a doctor WARN finding naming
@@ -69,55 +82,127 @@ invariants:
     when to prune (verifies recoverability for each archived id
     BEFORE the prune deletes anything).
   - >-
-    `caws specs prune-archive` (new command) verifies each legacy
+    `caws specs prune-archive` verifies each legacy
     `.caws/specs/.archive/<id>.yaml` is recoverable via git history
     (the body MUST be reachable from at least one commit on the
     current branch's history). Files that fail the recoverability
     check are QUARANTINED (moved to `.caws/specs/.archive/.unrecoverable/`)
     and reported as warnings — never silently deleted. Files that
     pass are removed from the working tree. Output: per-id status
-    report. Dry-run by default; `--apply` required for actual mutation.
+    report. DRY-RUN BY DEFAULT; `--apply` required for any mutation.
+    The "prove-recovery-or-quarantine" invariant is absolute: the
+    command will REFUSE to delete a body it cannot prove recoverable
+    via git, even when `--apply` is passed.
   - >-
-    The `spec_archived.v1.json` schema gains a REQUIRED `commit_sha`
-    field. `to_path` becomes OPTIONAL (legacy events that named the
-    archive destination remain valid; new events do not populate it).
-    This is a schema evolution, not a breaking change — old events
-    continue to validate against the new schema as long as the
-    schema's `additionalProperties: false` is preserved with both
-    fields admitted.
+    Schema evolution is ADDITIVE. The amended `spec_archived.v1.json`
+    schema uses a `oneOf` discriminating legacy vs new events:
+      - Legacy shape: { from_path, to_path }
+      - New shape:    { from_path, blob_sha, source_commit_sha? }
+    Both shapes preserve `additionalProperties: false` at the branch
+    level. Read-side consumers (`caws specs list --include-archived`,
+    `caws specs recover`, doctor) MUST handle both shapes. For legacy
+    events lacking blob_sha, recovery falls back to
+    `git log --all --follow -- <from_path>` to find a containing
+    commit; if zero commits exist (local-only body), recovery returns
+    a typed Err diagnostic naming the gap.
 acceptance:
   - id: A1
     given: |
       a clean repo + an active spec `FEAT-001` that has been closed
-      (lifecycle_state: closed). The working tree is clean.
+      (lifecycle_state: closed). The working tree is clean. The
+      spec yaml's content at HEAD has blob_sha B (as reported by
+      `git hash-object .caws/specs/FEAT-001.yaml`).
     when: |
       `caws specs archive FEAT-001` is invoked.
     then: |
-      The active yaml at `.caws/specs/FEAT-001.yaml` is REMOVED from
-      the working tree (the deletion is staged + auto-committed via
-      the autocommit landed in CAWS-SPECS-WRITER-AUTOCOMMIT-001). No
-      file is written to `.caws/specs/.archive/`. The `spec_archived`
-      event in `.caws/events.jsonl` carries `commit_sha` equal to
-      the autocommit's sha. `ls .caws/specs/` no longer lists
-      FEAT-001.yaml.
+      Step-ordered behavior:
+        1. `archiveSpec` captures blob_sha B (via
+           `git ls-tree HEAD <path>` or `git hash-object <path>`)
+           BEFORE any filesystem mutation.
+        2. `archiveSpec` removes `.caws/specs/FEAT-001.yaml` from
+           the working tree (via `git rm`, staged inside the
+           lifecycle transaction).
+        3. The lifecycle transaction appends a `spec_archived` event
+           carrying `{ from_path: '.caws/specs/FEAT-001.yaml',
+           blob_sha: B }` (no `to_path`).
+        4. The autocommit (from CAWS-SPECS-WRITER-AUTOCOMMIT-001)
+           commits the staged deletion.
+      Post-conditions:
+        - `ls .caws/specs/` does NOT list FEAT-001.yaml.
+        - No file is written to `.caws/specs/.archive/`.
+        - `git show B` prints the pre-archive yaml content
+          (topology-independent recovery target).
+        - The `spec_archived` event in `.caws/events.jsonl` carries
+          the new shape (blob_sha, no to_path) and is valid against
+          the amended schema.
   - id: A2
     given: |
-      a spec archived per A1; the autocommit landed at sha S; the
-      pre-archive content of `.caws/specs/FEAT-001.yaml` is named B0
-      and is the parent commit's blob content.
+      a spec archived per A1; blob_sha = B was recorded in the
+      `spec_archived` event payload.
     when: |
-      `caws specs recover FEAT-001` is invoked.
+      `caws specs recover FEAT-001` is invoked (no flags).
     then: |
-      The command prints the recovered yaml body B0 to stdout (or
-      writes to a path specified via `--out <path>`) without
-      mutating `.caws/specs/`. The recovery resolves the commit_sha
-      from the `spec_archived` event, then runs
-      `git show <S>^:.caws/specs/FEAT-001.yaml`. Exit 0 on success.
-      Exit 1 with a typed diagnostic if the commit is unreachable
-      (shallow clone), the file was not at that path historically,
-      or the event lacks `commit_sha` (legacy event from before this
-      slice).
+      The command:
+        1. Reads `.caws/events.jsonl` and finds the most recent
+           `spec_archived` event for spec_id 'FEAT-001'.
+        2. Validates the event's blob_sha (40-hex, never raw shell
+           interpolation — uses execFileSync with array args).
+        3. Runs `git show <B>` and prints the result to stdout.
+        4. Exits 0.
+      Recovery does NOT mutate `.caws/specs/`. Recovery does NOT
+      depend on commit topology (works with merge commits, rebases,
+      shallow clones AS LONG AS the blob is reachable in git's
+      object store — which is true for any commit that ever
+      contained the file, fetched or not).
+
+      Error cases:
+        - Spec id has no `spec_archived` event in the log → typed
+          Err: `spec not archived: FEAT-001`.
+        - Event lacks blob_sha (legacy event from pre-slice) → fall
+          back to `git log --all --follow -- <from_path>`; if a
+          containing commit exists, recover via `git show
+          <commit>:<from_path>`. If zero commits, typed Err:
+          `spec FEAT-001 is a legacy archive with no reachable git
+          history; body is unrecoverable from this clone`.
+        - blob_sha present but `git show <sha>` fails (truly missing
+          from object store) → typed Err: `blob <sha> not in object
+          store; try `git fetch --unshallow` or `git fetch
+          --all`.
   - id: A3
+    given: |
+      a closed spec `FEAT-001` (NOT yet archived). The working tree
+      is clean.
+    when: |
+      `caws specs show FEAT-001` is invoked (no flags).
+    then: |
+      Output is the spec yaml content from `.caws/specs/FEAT-001.yaml`
+      (active path). Exit 0. This is the current-state happy path
+      and MUST be preserved.
+  - id: A4
+    given: |
+      a spec `FEAT-001` archived per A1. The active path no longer
+      exists.
+    when: |
+      `caws specs show FEAT-001` is invoked (no flags).
+    then: |
+      Output is a typed diagnostic naming the gap:
+      `spec 'FEAT-001' is not in active specs. It was archived; to
+      view its body, use \`caws specs show FEAT-001 --archived\` or
+      \`caws specs recover FEAT-001\`.`
+      Exit 1. The command does NOT silently fall back to walking
+      `.caws/specs/.archive/` (the v11.1.x transparent fallback).
+  - id: A5
+    given: |
+      same as A4.
+    when: |
+      `caws specs show FEAT-001 --archived` is invoked.
+    then: |
+      Output is the recovered yaml body (resolved via the event log's
+      blob_sha + `git show`). Exit 0. Equivalent to
+      `caws specs recover FEAT-001` for the read-only case, but
+      reads more naturally for callers who think of it as "show
+      this archived spec."
+  - id: A6
     given: |
       `caws specs list` invoked in a project with 2 active specs, 1
       draft spec, and 3 archived specs (whose bodies have been
@@ -129,35 +214,75 @@ acceptance:
       Output lists only the 2 active + 1 draft specs. The 3
       archived specs do NOT appear. The file-tree default surface
       is current+in-flight only.
-  - id: A4
+  - id: A7
     given: |
-      Same project as A3.
+      Same project as A6.
     when: |
       `caws specs list --include-archived` is invoked.
     then: |
       Output lists the 2 active + 1 draft + a separate "Archived
       (recoverable from history)" section enumerating the 3
-      archived specs by id, with the closing commit_sha and the
-      `caws specs recover <id>` hint. No body content is loaded
-      (we read the event log, not the on-disk archive dir).
-  - id: A5
+      archived specs by id, with the blob_sha (8-char prefix) and
+      the `caws specs recover <id>` hint per entry. The listing is
+      derived from `.caws/events.jsonl` by scanning for
+      `spec_archived` events (and discarding any spec_id that has
+      been re-created since — the most recent lifecycle event for
+      a spec_id wins). NO walk of `.caws/specs/.archive/` —
+      that directory should be empty/absent post-slice, and
+      walking it would re-introduce the ambient-surface
+      anti-pattern this slice eliminates.
+  - id: A8
     given: |
       a project with a legacy `.caws/specs/.archive/` directory
       containing 5 yaml files: 4 are reachable from current branch
-      history (their pre-archive commits exist), 1 was archived
-      manually without ever being committed (no reachable commit
-      contains its body).
+      history (their pre-archive commits exist; `git log --all
+      --follow -- .caws/specs/<id>.yaml` returns ≥1 commit), 1 was
+      archived manually without ever being committed (no reachable
+      commit contains its body — local-only on disk).
     when: |
       `caws specs prune-archive --dry-run` is invoked.
     then: |
-      Output reports per-id status: 4 marked "recoverable, would
-      remove from working tree", 1 marked "NOT recoverable, would
-      quarantine to .caws/specs/.archive/.unrecoverable/<id>.yaml".
-      Exit 0 (dry-run never mutates). Subsequent invocation with
-      `--apply` performs both the removals AND the quarantine move
-      AND emits one `spec_archive_pruned` event per id (NEW event
-      type) recording the action taken.
-  - id: A6
+      Output reports per-id status:
+        - 4 marked "RECOVERABLE: would remove from working tree
+          (body reachable at git blob <sha> via commit <sha>)";
+        - 1 marked "UNRECOVERABLE: would QUARANTINE to
+          .caws/specs/.archive/.unrecoverable/<id>.yaml (body not
+          found in git history; preserving on disk for human
+          review)".
+      Exit 0. NO mutation (dry-run).
+  - id: A9
+    given: |
+      same project as A8.
+    when: |
+      `caws specs prune-archive --apply` is invoked.
+    then: |
+      Mutation happens, but with the ABSOLUTE invariant:
+        - The 4 recoverable files are removed from the working tree
+          (each via `git rm` if tracked, or `fs.unlinkSync` if
+          untracked-but-ignored). Each removal emits one
+          `spec_archive_pruned` event with `{ spec_id, from_path,
+          blob_sha, action: 'removed' }`.
+        - The 1 unrecoverable file is MOVED to
+          `.caws/specs/.archive/.unrecoverable/<id>.yaml` via
+          `fs.renameSync`. The body is preserved on disk for human
+          review; the file is NOT deleted. Emits a
+          `spec_archive_pruned` event with `{ spec_id, from_path,
+          action: 'quarantined' }` (no blob_sha because there is
+          none).
+        - If at any point the command would delete a file whose
+          recoverability it cannot prove via git, the command MUST
+          refuse and quarantine instead. This invariant is
+          unconditional — there is no `--force` flag, no
+          `--allow-unrecoverable-delete`, no override. The only
+          way to lose a body through this command is to also lose
+          the quarantine directory, which is a manual `rm -rf`
+          operation outside CAWS scope.
+      Post-state: `.caws/specs/.archive/` contains only the
+      `.unrecoverable/` subdirectory (with 1 file). All 4
+      recoverable files are gone from disk but recoverable via
+      `caws specs recover`. The event log has 5 new
+      `spec_archive_pruned` entries.
+  - id: A10
     given: |
       a project with a non-empty `.caws/specs/.archive/` directory
       AFTER the slice has landed (i.e., not all consumers have
@@ -179,37 +304,86 @@ non_functional:
       The recoverability check uses `git log --all --follow --
       .caws/specs/<id>.yaml` to find any commit that ever contained
       the file at that path; if zero results, the file is
-      unrecoverable and quarantined.
+      unrecoverable and quarantined. This invariant has NO override
+      flag — there is no way to instruct `prune-archive` to delete
+      an unrecoverable body. The only path that loses a body is a
+      manual `rm` outside CAWS.
     - >-
-      Schema evolution must be additive. Legacy `spec_archived`
-      events (with `from_path` + `to_path` but no `commit_sha`)
-      MUST continue to validate. The schema makes `commit_sha`
-      required for NEW events authored by this slice's writer; the
-      kernel's runtime validator MUST accept legacy events as a
-      transition concession (event_log_min_version-style read-side
-      tolerance), documented in the schema's `$comment`. If this
-      tolerance is hard to express cleanly in the JSON schema, an
-      acceptable alternative is a one-time migration that walks
-      `.caws/events.jsonl` and back-fills `commit_sha` where the
-      legacy `to_path` is recoverable; the slice picks one of the
-      two approaches and documents the choice.
+      Schema evolution is ADDITIVE under a `oneOf`. The amended
+      `spec_archived.v1.json` admits TWO shapes:
+        - Legacy: { from_path, to_path }
+        - New:    { from_path, blob_sha, source_commit_sha? }
+      Each branch preserves `additionalProperties: false` so neither
+      shape leaks fields into the other. Read-side consumers
+      (`caws specs list --include-archived`, `caws specs show
+      --archived`, `caws specs recover`, doctor) MUST handle both
+      shapes. The hash-chained `events.jsonl` is never
+      retroactively rewritten — no back-fill migration is needed
+      because the oneOf admits the historical shape.
+    - >-
+      blob_sha is recovery-authoritative because it is content-
+      addressed and topology-independent. Recovery via
+      `git show <blob_sha>` works under ALL of: fast-forward
+      merges, no-ff merges, rebased histories, cherry-picked
+      archive commits, and squash-merged branches. The only
+      failure mode is "blob not in object store" (shallow clone
+      that never fetched the relevant pack), which surfaces a
+      typed diagnostic with `git fetch --unshallow` as the repair
+      hint.
   security:
     - >-
-      `caws specs recover` runs `git show` against a commit_sha
-      that came from a kernel-validated event payload. The
-      commit_sha format MUST be validated (40-hex or 7+ hex prefix)
-      BEFORE being passed to `git show` — never interpolate raw
-      event payload into shell. Existing CAWS shell discipline
+      `caws specs recover` runs `git show` against a blob_sha that
+      came from a kernel-validated event payload. The blob_sha
+      format MUST be validated (40-hex exactly, or 7+ hex prefix
+      with disambiguation via `git rev-parse --verify`) BEFORE
+      being passed to `git show` — never interpolate raw event
+      payload into shell. Existing CAWS shell discipline
       (execFileSync with array args, never spawned shell strings)
       carries through.
     - >-
       `prune-archive --apply` is destructive (removes files from
       the working tree, even though they're recoverable from git).
-      It MUST require either `--apply` (explicit flag, default is
-      dry-run) or an interactive confirmation prompt when stdin is
-      a TTY. Non-interactive callers (CI) cannot accidentally
-      destructive-mode by omitting `--apply`.
-contracts: []
+      It MUST require explicit `--apply` (default is dry-run).
+      Non-interactive callers (CI) cannot accidentally destructive-
+      mode by omitting `--apply`. When stdin is a TTY AND `--apply`
+      is passed, the command prints a one-line summary
+      (`N recoverable, M unrecoverable`) and waits for the
+      operator to press y/N before proceeding. CI workflows that
+      automate prune MUST pass `--apply --yes` to bypass the
+      prompt; `--yes` is the only flag that suppresses the
+      confirmation, and it does NOT relax the quarantine
+      invariant.
+contracts:
+  - name: spec-archived-event-v1-evolution
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/spec_archived.v1.json
+    description: |
+      Additive evolution under a oneOf admitting two shapes:
+        legacy: { from_path, to_path }
+        new:    { from_path, blob_sha, source_commit_sha? }
+      Each branch keeps additionalProperties: false. blob_sha is
+      the authoritative recovery target (topology-independent via
+      git show <blob_sha>). source_commit_sha is recorded for
+      human audit only and is NOT used by recover. Legacy events
+      remain valid against the amended schema — no back-fill
+      migration needed. Hash-chained events.jsonl is never
+      rewritten.
+  - name: caws-specs-cli-archived-default
+    type: behavior
+    path: packages/caws-cli/src/shell/commands/specs.ts
+    description: |
+      `caws specs show <id>` defaults to active-only resolution
+      (.caws/specs/<id>.yaml). Archived specs require explicit
+      opt-in via `--archived` flag or the dedicated
+      `caws specs recover <id>` command. v11.1.x's transparent
+      fallback (silently walking `.caws/specs/.archive/`) is
+      removed by design. `caws specs list` defaults to active +
+      draft only; `--include-archived` reads the event log
+      instead of walking the directory. New `caws specs recover
+      <id>` resolves via the event log's blob_sha + git show.
+      New `caws specs prune-archive` migrates legacy archive
+      bodies with a prove-recovery-or-quarantine invariant
+      (no override flag for the quarantine).
 closure_notes: |
   MOTIVATION (verified evidence, 2026-05-27):
 
