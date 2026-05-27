@@ -32,6 +32,7 @@ import {
   runInitCommand,
   runScopeCommand,
   runSpecsArchiveCommand,
+  runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
   runSpecsCloseCommand,
   runSpecsCreateCommand,
@@ -700,6 +701,21 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  specsCmd
+    .command('prune-archive')
+    .description(
+      'Migrate legacy .caws/specs/.archive/<id>.yaml bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass --apply to execute. Recoverable bodies (reachable via git log --follow) are removed from the working tree; unrecoverable bodies are QUARANTINED to .caws/specs/.archive/.unrecoverable/ (never silently deleted, no override flag). Emits one spec_archive_pruned event per id on --apply.'
+    )
+    .option('--apply', 'Execute the migration. Default is dry-run.')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((opts: { apply?: boolean; data?: boolean }) => {
+      const code = runSpecsPruneArchiveCommand({
+        ...(opts.apply === true ? { apply: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   specsCmd
     .command('migrate')

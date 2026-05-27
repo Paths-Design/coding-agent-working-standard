@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_archive_pruned.v1.json",
+  "title": "spec_archive_pruned event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the migration of a legacy .caws/specs/.archive/<id>.yaml body during `caws specs prune-archive --apply` (CAWS-ARCHIVE-AS-TOMBSTONE-001). The legacy archive body either: (a) is recoverable via git history → removed from working tree with action='removed' and blob_sha recorded so a later recover call has the same authority as a tombstone-shape archive; or (b) is not recoverable from git history (local-only body) → moved to .caws/specs/.archive/.unrecoverable/<id>.yaml with action='quarantined' (no blob_sha because there is none). The prove-recovery-or-quarantine invariant is absolute: prune-archive will REFUSE to delete a body it cannot prove recoverable, even when --apply is passed.",
+  "type": "object",
+  "oneOf": [
+    {
+      "$comment": "Removed: the legacy archive body was recoverable from git history (a commit on the current branch contains the file at from_path), so it was deleted from the working tree. blob_sha is the recovery target; from_commit_sha names the commit that contained the body, for human audit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_path", "action", "blob_sha"],
+      "properties": {
+        "from_path": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "const": "removed" },
+        "blob_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "from_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Optional: the commit that contained the recovered body."
+        }
+      }
+    },
+    {
+      "$comment": "Quarantined: the legacy archive body was NOT recoverable from git history (no commit contains it). The body was moved to .caws/specs/.archive/.unrecoverable/<id>.yaml so the operator can review and decide manually. NO blob_sha because there is none in git.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_path", "action", "to_path"],
+      "properties": {
+        "from_path": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "const": "quarantined" },
+        "to_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Destination under .archive/.unrecoverable/. Preserves the body for human inspection."
+        }
+      }
+    }
+  ]
+}

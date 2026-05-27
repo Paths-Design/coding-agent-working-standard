@@ -1130,6 +1130,265 @@ export function recoverArchivedSpec(
   );
 }
 
+// ─── pruneArchive (CAWS-ARCHIVE-AS-TOMBSTONE-001 A8/A9) ─────────────────
+//
+// Migrates legacy .caws/specs/.archive/<id>.yaml bodies. For each
+// legacy archive body:
+//   - If git history contains the file at from_path on the current
+//     branch → mark recoverable + would remove from working tree.
+//   - If git history does NOT contain it → mark unrecoverable + would
+//     quarantine to .caws/specs/.archive/.unrecoverable/<id>.yaml.
+//
+// Dry-run by default; --apply executes. The prove-recovery-or-
+// quarantine invariant is absolute: there is NO override flag that
+// would let prune delete an unrecoverable body. The only way to lose
+// an unrecoverable body is a manual rm outside CAWS.
+//
+// On --apply, emits one spec_archive_pruned event per id describing
+// the action taken (removed or quarantined).
+
+export type PruneArchivePlan =
+  | {
+      readonly id: string;
+      readonly fromPath: string;
+      readonly fromRel: string;
+      readonly status: 'recoverable';
+      readonly blob_sha: string;
+      readonly commit_sha: string;
+    }
+  | {
+      readonly id: string;
+      readonly fromPath: string;
+      readonly fromRel: string;
+      readonly status: 'unrecoverable';
+      readonly reason: string;
+    };
+
+export interface PruneArchiveResult {
+  readonly plans: ReadonlyArray<PruneArchivePlan>;
+  readonly applied: boolean;
+  readonly events_appended: number;
+}
+
+export interface PruneArchiveInput {
+  readonly apply?: boolean;
+  readonly actor: EventBody['actor'];
+  readonly now?: () => Date;
+}
+
+/**
+ * Scan .caws/specs/.archive/ for legacy bodies. Returns per-id status
+ * (dry-run) or executes the migration (--apply).
+ *
+ * Recoverability check: `git log --all --follow -- <fromPath>`. If
+ * any commit contains the file, the body is recoverable from git
+ * history; we extract the blob_sha + most-recent containing commit
+ * and that becomes the recovery target. If zero commits, the body
+ * is local-only and gets quarantined.
+ */
+export function pruneArchive(
+  cawsDir: string,
+  input: PruneArchiveInput
+): Result<PruneArchiveResult> {
+  const archiveDir = path.join(cawsDir, 'specs', '.archive');
+  if (!fs.existsSync(archiveDir)) {
+    // No legacy archive to prune; succeed with empty plan.
+    return ok({ plans: [], applied: input.apply === true, events_appended: 0 });
+  }
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const apply = input.apply === true;
+  const now = (input.now ?? (() => new Date()))().toISOString();
+
+  // Enumerate yaml files at the top of .archive/, excluding the
+  // .unrecoverable/ subdir (which is the destination, not a source).
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(archiveDir, { withFileTypes: true });
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Failed to read ${archiveDir}: ${(e as Error).message}`,
+        { subject: archiveDir }
+      )
+    );
+  }
+
+  const plans: PruneArchivePlan[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith('.yaml') && !entry.name.endsWith('.yml')) continue;
+    const id = entry.name.replace(/\.ya?ml$/, '');
+    const fromPath = path.join(archiveDir, entry.name);
+    // The legacy archive bodies' from_path (where the spec was BEFORE
+    // archiving) is .caws/specs/<id>.yaml — that's what git log
+    // --follow searches.
+    const activeRel = path.relative(repoRoot, specPath(cawsDir, id));
+
+    // Find any commit that contained the file at activeRel.
+    const commitListing = runGitQuery(
+      ['log', '--all', '--follow', '--format=%H', '--', activeRel],
+      repoRoot
+    );
+    if (commitListing === null || commitListing.length === 0) {
+      plans.push({
+        id,
+        fromPath,
+        fromRel: path.relative(repoRoot, fromPath),
+        status: 'unrecoverable',
+        reason: `git log --all --follow -- ${activeRel} returned no commits`,
+      });
+      continue;
+    }
+    // Walk commits newest-first; pick the first one where the blob
+    // actually exists at activeRel (skip deletion commits).
+    let recovered: { commit: string; blob: string } | null = null;
+    for (const commit of commitListing.split('\n')) {
+      const c = commit.trim();
+      if (!/^[0-9a-f]{40}$/.test(c)) continue;
+      const lsTree = runGitQuery(['ls-tree', c, '--', activeRel], repoRoot);
+      if (lsTree === null || lsTree.length === 0) continue;
+      const blobParts = lsTree.split(/\s+/);
+      if (blobParts.length < 3) continue;
+      const sha = blobParts[2];
+      if (sha !== undefined && /^[0-9a-f]{40}$/.test(sha)) {
+        recovered = { commit: c, blob: sha };
+        break;
+      }
+    }
+    if (recovered === null) {
+      plans.push({
+        id,
+        fromPath,
+        fromRel: path.relative(repoRoot, fromPath),
+        status: 'unrecoverable',
+        reason: `git log returned commits but none contained the blob at ${activeRel}`,
+      });
+    } else {
+      plans.push({
+        id,
+        fromPath,
+        fromRel: path.relative(repoRoot, fromPath),
+        status: 'recoverable',
+        blob_sha: recovered.blob,
+        commit_sha: recovered.commit,
+      });
+    }
+  }
+
+  if (!apply) {
+    return ok({ plans, applied: false, events_appended: 0 });
+  }
+
+  // --apply: execute the migration. For each plan:
+  //   recoverable   → fs.unlinkSync(fromPath) + emit removed event
+  //   unrecoverable → fs.renameSync to .unrecoverable/<id>.yaml + emit
+  //                   quarantined event
+  // Quarantine dir is created lazily on first unrecoverable.
+  const unrecoverableDir = path.join(archiveDir, '.unrecoverable');
+  let eventsAppended = 0;
+  for (const plan of plans) {
+    if (plan.status === 'recoverable') {
+      try {
+        fs.unlinkSync(plan.fromPath);
+      } catch (e) {
+        // Best-effort: surface as Err but allow event-append to skip.
+        // The plan reported the intent; the operator can inspect.
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+            `Failed to unlink ${plan.fromPath}: ${(e as Error).message}`,
+            { subject: plan.id }
+          )
+        );
+      }
+      const event: EventBody = {
+        event: 'spec_archive_pruned',
+        ts: now,
+        actor: input.actor,
+        spec_id: plan.id,
+        data: {
+          from_path: plan.fromRel,
+          action: 'removed',
+          blob_sha: plan.blob_sha,
+          from_commit_sha: plan.commit_sha,
+        },
+      } as unknown as EventBody;
+      const txn = withLifecycleLock(cawsDir, () =>
+        runLifecycleTransaction({
+          cawsDir,
+          plannedWrites: [],
+          events: [event],
+        })
+      );
+      if (!txn.ok) return err(txn.errors);
+      if (txn.value.kind !== 'success') {
+        return ok({
+          plans,
+          applied: true,
+          events_appended: eventsAppended,
+        });
+      }
+      eventsAppended++;
+    } else {
+      try {
+        fs.mkdirSync(unrecoverableDir, { recursive: true });
+      } catch (e) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_WRITE_FAILED,
+            `Failed to create quarantine dir ${unrecoverableDir}: ${(e as Error).message}`,
+            { subject: unrecoverableDir }
+          )
+        );
+      }
+      const toPath = path.join(unrecoverableDir, path.basename(plan.fromPath));
+      const toRel = path.relative(repoRoot, toPath);
+      try {
+        fs.renameSync(plan.fromPath, toPath);
+      } catch (e) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+            `Failed to quarantine ${plan.fromPath} → ${toPath}: ${(e as Error).message}`,
+            { subject: plan.id }
+          )
+        );
+      }
+      const event: EventBody = {
+        event: 'spec_archive_pruned',
+        ts: now,
+        actor: input.actor,
+        spec_id: plan.id,
+        data: {
+          from_path: plan.fromRel,
+          action: 'quarantined',
+          to_path: toRel,
+        },
+      } as unknown as EventBody;
+      const txn = withLifecycleLock(cawsDir, () =>
+        runLifecycleTransaction({
+          cawsDir,
+          plannedWrites: [],
+          events: [event],
+        })
+      );
+      if (!txn.ok) return err(txn.errors);
+      if (txn.value.kind !== 'success') {
+        return ok({
+          plans,
+          applied: true,
+          events_appended: eventsAppended,
+        });
+      }
+      eventsAppended++;
+    }
+  }
+
+  return ok({ plans, applied: true, events_appended: eventsAppended });
+}
+
 // Re-export appendEvent type for downstream tests that want to inject.
 export type { EventBody };
 // Unused import elimination: surface appendEvent so future direct-event

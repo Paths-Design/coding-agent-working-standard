@@ -32,6 +32,7 @@ import {
   closeSpec,
   createSpec,
   listSpecs,
+  pruneArchive,
   recoverArchivedSpec,
   showSpec,
 } from '../../store/specs-writer';
@@ -630,4 +631,71 @@ function renderApplyJson(
       2,
     ),
   );
+}
+
+// ─── caws specs prune-archive (CAWS-ARCHIVE-AS-TOMBSTONE-001 A8/A9) ─────
+//
+// Migrates legacy .caws/specs/.archive/<id>.yaml bodies. Dry-run by
+// default; --apply executes. The prove-recovery-or-quarantine
+// invariant is absolute — there is NO override flag that would let
+// prune delete an unrecoverable body.
+
+export interface SpecsPruneArchiveOptions extends BaseCommandOptions {
+  /** Default false → dry-run. Pass true to mutate the filesystem. */
+  readonly apply?: boolean;
+}
+
+export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'prune-archive');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'prune-archive'
+  );
+  if (actor === null) return 2;
+
+  const result = pruneArchive(ctx.cawsDir, {
+    apply: opts.apply === true,
+    actor,
+    now: nowFn,
+  });
+  if (!isOk(result)) {
+    err('caws specs prune-archive: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  const { plans, applied, events_appended } = result.value;
+  if (plans.length === 0) {
+    out('caws specs prune-archive: no legacy .caws/specs/.archive/ bodies to prune.');
+    return 0;
+  }
+
+  const recoverable = plans.filter((p) => p.status === 'recoverable');
+  const unrecoverable = plans.filter((p) => p.status === 'unrecoverable');
+  const verb = applied ? 'Pruned' : 'Would prune';
+  out(`${verb} ${plans.length} legacy archive bodies (${recoverable.length} recoverable, ${unrecoverable.length} unrecoverable):`);
+  for (const plan of plans) {
+    if (plan.status === 'recoverable') {
+      const action = applied ? 'REMOVED' : 'would remove';
+      out(`  - ${plan.id}: RECOVERABLE — ${action} (blob ${plan.blob_sha.slice(0, 8)} at commit ${plan.commit_sha.slice(0, 8)})`);
+    } else {
+      const action = applied ? 'QUARANTINED' : 'would quarantine';
+      out(`  - ${plan.id}: UNRECOVERABLE — ${action} to .archive/.unrecoverable/${plan.id}.yaml (${plan.reason})`);
+    }
+  }
+  if (applied) {
+    out(`Appended ${events_appended} spec_archive_pruned events.`);
+  } else {
+    out('Dry-run complete. Pass --apply to execute. Unrecoverable bodies will be quarantined (never silently deleted); recoverable bodies will be removed (recoverable via caws specs recover <id>).');
+  }
+  return 0;
 }
