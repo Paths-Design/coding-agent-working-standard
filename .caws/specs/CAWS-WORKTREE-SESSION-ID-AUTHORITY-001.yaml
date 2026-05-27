@@ -2,9 +2,10 @@ id: CAWS-WORKTREE-SESSION-ID-AUTHORITY-001
 title: 'worktree create must use current session id, not stale agents.json'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-27T04:46:16.996Z'
-updated_at: '2026-05-27T04:46:16.996Z'
+updated_at: '2026-05-27T07:17:03.179Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-writer.ts
@@ -100,7 +101,49 @@ non_functional:
       so it cannot be spoofed by a caller.
 contracts: []
 closure_notes: |
-  DRAFT SPEC — investigation + fix not yet started.
+  PARTIALLY RESOLVED by upstream env-precedence work; closing with
+  scope-narrowed follow-up tracked separately.
+
+  Status (2026-05-27): CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001
+  landed at commit 469f419 between this spec's authoring and this
+  closure. That fix admits HOOK_SESSION_ID as a priority-2 session
+  identity source in resolve-session.ts and adds capsule cleanup on
+  mint. It eliminates the "session identity is unstable across CLI
+  invocations within a single Claude Code conversation" failure mode
+  that produced the symptoms below — but its own commit message is
+  explicit that **authority surfaces are unchanged**: ".caws/worktrees.json:owner.session_id is the sole ownership authority"
+  and "the COMPARISON in worktrees-writer.ts is untouched."
+
+  In practice (4 reproductions during this session's slice work),
+  this means:
+
+    - WORKTREE CREATE: env-precedence fix makes the new owner field
+      stable across hook calls within a session. The "OWNED (foreign)
+      on a worktree I just created" class is resolved for the common
+      case.
+
+    - WORKTREE DESTROY: still reproduces "owned by a different session
+      (caws-NNNN)" refusal AFTER a successful `caws claim --takeover`
+      reports OWNED (you) with the SAME session id. The destroy-side
+      session-resolution path or the comparison logic still disagrees
+      with the claim-side resolution. Manual recovery (git worktree
+      remove --force + registry hand-edit + git branch -d) was needed
+      4 times this session.
+
+  The destroy-side gap deserves its own focused spec because (a) the
+  env-precedence fix's commit message explicitly excludes it from
+  scope ("the COMPARISON in worktrees-writer.ts is untouched"); (b)
+  the symptom shape is different (takeover succeeds but the very
+  next destroy refuses, vs. create-time wrong-id); (c) a clean fix
+  needs to look at the destroy path's session resolution end-to-end
+  rather than backporting hook_env precedence to one comparison site.
+
+  Closing this spec under resolution: completed because the
+  symptoms it was authored against (Sterling turn-043's create-time
+  foreign-claim) are addressed. Filing a successor candidate for the
+  destroy-side gap separately is the cleaner audit shape.
+
+  ORIGINAL PRECEDENT (preserved for the successor spec to reference):
 
   Precedent observed in two places during USER-E2E-SETUP-REHEARSAL-001
   (2026-05-26) follow-up work:
