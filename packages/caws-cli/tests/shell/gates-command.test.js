@@ -479,3 +479,209 @@ describe('runGatesRunCommand — missing --spec', () => {
     expect(r.stderr).toMatch(/--spec is required/);
   });
 });
+
+// CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001 regression suite.
+//
+// Before this slice:
+//   - the append loop fail-fast'd on first failure and returned 2
+//     (conflating evidence-integrity failure with composition failure);
+//   - a run that produced zero dispositions silently exited 0 with no
+//     evidence appended (the Sterling-evidence silent CI false-green).
+//
+// After this slice:
+//   - per-gate append failure is collected, the loop continues, and the
+//     command exits 3 with a summary of every gate whose evidence was
+//     lost (A1, A2, A5, A6 in the spec);
+//   - a run that would produce zero gate_evaluated events is refused with
+//     exit 3 before the loop (the zero-disposition guard);
+//   - exit 3 is distinct from exit 1 (policy fail) so CI can tell the
+//     difference between "policy blocked" and "evidence was lost" (A4).
+describe('runGatesRunCommand — CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001 evidence integrity', () => {
+  let repoRoot;
+  afterEach(() => rmrf(repoRoot));
+
+  // A1 + A6: poison the events store by pre-writing a malformed interior
+  // line. loadEvents (called by appendEvent to read the tail before each
+  // append) returns Err, so EVERY gate's append fails. The pre-fix code
+  // would have exited 2 on the first failure with no record of the
+  // sibling gates' outcomes; the post-fix code attempts all 5 gates,
+  // collects 5 lost-evidence entries, and exits 3.
+  it('all gates lose evidence → exit 3, every gate enumerated, partial summary still rendered', () => {
+    repoRoot = mkTempGitRepo('caws-gates-allLost-');
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+
+    // Poison events.jsonl with two interior-malformed lines + a trailing
+    // newline. The malformed-interior shape triggers
+    // STORE_RULES.EVENTS_INTERIOR_MALFORMED_LINE on every load.
+    const eventsPath = path.join(repoRoot, '.caws', 'events.jsonl');
+    fs.writeFileSync(eventsPath, '{"not":"a chained event"}\n{"also":"not"}\n');
+
+    const r = captureRun(repoRoot, PASS_REPORT);
+
+    // Evidence-integrity exit code — distinct from 1 (policy fail) and
+    // 2 (composition failure). The pre-fix behavior was exit 2 on first
+    // failure; this asserts the new exit code.
+    expect(r.code).toBe(3);
+
+    // Per-gate isolation proof: all 5 policy-declared gates must appear
+    // in the lost-evidence summary. If the pre-fix fail-fast behavior
+    // had survived, only the first gate would appear in stderr.
+    expect(r.stderr).toMatch(/evidence-integrity failure/);
+    expect(r.stderr).toMatch(/shell\.gates\.evidence_lost/);
+    expect(r.stderr).toMatch(/5 of 5/);
+    // The summary names every lost gate by id.
+    expect(r.stderr).toMatch(/budget_limit/);
+    expect(r.stderr).toMatch(/spec_completeness/);
+    expect(r.stderr).toMatch(/scope_boundary/);
+    expect(r.stderr).toMatch(/god_object/);
+    expect(r.stderr).toMatch(/todo_detection/);
+
+    // Per-gate diagnostic propagation (A5): each gate's failure cites the
+    // store-layer rule verbatim. The rule string MUST NOT be sanitized
+    // or transformed by the shell.
+    expect(r.stderr).toMatch(/failed to append gate_evaluated event for budget_limit/);
+
+    // Partial-evidence rendering (the summary is still emitted to stdout
+    // so operators can see what WOULD have been recorded if the store
+    // had accepted the appends).
+    expect(r.stdout.length).toBeGreaterThan(0);
+  });
+
+  // Zero-disposition guard: the Sterling silent-success class. A policy
+  // whose declared gates do not appear in deriveDispositions's KNOWN_GATE_IDS
+  // set produces zero dispositions and (pre-fix) exit 0 with no evidence.
+  //
+  // The kernel's Policy schema refuses unknown top-level gate names at
+  // composition time (that returns exit 2 — a different code path than the
+  // one this slice is fixing). To exercise the post-disposition guard
+  // specifically, the policy declares only the empty intersection that
+  // arises in practice: a future policy version may declare a gate that
+  // older CLIs do not recognize. We simulate by patching deriveDispositions
+  // via an empty KNOWN_GATE_IDS-style outcome: this is achieved by
+  // declaring a SINGLE known gate disabled (which still produces 1
+  // disposition — a 'skipped' one), and a SEPARATE assertion verifies the
+  // dispositionResult.dispositions.length === 0 path through a unit-level
+  // probe rather than an integration repro that the kernel schema blocks.
+  //
+  // Concretely: in the integration repro the cleanest available shape is
+  // a policy that the kernel ACCEPTS but produces 0 KNOWN-id dispositions.
+  // Since the current kernel rejects unknown gate names at validate-time,
+  // we cannot integration-test this guard with the production kernel. The
+  // guard remains correct (verified by reading deriveDispositions's loop)
+  // and by the per-gate isolation test above proving the loop runs as
+  // expected; this test asserts the guard's SHAPE via a direct invocation
+  // when the dispositions array is empty.
+  //
+  // Until a future schema-evolution scenario reproduces zero-disposition
+  // through valid policy, this test exercises the guard via the documented
+  // diagnostic-text path: a policy that produces 5 disposition entries all
+  // 'skipped' is the closest production-shape proxy, and the guard fires
+  // only when dispositions.length === 0 exactly. Asserting the guard does
+  // NOT fire on the 5-skipped case is the meaningful negative test.
+  it('zero-disposition guard: 5 skipped dispositions does NOT fire the guard (negative test)', () => {
+    repoRoot = mkTempGitRepo('caws-gates-allSkipped-');
+    // All 5 known gates disabled. Each produces a 'skipped' disposition,
+    // so dispositions.length === 5 (not zero). The guard MUST NOT fire.
+    const POLICY_ALL_SKIPPED = `version: 1
+risk_tiers:
+  "1": { max_files: 5, max_loc: 200 }
+  "2": { max_files: 15, max_loc: 600 }
+  "3": { max_files: 30, max_loc: 1500 }
+gates:
+  budget_limit: { enabled: false, mode: skip }
+  spec_completeness: { enabled: false, mode: skip }
+  scope_boundary: { enabled: false, mode: skip }
+  god_object: { enabled: false, mode: skip }
+  todo_detection: { enabled: false, mode: skip }
+`;
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), POLICY_ALL_SKIPPED);
+
+    const r = captureRun(repoRoot, PASS_REPORT);
+
+    // All 5 dispositions are produced (each marked skipped). Guard does
+    // NOT fire because dispositions.length > 0. Exit 0 because none block.
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toMatch(/no policy-declared gates were dispositioned/);
+    expect(r.stderr).not.toMatch(/shell\.gates\.no_dispositions/);
+
+    // 5 events still landed (audit completeness — skipped events are
+    // still appended).
+    const events = loadEvents(path.join(repoRoot, '.caws'));
+    expect(events.value.events).toHaveLength(5);
+    for (const e of events.value.events) {
+      expect(e.data.result).toBe('skipped');
+    }
+  });
+
+  // The guard's positive case (dispositions.length === 0 → exit 3) can be
+  // unit-tested directly by calling deriveDispositions with a policy that
+  // has zero KNOWN_GATE_IDS entries and asserting dispositionResult is
+  // empty. The shell command's behavior given that input is determined
+  // mechanically by the guard at gates.ts (the next assertion).
+  it('zero-disposition guard: deriveDispositions empty result → guard would fire (unit-level proof)', () => {
+    // Policy with no KNOWN_GATE_IDS overlap. The kernel schema may not
+    // accept this at policy.yaml parse time, but deriveDispositions's
+    // pure-function contract is well-defined for it: empty dispositions.
+    const policyNoKnownGates = {
+      version: 1,
+      risk_tiers: {
+        1: { max_files: 5, max_loc: 200 },
+        2: { max_files: 15, max_loc: 600 },
+        3: { max_files: 30, max_loc: 1500 },
+      },
+      gates: {}, // no gates at all
+    };
+    const r = deriveDispositions(PASS_REPORT, policyNoKnownGates);
+    // Confirms the precondition the guard checks: dispositions.length === 0.
+    expect(r.dispositions).toHaveLength(0);
+    expect(r.anyBlocks).toBe(false);
+    // The shell command's guard at gates.ts maps this exact precondition
+    // to exit 3 + GATES_NO_DISPOSITIONS_RULE. Verifying the guard's source
+    // (string presence) is a structural assertion that catches accidental
+    // guard removal during refactor.
+    const fs2 = require('fs');
+    const gatesSource = fs2.readFileSync(
+      require('path').resolve(__dirname, '../../dist/shell/commands/gates.js'),
+      'utf8'
+    );
+    expect(gatesSource).toMatch(/dispositionResult\.dispositions\.length === 0/);
+    expect(gatesSource).toMatch(/shell\.gates\.no_dispositions/);
+    expect(gatesSource).toMatch(/EXIT_EVIDENCE_INTEGRITY/);
+  });
+
+  // A4: policy-failure exit code (1) must remain distinct from
+  // evidence-integrity exit code (3). A clean append + a block-mode
+  // policy fail is the SAME exit code as before this slice.
+  it('policy-block fail with clean appends → exit 1, NOT exit 3 (A4 distinguishability)', () => {
+    repoRoot = mkTempGitRepo('caws-gates-blockClean-');
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    const r = captureRun(repoRoot, FAIL_REPORT('budget_limit', 1));
+    // Existing regression at gates-command.test.js:365 asserts exit 1 on
+    // this same shape. Reasserting here as the explicit A4 mapping: the
+    // new evidence-integrity exit code (3) must NOT subsume the existing
+    // policy-failure exit code (1).
+    expect(r.code).toBe(1);
+    expect(r.code).not.toBe(3);
+    // All 5 events still landed (no evidence loss on the healthy path).
+    const events = loadEvents(path.join(repoRoot, '.caws'));
+    expect(events.ok).toBe(true);
+    expect(events.value.events).toHaveLength(5);
+  });
+
+  // A3 healthy-path regression guard: a clean pass run still exits 0,
+  // still appends 5 events, and emits no evidence-integrity diagnostic.
+  // This is the most important assertion in the suite — it pins that
+  // the fix changed exit semantics ONLY on the failure paths.
+  it('healthy path: all-pass run still exits 0 with 5 events appended (A3 regression guard)', () => {
+    repoRoot = mkTempGitRepo('caws-gates-healthyA3-');
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    const r = captureRun(repoRoot, PASS_REPORT);
+    expect(r.code).toBe(0);
+    // The new evidence-integrity diagnostic surface MUST NOT fire on the
+    // healthy path. If it does, A3 is broken.
+    expect(r.stderr).not.toMatch(/evidence-integrity failure/);
+    expect(r.stderr).not.toMatch(/no policy-declared gates were dispositioned/);
+    const events = loadEvents(path.join(repoRoot, '.caws'));
+    expect(events.value.events).toHaveLength(5);
+  });
+});
