@@ -3,6 +3,7 @@ title: 'caws gates run aborts on corrupt event-chain append failure'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: gates-run-corrupt-chain
 created_at: '2026-05-27T18:12:17.280Z'
 updated_at: '2026-05-27T18:12:17.280Z'
 blast_radius:
