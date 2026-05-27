@@ -13,12 +13,20 @@
   "renderer-hotfix": {
     "specId": "CAWS-HOOK-PACK-RENDERER-MISSING-001",
     "owner": {
-      "session_id": "caws-d66262ddcd76",
+      "session_id": "caws-50fe990fdda5",
       "platform": "darwin"
     },
-    "last_heartbeat": "2026-05-27T05:46:01.578Z",
+    "last_heartbeat": "2026-05-27T05:56:27.993Z",
     "branch": "renderer-hotfix",
     "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/renderer-hotfix"
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/renderer-hotfix",
+    "prior_owners": [
+      {
+        "session_id": "caws-d66262ddcd76",
+        "platform": "darwin",
+        "last_seen": "2026-05-27T05:46:01.578Z",
+        "takenOver_at": "2026-05-27T05:56:27.993Z"
+      }
+    ]
   }
 }

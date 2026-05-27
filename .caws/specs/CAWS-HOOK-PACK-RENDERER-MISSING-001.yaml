@@ -2,10 +2,10 @@ id: CAWS-HOOK-PACK-RENDERER-MISSING-001
 title: 'ship session_log_renderer.py with v11 hook pack (fixes broken session-log.sh)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: renderer-hotfix
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-27T05:40:03.559Z'
-updated_at: '2026-05-27T06:30:00.000Z'
+updated_at: '2026-05-27T05:56:49.534Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/session_log_renderer.py
