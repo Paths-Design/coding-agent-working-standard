@@ -9,16 +9,5 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
-  },
-  "scope-strike-unify": {
-    "specId": "CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T06:51:32.333Z",
-    "branch": "scope-strike-unify",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/scope-strike-unify"
   }
 }
