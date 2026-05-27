@@ -48,6 +48,11 @@ import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { runLifecycleTransaction } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
+import {
+  admitsOwner,
+  describeCandidateTrace,
+} from '../shell/session/resolve-session';
+import type { SessionCandidates } from '../shell/session/types';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
@@ -83,7 +88,31 @@ export interface BindWorktreeInput {
 
 export interface DestroyWorktreeInput {
   readonly name: string;
+  /**
+   * The session identity to record as the actor of the destroy event.
+   * Single identity by design — an event has exactly one author. This
+   * is the field minted-or-resolved by the caller's
+   * resolveSession({ allowMint: true }) call.
+   */
   readonly session: SessionIdentity;
+  /**
+   * The exhaustive set of session identities the invoking process can
+   * speak for, used for the ownership-comparison admission check.
+   *
+   * The split between `session` (actor) and `sessionCandidates`
+   * (comparison) addresses the destroy-side failure mode of
+   * CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001: a single cwd-keyed
+   * `session` cannot distinguish "I am the registered owner via a
+   * sibling-cwd capsule" from "I am a genuinely-foreign session", so
+   * a destroy issued from canonical after a `claim --takeover` from
+   * inside the worktree would refuse its own owner. The comparison
+   * now admits the destroy iff ANY candidate matches `entry.owner`,
+   * which is the honest semantic — comparison is set membership, not
+   * cwd-keyed equality.
+   *
+   * Construct via the shell layer's `resolveSessionCandidates()`.
+   */
+  readonly sessionCandidates: SessionCandidates;
   readonly actor: EventBody['actor'];
   readonly now?: () => Date;
   /** Allow destruction even when the branch is not merged into base.
@@ -94,7 +123,10 @@ export interface DestroyWorktreeInput {
 
 export interface MergeWorktreeInput {
   readonly name: string;
+  /** See DestroyWorktreeInput.session — same actor/event-author role. */
   readonly session: SessionIdentity;
+  /** See DestroyWorktreeInput.sessionCandidates — same comparison semantic. */
+  readonly sessionCandidates: SessionCandidates;
   readonly actor: EventBody['actor'];
   readonly now?: () => Date;
   /** When true, perform validation only; no git operations, no file
@@ -764,20 +796,25 @@ export function destroyWorktree(
     );
   }
 
-  // Ownership check: refuse foreign session unless takeover already
-  // happened in a separate step (caws claim --takeover writes a
-  // prior_owners audit; ownership then matches and we proceed).
-  if (
-    entry.owner !== undefined &&
-    entry.owner.session_id !== input.session.session_id
-  ) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). Run 'caws claim ${input.name} --takeover' first if you need to take ownership.`,
-        { subject: input.name }
-      )
-    );
+  // Ownership check: admit if ANY identity the invoker can speak for
+  // matches the registered owner (CAWS-WORKTREE-DESTROY-SESSION-
+  // RESOLUTION-001). The candidate set is built by the caller via
+  // resolveSessionCandidates() and is INSENSITIVE to cwd, so a destroy
+  // issued from canonical after a `claim --takeover` from inside the
+  // worktree finds the worktree-keyed capsule among the candidates and
+  // succeeds. A genuinely-foreign session has no candidate that matches
+  // entry.owner.session_id, so the refusal still fires.
+  if (entry.owner !== undefined) {
+    const matched = admitsOwner(input.sessionCandidates, entry.owner.session_id);
+    if (matched === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). Run 'caws claim ${input.name} --takeover' first if you need to take ownership.\n\nSession-resolution trace (no candidate matched the registered owner):\n${describeCandidateTrace(input.sessionCandidates)}`,
+          { subject: input.name }
+        )
+      );
+    }
   }
 
   // Dirty-tree check.
@@ -919,8 +956,17 @@ export function mergeWorktree(
 
   // Validate prerequisites.
   const findings: string[] = [];
-  if (entry.owner !== undefined && entry.owner.session_id !== input.session.session_id) {
-    findings.push(`worktree is owned by a different session (${entry.owner.session_id})`);
+  // Ownership: same multi-candidate admission semantic as destroyWorktree.
+  // Merge is structurally an ownership-comparison surface — the invoker
+  // must be the registered owner. See CAWS-WORKTREE-DESTROY-SESSION-
+  // RESOLUTION-001 closure_notes Option E for the why.
+  if (entry.owner !== undefined) {
+    const matched = admitsOwner(input.sessionCandidates, entry.owner.session_id);
+    if (matched === null) {
+      findings.push(
+        `worktree is owned by a different session (${entry.owner.session_id})`
+      );
+    }
   }
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
   if (fs.existsSync(wtPath) && !isWorkingTreeClean(wtPath)) {
@@ -1119,6 +1165,7 @@ export function mergeWorktree(
   const destroyResult = destroyWorktree(cawsDir, {
     name: input.name,
     session: input.session,
+    sessionCandidates: input.sessionCandidates,
     actor: input.actor,
     now: sharedNowFactory,
   });

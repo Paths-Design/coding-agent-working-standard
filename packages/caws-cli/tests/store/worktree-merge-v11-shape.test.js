@@ -54,6 +54,22 @@ const ACTOR = {
 };
 const FOREIGN_SESSION = { session_id: 'sess-foreign-owner', platform: 'jest' };
 
+// Multi-candidate ownership-admission input for the writer
+// (CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001). For tests that
+// previously passed a single `session`, this constant wraps that same
+// identity as the only candidate — preserving the legacy
+// "session_id-equality admit/refuse" semantic while satisfying the
+// writer's new required input shape.
+const SESSION_CANDIDATES = {
+  candidates: [{ identity: SESSION, source: 'capsule' }],
+  trace: [
+    { source: 'claude_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'hook_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'capsule', outcome: 'admitted', count: 1 },
+    { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
+  ],
+};
+
 function mkRepo(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   execFileSync('git', ['init', '--quiet', '-b', 'main', root]);
@@ -173,6 +189,7 @@ describe('WORKTREE-MERGE-V11-SHAPE-001 (v11 direct-key shape regression lock)', 
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a1',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
       dryRun: true,
     });
@@ -227,6 +244,7 @@ describe('WORKTREE-MERGE-V11-SHAPE-001 (v11 direct-key shape regression lock)', 
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a2',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
       dryRun: true,
     });
@@ -261,6 +279,7 @@ describe('WORKTREE-MERGE-V11-SHAPE-001 (v11 direct-key shape regression lock)', 
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a3',
       session: SESSION, // local session, not the foreign owner
+      sessionCandidates: SESSION_CANDIDATES, // local candidates, not foreign
       actor: ACTOR,
       dryRun: true,
     });
