@@ -7,19 +7,139 @@ created_at: '2026-05-27T20:20:41.583Z'
 updated_at: '2026-05-27T20:20:41.583Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell
+    - .caws/specs/CAWS-SPECS-TIER-MODE-GUIDANCE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws specs create` MUST surface tier-vs-mode requirements
+    BEFORE the lifecycle transaction attempts to author the yaml.
+    Specifically: a tier-2 invocation without contract-declaration
+    affordance MUST be refused with a typed diagnostic naming the
+    requirement and showing the maintainer how to declare a
+    contract — NOT a bare schema-violation error after the spec
+    body has been written.
+  - >-
+    The diagnostic MUST be actionable. A failing
+    `caws specs create FOO --mode fix --risk-tier 2 --title "..."`
+    invocation prints:
+      (a) the rule that fired ("tier 2 requires at least one
+          contract entry");
+      (b) the exact minimal contract syntax to add (with the
+          permitted `type` enum values: api / schema / contract-test
+          / behavior);
+      (c) the alternative ("OR downgrade to --risk-tier 3 if this
+          is genuinely a tier-3 chore — but be aware that tier
+          affects gate strictness, change-budget bookkeeping, and
+          reviewer routing").
+  - >-
+    The diagnostic MUST NOT push agents toward the "downgrade tier
+    to bypass" anti-pattern. The recommended path is "declare a
+    contract"; the downgrade is named as a legitimate alternative
+    only when the spec's actual scope warrants it. This matters
+    because agents (per observed behavior 2026-05-27) default to
+    the path of least resistance — if the bare error says only
+    "tier 2 requires contracts," they downgrade. The diagnostic
+    must make the right choice the easy choice.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: |
+      a fresh CAWS project (no specs yet). The maintainer wants
+      to author a tier-2 spec for a cross-package surface change.
+    when: |
+      `caws specs create FOO-001 --mode fix --risk-tier 2 --title
+      "cross-package shape change"` is invoked.
+    then: |
+      The command returns a typed diagnostic with EXIT 1 that
+      includes:
+        - "Tier 2 specs require at least one contract entry"
+        - A minimal contract example showing the required `name`
+          and `type` fields, with the four permitted type enum
+          values listed inline (api, schema, contract-test, behavior).
+        - The path to the schema file for further reference.
+        - An explicit "alternative: --risk-tier 3 if this is
+          actually a chore" hint, but FRAMED AS the lesser path
+          ("only if the slice has no cross-version contract").
+      No yaml file is written to disk by the failed create
+      attempt.
+  - id: A2
+    given: |
+      same as A1.
+    when: |
+      `caws specs create --help` is invoked.
+    then: |
+      The help output mentions the tier-mode interaction:
+      specifically, that tier 1 + 2 require contracts (with a
+      one-line note about why) and tier 3 + mode chore do not.
+      Help should be self-contained enough that an agent reading
+      it understands the tier choice consequence BEFORE invoking
+      create.
+non_functional:
+  reliability:
+    - >-
+      The pre-flight tier-mode check must run BEFORE the
+      lifecycle transaction allocates resources (lock acquisition,
+      event allocation). The check is a pure function of the input
+      args + the project's existing spec schema; no I/O beyond
+      reading the schema once.
 contracts: []
+closure_notes: |
+  MOTIVATION (maintainer feedback, 2026-05-27):
+
+  During CAWS-ARCHIVE-AS-TOMBSTONE-001 authoring, the agent
+  invoked `caws specs create CAWS-ARCHIVE-AS-TOMBSTONE-001
+  --mode fix --risk-tier 2 --title "..."`. The CLI rejected with
+  the bare diagnostic:
+
+    caws specs create: failed.
+    [ERROR  ] store.lifecycle.plan_rejected: Tier 2 specs require
+    at least one contract.
+              subject: CAWS-ARCHIVE-AS-TOMBSTONE-001
+
+  No further guidance. The agent's path-of-least-resistance
+  response was to re-invoke with `--risk-tier 3` (incorrect — the
+  slice genuinely warranted tier 2 because it changed an event
+  schema and a CLI surface). The maintainer caught this in a
+  follow-up review and required a tier-2 amendment.
+
+  Repo doctrine (CLAUDE.md trap #3) already documents the
+  tier-2-requires-contracts rule, but the diagnostic itself does
+  not surface that doctrine when the rule fires. The fix is to
+  push the doctrine into the diagnostic so agents/operators don't
+  need to remember external context.
+
+  This is a quality-of-life fix, NOT a governance loosening. The
+  tier-2 requirement is correct; the diagnostic just needs to make
+  the right path (declare a contract) easier to find than the
+  wrong path (downgrade tier).
+
+  IMPLEMENTATION NOTES:
+
+    - The tier-mode validation likely happens during
+      parseAndValidateSpec (kernel) or during the spec.semantic.*
+      rule layer. The diagnostic enrichment can live in the shell
+      command's error renderer (specs.ts) rather than touching
+      the kernel — pattern-match on the rule name and append the
+      actionable hint.
+    - Alternatively, the kernel's diagnostic can carry a
+      `narrowRepair` field (already exists on Diagnostic) with
+      the contract-declaration syntax. Shell-side renderer just
+      surfaces narrowRepair when present.
+    - The `--help` text update is mechanical commander.option
+      description tweak.
+
+  COMPANION SPEC: CAWS-ARCHIVE-AS-TOMBSTONE-001 (the slice whose
+  authoring revealed this gap). Both can ship in any order;
+  neither blocks the other.
