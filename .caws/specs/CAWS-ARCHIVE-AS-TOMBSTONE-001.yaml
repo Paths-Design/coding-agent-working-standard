@@ -2,10 +2,10 @@ id: CAWS-ARCHIVE-AS-TOMBSTONE-001
 title: 'Archived specs are tombstones + git history, not authoritative file-tree surface'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: tombstone
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-27T20:03:15.092Z'
-updated_at: '2026-05-27T23:30:00.000Z'
+updated_at: '2026-05-27T21:41:12.366Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
