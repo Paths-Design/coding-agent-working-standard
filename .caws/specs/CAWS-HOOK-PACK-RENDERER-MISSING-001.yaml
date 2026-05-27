@@ -1,0 +1,153 @@
+id: CAWS-HOOK-PACK-RENDERER-MISSING-001
+title: 'ship session_log_renderer.py with v11 hook pack (fixes broken session-log.sh)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T05:40:03.559Z'
+updated_at: '2026-05-27T05:40:03.559Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code/session_log_renderer.py
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/templates/hook-packs/claude-code/session_log_renderer.py
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/init/hook-packs
+    - .caws/specs/CAWS-HOOK-PACK-RENDERER-MISSING-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-kernel
+invariants:
+  - >-
+    Every `caws init --agent-surface claude-code` invocation results in
+    `session-log.sh` being able to invoke its `RENDERER` dependency
+    successfully. The renderer file exists at the path
+    `session-log.sh:35` references (`$SCRIPT_DIR/session_log_renderer.py`)
+    after a fresh init.
+  - >-
+    The renderer in the pack is generic. Sterling-specific
+    `MEANINGFUL_COMMAND_KW` entries (`cargo test`, `cargo build`, `ruff`,
+    `mypy`) are removed OR moved behind a configuration mechanism that
+    defaults to empty. A vanilla caws-init'd project sees no
+    Sterling-toolchain keyword highlights in its session.txt output
+    unless it opts in.
+  - >-
+    The renderer is registered in `manifest-claude-code.ts:installedFiles[]`
+    with `managed: true` and `executable: false` (it's invoked via
+    `python3 <path>`, not as an executable). The pack version is bumped
+    from 5 to 6 to signal the new file to existing installs.
+acceptance:
+  - id: A1
+    given: |
+      a fresh git repo with no prior caws state
+    when: |
+      the user runs `caws init --agent-surface claude-code`
+    then: |
+      after init exits 0, `.claude/hooks/session_log_renderer.py` exists
+      AND `.claude/hooks/session-log.sh` exists; running
+      `python3 .claude/hooks/session_log_renderer.py --help` (or the
+      equivalent valid invocation per the renderer's CLI) exits 0
+      without ImportError or FileNotFoundError. Asserted via integration
+      test that runs init in a tmpdir and inspects the resulting
+      .claude/hooks/ contents.
+  - id: A2
+    given: |
+      the v11 pack post-fix
+    when: |
+      the user inspects the pack's session_log_renderer.py source
+    then: |
+      grep for Sterling-specific toolchain keywords (`cargo test`,
+      `cargo build`, `ruff check`, `mypy`) returns either zero hits
+      OR shows them inside a clearly-labeled
+      "consumer-customization" section that is empty by default. The
+      generic-base `MEANINGFUL_COMMAND_KW` set (`git`, `npm`, `pnpm`,
+      `caws`, `node`, etc.) is preserved.
+  - id: A3
+    given: |
+      an existing v11 install at pack version 5 (has session-log.sh
+      but no renderer)
+    when: |
+      the user re-runs `caws init --agent-surface claude-code`
+    then: |
+      the upgrade flow detects pack version 5 vs current 6, writes
+      the renderer into place, and the consumer's existing
+      session-log.sh now functions. No other pack files are
+      overwritten beyond what the version bump signals (the existing
+      managed_old_version → auto-update path is exercised, not the
+      collision-refusal path).
+  - id: A4
+    given: |
+      session-log.sh is invoked at Stop or PostToolUse with a real
+      Claude Code transcript file present
+    when: |
+      the renderer is called as session-log.sh expects
+    then: |
+      the renderer produces the four expected outputs (session.json,
+      turn-NNN.json, handoff.json, session.txt) under `tmp/<session-id>/`
+      without crashing. Asserted via integration test that feeds a
+      minimal-but-valid transcript fixture to the renderer.
+non_functional:
+  reliability:
+    - >-
+      The renderer must NOT crash on transcript shapes that differ from
+      Sterling's specific session profile. Generic robustness: a
+      transcript with zero tool calls, a transcript with only
+      ExitPlanMode, a transcript with a partially-corrupted JSONL line
+      — all should produce output (possibly with the corrupted line
+      flagged) rather than an unhandled exception.
+contracts: []
+closure_notes: |
+  DRAFT SPEC — implementation pending.
+
+  Discovered during the Sterling hook port-decision audit
+  (docs/reports/sterling_hook_port_audit_001.md, 2026-05-27): the
+  v11 hook pack ships `session-log.sh` which at line 35 declares
+  `RENDERER="$SCRIPT_DIR/session_log_renderer.py"` and at line 85+
+  invokes `python3 "$RENDERER" ...`. The file the path resolves to
+  does NOT exist in the pack at `packages/caws-cli/templates/hook-packs/claude-code/`.
+
+  Verified by direct `ls`:
+    /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli/templates/hook-packs/claude-code/session_log_renderer.py
+      -> No such file or directory
+    /Users/darianrosebrook/Desktop/Projects/sterling/.claude/hooks/session_log_renderer.py
+      -> exists, 33345 bytes
+
+  Implication: every fresh `caws init --agent-surface claude-code`
+  ships a `session-log.sh` that crashes when invoked because the
+  Python dependency it shells out to is missing. The bug has been
+  latent in v11.1.x because none of the existing tests exercise the
+  session-log.sh → renderer integration end-to-end.
+
+  Source-of-truth for the renderer: Sterling's
+  `.claude/hooks/session_log_renderer.py` (933 lines). Per the audit,
+  it has a small number of Sterling-specific toolchain keywords in
+  `MEANINGFUL_COMMAND_KW` (around lines 55-59: `cargo test`,
+  `cargo build`, `ruff`, `mypy`). These should be removed or moved
+  behind an empty-by-default consumer-customization block before
+  shipping in the pack.
+
+  Implementation steps:
+  1. Read Sterling's renderer in full.
+  2. Identify the genericization deltas (the MEANINGFUL_COMMAND_KW
+     Sterling-specific entries, plus any other Sterling-specific
+     paths in heuristic regexes).
+  3. Copy the file into
+     packages/caws-cli/templates/hook-packs/claude-code/session_log_renderer.py
+     with Sterling-specifics removed/genericized.
+  4. Add a manifest entry in src/init/hook-packs/manifest-claude-code.ts
+     under installedFiles[] — `managed: true, executable: false`.
+  5. Bump CLAUDE_CODE_PACK_VERSION from 5 to 6 with a comment block
+     explaining "Version 6: ships session_log_renderer.py to unbreak
+     session-log.sh which referenced but did not include it."
+  6. Add A1 integration test in tests/init/hook-packs/ asserting
+     fresh-init produces both files and the renderer is invocable.
+
+  This is a hotfix, not the broader hook-promotion work. Ship it
+  ahead of CAWS-HOOK-PACK-PROMOTE-001 because it unbreaks an
+  already-installed hook rather than adding new ones.
