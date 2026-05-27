@@ -1,13 +1,1 @@
-{
-  "merge-close-updated-at": {
-    "specId": "CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T21:18:30.487Z",
-    "branch": "merge-close-updated-at",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/merge-close-updated-at"
-  }
-}
+{}
