@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: tombstone
 created_at: '2026-05-27T20:03:15.092Z'
-updated_at: '2026-05-27T22:30:00.000Z'
+updated_at: '2026-05-27T22:35:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
@@ -38,7 +38,6 @@ scope:
     - packages/caws-kernel/src/worktree
     - packages/caws-kernel/src/scope
     - packages/caws-kernel/src/policy
-    - packages/caws-kernel/src/evidence
     - packages/caws-kernel/src/waiver
     - .gitignore
 invariants:
