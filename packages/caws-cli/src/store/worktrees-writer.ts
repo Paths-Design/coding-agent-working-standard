@@ -41,6 +41,7 @@ import {
 } from '@paths.design/caws-kernel';
 
 import { applyRegistryPatch } from './apply-patch';
+import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
 import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
 import { closeSpec } from './specs-writer';
 import { loadSpecs } from './specs-store';
@@ -129,6 +130,84 @@ function specPath(cawsDir: string, id: string): string {
 }
 function worktreePathFor(cawsDir: string, name: string): string {
   return path.join(cawsDir, 'worktrees', name);
+}
+function registryRelPath(cawsDir: string, repoRoot: string): string {
+  return path.relative(repoRoot, path.join(cawsDir, 'worktrees.json'));
+}
+function specRelPath(
+  cawsDir: string,
+  specId: string,
+  repoRoot: string
+): string {
+  return path.relative(repoRoot, specPath(cawsDir, specId));
+}
+
+// ─── Auto-commit helper ──────────────────────────────────────────────────
+//
+// CAWS-FIRST-CONTACT-UX-001 Fix 5: every successful worktrees-writer
+// lifecycle transaction commits its file changes as the final step.
+// The shared git-autocommit utility handles the three observable
+// states (committed / refused_dirty / skipped_no_git); this helper
+// computes the right inputs and never throws.
+//
+// Pre-write dirty state must be captured by the CALLER, before any
+// writer mutation lands. The utility cannot rederive it after the
+// fact.
+
+interface PreWriteState {
+  readonly registryWasDirty: boolean;
+  readonly specWasDirty: boolean;
+}
+
+function capturePreWriteState(
+  cawsDir: string,
+  specId: string | null
+): PreWriteState {
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const registryPath = registryRelPath(cawsDir, repoRoot);
+  return {
+    registryWasDirty: isPathDirty(repoRoot, registryPath),
+    specWasDirty:
+      specId === null
+        ? false
+        : isPathDirty(repoRoot, specRelPath(cawsDir, specId, repoRoot)),
+  };
+}
+
+function autoCommitTransition(
+  cawsDir: string,
+  specId: string | null,
+  name: string,
+  action: 'created' | 'bound' | 'destroyed' | 'merged',
+  preState: PreWriteState
+): AutoCommitOutcome {
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const registryPath = registryRelPath(cawsDir, repoRoot);
+  const paths: string[] = [registryPath];
+  if (specId !== null) {
+    paths.push(specRelPath(cawsDir, specId, repoRoot));
+  }
+  const verbForAction: Record<typeof action, string> = {
+    created: 'bind',
+    bound: 'bind',
+    destroyed: 'destroy',
+    merged: 'close',
+  };
+  const verb = verbForAction[action];
+  const specSuffix =
+    specId !== null && (action === 'created' || action === 'bound')
+      ? ` to ${specId}`
+      : '';
+  const message =
+    action === 'merged' && specId !== null
+      ? `chore(caws): close ${specId} post-merge of ${name}`
+      : `chore(caws): ${verb} ${name}${specSuffix}`;
+  return autoCommit({
+    repoRoot,
+    paths,
+    message,
+    wasDirtyBeforeWrite: preState.registryWasDirty || preState.specWasDirty,
+  });
 }
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
@@ -294,6 +373,12 @@ export function createWorktree(
   input: CreateWorktreeInput
 ): Result<WorktreeWriterOutcome> {
   // ─ Pre-flight validation (no git, no file writes) ─
+
+  // CAWS-FIRST-CONTACT-UX-001 Fix 5: capture dirty state BEFORE any
+  // writer mutation lands, so the auto-commit step can distinguish
+  // "writer made the only change" from "writer's change on top of
+  // someone else's uncommitted change".
+  const preState = capturePreWriteState(cawsDir, input.specId);
 
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
@@ -492,11 +577,24 @@ export function createWorktree(
       cause: txnOutcome.value.cause,
     });
   }
+  const autoCommitOutcome = autoCommitTransition(
+    cawsDir,
+    input.specId,
+    input.name,
+    'created',
+    preState
+  );
   return ok({
     kind: 'success',
     name: input.name,
     action: 'created',
-    data: { branch, base_branch: baseBranch, path: wtPath, spec_id: input.specId },
+    data: {
+      branch,
+      base_branch: baseBranch,
+      path: wtPath,
+      spec_id: input.specId,
+      audit_commit: autoCommitOutcome,
+    },
   });
 }
 
@@ -552,6 +650,9 @@ export function bindWorktreeRepair(
   cawsDir: string,
   input: BindWorktreeInput
 ): Result<WorktreeWriterOutcome> {
+  // CAWS-FIRST-CONTACT-UX-001 Fix 5: capture dirty state for autocommit.
+  const preState = capturePreWriteState(cawsDir, input.specId);
+
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
   const specValidation = validateSpecId(input.specId);
@@ -620,7 +721,19 @@ export function bindWorktreeRepair(
   if (txnOutcome.value.kind !== 'success') {
     return ok({ kind: 'partial_failure_recovered', cause: txnOutcome.value.cause });
   }
-  return ok({ kind: 'success', name: input.name, action: 'bound' });
+  const autoCommitOutcome = autoCommitTransition(
+    cawsDir,
+    input.specId,
+    input.name,
+    'bound',
+    preState
+  );
+  return ok({
+    kind: 'success',
+    name: input.name,
+    action: 'bound',
+    data: { audit_commit: autoCommitOutcome },
+  });
 }
 
 // ─── destroyWorktree ─────────────────────────────────────────────────────
@@ -635,6 +748,12 @@ export function destroyWorktree(
   const registry = loadWorktrees(cawsDir);
   if (!isOk(registry)) return err(registry.errors);
   const entry = registry.value[input.name];
+  // CAWS-FIRST-CONTACT-UX-001 Fix 5: capture pre-write state once we
+  // know the bound spec (entry may have no specId for legacy entries).
+  const preStateSpecId: string | null =
+    entry !== undefined && entry.specId !== undefined ? entry.specId : null;
+  const preState = capturePreWriteState(cawsDir, preStateSpecId);
+
   if (entry === undefined) {
     return err(
       storeDiagnostic(
@@ -752,11 +871,21 @@ export function destroyWorktree(
   if (txnOutcome.value.kind !== 'success') {
     return ok({ kind: 'partial_failure_recovered', cause: txnOutcome.value.cause });
   }
+  const autoCommitOutcome = autoCommitTransition(
+    cawsDir,
+    preStateSpecId,
+    input.name,
+    'destroyed',
+    preState
+  );
   return ok({
     kind: 'success',
     name: input.name,
     action: 'destroyed',
-    data: { removed_git_worktree: removedGitWorktree },
+    data: {
+      removed_git_worktree: removedGitWorktree,
+      audit_commit: autoCommitOutcome,
+    },
   });
 }
 
@@ -772,6 +901,12 @@ export function mergeWorktree(
   const registry = loadWorktrees(cawsDir);
   if (!isOk(registry)) return err(registry.errors);
   const entry = registry.value[input.name];
+  // CAWS-FIRST-CONTACT-UX-001 Fix 5: capture pre-write state for the
+  // post-merge auto-commit step.
+  const preStateSpecId: string | null =
+    entry !== undefined && entry.specId !== undefined ? entry.specId : null;
+  const preState = capturePreWriteState(cawsDir, preStateSpecId);
+
   if (entry === undefined) {
     return err(
       storeDiagnostic(
@@ -1005,11 +1140,23 @@ export function mergeWorktree(
     );
   }
 
+  const autoCommitOutcome = autoCommitTransition(
+    cawsDir,
+    preStateSpecId,
+    input.name,
+    'merged',
+    preState
+  );
   return ok({
     kind: 'success',
     name: input.name,
     action: 'merged',
-    data: { merge_commit: mergeCommit, spec_id: specId, auto_closed_spec: true },
+    data: {
+      merge_commit: mergeCommit,
+      spec_id: specId,
+      auto_closed_spec: true,
+      audit_commit: autoCommitOutcome,
+    },
   });
 }
 
