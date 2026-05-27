@@ -1,1 +1,13 @@
-{}
+{
+  "migrate-v10-specs": {
+    "specId": "CAWS-MIGRATE-V10-SPECS-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T02:29:29.599Z",
+    "branch": "migrate-v10-specs",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
+  }
+}
