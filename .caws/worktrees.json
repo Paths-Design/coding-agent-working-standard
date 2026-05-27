@@ -1,15 +1,4 @@
 {
-  "destroy-session-resolution": {
-    "specId": "CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T17:23:49.502Z",
-    "branch": "destroy-session-resolution",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/destroy-session-resolution"
-  },
   "gates-run-corrupt-chain": {
     "specId": "CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001",
     "owner": {
