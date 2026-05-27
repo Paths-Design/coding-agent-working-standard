@@ -2,10 +2,11 @@ id: CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001
 title: 'caws specs close defaults --resolution to completed'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-close-default-resolution
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-close-default-resolution at 1be4b58b49535102dd9814bcc0410ce1976636e8'
 created_at: '2026-05-27T19:19:07.281Z'
-updated_at: '2026-05-27T19:19:07.281Z'
+updated_at: '2026-05-27T19:25:53.431Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/register.ts
