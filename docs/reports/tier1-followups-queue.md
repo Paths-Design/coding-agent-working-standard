@@ -121,6 +121,33 @@ Option A is the narrowest (closes the loop without changing kernel semantics) an
 
 **Evidence:** sibling-session reproduction, 2026-05-27. The composed merge succeeded on the git side (commit landed) but the spec remained `lifecycle_state: active` until manual `updated_at` restoration unblocked the close.
 
+### 8. CAWS-MIGRATOR-V10-ARCHIVE-RESIDUAL-001 (P2 — out-of-scope migrator gaps from active-spec slice)
+
+**Scope:** Archived v10 specs (typically under `.caws/specs/.archive/`) expose non-active historical schema classes that are NOT covered by `CAWS-MIGRATE-V10-SPECS-001` (which targets the active migration surface only).
+
+**Surfaced during:** CAWS-MIGRATE-V10-SPECS-001 commit 7.1 exploratory stress test against Sterling's `.caws/specs/.archive/` (554 archived v10 specs). The active corpus migrator scope is `.caws/specs/`; an exploratory copy of the archive into the active surface produced `distribution: { migrated_with_warnings: 361, refused: 191, post_write_validation_failed: 361, total: 552 }` after the 7.1 fix.
+
+**Residual classes (each needs separate triage — DO NOT bundle):**
+
+- **A.** Additional top-level unknown / report-only candidates beyond the 14 commit-7 names: `problem_statement`, `non_claims`, plus the full classified long tail (9401 `spec.schema.violation` hits across many distinct names).
+- **B.** `invariants[]` element shape: v10 ships objects, v11 expects strings. Normalize or refuse.
+- **C.** `acceptance[]` / `acceptance_criteria[]` element shape: after the safe rename, individual elements still don't match v11's expected object shape.
+- **D.** `non_functional/<subkey>` value types: v10 ships scalars where v11 expects arrays.
+- **E.** `closure_notes` type: v10 ships non-string values where v11 expects string.
+- **F.** `forbidden_field.status` (579 hits): the `status → lifecycle_state` safe_rename runs, but the `status` source key survives in output and trips `spec.schema.forbidden_field.status`. Likely a rename-cleanup gap.
+- **G.** `scope.out` `**` glob handling (27 hits): v10 specs commonly use `**` globs in `scope.out`; v11 refuses them per `spec.schema.scope.out_glob_forbidden` (CLAUDE.md trap #2).
+- **H.** `id.pattern_violation` (10 hits): some v10 spec ids don't match v11's id pattern.
+
+**Explicit non-goals:**
+
+- Do NOT broaden the migrator's allowlist to "allow all unknown fields." The 7.1 directive on uncontrolled allowlist creep applies here too.
+- Do NOT use archive behavior to block active-spec migrator closure. The active-spec migrator's contract is `.caws/specs/` (live state); archives are a separate migration regime (long-tail schema repair).
+- Do NOT bundle these classes into a single mega-spec. Each class should be its own narrow slice (or a separate `caws specs migrate --from v10-archive` surface with its own scope).
+
+**Why this is in the queue (not active):** the active-spec migrator (`CAWS-MIGRATE-V10-SPECS-001`) is bounded and closeable on its own evidence. The archive migration is a different problem class — historical-document schema repair vs active-spec lifecycle migration — and conflating them turned 7.1 into a near-unbounded scope drift candidate. Filing here preserves the finding without contaminating the active slice's closure.
+
+**Evidence:** exploratory stress test, 2026-05-27, against `/Users/darianrosebrook/Desktop/Projects/sterling/.caws/specs/.archive/` (554 v10 specs). Sample failing fixture `ADR-0010A-STOREB-REACH-01.yaml` exhibits classes A, B, C, D, E in a single file.
+
 ## Tier 2 (defer until Tier 1 closes)
 
 5. `caws waiver migrate --from v10` — Sterling hand-wrote a custom Node script for this. No spec exists. Sibling to the in-flight specs migrator; should reuse `detectSpecVersion` pattern. Sterling Issue 6 + Issue 14 (waiver-vs-policy mismatch unmasked by migration).
