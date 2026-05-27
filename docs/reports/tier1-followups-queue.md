@@ -104,6 +104,23 @@ And ensure `runSpecsCloseCommand`'s existing `VALID_RESOLUTIONS` enum check stil
 
 **Adjacent UX gap (out of scope for this fix, but worth flagging):** when `caws worktree merge` hits `partial_failure_unrecovered`, the merge commit is on disk but the spec is still `active`. The error data names the recovery command. The agent should be able to inspect the spec's actual state with `caws specs show <id>` to confirm the lifecycle_state remains active before re-running close. Documenting this in the merge error output (one extra line: "spec lifecycle_state remains 'active'; re-run with: caws specs close ...") would close the loop.
 
+### 7. CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001 (P1 — composed-path silent failure)
+
+**Symptom:** `caws worktree merge <name>` succeeds on the merge commit but the composed `mergeWorktree → closeSpec` step fails with `store.lifecycle.partial_failure_unrecovered`. Diagnosis from the failing operator: the bound spec lacked `updated_at`. After restoring the timestamp manually, `caws specs close` worked.
+
+**Root cause (provisional, needs source confirmation):** `closeSpec` (`packages/caws-cli/src/store/specs-writer.ts`) patches the spec YAML and re-validates via `parseAndValidateSpec`. The kernel's spec schema may require `updated_at` (or the close patch may set it conditionally and fail when missing). Either way, the composed path doesn't surface "spec lacks updated_at; close needs it" — it just hits `partial_failure_unrecovered` with a generic message.
+
+**Fix shape (provisional):** one of
+- **Option A:** `closeSpec` defaults `updated_at = now.toISOString()` when the spec lacks it, before re-validating.
+- **Option B:** `mergeWorktree` checks the spec for `updated_at` before invoking close; surfaces a precise "set updated_at on the spec before merging" diagnostic.
+- **Option C:** Kernel `parseAndValidateSpec` treats missing `updated_at` as a soft warning, not a hard error, for already-active specs.
+
+Option A is the narrowest (closes the loop without changing kernel semantics) and matches the operator's manual fix (set `updated_at` then close works). Option B is most explanatory but doesn't repair the failure. Option C changes kernel authority and is wrong.
+
+**Why this is in the queue:** it's a tooling quirk that turns a composed lifecycle command into a partial-failure rabbit hole. Operators end up hand-editing spec YAMLs to satisfy a validator that the composed path should have satisfied automatically. Adjacent to #6 (caws-specs-close-default-resolution): both surface the same class — `caws specs close` and the composed merge path have implicit preconditions that aren't documented in the recovery diagnostic.
+
+**Evidence:** sibling-session reproduction, 2026-05-27. The composed merge succeeded on the git side (commit landed) but the spec remained `lifecycle_state: active` until manual `updated_at` restoration unblocked the close.
+
 ## Tier 2 (defer until Tier 1 closes)
 
 5. `caws waiver migrate --from v10` — Sterling hand-wrote a custom Node script for this. No spec exists. Sibling to the in-flight specs migrator; should reuse `detectSpecVersion` pattern. Sterling Issue 6 + Issue 14 (waiver-vs-policy mismatch unmasked by migration).
