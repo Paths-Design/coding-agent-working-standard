@@ -525,9 +525,32 @@ export function closeSpec(
     }
   }
 
-  const step4 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
-  if (!step4.ok) return err(step4.errors);
-  patched = step4.value;
+  // CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001: insert-or-update fallback
+  // for updated_at. Legacy / v10-migrated / hand-authored specs may lack
+  // this optional field (it's not in spec.v1.json required[]). Without
+  // the fallback, setTopLevelScalar returns YAML_PATCH_KEY_NOT_FOUND
+  // here and the close transaction rolls back; the composed
+  // mergeWorktree → closeSpec path then reports
+  // partial_failure_unrecovered with the underlying patch-key error
+  // buried in close_errors. Mirror the has*-check +
+  // insertTopLevelScalarAfter pattern used for resolution and
+  // closure_notes above. Inline rather than extracted to a helper per
+  // the spec's out-of-scope note (the parallel pattern is intentional;
+  // helper extraction is a hygiene concern, not a closure blocker).
+  const hasUpdatedAt = /^updated_at:/m.test(patched);
+  if (hasUpdatedAt) {
+    const step4 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!step4.ok) return err(step4.errors);
+    patched = step4.value;
+  } else {
+    // Anchor preference: after created_at (natural timestamp pairing)
+    // when present, otherwise after lifecycle_state. createSpec always
+    // writes created_at so this fallback fires only for legacy specs.
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const step4 = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!step4.ok) return err(step4.errors);
+    patched = step4.value;
+  }
 
   // Step 5 (WORKTREE-MERGE-CLEARS-SPEC-BINDING-001):
   // Clear any top-level `worktree:` binding. A closed spec cannot have
@@ -688,6 +711,15 @@ export function archiveSpec(
   //
   // void input.reason: archive accepts --reason for parity with
   // close but the spec_archived schema does not carry it.
+  //
+  // CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001 reconciliation: the
+  // archiveSpec absent-`updated_at` patch from this slice was
+  // superseded by CAWS-ARCHIVE-AS-TOMBSTONE-001 (merge 2a4cc30).
+  // Tombstone eliminates archiveSpec's YAML patch step entirely —
+  // there is no `updated_at` to insert into a body that no longer
+  // gets written. The closeSpec absent-`updated_at` fix at line ~540
+  // remains in force; the archiveSpec branch is now dead code in
+  // tombstone-world and has been removed from this slice on merge.
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const fromRel = path.relative(repoRoot, fromPath);
