@@ -1009,3 +1009,54 @@ The right resolution depends on whether v10 entries are evidentiarily load-beari
 ### Single-line synthesis
 
 **Entry 20 was a silent migration-compatibility failure: a writer-side event rename (v10 `validation_completed` → v11 `spec_validated`) was not paired with a read-side compatibility alias, so every v10-migrant repo's event-appending lifecycle commands failed during the full-log re-read step that lifecycle-transaction does before computing the next chain hash. The failure was made invisible by the wrapper outcome `partial_failure_recovered`, which sounds benign but actually means "the substrate cannot be read anymore." The fix is a narrow read-only compat alias in `validateChainedEvent` — the v10 envelope shape is admitted under one specific event name, the parsed event is returned verbatim (preserving the v10-writer-computed hash), and new writes still emit only canonical v11. The deeper invariant: any vocabulary rename in an append-only log substrate MUST ship a read-side compatibility alias paired with the rename, not as a follow-up — otherwise the first lifecycle operation under the new version stops being possible on every existing-data repo.**
+
+---
+
+## Entry 21: We Mistook Visible Feature Surface for Governance Semantics (May 2026)
+
+**Severity:** High (rewrite false confidence; documentation/runtime drift; repeated late discovery of safety properties)
+**Era:** v10.2 to v11.1 rewrite and cutover
+**Surface that failed:** CAWS doctrine, docs, templates, command vocabulary, and runtime reachability as a single migration substrate
+**Agent class involved:** early agentic development sessions operating under documentation that was often more coherent than the implementation
+
+### What happened
+
+During the v11 rewrite, CAWS looked easier to replace than it actually was. From the outside it presented as a CLI around specs, gates, evidence, worktrees, hooks, and docs. The public command surface made the project look like a product architecture: create a spec, run gates, record evidence, manage worktrees, close the loop.
+
+That visible surface created false confidence. The real system was not just a command list; it was a pile of hard-won governance semantics accreted around prior agent failures. Every guard existed because something broke. Many important meanings lived outside the clean vNext kernel boundary: in legacy lifecycle commands, hooks, templates, stale docs, migration paths, event names, worktree registry assumptions, and user habits.
+
+The rewrite succeeded at creating a cleaner kernel/store/shell substrate, but the larger job was semantic migration. We needed to preserve every authority boundary, failure diagnostic, safety guard, evidence rule, lifecycle transition, and operational habit while replacing the substrate underneath it. vNext initially delivered architecture-completion confidence before it had behavioral-equivalence confidence.
+
+### The five misreads
+
+**1. We overestimated kernel separability.** The kernel/store/shell substrate was real, but spec lifecycle and worktree lifecycle were initially left on legacy paths or deferred. In CAWS those are not accessory commands. They are where authority, attribution, closure, and mutation actually occur. A clean kernel without complete lifecycle semantics is an engine block, not a drivable vehicle.
+
+**2. We treated old commands as replaceable UI when they were state-transition law.** Removing or deferring commands such as `validate`, `verify-acs`, `provenance`, `hooks`, `parallel`, `session`, and parts of `specs`/`worktree` was not merely command-surface pruning. Those commands encoded assumptions about `.caws/specs`, `working-spec.yaml`, `worktrees.json`, legacy provenance, hooks, ownership, and closure. The vNext removal taxonomy became an X-ray of the old system's hidden law.
+
+**3. We underestimated semantic sediment.** CAWS carried multiple generations of truth: project-level `working-spec.yaml` versus per-feature specs, legacy provenance versus `events.jsonl`, union-mode scope versus authoritative binding, CLI hooks versus kernel/store authority, template behavior versus hardened in-repo behavior. These were not only stale files. They were competing answers to "what is authoritative?"
+
+**4. We confused "guard exists" with "invariant exists."** Guards against destructive git operations, shadow files, stubs, scope leaks, stale spec closure, worktree ownership violations, and baseline clobbering existed across shell scripts, templates, docs, and conventions. They were not all unified under one admission surface. Rewriting CAWS meant translating procedural scar tissue into actual invariants, which is harder than copying behavior.
+
+**5. We believed the docs more than the reachability graph.** Some docs, help text, templates, and public exports advertised commands or workflows that were removed, deferred, or still legacy-backed. Audits found stale removed-command references, duplicate event writers, lingering `working-spec.yaml` paths, packaging gaps, and runtime fallbacks. Each one proved that the apparent command surface and the actual runtime surface were not aligned.
+
+### What we built or changed because of it
+
+| Response | Mechanism |
+|---|---|
+| v11.1 command-surface doctrine | `docs/architecture/caws-vnext-command-surface.md` became the source of truth when agent-facing docs disagree. |
+| Removed-command hygiene | Tarball/source scans and doctrine updates block stale invocations of removed commands from shipped docs/templates. |
+| Lifecycle restoration | `caws specs create/list/show/close/archive` and `caws worktree create/list/bind/destroy/merge/repair-sparse/migrate-registry` re-established lifecycle surfaces instead of treating lifecycle as peripheral. |
+| Read-side migration compatibility | Entry 20's event-name alias records the rule: append-only vocabulary renames need compatibility on read, not only new writers. |
+| Scope authority hardening | Authoritative binding replaced union-mode interference for bound worktrees, while unbound worktrees fail closed for governed paths. |
+| Visibility substrate | Entry 19's lease/agents/status work made concurrent agent presence legible before enforcement decisions. |
+
+### What it doesn't catch
+
+- A clean doctrine doc can still drift if the implementation changes without a paired runtime or packaging check.
+- Migration compatibility remains event-by-event and surface-by-surface unless every old runtime vocabulary is enumerated and tested.
+- A docs-only assertion of an invariant is not sufficient; the invariant needs an admission point, a diagnostic, and a regression test.
+- Behavioral equivalence is broader than command parity. It includes failure wording, partial-state handling, stale-data behavior, ownership semantics, and user recovery paths.
+
+### Single-line synthesis
+
+**Entry 21 was a category error in the rewrite plan: CAWS looked rewritable because the visible CLI surface was legible, but the system's real value was accumulated negative knowledge encoded unevenly across commands, hooks, docs, templates, event logs, and worktree habits. The v11 substrate gave us architecture-completion confidence before behavioral-equivalence confidence. The deeper invariant: governance software cannot be rewritten as a feature map; it has to be migrated as a set of preserved safety semantics, with docs treated as claims that must be proven against the reachable implementation.**
