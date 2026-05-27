@@ -8,10 +8,20 @@
 export { SHELL_RULES, SHELL_RULE_PREFIXES } from './rules';
 export type { ShellRule } from './rules';
 
-export { resolveSession, describeSessionSource } from './session/resolve-session';
+export {
+  resolveSession,
+  describeSessionSource,
+  resolveSessionCandidates,
+  admitsOwner,
+  describeCandidateTrace,
+} from './session/resolve-session';
 export type {
+  CandidateTraceEntry,
+  ResolveCandidatesOptions,
   ResolveSessionOptions,
   ResolvedSession,
+  SessionCandidate,
+  SessionCandidates,
   SessionCapsule,
   SessionSource,
 } from './session/types';

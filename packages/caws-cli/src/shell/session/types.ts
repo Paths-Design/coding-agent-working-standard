@@ -39,6 +39,85 @@ export interface SessionCapsule {
   readonly worktree_root: string;
 }
 
+/**
+ * One candidate identity returned by resolveSessionCandidates.
+ *
+ * Tagged with the source that produced it so the caller can render
+ * a diagnostic trace ("we admitted because env source X matched
+ * registry owner Y").
+ */
+export interface SessionCandidate {
+  readonly identity: SessionIdentity;
+  readonly source: SessionSource;
+  /** Capsule on-disk path when source is 'capsule'; undefined for env sources. */
+  readonly capsulePath?: string;
+}
+
+/**
+ * Result of resolveSessionCandidates — the full set of session identities
+ * the current process can plausibly speak for.
+ *
+ * Authority semantics (ownership-comparison surfaces only):
+ *
+ *   resolveSession() picks ONE identity in priority order (and may mint
+ *   one when allowMint is set). It is the right helper for surfaces that
+ *   need to STAMP an identity onto a new record (worktree create, claim,
+ *   evidence, gates) — there is exactly one author of any given record.
+ *
+ *   resolveSessionCandidates() returns ZERO OR MORE identities, NEVER
+ *   mints, and is the right helper for ownership-comparison surfaces
+ *   (worktree destroy, merge) that need to answer "is the agent invoking
+ *   this command speaking for the registered owner?" The comparison
+ *   admits if ANY candidate matches the registered owner's session_id.
+ *
+ * The split exists because resolveSession()'s cwd-keyed capsule lookup
+ * is correct for identity stamping (the act of writing identifies you
+ * with a specific worktree_root) but wrong for ownership comparison
+ * across cwds (an agent that claimed inside a worktree may legitimately
+ * destroy from the canonical checkout, and the cwd-keyed lookup would
+ * synthesize a fresh identity that doesn't match the registry owner).
+ *
+ * See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 for the failure mode
+ * and CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 for the prior fix that
+ * narrowed but did not eliminate the comparison-side gap.
+ */
+export interface SessionCandidates {
+  /** Ordered candidates. Empty when no source resolved an identity. */
+  readonly candidates: ReadonlyArray<SessionCandidate>;
+  /**
+   * Diagnostic-grade record of every source consulted and what it
+   * returned. Renderers should surface this when admission fails so the
+   * user can see EXACTLY which sources were tried and why none matched.
+   * The trace exists to satisfy the spec's non_functional.reliability
+   * invariant against silent fallbacks.
+   */
+  readonly trace: ReadonlyArray<CandidateTraceEntry>;
+}
+
+export interface CandidateTraceEntry {
+  readonly source: SessionSource;
+  /**
+   *   - 'admitted': the source produced one or more identities (counted
+   *     individually in `candidates`).
+   *   - 'absent': the source was consulted but produced nothing
+   *     (env var unset, capsule directory empty, etc.).
+   *   - 'rejected': the source produced raw data that was refused for a
+   *     specific reason (e.g. HOOK_SESSION_ID = 'unknown', malformed
+   *     capsule file). The `reason` field is populated.
+   */
+  readonly outcome: 'admitted' | 'absent' | 'rejected';
+  readonly reason?: string;
+  /** Number of identities admitted from this source (0 unless outcome === 'admitted'). */
+  readonly count?: number;
+}
+
+export interface ResolveCandidatesOptions {
+  /** Injected environment. Defaults to `process.env`. */
+  readonly env?: NodeJS.ProcessEnv;
+  /** Injected `cawsDir` (the directory containing `sessions/`). Required. */
+  readonly cawsDir: string;
+}
+
 export interface ResolveSessionOptions {
   /**
    * `false` (default): read-only resolution — never mints a capsule. If no
