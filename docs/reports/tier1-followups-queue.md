@@ -67,6 +67,43 @@ Also fold in:
 
 Single docs slice. Cheap. Could bundle with item 1 if the slice author wants.
 
+### 5. CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 (P0 — Sterling-recurring)
+
+**Symptom:** every `caws worktree merge` after a Claude Code session restart refuses with `OWNED (foreign) — caws-<prior-hex>`, even when the same human user is operating. Sterling has been forced into repeated `caws claim --takeover` cycles within a single agent session.
+
+**Root cause (from diagnosis 2026-05-26):** `packages/caws-cli/src/shell/session/resolve-session.ts` minted-capsule path runs whenever `CLAUDE_SESSION_ID` is not set in `process.env`. Claude Code provides the stable session id as `HOOK_SESSION_ID` in the hook envelope JSON (consumed by `parse-input.sh`), but does NOT export it into child-process env. So every CLI invocation outside a hook context misses priority 1 of `resolveSession` and falls through to capsule-or-mint. A second compounding bug: `readCapsule` iterates `.caws/sessions/*.json` and returns the first whose `worktree_root` matches, but does NOT delete superseded capsules. After a restart, multiple capsules may match the same worktree, and which one wins is non-deterministic by filesystem order.
+
+**Fix shape (two surgical options, either standalone):**
+- **Option A (harness-side, one line per hook):** in `agent-register.sh` / `agent-heartbeat.sh` / any hook that may spawn a `caws` invocation, add `export CLAUDE_SESSION_ID="$HOOK_SESSION_ID"` before the CLI call. This makes priority 1 of `resolveSession` hit consistently for every hook-triggered CAWS command.
+- **Option B (store-side, capsule cleanup):** in `resolve-session.ts` mint path, before writing the new capsule, scan `.caws/sessions/` and delete any pre-existing capsule whose `worktree_root` matches. Guarantees per-worktree-root capsule uniqueness; restart cleanly supersedes prior mint.
+
+Recommendation: ship both. Option A fixes the hook-context path; Option B fixes the human-shell path. Together they eliminate drift across both invocation paths.
+
+**Authority discipline:** this is a substrate change, not an enforcement relaxation. The `worktrees.json:owner.session_id` field remains authoritative; `--takeover` semantics remain unchanged. The fix changes which id is RESOLVED, not how ownership is COMPARED.
+
+### 6. CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001 (P1 — Sterling-recurring)
+
+**Symptom:** `caws specs close <id> --reason "..."` errors with `error: required option '--resolution <r>' not specified` before any business logic runs. The recovery instruction emitted by `caws worktree merge` after a `partial_failure_unrecovered` (e.g., `caws specs close <id> --resolution completed --merge-commit ...`) includes `--resolution`, but agents that read only the error or attempt the close manually with `--reason` fail twice.
+
+**Root cause (from diagnosis 2026-05-26):** `packages/caws-cli/src/shell/register.ts` line 613 registers `--resolution` as Commander `.requiredOption` with no default. The composed `caws worktree merge → closeSpec` path hardcodes `resolution: 'completed'` (`worktrees-writer.ts` ~line 1024) and is unaffected. The defect is purely shell-UX: manual close calls have no default.
+
+**Fix shape (one line):**
+```ts
+// register.ts ~line 613
+.option(
+  '--resolution <r>',
+  'Resolution: completed | superseded | abandoned (default: completed)',
+  'completed'
+)
+```
+And ensure `runSpecsCloseCommand`'s existing `VALID_RESOLUTIONS` enum check still runs against the default.
+
+**Why "completed" is the safe default:** the vast majority of spec closes are completion-of-work. `superseded` and `abandoned` are explicit operator decisions that should be opted into. Defaulting to `completed` matches the merge-path behavior.
+
+**Kernel-side:** no change. The `CLOSED_SPEC_MISSING_RESOLUTION` semantic gate (`packages/caws-kernel/src/spec/rules.ts`) is correct — kernel still enforces resolution must be present. The fix changes what value the shell SUPPLIES when the operator doesn't, not what the kernel ACCEPTS.
+
+**Adjacent UX gap (out of scope for this fix, but worth flagging):** when `caws worktree merge` hits `partial_failure_unrecovered`, the merge commit is on disk but the spec is still `active`. The error data names the recovery command. The agent should be able to inspect the spec's actual state with `caws specs show <id>` to confirm the lifecycle_state remains active before re-running close. Documenting this in the merge error output (one extra line: "spec lifecycle_state remains 'active'; re-run with: caws specs close ...") would close the loop.
+
 ## Tier 2 (defer until Tier 1 closes)
 
 5. `caws waiver migrate --from v10` — Sterling hand-wrote a custom Node script for this. No spec exists. Sibling to the in-flight specs migrator; should reuse `detectSpecVersion` pattern. Sterling Issue 6 + Issue 14 (waiver-vs-policy mismatch unmasked by migration).
