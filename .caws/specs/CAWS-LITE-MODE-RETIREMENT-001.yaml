@@ -4,7 +4,7 @@ risk_tier: 3
 mode: refactor
 lifecycle_state: active
 created_at: '2026-05-27T04:46:16.996Z'
-updated_at: '2026-05-27T04:46:16.996Z'
+updated_at: '2026-05-27T05:15:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/commands/init.js
@@ -17,6 +17,7 @@ blast_radius:
     - packages/caws-cli/templates/hook-packs/claude-code
     - packages/caws-cli/tests/integration/lite-hooks.test.js
     - packages/caws-cli/tests/lite-scope.test.js
+    - packages/caws-cli/tests/axe/cli-accessibility.test.js
     - docs/migration-v10-to-v11.md
   data_migration: true
 operational_rollback_slo: 30m
@@ -114,6 +115,27 @@ acceptance:
       (d) what to do with .caws/scope.json (assess case-by-case —
       Sterling currently uses it for v10-era scope hints; v11 derives
       scope from spec.in directly).
+  - id: A6
+    given: |
+      tests/axe/cli-accessibility.test.js contains assertions that
+      `caws init` (with no project-name argument) emits "Project name
+      is required" + "Usage:" error messages. These are v10 contract
+      assertions; the v11 `caws init` does not take a project-name
+      argument (it bootstraps in cwd) and so cannot produce those
+      error strings. The assertions fail on the v11 surface for the
+      same v10-test-on-v11-CLI reason as lite-hooks.test.js
+    when: |
+      the lite/v10-surface retirement is complete
+    then: |
+      either (a) the v10 contract assertions in
+      tests/axe/cli-accessibility.test.js are deleted (the underlying
+      "argument-missing error message" surface no longer exists), OR
+      (b) the assertions are rewritten against a real v11 error path
+      (e.g. `caws specs create` without --title emits a usage-style
+      diagnostic; that assertion would be honest about what v11
+      actually produces). The implementing agent picks based on
+      whether the accessibility contract is still valuable on a
+      different v11 entrypoint. Two test failures resolve either way.
 non_functional:
   reliability:
     - >-
@@ -143,6 +165,20 @@ closure_notes: |
     no .caws/mode.json. full-stack-ds has neither. The retirement
     surface is narrow on these two consumers but unknown for any
     project that adopted v10 lite mode at scale.
+
+  Concrete evidence backing A6 (added 2026-05-27 in
+  CAWS-FIRST-CONTACT-UX-001 closure verification): the post-merge
+  full jest run for CAWS-FIRST-CONTACT-UX-001 surfaced two failing
+  tests in tests/axe/cli-accessibility.test.js — "should provide
+  clear and helpful error messages" and "should handle invalid
+  project names accessibly". Both assert v10 contract: that
+  `caws init` (with no project-name argument) emits "Project name
+  is required" + "Usage:" strings. v11's `caws init` does not take
+  a project-name argument (bootstraps in cwd), so it cannot produce
+  those strings. The test received a v11 init success block instead
+  of the expected error. Same v10-test-on-v11-CLI class as the
+  lite-hooks failures. Retirement of these assertions falls under
+  this spec; they are not regressions from CAWS-FIRST-CONTACT-UX-001.
 
   Investigation steps for the implementing agent:
   - audit `.caws/mode.json` and `.caws/scope.json` reads across the
