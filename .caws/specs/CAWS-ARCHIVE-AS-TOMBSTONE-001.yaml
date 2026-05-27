@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: tombstone
 created_at: '2026-05-27T20:03:15.092Z'
-updated_at: '2026-05-27T20:35:00.000Z'
+updated_at: '2026-05-27T22:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
@@ -23,6 +23,9 @@ scope:
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/index.ts
     - packages/caws-kernel/src/schemas/events/spec_archived.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_archive_pruned.v1.json
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/evidence/types.ts
     - packages/caws-kernel/src/doctor
     - packages/caws-cli/tests/store
     - packages/caws-cli/tests/shell
