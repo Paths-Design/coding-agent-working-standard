@@ -459,6 +459,13 @@ public
 .caws/agents.json
 **/.caws/agents.json
 
+# MULTI-AGENT-ACTIVITY-REGISTRY-001: per-session lease cache written
+# by agent-register/heartbeat/stop.sh hooks. Operational cache only —
+# NEVER authority (per .claude/hooks/CLAUDE.md). Pruned via
+# `caws agents prune`.
+.caws/leases/
+**/.caws/leases/
+
 # EVLOG-001: append-only event log — runtime, not versioned
 **/.caws/events.jsonl
 **/.caws/events.jsonl.lock
