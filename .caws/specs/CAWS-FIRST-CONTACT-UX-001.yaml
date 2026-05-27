@@ -1,0 +1,208 @@
+id: CAWS-FIRST-CONTACT-UX-001
+title: 'First-contact UX fixes: init/worktree/specs hints + registry auto-commit'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-05-27T03:36:26.465Z'
+updated_at: '2026-05-27T03:36:26.465Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/init.js
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/templates/.git/hooks/pre-commit
+    - docs/guides/worktree-isolation.md
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/commands/init.js
+    - packages/caws-cli/src/commands/specs.js
+    - packages/caws-cli/src/commands/worktree.js
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/templates/.git/hooks/pre-commit
+    - packages/caws-cli/tests/commands
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/init
+    - packages/caws-cli/tests/integration/first-contact-ux.test.js
+    - packages/caws-cli/tests/store/git-autocommit.test.js
+    - docs/guides/worktree-isolation.md
+    - docs/reports/user_e2e_setup_rehearsal_001.md
+    - .caws/specs/CAWS-FIRST-CONTACT-UX-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-kernel
+invariants:
+  - >-
+    `caws init` succeeds idempotently in a git repo and prints a next-step
+    line directing the user to `git add .caws/ && git commit` when the
+    .caws/ directory was newly created in a git working tree. Outside a
+    git working tree, no commit hint is printed.
+  - >-
+    `caws worktree create <name> --spec <id>` prints a next-step line
+    `cd .caws/worktrees/<name>` immediately after the success line. This
+    hint is unconditional (the worktree directory always exists post-create).
+  - >-
+    `caws specs create <id> ...` prints a post-create guidance block naming
+    the spec path and explaining that the spec ships with TODO placeholders
+    in scope.in that must be replaced before edits will be admitted.
+  - >-
+    `docs/guides/worktree-isolation.md` documents the node_modules visibility
+    constraint for workspace package managers (pnpm/yarn/npm workspaces),
+    with two named recovery options (root-relative `-F` filter, or
+    `pnpm install` inside the linked worktree).
+  - >-
+    Every worktrees-writer mutation that successfully writes
+    `.caws/worktrees.json` (createWorktree, bindWorktree, destroyWorktree,
+    mergeWorktree, claim transitions) commits the file as the final step
+    of the lifecycle transaction via the shared git-autocommit utility.
+    The commit message is `chore(caws): <op> <name>`. Hooks are not
+    bypassed (no --no-verify).
+  - >-
+    The shared git-autocommit utility handles three states predictably:
+    (a) cwd is not inside a git working tree -> skip commit, emit one
+    structured warning, return ok with kind:'skipped_no_git'; (b) target
+    file was dirty before the writer's own write -> refuse commit, emit
+    typed diagnostic naming the conflict, return ok with kind:'refused_dirty'
+    leaving the writer's change in the working tree for the user to resolve;
+    (c) target file was clean before the writer's own write -> commit
+    succeeds, return ok with kind:'committed' and the resulting sha.
+  - >-
+    The template `pre-commit` hook admits a commit on the base branch
+    when (a) the commit subject matches `^chore\(caws\): ` AND (b) every
+    staged path is under `.caws/` AND (c) at least one active worktree
+    exists in `.caws/worktrees.json`. This admits CAWS's own registry
+    auto-commits during active multi-agent sessions without weakening
+    the general base-branch protection.
+acceptance:
+  - id: A1
+    given: a git repository with no prior .caws/ directory
+    when: the user runs `caws init`
+    then: |
+      the command exits 0; .caws/ is created; the final line of stdout
+      is the next-step hint `Next: git add .caws/ && git commit -m
+      "chore: add caws governance state"` (or equivalent wording that
+      names both the git add and the commit verbs); a snapshot test
+      asserts the hint is present.
+  - id: A2
+    given: a directory that is NOT a git repository
+    when: the user runs `caws init`
+    then: |
+      the command exits 0; .caws/ is created; no git commit hint is
+      printed (the hint would be misleading because there is nothing
+      to commit to). A regression test exercises this path with a
+      tmpdir-without-git fixture.
+  - id: A3
+    given: a CAWS-initialized git repo and an active spec
+    when: the user runs `caws worktree create <name> --spec <SPEC-ID>`
+    then: |
+      the command exits 0; the worktree is created and bound; the final
+      line of stdout is `Next: cd .caws/worktrees/<name>` (or equivalent
+      wording naming the directory); a test asserts the hint is present
+      in command output.
+  - id: A4
+    given: a CAWS-initialized git repo
+    when: the user runs `caws specs create <ID> --title "..." --mode chore --risk-tier 3`
+    then: |
+      the command exits 0; .caws/specs/<ID>.yaml is created; the stdout
+      includes a guidance block stating that scope.in ships with TODO
+      placeholders that must be replaced with real file paths before
+      edits will be admitted by scope-guard; the block names the spec
+      path so the user can open it directly. A test asserts the
+      guidance is present.
+  - id: A5
+    given: a developer reading docs about worktree isolation
+    when: they consult docs/guides/worktree-isolation.md
+    then: |
+      the doc contains a section titled "Workspace package managers
+      (pnpm, yarn, npm workspaces)" or equivalent; the section explains
+      that node_modules is not materialized inside linked worktrees;
+      the section names two recovery patterns: (a) run package scripts
+      from the repo root with the workspace filter flag (e.g.
+      `pnpm -F <pkg> test`), and (b) run an in-worktree install.
+  - id: A6
+    given: |
+      a git repo where .caws/worktrees.json is clean before a caws
+      worktree command runs
+    when: |
+      the user runs `caws worktree create <name> --spec <ID>`
+    then: |
+      after the command exits 0, `git status --short` shows zero entries
+      for .caws/worktrees.json (the file is committed); `git log -1
+      --pretty=%s -- .caws/worktrees.json` shows
+      `chore(caws): create <name>` (or `bind <name> to <ID>`, exact verb
+      matching the writer's operation); the commit was authored by git's
+      configured user, not by a forced override; the commit was created
+      without --no-verify (verified by the pre-commit hook existing and
+      passing).
+  - id: A7
+    given: |
+      a git repo where .caws/worktrees.json is dirty (modified by
+      a prior unrelated edit) before a caws worktree command runs
+    when: |
+      the user runs `caws worktree create <name> --spec <ID>`
+    then: |
+      the auto-commit step refuses with a typed diagnostic naming the
+      conflict; the writer's own write is preserved in the working tree;
+      the user is told the recovery path (commit the prior change manually
+      OR discard with `git checkout -- .caws/worktrees.json` and re-run
+      the caws command). The worktree itself is still created (the
+      auto-commit refusal does not roll back the lifecycle transaction).
+  - id: A8
+    given: |
+      a directory that is NOT inside a git working tree, but has a
+      valid .caws/ directory (initialized via `caws init`)
+    when: |
+      any caws worktree-mutating command runs
+    then: |
+      the writer write succeeds; the auto-commit step emits one structured
+      warning ("not a git working tree; registry not committed; multi-session
+      coordination requires git"); the command exits 0.
+  - id: A9
+    given: |
+      a base-branch checkout with at least one active worktree
+      registered in .caws/worktrees.json
+    when: |
+      a commit is attempted whose subject is `chore(caws): create x`
+      and whose only staged path is .caws/worktrees.json
+    then: |
+      the template pre-commit hook admits the commit. (Regression: the
+      same commit should be admitted whether or not its author is the
+      caws CLI; admission is structural, not identity-based.)
+  - id: A10
+    given: |
+      a base-branch checkout with at least one active worktree
+    when: |
+      a commit is attempted whose subject is `feat: add new feature`
+      and whose staged paths include source files
+    then: |
+      the template pre-commit hook refuses with the existing
+      "no direct commits to base branch while worktrees active" message.
+      (Regression: A9's admission does not weaken general base-branch
+      protection.)
+non_functional:
+  reliability:
+    - >-
+      git-autocommit utility is total over its three states (skipped,
+      refused, committed); no unhandled exceptions escape the utility.
+      Tested via tests/store/git-autocommit.test.js.
+    - >-
+      writer rollback semantics are unchanged. If the lifecycle
+      transaction succeeds and the auto-commit refuses, the writer
+      change persists (user can commit manually). If the writer
+      transaction itself fails, the auto-commit is never attempted.
+  security:
+    - >-
+      auto-commit never uses --no-verify, --no-gpg-sign, or any
+      hook-bypass flag. The commit goes through the project's normal
+      pre-commit and commit-msg hooks. The hook admission rule for
+      `chore(caws):` commits is structural (commit subject + path
+      whitelist), not identity-based, so it cannot be spoofed in a
+      way the hook would not also have admitted from any other author.
+contracts: []
