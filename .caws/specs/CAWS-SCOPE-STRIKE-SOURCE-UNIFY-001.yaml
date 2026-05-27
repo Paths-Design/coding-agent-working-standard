@@ -3,6 +3,7 @@ title: 'scope-guard strike counter and caws scope show must read the same author
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: scope-strike-unify
 created_at: '2026-05-27T04:46:16.996Z'
 updated_at: '2026-05-27T07:00:00.000Z'
 blast_radius:
