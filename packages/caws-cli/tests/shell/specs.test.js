@@ -423,6 +423,141 @@ describe('A8: illegal transition refusals', () => {
 });
 
 // ============================================================
+// CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001: Commander-layer default
+// ============================================================
+//
+// The Sterling-reported defect: `caws specs close FOO-1 --reason "..."`
+// invoked without `--resolution` failed at Commander's option-parse
+// layer with "error: required option '--resolution <r>' not specified"
+// BEFORE runSpecsCloseCommand was invoked. This suite exercises the
+// fix at the Commander parser surface — the only layer where the
+// .requiredOption → .option(... , 'completed') change is visible.
+//
+// The action-handler-level tests above (A8 etc.) already prove that
+// resolution: 'completed' produces a correct close; this suite proves
+// that omitting --resolution at the argv layer now resolves to that
+// same default before the handler runs.
+describe('CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001: --resolution defaults to completed', () => {
+  const { Command } = require('commander');
+  const { registerShellCommands } = require('../../dist/shell');
+
+  /**
+   * Build a Commander program with only the shell command registration,
+   * matching the pattern in register.test.js. Returns the close
+   * subcommand of the specs group so tests can read its declared
+   * options + parse argv.
+   */
+  function getSpecsCloseSubcommand() {
+    const program = new Command();
+    program.exitOverride();
+    program.name('caws').version('test');
+    registerShellCommands(program, { exit: () => {} });
+    const specsCmd = program.commands.find((c) => c.name() === 'specs');
+    expect(specsCmd).toBeDefined();
+    const closeCmd = specsCmd.commands.find((c) => c.name() === 'close');
+    expect(closeCmd).toBeDefined();
+    return closeCmd;
+  }
+
+  it('--resolution is declared as a non-required option with default "completed"', () => {
+    const closeCmd = getSpecsCloseSubcommand();
+    const resolutionOpt = closeCmd.options.find((o) => o.long === '--resolution');
+    expect(resolutionOpt).toBeDefined();
+    // Pre-fix: this would be a required option (mandatory === true).
+    // Post-fix: optional with default 'completed'.
+    expect(resolutionOpt.mandatory).toBe(false);
+    expect(resolutionOpt.defaultValue).toBe('completed');
+  });
+
+  it('Commander populates opts.resolution with "completed" when --resolution is omitted', () => {
+    const closeCmd = getSpecsCloseSubcommand();
+    // Parse argv that omits --resolution. The action handler in
+    // register.ts would normally invoke runSpecsCloseCommand and exit;
+    // we intercept the action so the test never touches the filesystem.
+    let capturedOpts;
+    closeCmd.action((id, opts) => {
+      capturedOpts = { id, opts };
+    });
+    // Argv shape Commander expects: ['node', 'caws', 'specs', 'close', '<id>', '--reason', '...']
+    closeCmd.parent.parent.parse(
+      ['node', 'caws', 'specs', 'close', 'FOO-1', '--reason', 'done'],
+      { from: 'node' }
+    );
+    expect(capturedOpts).toBeDefined();
+    expect(capturedOpts.id).toBe('FOO-1');
+    expect(capturedOpts.opts.resolution).toBe('completed');
+    expect(capturedOpts.opts.reason).toBe('done');
+  });
+
+  it('Commander preserves explicit --resolution (default does NOT override the flag)', () => {
+    const closeCmd = getSpecsCloseSubcommand();
+    let capturedOpts;
+    closeCmd.action((id, opts) => {
+      capturedOpts = { id, opts };
+    });
+    closeCmd.parent.parent.parse(
+      [
+        'node', 'caws', 'specs', 'close', 'FOO-2',
+        '--resolution', 'superseded',
+        '--superseded-by', 'FOO-3',
+        '--reason', 'moved',
+      ],
+      { from: 'node' }
+    );
+    expect(capturedOpts.opts.resolution).toBe('superseded');
+    expect(capturedOpts.opts.supersededBy).toBe('FOO-3');
+    expect(capturedOpts.opts.reason).toBe('moved');
+  });
+
+  it('zero-flag invocation: `caws specs close <id>` resolves resolution to "completed"', () => {
+    // A3 from the spec: bare close with no flags should not fail at the
+    // Commander layer. This proves the --reason independence: omitting
+    // both --reason AND --resolution still parses.
+    const closeCmd = getSpecsCloseSubcommand();
+    let capturedOpts;
+    closeCmd.action((id, opts) => {
+      capturedOpts = { id, opts };
+    });
+    closeCmd.parent.parent.parse(
+      ['node', 'caws', 'specs', 'close', 'FOO-3'],
+      { from: 'node' }
+    );
+    expect(capturedOpts.opts.resolution).toBe('completed');
+    expect(capturedOpts.opts.reason).toBeUndefined();
+  });
+
+  it('action handler accepts resolution="completed" end-to-end (A1 behavioral proof)', () => {
+    // A1: the defaulted "completed" must round-trip through the action
+    // handler to a successful close. This is the action-handler-level
+    // proof that the Commander default produces the same observable
+    // outcome as an explicit --resolution completed.
+    const { repoRoot } = setup('specs-close-default-');
+    try {
+      capture(runSpecsCreateCommand, {
+        cwd: repoRoot, id: 'DEF-001', title: 't', mode: 'chore', riskTier: 3,
+      });
+      // Invoke with the value Commander would have defaulted to.
+      const r = capture(runSpecsCloseCommand, {
+        cwd: repoRoot, id: 'DEF-001', resolution: 'completed', reason: 'done',
+      });
+      expect(r.code).toBe(0);
+      const specPath = path.join(repoRoot, '.caws/specs/DEF-001.yaml');
+      const yaml = fs.readFileSync(specPath, 'utf8');
+      expect(yaml).toMatch(/lifecycle_state: closed/);
+      expect(yaml).toMatch(/resolution: completed/);
+      // YAML serializer quotes string scalars: closure_notes: 'done'.
+      expect(yaml).toMatch(/closure_notes: ['"]?done['"]?/);
+      const events = readEvents(path.join(repoRoot, '.caws'));
+      const closeEv = events.find((e) => e.event === 'spec_closed' && e.spec_id === 'DEF-001');
+      expect(closeEv).toBeDefined();
+      expect(closeEv.data.resolution).toBe('completed');
+    } finally {
+      rmrf(repoRoot);
+    }
+  });
+});
+
+// ============================================================
 // A10: read-only commands do not rewrite YAML
 // ============================================================
 describe('A10: read-only commands are non-mutating', () => {
