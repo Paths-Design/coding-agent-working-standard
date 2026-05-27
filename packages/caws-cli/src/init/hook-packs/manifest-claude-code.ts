@@ -100,7 +100,23 @@ import type { HookPackV1 } from './types';
 // plan-transcript-finalize. No stateModel changes (the plan-transcript
 // pair writes to $HOME/.claude/.pending-plan-snapshots, outside the
 // repo).
-export const CLAUDE_CODE_PACK_VERSION = 7;
+//
+// Version 8: CAWS-LITE-MODE-RETIREMENT-001. Removes the v10 "Lite mode"
+// branch from scope-guard.sh. The branch previously read
+// `.caws/scope.json` and enforced lite-mode rules when no `.caws/specs/`
+// directory was present — a v10 fallback that silently disagreed with
+// `caws doctor`'s v11 view of the same project. v8 hooks ignore
+// `.caws/scope.json` entirely; consumers with a legacy file get a
+// doctor finding (informational) pointing at the migration guide.
+// No stateModel changes; no new managed files. The retirement is the
+// LIVE component of CAWS-LITE-MODE-RETIREMENT-001 — the spec also
+// authorizes deleting v10 source archaeology (src/config/lite-scope.js,
+// src/config/modes.js, src/scaffold/, the lite branches in
+// src/commands/init.js + src/commands/specs.js) but those files are
+// already excluded from the v11 npm package by build-cli.js's
+// allowlist, so deleting them is hygiene, not a behavior change.
+// Companion docs section in docs/migration-v10-to-v11.md.
+export const CLAUDE_CODE_PACK_VERSION = 8;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

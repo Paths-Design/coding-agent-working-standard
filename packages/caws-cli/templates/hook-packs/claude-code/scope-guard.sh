@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 7
+# hook_pack_version: 8
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -130,15 +130,20 @@ if [[ "$WORK_DIR" =~ \/\.caws\/worktrees\/([^/]+)$ ]]; then
   WORKTREE_NAME="${BASH_REMATCH[1]}"
 fi
 
+# CAWS-LITE-MODE-RETIREMENT-001: lite mode (scope.json without specs/)
+# was removed in pack v8. v11 projects only have .caws/specs/; lite-mode
+# .caws/scope.json is a v10 artifact. Consumers with a legacy
+# .caws/scope.json get a doctor finding (not a hook branch).
 if [[ -d "$WORK_DIR/.caws/specs" ]]; then
-  SCOPE_FILE="$WORK_DIR/.caws/scope.json"
   SPECS_BASE="$WORK_DIR"
 else
-  SCOPE_FILE="$PROJECT_DIR/.caws/scope.json"
   SPECS_BASE="$PROJECT_DIR"
 fi
 
-if [[ ! -f "$SCOPE_FILE" ]] && [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
+# No specs directory means no v11 governance to enforce. Pre-v8 this
+# branch would fall through to the lite-mode scope.json path; v8+ it
+# is a clean no-op.
+if [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
   exit 0
 fi
 
@@ -159,69 +164,11 @@ for prefix in "${ALLOW_PREFIXES[@]}"; do
   fi
 done
 
-# Lite mode: scope.json (no .caws/specs/)
-if [[ ! -d "$SPECS_BASE/.caws/specs" ]] && [[ -f "$SCOPE_FILE" ]]; then
-  if command -v node >/dev/null 2>&1; then
-    LITE_CHECK=$(node -e "
-      var fs = require('fs');
-      var path = require('path');
-      try {
-        var scope = JSON.parse(fs.readFileSync('$SCOPE_FILE', 'utf8'));
-        var filePath = '$REL_PATH';
-        var dirs = scope.allowedDirectories || [];
-        var banned = scope.bannedPatterns || {};
-
-        var basename = path.basename(filePath);
-        var bannedFiles = banned.files || [];
-        for (var i = 0; i < bannedFiles.length; i++) {
-          var regex = new RegExp(bannedFiles[i].replace(/\\*/g, '.*').replace(/\\?/g, '.'));
-          if (regex.test(basename)) {
-            console.log('banned:' + bannedFiles[i]);
-            process.exit(0);
-          }
-        }
-
-        var bannedDocs = banned.docs || [];
-        for (var i = 0; i < bannedDocs.length; i++) {
-          var regex = new RegExp(bannedDocs[i].replace(/\\*/g, '.*').replace(/\\?/g, '.'));
-          if (regex.test(basename)) {
-            console.log('banned:' + bannedDocs[i]);
-            process.exit(0);
-          }
-        }
-
-        if (dirs.length > 0) {
-          var normalized = filePath.replace(/\\\\\\\\/g, '/');
-          var found = false;
-          for (var i = 0; i < dirs.length; i++) {
-            var d = dirs[i].replace(/\\/$/, '');
-            if (normalized.startsWith(d + '/') || normalized === d) { found = true; break; }
-          }
-          if (!found) {
-            console.log('not_allowed');
-            process.exit(0);
-          }
-        }
-        console.log('allowed');
-      } catch (error) {
-        console.log('error:' + error.message);
-      }
-    " 2>&1)
-
-    if [[ "$LITE_CHECK" == banned:* ]]; then
-      PATTERN="${LITE_CHECK#banned:}"
-      emit_scope_progression "This file matches banned pattern '$PATTERN' in .caws/scope.json."
-      exit 0
-    fi
-
-    if [[ "$LITE_CHECK" == "not_allowed" ]]; then
-      emit_scope_progression "This file is outside the allowed directories in .caws/scope.json."
-      exit 0
-    fi
-
-    exit 0
-  fi
-fi
+# CAWS-LITE-MODE-RETIREMENT-001: the v10 "Lite mode" branch
+# (`.caws/scope.json` without `.caws/specs/`) was removed in pack v8.
+# A consumer upgrading from v10 with a legacy `.caws/scope.json` on
+# disk now gets a doctor finding instead — the hook no longer has a
+# silent fallback behavior that disagrees with `caws doctor`.
 
 # Full mode: per-feature specs under .caws/specs/ (v11-shape aware)
 SPECS_DIR="$SPECS_BASE/.caws/specs"
