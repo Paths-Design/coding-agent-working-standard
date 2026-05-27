@@ -66,7 +66,31 @@ import type { HookPackV1 } from './types';
 // extensions. No stateModel changes (tmp/<session-id>/ already
 // declared; the renderer writes into the same surface session-log.sh
 // already declared as a write).
-export const CLAUDE_CODE_PACK_VERSION = 6;
+//
+// Version 7: CAWS-HOOK-PACK-PROMOTE-001. Promotes 4 PORT-classified
+// hooks from the Sterling hook audit
+// (docs/reports/sterling_hook_port_audit_001.md):
+//   - cwd-guard.sh (PreToolUse): blocks tool calls when the working
+//     directory has been deleted (lineage entry 22). Mitigates a
+//     documented Claude Code session-crash class.
+//   - protected-paths.sh (PreToolUse): blocks Write/Edit on
+//     .claude/hooks/* and .claude/logs/guard-strikes-*.json (lineage
+//     entry 23). Closes the doctrine-vs-enforcement gap that lets
+//     agents edit their own hook state.
+//   - scan-secrets.sh (PreToolUse): advisory on .env files, SSH keys,
+//     cloud configs (lineage entry 24). Never blocks.
+//   - naming-check.sh (PostToolUse): "no shadow files" enforcement
+//     (lineage entry 25). Banned modifier suffixes, version
+//     suffixes, date stamps. Genericized: dropped Sterling-era
+//     references to the v10 `caws naming check` CLI and
+//     `.caws/canonical-map.yaml`.
+// Dispatcher updates: pre_tool_use.sh adds cwd-guard.sh (early,
+// after agent-heartbeat), protected-paths.sh (after scope-guard),
+// scan-secrets.sh (last); post_tool_use.sh adds naming-check.sh.
+// No stateModel changes. Remaining 3 PORT candidates (quiet-merge,
+// plan-transcript-snapshot + plan-transcript-finalize) deferred to
+// a follow-up commit on the same spec.
+export const CLAUDE_CODE_PACK_VERSION = 7;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
@@ -96,7 +120,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       'tmp/<session-id>/',
     ],
   },
-  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19],
+  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25],
 
   // Installed files. Order is deterministic (used by tests and by the
   // install reporter). destPath is relative to repo root.
@@ -269,6 +293,43 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     // settings.json (or to create one from the canonical snippet in
     // CLAUDE.md if absent). This avoids JSON-merge complexity and
     // preserves user-owned settings.
+
+    // -- CAWS-HOOK-PACK-PROMOTE-001 (v7): hooks promoted from Sterling --
+    // See docs/reports/sterling_hook_port_audit_001.md and
+    // docs/failure-lineage.md entries 22-25 for the governance gaps
+    // each closes.
+    {
+      // PreToolUse: blocks tool calls when the working directory has
+      // been deleted (worktree-destroyed-while-inside class).
+      destPath: '.claude/hooks/cwd-guard.sh',
+      sourcePath: 'cwd-guard.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PreToolUse: blocks agent-side Write/Edit on hook scripts and
+      // strike-state files. Structural enforcement of the doctrine
+      // that hooks may not be edited by an agent's local judgment.
+      destPath: '.claude/hooks/protected-paths.sh',
+      sourcePath: 'protected-paths.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PreToolUse: advisory-only warning on secret-bearing file paths.
+      destPath: '.claude/hooks/scan-secrets.sh',
+      sourcePath: 'scan-secrets.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PostToolUse: "no shadow files" doctrine enforcement.
+      // Advisory-only. Genericized: no v10 CLI references.
+      destPath: '.claude/hooks/naming-check.sh',
+      sourcePath: 'naming-check.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Doctrine landing for hook editors --
     {
