@@ -85,6 +85,13 @@ describe('A1: caws specs create', () => {
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/created FEAT-001/);
+    // CAWS-FIRST-CONTACT-UX-001 A4: post-create guidance must explain
+    // that scope.in TODO placeholders block edits and name the spec path.
+    expect(r.stdout).toMatch(/Next: open the spec/);
+    expect(r.stdout).toMatch(/edit:.*FEAT-001\.yaml/);
+    expect(r.stdout).toMatch(/scope\.in must list/);
+    expect(r.stdout).toMatch(/scope-guard rejects/);
+
     const filePath = path.join(cawsDir, 'specs/FEAT-001.yaml');
     expect(fs.existsSync(filePath)).toBe(true);
     const content = fs.readFileSync(filePath, 'utf8');
