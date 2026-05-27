@@ -9,16 +9,5 @@
     "branch": "migrate-v10-specs",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/migrate-v10-specs"
-  },
-  "first-contact-ux": {
-    "specId": "CAWS-FIRST-CONTACT-UX-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T03:39:27.131Z",
-    "branch": "first-contact-ux",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/first-contact-ux"
   }
 }
