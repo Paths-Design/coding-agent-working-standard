@@ -1,1 +1,13 @@
-{}
+{
+  "specs-close-default-resolution": {
+    "specId": "CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T19:20:40.755Z",
+    "branch": "specs-close-default-resolution",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/specs-close-default-resolution"
+  }
+}

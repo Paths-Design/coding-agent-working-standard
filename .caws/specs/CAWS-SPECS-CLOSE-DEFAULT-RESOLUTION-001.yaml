@@ -3,6 +3,7 @@ title: 'caws specs close defaults --resolution to completed'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: specs-close-default-resolution
 created_at: '2026-05-27T19:19:07.281Z'
 updated_at: '2026-05-27T19:19:07.281Z'
 blast_radius:
