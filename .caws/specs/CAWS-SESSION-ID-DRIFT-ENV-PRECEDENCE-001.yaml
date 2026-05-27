@@ -1,0 +1,176 @@
+id: CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001
+title: 'resolveSession admits HOOK_SESSION_ID; mintCapsule cleans up superseded capsules'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T06:18:24.680Z'
+updated_at: '2026-05-27T06:20:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/tests/shell/session
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001.yaml
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/tests/shell/session/resolve-session.test.js
+  out:
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/store
+    - packages/caws-cli/templates/hook-packs
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+invariants:
+  - >-
+    HOOK_SESSION_ID is admitted at priority 2 of resolveSession's env
+    precedence chain (between CLAUDE_SESSION_ID at priority 1 and the
+    on-disk capsule at priority 3). When set and non-empty, it
+    returns identity { session_id, platform: 'claude-code' } with
+    source: 'hook_env'. HOOK_SESSION_ID is the Claude Code hook
+    envelope's session_id, exported by every CAWS hook script via
+    parse-input.sh; it is stable across CLI invocations within a
+    single Claude Code conversation. Admitting it eliminates the
+    capsule-mint drift that causes recurring OWNED (foreign)
+    refusals after harness restarts.
+  - >-
+    HOOK_SESSION_ID is intentionally below CLAUDE_SESSION_ID (priority
+    1) and above capsule lookup (priority 3). Reason CLAUDE_SESSION_ID
+    is still first - operator-set env var is a deliberate override
+    (e.g. test harness simulating a specific session). Reason hook
+    env is above capsule - the hook id is harness-authoritative for
+    the current invocation; the capsule is a per-worktree-root cache
+    that should not override a fresh harness signal. The literal
+    string 'unknown' (parse-input.sh's fallback when the hook payload
+    lacks session_id) is REFUSED at this priority; the resolver
+    falls through to the capsule path.
+  - >-
+    mintCapsule (the priority-5 mint path, only reached when allowMint
+    is true and no env or capsule resolved) DELETES any pre-existing
+    capsule for the same worktree_root before writing the new one.
+    Cleanup uses fs.realpathSync to resolve worktree_root before
+    matching (same logic as readCapsule). Cleanup failures emit a
+    non-fatal diagnostic warning but do not block the mint.
+  - >-
+    No event is appended for any of these changes. resolveSession
+    remains a pure read/cache surface and mintCapsule remains
+    operational-cache I/O outside any lifecycle transaction.
+    Authority surfaces (.caws/worktrees.json:owner.session_id,
+    --takeover semantics, prior_owners audit) are unchanged.
+  - >-
+    Existing precedence-1 (CLAUDE_SESSION_ID), capsule, CURSOR_TRACE_ID,
+    and mint branches all behave identically when HOOK_SESSION_ID is
+    absent or 'unknown'. The fix is purely additive at priority 2 and
+    a defensive cleanup at the mint path; it does not modify any
+    other branch of the resolver.
+  - >-
+    Hook-pack templates are NOT modified by this slice. The
+    CAWS-managed claude-code hook pack already exports
+    HOOK_SESSION_ID via parse-input.sh. Existing v11.1.x installations
+    get the fix on `npm install -g @paths.design/caws-cli@<next>`
+    without a hook-pack version bump or re-install.
+acceptance:
+  - id: A1
+    given: |
+      env = { HOOK_SESSION_ID: 'caws-hook-abc123' } with no
+      CLAUDE_SESSION_ID, no capsule on disk, and no CURSOR_TRACE_ID.
+    when: |
+      resolveSession is called with that env.
+    then: |
+      Returns ok with identity { session_id: 'caws-hook-abc123',
+      platform: 'claude-code' } and source: 'hook_env'.
+  - id: A2
+    given: |
+      Both CLAUDE_SESSION_ID = 'claude-direct' and HOOK_SESSION_ID =
+      'caws-hook-abc123' are set.
+    when: |
+      resolveSession is called.
+    then: |
+      Returns identity.session_id = 'claude-direct' and source:
+      'claude_env'. The CLAUDE_SESSION_ID override at priority 1 is
+      preserved.
+  - id: A3
+    given: |
+      HOOK_SESSION_ID = 'unknown' (parse-input.sh fallback) with no
+      other env signals and no capsule.
+    when: |
+      resolveSession is called with allowMint: false.
+    then: |
+      Returns err with SESSION_NO_STABLE_IDENTITY. The literal
+      'unknown' is REFUSED at the hook_env priority; the resolver
+      does not return source 'hook_env' with id 'unknown'.
+  - id: A4
+    given: |
+      A pre-existing capsule file at .caws/sessions/caws-old.json
+      whose worktree_root matches the current call.
+    when: |
+      mintCapsule is invoked.
+    then: |
+      The new capsule file caws-<new-hex>.json is written. The old
+      caws-old.json is DELETED from .caws/sessions/. Subsequent
+      readCapsule for the same worktree_root returns the new
+      capsule deterministically.
+  - id: A5
+    given: |
+      Two pre-existing capsule files for the same worktree_root
+      (caws-old-1.json and caws-old-2.json).
+    when: |
+      mintCapsule is invoked.
+    then: |
+      Both old capsules are deleted before the new one is written.
+      Cleanup operates on every capsule whose worktree_real_root
+      matches, not just the first one found.
+  - id: A6
+    given: |
+      A pre-existing capsule whose worktree_root differs from the
+      current call.
+    when: |
+      mintCapsule is invoked for a different worktree_root.
+    then: |
+      The non-matching capsule is PRESERVED (cleanup is per
+      worktree_root, not blanket).
+  - id: A7
+    given: |
+      A pre-existing capsule whose file is unreadable or unparseable.
+    when: |
+      mintCapsule attempts cleanup.
+    then: |
+      The cleanup failure is recorded as a non-fatal warning. The
+      new capsule is still written; the mint succeeds.
+  - id: A8
+    given: |
+      A run with CLAUDE_SESSION_ID set (priority 1 wins).
+    when: |
+      resolveSession is called.
+    then: |
+      No capsule cleanup is attempted (mint path not reached).
+      Source remains 'claude_env'. No side effect on the on-disk
+      capsule directory.
+non_functional:
+  reliability:
+    - >-
+      Capsule cleanup is best-effort and never aborts the mint.
+      Worst case is the pre-fix behavior (multiple capsules per
+      worktree_root), which is observable but not data-corrupting.
+contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: recurring "OWNED (foreign)" refusals at caws worktree merge after
+# Claude Code session restart. User flagged the pattern as dangerous because
+# agents have been normalizing --takeover, defeating the audit contract.
+#
+# Fix is two changes in one file (resolve-session.ts):
+#   1. Add HOOK_SESSION_ID at priority 2 of the precedence chain. Refuse
+#      the literal 'unknown'.
+#   2. In mintCapsule, before writing the new capsule, enumerate
+#      .caws/sessions/*.json and delete any whose worktree_real_root
+#      matches the current call.
+#
+# Out of scope:
+#   - Hook-pack templates (already export HOOK_SESSION_ID).
+#   - Authority surfaces (worktrees.json owner, takeover semantics,
+#     prior_owners audit) - intentionally unchanged.
+#   - Package.json / CHANGELOG.md (release-tooling concern; release is
+#     tag-driven per CLAUDE.md trap #7).
