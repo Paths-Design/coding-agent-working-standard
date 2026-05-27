@@ -67,29 +67,39 @@ import type { HookPackV1 } from './types';
 // declared; the renderer writes into the same surface session-log.sh
 // already declared as a write).
 //
-// Version 7: CAWS-HOOK-PACK-PROMOTE-001. Promotes 4 PORT-classified
+// Version 7: CAWS-HOOK-PACK-PROMOTE-001. Promotes all 7 PORT-classified
 // hooks from the Sterling hook audit
 // (docs/reports/sterling_hook_port_audit_001.md):
-//   - cwd-guard.sh (PreToolUse): blocks tool calls when the working
-//     directory has been deleted (lineage entry 22). Mitigates a
-//     documented Claude Code session-crash class.
-//   - protected-paths.sh (PreToolUse): blocks Write/Edit on
-//     .claude/hooks/* and .claude/logs/guard-strikes-*.json (lineage
-//     entry 23). Closes the doctrine-vs-enforcement gap that lets
-//     agents edit their own hook state.
-//   - scan-secrets.sh (PreToolUse): advisory on .env files, SSH keys,
-//     cloud configs (lineage entry 24). Never blocks.
-//   - naming-check.sh (PostToolUse): "no shadow files" enforcement
-//     (lineage entry 25). Banned modifier suffixes, version
-//     suffixes, date stamps. Genericized: dropped Sterling-era
-//     references to the v10 `caws naming check` CLI and
-//     `.caws/canonical-map.yaml`.
-// Dispatcher updates: pre_tool_use.sh adds cwd-guard.sh (early,
-// after agent-heartbeat), protected-paths.sh (after scope-guard),
-// scan-secrets.sh (last); post_tool_use.sh adds naming-check.sh.
-// No stateModel changes. Remaining 3 PORT candidates (quiet-merge,
-// plan-transcript-snapshot + plan-transcript-finalize) deferred to
-// a follow-up commit on the same spec.
+//   - cwd-guard.sh (PreToolUse, lineage 22): blocks tool calls when
+//     the working directory has been deleted. Mitigates a documented
+//     Claude Code session-crash class.
+//   - protected-paths.sh (PreToolUse, lineage 23): blocks Write/Edit
+//     on .claude/hooks/* and .claude/logs/guard-strikes-*.json.
+//     Closes the doctrine-vs-enforcement gap that lets agents edit
+//     their own hook state.
+//   - scan-secrets.sh (PreToolUse, lineage 24): advisory on .env
+//     files, SSH keys, cloud configs. Never blocks.
+//   - naming-check.sh (PostToolUse, lineage 25): "no shadow files"
+//     enforcement. Banned modifier suffixes, version suffixes, date
+//     stamps. Genericized: dropped Sterling-era references to the
+//     v10 `caws naming check` CLI and `.caws/canonical-map.yaml`.
+//   - quiet-merge.sh (PreToolUse LAST, lineage 26): rewrites
+//     `caws worktree merge|destroy` bash commands to cd to repo
+//     root + suppress output, avoiding subagent CWD-destroyed
+//     crashes and context-window overflow on verbose merge output.
+//     Companion to cwd-guard.sh.
+//   - plan-transcript-snapshot.sh (PostToolUse on ExitPlanMode,
+//     lineage 27): snapshots the conversation transcript co-located
+//     with the plan file when ExitPlanMode fires.
+//   - plan-transcript-finalize.sh (Stop, lineage 27): drains the
+//     pending-snapshots list and overwrites each with the final
+//     turn-end transcript. Companion to plan-transcript-snapshot.sh.
+// Dispatcher updates: pre_tool_use.sh adds cwd-guard, protected-paths,
+// scan-secrets, quiet-merge (last); post_tool_use.sh adds
+// naming-check, plan-transcript-snapshot; stop.sh adds
+// plan-transcript-finalize. No stateModel changes (the plan-transcript
+// pair writes to $HOME/.claude/.pending-plan-snapshots, outside the
+// repo).
 export const CLAUDE_CODE_PACK_VERSION = 7;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
@@ -120,7 +130,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       'tmp/<session-id>/',
     ],
   },
-  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25],
+  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27],
 
   // Installed files. Order is deterministic (used by tests and by the
   // install reporter). destPath is relative to repo root.
@@ -327,6 +337,39 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // Advisory-only. Genericized: no v10 CLI references.
       destPath: '.claude/hooks/naming-check.sh',
       sourcePath: 'naming-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PreToolUse (LAST): rewrites caws worktree merge|destroy
+      // bash commands for CWD safety + output suppression.
+      // MUST be last in dispatch/pre_tool_use.sh because it emits
+      // updatedInput which replaces any prior interceptor's
+      // updatedInput. Companion to cwd-guard.sh (lineage entry 22)
+      // for the worktree-destroyed-while-inside class. Lineage 26.
+      destPath: '.claude/hooks/quiet-merge.sh',
+      sourcePath: 'quiet-merge.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PostToolUse (ExitPlanMode-filtered): snapshots the session
+      // transcript co-located with the plan file at the moment
+      // ExitPlanMode fires. Paired with plan-transcript-finalize.sh
+      // (Stop). Lineage 27.
+      destPath: '.claude/hooks/plan-transcript-snapshot.sh',
+      sourcePath: 'plan-transcript-snapshot.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // Stop: drains $HOME/.claude/.pending-plan-snapshots and
+      // overwrites each pending snapshot with the turn-end
+      // transcript. Companion to plan-transcript-snapshot.sh.
+      // Already referenced in dispatch/stop.sh; this entry makes
+      // the pack manifest install it. Lineage 27.
+      destPath: '.claude/hooks/plan-transcript-finalize.sh',
+      sourcePath: 'plan-transcript-finalize.sh',
       executable: true,
       managed: true,
     },

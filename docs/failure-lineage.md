@@ -1189,3 +1189,82 @@ The v7 hook pack adds `naming-check.sh` to the PostToolUse dispatch order. The h
 ### Single-line synthesis
 
 **Entry 25: shipping a doctrine without a hook is shipping an aspiration. The "no shadow files" rule lived in three doctrine docs for months without enforcement; an advisory PostToolUse hook is the smallest enforcement that closes the doctrine-vs-runtime gap.**
+
+---
+
+## Entry 26: `caws worktree merge` Output And CWD-Destruction Crashed Subagents (May 2026)
+
+**Severity:** Medium (silent subagent crash + context-window overflow; affects multi-agent workflows)
+**Era:** v11.1 — exposed during CAWS-FIRST-CONTACT-UX-001 and CAWS-HOOK-PACK-RENDERER-MISSING-001 merge runs
+**Surface that failed:** the `caws worktree merge` and `caws worktree destroy` commands' verbose output AND their destruction of the agent's own CWD before the agent's tool call has finished
+**Agent class involved:** any agent whose current Bash invocation calls `caws worktree merge` or `caws worktree destroy` against a worktree it's operating inside; any agent reading the merge output into its context
+
+### What happened
+
+`caws worktree merge` produces verbose output: setup detection, schema validation, registry mutations, the actual git merge, spec close, worktree destroy, registry cleanup. In a long session this output can push the context window over the limit, with downstream consequences that present as a misleading "Not logged in" error.
+
+Worse, both `merge` and `destroy` remove the worktree directory from disk. If the agent's Bash tool was invoked with cwd inside that worktree, the moment the directory is removed the agent's CWD becomes invalid. Any PostToolUse hook that subsequently tries to write to a path relative to CWD crashes with posix_spawn ENOENT, and every Bash call after that fails the same way.
+
+Sterling shipped `quiet-merge.sh` as a PreToolUse hook that intercepts `caws worktree merge|destroy` bash commands via `updatedInput` and rewrites them to:
+
+```
+cd <repo-root> && <original command> 2>/dev/null | tail -3
+```
+
+The `cd` moves the agent's CWD to safety *before* the destroy runs, and the pipe suppresses verbose output that would otherwise overflow context.
+
+The Sterling hook port-decision audit classified it as universally applicable; the doctrine point about `merge` output overflow appears in Sterling's CLAUDE.md worktree section but had no hook in the upstream pack. `CAWS-HOOK-PACK-PROMOTE-001` shipped it.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `quiet-merge.sh` to the PreToolUse dispatch order as the LAST handler — `updatedInput` from this hook replaces any prior interceptor's `updatedInput`, so it must run last. Self-filters to `Bash` tool with `caws worktree merge|destroy` regex. Skips already-piped/redirected commands so the user's explicit handling wins.
+
+Companion to `cwd-guard.sh` (entry 22). `cwd-guard.sh` blocks tool calls when CWD is *already* missing; `quiet-merge.sh` prevents CWD from becoming missing in the first place by cd-ing to repo root before the destroying command runs.
+
+### What it doesn't catch
+
+- A direct `git worktree remove` (not via `caws worktree destroy`). The interceptor matches on `caws worktree merge|destroy` only. A user who shells out to `git` directly will still hit the CWD-destruction crash unless `cwd-guard.sh` catches the post-destroy tool call.
+- A merge that aborts partway through (the `partial_failure_unrecovered` state observed in both Sterling and upstream this session). The rewrite still runs; the `tail -3` may swallow the diagnostic. A future entry covering partial-merge handling would need its own surface.
+- The fundamental session-id-drift bug that necessitates `caws claim --takeover` before merge can succeed at all. That's a separate spec.
+
+### Single-line synthesis
+
+**Entry 26: a destructive command that removes the directory the caller is operating inside ships with no defensive cwd-rewrite by default. The fix is two lines of bash in the right hook slot. Until it shipped, every multi-agent worktree merge was one user-CWD away from a subagent crash and one verbose-output overflow away from a misleading session error.**
+
+---
+
+## Entry 27: Plan Provenance Was Lost At Session End (May 2026)
+
+**Severity:** Low (no incident, missing audit surface)
+**Era:** v11.1 — applies to any consumer using Claude Code's `ExitPlanMode` tool
+**Surface that failed:** no mechanism co-located the session transcript with the plan file at the moment of plan presentation
+**Agent class involved:** any agent using plan mode for non-trivial work; reviewers who want to understand what context produced a given plan
+
+### What happened
+
+Claude Code's plan mode produces a plan file (typically under `.claude/plans/<name>.md`) via `Write` followed by an `ExitPlanMode` tool call that presents the plan to the user. The plan file is durable; the conversation that produced it is not — the session transcript lives under `tmp/<session-id>/` and is per-session ephemeral.
+
+When a reviewer (or future agent, or the original user weeks later) reads a plan file and wants to understand *what context the plan came out of* — what was explored, what was rejected, what trade-offs were considered — they have to find the original session transcript by session-id, which is opaque and may be lost.
+
+Sterling shipped a paired-hook system: `plan-transcript-snapshot.sh` (PostToolUse on ExitPlanMode) copies the transcript at the moment of plan presentation to `<plan-path>.transcript.jsonl`, and `plan-transcript-finalize.sh` (Stop) overwrites that snapshot with the final turn-end transcript (which includes user approval, subsequent reasoning, and any tool calls that happened after the plan was presented). The result is a `.transcript.jsonl` file co-located with every committed plan, capturing the full conversation provenance.
+
+The Sterling hook port-decision audit classified the pair as universally applicable — both hooks reference only generic Claude Code paths (`$HOOK_TRANSCRIPT_PATH`, `.claude/plans/*.md`, `$HOME/.claude/.pending-plan-snapshots`). No Sterling-specific references. `CAWS-HOOK-PACK-PROMOTE-001` shipped both as a unit.
+
+### What we built or changed because of it
+
+The v7 hook pack adds:
+- `plan-transcript-snapshot.sh` to `dispatch/post_tool_use.sh` (self-filters to `ExitPlanMode`)
+- `plan-transcript-finalize.sh` to `dispatch/stop.sh` (drains the pending list)
+
+Both are idempotent and never block. They write to `<plan-path>.transcript.jsonl` (co-located with the plan) and `$HOME/.claude/.pending-plan-snapshots` (a per-user state file outside the repo). The manifest's stateModel was NOT extended because the writes go to per-user state outside the project tree; `$HOME/.claude/` is the user's harness state, not the project's.
+
+### What it doesn't catch
+
+- Plans created without `ExitPlanMode`. If an agent writes a plan-shaped file and never presents it via the tool, no snapshot is captured.
+- Plans presented in sessions where the user never approves (Stop fires without ExitPlanMode having succeeded). The hook is best-effort; if the snapshot wasn't registered in the pending list, finalize is a no-op.
+- Privacy. The transcript is unfiltered — Bash command outputs, Read results, etc. all land in the snapshot. The hook header documents this; consumers are responsible for not sharing `.transcript.jsonl` files casually.
+- Cross-session plan continuity. If a plan is presented in one session and edited in a later one, only the most recent session's transcript is captured. Multi-session plan provenance would require a different mechanism.
+
+### Single-line synthesis
+
+**Entry 27: durable artifacts produced by ephemeral conversations need an audit surface. A two-hook paired system (PostToolUse snapshot + Stop finalize) at ~80 lines total ships that surface as a pack default. The cost is one extra file next to every committed plan; the benefit is reproducible context for every committed decision.**

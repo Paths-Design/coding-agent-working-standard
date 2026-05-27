@@ -3,7 +3,7 @@
 # hook_pack: claude-code
 # hook_pack_version: 7
 # caws_min_major: 11
-# lineage_refs: 8,16,25
+# lineage_refs: 8,16,25,27
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # PostToolUse dispatcher for Claude Code hooks.
 #
@@ -56,7 +56,7 @@ HANDLERS=(
   "naming-check.sh"
   # "doc-frontmatter-check.sh"
   # "audit.sh tool-use"
-  # "plan-transcript-snapshot.sh"
+  "plan-transcript-snapshot.sh"
   "session-log.sh"
 )
 

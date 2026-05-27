@@ -3,7 +3,7 @@
 # hook_pack: claude-code
 # hook_pack_version: 7
 # caws_min_major: 11
-# lineage_refs: 10,19
+# lineage_refs: 10,19,27
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # Stop dispatcher for Claude Code hooks.
 #

@@ -3,7 +3,7 @@
 # hook_pack: claude-code
 # hook_pack_version: 7
 # caws_min_major: 11
-# lineage_refs: 8,11,17,19,22,23,24
+# lineage_refs: 8,11,17,19,22,23,24,26
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 #
 # PreToolUse dispatcher for Claude Code hooks.
@@ -57,6 +57,11 @@ HANDLERS=(
   worktree-write-guard.sh
   protected-paths.sh
   scan-secrets.sh
+  # quiet-merge.sh MUST be the last interceptor: it emits
+  # updatedInput which replaces any prior hook's updatedInput.
+  # The hook itself self-filters to Bash + caws worktree merge|destroy
+  # so non-matching tool calls are cheap exits.
+  quiet-merge.sh
 )
 
 run_handlers --short-circuit-on-block "${HANDLERS[@]}"
