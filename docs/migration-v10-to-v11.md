@@ -306,6 +306,87 @@ one-liner. Committed state survives.
 
 ---
 
+## Project doctrine drift: CLAUDE.md, agents.md, and hooks
+
+The CLI surface migration is necessary but not sufficient. Two failure
+modes show up in projects that initialized on caws-cli 10.x and then
+upgraded to 11.x:
+
+1. **Stale doctrine in project root.** `caws init` lays down a
+   `CLAUDE.md` and `agents.md` at project root from
+   `packages/caws-cli/templates/`. The 10.x templates referenced
+   `caws validate`, `caws iterate`, `caws verify-acs`, `caws burnup`,
+   `caws specs create --type feature`, and `caws validate --spec-id <id>`
+   — all of which are removed or renamed in v11. Upgrading the CLI does
+   not rewrite those project files, and CLAUDE.md is exactly the surface
+   AI agents read first. Future agents in those projects will keep
+   citing v10 commands that no longer exist.
+
+2. **Stale hook copies trapped inside linked worktrees.** v11
+   `caws init --agent-surface claude-code` installs the canonical hook
+   pack from `packages/caws-cli/templates/hook-packs/claude-code/`. But
+   a linked worktree gets a snapshot of `.claude/hooks/` at
+   worktree-create time. If the worktree was created before the upstream
+   hook fix landed, the worktree's hooks are frozen at the broken
+   shape — even after main is fixed. The worktree's session walks
+   `git rev-parse --git-common-dir` to find canonical CAWS state, but
+   it runs its own `.claude/hooks/*.sh` for tool-call admission, and
+   those don't get re-snapshotted.
+
+### Symptom: scope-guard falls into union mode
+
+The most common signal is an agent inside a bound worktree getting
+strike-1 / strike-3 blocks against files that `caws scope show <path>`
+confirms are admitted. The kernel-side scope-show CLI reports
+`binding: bound`, but the bash hook still reports `Mode: union (no
+authoritative spec bound)` and applies an unrelated sibling spec's
+`scope.out` to the edit.
+
+Root cause: the hook reads `.caws/worktrees.json` under v10 envelope
+shape `{worktrees: {<name>: {...}}}` while the registry has already
+been migrated to v11 flat-map `{<name>: {...}}` by
+`caws worktree migrate-registry`. The envelope lookup returns
+undefined, the registry-binding lookup fails silently, and the hook
+falls back to union mode.
+
+### Migration recipe for downstream projects
+
+Sterling — the canonical reference downstream — landed this work in
+the following commit chain (`/Users/darianrosebrook/Desktop/Projects/sterling`):
+
+| Concern | Sterling commit prefix | What changed |
+|---|---|---|
+| policy.yaml + per-edit gates run | `chore(caws): land CAWS-1117-COMPAT-BOOTSTRAP-01` | policy.yaml gate-vocabulary; hook switches from removed `caws quality-gates` to v11 `caws gates run --spec <id> --context commit`; bootstrap-failure-vs-violation discipline. |
+| events.jsonl rotation | `chore(caws): land CAWS-1117-EVENT-LOG-COMPAT-RECON-01` | Truncate to empty + preserve old log at `.bak` and `.archive-<ts>`. v11's allowed event enum does not include `chain_rotated`; new chain starts at seq:1 with `prev_hash:null` on the next append. |
+| worktrees.json registry shape | `chore(caws): land CAWS-1117-WORKTREE-REGISTRY-CLEAN-01` | `caws worktree migrate-registry` from v10 envelope to v11 flat-map + disk cleanup of zombie destroyed-record directories. |
+| Waivers schema | `chore(caws): land CAWS-1117-WAIVER-SCHEMA-RECON-01` | Per-file `.caws/waivers/<WV-NNNN>.yaml` shape; expired waivers transitioned to `status: revoked` with `revocation:` records. |
+| Hook pack install (v11) | `chore(caws): land CAWS-1117-HOOK-PACK-INSTALL-01` | Removed legacy `.caws/working-spec.yaml`; ran `caws init --agent-surface claude-code --adopt`; patched `--delete-branch` flag refs. |
+| Hook dual-shape cascade | `chore(caws): land CAWS-1117-V11-HOOK-DRIFT-MERGE-01` | Repaired 6 `Object.values(reg.worktrees || {})` callsites across 4 hooks that silently went blind after the registry migration. |
+| Waiver gate vocabulary | `chore(caws): land CAWS-1117-WAIVER-GATE-VOCAB-RECON-01` | Mapped 10 waivers' 8 v10/Sterling-custom gate names to v11 enum. |
+| Spec schema bulk migrate | `chore(caws): land CAWS-1117-SPEC-SCHEMA-MIGRATE-01` | 67 of 68 specs migrated to v11: status→lifecycle_state, type→mode, acceptance_criteria→acceptance, change_budget removed, content preserved into closure_notes. |
+| Doctrine rewrite | `docs(caws): rewrite Sterling CAWS doctrine surfaces to v11.1.7` | Sterling's `CLAUDE.md`, `.claude/README.md`, `.claude/rules/worktree-isolation.md` rewritten — removes `--spec-id`, `caws validate`, `caws iterate`, `caws specs conflicts`, `caws parallel setup`, etc. |
+| Lib extraction + scope-guard fix | `refactor(hooks): extract dual-shape CAWS state helpers to lib/caws-state.sh` | Factored the dual-shape reader and canonical-dir resolver into `.claude/hooks/lib/caws-state.sh`. Single source of truth for v10/v11 readers eliminates the "missed one of N callsites during a schema migration" bug class. |
+
+Roughly: assume one half-day of work per downstream project for the
+full migration. Smaller projects can skip the bulk-spec migration
+(specs that never break the v11 schema don't need rewrites).
+
+### What this guide will NOT do for you
+
+The CAWS CLI does not currently rewrite project-level `CLAUDE.md` or
+`agents.md` on upgrade. If your project initialized on 10.x:
+
+- Re-running `caws init` will refuse on legacy residue (`.caws/working-spec.yaml`).
+- `caws init --agent-surface claude-code --adopt` will preserve your
+  existing hook customizations but will not touch root-level docs.
+- Manual rewrite is required for `CLAUDE.md`/`agents.md`. Sterling's
+  v11.1.7 doctrine commits (above) are a working reference.
+
+A future surface (`caws init --refresh-doctrine` or `caws doctor
+--doctrine-drift`) could automate this; it does not exist yet. If you
+want it, please file an issue against the upstream caws repo with the
+specific stale-command grep patterns your project encountered.
+
 ## Open follow-up work
 
 The following are tracked in `.caws/specs/` and may close additional gaps as they ship:
@@ -340,5 +421,7 @@ This guide was authored as part of `DOC-MIGRATION-V10-TO-V11-001`, an active tie
 The four-bucket classification (Replaced / Renamed / Removed-without-replacement / Deferred) is intentional: it forces every v10.2 command into an explicit category, so no surface is unaddressed and no surface is overclaimed.
 
 Last verified against:
-- `@paths.design/caws-cli@11.1.4` (current npm latest)
+- `@paths.design/caws-cli@11.1.7` (current npm latest as of 2026-05-27)
 - main branch HEAD `2e4b7ab` (post-release-tag-driven merge + spec closure)
+- Downstream reference: Sterling repo's CAWS-1117-* migration commit chain (2026-05-26)
+  documented in the "Project doctrine drift" section above.
