@@ -69,15 +69,6 @@ const SESSION_CANDIDATES = {
     { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
   ],
 };
-const FOREIGN_SESSION_CANDIDATES = {
-  candidates: [{ identity: FOREIGN_SESSION, source: 'capsule' }],
-  trace: [
-    { source: 'claude_env', outcome: 'absent', reason: 'test fixture' },
-    { source: 'hook_env', outcome: 'absent', reason: 'test fixture' },
-    { source: 'capsule', outcome: 'admitted', count: 1 },
-    { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
-  ],
-};
 
 function mkRepo(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

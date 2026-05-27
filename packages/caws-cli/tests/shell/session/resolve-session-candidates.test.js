@@ -42,7 +42,9 @@ function mkTempCaws() {
 function cleanup(root) {
   try {
     fs.rmSync(root, { recursive: true, force: true });
-  } catch {}
+  } catch {
+    // best-effort; tmpdir teardown is not fatal
+  }
 }
 
 function writeCapsule(cawsDir, id, worktreeRoot) {
