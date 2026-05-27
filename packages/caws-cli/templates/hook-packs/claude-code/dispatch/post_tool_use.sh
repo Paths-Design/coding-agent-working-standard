@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 6
+# hook_pack_version: 7
 # caws_min_major: 11
-# lineage_refs: 8,16
+# lineage_refs: 8,16,25,27
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # PostToolUse dispatcher for Claude Code hooks.
 #
@@ -53,10 +53,10 @@ source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
 HANDLERS=(
   # "quality-check.sh"
   # "validate-spec.sh"
-  # "naming-check.sh"
+  "naming-check.sh"
   # "doc-frontmatter-check.sh"
   # "audit.sh tool-use"
-  # "plan-transcript-snapshot.sh"
+  "plan-transcript-snapshot.sh"
   "session-log.sh"
 )
 

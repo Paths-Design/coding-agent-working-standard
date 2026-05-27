@@ -1060,3 +1060,211 @@ The rewrite succeeded at creating a cleaner kernel/store/shell substrate, but th
 ### Single-line synthesis
 
 **Entry 21 was a category error in the rewrite plan: CAWS looked rewritable because the visible CLI surface was legible, but the system's real value was accumulated negative knowledge encoded unevenly across commands, hooks, docs, templates, event logs, and worktree habits. The v11 substrate gave us architecture-completion confidence before behavioral-equivalence confidence. The deeper invariant: governance software cannot be rewritten as a feature map; it has to be migrated as a set of preserved safety semantics, with docs treated as claims that must be proven against the reachable implementation.**
+
+---
+
+## Entry 22: Session Crash When Working Directory Is Deleted Mid-Session (May 2026)
+
+**Severity:** Medium (silent agent failure; no recovery message; affects multi-worktree workflows)
+**Era:** v11.1 (Claude Code harness, multi-agent worktree scenarios)
+**Surface that failed:** the Claude Code session itself, downstream of any agent tool call when CWD becomes invalid
+**Agent class involved:** sessions operating inside a `.caws/worktrees/<name>` worktree that another process (or a `caws worktree destroy` invocation, or a `caws worktree merge` from canonical) removes from disk
+
+### What happened
+
+When a worktree directory is destroyed while a Claude Code session has its CWD inside it, the next filesystem-touching tool call crashes the session with a posix_spawn ENOENT or similar error. Recovery requires the user to restart the session; the agent cannot self-recover because every subsequent tool call also fails. Documented in upstream Claude Code as https://github.com/anthropics/claude-code/issues/34344.
+
+The `caws worktree merge` and `caws worktree destroy` commands legitimately remove worktree directories as part of their lifecycle. An agent operating inside the destroyed worktree at the moment of removal is left holding an invalid CWD. The post-removal PostToolUse hooks may attempt to write audit logs into the now-missing directory and fail; the failure cascades into the next agent tool call.
+
+Sterling shipped a defensive PreToolUse hook (`cwd-guard.sh`, 9 lines) that detects a missing CWD before the tool runs and emits a blocking diagnostic naming the recovery path (`cd <repo-root>`). The v11 caws pack did not ship it. The Sterling hook port-decision audit (docs/reports/sterling_hook_port_audit_001.md) flagged it as a universal-applicability candidate, and `CAWS-HOOK-PACK-PROMOTE-001` shipped it.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `cwd-guard.sh` to the PreToolUse dispatch order at position 2 (after `agent-heartbeat.sh`, before any guard that might block). The hook is generic — it checks `[ ! -d "$(pwd 2>/dev/null)" ]`, then prints a `cd <repo-root>` recovery message and exits 2. No project-specific references.
+
+### What it doesn't catch
+
+- Post-tool-use hooks that crash on missing CWD after the agent's tool call has already executed. The session is still salvageable in that case (the agent's response goes through), but audit-log writes may fail silently. Out of scope for this entry; a sibling hook covering PostToolUse missing-CWD would be a separate slice.
+- CWD lost partway through a Bash tool call's execution (e.g., the command itself does `rm -rf $(pwd)`). PreToolUse runs before the command, so a missing CWD detected at that point catches the post-destroy case; an in-flight destroy is not catchable at the hook layer.
+
+### Single-line synthesis
+
+**Entry 22: a multi-worktree governance surface that ships a `destroy` command but doesn't ship a hook to catch the agent operating in the directory the destroy is about to remove is one user mistake away from a session crash with no recovery message. The cwd-guard.sh hook is a 9-line answer to a multi-month silent failure class.**
+
+---
+
+## Entry 23: The Doctrine Of "Hooks Cannot Be Edited By An Agent" Had No Enforcement (May 2026)
+
+**Severity:** High (defense-in-depth gap; the agent could rewrite its own enforcement layer)
+**Era:** v10.2 through v11.1
+**Surface that failed:** the boundary between "hooks are managed governance" and "the agent can Write/Edit any path that scope.in admits"
+**Agent class involved:** any agent whose spec scope.in happens to admit `.claude/hooks/*` or `.claude/logs/guard-strikes-*.json`, OR any agent in union-mode where no other spec's scope.out excludes those paths
+
+### What happened
+
+The v11 hook pack's CLAUDE.md explicitly states hooks "may not be removed or weakened by an agent's local judgment" (templates/hook-packs/claude-code/CLAUDE.md). The pack documentation describes the discipline. But the discipline had no enforcement mechanism in the hook pack itself — `scope-guard.sh` only refuses paths the bound spec excludes, and a spec could legitimately include `.claude/hooks/*` in its scope.in (e.g., a slice that promotes new hooks like this very one). Worse, in union mode (no bound spec), no scope would reject the path unless every active spec happened to declare it in scope.out.
+
+The same gap applied to `.claude/logs/guard-strikes-*.json`. An agent at strike 2/3 could in principle edit the strike file to reset itself rather than asking the user to run `reset-strikes.sh`. The doctrine warned against it; no hook structurally prevented it.
+
+Sterling shipped `protected-paths.sh` as a PreToolUse hook that refuses Write/Edit on those two path classes unconditionally (regardless of spec scope). The Sterling hook port-decision audit classified it as universally applicable. `CAWS-HOOK-PACK-PROMOTE-001` shipped it.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `protected-paths.sh` to the PreToolUse dispatch order after `scope-guard.sh` (so spec-aware refusals fire first, but spec-allowed edits to hook files still get caught). The hook has two refusal paths:
+
+- `*/.claude/hooks/*` → exit 1 with "ask the user for permission before editing Claude hook scripts"
+- `*/.claude/logs/guard-strikes-*.json` → exit 2 with a longer message pointing at `reset-strikes.sh --current` as the legitimate recovery path
+
+Paths it protects are universally part of the v11 pack layout; no consumer-specific references.
+
+### What it doesn't catch
+
+- An agent invoking Bash to `rm` or `chmod` a hook file. The PreToolUse hook fires on Write/Edit tool calls, not on Bash commands that happen to touch hook paths. `block-dangerous.sh` catches the most extreme cases (`rm -rf`) but not surgical hook deletion. A future entry covering Bash-mediated hook tampering would need a different mechanism.
+- An agent editing the hook from outside a Claude Code session entirely (a human typing `vim`, a CI job, etc.). The hook only runs on agent tool calls.
+
+### Single-line synthesis
+
+**Entry 23: the gap between "the doctrine says do not do X" and "the hook structurally refuses X" is the gap between an aspiration and an enforcement. The pack shipped the aspiration for months without the enforcement; one consumer (Sterling) had built the enforcement locally. Promoting it closed the gap for every downstream consumer.**
+
+---
+
+## Entry 24: Reading Secret-Bearing Files Without A Redaction Reminder (May 2026)
+
+**Severity:** Low (advisory; depends on agent compliance after warning)
+**Era:** v10.2 through v11.1
+**Surface that failed:** no admission point between "the scope.in admits this path" and "the agent's response may include sensitive values verbatim"
+**Agent class involved:** any agent whose Read tool touches `.env*`, SSH keys, cloud-provider config files, or similar secret-bearing paths
+
+### What happened
+
+The v11 hook pack had no advisory mechanism on Read of secret-bearing paths. An agent reading `.env.production` for legitimate purposes (e.g., checking which env vars a script expects) could include the literal secret values in its response, in commit messages, or in summarized output. The scope-guard layer doesn't help here — `.env.production` may be entirely in-scope for a slice that's investigating env-var handling.
+
+Sterling shipped `scan-secrets.sh` as a PreToolUse advisory hook that emits a `hookSpecificOutput.additionalContext` warning whenever the tool call's target path matches one of ~20 well-known secret-file patterns (`.env*`, `*.pem`, `*.key`, `id_rsa`, etc.) or sits inside a sensitive directory (`.ssh`, `.aws`, `.gcloud`, etc.). The hook never blocks; it only injects a reminder into the agent's context. Sterling kept it as the last handler in the PreToolUse chain so it never short-circuits a real block from earlier hooks.
+
+The Sterling hook port-decision audit classified it as universally applicable — the patterns are universal, the implementation is 87 lines of generic Bash, and advisory-only hooks can't break anything. `CAWS-HOOK-PACK-PROMOTE-001` shipped it.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `scan-secrets.sh` to the PreToolUse dispatch order as the LAST handler. The injected warning text is generic ("do not include sensitive values in your response; use placeholders like <API_KEY>"). No project-specific patterns.
+
+### What it doesn't catch
+
+- An agent reading secret-bearing values via Bash (`cat .env`, `grep PASSWORD config`) where the secret is in the file's content but the file path itself doesn't match the pattern (e.g., `appsettings.json` containing inlined credentials). Content-based secret detection is a much larger problem and not in scope.
+- Repo paths that contain secrets but don't match the pattern list. The patterns are heuristic; a project that names its credentials file `myconfig.json` will not trigger the advisory.
+- The agent ignoring the advisory. The hook adds context; compliance is the agent's responsibility.
+
+### Single-line synthesis
+
+**Entry 24: a hook that costs nothing to run, never blocks anything, and reminds the agent of a discipline the doctrine already states is a low-cost insurance policy against a high-cost outcome (a leaked secret in a transcript or commit message). It should ship in the pack by default.**
+
+---
+
+## Entry 25: "No Shadow Files" Was Doctrine With No Hook (May 2026)
+
+**Severity:** Medium (doctrine drift; the "edit in place" rule appeared in CLAUDE.md but had no enforcement)
+**Era:** v10.2 through v11.1
+**Surface that failed:** the boundary between "the doctrine lists banned filename modifiers" and "the agent creates a Write tool call with one of those modifiers"
+**Agent class involved:** any agent whose first instinct on a refactor is to create `<file>-enhanced.<ext>` / `<file>-new.<ext>` / `<file>-v2.<ext>` rather than edit the original in place
+
+### What happened
+
+The CAWS key rules in CLAUDE.md include `No shadow files — edit in place, never create *-enhanced.*, *-new.*, *-v2.*, *-final.*, *-copy.* duplicates`. The rule appears in the user-global session protocol (`~/.claude/CLAUDE.md`), in the project-level CLAUDE.md, and in the doctrine docs. The rule had no hook in the pack — no mechanism would catch an agent that created `auth-improved.ts` next to `auth.ts`.
+
+The omission compounded with the way LLM agents instinctively reach for incremental naming under stress (rewrites, refactors, "let me try a different approach"). The doctrine's existence in three places didn't prevent the failure mode; it just gave the user a clear thing to cite when reviewing a PR that contained the shadow file.
+
+Sterling shipped `naming-check.sh` as a PostToolUse advisory hook that fires on Write (new file creation only). It checks the new file's basename against a list of ~20 banned modifier suffixes (with word-boundary matching to avoid false positives like "old" inside "gold_oracle"), checks for version suffixes (`-v2.`, `_v3.`, etc.), and checks for date stamps (`YYYY-MM-DD`). Test files with canonical extensions (`.test.js`, `.spec.ts`) are exempted from the test-related modifier check.
+
+The Sterling hook port-decision audit classified the detection logic as universally applicable but flagged that the advisory message contained a reference to a removed v10 CLI command (`caws naming check`) and to a v10 artifact (`.caws/canonical-map.yaml`). Both were stripped before shipping in v7. The remaining advisory text cites the CLAUDE.md key rule directly.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `naming-check.sh` to the PostToolUse dispatch order. The hook is advisory-only (never blocks); the agent receives a `hookSpecificOutput.additionalContext` warning on the next tool call. The banned modifier list, version-suffix regex, and date-stamp regex are universally applicable.
+
+### What it doesn't catch
+
+- Existing files with banned modifiers in their names. The hook fires on Write (new file creation) only; it does not retroactively flag legacy files. A `caws doctor` finding for that would be a separate slice.
+- Renames via Bash (`mv old.ts old-v2.ts`). The hook fires on the Write tool, not on Bash mv invocations. The git-safety hook may catch some destructive renames, but not the rename-with-banned-suffix case.
+- An agent's response that proposes the shadow file in prose but doesn't actually Write it. The hook fires on the tool call, not on the agent's reasoning.
+
+### Single-line synthesis
+
+**Entry 25: shipping a doctrine without a hook is shipping an aspiration. The "no shadow files" rule lived in three doctrine docs for months without enforcement; an advisory PostToolUse hook is the smallest enforcement that closes the doctrine-vs-runtime gap.**
+
+---
+
+## Entry 26: `caws worktree merge` Output And CWD-Destruction Crashed Subagents (May 2026)
+
+**Severity:** Medium (silent subagent crash + context-window overflow; affects multi-agent workflows)
+**Era:** v11.1 — exposed during CAWS-FIRST-CONTACT-UX-001 and CAWS-HOOK-PACK-RENDERER-MISSING-001 merge runs
+**Surface that failed:** the `caws worktree merge` and `caws worktree destroy` commands' verbose output AND their destruction of the agent's own CWD before the agent's tool call has finished
+**Agent class involved:** any agent whose current Bash invocation calls `caws worktree merge` or `caws worktree destroy` against a worktree it's operating inside; any agent reading the merge output into its context
+
+### What happened
+
+`caws worktree merge` produces verbose output: setup detection, schema validation, registry mutations, the actual git merge, spec close, worktree destroy, registry cleanup. In a long session this output can push the context window over the limit, with downstream consequences that present as a misleading "Not logged in" error.
+
+Worse, both `merge` and `destroy` remove the worktree directory from disk. If the agent's Bash tool was invoked with cwd inside that worktree, the moment the directory is removed the agent's CWD becomes invalid. Any PostToolUse hook that subsequently tries to write to a path relative to CWD crashes with posix_spawn ENOENT, and every Bash call after that fails the same way.
+
+Sterling shipped `quiet-merge.sh` as a PreToolUse hook that intercepts `caws worktree merge|destroy` bash commands via `updatedInput` and rewrites them to:
+
+```
+cd <repo-root> && <original command> 2>/dev/null | tail -3
+```
+
+The `cd` moves the agent's CWD to safety *before* the destroy runs, and the pipe suppresses verbose output that would otherwise overflow context.
+
+The Sterling hook port-decision audit classified it as universally applicable; the doctrine point about `merge` output overflow appears in Sterling's CLAUDE.md worktree section but had no hook in the upstream pack. `CAWS-HOOK-PACK-PROMOTE-001` shipped it.
+
+### What we built or changed because of it
+
+The v7 hook pack adds `quiet-merge.sh` to the PreToolUse dispatch order as the LAST handler — `updatedInput` from this hook replaces any prior interceptor's `updatedInput`, so it must run last. Self-filters to `Bash` tool with `caws worktree merge|destroy` regex. Skips already-piped/redirected commands so the user's explicit handling wins.
+
+Companion to `cwd-guard.sh` (entry 22). `cwd-guard.sh` blocks tool calls when CWD is *already* missing; `quiet-merge.sh` prevents CWD from becoming missing in the first place by cd-ing to repo root before the destroying command runs.
+
+### What it doesn't catch
+
+- A direct `git worktree remove` (not via `caws worktree destroy`). The interceptor matches on `caws worktree merge|destroy` only. A user who shells out to `git` directly will still hit the CWD-destruction crash unless `cwd-guard.sh` catches the post-destroy tool call.
+- A merge that aborts partway through (the `partial_failure_unrecovered` state observed in both Sterling and upstream this session). The rewrite still runs; the `tail -3` may swallow the diagnostic. A future entry covering partial-merge handling would need its own surface.
+- The fundamental session-id-drift bug that necessitates `caws claim --takeover` before merge can succeed at all. That's a separate spec.
+
+### Single-line synthesis
+
+**Entry 26: a destructive command that removes the directory the caller is operating inside ships with no defensive cwd-rewrite by default. The fix is two lines of bash in the right hook slot. Until it shipped, every multi-agent worktree merge was one user-CWD away from a subagent crash and one verbose-output overflow away from a misleading session error.**
+
+---
+
+## Entry 27: Plan Provenance Was Lost At Session End (May 2026)
+
+**Severity:** Low (no incident, missing audit surface)
+**Era:** v11.1 — applies to any consumer using Claude Code's `ExitPlanMode` tool
+**Surface that failed:** no mechanism co-located the session transcript with the plan file at the moment of plan presentation
+**Agent class involved:** any agent using plan mode for non-trivial work; reviewers who want to understand what context produced a given plan
+
+### What happened
+
+Claude Code's plan mode produces a plan file (typically under `.claude/plans/<name>.md`) via `Write` followed by an `ExitPlanMode` tool call that presents the plan to the user. The plan file is durable; the conversation that produced it is not — the session transcript lives under `tmp/<session-id>/` and is per-session ephemeral.
+
+When a reviewer (or future agent, or the original user weeks later) reads a plan file and wants to understand *what context the plan came out of* — what was explored, what was rejected, what trade-offs were considered — they have to find the original session transcript by session-id, which is opaque and may be lost.
+
+Sterling shipped a paired-hook system: `plan-transcript-snapshot.sh` (PostToolUse on ExitPlanMode) copies the transcript at the moment of plan presentation to `<plan-path>.transcript.jsonl`, and `plan-transcript-finalize.sh` (Stop) overwrites that snapshot with the final turn-end transcript (which includes user approval, subsequent reasoning, and any tool calls that happened after the plan was presented). The result is a `.transcript.jsonl` file co-located with every committed plan, capturing the full conversation provenance.
+
+The Sterling hook port-decision audit classified the pair as universally applicable — both hooks reference only generic Claude Code paths (`$HOOK_TRANSCRIPT_PATH`, `.claude/plans/*.md`, `$HOME/.claude/.pending-plan-snapshots`). No Sterling-specific references. `CAWS-HOOK-PACK-PROMOTE-001` shipped both as a unit.
+
+### What we built or changed because of it
+
+The v7 hook pack adds:
+- `plan-transcript-snapshot.sh` to `dispatch/post_tool_use.sh` (self-filters to `ExitPlanMode`)
+- `plan-transcript-finalize.sh` to `dispatch/stop.sh` (drains the pending list)
+
+Both are idempotent and never block. They write to `<plan-path>.transcript.jsonl` (co-located with the plan) and `$HOME/.claude/.pending-plan-snapshots` (a per-user state file outside the repo). The manifest's stateModel was NOT extended because the writes go to per-user state outside the project tree; `$HOME/.claude/` is the user's harness state, not the project's.
+
+### What it doesn't catch
+
+- Plans created without `ExitPlanMode`. If an agent writes a plan-shaped file and never presents it via the tool, no snapshot is captured.
+- Plans presented in sessions where the user never approves (Stop fires without ExitPlanMode having succeeded). The hook is best-effort; if the snapshot wasn't registered in the pending list, finalize is a no-op.
+- Privacy. The transcript is unfiltered — Bash command outputs, Read results, etc. all land in the snapshot. The hook header documents this; consumers are responsible for not sharing `.transcript.jsonl` files casually.
+- Cross-session plan continuity. If a plan is presented in one session and edited in a later one, only the most recent session's transcript is captured. Multi-session plan provenance would require a different mechanism.
+
+### Single-line synthesis
+
+**Entry 27: durable artifacts produced by ephemeral conversations need an audit surface. A two-hook paired system (PostToolUse snapshot + Stop finalize) at ~80 lines total ships that surface as a pack default. The cost is one extra file next to every committed plan; the benefit is reproducible context for every committed decision.**

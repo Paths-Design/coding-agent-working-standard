@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 6
+# hook_pack_version: 7
 # caws_min_major: 11
-# lineage_refs: 8,11,17,19
+# lineage_refs: 8,11,17,19,22,23,24,26
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 #
 # PreToolUse dispatcher for Claude Code hooks.
@@ -50,10 +50,18 @@ source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
 # stdout-priority logic ensures a block from a later handler still wins.
 HANDLERS=(
   agent-heartbeat.sh
+  cwd-guard.sh
   block-dangerous.sh
   worktree-guard.sh
   scope-guard.sh
   worktree-write-guard.sh
+  protected-paths.sh
+  scan-secrets.sh
+  # quiet-merge.sh MUST be the last interceptor: it emits
+  # updatedInput which replaces any prior hook's updatedInput.
+  # The hook itself self-filters to Bash + caws worktree merge|destroy
+  # so non-matching tool calls are cheap exits.
+  quiet-merge.sh
 )
 
 run_handlers --short-circuit-on-block "${HANDLERS[@]}"

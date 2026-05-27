@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 6');
+        expect(content).toContain('hook_pack_version: 7');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 6');
+      expect(sessionStart).toContain('hook_pack_version: 7');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 6');
+      expect(preToolUse).toContain('hook_pack_version: 7');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 6');
+      expect(stop).toContain('hook_pack_version: 7');
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -681,7 +681,7 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
     const content = fs.readFileSync(rendererPath, 'utf8');
     expect(content).toContain('CAWS-MANAGED-HOOK');
     expect(content).toContain('hook_pack: claude-code');
-    expect(content).toContain('hook_pack_version: 6');
+    expect(content).toContain('hook_pack_version: 7');
     expect(content).toContain('caws_min_major: 11');
   });
 
@@ -731,5 +731,195 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
       '../../../dist/init/hook-packs/manifest-claude-code'
     );
     expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(6);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// CAWS-HOOK-PACK-PROMOTE-001 — A1/A2/A3/A4 (4-hook subset)
+//
+// Promotes 4 PORT-classified hooks from
+// docs/reports/sterling_hook_port_audit_001.md:
+//   cwd-guard.sh, protected-paths.sh, scan-secrets.sh (PreToolUse)
+//   naming-check.sh (PostToolUse)
+// ════════════════════════════════════════════════════════════════════
+describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
+  const packRoot = path.resolve(
+    __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+  );
+
+  const PROMOTED_HOOKS = [
+    { name: 'cwd-guard.sh', dispatch: 'pre_tool_use.sh', exec: true },
+    { name: 'protected-paths.sh', dispatch: 'pre_tool_use.sh', exec: true },
+    { name: 'scan-secrets.sh', dispatch: 'pre_tool_use.sh', exec: true },
+    { name: 'naming-check.sh', dispatch: 'post_tool_use.sh', exec: true },
+    { name: 'quiet-merge.sh', dispatch: 'pre_tool_use.sh', exec: true },
+    { name: 'plan-transcript-snapshot.sh', dispatch: 'post_tool_use.sh', exec: true },
+    { name: 'plan-transcript-finalize.sh', dispatch: 'stop.sh', exec: true },
+  ];
+
+  it('A1: all 7 promoted hooks exist in the pack template tree', () => {
+    for (const h of PROMOTED_HOOKS) {
+      const p = path.join(packRoot, h.name);
+      expect(fs.existsSync(p)).toBe(true);
+    }
+  });
+
+  it('A1: each promoted hook is registered in the manifest', () => {
+    for (const h of PROMOTED_HOOKS) {
+      const entry = CLAUDE_CODE_PACK.installedFiles.find(
+        (f) => f.sourcePath === h.name
+      );
+      expect(entry).toBeDefined();
+      expect(entry.destPath).toBe(`.claude/hooks/${h.name}`);
+      expect(entry.managed).toBe(true);
+      expect(entry.executable).toBe(h.exec);
+    }
+  });
+
+  it('A1: each promoted hook carries a CAWS-MANAGED-HOOK header at v7', () => {
+    for (const h of PROMOTED_HOOKS) {
+      const content = fs.readFileSync(path.join(packRoot, h.name), 'utf8');
+      expect(content).toContain('CAWS-MANAGED-HOOK');
+      expect(content).toContain('hook_pack: claude-code');
+      expect(content).toContain('hook_pack_version: 7');
+      expect(content).toContain('caws_min_major: 11');
+      // Each promoted hook cites at least one lineage entry from
+      // the 22-25 range.
+      expect(content).toMatch(/lineage_refs: \d+/);
+    }
+  });
+
+  it('A2: PreToolUse dispatcher wires cwd-guard, protected-paths, scan-secrets, quiet-merge', () => {
+    const preToolUse = fs.readFileSync(
+      path.join(packRoot, 'dispatch/pre_tool_use.sh'),
+      'utf8'
+    );
+    expect(preToolUse).toContain('cwd-guard.sh');
+    expect(preToolUse).toContain('protected-paths.sh');
+    expect(preToolUse).toContain('scan-secrets.sh');
+    expect(preToolUse).toContain('quiet-merge.sh');
+
+    // Ordering invariant per audit + the hook's own header comment:
+    // cwd-guard runs early (after agent-heartbeat), protected-paths
+    // runs after scope-guard, scan-secrets advisory runs late,
+    // quiet-merge MUST be last (it emits updatedInput which replaces
+    // any prior interceptor's updatedInput).
+    const cwdIdx = preToolUse.indexOf('cwd-guard.sh');
+    const heartbeatIdx = preToolUse.indexOf('agent-heartbeat.sh');
+    const scopeIdx = preToolUse.indexOf('scope-guard.sh');
+    const protectedIdx = preToolUse.indexOf('protected-paths.sh');
+    const secretsIdx = preToolUse.indexOf('scan-secrets.sh');
+    const quietMergeIdx = preToolUse.indexOf('quiet-merge.sh');
+    expect(cwdIdx).toBeGreaterThan(heartbeatIdx); // cwd-guard after heartbeat
+    expect(protectedIdx).toBeGreaterThan(scopeIdx); // protected-paths after scope-guard
+    expect(secretsIdx).toBeGreaterThan(protectedIdx); // scan-secrets after protected-paths
+    expect(quietMergeIdx).toBeGreaterThan(secretsIdx); // quiet-merge LAST
+  });
+
+  it('A2: PostToolUse dispatcher wires naming-check and plan-transcript-snapshot', () => {
+    const postToolUse = fs.readFileSync(
+      path.join(packRoot, 'dispatch/post_tool_use.sh'),
+      'utf8'
+    );
+    // Uncommented in HANDLERS array.
+    expect(postToolUse).toMatch(/^\s*"naming-check\.sh"/m);
+    expect(postToolUse).toMatch(/^\s*"plan-transcript-snapshot\.sh"/m);
+  });
+
+  it('A2: Stop dispatcher wires plan-transcript-finalize', () => {
+    const stopDispatch = fs.readFileSync(
+      path.join(packRoot, 'dispatch/stop.sh'),
+      'utf8'
+    );
+    expect(stopDispatch).toMatch(/^\s*"plan-transcript-finalize\.sh"/m);
+  });
+
+  it('A2: plan-transcript pair ships as a unit (both files + cross-references)', () => {
+    const snapshot = fs.readFileSync(
+      path.join(packRoot, 'plan-transcript-snapshot.sh'), 'utf8'
+    );
+    const finalize = fs.readFileSync(
+      path.join(packRoot, 'plan-transcript-finalize.sh'), 'utf8'
+    );
+    // Both hooks reference the same $HOME/.claude/.pending-plan-snapshots
+    // state file. Snapshot writes to it; finalize reads + drains.
+    expect(snapshot).toContain('pending-plan-snapshots');
+    expect(finalize).toContain('pending-plan-snapshots');
+    // Each hook documents its companion in the header.
+    expect(snapshot).toMatch(/plan-transcript-finalize/i);
+    expect(finalize).toMatch(/plan-transcript-snapshot/i);
+  });
+
+  it('A2: quiet-merge self-filters to Bash + caws worktree merge|destroy', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'quiet-merge.sh'), 'utf8'
+    );
+    // Self-filter: bail on non-Bash tools.
+    expect(content).toMatch(/HOOK_TOOL_NAME/);
+    expect(content).toMatch(/"\$TOOL_NAME"\s*!=\s*"Bash"/);
+    // Targets the destructive command set.
+    expect(content).toMatch(/caws\\s\+worktree\\s\+\(merge\|destroy\)/);
+    // The rewrite uses updatedInput envelope.
+    expect(content).toMatch(/hookSpecificOutput.*updatedInput/);
+  });
+
+  it('A3: naming-check.sh advisory messages do not reference removed v10 surfaces', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'naming-check.sh'),
+      'utf8'
+    );
+    // Strip the file's own doc-comment header block (lines starting with #).
+    // Stale-reference assertions target what the AGENT sees at runtime
+    // (the hookSpecificOutput.additionalContext strings), not the
+    // documentation comments that explain the genericization itself.
+    const codeOnly = content
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    // The v10 CLI is gone; the advisory text must not direct users
+    // to invoke it.
+    expect(codeOnly).not.toMatch(/caws naming check/);
+    expect(codeOnly).not.toMatch(/canonical-map\.yaml/);
+    // Generic doctrine reference is preserved in the advisory text.
+    expect(codeOnly).toMatch(/No shadow files/);
+  });
+
+  it('A4: failure-lineage.md has entries 22-27 for the 7 promoted hooks', () => {
+    const lineagePath = path.resolve(
+      __dirname, '..', '..', '..', '..', '..', 'docs', 'failure-lineage.md'
+    );
+    const content = fs.readFileSync(lineagePath, 'utf8');
+    expect(content).toMatch(/^## Entry 22:/m);
+    expect(content).toMatch(/^## Entry 23:/m);
+    expect(content).toMatch(/^## Entry 24:/m);
+    expect(content).toMatch(/^## Entry 25:/m);
+    expect(content).toMatch(/^## Entry 26:/m);
+    expect(content).toMatch(/^## Entry 27:/m);
+    // Each cites the corresponding hook by name (entries 22-25 are
+    // 1:1 with their hooks; 26 covers quiet-merge.sh; 27 covers the
+    // plan-transcript pair).
+    expect(content).toMatch(/Entry 22:[\s\S]*cwd-guard\.sh/);
+    expect(content).toMatch(/Entry 23:[\s\S]*protected-paths\.sh/);
+    expect(content).toMatch(/Entry 24:[\s\S]*scan-secrets\.sh/);
+    expect(content).toMatch(/Entry 25:[\s\S]*naming-check\.sh/);
+    expect(content).toMatch(/Entry 26:[\s\S]*quiet-merge\.sh/);
+    expect(content).toMatch(/Entry 27:[\s\S]*plan-transcript-snapshot\.sh/);
+    expect(content).toMatch(/Entry 27:[\s\S]*plan-transcript-finalize\.sh/);
+  });
+
+  it('invariant 5: pack version bumped to 7', () => {
+    const { CLAUDE_CODE_PACK_VERSION } = require(
+      '../../../dist/init/hook-packs/manifest-claude-code'
+    );
+    expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(7);
+  });
+
+  it('invariant 6: lineageRefs in the manifest cite all promoted entries (22-27)', () => {
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(22);
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(23);
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(24);
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(25);
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(26);
+    expect(CLAUDE_CODE_PACK.lineageRefs).toContain(27);
   });
 });
