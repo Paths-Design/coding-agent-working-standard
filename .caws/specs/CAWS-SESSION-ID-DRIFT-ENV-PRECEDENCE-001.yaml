@@ -3,8 +3,9 @@ title: 'resolveSession admits HOOK_SESSION_ID; mintCapsule cleans up superseded 
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: session-id-drift-fix
 created_at: '2026-05-27T06:18:24.680Z'
-updated_at: '2026-05-27T06:20:00.000Z'
+updated_at: '2026-05-27T06:45:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
@@ -15,6 +16,8 @@ scope:
   in:
     - .caws/specs/CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001.yaml
     - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/src/shell/rules.ts
     - packages/caws-cli/tests/shell/session/resolve-session.test.js
   out:
     - packages/caws-cli/src/shell/commands
