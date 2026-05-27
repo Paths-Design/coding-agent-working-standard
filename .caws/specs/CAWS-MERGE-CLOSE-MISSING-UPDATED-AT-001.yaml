@@ -2,10 +2,11 @@ id: CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001
 title: 'closeSpec and archiveSpec insert updated_at when absent'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: merge-close-updated-at
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Manually closed post-merge fc7a48d (merge required conflict resolution with tombstone, auto-close path not used)'
 created_at: '2026-05-27T21:17:04.469Z'
-updated_at: '2026-05-27T21:17:04.469Z'
+updated_at: '2026-05-27T21:52:15.667Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
