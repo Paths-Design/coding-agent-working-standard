@@ -99,6 +99,32 @@ export const STORE_RULES = {
   EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED:
     'store.events.migrate.partial_upgrade_refused',
 
+  // ---- specs migration (CAWS-MIGRATE-V10-SPECS-001) -----------------------
+  /** Scan failed to read .caws/specs/ directory. Structural — refuses
+   *  rather than silently returning an empty scan (so apply-default
+   *  bypass can't masquerade as "no v10 specs found"). */
+  SPECS_MIGRATE_SCAN_FAILED: 'store.specs.migrate.scan_failed',
+  /** A YAML file in .caws/specs/ could not be parsed during scan;
+   *  recorded per-file but does not stop the scan. */
+  SPECS_MIGRATE_PARSE_FAILED: 'store.specs.migrate.parse_failed',
+  /** --apply (no --partial) refused because at least one spec hit a
+   *  refused verdict; ZERO files were written. */
+  SPECS_MIGRATE_REFUSALS_PRESENT: 'store.specs.migrate.refusals_present',
+  /** A post-write validation of the transformer's output rejected the
+   *  spec; the write for that file was rolled back. Other files in
+   *  the batch are NOT rolled back per non_functional reliability rule. */
+  SPECS_MIGRATE_POST_WRITE_VALIDATION_FAILED:
+    'store.specs.migrate.post_write_validation_failed',
+  /** Writing a migrated spec file to disk failed (atomic write rejected
+   *  by filesystem). The other writes proceeded; the report records
+   *  which files were skipped. */
+  SPECS_MIGRATE_WRITE_FAILED: 'store.specs.migrate.write_failed',
+  /** Writing the durable migration report to disk failed AFTER spec
+   *  writes succeeded. The migrations are on disk; only the audit
+   *  trail failed. Operator must investigate. */
+  SPECS_MIGRATE_REPORT_WRITE_FAILED:
+    'store.specs.migrate.report_write_failed',
+
   // ---- init (slice 7b) ----------------------------------------------------
   /** A legacy file (e.g., working-spec.yaml) blocks vNext init. */
   INIT_LEGACY_RESIDUE: 'store.init.legacy_residue',

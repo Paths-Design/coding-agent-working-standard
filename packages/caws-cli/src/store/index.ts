@@ -26,6 +26,25 @@ export { readJsonFile } from './json-store';
 export { readYamlFile, readYamlSource } from './yaml-store';
 
 export { loadSpecs } from './specs-store';
+
+// ─── v10→v11 spec migration (CAWS-MIGRATE-V10-SPECS-001) ─────────────────
+export {
+  runSpecsMigrateScan,
+  runSpecsMigrateApply,
+  MIGRATION_REPORT_SCHEMA_VERSION,
+} from './specs-migration';
+export type {
+  ScanEntry,
+  ScanReport,
+  ReportEntry,
+  ReportVerdict,
+  MigrationReport,
+  ApplyResult as SpecsMigrateApplyResult,
+  ScanOptions as SpecsMigrateScanOptions,
+  ApplyOptions as SpecsMigrateApplyOptions,
+  NonYamlObservation,
+} from './specs-migration';
+
 export { loadPolicy } from './policy-store';
 export { loadWorktrees } from './worktrees-store';
 export { loadAgents } from './agents-store';
