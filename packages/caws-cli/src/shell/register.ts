@@ -35,6 +35,7 @@ import {
   runSpecsCloseCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
+  runSpecsMigrateCommand,
   runSpecsShowCommand,
   runStatusCommand,
   runWaiverCreateCommand,
@@ -669,6 +670,49 @@ export function registerShellCommands(
         const code = runSpecsArchiveCommand({
           id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  specsCmd
+    .command('migrate')
+    .description(
+      'v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; --apply opts into mutation. --apply without --partial refuses if any spec hits a "refused" verdict. --apply --partial writes migratable specs, skips refused, emits a durable JSON report under .caws/migrations/v10-specs/.'
+    )
+    .requiredOption(
+      '--from <version>',
+      'Source schema version (only v10 is supported in v11.2)'
+    )
+    .option('--apply', 'Write migrated YAMLs to disk (default: dry-run)')
+    .option(
+      '--partial',
+      'Allow apply to proceed even when some specs are refused (only meaningful with --apply)'
+    )
+    .option(
+      '--lifecycle-mapping <path>',
+      'Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.'
+    )
+    .option('--json', 'Emit machine-readable JSON output instead of human text')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        from: string;
+        apply?: boolean;
+        partial?: boolean;
+        lifecycleMapping?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runSpecsMigrateCommand({
+          from: opts.from,
+          apply: opts.apply === true,
+          partial: opts.partial === true,
+          ...(opts.lifecycleMapping !== undefined
+            ? { lifecycleMappingPath: opts.lifecycleMapping }
+            : {}),
+          json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);
