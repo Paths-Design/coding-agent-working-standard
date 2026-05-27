@@ -22,6 +22,7 @@
 //   - Rendering (shell layer)
 //   - Concurrent worktree mutations (Slice 6 surface)
 
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -135,6 +136,70 @@ function findSpecPath(cawsDir: string, id: string): string | null {
   const archived = archivedSpecPath(cawsDir, id);
   if (fs.existsSync(archived)) return archived;
   return null;
+}
+
+// ─── Git query helpers (CAWS-ARCHIVE-AS-TOMBSTONE-001) ─────────────────
+//
+// archiveSpec needs to capture the spec yaml's blob_sha + optional
+// source_commit_sha BEFORE removing the file. These helpers wrap
+// execFileSync with the CAWS shell discipline (array args, never raw
+// shell strings) and return null on failure rather than throwing.
+// Failure-tolerant by design: a missing blob means "not in HEAD," not
+// "system is broken."
+
+function runGitQuery(
+  args: ReadonlyArray<string>,
+  repoRoot: string
+): string | null {
+  try {
+    return execFileSync('git', [...args], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return the git blob_sha of a path at HEAD, or null if the path is
+ * not tracked at HEAD. Output is a 40-hex string when present.
+ *
+ * The blob_sha is content-addressed and topology-independent: once
+ * recorded in a spec_archived event, `git show <blob_sha>` recovers
+ * the body regardless of subsequent commit graph rewrites.
+ */
+function gitBlobShaAtHead(
+  repoRoot: string,
+  relPath: string
+): string | null {
+  const output = runGitQuery(['ls-tree', 'HEAD', '--', relPath], repoRoot);
+  if (output === null || output.length === 0) return null;
+  // Output shape: "<mode> <type> <sha>\t<path>"
+  const parts = output.split(/\s+/);
+  if (parts.length < 3) return null;
+  const sha = parts[2];
+  return /^[0-9a-f]{40}$/.test(sha ?? '') ? (sha as string) : null;
+}
+
+/**
+ * Return the sha of the commit that last modified the given path, or
+ * null if no such commit exists (file never tracked). Recorded for
+ * human audit on spec_archived events; NOT used by recover.
+ */
+function gitLastCommitForPath(
+  repoRoot: string,
+  relPath: string
+): string | null {
+  const output = runGitQuery(
+    ['log', '-1', '--format=%H', '--', relPath],
+    repoRoot
+  );
+  if (output === null || output.length === 0) return null;
+  return /^[0-9a-f]{40}$/.test(output) ? output : null;
 }
 
 // ─── Auto-commit helper (CAWS-SPECS-WRITER-AUTOCOMMIT-001) ──────────────
@@ -596,87 +661,86 @@ export function archiveSpec(
   }
 
   const now = (input.now ?? (() => new Date()))().toISOString();
-  const toPath = archivedSpecPath(cawsDir, input.id);
 
-  // Patch lifecycle_state → archived and bump updated_at on a copy.
-  let patched = originalBytes;
-  const s1 = setTopLevelScalar(patched, 'lifecycle_state', 'archived');
-  if (!s1.ok) return err(s1.errors);
-  patched = s1.value;
-  const s2 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
-  if (!s2.ok) return err(s2.errors);
-  patched = s2.value;
+  // CAWS-ARCHIVE-AS-TOMBSTONE-001 invariant: archive does NOT write
+  // a body to .caws/specs/.archive/<id>.yaml. The body is recoverable
+  // via git history; the only on-disk mutation is the deletion of the
+  // active path.
+  //
+  // Step ordering (locked inside the lifecycle txn):
+  //   1. Capture blob_sha + source_commit_sha BEFORE any mutation
+  //      (so even if the txn fails, no state has been written).
+  //   2. unlink fromPath inside the txn's plannedWrites (modelled as
+  //      a delete via the new lifecycle-transaction shape, OR
+  //      executed inside the txn callback for v1).
+  //   3. Append the spec_archived event carrying blob_sha (new
+  //      tombstone shape) — NOT to_path.
+  //   4. Post-txn, autoCommit stages the deletion via `git add` (which
+  //      stages deletions when the file is gone).
+  //
+  // v1 ordering note: lifecycle-transaction.plannedWrites expects
+  // {path, contents} pairs (creates/overwrites). It does not model
+  // deletions natively. For v1 we execute the unlink inside the
+  // txn callback AFTER the event write succeeds; if the unlink
+  // fails post-event, we surface partial_failure_unrecovered
+  // (same shape as the legacy code did).
+  //
+  // void input.reason: archive accepts --reason for parity with
+  // close but the spec_archived schema does not carry it.
 
-  // Validate.
-  const reparsed = parseAndValidateSpec(patched);
-  if (!isOk(reparsed)) {
-    return err(
-      reparsed.errors.map((d) =>
-        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
-          subject: d.subject ?? input.id,
-          data: { source_rule: d.rule, hint: 'planned-bytes validation failed' },
-        })
-      )
-    );
-  }
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const fromRel = path.relative(repoRoot, fromPath);
 
-  // Ensure the archive dir exists. fs.renameSync requires it.
-  try {
-    fs.mkdirSync(path.dirname(toPath), { recursive: true });
-  } catch (e) {
-    const cause = e as { message?: string };
+  // Capture BEFORE any mutation. blob_sha is the authoritative
+  // recovery target. source_commit_sha is optional human audit.
+  const blobSha = gitBlobShaAtHead(repoRoot, fromRel);
+  if (blobSha === null) {
     return err(
       storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `Failed to create archive directory: ${cause.message ?? 'unknown'}.`,
-        { subject: path.dirname(toPath) }
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is not tracked at HEAD. Cannot archive: blob_sha is the authoritative recovery target, and without it the archive event would have no recovery path. Commit the spec first (or run \`caws specs close <id>\` which auto-commits per CAWS-SPECS-WRITER-AUTOCOMMIT-001), then re-run archive.`,
+        { subject: input.id, data: { from_path: fromRel } }
       )
     );
   }
+  const sourceCommitSha = gitLastCommitForPath(repoRoot, fromRel);
 
-  // Filesystem-move pattern: we write the patched bytes to the new
-  // path via the transaction, then delete the source. The transaction
-  // doesn't model moves natively, so we do this in two phases inside
-  // the same lock:
-  //   1. lifecycle-transaction: write toPath + append spec_archived
-  //   2. AFTER transaction success: unlink fromPath
-  //
-  // If step 2 fails, we surface the partial-failure but the audit log
-  // already records the move intent. The next doctor pass will see
-  // the spec in BOTH locations and surface that as a doctor finding.
-
-  const fromRel = path.relative(path.join(cawsDir, '..'), fromPath);
-  const toRel = path.relative(path.join(cawsDir, '..'), toPath);
+  // Build the event payload in tombstone shape.
+  const eventData: Record<string, unknown> = {
+    from_path: fromRel,
+    blob_sha: blobSha,
+  };
+  if (sourceCommitSha !== null) {
+    eventData.source_commit_sha = sourceCommitSha;
+  }
   const event: EventBody = {
     event: 'spec_archived',
     ts: now,
     actor: input.actor,
     spec_id: input.id,
-    data: { from_path: fromRel, to_path: toRel },
+    data: eventData,
   } as unknown as EventBody;
 
-  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: capture pre-write dirty state
-  // on the source path (the one we're moving out of) BEFORE the
-  // transaction. archiveSpec is the only op that touches two paths;
-  // we autocommit both in a single commit below so the move is one
-  // atomic audit entry.
-  const repoRoot = repoRootFromCawsDir(cawsDir);
+  // Pre-write dirty state on the path being deleted.
   const wasDirtyBeforeWrite = isPathDirty(repoRoot, fromRel);
 
-  // Capture original bytes so we can roll back the unlink in
-  // emergencies (rare but worth tracking).
+  // The "fake plannedWrite" pattern: lifecycle-transaction's contract
+  // is "write these files atomically and append these events." We have
+  // no file to write, so we feed it an empty plannedWrites and append
+  // the event only. The unlink happens AFTER txn success but BEFORE
+  // autocommit, so the autocommit's `git add` stages the deletion.
   let unlinkOk = false;
   let unlinkError: string | null = null;
 
   const txnResult = withLifecycleLock(cawsDir, () => {
     const r = runLifecycleTransaction({
       cawsDir,
-      plannedWrites: [{ path: toPath, contents: patched }],
+      plannedWrites: [],
       events: [event],
     });
     if (!r.ok) return r;
     if (r.value.kind !== 'success') return r;
-    // Transaction wrote toPath + appended event. Now remove fromPath.
+    // Event appended. Now unlink the active path.
     try {
       fs.unlinkSync(fromPath);
       unlinkOk = true;
@@ -687,11 +751,6 @@ export function archiveSpec(
     return r;
   });
 
-  // Reason flows into closure_notes ONLY if the user passed one; archive
-  // event schema does NOT take closure_notes, but we attach the reason
-  // to a follow-up evidence record path in future versions. For v11.1
-  // archive, we accept the --reason for parity with close but the
-  // schema does not carry it.
   void input.reason;
 
   if (!txnResult.ok) {
@@ -707,26 +766,25 @@ export function archiveSpec(
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Archive write succeeded and spec_archived event appended, but original file unlink failed (${unlinkError}). Spec now exists in BOTH active and archived locations.`,
+        `spec_archived event appended (blob_sha=${blobSha}) but unlink of ${fromPath} failed (${unlinkError}). The body is recoverable via \`git show ${blobSha}\` but the active file still exists on disk.`,
         {
           subject: input.id,
           data: {
             from_path: fromPath,
-            to_path: toPath,
-            recovery_instruction: `Manually remove ${fromPath} once you've confirmed ${toPath} is intact.`,
+            blob_sha: blobSha,
+            recovery_instruction: `Manually remove ${fromPath}; the body is in git history at blob ${blobSha}.`,
           },
         }
       )
     );
   }
 
-  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: stage BOTH paths (the new
-  // archived yaml + the unlinked original) in a single autocommit so
-  // the move is one atomic audit entry. autoCommit() reuses the same
-  // safety contracts as worktrees-writer; never throws.
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: autoCommit the deletion. `git
+  // add -- <fromRel>` stages a deletion when the file is gone, so the
+  // resulting commit records the removal.
   const audit = autoCommit({
     repoRoot,
-    paths: [toRel, fromRel],
+    paths: [fromRel],
     message: `chore(caws): archive ${input.id}`,
     wasDirtyBeforeWrite,
   });
@@ -734,7 +792,7 @@ export function archiveSpec(
   return ok({
     kind: 'success',
     id: input.id,
-    path: toPath,
+    path: fromPath,
     data: { audit_commit: audit },
   });
 }

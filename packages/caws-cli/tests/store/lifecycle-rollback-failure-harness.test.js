@@ -256,9 +256,18 @@ describe('LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (event-append boundary)', () =>
   // ──────────────────────────────────────────────────────────────────────
 
   describe('archiveSpec (single-event + external unlink gate)', () => {
-    test('A3: injection on spec_archived -> partial_failure_recovered; source file remains; archive absent', () => {
+    test('A3: injection on spec_archived -> partial_failure_recovered; source file remains; .archive/ never written', () => {
       const id = 'HARNESS-ARCHIVE-001';
       writeActiveSpec(cawsDir, id);
+      // CAWS-ARCHIVE-AS-TOMBSTONE-001: archiveSpec now requires the
+      // spec yaml to be tracked at HEAD (blob_sha is the
+      // authoritative recovery target). Commit the spec yaml AND the
+      // bootstrap .caws/ dir so the close-then-archive chain matches
+      // production behavior (close auto-commits, archive sees a
+      // tracked file).
+      execFileSync('git', ['-C', repo, 'add', '.caws/']);
+      execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'fixture: bootstrap + active spec']);
+
       // archiveSpec requires the spec to be closed first (close before
       // archive in CAWS lifecycle).
       const closeRes = closeSpec(cawsDir, {
@@ -282,14 +291,17 @@ describe('LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (event-append boundary)', () =>
       expect(result.ok).toBe(true);
       expect(result.value.kind).toBe('partial_failure_recovered');
 
-      // A3 core assertion: source remains. The unlink at
-      // specs-writer.ts:547 is gated on r.value.kind === 'success' and
-      // must not run on partial_failure_recovered.
+      // A3 core assertion: source remains. The unlink is gated on
+      // r.value.kind === 'success' and must not run on
+      // partial_failure_recovered.
       expect(fs.existsSync(fromPath)).toBe(true);
       expect(fs.readFileSync(fromPath, 'utf8')).toBe(preFromBytes);
 
-      // Archive destination was a fresh write; rollback removes it.
+      // CAWS-ARCHIVE-AS-TOMBSTONE-001: .archive/ destination was
+      // never written (the tombstone shape doesn't write a body).
+      // The directory itself should not exist.
       expect(fs.existsSync(toPath)).toBe(false);
+      expect(fs.existsSync(path.join(cawsDir, 'specs', '.archive'))).toBe(false);
 
       // No spec_archived event.
       const events = readEvents(cawsDir).filter((e) => e.spec_id === id);
