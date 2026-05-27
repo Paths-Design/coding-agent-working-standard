@@ -8,19 +8,296 @@ created_at: '2026-05-27T23:04:42.538Z'
 updated_at: '2026-05-27T23:04:42.538Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-cli/src/store/specs-store.ts
+    - packages/caws-cli/src/store/waivers-store.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-DOCTOR-SEVERITY-RECALIBRATION-001.yaml
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/tests/unit/doctor-severity-recalibration.test.ts
+    - packages/caws-cli/src/store/specs-store.ts
+    - packages/caws-cli/src/store/waivers-store.ts
+    - packages/caws-cli/tests/store/specs-store-non-yaml-severity.test.js
+  out:
+    - packages/caws-kernel/src/doctor/rules.ts
+    - packages/caws-kernel/src/result/construct.ts
+    - packages/caws-cli/src/store/repo-root.ts
+    - packages/caws-cli/src/shell/commands/doctor.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Doctor severities reflect operator action surface, not producer
+    convenience. ERROR means "real drift; operator must repair to
+    clear." WARN means "attention recommended; not blocking." INFO
+    means "observable state; no action required." Diagnostics whose
+    rule semantics are "by-design skip" or "terminal-state lingering
+    binding" MUST NOT emit ERROR — they train operators to ignore
+    real errors and erode the value of the ERROR signal.
+  - >-
+    doctor.binding.spec_missing_registry is lifecycle-aware:
+    severity ERROR when the referencing spec is in lifecycle_state
+    'active' (the binding-lie is live governance drift requiring
+    repair); severity INFO when the referencing spec is in
+    lifecycle_state 'closed' or 'archived' (the binding is dormant
+    historical residue with no operator action — the spec is
+    terminal, the stale worktree field is a cosmetic artifact of
+    pre-WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 closes). The rule
+    ID and message text are unchanged; only the severity selection
+    at the emission site is lifecycle-aware.
+  - >-
+    store.specs.non_yaml_skipped emits INFO, not ERROR. The rule
+    name itself signals by-design behavior — the store deliberately
+    skips files in .caws/specs/ that do not parse as spec YAML
+    (e.g., registry.json, *.preflight.md companion artifacts).
+    These are not load failures; they are normal directory residents
+    the store ignores. ERROR was wrong because storeDiagnostic
+    helper defaulted unset severity to 'error' via the diagnostic()
+    constructor — this slice sets the severity explicitly at the
+    emission site.
+  - >-
+    store.waivers.non_yaml_skipped (parallel construct in
+    waivers-store) follows the same rule: INFO, not ERROR. Same
+    rationale — non-YAML files in .caws/waivers/ are skipped
+    by-design.
+  - >-
+    No load-side diagnostic defaults are globally changed from
+    'error'. Genuine load failures — malformed YAML, malformed
+    registry, schema violations, I/O errors — retain ERROR severity
+    via the existing storeDiagnostic/diagnostic() defaults. Only
+    the two named benign skip rules are recalibrated. This is a
+    targeted source-level change, NOT a broad severity-map or
+    policy abstraction. The boundary is deliberate: a broad
+    normalizer (e.g., `severity ?? 'info'` globally) would
+    downgrade real malformed-load errors and break the value of
+    the ERROR signal in the other direction.
+  - >-
+    The current canonical live 1E
+    (doctor.binding.spec_missing_registry on
+    SESSION-OWNERSHIP-METADATA-001, lifecycle_state: active)
+    REMAINS ERROR after this slice. That binding-lie is a real
+    active-spec drift — the spec is active, the worktree field
+    points to a destroyed worktree, the registry has no entry.
+    ERROR is the correct severity. Repair is out of scope (the
+    spec itself or its underlying drift must be resolved
+    separately). This slice does not "greenwash" the canonical
+    state; it only stops the closed/archived-spec false-ERROR
+    case from firing when it would.
+  - >-
+    doctor.spec.unbound_active_stale (already WARN) and
+    doctor.agent.stale_display_only (already WARN with explicit
+    "display only" message) are unchanged. They are correctly
+    calibrated.
+  - >-
+    doctor.binding.spec_not_governable: deferred for separate
+    investigation. The queue note flags this as a candidate but
+    recon could not construct the firing path cheaply (the rule
+    requires a draft-state binding which is rare on canonical and
+    requires fixture authoring). Out of scope for this slice; a
+    future recon may file a follow-up if the rule fires
+    spuriously on consumer repos.
+  - >-
+    Implementation discipline: severity selection happens at the
+    emission site (the `finding(...)` or `storeDiagnostic(...)`
+    call), NOT via a downstream remap layer, NOT via a
+    severity-map config, NOT via doctor command post-processing.
+    Producers know their semantics; remapping after the fact
+    inverts the dependency and makes severity drift again.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: |
+      A spec in lifecycle_state 'active' with a worktree field
+      pointing to a name that has no entry in .caws/worktrees.json.
+    when: |
+      caws doctor runs.
+    then: |
+      doctor.binding.spec_missing_registry emits with severity
+      ERROR. The current canonical 1E case
+      (SESSION-OWNERSHIP-METADATA-001) is in this class and is
+      preserved verbatim — same rule, same message, same severity.
+  - id: A2
+    given: |
+      A spec in lifecycle_state 'closed' with a worktree field
+      pointing to a name that has no entry in .caws/worktrees.json.
+    when: |
+      caws doctor runs.
+    then: |
+      doctor.binding.spec_missing_registry emits with severity
+      INFO. The repair text is still surfaced (operators can clear
+      the residue), but the diagnostic does not contribute to the
+      ERROR count and does not block any operator workflow keyed
+      on "no doctor errors."
+  - id: A3
+    given: |
+      A spec in lifecycle_state 'archived' with a worktree field
+      pointing to a name that has no entry in .caws/worktrees.json.
+    when: |
+      caws doctor runs.
+    then: |
+      doctor.binding.spec_missing_registry emits with severity
+      INFO (same as A2). Archived specs are terminal; the binding
+      residue is dormant.
+  - id: A4
+    given: |
+      A .caws/specs/ directory containing one or more non-YAML
+      files (e.g., registry.json, README.md, *.preflight.md).
+    when: |
+      The specs store loads via loadSpecs.
+    then: |
+      store.specs.non_yaml_skipped emits with severity INFO for
+      each skipped file. The skipped files are excluded from the
+      spec registry as before; the diagnostic surface no longer
+      reports them as ERROR.
+  - id: A5
+    given: |
+      A .caws/waivers/ directory containing one or more non-YAML
+      files (parallel to A4).
+    when: |
+      The waivers store loads.
+    then: |
+      store.waivers.non_yaml_skipped (if present in waivers-store)
+      emits with severity INFO. If the rule does not exist in
+      waivers-store yet, this acceptance is vacuously satisfied
+      and the implementation note records that the parallel
+      surface was checked but found absent — no new rule is
+      introduced by this slice solely for parity.
+  - id: A6
+    given: |
+      Pre-existing load-side ERROR diagnostics: malformed YAML
+      in a spec file, malformed .caws/registry.json, schema
+      validation failures, EACCES on .caws/specs/, etc.
+    when: |
+      The specs/waivers store loads.
+    then: |
+      These diagnostics retain severity ERROR. The slice does
+      NOT broadly downgrade load-side severity; it only changes
+      the two named benign skip rules.
+  - id: A7
+    given: |
+      doctor.binding.spec_not_governable, doctor.spec.unbound_
+      active_stale, doctor.agent.stale_display_only, doctor.
+      worktree.foreign_physical, doctor.binding.one_sided, and
+      any other doctor rule not named in this spec.
+    when: |
+      caws doctor runs.
+    then: |
+      Their severities are unchanged. This slice is bounded to
+      the two named rules.
+  - id: A8
+    given: |
+      The canonical CAWS repo as of HEAD before this slice merges
+      (current state: 1E/3W/1I where 1E is the active-spec
+      drift on SESSION-OWNERSHIP-METADATA-001).
+    when: |
+      caws doctor runs after this slice merges.
+    then: |
+      The 1E remains 1E. The slice does NOT clear the canonical
+      ERROR count by hiding genuine active-spec drift. The slice
+      only changes which severities WOULD fire for the
+      closed/archived-spec class (currently dormant on canonical
+      because WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 clears the
+      binding on merge-close) and for non_yaml_skipped (currently
+      dormant on canonical because no non-YAML files exist in
+      .caws/specs/).
+  - id: A9
+    given: |
+      Unit tests in
+      packages/caws-kernel/tests/unit/doctor-severity-recalibration.test.ts
+      and
+      packages/caws-cli/tests/store/specs-store-non-yaml-severity.test.js.
+    when: |
+      Tests run.
+    then: |
+      Tests cover both positive locks (severity is INFO for the
+      newly-recalibrated cases) and negative locks (severity is
+      still ERROR for active-spec binding-lies and for malformed
+      load conditions). The negative locks are load-bearing —
+      they prove the slice did not silently downgrade real
+      errors.
+  - id: A10
+    given: |
+      The post-implementation caws doctor canonical output.
+    when: |
+      caws doctor runs on the merged HEAD.
+    then: |
+      Output still reports the existing active-spec 1E (the
+      genuine drift on SESSION-OWNERSHIP-METADATA-001). The
+      INFO count may increase by 0 (no closed/archived stale
+      bindings on canonical right now, no non-YAML files in
+      .caws/specs/). No previously-ERROR diagnostic is now
+      missing — only the severity selection logic changed at
+      the emission sites for the two named rules, with no
+      canonical case that exercises the new path.
+non_functional:
+  reliability:
+    - >-
+      The slice ships a behavioral change that is, in practice,
+      dormant on the canonical repo. The change activates for
+      operator/consumer environments that have closed-spec
+      binding residue (pre-WORKTREE-MERGE-CLEARS-SPEC-BINDING-001
+      migrations, Sterling-class repos) or non-YAML files in
+      .caws/specs/ (registry.json + companion artifacts). This
+      is deliberate: the recalibration corrects a known
+      false-ERROR class that trains operators to ignore the
+      ERROR signal over time. Even though canonical does not
+      reproduce the noise today, future operator state may, and
+      the producer-side severity discipline must be correct now.
+    - >-
+      Drift-detection invariant: the doctor severity for
+      BINDING_SPEC_MISSING_REGISTRY is now lifecycle-conditional.
+      Any future addition of a new lifecycle_state value (beyond
+      active/closed/archived) requires re-evaluation of the
+      severity boundary. The implementation must fail safely:
+      unknown lifecycle_state values default to ERROR (treat
+      unknown as governance-relevant), NOT INFO (which would
+      hide real drift on unrecognized states).
 contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: tier-1 follow-up queue item #3
+# (docs/reports/tier1-followups-queue.md). Recon completed 2026-05-27
+# against canonical HEAD by the governance-cleanup tranche.
+#
+# Recon classification: real_residual (not stale_duplicate;
+# not coverage_gap_only; not wrong_backlog_name; not
+# not_actionable_without_sterling_fixture).
+#
+# Producer surfaces:
+#   - packages/caws-kernel/src/doctor/inspect.ts:292-294
+#     hardcodes 'error' for BINDING_SPEC_MISSING_REGISTRY without
+#     consulting spec.lifecycle_state.
+#   - packages/caws-cli/src/store/specs-store.ts:73,86 emits
+#     SPECS_NON_YAML_SKIPPED via storeDiagnostic with no explicit
+#     severity; default chain → 'error' via diagnostic() helper.
+#   - packages/caws-cli/src/store/waivers-store.ts: parallel surface
+#     to check (if present, same recalibration; if absent, vacuous).
+#
+# Resolution shape: targeted severity edits at emission sites.
+# NO new policy layer. NO broad severity-map abstraction. NO
+# downstream remap in doctor command.
+#
+# Out of scope:
+#   - SESSION-OWNERSHIP-METADATA-001 repair (the canonical 1E
+#     remains, and that is correct per A8/A10)
+#   - worktree/session ownership semantics
+#   - v10 verify-chain draft (separate spec KERNEL-EVENT-V10-
+#     VERIFYCHAIN-COMPAT-001)
+#   - event migration / rotation
+#   - docs v11.1.7 reconciliation
+#   - package version / release work (tag-driven per CLAUDE.md
+#     trap #7)
+#   - broad doctor redesign or policy-map abstraction
+#   - doctor.binding.spec_not_governable severity (deferred;
+#     recon could not cheaply construct the firing path; future
+#     follow-up if it surfaces on consumer repos)
+#   - resurrecting/handling the v10 ghost "worktrees" key
+#     mentioned in the queue note (could not locate as an
+#     active rule in current source; likely already addressed
+#     by tombstone or migrate-registry slices)
