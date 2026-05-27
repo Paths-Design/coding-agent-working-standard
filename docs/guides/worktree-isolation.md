@@ -119,6 +119,40 @@ git branch -d agent-auth agent-payments
 
 The `merge(worktree): <description>` commit-message convention is recommended (and enforced by this repo's commit-msg hook) for non-fast-forward merges from agent branches into base.
 
+## Workspace package managers (pnpm, yarn, npm workspaces)
+
+Linked git worktrees share the main checkout's `.git/` and tracked files but **do NOT share `node_modules/`** — each worktree starts with a bare working tree. Workspace-based tools (`pnpm`, `yarn workspaces`, `npm workspaces`, `turbo`) rely on a `node_modules/` tree at the workspace root and per-package `node_modules/` symlinks, so the first thing you'll notice inside a fresh linked worktree is that `pnpm test` (or your equivalent) fails immediately with missing-binary or missing-module errors.
+
+This is not a CAWS bug. It's how `git worktree` and workspace package managers interact.
+
+You have two recovery options. Pick based on whether you need to run package scripts from inside the worktree or from the repo root:
+
+**Option A — run from the repo root with a workspace filter** (preferred for short slices):
+
+```bash
+# From the canonical checkout root, target the package by name:
+pnpm -F @scope/my-package test
+yarn workspace @scope/my-package test
+npm -w @scope/my-package test
+turbo run test --filter=@scope/my-package
+```
+
+The package scripts execute against your worktree's source (because git-worktree shares the tracked files) but resolve dependencies from the canonical `node_modules/`. No extra disk, no extra install.
+
+**Option B — install in the worktree** (preferred when the slice is long enough that you'll cd in and out often):
+
+```bash
+# From inside the linked worktree:
+cd .caws/worktrees/<name>
+pnpm install --prefer-offline   # or: npm install, yarn install
+```
+
+This materializes a parallel `node_modules/` tree inside the worktree. Subsequent `pnpm test` / `npm test` calls work natively. The extra disk is real (often several hundred MB for a large monorepo); only pay it for longer-lived worktrees.
+
+**A third workaround you may see in scripts** — symlinking the canonical `node_modules/` into the worktree — works but is fragile: workspace package managers sometimes write into `node_modules/.bin/` during script execution, and a shared symlink means those writes appear in canonical's tree too. Prefer Option A or B over symlinks unless you understand the failure modes.
+
+`node_modules/` is `.gitignore`d in every well-formed repo, so neither recovery option ever commits the dependency tree.
+
 ## Filesystem layout
 
 ```

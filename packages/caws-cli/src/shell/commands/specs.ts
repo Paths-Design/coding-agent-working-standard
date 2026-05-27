@@ -159,9 +159,17 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     err(renderDiagnostics(outcome.cause, { showData }));
     return 1;
   }
-  out(
-    `created ${outcome.id} at ${path.relative(ctx.repoRoot, outcome.path)} (lifecycle_state: active)`
-  );
+  const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
+  out(`created ${outcome.id} at ${relSpecPath} (lifecycle_state: active)`);
+  // CAWS-FIRST-CONTACT-UX-001 A4: the spec ships with TODO placeholders
+  // in scope.in. Until those are replaced with real file paths, scope-guard
+  // will reject every edit because no path is admitted. New users hit
+  // this immediately and conclude CAWS is broken.
+  out('');
+  out('Next: open the spec and replace TODO placeholders before editing files.');
+  out(`  edit: ${relSpecPath}`);
+  out('  scope.in must list the file paths your slice will touch.');
+  out('  Until then, scope-guard rejects every edit (no path admitted).');
   return 0;
 }
 

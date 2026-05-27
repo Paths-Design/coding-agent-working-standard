@@ -24,6 +24,7 @@
 //   2 = repo-root resolution failed, write I/O failed, or default
 //       policy invalid
 
+import { execFileSync } from 'child_process';
 import {
   detectAgentHarness,
   type HarnessDetectionResult,
@@ -48,6 +49,19 @@ import {
   renderHookPackInstall,
   renderSettingsWiring,
 } from '../render/init-hook-pack';
+
+function isInsideGitWorkingTree(cwd: string): boolean {
+  try {
+    const r = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return r.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
 
 export interface InitCommandOptions {
   readonly cwd?: string;
@@ -229,6 +243,23 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // becomes a constant STOP sign on re-runs, training agents to ignore
   // it.
   out(renderActivationContract(hookPackResult, wiringStatus));
+
+  // Step 5: first-contact commit hint. When .caws/ was newly created
+  // (not 'already_initialized') AND the cwd is a real git working tree,
+  // emit a one-line next-step pointing the user at the commit they need
+  // to run to persist governance state. Without this hint, users miss
+  // that .caws/ is untracked and lose state on branch switches.
+  // Outside a git working tree, the hint would be misleading — skip it.
+  if (
+    result.value.outcome === 'created' &&
+    isInsideGitWorkingTree(repoRoot)
+  ) {
+    out('');
+    out(
+      'Next: stage and commit the .caws/ directory to persist governance state:'
+    );
+    out('  git add .caws/ && git commit -m "chore: add caws governance state"');
+  }
 
   // Exit code: refusal in pack install → 1 so callers see something went
   // wrong; otherwise 0.

@@ -102,6 +102,9 @@ describe('A1/A3: caws worktree create', () => {
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/created feat-001-wt/);
+    // CAWS-FIRST-CONTACT-UX-001 A3: cd hint must follow the success line.
+    expect(r.stdout).toMatch(/Next: cd .*worktrees\/feat-001-wt/);
+    expect(r.stdout).toMatch(/start working in the bound worktree/);
 
     // Registry entry exists.
     const registry = readRegistry(cawsDir);
