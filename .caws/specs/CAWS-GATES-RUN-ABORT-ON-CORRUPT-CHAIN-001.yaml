@@ -1,0 +1,190 @@
+id: CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001
+title: 'caws gates run aborts on corrupt event-chain append failure'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T18:12:17.280Z'
+updated_at: '2026-05-27T18:12:17.280Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/store/events-store.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001.yaml
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/tests/shell/gates-command.test.js
+    - packages/caws-cli/tests/store/events-store.test.js
+    - packages/caws-cli/tests/shell
+    - packages/caws-cli/tests/store
+  out:
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/session
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/agents-store.ts
+    - packages/caws-cli/src/store/leases-store.ts
+invariants:
+  - >-
+    `caws gates run` exits non-zero when ANY declared gate's
+    `gate_evaluated` event fails to append durably to
+    `.caws/events.jsonl`. The command MUST NOT exit 0 while any
+    declared gate's evidence was rejected by the store layer (schema
+    violation, invalid_event_shape, lock contention, I/O failure,
+    chain-corruption refusal). Silent success on append failure is the
+    exact CI false-green pattern this slice eliminates.
+  - >-
+    The diagnostic emitted on append failure is typed and names BOTH
+    the rule that fired (e.g. `store.events.invalid_event_shape`) and
+    the gate whose evidence was lost (e.g. `budget_limit`). Operators
+    reading CI output must be able to identify (a) the failing gate,
+    (b) the store-layer reason, and (c) that no gate evidence was
+    appended, in one read of the command output.
+  - >-
+    Healthy event-chain behavior is unchanged. A run with no append
+    failures still produces one `gate_evaluated` event per declared
+    gate, in the same chain-hash order as before, with the same exit
+    code (0 when all gates pass policy, non-zero when any gate fails
+    policy). The fix changes exit semantics ONLY on the
+    append-failure path, not on the policy-failure path.
+  - >-
+    No kernel schema or v10-compat behavior is changed. Event-shape
+    validation rules in `packages/caws-kernel/src/schemas/events/` and
+    the v10 `validation_completed` alias remain authoritative. The
+    fix is purely a shell-command exit-code policy plus a store-layer
+    diagnostic shape; it MUST NOT weaken event validation to make the
+    append "pass" cleanly.
+  - >-
+    No new event is appended for the diagnostic itself. The defect is
+    that the failed append silently lost evidence; the fix surfaces
+    the failure to stdout/stderr and exit code, NOT by writing more
+    events. Adding a "gates_run_failed" event would itself depend on
+    the same append path that just failed.
+  - >-
+    Per-gate isolation: when one gate's append fails, the command
+    still attempts subsequent gates' appends (so partial evidence is
+    captured), then exits non-zero at the end with a summary listing
+    every gate whose evidence was lost. This is the "isolate per-gate
+    failures from each other so subsequent gates still run" shape
+    called out in the tier-1 queue note for this defect.
+acceptance:
+  - id: A1
+    given: |
+      A repo whose .caws/events.jsonl contains a partially-corrupt
+      tail OR whose policy declares a gate whose synthesized event
+      body fails `gate_evaluated.v1` schema validation (the Sterling
+      reproduction shape: append rejected with
+      `store.events.invalid_event_shape: must be equal to one of the
+      allowed values`).
+    when: |
+      `caws gates run --spec <id>` is invoked.
+    then: |
+      The CLI exits non-zero (the pre-fix behavior of exit 0 with
+      zero appended events is forbidden). Exit code MUST distinguish
+      append failure from policy failure; reuse the existing
+      append-failure exit code if one exists, otherwise introduce
+      exit code 3 (policy failure remains 1).
+  - id: A2
+    given: |
+      A run in which gate 1 of 3 fails to append (invalid_event_shape)
+      and gates 2 and 3 would append cleanly.
+    when: |
+      `caws gates run` evaluates all three gates.
+    then: |
+      Gates 2 and 3 are still attempted; their `gate_evaluated`
+      events are durably appended (visible via `caws status events`
+      tail). The command exits non-zero. The diagnostic summary
+      names gate 1 as the gate whose evidence was lost and cites
+      the store-layer rule that fired.
+  - id: A3
+    given: |
+      A run in which every gate appends cleanly and every gate
+      passes policy.
+    when: |
+      `caws gates run` completes.
+    then: |
+      The command exits 0. The same number of `gate_evaluated`
+      events is appended as before the fix. No diagnostic about
+      append failure is emitted. This is the regression-guard
+      acceptance: healthy path is unchanged.
+  - id: A4
+    given: |
+      A run in which one gate appends cleanly but its policy
+      decision is fail.
+    when: |
+      `caws gates run` completes.
+    then: |
+      The command exits non-zero with the EXISTING policy-failure
+      exit code (1, unchanged). The diagnostic surface is the
+      existing policy-failure shape, not the new append-failure
+      shape. The two failure modes MUST be distinguishable in CI
+      output without reading event-chain tail.
+  - id: A5
+    given: |
+      The events store's append path returns a typed Result.err
+      with a diagnostic whose rule is `store.events.invalid_event_shape`.
+    when: |
+      The shell command receives the failed Result from the store
+      append call.
+    then: |
+      The shell command propagates the diagnostic to stderr verbatim
+      (rule + message + subject + data), increments the lost-evidence
+      counter for the gate, and continues to the next gate. It MUST
+      NOT swallow, transform, or retry the diagnostic. It MUST NOT
+      mutate or sanitize the rule string.
+  - id: A6
+    given: |
+      A test fixture reproducing the original Sterling silent-success
+      pattern (a gate whose synthesized event body triggers
+      `store.events.invalid_event_shape` on append).
+    when: |
+      The regression test invokes `caws gates run` via the captureRun
+      harness pattern used by sibling shell-command tests.
+    then: |
+      The test asserts (a) exit code is non-zero, (b) stderr contains
+      the rule `store.events.invalid_event_shape`, (c) stderr names
+      the failing gate, (d) the `.caws/events.jsonl` file gained
+      zero new entries for the failing gate, (e) entries for
+      sibling gates that would have appended cleanly DID land.
+non_functional:
+  reliability:
+    - >-
+      Append-failure visibility is mandatory. The pre-fix silent
+      exit-0 behavior is treated as a CI-false-green incident class;
+      this slice eliminates that class for `caws gates run`. Other
+      commands that append events remain out of scope; their
+      append-failure handling is tracked under separate slices if
+      Sterling or operator reports surface them.
+contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: tier-1 follow-up queue item #1 (docs/reports/tier1-followups-queue.md).
+# Sterling evidence verbatim:
+#   caws gates run: failed to append gate_evaluated event for budget_limit
+#   [ERROR ] store.events.invalid_event_shape: must be equal to one of the allowed values
+#   ... exit: 0
+#
+# Root cause class: shell command treats per-gate append failure as a
+# warn-and-continue condition, then exits 0 because no gate's POLICY
+# decision was fail. The exit-code policy only considered policy
+# verdicts, not evidence-append durability.
+#
+# Out of scope:
+#   - Kernel event schema changes (schemas/events/gate_evaluated.v1.json
+#     remains authoritative).
+#   - v10 validation_completed alias (KERNEL-EVENT-V10-COMPAT-ALIAS-001
+#     shipped separately and is unaffected).
+#   - Other append-failure paths (specs-writer, worktrees-writer, evidence)
+#     — each is its own slice if surfaced.
+#   - Release tooling (package.json, CHANGELOG.md) — tag-driven per
+#     CLAUDE.md trap #7.
