@@ -133,6 +133,21 @@ const ACTOR = {
   session_id: 'sess-test-a2',
 };
 
+// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001: ownership-comparison
+// surfaces (merge, destroy) require a candidate set instead of a
+// single session. For tests that previously asserted on session-id
+// equality, wrap the test SESSION as the only capsule candidate —
+// preserves the original semantic while satisfying the new input.
+const SESSION_CANDIDATES = {
+  candidates: [{ identity: SESSION, source: 'capsule' }],
+  trace: [
+    { source: 'claude_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'hook_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'capsule', outcome: 'admitted', count: 1 },
+    { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
+  ],
+};
+
 function setupBoundWorktree(repoRoot, cawsDir, name, specId) {
   writeActiveSpec(cawsDir, specId);
   const createResult = createWorktree(cawsDir, {
@@ -195,6 +210,7 @@ describe('WORKTREE-MERGE-A2-FAULT-INJECTION-001 (fault-injection seam)', () => {
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a4',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
 
@@ -231,6 +247,7 @@ describe('WORKTREE-MERGE-A2-FAULT-INJECTION-001 (fault-injection seam)', () => {
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a1',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
 
@@ -281,6 +298,7 @@ describe('WORKTREE-MERGE-A2-FAULT-INJECTION-001 (fault-injection seam)', () => {
     const result = mergeWorktree(cawsDir, {
       name: 'wt-a2',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
     expect(result.ok).toBe(false);
@@ -310,6 +328,7 @@ describe('WORKTREE-MERGE-A2-FAULT-INJECTION-001 (fault-injection seam)', () => {
     const first = mergeWorktree(cawsDir, {
       name: 'wt-a3',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
     expect(first.ok).toBe(false);
@@ -320,6 +339,7 @@ describe('WORKTREE-MERGE-A2-FAULT-INJECTION-001 (fault-injection seam)', () => {
     const second = mergeWorktree(cawsDir, {
       name: 'wt-a3',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
 

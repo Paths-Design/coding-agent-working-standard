@@ -153,6 +153,18 @@ const ACTOR = {
   session_id: 'sess-harness',
 };
 
+// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001: ownership-comparison
+// admission set. See worktree-merge-v11-shape.test.js for rationale.
+const SESSION_CANDIDATES = {
+  candidates: [{ identity: SESSION, source: 'capsule' }],
+  trace: [
+    { source: 'claude_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'hook_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'capsule', outcome: 'admitted', count: 1 },
+    { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
+  ],
+};
+
 // ─── Test suite ──────────────────────────────────────────────────────────
 
 describe('LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (event-append boundary)', () => {
@@ -558,6 +570,7 @@ describe('LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (event-append boundary)', () =>
         destroyWorktree(cawsDir, {
           name: wtName,
           session: SESSION,
+          sessionCandidates: SESSION_CANDIDATES,
           actor: ACTOR,
         })
       );

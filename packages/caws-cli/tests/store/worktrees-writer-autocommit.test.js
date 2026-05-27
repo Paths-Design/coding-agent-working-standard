@@ -129,6 +129,17 @@ const ACTOR = {
   kind: 'human',
 };
 
+// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001: see merge-v11-shape test for rationale.
+const SESSION_CANDIDATES = {
+  candidates: [{ identity: SESSION, source: 'capsule' }],
+  trace: [
+    { source: 'claude_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'hook_env', outcome: 'absent', reason: 'test fixture' },
+    { source: 'capsule', outcome: 'admitted', count: 1 },
+    { source: 'cursor_env', outcome: 'absent', reason: 'test fixture' },
+  ],
+};
+
 // ─── createWorktree autocommit ─────────────────────────────────────────
 
 describe('createWorktree — auto-commit (Fix 5)', () => {
@@ -237,6 +248,7 @@ describe('destroyWorktree — auto-commit (Fix 5)', () => {
     const destroyResult = destroyWorktree(fixture.cawsDir, {
       name: 'fix-003-wt',
       session: SESSION,
+      sessionCandidates: SESSION_CANDIDATES,
       actor: ACTOR,
     });
 

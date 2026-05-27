@@ -38,7 +38,7 @@ import {
   mergeWorktree,
 } from '../../store/worktrees-writer';
 import { buildActor } from '../session/actor';
-import { resolveSession } from '../session/resolve-session';
+import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 
 interface BaseCommandOptions {
@@ -250,9 +250,19 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'destroy');
   if (id === null) return 2;
 
+  // Ownership-comparison surface: build the exhaustive candidate set
+  // (across all capsules + env sources) for the writer's admission test.
+  // Distinct from `id.session` (single-identity actor for the event).
+  // See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.
+  const sessionCandidates = resolveSessionCandidates({
+    cawsDir: ctx.cawsDir,
+    env,
+  });
+
   const input: Parameters<typeof destroyWorktree>[1] = {
     name: opts.name,
     session: id.session,
+    sessionCandidates,
     actor: id.actor,
     now: nowFn,
   };
@@ -294,9 +304,17 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'merge');
   if (id === null) return 2;
 
+  // See destroy: ownership-comparison surface needs the exhaustive
+  // candidate set, distinct from the single-identity actor.
+  const sessionCandidates = resolveSessionCandidates({
+    cawsDir: ctx.cawsDir,
+    env,
+  });
+
   const input: Parameters<typeof mergeWorktree>[1] = {
     name: opts.name,
     session: id.session,
+    sessionCandidates,
     actor: id.actor,
     now: nowFn,
   };
