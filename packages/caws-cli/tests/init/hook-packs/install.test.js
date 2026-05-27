@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 7');
+        expect(content).toContain('hook_pack_version: 8');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 7');
+      expect(sessionStart).toContain('hook_pack_version: 8');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 7');
+      expect(preToolUse).toContain('hook_pack_version: 8');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 7');
+      expect(stop).toContain('hook_pack_version: 8');
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -681,7 +681,7 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
     const content = fs.readFileSync(rendererPath, 'utf8');
     expect(content).toContain('CAWS-MANAGED-HOOK');
     expect(content).toContain('hook_pack: claude-code');
-    expect(content).toContain('hook_pack_version: 7');
+    expect(content).toContain('hook_pack_version: 8');
     expect(content).toContain('caws_min_major: 11');
   });
 
@@ -781,7 +781,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
       const content = fs.readFileSync(path.join(packRoot, h.name), 'utf8');
       expect(content).toContain('CAWS-MANAGED-HOOK');
       expect(content).toContain('hook_pack: claude-code');
-      expect(content).toContain('hook_pack_version: 7');
+      expect(content).toContain('hook_pack_version: 8');
       expect(content).toContain('caws_min_major: 11');
       // Each promoted hook cites at least one lineage entry from
       // the 22-25 range.
@@ -921,5 +921,78 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
     expect(CLAUDE_CODE_PACK.lineageRefs).toContain(25);
     expect(CLAUDE_CODE_PACK.lineageRefs).toContain(26);
     expect(CLAUDE_CODE_PACK.lineageRefs).toContain(27);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// CAWS-LITE-MODE-RETIREMENT-001 — A1, A4, A5 + invariants 1, 3
+//
+// Pack v8 removes the v10 "Lite mode" branch from scope-guard.sh.
+// The branch previously read `.caws/scope.json` and enforced lite-mode
+// rules when no `.caws/specs/` directory was present. v8 retires that
+// branch entirely.
+// ════════════════════════════════════════════════════════════════════
+describe('CAWS-LITE-MODE-RETIREMENT-001 — pack v8', () => {
+  const packRoot = path.resolve(
+    __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+  );
+
+  it('A1/invariant 1: scope-guard.sh no longer contains the "Lite mode" branch', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    // The pre-v8 lite branch was guarded by:
+    //   if [[ ! -d "$SPECS_BASE/.caws/specs" ]] && [[ -f "$SCOPE_FILE" ]]; then
+    // and contained a "Lite mode: scope.json (no .caws/specs/)" comment
+    // followed by a 60-line node -e block reading scope.json.
+    expect(content).not.toMatch(/Lite mode: scope\.json/);
+    expect(content).not.toMatch(/LITE_CHECK=/);
+    // The hook should no longer reference SCOPE_FILE at all (it was
+    // only used to point at .caws/scope.json for the lite branch).
+    expect(content).not.toMatch(/SCOPE_FILE=/);
+    // Negative-evidence guard: the v8 retirement note explains the
+    // removal in the source so future readers don't re-add it.
+    expect(content).toMatch(/CAWS-LITE-MODE-RETIREMENT-001/);
+  });
+
+  it('A1/invariant 1: scope-guard.sh "no specs directory → exit 0" is the new fallback', () => {
+    const content = fs.readFileSync(
+      path.join(packRoot, 'scope-guard.sh'),
+      'utf8'
+    );
+    // The new shape: if no .caws/specs/ exists, exit 0 cleanly.
+    // No silent fallback to scope.json.
+    expect(content).toMatch(/if \[\[ ! -d "\$SPECS_BASE\/\.caws\/specs" \]\]; then/);
+  });
+
+  it('invariant 3a: src/config/lite-scope.js is excluded from the v11 build allowlist', () => {
+    // build-cli.js's comment block lists the v10 surface that is
+    // NOT shipped to dist/. lite-scope.js and modes.js are in that
+    // list. This test asserts the build script's intent has not
+    // silently been changed.
+    const buildScript = fs.readFileSync(
+      path.resolve(__dirname, '..', '..', '..', 'scripts', 'build-cli.js'),
+      'utf8'
+    );
+    // The v10 paths called out as orphaned-by-removal in build-cli.js
+    // should remain on the orphan list.
+    expect(buildScript).toMatch(/scaffold\//);
+    expect(buildScript).toMatch(/policy\/\*\.js/);
+    // Generic assertion: the build script is allowlist-shaped, not
+    // blocklist-shaped (a regression would silently ship orphan code).
+    expect(buildScript).toMatch(/allowlist/i);
+  });
+
+  it('invariant 5/A5: docs/migration-v10-to-v11.md has a Lite mode retirement section', () => {
+    const migrationPath = path.resolve(
+      __dirname, '..', '..', '..', '..', '..', 'docs', 'migration-v10-to-v11.md'
+    );
+    const content = fs.readFileSync(migrationPath, 'utf8');
+    // A header referencing lite-mode retirement should exist.
+    expect(content).toMatch(/lite mode/i);
+    // The section should explicitly mention .caws/mode.json and the
+    // recommended action (delete it).
+    expect(content).toMatch(/mode\.json/);
   });
 });

@@ -245,6 +245,56 @@ mv .caws/events.jsonl .caws/events-pre-v11.jsonl.bak
 
 ---
 
+## Lite mode retirement (v11.1 hook pack v8+)
+
+**What lite mode was.** In v10.2, `caws init --mode lite` created a thinner alternative to the full per-feature spec workflow. Instead of `.caws/specs/*.yaml`, lite-mode projects had:
+
+- `.caws/mode.json` — `{ "current": "lite", "initialized": true }`
+- `.caws/scope.json` — a single project-wide allowlist/blocklist (`allowedDirectories`, `bannedPatterns.files`, `bannedPatterns.docs`, `maxNewFilesPerCommit`)
+
+The Claude Code hook pack's `scope-guard.sh` had a fallback branch: if no `.caws/specs/` directory existed AND `.caws/scope.json` did, the hook would enforce the lite-mode rules instead.
+
+**Why it was removed.** v11 has one governance model: per-feature specs under `.caws/specs/`. The lite-mode CLI surface (`caws lite`, `caws mode`, `caws scaffold`) was removed in v11.0. But the runtime hook pack kept silently enforcing `.caws/scope.json` rules through pack v7, creating a half-decommissioned state: the CLI couldn't create or manage lite-mode projects, but the hooks would still respect a legacy `.caws/scope.json` if one was on disk. That divergence ("the hook says lite is in effect; `caws doctor` says there are no specs") was the kind of authority-split this whole rewrite exists to prevent.
+
+Pack v8 finishes the retirement. `scope-guard.sh` no longer reads `.caws/scope.json`. Consumers with a legacy file get a doctor finding instead.
+
+**What to do with a legacy `.caws/mode.json`.** Delete it. v11 has no equivalent. The file is operational cache from v10; removing it has no behavioral effect on a v11 project that already has `.caws/specs/`.
+
+```bash
+# If you can confirm you no longer rely on lite-mode:
+rm .caws/mode.json
+```
+
+**What to do with a legacy `.caws/scope.json`.** Assess case by case. Some Sterling-era projects use `.caws/scope.json` as a Python/Rust-friendly scope hint that pre-dates the `.caws/specs/scope.in` mechanism. v11 derives scope from `.caws/specs/<id>.yaml:scope.in` directly. If you have an active v11 project (`.caws/specs/*.yaml` exists), the `scope.json` file is now ignored by both the CLI and the hooks; it can be deleted or kept as historical reference.
+
+```bash
+# If .caws/specs/ exists and you are fully on v11 workflows:
+rm .caws/scope.json
+
+# If you want to preserve the v10-era intent for reference:
+git mv .caws/scope.json docs/historical/v10-scope.json
+```
+
+**What is NOT changed by this retirement:**
+
+- v11 per-feature specs under `.caws/specs/` are unaffected.
+- `caws gates run`, `caws scope check`, `caws scope show` continue to work as before.
+- Existing Sterling-era projects with both `.caws/specs/` AND `.caws/scope.json` were already on the v11 path (the lite branch never fired when specs existed); the only change for them is potentially a doctor finding on `mode.json` if it is present on disk.
+
+**What breaks if you actually depended on lite mode itself:**
+
+If your project relied on the lite-mode hook behavior (you don't have `.caws/specs/`, you only have `.caws/scope.json`), v8 will make scope-guard.sh exit silently. You will lose the lite-mode banned-pattern and allowed-directories enforcement. The migration path is to author per-feature specs:
+
+```bash
+caws specs create FEAT-001 --title "Initial v11 spec" --mode chore --risk-tier 3
+# Then edit .caws/specs/FEAT-001.yaml to populate scope.in based on
+# the directory list that was previously in .caws/scope.json:allowedDirectories.
+```
+
+Sterling and full-stack-ds are not in this position; they have specs. A consumer that adopted v10 lite mode and never moved to specs would feel this change. The doctrine on this is intentional: lite mode could not survive into v11 because v11's authority model is per-spec, and the v10 lite shape has no equivalent.
+
+---
+
 ## The rollback path
 
 If you upgrade and hit a blocker — a missing command, an unexpected gate failure, multi-agent observability you cannot live without — you can pin back to v10.2 immediately.
