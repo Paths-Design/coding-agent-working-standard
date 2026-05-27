@@ -28,5 +28,16 @@
         "takenOver_at": "2026-05-27T05:56:27.993Z"
       }
     ]
+  },
+  "hook-pack-promote": {
+    "specId": "CAWS-HOOK-PACK-PROMOTE-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T06:00:34.816Z",
+    "branch": "hook-pack-promote",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/hook-pack-promote"
   }
 }
