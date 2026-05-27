@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: first-contact-ux
 created_at: '2026-05-27T03:36:26.465Z'
-updated_at: '2026-05-27T03:50:00.000Z'
+updated_at: '2026-05-27T04:30:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/init.ts
@@ -14,7 +14,6 @@ blast_radius:
     - packages/caws-cli/src/shell/render/init.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/git-autocommit.ts
-    - packages/caws-cli/templates/.git/hooks/pre-commit
     - docs/guides/worktree-isolation.md
   data_migration: false
 operational_rollback_slo: 5m
@@ -26,7 +25,6 @@ scope:
     - packages/caws-cli/src/shell/render/init.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/git-autocommit.ts
-    - packages/caws-cli/templates/.git/hooks/pre-commit
     - packages/caws-cli/tests
     - docs/guides/worktree-isolation.md
     - docs/reports/user_e2e_setup_rehearsal_001.md
@@ -65,20 +63,15 @@ invariants:
     bypassed (no --no-verify).
   - >-
     The shared git-autocommit utility handles three states predictably:
-    (a) cwd is not inside a git working tree -> skip commit, emit one
-    structured warning, return ok with kind:'skipped_no_git'; (b) target
-    file was dirty before the writer's own write -> refuse commit, emit
-    typed diagnostic naming the conflict, return ok with kind:'refused_dirty'
-    leaving the writer's change in the working tree for the user to resolve;
+    (a) cwd is not inside a git working tree -> skip commit, return ok
+    with kind:'skipped_no_git' (defense-in-depth: caws worktree commands
+    presuppose a git repo via resolveRepoRoot, so this branch is not
+    reached in production; the utility must still be total over the
+    case); (b) target file was dirty before the writer's own write ->
+    refuse commit, return ok with kind:'refused_dirty' leaving the
+    writer's change in the working tree for the user to resolve;
     (c) target file was clean before the writer's own write -> commit
     succeeds, return ok with kind:'committed' and the resulting sha.
-  - >-
-    The template `pre-commit` hook admits a commit on the base branch
-    when (a) the commit subject matches `^chore\(caws\): ` AND (b) every
-    staged path is under `.caws/` AND (c) at least one active worktree
-    exists in `.caws/worktrees.json`. This admits CAWS's own registry
-    auto-commits during active multi-agent sessions without weakening
-    the general base-branch protection.
 acceptance:
   - id: A1
     given: a git repository with no prior .caws/ directory
@@ -155,36 +148,16 @@ acceptance:
       auto-commit refusal does not roll back the lifecycle transaction).
   - id: A8
     given: |
-      a directory that is NOT inside a git working tree, but has a
-      valid .caws/ directory (initialized via `caws init`)
+      a unit-test fixture where cwd is NOT inside a git working tree
+      (defense-in-depth contract: the git-autocommit utility must be
+      total over this case even though caws worktree commands cannot
+      reach it in production because resolveRepoRoot refuses non-git
+      cwd)
     when: |
-      any caws worktree-mutating command runs
+      the utility is called directly with a target file and message
     then: |
-      the writer write succeeds; the auto-commit step emits one structured
-      warning ("not a git working tree; registry not committed; multi-session
-      coordination requires git"); the command exits 0.
-  - id: A9
-    given: |
-      a base-branch checkout with at least one active worktree
-      registered in .caws/worktrees.json
-    when: |
-      a commit is attempted whose subject is `chore(caws): create x`
-      and whose only staged path is .caws/worktrees.json
-    then: |
-      the template pre-commit hook admits the commit. (Regression: the
-      same commit should be admitted whether or not its author is the
-      caws CLI; admission is structural, not identity-based.)
-  - id: A10
-    given: |
-      a base-branch checkout with at least one active worktree
-    when: |
-      a commit is attempted whose subject is `feat: add new feature`
-      and whose staged paths include source files
-    then: |
-      the template pre-commit hook refuses with the existing
-      "no direct commits to base branch while worktrees active" message.
-      (Regression: A9's admission does not weaken general base-branch
-      protection.)
+      it returns ok with kind:'skipped_no_git'; no commit is attempted;
+      no exception escapes the utility.
 non_functional:
   reliability:
     - >-
@@ -199,9 +172,13 @@ non_functional:
   security:
     - >-
       auto-commit never uses --no-verify, --no-gpg-sign, or any
-      hook-bypass flag. The commit goes through the project's normal
-      pre-commit and commit-msg hooks. The hook admission rule for
-      `chore(caws):` commits is structural (commit subject + path
-      whitelist), not identity-based, so it cannot be spoofed in a
-      way the hook would not also have admitted from any other author.
+      hook-bypass flag. The commit goes through whatever pre-commit
+      and commit-msg hooks the consumer project has installed.
+      Upstream caws ships no .git/hooks/pre-commit template (the
+      claude-code hook pack is agent-harness PreToolUse only), so a
+      vanilla caws-init'd project has no git-side hooks to interact
+      with; downstream consumers that install their own hooks remain
+      responsible for admitting chore(caws):-prefixed commits if
+      they want CAWS's auto-commit to work alongside their base-branch
+      protection.
 contracts: []
