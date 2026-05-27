@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: destroy-session-resolution
 created_at: '2026-05-27T07:25:07.834Z'
-updated_at: '2026-05-27T08:05:00.000Z'
+updated_at: '2026-05-27T09:00:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
@@ -345,3 +345,82 @@ closure_notes: |
   2026-05-27 at bd4a2c4) and successor to
   CAWS-WORKTREE-SESSION-ID-AUTHORITY-001 (closed partially-resolved
   2026-05-27 at 594b18e).
+
+  ──────────────────────────────────────────────────────────────────
+  NAMED RESIDUALS (out-of-scope for this slice; recorded so they
+  are not silently ignored when the slice closes):
+  ──────────────────────────────────────────────────────────────────
+
+  R1 — CAPSULE TTL / EXPIRY.
+  Capsules under .caws/sessions/*.json have no time-bound admission
+  rule today. A capsule minted six months ago is still a valid
+  admission candidate. With the multi-candidate admission landing
+  in this slice, the surface area for this becomes more visible:
+  any capsule on disk, regardless of age, can satisfy ownership
+  admission as long as its session_id matches a registry owner.
+
+  Pre-slice this was equally true (cwd-keyed capsule lookup would
+  also admit an old capsule if its worktree_root matched), but the
+  scope was narrower. Post-slice it applies cross-cwd.
+
+  Practical impact: low for single-developer/single-machine use;
+  potentially meaningful for shared-host or long-lived-checkout
+  scenarios. A future spec should consider:
+    - capsule expiry on minted_at + N days
+    - refresh-on-use heartbeat
+    - explicit `caws session prune --older-than <duration>` command
+
+  This residual is doctrine-adjacent (touches invariant §6.8
+  "stale lease is evidence, never authority") and should be
+  considered when leases ship in v11.2.
+
+  R2 — PLATFORM-BLIND ADMISSION.
+  `admitsOwner` (resolve-session.ts:618) compares by session_id
+  only; platform is not part of the equality check. The doc comment
+  on the function names this as intentional ("matches the
+  pre-existing destroyWorktree:772 single-id comparison"), but the
+  decision deserves an explicit residual because:
+
+    - The mint id format is `caws-${hex6}` = 48 bits of entropy,
+      with a birthday collision at ~16M sessions — not a practical
+      risk at any reasonable scale.
+    - A future change that introduces a longer/structured session_id
+      (e.g. UUIDv7 to capture mint time) could narrow this further.
+    - Cross-platform collision (Claude Code capsule + Cursor capsule
+      coincidentally generating the same hex6) would admit
+      ownership across platforms today. Strictly tightening this
+      would require platform equality in admitsOwner — which would
+      be a follow-up spec, not a hotfix.
+
+  Practical impact: very low. Recorded so a future security review
+  has a starting point.
+
+  R3 — MUTATION TESTING OF resolveSessionCandidates.
+  Per the code-review pass (2026-05-27), mutation testing on
+  src/shell/session/resolve-session.ts would provide stronger
+  evidence than the 21 unit assertions that the new helper's
+  behavior is genuinely test-protected (vs executed but not
+  assertion-guarded). Stryker is wired in this repo. Out of scope
+  for this slice because it would extend close timeline by
+  hours; bonus evidence if any future slice wants it.
+
+  ──────────────────────────────────────────────────────────────────
+  CLOSURE EVIDENCE (gates clean as of d58664f):
+  ──────────────────────────────────────────────────────────────────
+    - Scoped lint:    clean on all 11 touched files
+    - Typecheck:      clean (tsconfig.vnext.test.json)
+    - Resolver tests: 21/21 pass (resolve-session-candidates.test.js)
+    - Store tests:    19/19 pass (4 migrated files)
+    - Shell tests:    21/21 pass (worktree.test.js, unmodified, validates
+                      backward compatibility of the wiring)
+    - Integration:    7/7 pass (worktree-destroy-session.test.js,
+                      covers every acceptance criterion A1-A5 + merge mirror)
+    - CAWS gates:     PASS budget_limit, spec_completeness, scope_boundary,
+                      god_object, todo_detection
+    - Pre-existing 5 jest failures in dead v10 code
+      (src/utils/finalization.js → src/scaffold/cursor-hooks, retired by
+      CAWS-LITE-MODE-RETIREMENT-001) — confirmed unrelated to this slice.
+
+  Total: 68 assertions covering the contract from helper layer
+  through end-to-end command flow. Acceptance criteria A1-A5 all
+  have executable proofs.
