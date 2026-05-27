@@ -1,15 +1,4 @@
 {
-  "tombstone": {
-    "specId": "CAWS-ARCHIVE-AS-TOMBSTONE-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T20:22:50.874Z",
-    "branch": "tombstone",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/tombstone"
-  },
   "merge-close-updated-at": {
     "specId": "CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001",
     "owner": {
