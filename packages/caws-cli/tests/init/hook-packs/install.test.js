@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 5');
+        expect(content).toContain('hook_pack_version: 6');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 5');
+      expect(sessionStart).toContain('hook_pack_version: 6');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 5');
+      expect(preToolUse).toContain('hook_pack_version: 6');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 5');
+      expect(stop).toContain('hook_pack_version: 6');
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -644,5 +644,92 @@ describe('unimplemented surfaces', () => {
     });
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/unknown --agent-surface/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// CAWS-HOOK-PACK-RENDERER-MISSING-001 — A1/A2 + invariant 1
+//
+// session-log.sh shells out to session_log_renderer.py via
+// `python3 "$RENDERER"`. Prior to v6 the renderer was referenced but
+// not bundled, producing a broken session-log.sh on every fresh
+// install. These tests prove the renderer is now bundled, registered
+// as managed, and that the Sterling-specific MEANINGFUL_COMMAND_KW
+// entries (cargo, ruff, mypy) have been removed from the baseline.
+// ════════════════════════════════════════════════════════════════════
+describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundled', () => {
+  const packRoot = path.resolve(
+    __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+  );
+  const rendererPath = path.join(packRoot, 'session_log_renderer.py');
+
+  it('A1: renderer file exists in the pack template directory', () => {
+    expect(fs.existsSync(rendererPath)).toBe(true);
+  });
+
+  it('A1: renderer is registered in the manifest with managed:true and executable:false', () => {
+    const entry = CLAUDE_CODE_PACK.installedFiles.find(
+      (f) => f.sourcePath === 'session_log_renderer.py'
+    );
+    expect(entry).toBeDefined();
+    expect(entry.destPath).toBe('.claude/hooks/session_log_renderer.py');
+    expect(entry.managed).toBe(true);
+    expect(entry.executable).toBe(false);
+  });
+
+  it('A1: renderer carries a CAWS-MANAGED-HOOK header at v6', () => {
+    const content = fs.readFileSync(rendererPath, 'utf8');
+    expect(content).toContain('CAWS-MANAGED-HOOK');
+    expect(content).toContain('hook_pack: claude-code');
+    expect(content).toContain('hook_pack_version: 6');
+    expect(content).toContain('caws_min_major: 11');
+  });
+
+  it('A1: session-log.sh references the renderer at the path the pack now ships', () => {
+    // The pack's session-log.sh:35 declares
+    //   RENDERER="$SCRIPT_DIR/session_log_renderer.py"
+    // After install both files land in the same dir, so this relative
+    // reference resolves to the bundled renderer.
+    const sessionLog = fs.readFileSync(path.join(packRoot, 'session-log.sh'), 'utf8');
+    expect(sessionLog).toMatch(/RENDERER=.*\$SCRIPT_DIR\/session_log_renderer\.py/);
+    // The pack ships both side by side.
+    expect(fs.existsSync(path.join(packRoot, 'session-log.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(packRoot, 'session_log_renderer.py'))).toBe(true);
+  });
+
+  it('A2: Sterling-specific MEANINGFUL_COMMAND_KW entries are removed from the baseline', () => {
+    const content = fs.readFileSync(rendererPath, 'utf8');
+    // Extract the MEANINGFUL_COMMAND_KW tuple — Python tuple-literal,
+    // multiple lines.
+    const tupleMatch = content.match(/MEANINGFUL_COMMAND_KW\s*=\s*\(([^)]+)\)/);
+    expect(tupleMatch).not.toBeNull();
+    const tupleBody = tupleMatch[1];
+
+    // Sterling-Rust + Python-lint tooling: gone.
+    expect(tupleBody).not.toMatch(/"cargo test"/);
+    expect(tupleBody).not.toMatch(/"cargo build"/);
+    expect(tupleBody).not.toMatch(/"ruff"/);
+    expect(tupleBody).not.toMatch(/"mypy"/);
+
+    // Generic baseline: preserved.
+    expect(tupleBody).toMatch(/"pytest"/);
+    expect(tupleBody).toMatch(/"git log"/);
+    expect(tupleBody).toMatch(/"npm test"/);
+    expect(tupleBody).toMatch(/"caws "/);
+  });
+
+  it('A2: test_run artifact-detection list mirrors the trimmed baseline', () => {
+    const content = fs.readFileSync(rendererPath, 'utf8');
+    // The test_run detection hardcoded a sibling list; should now match
+    // the generic baseline minus Sterling-specifics.
+    expect(content).toMatch(/keyword in command for keyword in \("pytest", "npm test", "pnpm test"\)/);
+    expect(content).not.toMatch(/keyword in command for keyword in \("pytest", "cargo test"/);
+  });
+
+  it('invariant 3: pack version bumped from 5 to 6 to signal the new file to existing installs', () => {
+    const { CLAUDE_CODE_PACK_VERSION } = require(
+      '../../../dist/init/hook-packs/manifest-claude-code'
+    );
+    expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(6);
   });
 });

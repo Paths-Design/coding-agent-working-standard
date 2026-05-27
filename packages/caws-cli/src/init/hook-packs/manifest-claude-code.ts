@@ -51,7 +51,22 @@ import type { HookPackV1 } from './types';
 // Closes the enforcement gap that failure-lineage Entry 19 documented
 // as visibility-without-enforcement. No new managed files; no stateModel
 // changes (leases/worktrees.json already declared).
-export const CLAUDE_CODE_PACK_VERSION = 5;
+//
+// Version 6: CAWS-HOOK-PACK-RENDERER-MISSING-001. Ships
+// session_log_renderer.py alongside session-log.sh. Prior versions
+// shipped session-log.sh with `RENDERER="$SCRIPT_DIR/session_log_renderer.py"`
+// (line 35 of session-log.sh) but did NOT bundle the renderer
+// itself, so every `caws init --agent-surface claude-code` produced
+// a session-log.sh that crashed when invoked. Adds the renderer as
+// a managed file (executable: false; invoked via `python3 <path>`).
+// Removed Sterling-specific MEANINGFUL_COMMAND_KW entries (cargo
+// test, cargo build, ruff, mypy) from the renderer's baseline;
+// future work (CAWS-HOOK-PACK-RENDERER-CONFIG-001, not yet
+// authored) may admit a sidecar config for consumer toolchain
+// extensions. No stateModel changes (tmp/<session-id>/ already
+// declared; the renderer writes into the same surface session-log.sh
+// already declared as a write).
+export const CLAUDE_CODE_PACK_VERSION = 6;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
@@ -180,6 +195,18 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       destPath: '.claude/hooks/session-log.sh',
       sourcePath: 'session-log.sh',
       executable: true,
+      managed: true,
+    },
+    {
+      // CAWS-HOOK-PACK-RENDERER-MISSING-001: session-log.sh shells out
+      // to this Python script via `python3 "$RENDERER"`. Before v6 the
+      // renderer was NOT bundled and every `caws init` shipped a broken
+      // session-log.sh that crashed on invocation. Not marked executable
+      // because it is invoked via python3 <path>, not as a standalone
+      // binary.
+      destPath: '.claude/hooks/session_log_renderer.py',
+      sourcePath: 'session_log_renderer.py',
+      executable: false,
       managed: true,
     },
     {
