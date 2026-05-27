@@ -459,9 +459,32 @@ export function closeSpec(
     }
   }
 
-  const step4 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
-  if (!step4.ok) return err(step4.errors);
-  patched = step4.value;
+  // CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001: insert-or-update fallback
+  // for updated_at. Legacy / v10-migrated / hand-authored specs may lack
+  // this optional field (it's not in spec.v1.json required[]). Without
+  // the fallback, setTopLevelScalar returns YAML_PATCH_KEY_NOT_FOUND
+  // here and the close transaction rolls back; the composed
+  // mergeWorktree → closeSpec path then reports
+  // partial_failure_unrecovered with the underlying patch-key error
+  // buried in close_errors. Mirror the has*-check +
+  // insertTopLevelScalarAfter pattern used for resolution and
+  // closure_notes above. Inline rather than extracted to a helper per
+  // the spec's out-of-scope note (the parallel pattern is intentional;
+  // helper extraction is a hygiene concern, not a closure blocker).
+  const hasUpdatedAt = /^updated_at:/m.test(patched);
+  if (hasUpdatedAt) {
+    const step4 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!step4.ok) return err(step4.errors);
+    patched = step4.value;
+  } else {
+    // Anchor preference: after created_at (natural timestamp pairing)
+    // when present, otherwise after lifecycle_state. createSpec always
+    // writes created_at so this fallback fires only for legacy specs.
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const step4 = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!step4.ok) return err(step4.errors);
+    patched = step4.value;
+  }
 
   // Step 5 (WORKTREE-MERGE-CLEARS-SPEC-BINDING-001):
   // Clear any top-level `worktree:` binding. A closed spec cannot have
@@ -603,10 +626,22 @@ export function archiveSpec(
   const s1 = setTopLevelScalar(patched, 'lifecycle_state', 'archived');
   if (!s1.ok) return err(s1.errors);
   patched = s1.value;
-  const s2 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
-  if (!s2.ok) return err(s2.errors);
-  patched = s2.value;
-
+  // CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001: insert-or-update fallback
+  // for updated_at. Parallel to the closeSpec fix above — same defect
+  // class (writer assumes optional schema field always present), same
+  // remedy (has*-check + insertTopLevelScalarAfter), inline per the
+  // spec's out-of-scope-on-helper-extraction note.
+  const hasUpdatedAt = /^updated_at:/m.test(patched);
+  if (hasUpdatedAt) {
+    const s2 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!s2.ok) return err(s2.errors);
+    patched = s2.value;
+  } else {
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const s2 = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!s2.ok) return err(s2.errors);
+    patched = s2.value;
+  }
   // Validate.
   const reparsed = parseAndValidateSpec(patched);
   if (!isOk(reparsed)) {
