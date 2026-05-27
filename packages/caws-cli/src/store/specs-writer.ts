@@ -839,12 +839,53 @@ export interface SpecsListEntry {
   readonly path: string;
 }
 
-export interface SpecsListResult {
-  readonly active: readonly SpecsListEntry[];
-  readonly archived: readonly SpecsListEntry[];
+/**
+ * CAWS-ARCHIVE-AS-TOMBSTONE-001: archived entries do NOT have an
+ * on-disk path post-tombstone. They are reconstructed from the event
+ * log's spec_archived events. `blob_sha` is the recovery target;
+ * `path` carries the from_path (where the spec was BEFORE archiving)
+ * for human-readable identification.
+ */
+export interface ArchivedSpecsListEntry {
+  readonly id: string;
+  /**
+   * Pre-archive from_path. For new-shape events, taken verbatim from
+   * the event's from_path. For legacy events, the same field
+   * (legacy events also carry from_path).
+   */
+  readonly path: string;
+  readonly archived_at: string;
+  /**
+   * Blob sha of the spec body at archive time. `null` for legacy
+   * events (pre-tombstone shape with no blob_sha); recovery in that
+   * case uses git log --follow fallback.
+   */
+  readonly blob_sha: string | null;
 }
 
-/** List specs by lifecycle state, optionally including archived ones. */
+export interface SpecsListResult {
+  readonly active: readonly SpecsListEntry[];
+  readonly archived: readonly ArchivedSpecsListEntry[];
+}
+
+/**
+ * List specs by lifecycle state, optionally including archived ones.
+ *
+ * CAWS-ARCHIVE-AS-TOMBSTONE-001: the `--include-archived` path now
+ * reads from `.caws/events.jsonl` (most recent spec_archived event
+ * per spec_id), NOT from `.caws/specs/.archive/`. Post-tombstone the
+ * .archive/ directory is not populated; reading it would either
+ * surface nothing (steady state) or surface legacy bodies the
+ * doctor warning already flags for migration.
+ *
+ * Includes legacy events (with only from_path + to_path, no
+ * blob_sha) → blob_sha is reported as null; recover falls back to
+ * git log --follow.
+ *
+ * Latest-write-wins per spec_id: if a spec was archived, recovered,
+ * recreated, and re-archived, only the most recent spec_archived
+ * event surfaces.
+ */
 export function listSpecs(
   cawsDir: string,
   options: { readonly includeArchived?: boolean } = {}
@@ -856,35 +897,86 @@ export function listSpecs(
     lifecycle_state: spec.lifecycle_state,
     path: specPath(cawsDir, spec.id),
   }));
+  const activeIds = new Set(active.map((s) => s.id));
 
-  const archived: SpecsListEntry[] = [];
+  let archived: ArchivedSpecsListEntry[] = [];
   if (options.includeArchived === true) {
-    const archiveDir = path.join(cawsDir, 'specs', '.archive');
-    if (fs.existsSync(archiveDir)) {
-      try {
-        const entries = fs.readdirSync(archiveDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isFile()) continue;
-          if (!entry.name.endsWith('.yaml') && !entry.name.endsWith('.yml')) continue;
-          const fullPath = path.join(archiveDir, entry.name);
-          const src = readYamlSource(fullPath);
-          if (!isOk(src)) continue;
-          const parsed = parseAndValidateSpec(src.value);
-          if (!isOk(parsed)) continue;
-          const spec = parsed.value as Spec;
-          archived.push({
-            id: spec.id,
-            title: spec.title,
-            lifecycle_state: spec.lifecycle_state,
-            path: fullPath,
-          });
-        }
-      } catch {
-        // Best-effort archive listing.
-      }
-    }
+    archived = readArchivedFromEventLog(cawsDir, activeIds);
   }
   return ok({ active, archived });
+}
+
+/**
+ * Walk events.jsonl for spec_archived events; collect the most recent
+ * one per spec_id; emit entries. Excludes any spec_id that has been
+ * re-created since (presence in activeIds wins — that means the
+ * archive was undone by a subsequent createSpec).
+ */
+function readArchivedFromEventLog(
+  cawsDir: string,
+  activeIds: ReadonlySet<string>
+): ArchivedSpecsListEntry[] {
+  const eventsPath = path.join(cawsDir, 'events.jsonl');
+  if (!fs.existsSync(eventsPath)) return [];
+  let raw: string;
+  try {
+    raw = fs.readFileSync(eventsPath, 'utf8');
+  } catch {
+    return [];
+  }
+  // Map: spec_id → most recent spec_archived event payload+ts.
+  const latest = new Map<
+    string,
+    { ts: string; from_path: string; blob_sha: string | null }
+  >();
+  for (const line of raw.split('\n')) {
+    if (line.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      (parsed as { event?: unknown }).event !== 'spec_archived'
+    ) {
+      continue;
+    }
+    const evt = parsed as {
+      ts?: string;
+      spec_id?: string;
+      data?: { from_path?: string; blob_sha?: string };
+    };
+    if (
+      typeof evt.ts !== 'string' ||
+      typeof evt.spec_id !== 'string' ||
+      typeof evt.data !== 'object' ||
+      evt.data === null ||
+      typeof evt.data.from_path !== 'string'
+    ) {
+      continue;
+    }
+    latest.set(evt.spec_id, {
+      ts: evt.ts,
+      from_path: evt.data.from_path,
+      blob_sha: typeof evt.data.blob_sha === 'string' ? evt.data.blob_sha : null,
+    });
+  }
+  const out: ArchivedSpecsListEntry[] = [];
+  for (const [specId, info] of latest) {
+    if (activeIds.has(specId)) continue; // re-created after archive — active wins
+    out.push({
+      id: specId,
+      path: info.from_path,
+      archived_at: info.ts,
+      blob_sha: info.blob_sha,
+    });
+  }
+  // Stable sort: by id ascending.
+  out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return out;
 }
 
 /**

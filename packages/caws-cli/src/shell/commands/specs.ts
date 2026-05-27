@@ -214,9 +214,13 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
   }
   if (opts.includeArchived === true && archived.length > 0) {
     out('');
-    out('-- archived --');
+    out('-- archived (recoverable from history) --');
     for (const entry of archived) {
-      out(`${entry.id.padEnd(28)} ${entry.lifecycle_state.padEnd(8)} ${entry.title}`);
+      const blobDisplay = entry.blob_sha !== null
+        ? `blob ${entry.blob_sha.slice(0, 8)}`
+        : 'legacy (no blob_sha; use git log --follow)';
+      out(`${entry.id.padEnd(28)} archived ${entry.archived_at}  ${blobDisplay}`);
+      out(`  recover: caws specs recover ${entry.id}`);
     }
   }
   return 0;
