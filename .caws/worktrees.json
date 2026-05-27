@@ -32,12 +32,20 @@
   "hook-pack-promote": {
     "specId": "CAWS-HOOK-PACK-PROMOTE-001",
     "owner": {
-      "session_id": "caws-d66262ddcd76",
+      "session_id": "caws-c5dc6ccf2dcd",
       "platform": "darwin"
     },
-    "last_heartbeat": "2026-05-27T06:00:34.816Z",
+    "last_heartbeat": "2026-05-27T06:18:49.147Z",
     "branch": "hook-pack-promote",
     "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/hook-pack-promote"
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/hook-pack-promote",
+    "prior_owners": [
+      {
+        "session_id": "caws-d66262ddcd76",
+        "platform": "darwin",
+        "last_seen": "2026-05-27T06:00:34.816Z",
+        "takenOver_at": "2026-05-27T06:18:49.147Z"
+      }
+    ]
   }
 }

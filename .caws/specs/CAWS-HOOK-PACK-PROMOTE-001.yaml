@@ -2,10 +2,10 @@ id: CAWS-HOOK-PACK-PROMOTE-001
 title: 'promote 7 Sterling hooks into v11 hook pack per audit 001'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: hook-pack-promote
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-27T05:40:03.559Z'
-updated_at: '2026-05-27T05:40:03.559Z'
+updated_at: '2026-05-27T06:19:01.015Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/cwd-guard.sh
