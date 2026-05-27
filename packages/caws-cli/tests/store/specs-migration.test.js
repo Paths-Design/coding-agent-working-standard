@@ -696,6 +696,280 @@ invariants:
   });
 });
 
+// ─── Commit 5: fixture corpus end-to-end ────────────────────────────────
+//
+// The corpus at tests/fixtures/specs-v10-sterling/ is the bounded
+// representative sample required by spec invariant 8. Each fixture
+// represents one refusal class or one safe-migration class. These tests
+// copy the corpus into a tmp .caws/specs/ and exercise the full scan +
+// apply path the way `caws specs migrate` exercises it for a real user.
+//
+// Why a copy (not in-place scan of the fixtures directory): the apply
+// path WRITES the migrated YAML to the input files. The corpus is
+// read-only fixture input; mutating it would defeat the test on the
+// next run and would pollute git.
+
+describe('fixture corpus end-to-end (commit 5)', () => {
+  const CORPUS_DIR = path.join(__dirname, '..', 'fixtures', 'specs-v10-sterling');
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.rootDir));
+
+  function copyCorpusInto(cawsDir) {
+    const files = fs.readdirSync(CORPUS_DIR);
+    for (const f of files) {
+      const src = path.join(CORPUS_DIR, f);
+      const dst = path.join(cawsDir, 'specs', f);
+      fs.copyFileSync(src, dst);
+    }
+  }
+
+  function loadMappingFromCorpus() {
+    const raw = fs.readFileSync(path.join(CORPUS_DIR, 'mapping.json'), 'utf8');
+    return JSON.parse(raw);
+  }
+
+  it('scan produces the documented distribution without operator mapping', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    const r = runSpecsMigrateScan({ cawsDir: tmp.cawsDir, from: 'v10' });
+    expect(r.ok).toBe(true);
+    expect(r.value.distribution).toEqual({
+      migrated: 0,
+      migrated_with_warnings: 4,
+      refused: 6,
+      total: 10,
+    });
+  });
+
+  it('scan surfaces README.md and mapping.json as non_yaml observations', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    const r = runSpecsMigrateScan({ cawsDir: tmp.cawsDir, from: 'v10' });
+    expect(r.ok).toBe(true);
+    const names = r.value.non_yaml.map((o) => path.basename(o.file)).sort();
+    expect(names).toEqual(['README.md', 'mapping.json']);
+    const byName = Object.fromEntries(
+      r.value.non_yaml.map((o) => [path.basename(o.file), o.kind]),
+    );
+    expect(byName['README.md']).toBe('markdown_sidecar');
+    expect(byName['mapping.json']).toBe('unknown_non_yaml');
+  });
+
+  it('scan attributes each fixture to the expected verdict', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    const r = runSpecsMigrateScan({ cawsDir: tmp.cawsDir, from: 'v10' });
+    expect(r.ok).toBe(true);
+
+    // Build verdict-by-filename for stable assertion.
+    const verdictByFile = Object.fromEntries(
+      r.value.entries.map((e) => [path.basename(e.file), e.outcome.kind]),
+    );
+
+    // 4 migration-class fixtures → migrated_with_warnings.
+    expect(verdictByFile['migrate-happy-renames.yaml']).toBe('migrated_with_warnings');
+    expect(verdictByFile['migrate-mode-from-type.yaml']).toBe('migrated_with_warnings');
+    expect(verdictByFile['migrate-mode-type-disagree.yaml']).toBe('migrated_with_warnings');
+    expect(verdictByFile['migrate-bare-date-created.yaml']).toBe('migrated_with_warnings');
+
+    // 5 refuse-* fixtures + 1 lifecycle-mapped (no mapping supplied) → refused.
+    expect(verdictByFile['refuse-empty-modules.yaml']).toBe('refused');
+    expect(verdictByFile['refuse-lifecycle-unmapped.yaml']).toBe('refused');
+    expect(verdictByFile['refuse-mode-unresolvable.yaml']).toBe('refused');
+    expect(verdictByFile['refuse-risk-tier-unresolvable.yaml']).toBe('refused');
+    expect(verdictByFile['refuse-scope-in-missing.yaml']).toBe('refused');
+    expect(verdictByFile['migrate-lifecycle-mapped.yaml']).toBe('refused');
+  });
+
+  it('each refusal fixture surfaces the expected refusal rule', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    const r = runSpecsMigrateScan({ cawsDir: tmp.cawsDir, from: 'v10' });
+    expect(r.ok).toBe(true);
+
+    const refusalRulesByFile = {};
+    for (const e of r.value.entries) {
+      if (e.outcome.kind === 'refused') {
+        refusalRulesByFile[path.basename(e.file)] = e.outcome.reasons.map((d) => d.rule);
+      }
+    }
+    expect(refusalRulesByFile['refuse-empty-modules.yaml']).toContain(
+      'spec.migrate.blast_radius_modules_empty',
+    );
+    expect(refusalRulesByFile['refuse-lifecycle-unmapped.yaml']).toContain(
+      'spec.migrate.lifecycle_unmapped',
+    );
+    expect(refusalRulesByFile['refuse-mode-unresolvable.yaml']).toContain(
+      'spec.migrate.mode_unresolvable',
+    );
+    expect(refusalRulesByFile['refuse-risk-tier-unresolvable.yaml']).toContain(
+      'spec.migrate.risk_tier_unresolvable',
+    );
+    expect(refusalRulesByFile['refuse-scope-in-missing.yaml']).toContain(
+      'spec.migrate.scope_in_missing',
+    );
+    expect(refusalRulesByFile['migrate-lifecycle-mapped.yaml']).toContain(
+      'spec.migrate.lifecycle_unmapped',
+    );
+  });
+
+  it('with operator mapping: lifecycle-mapped moves from refused to migrated', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+    const mapping = loadMappingFromCorpus();
+
+    const r = runSpecsMigrateScan({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      lifecycleMapping: mapping,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.distribution).toEqual({
+      migrated: 0,
+      migrated_with_warnings: 5,
+      refused: 5,
+      total: 10,
+    });
+  });
+
+  it('apply --partial writes 4 migrated specs (no mapping), refuses 6, emits report', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+
+    // Capture pre-state digests for refused fixtures — they must be
+    // byte-identical after apply.
+    const refusedFiles = [
+      'refuse-empty-modules.yaml',
+      'refuse-lifecycle-unmapped.yaml',
+      'refuse-mode-unresolvable.yaml',
+      'refuse-risk-tier-unresolvable.yaml',
+      'refuse-scope-in-missing.yaml',
+      'migrate-lifecycle-mapped.yaml',
+    ];
+    const refusedDigests = {};
+    for (const f of refusedFiles) {
+      refusedDigests[f] = sha256(readSpec(tmp.cawsDir, f));
+    }
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      now: FIXED_NOW,
+    });
+
+    expect(r.ok).toBe(true);
+    // All 6 refused files byte-identical post-apply.
+    for (const f of refusedFiles) {
+      expect(sha256(readSpec(tmp.cawsDir, f))).toBe(refusedDigests[f]);
+    }
+    // The 4 migrated files have v11 shape on disk.
+    const migrated = readSpec(tmp.cawsDir, 'migrate-happy-renames.yaml');
+    expect(migrated).toContain('lifecycle_state: active');
+    expect(migrated).not.toContain('\nstatus:');
+    expect(migrated).not.toContain('\nacceptance_criteria:');
+    expect(migrated).not.toContain('\n  a11y:');
+    expect(migrated).not.toContain('\n  perf:');
+    // Bare-date coerced on disk.
+    const bareDateMigrated = readSpec(tmp.cawsDir, 'migrate-bare-date-created.yaml');
+    expect(bareDateMigrated).toContain("'2026-03-15T00:00:00.000Z'");
+    expect(bareDateMigrated).not.toMatch(/created_at: '2026-03-15'\n/);
+    // Mode-from-type fixture: mode is now 'feature' (from type), not 'development'.
+    const modeFromType = readSpec(tmp.cawsDir, 'migrate-mode-from-type.yaml');
+    expect(modeFromType).toContain('mode: feature');
+    expect(modeFromType).not.toContain('mode: development');
+    // Mode/type disagreement fixture: mode preserved as 'chore'.
+    const disagree = readSpec(tmp.cawsDir, 'migrate-mode-type-disagree.yaml');
+    expect(disagree).toContain('mode: chore');
+    expect(disagree).not.toContain('mode: fix');
+    // Report on disk.
+    expect(fs.existsSync(r.value.report_path)).toBe(true);
+    const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
+    expect(reportJson.distribution.migrated_with_warnings).toBe(4);
+    expect(reportJson.distribution.refused).toBe(6);
+    expect(reportJson.distribution.post_write_validation_failed).toBe(0);
+  });
+
+  it('apply --partial with mapping writes 5 migrated specs (lifecycle-mapped now lands)', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+    const mapping = loadMappingFromCorpus();
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      lifecycleMapping: mapping,
+      now: FIXED_NOW,
+    });
+
+    expect(r.ok).toBe(true);
+    // Lifecycle-mapped is now migrated.
+    const mapped = readSpec(tmp.cawsDir, 'migrate-lifecycle-mapped.yaml');
+    expect(mapped).toContain('lifecycle_state: archived');
+    expect(mapped).toContain('resolution: superseded');
+    expect(mapped).toContain('closure_notes: superseded by STERLING-HAPPY-001');
+    // Report shows 5 migrated, 5 refused, 0 post-write failures.
+    const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
+    expect(reportJson.distribution).toEqual({
+      migrated: 0,
+      migrated_with_warnings: 5,
+      refused: 5,
+      total: 10,
+      post_write_validation_failed: 0,
+    });
+  });
+
+  it('apply without --partial refuses (no writes) on the corpus', () => {
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+    const happyBefore = sha256(readSpec(tmp.cawsDir, 'migrate-happy-renames.yaml'));
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: false,
+      now: FIXED_NOW,
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe('store.specs.migrate.refusals_present');
+    // Happy file unchanged — full-batch refusal.
+    expect(sha256(readSpec(tmp.cawsDir, 'migrate-happy-renames.yaml'))).toBe(happyBefore);
+    // No report written.
+    expect(fs.existsSync(path.join(tmp.cawsDir, 'migrations', 'v10-specs'))).toBe(false);
+  });
+
+  it('all migrated outputs pass post-write validation (zero PWF in the corpus)', () => {
+    // The fixture corpus is curated such that EVERY non-refused fixture
+    // produces a v11-valid spec. This test is the canary: if a future
+    // transformer or kernel change introduces a v11 schema requirement
+    // the corpus does not satisfy, this assertion catches it.
+    tmp = makeTempCaws();
+    copyCorpusInto(tmp.cawsDir);
+    const mapping = loadMappingFromCorpus();
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      lifecycleMapping: mapping,
+      now: FIXED_NOW,
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.value.report.distribution.post_write_validation_failed).toBe(0);
+  });
+});
+
 // ─── Sanity: lifecycle mapping plumbed through to the kernel ──────────
 
 describe('lifecycle mapping plumbed through to transformer', () => {

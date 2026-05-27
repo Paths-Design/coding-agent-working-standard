@@ -1,0 +1,18 @@
+id: STERLING-REFUSE-EMPTY-MODULES-001
+title: blast_radius.modules is empty; auto-synthesis from scope.in is forbidden
+status: active
+type: feature
+mode: feature
+acceptance_criteria: []
+risk_tier: 2
+blast_radius:
+  modules: []
+scope:
+  in:
+    - pkg/x/a.ts
+    - pkg/x/b.ts
+    - pkg/x/c.ts
+non_functional: {}
+contracts: []
+invariants:
+  - synthesis would launder authority claims

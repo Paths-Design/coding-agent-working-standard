@@ -1,0 +1,22 @@
+id: STERLING-REFUSE-RISK-TIER-001
+title: risk_tier is a string that does not coerce to v11 1/2/3
+status: active
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: starting state
+    when: action
+    then: outcome
+created: '2026-05-10T00:00:00.000Z'
+risk_tier: low
+blast_radius:
+  modules:
+    - pkg/x
+scope:
+  in:
+    - pkg/x/y.ts
+non_functional: {}
+contracts: []
+invariants:
+  - operator must declare a v11-valid risk_tier

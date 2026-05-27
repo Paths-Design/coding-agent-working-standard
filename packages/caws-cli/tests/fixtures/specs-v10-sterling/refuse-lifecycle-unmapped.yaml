@@ -1,0 +1,22 @@
+id: STERLING-REFUSE-LIFECYCLE-001
+title: lifecycle 'proven' has no v11 enum mapping and no operator mapping supplied
+status: proven
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: starting state
+    when: action
+    then: outcome
+created: '2026-04-15T00:00:00.000Z'
+risk_tier: 3
+blast_radius:
+  modules:
+    - pkg/x
+scope:
+  in:
+    - pkg/x/y.ts
+non_functional: {}
+contracts: []
+invariants:
+  - lifecycle outside v11 enum refuses without operator mapping
