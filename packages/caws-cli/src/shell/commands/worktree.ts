@@ -157,9 +157,12 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
     return 2;
   }
   const wtPath = outcome.data?.path ?? '';
-  out(
-    `created ${outcome.name} at ${path.relative(ctx.repoRoot, String(wtPath))} (spec: ${opts.specId})`
-  );
+  const relWtPath = path.relative(ctx.repoRoot, String(wtPath));
+  out(`created ${outcome.name} at ${relWtPath} (spec: ${opts.specId})`);
+  // CAWS-FIRST-CONTACT-UX-001 A3: tell the user where to work next.
+  // Without this hint, users continue editing in the canonical checkout
+  // and trigger union-mode scope behavior they can't explain.
+  out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
   return 0;
 }
 
