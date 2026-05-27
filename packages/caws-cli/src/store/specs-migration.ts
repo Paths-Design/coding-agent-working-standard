@@ -153,6 +153,16 @@ export interface ApplyOptions extends ScanOptions {
  * as "no v10 specs found."
  */
 export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
+  // Defensive substrate assertion: cawsDir must point at a `.caws`
+  // directory. The store does NOT trust the shell to validate this —
+  // any caller (test harness, future SDK, in-process consumer) must
+  // pass an absolute path whose basename is exactly `.caws`. A wrong
+  // root would cause repo-root-relative paths in the report to be
+  // garbage and would cause the report write to land in the wrong
+  // .caws/migrations/ directory.
+  const cawsDirCheck = assertCawsDirShape(opts.cawsDir);
+  if (!isOk(cawsDirCheck)) return cawsDirCheck;
+
   const specsDir = path.join(opts.cawsDir, 'specs');
 
   let entries: fs.Dirent[];
@@ -482,6 +492,48 @@ export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
 
 function sha256Hex(input: string): string {
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
+}
+
+/**
+ * Substrate assertion: cawsDir must be a path whose basename is
+ * exactly `.caws`. Refuses with SPECS_MIGRATE_SCAN_FAILED if not,
+ * naming the exact path passed and the expected shape.
+ *
+ * This is intentionally NOT a soft warning — a wrong root corrupts
+ * every relative-path computation downstream (report entries, write
+ * targets, the migrations-report directory itself). Failing hard at
+ * the substrate boundary is the right answer.
+ */
+function assertCawsDirShape(cawsDir: string): Result<true> {
+  if (typeof cawsDir !== 'string' || cawsDir.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.SPECS_MIGRATE_SCAN_FAILED,
+        'cawsDir must be a non-empty string path.',
+        {
+          subject: String(cawsDir),
+          narrowRepair:
+            'Pass cawsDir as an absolute path whose basename is exactly ".caws" (e.g. "/path/to/repo/.caws").',
+        },
+      ),
+    );
+  }
+  const base = path.basename(cawsDir);
+  if (base !== '.caws') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.SPECS_MIGRATE_SCAN_FAILED,
+        `cawsDir basename must be exactly ".caws"; got "${base}" for path "${cawsDir}".`,
+        {
+          subject: cawsDir,
+          data: { basename: base, expected: '.caws' },
+          narrowRepair:
+            'Pass cawsDir as the path to the .caws directory itself, not the repo root or a subdirectory. The shell layer (caws specs migrate) should compute this from resolveRepoRoot + path.join(repoRoot, ".caws").',
+        },
+      ),
+    );
+  }
+  return ok(true);
 }
 
 function buildCommandString(opts: ApplyOptions): string {

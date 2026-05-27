@@ -44,6 +44,7 @@ export const MIGRATE_RULES = {
   SAFE_RENAME: 'spec.migrate.safe_rename',
   NF_SUBKEY_RENAME: 'spec.migrate.non_functional_subkey_rename',
   RISK_TIER_COERCED: 'spec.migrate.risk_tier_coerced',
+  CREATED_AT_COERCED: 'spec.migrate.created_at_coerced',
   MODE_OVERRIDDEN_FROM_TYPE: 'spec.migrate.mode_overridden_from_type',
   MODE_TYPE_DISAGREEMENT: 'spec.migrate.mode_type_disagreement',
   LIFECYCLE_MAPPING_APPLIED: 'spec.migrate.lifecycle_mapping_applied',
@@ -379,6 +380,32 @@ export function migrateSpecV10(
     }
   }
 
+  // created_at coercion: v10 commonly used bare YYYY-MM-DD dates;
+  // v11 schema requires `date-time` format. Coerce bare dates to
+  // midnight UTC and record as a coercion entry so the operator
+  // sees the change in the migration report. Anything that isn't a
+  // bare YYYY-MM-DD or a parseable date-time is left as-is and will
+  // surface as a schema violation at post-write validation (correct
+  // — we don't want to silently coerce arbitrary nonsense).
+  const createdAt = output['created_at'];
+  if (typeof createdAt === 'string') {
+    const coerced = coerceBareDateToIsoDateTime(createdAt);
+    if (coerced !== null && coerced !== createdAt) {
+      coercions.push({ field: 'created_at', from: createdAt, to: coerced });
+      output['created_at'] = coerced;
+      warnings.push(
+        diagnostic({
+          rule: MIGRATE_RULES.CREATED_AT_COERCED,
+          authority: 'kernel/spec',
+          message: `Coerced bare-date created_at "${createdAt}" to ISO date-time "${coerced}" (v11 schema requires date-time format).`,
+          ...(source.path !== undefined && { subject: source.path }),
+          severity: 'warning',
+          data: { from: createdAt, to: coerced },
+        }),
+      );
+    }
+  }
+
   // non_functional subkey renames.
   const nfOriginal = output['non_functional'];
   if (typeof nfOriginal === 'object' && nfOriginal !== null && !Array.isArray(nfOriginal)) {
@@ -688,6 +715,42 @@ type RiskTierCoercion =
   | { kind: 'already_int'; value: 1 | 2 | 3 }
   | { kind: 'coerced'; from: unknown; to: 1 | 2 | 3 }
   | { kind: 'unresolvable' };
+
+/**
+ * Coerce a bare ISO date (YYYY-MM-DD) to an ISO date-time at midnight
+ * UTC. Returns null when the input is not a bare date the migrator
+ * should touch.
+ *
+ * Decision rules:
+ *   - "2026-01-01" → "2026-01-01T00:00:00.000Z" (coerced)
+ *   - "2026-01-01T00:00:00.000Z" → returned unchanged (no coercion)
+ *   - "yesterday", "tbd", "" → null (not a bare date; transformer
+ *     leaves the value alone and post-write validation will reject it)
+ *   - any string with T or Z but malformed → null (the v11 schema
+ *     date-time format check is authoritative; we don't second-guess it)
+ *
+ * The bare-date pattern is exact: 4 digits, dash, 2 digits, dash, 2
+ * digits, end. No leading whitespace, no trailing chars, no time
+ * component. Anything looser is the validator's job to reject.
+ */
+const BARE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function coerceBareDateToIsoDateTime(value: string): string | null {
+  const m = BARE_DATE_RE.exec(value);
+  if (m === null) return null;
+  const [, yyyy, mm, dd] = m;
+  // Validate via round-trip: parse the candidate ISO date-time, format
+  // the parsed Date back to ISO, and confirm the Y/M/D segment matches.
+  // JavaScript's Date is permissive (Feb 30 silently becomes Mar 2),
+  // so we cannot rely on Date.parse alone. Round-trip equality is the
+  // strict check.
+  const iso = `${value}T00:00:00.000Z`;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const roundTripDate = parsed.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  if (roundTripDate !== `${yyyy}-${mm}-${dd}`) return null;
+  return iso;
+}
 
 function coerceRiskTier(raw: unknown): RiskTierCoercion {
   if (raw === 1 || raw === 2 || raw === 3) {

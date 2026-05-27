@@ -499,6 +499,203 @@ invariants: []
   });
 });
 
+// ─── Hardening commit 3.1: substrate assertion ────────────────────────
+
+describe('substrate assertion (commit 3.1)', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.rootDir));
+
+  it('refuses cawsDir whose basename is not ".caws"', () => {
+    tmp = makeTempCaws();
+    // Pass the repo root (parent of .caws) — basename is the tmpdir name.
+    const r = runSpecsMigrateScan({
+      cawsDir: tmp.rootDir,
+      from: 'v10',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe('store.specs.migrate.scan_failed');
+    expect(r.errors[0].data.expected).toBe('.caws');
+  });
+
+  it('refuses empty cawsDir', () => {
+    const r = runSpecsMigrateScan({ cawsDir: '', from: 'v10' });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe('store.specs.migrate.scan_failed');
+  });
+
+  it('refuses cawsDir pointing at a subdirectory of .caws (e.g. specs/)', () => {
+    tmp = makeTempCaws();
+    const r = runSpecsMigrateScan({
+      cawsDir: path.join(tmp.cawsDir, 'specs'),
+      from: 'v10',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe('store.specs.migrate.scan_failed');
+    expect(r.errors[0].data.basename).toBe('specs');
+  });
+
+  it('apply inherits the substrate refusal (does not write anything)', () => {
+    tmp = makeTempCaws();
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.rootDir, // wrong
+      from: 'v10',
+      apply: true,
+      partial: true,
+      now: FIXED_NOW,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe('store.specs.migrate.scan_failed');
+    // Nothing under tmp.rootDir/.caws/migrations was created.
+    expect(
+      fs.existsSync(path.join(tmp.cawsDir, 'migrations')),
+    ).toBe(false);
+  });
+});
+
+// ─── Hardening commit 3.1: end-to-end apply with lifecycle mapping ─────
+
+describe('end-to-end apply with lifecycle mapping (commit 3.1)', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.rootDir));
+
+  // Same shape as V10_HAPPY but with status: superseded so a mapping
+  // is required. id is v11-pattern-valid (TEST-LIFECYCLE-002) and
+  // every field is filled so post-write validation passes after the
+  // mapping is applied.
+  const V10_SUPERSEDED_FULL = `
+id: TEST-LIFECYCLE-002
+title: superseded but mappable
+status: superseded
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: x
+    when: y
+    then: z
+created: '2026-01-01T00:00:00.000Z'
+risk_tier: T3
+blast_radius:
+  modules:
+    - pkg/x
+scope:
+  in:
+    - pkg/x/foo.ts
+non_functional: {}
+contracts: []
+invariants:
+  - the mapping is operator-controlled
+`.trim();
+
+  it('apply --partial with mapping writes the migrated file with mapped lifecycle_state', () => {
+    tmp = makeTempCaws();
+    writeSpec(tmp.cawsDir, 'mapped.yaml', V10_SUPERSEDED_FULL);
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      now: FIXED_NOW,
+      lifecycleMapping: {
+        'TEST-LIFECYCLE-002': {
+          lifecycle_state: 'archived',
+          // v11 schema semantic rule: closed/archived specs require a
+          // resolution. The mapping is operator-owned; operators must
+          // supply resolution alongside lifecycle_state when they map
+          // a v10 'superseded'/'proven'/'frozen' to a v11 terminal state.
+          resolution: 'superseded',
+          closure_notes: 'superseded by Y',
+        },
+      },
+    });
+
+    expect(r.ok).toBe(true);
+    // The on-disk file has lifecycle_state: archived + closure_notes.
+    const written = readSpec(tmp.cawsDir, 'mapped.yaml');
+    expect(written).toContain('lifecycle_state: archived');
+    expect(written).toContain('resolution: superseded');
+    expect(written).toContain('closure_notes: superseded by Y');
+    expect(written).not.toContain('status:');
+    // Report records lifecycle_mapping_used.
+    const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
+    const entry = reportJson.entries[0];
+    expect(entry.verdict).toBe('migrated_with_warnings');
+    expect(entry.lifecycle_mapping_used).toEqual({
+      lifecycle_state: 'archived',
+      resolution: 'superseded',
+      closure_notes: 'superseded by Y',
+    });
+    // No false post-write-validation failure.
+    expect(reportJson.distribution.post_write_validation_failed).toBe(0);
+  });
+});
+
+// ─── Hardening commit 3.1: bare-date created coercion end-to-end ───────
+
+describe('bare-date created coercion end-to-end (commit 3.1)', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.rootDir));
+
+  const V10_BARE_DATE = `
+id: TEST-BARE-DATE-001
+title: bare date created
+status: active
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: x
+    when: y
+    then: z
+created: '2026-01-01'
+risk_tier: T3
+blast_radius:
+  modules:
+    - pkg/x
+scope:
+  in:
+    - pkg/x/foo.ts
+non_functional: {}
+contracts: []
+invariants:
+  - bare-date coercion is deterministic
+`.trim();
+
+  it('apply --partial coerces bare-date created to ISO date-time on disk', () => {
+    tmp = makeTempCaws();
+    writeSpec(tmp.cawsDir, 'bare.yaml', V10_BARE_DATE);
+
+    const r = runSpecsMigrateApply({
+      cawsDir: tmp.cawsDir,
+      from: 'v10',
+      apply: true,
+      partial: true,
+      now: FIXED_NOW,
+    });
+
+    expect(r.ok).toBe(true);
+    const written = readSpec(tmp.cawsDir, 'bare.yaml');
+    // Coerced to midnight UTC.
+    expect(written).toContain("'2026-01-01T00:00:00.000Z'");
+    // Bare date NOT present (it was replaced, not appended).
+    expect(written).not.toMatch(/created_at: '2026-01-01'\n/);
+    // Report records the coercion + zero post-write failures.
+    const reportJson = JSON.parse(fs.readFileSync(r.value.report_path, 'utf8'));
+    expect(reportJson.distribution.post_write_validation_failed).toBe(0);
+    expect(reportJson.distribution.migrated_with_warnings).toBe(1);
+    const entry = reportJson.entries[0];
+    const createdAtCoercion = entry.coercions.find(
+      (c) => c.field === 'created_at',
+    );
+    expect(createdAtCoercion).toEqual({
+      field: 'created_at',
+      from: '2026-01-01',
+      to: '2026-01-01T00:00:00.000Z',
+    });
+  });
+});
+
 // ─── Sanity: lifecycle mapping plumbed through to the kernel ──────────
 
 describe('lifecycle mapping plumbed through to transformer', () => {

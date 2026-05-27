@@ -164,7 +164,10 @@ describe('A2: safe-rename happy path', () => {
     expect(out['acceptance']).toEqual([
       { id: 'A1', given: 'x', when: 'y', then: 'z' },
     ]);
-    expect(out['created_at']).toBe('2026-01-01');
+    // Bare-date created → coerced to ISO date-time at midnight UTC
+    // (commit 3.1 hardening). Original date-only input is preserved
+    // in outcome.coercions and a CREATED_AT_COERCED warning is emitted.
+    expect(out['created_at']).toBe('2026-01-01T00:00:00.000Z');
     expect('status' in out).toBe(false);
     expect('acceptance_criteria' in out).toBe(false);
     expect('created' in out).toBe(false);
@@ -188,9 +191,22 @@ describe('A2: safe-rename happy path', () => {
       throw new Error('unexpected outcome');
     }
     expect(r.value.value['risk_tier']).toBe(2);
-    expect(r.value.coercions).toEqual([
-      { field: 'risk_tier', from: 'T2', to: 2 },
-    ]);
+    // Both risk_tier T2→2 and created_at bare-date→ISO coercions are
+    // recorded (commit 3.1 added the bare-date coercion). Order is
+    // determined by the transformer's processing sequence: renames →
+    // created_at coercion → non_functional renames → risk_tier
+    // coercion. Assert presence, not exact order, to keep the test
+    // resilient to future ordering changes that don't affect semantics.
+    expect(r.value.coercions).toContainEqual({
+      field: 'risk_tier',
+      from: 'T2',
+      to: 2,
+    });
+    expect(r.value.coercions).toContainEqual({
+      field: 'created_at',
+      from: '2026-01-01',
+      to: '2026-01-01T00:00:00.000Z',
+    });
   });
 
   it('records each safe rename in safe_renames', () => {
@@ -229,6 +245,103 @@ describe('A2: safe-rename happy path', () => {
     expect('change_budget' in r.value.value).toBe(false);
     expect('bounded_claim' in r.value.value).toBe(false);
     expect('description' in r.value.value).toBe(false);
+  });
+});
+
+// --- created_at bare-date coercion (hardening commit 3.1) ----------------
+
+describe('created_at bare-date coercion', () => {
+  const baseV10WithBareDate = {
+    id: 'TEST-DATE-001',
+    title: 'bare date',
+    status: 'active',
+    mode: 'feature',
+    risk_tier: 3,
+    blast_radius: { modules: ['pkg/x'] },
+    scope: { in: ['pkg/x/foo.ts'] },
+    contracts: [],
+    invariants: ['invariant-one'],
+    non_functional: {},
+    acceptance_criteria: [],
+    created: '2026-01-01',
+  };
+
+  it('coerces bare YYYY-MM-DD to ISO date-time at midnight UTC', () => {
+    const r = migrateSpecV10(baseV10WithBareDate);
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') {
+      throw new Error('expected migrated_with_warnings');
+    }
+    expect(r.value.value['created_at']).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('records the coercion in outcome.coercions', () => {
+    const r = migrateSpecV10(baseV10WithBareDate);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') return;
+    const coercion = r.value.coercions.find((c) => c.field === 'created_at');
+    expect(coercion).toEqual({
+      field: 'created_at',
+      from: '2026-01-01',
+      to: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('emits a created_at_coerced warning naming both values', () => {
+    const r = migrateSpecV10(baseV10WithBareDate);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') return;
+    const warning = r.value.warnings.find(
+      (d) => d.rule === MIGRATE_RULES.CREATED_AT_COERCED,
+    );
+    expect(warning).toBeDefined();
+    expect(warning?.data).toEqual({
+      from: '2026-01-01',
+      to: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('leaves a valid ISO date-time unchanged (no coercion)', () => {
+    const v10 = { ...baseV10WithBareDate, created: '2026-01-01T12:34:56.789Z' };
+    const r = migrateSpecV10(v10);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') return;
+    expect(r.value.value['created_at']).toBe('2026-01-01T12:34:56.789Z');
+    // No CREATED_AT_COERCED warning since nothing was coerced.
+    const warning = r.value.warnings.find(
+      (d) => d.rule === MIGRATE_RULES.CREATED_AT_COERCED,
+    );
+    expect(warning).toBeUndefined();
+    // Coercions list should not have a created_at entry.
+    const coercion = r.value.coercions.find((c) => c.field === 'created_at');
+    expect(coercion).toBeUndefined();
+  });
+
+  it('leaves non-date strings unchanged (post-write validator will reject them)', () => {
+    const v10 = { ...baseV10WithBareDate, created: 'yesterday' };
+    const r = migrateSpecV10(v10);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') return;
+    // Transformer does NOT coerce; the post-write validator owns that decision.
+    expect(r.value.value['created_at']).toBe('yesterday');
+    const coercion = r.value.coercions.find((c) => c.field === 'created_at');
+    expect(coercion).toBeUndefined();
+  });
+
+  it('rejects impossible bare dates (Feb 30) by returning the value unchanged', () => {
+    const v10 = { ...baseV10WithBareDate, created: '2026-02-30' };
+    const r = migrateSpecV10(v10);
+    if (!r.ok || r.value.kind !== 'migrated_with_warnings') return;
+    // Date.parse returns NaN for invalid dates — coercion declines.
+    expect(r.value.value['created_at']).toBe('2026-02-30');
+    const coercion = r.value.coercions.find((c) => c.field === 'created_at');
+    expect(coercion).toBeUndefined();
+  });
+
+  it('does not coerce when created_at is absent', () => {
+    const v10 = { ...baseV10WithBareDate };
+    delete (v10 as Record<string, unknown>)['created'];
+    const r = migrateSpecV10(v10);
+    if (!r.ok) throw new Error('expected ok');
+    // No created_at in output, no coercion.
+    if (r.value.kind === 'refused') throw new Error('unexpected refusal');
+    expect('created_at' in r.value.value).toBe(false);
   });
 });
 
