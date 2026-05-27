@@ -2,24 +2,220 @@ id: KERNEL-EVENT-V10-VERIFYCHAIN-COMPAT-001
 title: 'verifyChain rejects legacy v10 validation_completed entries — P2 hygiene residual'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: draft
 created_at: '2026-05-27T22:40:14.397Z'
 updated_at: '2026-05-27T22:40:14.397Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/evidence/verify.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/KERNEL-EVENT-V10-VERIFYCHAIN-COMPAT-001.yaml
+    - packages/caws-kernel/src/evidence/verify.ts
+    - packages/caws-kernel/tests/unit/evidence-verify-v10-compat.test.ts
+    - packages/caws-cli/src/shell/commands/events.ts
+  out:
+    - packages/caws-kernel/src/evidence/hash.ts
+    - packages/caws-kernel/src/evidence/canonical-json.ts
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/session
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    QUEUED SPEC — DO NOT IMPLEMENT. This spec is filed in
+    lifecycle_state: draft as a P2 hygiene residual. Implementation
+    waits for a deliberate decision between Option B (documentation/
+    rotation-workflow lean) and Option A (v10 canonical-json
+    authority surface). Option B is the default unless a fresh
+    consumer-audit proves legacy v10 hashes are load-bearing
+    evidence that must remain independently verifiable without
+    rotation.
+  - >-
+    The defect class is a read-side/verify-chain asymmetry in the
+    kernel's evidence surface. KERNEL-EVENT-V10-COMPAT-ALIAS-001
+    (closed) added a v10 admission branch to validateChainedEvent
+    (packages/caws-kernel/src/evidence/validate.ts:234). verifyChain
+    (packages/caws-kernel/src/evidence/verify.ts:198) does NOT have
+    a parallel branch: it recomputes event_hash via computeEventHash
+    → canonicalJson (v11 normalization), which produces different
+    bytes than the v10 writer's canonical-json, so the stored v10
+    event_hash does not match the recomputed value and verifyChain
+    fails with evidence.chain.event_hash_mismatch on every legacy
+    entry.
+  - >-
+    Option B default resolution: legacy v10 entries are parseable
+    (read-side compat) but NOT v11 chain-verifiable. Operators with
+    mixed v10→v11 chains must rotate via the existing
+    `caws events rotate` workflow, which already establishes
+    prior_chain_status: parseable_unverified semantics at the
+    boundary. The verify-archive diagnostic surface MAY be improved
+    to explicitly surface this when it encounters legacy entries,
+    but no kernel authority change is required.
+  - >-
+    Option A (explicit non-goal for this slice): adding a v10
+    canonical-json path inside computeEventHash, OR introducing a
+    polymorphic verifier that re-hashes via v10-shape canonicalization
+    when event === 'validation_completed'. This is intentionally
+    NOT pursued because (a) it introduces a divergent canonical-json
+    authority surface in the kernel, (b) the read-side schema's
+    $comment already documents the boundary explicitly ("v11 hash
+    chain semantics are preserved by NOT re-normalizing"), and
+    (c) the operator workflow for rotation already exists. Option A
+    would only be justified by consumer evidence that legacy hashes
+    must remain independently verifiable AND rotation is unavailable
+    or unacceptable.
+  - >-
+    No implementation work happens in this slice. The slice remains
+    draft until a future decision authorizes filing it as active
+    and bound to a worktree. The acceptance criteria below codify
+    the recon findings as record-of-fact; they are not implementation
+    triggers.
+  - >-
+    Recon caveat preserved: the empirical probe (verifyChain on a
+    synthetic v10 envelope with a placeholder event_hash) proves the
+    PATH ASYMMETRY and the failure RULE (evidence.chain.event_hash_
+    mismatch). It does NOT prove exact historical v10 hash-byte
+    divergence — that would require a real v10 fixture with a real
+    stored v10 event_hash computed by v10 canonical-json. The
+    asymmetry is sufficient to establish real_residual classification;
+    it is NOT sufficient to justify Option A. Option A's
+    justification requires a concrete consumer demanding legacy
+    verification without rotation.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: |
+      Recon completed 2026-05-27 against HEAD b8b4b1c.
+    when: |
+      This spec is filed.
+    then: |
+      The spec records that validateChainedEvent (read-side) and
+      verifyChain (chain integrity) take asymmetric paths for legacy
+      v10 validation_completed events. Read-side admits via a v10
+      compat branch; verify-chain does not.
+  - id: A2
+    given: |
+      Live state check on canonical .caws/events.jsonl as of
+      2026-05-27.
+    when: |
+      The chain is scanned for v10 validation_completed entries.
+    then: |
+      0 of 182 entries are v10. The canonical chain has no live
+      verifyChain failure attributable to this defect. The residual
+      is dormant in current main; it activates only when a chain
+      contains v10 entries (legacy adopter repos, archived chains
+      that crossed the v10→v11 boundary without rotation).
+  - id: A3
+    given: |
+      A chain containing one or more legacy v10 validation_completed
+      entries (archived from a pre-v11.1 repo, or mid-migration
+      chain).
+    when: |
+      `caws events verify-archive` or any caller of verifyChain is
+      invoked over that chain.
+    then: |
+      Every legacy entry fails with evidence.chain.event_hash_
+      mismatch. The diagnostic correctly identifies the hash
+      mismatch but does not currently disclose that the cause is
+      legacy v10 canonical-json semantics rather than tampering.
+      The operator-facing remedy is `caws events rotate` with the
+      existing prior_chain_status: parseable_unverified semantics.
+  - id: A4
+    given: |
+      The two implementation options from the queue note (Option A
+      v10 canonical-json kernel path; Option B rotation-workflow
+      documentation + optional diagnostic improvement).
+    when: |
+      This spec is filed.
+    then: |
+      Option B is recorded as the default resolution posture. Any
+      future implementation slice that selects Option A MUST first
+      produce consumer-audit evidence that legacy v10 hashes are
+      load-bearing for independent verification without rotation.
+  - id: A5
+    given: |
+      The kernel's existing canonical-json + computeEventHash
+      authority surfaces.
+    when: |
+      Option A would be considered.
+    then: |
+      The spec EXPLICITLY REJECTS adding a v10 canonical-json
+      authority path or making computeEventHash polymorphic on
+      event name without a fresh consumer-audit decision recorded
+      in this spec's invariants and acceptance.
+  - id: A6
+    given: |
+      This spec's lifecycle_state at filing.
+    when: |
+      The governance-cleanup tranche moves on to item #3
+      (CAWS-DOCTOR-SEVERITY-RECALIBRATION-001).
+    then: |
+      This spec remains lifecycle_state: draft. No worktree binding
+      is created. No implementation commits are authored. The next
+      lifecycle transition is operator-driven: flip to active when
+      a slice author is assigned, or close as superseded if the
+      rotation-workflow guidance proves sufficient over time.
+non_functional:
+  reliability:
+    - >-
+      Drift-detection invariant: this spec serves as the durable
+      record of a known kernel-side compat residual. If a future
+      slice closes the underlying defect (either via Option B
+      docs/diagnostic improvement, or via a deliberate Option A
+      authority surface), this spec must transition to closed
+      with the merge commit recorded in closure_notes — NOT
+      silently deleted from .caws/specs/. The residual class is
+      auditable as long as the spec exists in lifecycle_state:
+      draft or higher.
 contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: tier-1 follow-up queue item #2
+# (docs/reports/tier1-followups-queue.md). Recon completed 2026-05-27
+# against HEAD b8b4b1c by the governance-cleanup tranche.
+#
+# Recon findings (empirical):
+#   - validateChainedEvent ACCEPTS a synthetic v10 envelope (read-side
+#     compat from KERNEL-EVENT-V10-COMPAT-ALIAS-001 works as designed).
+#   - verifyChain REJECTS the same envelope with rule
+#     evidence.chain.event_hash_mismatch (the recomputed hash via v11
+#     canonical-json does not match the stored hash, which was
+#     computed by the v10 writer over v10 canonical-json).
+#   - The schema's $comment at
+#     packages/caws-kernel/src/schemas/events/validation_completed.v1.json
+#     explicitly states: "the v11 hash chain semantics are preserved
+#     by NOT re-normalizing the parsed event before hash verification"
+#     — but verifyChain DOES re-normalize via computeEventHash. The
+#     doctrine described the right behavior; the implementation
+#     diverged.
+#   - 0 of 182 entries in the live canonical .caws/events.jsonl are
+#     v10 validation_completed. No live failure to fix; the residual
+#     activates only for legacy/archive chains.
+#   - 1 existing test file (packages/caws-kernel/tests/unit/
+#     evidence-validate-v10-compat.test.ts) covers validateChainedEvent
+#     read-side compat (20+ tests). 0 existing tests cover verifyChain
+#     against v10 entries.
+#
+# Resolution posture (Option B default):
+#   - Operators with mixed v10→v11 chains rotate via existing
+#     `caws events rotate` workflow; prior_chain_status:
+#     parseable_unverified semantics already cover the boundary.
+#   - If a future slice selects Option A (kernel v10 canonical-json
+#     authority path), it must first record consumer-audit evidence
+#     that legacy hashes are load-bearing for independent
+#     verification without rotation.
+#
+# Out of scope:
+#   - Implementation (this slice is recon-record only)
+#   - Kernel canonical-json variants
+#   - computeEventHash polymorphism
+#   - Hash format / rule wording changes
+#   - Read-side validate.ts changes (already correct)
+#   - CLI events.ts changes (deferred to a future implementation
+#     slice if Option B includes a diagnostic-text improvement on
+#     verify-archive when encountering legacy entries)
+#   - Release tooling (tag-driven per CLAUDE.md trap #7)
