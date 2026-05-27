@@ -1,0 +1,345 @@
+id: CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001
+title: 'worktree destroy must resolve session via the same authority as claim/takeover'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-27T07:25:07.834Z'
+updated_at: '2026-05-27T07:40:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/shell/session
+    - packages/caws-cli/tests/shell/commands
+    - packages/caws-cli/tests/store
+    - .caws/specs/CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+invariants:
+  - >-
+    `caws worktree destroy <name>` resolves the invoking session via the
+    same authority chain as `caws claim`/`caws claim --takeover` for the
+    SAME logical session, regardless of which cwd the destroy command is
+    issued from. In particular: if `caws claim --takeover` from inside
+    the worktree successfully writes `owner.session_id = S`, then
+    `caws worktree destroy <name>` issued from the canonical checkout
+    immediately afterward (no env change, no time gap, same shell)
+    resolves `input.session.session_id = S` and proceeds.
+  - >-
+    The session-id comparison in `destroyWorktree`
+    (`entry.owner.session_id !== input.session.session_id`) is sound
+    only when both sides of the comparison were produced by a
+    session-resolution path that is INSENSITIVE to cwd for a single
+    logical agent session. The destroy path MUST NOT rely on a
+    `worktreeRoot`-keyed capsule lookup as its sole session source when
+    the invoker is operating from a different cwd than the bound
+    worktree (which is the common case — git refuses to destroy a
+    worktree from inside it).
+  - >-
+    Mint-on-destroy must not happen as the session-resolution result
+    for an agent session that already has a capsule under any other
+    `worktreeRoot` (e.g. canonical checkout, sibling worktree). If
+    `allowMint: true` is passed and no capsule matches the current
+    `worktreeRoot`, the resolver MUST first attempt to identify an
+    existing capsule for the same logical agent session before minting
+    a fresh one — otherwise destroy invents a new session id and
+    instantly fails its own ownership comparison against an entry the
+    prior claim just wrote.
+acceptance:
+  - id: A1
+    given: |
+      a worktree `wt-a` whose registry `owner.session_id` was just
+      written by `caws claim --takeover` from inside the worktree
+      (cwd = `.caws/worktrees/wt-a`), using a session id S sourced from
+      the capsule keyed to that worktree_root.
+    when: |
+      the same shell (same env, same agent session) immediately runs
+      `caws worktree destroy wt-a` from the canonical checkout
+      (cwd = repo root), with HOOK_SESSION_ID and CLAUDE_SESSION_ID
+      both unset (the typical agent-Bash path).
+    then: |
+      destroy succeeds. Specifically: the destroy-side session-resolution
+      result identifies session_id S (matching the registry's owner),
+      not a freshly-minted session_id that was created because the
+      canonical-cwd capsule lookup missed the worktree-cwd capsule and
+      `allowMint: true` synthesized a new identity. Asserted via
+      integration test in tests/shell/commands that:
+        1. mints a capsule for cwd = `<wt-root>`
+        2. writes the worktree registry with owner.session_id = that capsule's id
+        3. invokes runWorktreeDestroyCommand with cwd = canonical
+        4. asserts the destroy returns 0 (not 1 with "owned by different session")
+        5. asserts only ONE capsule existed in `.caws/sessions/` at any
+           point during the test — destroy did NOT mint a new one.
+  - id: A2
+    given: |
+      a worktree `wt-b` owned by a genuinely-foreign session F (a
+      sibling agent's capsule, different worktree_root) — no prior
+      `--takeover` happened.
+    when: |
+      the current session runs `caws worktree destroy wt-b` from any cwd.
+    then: |
+      destroy refuses with the foreign-claim error message naming
+      session F as the owner, and instructs the user to run
+      `caws claim wt-b --takeover` first. This is the legitimate
+      foreign-claim soft-block — A1's fix must NOT regress it. Asserted
+      by an integration test that primes a sibling capsule, sets the
+      registry owner to that capsule's session_id, and confirms the
+      destroy refusal still fires for the genuinely-foreign case.
+  - id: A3
+    given: |
+      a worktree `wt-c` owned by session S, where the current cwd is
+      neither the canonical checkout nor `wt-c` (e.g., cwd is a
+      DIFFERENT linked worktree `wt-d`) and HOOK_SESSION_ID is unset.
+    when: |
+      `caws worktree destroy wt-c` is invoked.
+    then: |
+      destroy resolves the SAME session id S that claim/takeover used
+      (assuming the same agent session minted the original capsule).
+      The destroy succeeds. This covers the "agent issues destroy from
+      a sibling worktree" path that is common when an agent is cleaning
+      up an older sibling before moving on.
+  - id: A4
+    given: |
+      a project with NO capsule under any worktree_root and
+      HOOK_SESSION_ID/CLAUDE_SESSION_ID both unset.
+    when: |
+      a fresh process runs `caws worktree destroy wt-x` (where wt-x is
+      owned by session F written from a different process earlier).
+    then: |
+      destroy refuses with foreign-claim wording. It does NOT mint a
+      capsule, run the destroy, and then later confuse subsequent
+      commands by leaving a fresh identity behind. The "no current
+      session resolvable, refuse with a guidance message" behavior is
+      preserved over the "mint a fresh identity to satisfy the
+      comparison" alternative.
+  - id: A5
+    given: |
+      `caws claim --takeover` reports OWNED (you) for `wt-y`, returning
+      exit 0, with session id S written to owner.
+    when: |
+      `caws worktree destroy wt-y` is invoked immediately afterward
+      from ANY cwd (canonical, wt-y itself, sibling worktree), with
+      env unchanged.
+    then: |
+      destroy succeeds without re-running takeover. No
+      `--takeover` second pass is required. No manual registry edits
+      are required. No capsule-file fiddling is required. The
+      claim→destroy chain is the documented and tested happy path for
+      worktree teardown. Asserted via an end-to-end test that wires
+      runClaimCommand → runWorktreeDestroyCommand and verifies both
+      exit 0 with no intermediate state mutation.
+non_functional:
+  reliability:
+    - >-
+      The session-resolution change must not introduce silent fallbacks
+      that pick the wrong session id. If destroy cannot resolve a
+      stable session identity that matches the registry owner, it MUST
+      surface a typed diagnostic explaining which session-resolution
+      paths were tried and why each failed — it does NOT silently mint
+      a fresh identity that will then fail the ownership comparison
+      with a misleading "owned by different session" message.
+    - >-
+      The fix must preserve the existing invariant that "stale lease
+      is evidence, never authority" (worktree-isolation.md §5).
+      Genuine cross-session destroy attempts (A2) must still refuse;
+      the fix narrows ONLY the false-positive case where the SAME
+      logical session resolves to two different ids across cwds.
+  security:
+    - >-
+      The destroy command MUST NOT accept an `--owner-session-id` flag
+      from the caller to short-circuit the comparison. Session identity
+      remains sourced from the resolver alone, never from a CLI
+      argument that a caller could spoof. The fix must address the
+      resolver's cwd-sensitivity directly, not paper over it with a
+      bypass flag.
+contracts: []
+closure_notes: |
+  SUCCESSOR SPEC TO CAWS-WORKTREE-SESSION-ID-AUTHORITY-001.
+
+  Authored 2026-05-27 after closing the parent spec as
+  "partially_resolved". The parent's closure_notes documented that
+  CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 (commit 469f419) fixed the
+  CREATE-time failure mode (registry recorded a sibling session's id at
+  worktree create) but explicitly excluded the destroy-side comparison
+  from scope: ".caws/worktrees.json:owner.session_id is the sole
+  ownership authority" and "the COMPARISON in worktrees-writer.ts is
+  untouched."
+
+  Reproduction (4× during the closure session, all manual recovery):
+    - inside worktree: `caws claim --takeover` → OK, OWNED (you),
+      registry owner.session_id = S.
+    - cd back to canonical, run `caws worktree destroy <name>` →
+      "owned by a different session (caws-NNNN)". The session id in
+      the error message is NOT S; it's a fresh id minted by
+      resolveSession() when readCapsule() missed the
+      worktreeRoot-keyed capsule from the wt-a cwd.
+    - manual recovery: `git worktree remove --force`, hand-edit
+      `.caws/worktrees.json`, `git branch -d <branch>`.
+
+  GROUNDED ROOT-CAUSE (verified by reading the v11.1.7 source at
+  closure-session HEAD = 594b18e):
+
+  Both `caws claim` and `caws worktree destroy` call the same
+  `resolveSession({ allowMint: true })` chain
+  (`packages/caws-cli/src/shell/session/resolve-session.ts:301`).
+  Priority order: CLAUDE_SESSION_ID env, HOOK_SESSION_ID env, capsule
+  on disk keyed by `worktreeRoot` realpath, CURSOR_TRACE_ID env, mint.
+
+  For typical agent-Bash invocation (Claude Code, no harness hook):
+  - CLAUDE_SESSION_ID is unset.
+  - HOOK_SESSION_ID is unset (only set inside hook envelopes via
+    lib/parse-input.sh, NOT in regular agent-Bash).
+  - The resolver falls through to step-3 capsule lookup, which is
+    keyed by realpath of `worktreeRoot` (the `cwd` of the invocation;
+    see `readCapsule` at line 91 of resolve-session.ts, specifically
+    the equality check at line 131:
+    `if (capsuleWorktreeReal === worktreeRealRoot)`).
+
+  Claim is run from INSIDE the worktree (cwd = wt-root). Its capsule
+  is keyed to wt-root. Takeover patch writes owner.session_id = S
+  (the capsule's id).
+
+  Destroy is run from canonical (cwd = repo root) — because git refuses
+  to destroy an active worktree from inside it. Its capsule lookup
+  searches `.caws/sessions/*.json` for a capsule whose
+  `parsed.worktree_root` realpath equals the canonical realpath. The
+  wt-root capsule does NOT match. Step-5 mint fires (allowMint: true),
+  creating a fresh capsule with a NEW session id S'.
+
+  Compare in destroyWorktree (worktrees-writer.ts:772):
+    entry.owner.session_id (= S) !== input.session.session_id (= S')
+    → REFUSE with "owned by a different session (S)".
+
+  The error message is technically accurate (S != S') but operationally
+  misleading: S is the SAME logical agent. The resolver invented S'
+  because it could not see across cwds. The env-precedence fix doesn't
+  help here because HOOK_SESSION_ID is not set in agent-Bash CLI calls.
+
+  DESIGN-SPACE FOR THE IMPLEMENTING AGENT:
+
+  Option A — capsule lookup across cwds when caller is the same logical
+  agent. Extend `readCapsule` (or add a second-pass helper) to look up
+  capsules by a stable identifier other than worktree_root realpath —
+  e.g., process-tree ancestry, parent PID match, or a session-id env
+  var that the harness exports. Risk: identifying "same agent across
+  cwds" without an explicit harness-supplied id is heuristic and may
+  reintroduce the sibling-session aliasing bug
+  CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 fixed.
+
+  Option B — refuse to mint on destroy when registry has a recorded
+  owner. Pass `allowMint: false` for the resolve-session call inside
+  `runWorktreeDestroyCommand` (and other ownership-comparison commands
+  like merge). If no stable identity resolves, refuse with a guidance
+  message: "destroy requires a resolvable session identity; run
+  `caws claim <name>` from inside the worktree first to establish a
+  session matching the registered owner." This forces the user/agent
+  through the claim flow, which IS cwd-aware. Trade-off: friction for
+  the common case where the user just took over and wants to destroy
+  immediately — they would now need an extra `cd` step.
+
+  Option C — destroy reads owner via a side channel that matches what
+  claim wrote. Have the takeover/claim flow drop a small breadcrumb
+  (e.g., update agents.json with `claimed_via: { worktree_name, when, cwd }`)
+  and have destroy consult agents.json by name to identify "if this
+  worktree was claimed by ME in any prior invocation, treat ownership
+  match as satisfied." Trade-off: introduces an indirect authority
+  surface (agents.json) parallel to worktrees.json — exactly the kind
+  of split-brain that doctrine invariant §6.8 warns against. Likely
+  the wrong shape.
+
+  Option D — harness-supplied stable session id. Document the
+  HOOK_SESSION_ID requirement: agents using Claude Code (or any
+  harness) should arrange for HOOK_SESSION_ID to be exported for all
+  agent-Bash invocations, not just hook envelopes. The existing
+  priority-2 resolution would then carry the same id across all
+  invocations regardless of cwd. Trade-off: requires harness changes
+  (Claude Code session capsule export) and doesn't fix the bare-shell
+  case for human users.
+
+  Option E — multi-source ownership-compare helper (RECOMMENDED).
+  Introduce a sibling to `resolveSession()` named
+  `resolveSessionForOwnershipCompare(opts)` in
+  `packages/caws-cli/src/shell/session/resolve-session.ts`. Contract:
+
+    - Reads CLAUDE_SESSION_ID env, HOOK_SESSION_ID env, ALL capsules
+      under `.caws/sessions/*.json` (not just the cwd-keyed match),
+      and CURSOR_TRACE_ID env.
+    - Returns a CANDIDATE SET of resolved session identities (zero or
+      more), each tagged with its source. Does NOT pick a single
+      "winner" and does NOT mint.
+    - Callers that need a single identity (create, claim, evidence,
+      gates) continue using the existing `resolveSession()` unchanged.
+    - Ownership-comparison callers (destroy, merge) use the new helper
+      and ask "does any candidate's session_id match
+      entry.owner.session_id?" If yes → admit. If no → genuine
+      foreign-claim → refuse with the existing message.
+
+  Trade-offs vs B:
+    + No friction: an agent that just took over via claim can
+      immediately destroy from canonical cwd — destroy will find the
+      worktree-keyed capsule among the candidate set.
+    + Preserves the foreign-claim refusal cleanly (A2): a sibling
+      session's capsule does NOT match the registry owner, so no
+      candidate matches, refusal fires.
+    + No new authority surface — agents.json stays out of ownership
+      decisions. Capsules remain the only session-id authority; we
+      just stop letting cwd-realpath act as an unintended filter.
+    + No harness change — works for bare-shell humans and hook-driven
+      agents identically.
+    - Slightly broader search at destroy-time (reads N capsule files
+      instead of 1). At realistic N (single-digit), the cost is
+      negligible; capsule cleanup-on-mint already bounds N per
+      worktree_root to 1.
+    - The candidate-set shape is a small new API surface; the
+      existing `resolveSession()` returns a single `ResolvedSession`,
+      so the new function diverges in return type. Acceptable
+      because it has a different purpose (admission test, not
+      identity selection).
+
+  Option E is recommended over B because it eliminates the only real
+  cost of B (the implicit "cd into wt-root before destroy" rule that
+  isn't enforced anywhere and would surprise users). It eliminates
+  the only real cost of D (harness work). And it is a direct,
+  shell-layer change in scope.in for this spec.
+
+  If during implementation Option E proves to have a subtle correctness
+  problem not visible at authoring time, falling back to Option B is
+  cheap — both pass A1-A5 with different ergonomics.
+
+  Note on the "do we need a resolve_session utility, like the git
+  helper" question (user, 2026-05-27): we already HAVE one
+  (`resolveSession()` at line 301). The shape problem isn't absence
+  of a helper — it's that the existing helper has one knob
+  (`allowMint`) that doesn't express the ownership-compare semantic.
+  Option E adds a sibling helper rather than refactoring the existing
+  one; the existing helper's single-identity-with-mint contract is
+  correct for create/claim/evidence/gates. The split keeps each
+  helper's invariants narrow.
+
+  TEST FILES TO CREATE:
+    - packages/caws-cli/tests/shell/session/resolve-session-cwd.test.js
+      (covers the resolver's behavior across cwds; A1/A3/A4 raw
+      resolver-level assertions)
+    - packages/caws-cli/tests/shell/commands/worktree-destroy-session.test.js
+      (covers runWorktreeDestroyCommand with primed registry and
+      cross-cwd invocations; A1/A2/A5 command-level integration)
+    - packages/caws-cli/tests/store/destroy-worktree-ownership.test.js
+      (covers destroyWorktree at the store layer with explicit
+      session inputs; A2 lower-level coverage and regression net for
+      foreign-claim refusal shape)
+
+  Companion spec to CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 (closed
+  2026-05-27 at bd4a2c4) and successor to
+  CAWS-WORKTREE-SESSION-ID-AUTHORITY-001 (closed partially-resolved
+  2026-05-27 at 594b18e).
