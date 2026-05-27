@@ -179,6 +179,24 @@ After the edit phase and before `git commit`:
 
 Commit only when all checks pass or you can explain in the commit message why a check was deliberately skipped or expected to fail.
 
+### Diagnostic files are write targets too
+
+Probe scripts, scratch files, redirected diagnostic outputs, and any other "temporary" file the agent creates ARE subject to the preflight protocol. `/tmp/probe.js`, `scratch.txt`, `debug-output.log`, and anything similar count as writes.
+
+**Concretely:**
+
+- Do NOT write to `/tmp/` from the agent. The scope guard doesn't admit paths under `/tmp/` because they're not in any spec's `scope.in`. Use `node -e '...'` for inline JS, stdout/stderr redirection inside Bash for capture, or in-scope test instrumentation (a temporary `console.log` inside an already-admitted `*.test.js` file, removed before commit).
+- Do NOT redirect diagnostic output to a new file unless that file's path is predeclared in the preflight write-target list AND passes `caws scope show`.
+- Do NOT use Write tool for ANY purpose without preflight. There is no "but it's just a scratch file" exception. The hook fires on every Write call.
+
+The valid escape hatches for diagnostic work:
+
+- Inline Bash with `node -e`, `python -c`, `jq`, etc. — no file is written, only stdout returned.
+- Temporary `console.log` inside an existing in-scope test file. Add, run, capture, remove before commit. The file itself stays scope-admitted.
+- Reading existing artifacts (`fs.readFileSync`, `cat`, `jq` against a real on-disk file) — read is never gated, only writes are.
+
+This rule exists because the agent earned a strike on `/tmp/migrator-probe.js` during CAWS-MIGRATE-V10-SPECS-001 commit 3 by treating "it's just a probe" as a license to skip the preflight. The strike system caught it. The protocol must catch it earlier — the agent's reasoning, not the kernel's enforcement.
+
 ### Demote intuition; trust proof
 
 If your mental model says "this file is obviously in scope" but you haven't run `caws scope show`, your mental model has no authority. The kernel's scope decision is the only authority. The cost of running four `caws scope show` calls before commit 3 is roughly six seconds; the cost of one strike + amendment + cherry-pick + reset + explanation is several minutes of your turn and several minutes of the user's attention. The asymmetry is severe.
