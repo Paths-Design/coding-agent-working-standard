@@ -144,6 +144,12 @@ export interface StoreSnapshot {
     readonly eventsJsonlExists: boolean;
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
+    /**
+     * CAWS-ARCHIVE-AS-TOMBSTONE-001: count of yaml files at the top
+     * of .caws/specs/.archive/. Excludes .unrecoverable/ subdir.
+     * Surfaced as doctor.archive.legacy_bodies_present WARN when >0.
+     */
+    readonly legacyArchiveBodyCount: number;
   };
 
   /**

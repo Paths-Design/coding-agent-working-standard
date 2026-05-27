@@ -178,7 +178,31 @@ function observeFilesystem(
     eventsJsonlExists: isFile(path.join(cawsDir, 'events.jsonl')),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
+    legacyArchiveBodyCount: countLegacyArchiveBodies(cawsDir),
   };
+}
+
+/**
+ * CAWS-ARCHIVE-AS-TOMBSTONE-001: count .yaml files at the TOP of
+ * .caws/specs/.archive/. Excludes the .unrecoverable/ subdirectory
+ * (that's the quarantine destination, not a source). Returns 0 when
+ * the directory doesn't exist (which is the post-tombstone steady
+ * state).
+ */
+function countLegacyArchiveBodies(cawsDir: string): number {
+  const archiveDir = path.join(cawsDir, 'specs', '.archive');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(archiveDir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml')) count++;
+  }
+  return count;
 }
 
 // ----------------------------------------------------------------------------
