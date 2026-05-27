@@ -2,6 +2,11 @@
 
 Created 2026-05-26 during the `CAWS-MIGRATE-V10-SPECS-001` slice (commit 2 of 7 landed as `9effdfe`). This is a queue note, **not** a spec. Do not expand the active/draft spec surface while the migrator is in flight; specs go through `caws specs create` only after the migrator merges.
 
+## Reconciliation log
+
+- **2026-05-27** — `CAWS-MIGRATE-V10-SPECS-001` closed/completed. Merge commit `ad95ff0`; close commit `ef5944f`. Migrator slice fully landed; archive residual remains queued as item 8 (P2).
+- **2026-05-27** — Item 5 `CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001` closed/completed. Fix commit `469f419`; merge commit `4877297`. HOOK_SESSION_ID admitted at priority 2 of resolveSession; mintCapsule now deletes superseded capsules.
+
 Source audit: this session's overhead-view audit (Sterling consumer report at `/Users/darianrosebrook/Desktop/Projects/sterling/docs/ephemeral/caws-v11-issues.md`, Sterling fixes JSON at `docs/reports/sterling-v11-fixes.json`, and Entry 21 of `docs/failure-lineage.md`).
 
 ## Sequencing rule (do not violate)
@@ -67,7 +72,9 @@ Also fold in:
 
 Single docs slice. Cheap. Could bundle with item 1 if the slice author wants.
 
-### 5. CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 (P0 — Sterling-recurring)
+### 5. CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 (P0 — Sterling-recurring) — **CLOSED 2026-05-27**
+
+**Status:** closed/completed. Spec at `.caws/specs/CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001.yaml` (`lifecycle_state: closed`, `resolution: completed`). Fix commit `469f419` (`fix(cli): CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 — admit HOOK_SESSION_ID + clean superseded capsules`); merge commit `4877297`. Both Option A (harness-side) and Option B (store-side capsule cleanup) shipped. Hook-pack templates were not modified (already export HOOK_SESSION_ID via `parse-input.sh`).
 
 **Symptom:** every `caws worktree merge` after a Claude Code session restart refuses with `OWNED (foreign) — caws-<prior-hex>`, even when the same human user is operating. Sterling has been forced into repeated `caws claim --takeover` cycles within a single agent session.
 
