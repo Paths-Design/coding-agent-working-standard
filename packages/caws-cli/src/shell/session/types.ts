@@ -16,6 +16,7 @@ import type { SessionIdentity } from '@paths.design/caws-kernel';
 export type SessionSource =
   | 'claude_env'
   | 'hook_env'
+  | 'durable_hook_envelope'
   | 'capsule'
   | 'cursor_env'
   | 'minted';
@@ -30,6 +31,28 @@ export interface ResolvedSession {
    * that was read or written. Useful for diagnostics rendering.
    */
   readonly capsulePath?: string;
+  /**
+   * For `source: 'durable_hook_envelope'`, the on-disk envelope file path
+   * that produced the identity. CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001.
+   */
+  readonly envelopePath?: string;
+}
+
+/**
+ * CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: durable hook-session
+ * envelope written by hook scripts to bridge HOOK_SESSION_ID across
+ * process boundaries (e.g., agent-issued Bash tool calls where the
+ * env var doesn't propagate). One envelope file per session, written
+ * at `<repo_root>/tmp/<session_id>/.session-envelope.json`. Refreshed
+ * on every hook fire so long-lived sessions stay within the freshness
+ * window.
+ */
+export interface DurableHookEnvelope {
+  readonly session_id: string;
+  readonly repo_root: string;
+  readonly created_at: string;
+  readonly last_seen_at: string;
+  readonly hook_event: string;
 }
 
 export interface SessionCapsule {

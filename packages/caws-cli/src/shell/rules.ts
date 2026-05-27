@@ -21,6 +21,24 @@ export const SHELL_RULES = {
   SESSION_RESOLVED_FROM_CAPSULE: 'shell.session.resolved_from_capsule',
   SESSION_RESOLVED_FROM_CURSOR_ENV: 'shell.session.resolved_from_cursor_env',
   SESSION_NO_STABLE_IDENTITY: 'shell.session.no_stable_identity',
+  // CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: priority 2.5 between
+  // hook_env and capsule. Bridges HOOK_SESSION_ID across agent-Bash
+  // invocations where the env var doesn't propagate.
+  SESSION_RESOLVED_FROM_DURABLE_ENVELOPE:
+    'shell.session.resolved_from_durable_envelope',
+  /** Refusal: two or more fresh durable envelopes match the current
+   *  repo_root. The resolver cannot pick a winner; the operator must
+   *  disambiguate (set CLAUDE_SESSION_ID, or route through a hook
+   *  context that sets HOOK_SESSION_ID, or remove stale tmp/<id>/
+   *  directories). NEVER newest-wins. */
+  SESSION_DURABLE_ENVELOPE_AMBIGUOUS:
+    'shell.session.durable_envelope_ambiguous',
+  /** Non-fatal warning: a tmp/<id>/.session-envelope.json file was
+   *  present but unreadable or unparseable. The envelope is skipped
+   *  as a candidate; resolution continues with remaining envelopes
+   *  and capsule fallback. */
+  SESSION_DURABLE_ENVELOPE_MALFORMED:
+    'shell.session.durable_envelope_malformed',
   SESSION_CAPSULE_MINTED: 'shell.session.capsule_minted',
   SESSION_CAPSULE_INVALID: 'shell.session.capsule_invalid',
   SESSION_CAPSULE_WRITE_FAILED: 'shell.session.capsule_write_failed',

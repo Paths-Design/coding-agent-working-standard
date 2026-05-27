@@ -9,12 +9,18 @@
 //                                (harness-stable id exported by the
 //                                Claude Code hook envelope via
 //                                lib/parse-input.sh; refused if the
-//                                value is the literal "unknown",
-//                                which is the parse-input.sh fallback
-//                                when the hook payload lacks an id —
-//                                admitting "unknown" would alias every
-//                                broken-context invocation into one
-//                                shared capsule)
+//                                value is the literal "unknown")
+//   2.5. Durable hook envelope → platform = "claude-code"
+//                                (CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001;
+//                                bridges HOOK_SESSION_ID across agent-Bash
+//                                invocations where the env var doesn't
+//                                propagate. Reads
+//                                <repo_root>/tmp/<id>/.session-envelope.json
+//                                files written by hook scripts. Filters by
+//                                repo_root + 24h freshness on last_seen_at.
+//                                Refuses with typed ambiguity diagnostic
+//                                when two or more candidates match;
+//                                NEVER newest-wins.)
 //   3. CAWS session capsule    → on-disk `.caws/sessions/<id>.json` that
 //                                names the current worktree root
 //   4. CURSOR_TRACE_ID env     → platform = "cursor" (low-stability fallback)
@@ -57,6 +63,164 @@ import type {
 } from './types';
 
 const SESSIONS_DIRNAME = 'sessions';
+
+// CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
+const DURABLE_ENVELOPE_DIRNAME = 'tmp';
+const DURABLE_ENVELOPE_FILENAME = '.session-envelope.json';
+const DURABLE_ENVELOPE_FRESHNESS_MS = 24 * 60 * 60 * 1000;
+
+interface DurableEnvelopeShape {
+  readonly session_id: string;
+  readonly repo_root: string;
+  readonly created_at: string;
+  readonly last_seen_at: string;
+  readonly hook_event: string;
+}
+
+interface DurableEnvelopeCandidate {
+  readonly envelope: DurableEnvelopeShape;
+  readonly envelopePath: string;
+}
+
+function isDurableEnvelopeShape(v: unknown): v is DurableEnvelopeShape {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.session_id === 'string' &&
+    o.session_id.length > 0 &&
+    typeof o.repo_root === 'string' &&
+    typeof o.last_seen_at === 'string'
+  );
+}
+
+/**
+ * Scan `<repoRoot>/tmp/<id>/.session-envelope.json` for durable
+ * hook-session envelopes matching the current call's repo_root and
+ * within the freshness window.
+ *
+ * Returns:
+ *   - { ok: true, candidates: [...] } where candidates is filtered
+ *     and freshness-checked. Caller decides accept/refuse based on
+ *     count.
+ *   - Diagnostic warnings for any malformed envelopes encountered
+ *     (non-fatal — the scan continues past malformed files).
+ *
+ * Per invariant 5: scan failures are non-fatal. A missing or
+ * unreadable tmp/ directory returns an empty candidate set, not an
+ * error. The durable-envelope path is operational cache; the
+ * resolver falls through cleanly when nothing matches.
+ *
+ * Per invariant 7: stale envelopes (last_seen_at > 24h ago) are
+ * silently skipped — never deleted from the read path. Cleanup is
+ * operator-driven via `rm -rf tmp/<id>/`.
+ */
+function scanDurableEnvelopes(args: {
+  repoRoot: string;
+  tmpDir: string;
+  now: Date;
+}): { candidates: DurableEnvelopeCandidate[]; warnings: Diagnostic[] } {
+  const warnings: Diagnostic[] = [];
+  const candidates: DurableEnvelopeCandidate[] = [];
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(args.tmpDir);
+  } catch {
+    // No tmp directory or unreadable — no candidates, no warnings.
+    // This is the common case in repos that have never run a hook.
+    return { candidates, warnings };
+  }
+
+  let repoRootReal: string;
+  try {
+    repoRootReal = fs.realpathSync(args.repoRoot);
+  } catch {
+    repoRootReal = args.repoRoot;
+  }
+
+  const nowMs = args.now.getTime();
+  const freshnessFloorMs = nowMs - DURABLE_ENVELOPE_FRESHNESS_MS;
+
+  for (const name of entries) {
+    const envelopePath = path.join(args.tmpDir, name, DURABLE_ENVELOPE_FILENAME);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(envelopePath);
+    } catch {
+      // No envelope file in this tmp/<name>/ subdir (might be a
+      // session-log dir, an auto-reset-dispatch-test dir, or any
+      // other tmp content). Skip silently.
+      continue;
+    }
+    if (!stat.isFile()) continue;
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(envelopePath, 'utf8');
+    } catch (e) {
+      warnings.push(
+        diag(
+          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+          `durable envelope read failed: ${(e as Error).message}`,
+          { envelopePath }
+        )
+      );
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      warnings.push(
+        diag(
+          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+          `durable envelope JSON parse failed: ${(e as Error).message}`,
+          { envelopePath }
+        )
+      );
+      continue;
+    }
+
+    if (!isDurableEnvelopeShape(parsed)) {
+      warnings.push(
+        diag(
+          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+          'durable envelope missing required fields (session_id, repo_root, last_seen_at)',
+          { envelopePath }
+        )
+      );
+      continue;
+    }
+
+    // Repo-root filter: realpath both sides to defeat /tmp vs
+    // /private/tmp differences on macOS.
+    let envRepoRootReal: string;
+    try {
+      envRepoRootReal = fs.realpathSync(parsed.repo_root);
+    } catch {
+      envRepoRootReal = parsed.repo_root;
+    }
+    if (envRepoRootReal !== repoRootReal) {
+      // Envelope belongs to a different repo (e.g., another project's
+      // session that happened to leave a tmp/<id>/ here). Skip — NOT
+      // a warning; this is normal multi-repo developer state.
+      continue;
+    }
+
+    // Freshness filter on last_seen_at (NOT created_at — long-lived
+    // active sessions stay fresh via per-hook refresh per invariant 2).
+    const lastSeenMs = Date.parse(parsed.last_seen_at);
+    if (!Number.isFinite(lastSeenMs) || lastSeenMs < freshnessFloorMs) {
+      // Stale. Skip silently — operator-driven cleanup, not auto-delete.
+      continue;
+    }
+
+    candidates.push({ envelope: parsed, envelopePath });
+  }
+
+  return { candidates, warnings };
+}
 
 function diag(
   rule: string,
@@ -332,6 +496,66 @@ export function resolveSession(
     });
   }
 
+  // 2.5. Durable hook envelope on disk (authority source #2.5)
+  //      CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: bridges
+  //      HOOK_SESSION_ID across agent-Bash invocations where the env
+  //      var doesn't propagate. The hook script writes/refreshes
+  //      `<repo_root>/tmp/<id>/.session-envelope.json` on every fire;
+  //      the resolver scans them filtered by repo_root + freshness.
+  //
+  //      Authority discipline:
+  //        - Repo-root filter is mandatory (no blind tmp/* scan).
+  //        - Stale envelopes (>24h on last_seen_at) skipped silently.
+  //        - Malformed envelopes skipped with non-fatal warning.
+  //        - Two or more fresh matches → REFUSE with typed ambiguity
+  //          diagnostic. NEVER newest-wins.
+  //        - Zero matches → fall through to capsule (priority 3).
+  //
+  //      Derive repoRoot from cawsDir (cawsDir is `<repoRoot>/.caws`).
+  const repoRoot = path.dirname(opts.cawsDir);
+  const tmpDir = path.join(repoRoot, DURABLE_ENVELOPE_DIRNAME);
+  const envScan = scanDurableEnvelopes({
+    repoRoot,
+    tmpDir,
+    now: opts.now ? opts.now() : new Date(),
+  });
+  if (envScan.candidates.length >= 2) {
+    const ids = envScan.candidates.map((c) => c.envelope.session_id);
+    const paths = envScan.candidates.map((c) => c.envelopePath);
+    return err([
+      diag(
+        SHELL_RULES.SESSION_DURABLE_ENVELOPE_AMBIGUOUS,
+        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale tmp/<id>/ directories for sessions that have ended.`,
+        {
+          repoRoot,
+          candidateCount: envScan.candidates.length,
+          candidateSessionIds: ids,
+          candidateEnvelopePaths: paths,
+        }
+      ),
+      ...envScan.warnings,
+    ]);
+  }
+  if (envScan.candidates.length === 1) {
+    const sole = envScan.candidates[0]!;
+    return ok(
+      {
+        identity: {
+          session_id: sole.envelope.session_id,
+          platform: 'claude-code',
+        },
+        source: 'durable_hook_envelope',
+        envelopePath: sole.envelopePath,
+      },
+      envScan.warnings.length > 0 ? envScan.warnings : undefined,
+    );
+  }
+  // envScan.candidates.length === 0: fall through to capsule.
+  // Warnings (if any malformed envelopes were encountered) are dropped
+  // here — the resolver returns ok() from the capsule branch and we
+  // don't have a clean way to thread warnings through. Operators see
+  // these via direct envelope-shape inspection.
+
   // 3. Capsule on disk (authority source #3)
   const cap = readCapsule(opts.cawsDir, opts.worktreeRoot);
   if (cap !== null) {
@@ -396,6 +620,12 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_HOOK_ENV,
         `Session identity from HOOK_SESSION_ID env (Claude Code hook envelope): ${s.identity.session_id}`
+      );
+    case 'durable_hook_envelope':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_DURABLE_ENVELOPE,
+        `Session identity from durable hook envelope: ${s.identity.session_id}`,
+        s.envelopePath !== undefined ? { envelopePath: s.envelopePath } : undefined
       );
     case 'capsule':
       return infoDiag(
