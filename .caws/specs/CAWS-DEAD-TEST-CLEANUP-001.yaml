@@ -2,9 +2,11 @@ id: CAWS-DEAD-TEST-CLEANUP-001
 title: 'Remove v10 dead tests from caws-cli'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Removed 17 dead test files (~6,221 LOC) that exercised v10-removed surfaces (burnup, evaluate, iterate, verify-acs, sidecar group, tool, parallel, validate, archive, provenance, plus the legacy multi-spec router via spec-resolver and scope-conflicts). Trimmed working-state.test.js to mergeFilesTouched (only live working-state surface). Scrubbed three stale CI-skip entries from jest.config.js. Post-merge canonical verification: 117 suites, 111 pass, 6 fail. The 6 failing suites (init.test.js, agent-claim-wiring, axe/cli-accessibility, hook-packs/classify_command_calibration, integration/gates-cli, store/snapshot-vnext-facts) are pre-existing failures, all out of this slice''s scope, and unchanged in count from the canonical baseline minus multi-spec-integration which this slice eliminated. Verification limitation: the test suite was NOT runnable from the linked worktree because canonical dist/ shape is not present in linked worktrees (sparse-checkout). Authoritative verification is therefore post-merge canonical jest run, recorded here. Branch merged via wip/doctor-severity-recal-checkpoint (also carries 2 wip checkpoint commits preserving doctor-severity-recal foreign edits that arrived on canonical mid-merge; the owning agent should cherry-pick those onto their slice). Follow-on spec needed: CAWS-DEAD-SOURCE-CLEANUP-001 to remove the 16 dead src/commands/*.js + src/sidecars/ + src/parallel/parallel-manager.js + src/test-analysis.js + src/utils/spec-resolver.js plus the worktree-manager.js:1597 verify-acs require.'
 created_at: '2026-05-27T22:37:27.390Z'
-updated_at: '2026-05-27T23:30:00.000Z'
+updated_at: '2026-05-27T23:36:17.636Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests
