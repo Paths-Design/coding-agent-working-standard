@@ -15,6 +15,7 @@ import type { SessionIdentity } from '@paths.design/caws-kernel';
 
 export type SessionSource =
   | 'claude_env'
+  | 'hook_env'
   | 'capsule'
   | 'cursor_env'
   | 'minted';

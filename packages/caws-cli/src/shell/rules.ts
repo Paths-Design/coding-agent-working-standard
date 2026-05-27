@@ -17,12 +17,18 @@ export const SHELL_RULE_PREFIXES = {
 export const SHELL_RULES = {
   // Session identity resolution.
   SESSION_RESOLVED_FROM_CLAUDE_ENV: 'shell.session.resolved_from_claude_env',
+  SESSION_RESOLVED_FROM_HOOK_ENV: 'shell.session.resolved_from_hook_env',
   SESSION_RESOLVED_FROM_CAPSULE: 'shell.session.resolved_from_capsule',
   SESSION_RESOLVED_FROM_CURSOR_ENV: 'shell.session.resolved_from_cursor_env',
   SESSION_NO_STABLE_IDENTITY: 'shell.session.no_stable_identity',
   SESSION_CAPSULE_MINTED: 'shell.session.capsule_minted',
   SESSION_CAPSULE_INVALID: 'shell.session.capsule_invalid',
   SESSION_CAPSULE_WRITE_FAILED: 'shell.session.capsule_write_failed',
+  /** Non-fatal warning: mintCapsule could not delete a pre-existing
+   *  capsule for the same worktree_root. The new capsule was still
+   *  written; the resolver may surface multiple capsules per root on
+   *  the next read (existing buggy state). */
+  SESSION_CAPSULE_CLEANUP_FAILED: 'shell.session.capsule_cleanup_failed',
 
   // cwd → worktree binding resolution.
   BINDING_CWD_OUTSIDE_REPO: 'shell.binding.cwd_outside_repo',
