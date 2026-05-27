@@ -38,6 +38,11 @@ import {
 
 import { appendEvent } from './events-store';
 import {
+  autoCommit,
+  isPathDirty,
+  type AutoCommitOutcome,
+} from './git-autocommit';
+import {
   runLifecycleTransaction,
   type LifecycleTransactionResult,
 } from './lifecycle-transaction';
@@ -85,7 +90,20 @@ export interface ArchiveSpecInput {
 }
 
 export type SpecWriterOutcome =
-  | { readonly kind: 'success'; readonly id: string; readonly path: string }
+  | {
+      readonly kind: 'success';
+      readonly id: string;
+      readonly path: string;
+      /**
+       * Audit-commit outcome for the spec yaml write
+       * (CAWS-SPECS-WRITER-AUTOCOMMIT-001). Always present on success.
+       * Callers that want the sha can read `data.audit_commit.sha` when
+       * `data.audit_commit.kind === 'committed'`. Refused or skipped
+       * outcomes are non-fatal: the writer's transaction still
+       * succeeded; only the audit-trail commit was deferred.
+       */
+      readonly data?: { readonly audit_commit: AutoCommitOutcome };
+    }
   | {
       readonly kind: 'partial_failure_recovered';
       readonly cause: readonly Diagnostic[];
@@ -95,6 +113,16 @@ export type SpecWriterOutcome =
 
 function specPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', `${id}.yaml`);
+}
+function repoRootFromCawsDir(cawsDir: string): string {
+  return path.dirname(cawsDir);
+}
+function specRelPath(
+  cawsDir: string,
+  id: string,
+  repoRoot: string
+): string {
+  return path.relative(repoRoot, specPath(cawsDir, id));
 }
 function archivedSpecPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', '.archive', `${id}.yaml`);
@@ -107,6 +135,75 @@ function findSpecPath(cawsDir: string, id: string): string | null {
   const archived = archivedSpecPath(cawsDir, id);
   if (fs.existsSync(archived)) return archived;
   return null;
+}
+
+// ─── Auto-commit helper (CAWS-SPECS-WRITER-AUTOCOMMIT-001) ──────────────
+//
+// Every successful spec-writer lifecycle transaction commits its yaml
+// change as the final step. Parity with worktrees-writer's
+// autoCommitTransition (worktrees-writer.ts:209). The shared
+// git-autocommit utility handles the three observable states
+// (committed / refused_dirty / skipped_no_git); this helper computes
+// the right inputs and never throws.
+//
+// Pre-write dirty state must be captured by the CALLER, before any
+// writer mutation lands. The utility cannot rederive it after the
+// fact.
+//
+// Root cause this addresses (observed 2026-05-27 during
+// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 close): without this
+// autocommit, `caws specs close` leaves the spec yaml dirty in the
+// working tree, which then causes a subsequent
+// `caws worktree destroy` to refuse its own audit commit because
+// the dirty spec yaml fails its capturePreWriteState check.
+
+function autoCommitSpecWrite(
+  cawsDir: string,
+  specId: string,
+  action: 'create' | 'close' | 'archive',
+  wasDirtyBeforeWrite: boolean,
+  extraPaths: ReadonlyArray<string> = []
+): AutoCommitOutcome {
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const primaryPath = specRelPath(cawsDir, specId, repoRoot);
+  const paths = [primaryPath, ...extraPaths];
+  const message = `chore(caws): ${action} ${specId}`;
+  return autoCommit({
+    repoRoot,
+    paths,
+    message,
+    wasDirtyBeforeWrite,
+  });
+}
+
+/**
+ * Wrap a Result<SpecWriterOutcome> with an autoCommit attempt, mirroring
+ * the worktrees-writer post-transaction commit pattern. Only attaches
+ * data.audit_commit when the inner outcome is `kind: 'success'`.
+ * Partial failure or err results pass through unchanged — there is
+ * nothing valid to commit when the transaction rolled back.
+ */
+function attachAutoCommit(
+  outcome: Result<SpecWriterOutcome>,
+  cawsDir: string,
+  specId: string,
+  action: 'create' | 'close' | 'archive',
+  wasDirtyBeforeWrite: boolean,
+  extraPaths: ReadonlyArray<string> = []
+): Result<SpecWriterOutcome> {
+  if (!isOk(outcome)) return outcome;
+  if (outcome.value.kind !== 'success') return outcome;
+  const audit = autoCommitSpecWrite(
+    cawsDir,
+    specId,
+    action,
+    wasDirtyBeforeWrite,
+    extraPaths
+  );
+  return ok({
+    ...outcome.value,
+    data: { audit_commit: audit },
+  });
 }
 
 // ─── ID validation (mirrors kernel regex) ────────────────────────────────
@@ -227,6 +324,20 @@ export function createSpec(
     },
   } as unknown as EventBody;
 
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: capture pre-write dirty state
+  // BEFORE the transaction runs. For createSpec on a fresh id, the
+  // target path does not yet exist, so isPathDirty returns false —
+  // the autocommit will succeed cleanly. We still call it because
+  // (a) a stale conflict marker or hand-authored draft at the target
+  // path could exist (we already refused that case above via
+  // findSpecPath, but defense-in-depth), and (b) the contract is
+  // that callers always observe data.audit_commit on success.
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
       cawsDir,
@@ -237,7 +348,8 @@ export function createSpec(
   if (!txnResult.ok) {
     return err(txnResult.errors);
   }
-  return mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'create', wasDirtyBeforeWrite);
 }
 
 // ─── closeSpec ───────────────────────────────────────────────────────────
@@ -400,6 +512,19 @@ export function closeSpec(
     data: eventData,
   } as unknown as EventBody;
 
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: capture pre-write dirty state
+  // BEFORE the transaction. closeSpec patches an existing yaml, so
+  // the path almost always pre-exists; dirty means the user
+  // hand-edited it before the close call. autoCommit refuses to
+  // overwrite uncommitted user work (data.audit_commit.kind ===
+  // 'refused_dirty'); the close itself still applies to the working
+  // tree.
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
       cawsDir,
@@ -410,7 +535,8 @@ export function closeSpec(
   if (!txnResult.ok) {
     return err(txnResult.errors);
   }
-  return mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'close', wasDirtyBeforeWrite);
 }
 
 // ─── archiveSpec ─────────────────────────────────────────────────────────
@@ -529,6 +655,14 @@ export function archiveSpec(
     data: { from_path: fromRel, to_path: toRel },
   } as unknown as EventBody;
 
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: capture pre-write dirty state
+  // on the source path (the one we're moving out of) BEFORE the
+  // transaction. archiveSpec is the only op that touches two paths;
+  // we autocommit both in a single commit below so the move is one
+  // atomic audit entry.
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, fromRel);
+
   // Capture original bytes so we can roll back the unlink in
   // emergencies (rare but worth tracking).
   let unlinkOk = false;
@@ -586,7 +720,23 @@ export function archiveSpec(
     );
   }
 
-  return ok({ kind: 'success', id: input.id, path: toPath });
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: stage BOTH paths (the new
+  // archived yaml + the unlinked original) in a single autocommit so
+  // the move is one atomic audit entry. autoCommit() reuses the same
+  // safety contracts as worktrees-writer; never throws.
+  const audit = autoCommit({
+    repoRoot,
+    paths: [toRel, fromRel],
+    message: `chore(caws): archive ${input.id}`,
+    wasDirtyBeforeWrite,
+  });
+
+  return ok({
+    kind: 'success',
+    id: input.id,
+    path: toPath,
+    data: { audit_commit: audit },
+  });
 }
 
 // ─── Outcome mapper ──────────────────────────────────────────────────────
