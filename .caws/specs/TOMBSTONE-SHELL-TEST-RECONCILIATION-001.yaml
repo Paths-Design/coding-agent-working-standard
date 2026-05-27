@@ -7,19 +7,190 @@ created_at: '2026-05-27T22:15:42.580Z'
 updated_at: '2026-05-27T22:15:42.580Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/TOMBSTONE-SHELL-TEST-RECONCILIATION-001.yaml
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell/specs.test.js
+    - packages/caws-cli/tests/shell
+    - packages/caws-cli/tests/specs-archive.test.js
+    - packages/caws-cli/tests
+  out:
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/yaml-patch.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    closeSpec detects an archived-id state via the event log
+    (spec_archived tombstone events keyed by spec_id), NOT via the
+    legacy `.caws/specs/.archive/<id>.yaml` file-existence check.
+    Pre-tombstone behavior: closeSpec looked for the archived file
+    path; tombstone deletes that file, so the existence check always
+    returned false and the diagnostic fell through to generic
+    "not found". This invariant restores the correct diagnostic:
+    `Spec "<id>" is archived; cannot close ...`.
+  - >-
+    The archived-id predicate is a thin event-log scan: load events
+    via the existing store helper, filter for `event === 'spec_archived'
+    && spec_id === <id>`, and treat any match as "archived." No
+    body recovery, no git-blob lookup — the diagnostic only needs the
+    existence signal. Cheap O(events) scan; happens only on the
+    cold-path where the active spec file is absent (not on every
+    close).
+  - >-
+    The legacy `.caws/specs/.archive/<id>.yaml` file-existence check
+    is REMOVED from closeSpec's archived-id branch. The path itself
+    remains a recognized concept for other surfaces (e.g., recover,
+    list --include-archived) but for closeSpec the on-disk file is
+    no longer authoritative.
+  - >-
+    Shell tests in `tests/shell/specs.test.js` are updated to match
+    tombstone semantics for A3 (list section header string), A4
+    (show requires explicit archived flag), A7 (archive event shape
+    + no archive-file existence), and A8 (the close-on-archived
+    refusal now works correctly post-implementation fix; the test
+    assertion is unchanged but the implementation must satisfy it).
+  - >-
+    No changes to archiveSpec implementation. Tombstone authority
+    (CAWS-ARCHIVE-AS-TOMBSTONE-001) remains the canonical archive
+    write path. This slice's archive-direction work is purely
+    test-side reconciliation.
+  - >-
+    Existing tombstone-specific tests (`specs-list-archived.test.js`,
+    `specs-recover-show-archived.test.js`, `events-verify-archive.test.js`,
+    `specs-prune-archive.test.js`) MUST remain green. The closeSpec
+    implementation fix is additive at the cold-path archived-detection
+    site; it does not alter any path covered by those tests.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: |
+      tests/shell/specs.test.js had 4 failing assertions on canonical
+      HEAD as of merge fc7a48d: A3 list-archived header, A4 show
+      archived, A7 archive event/file shape, A8 close-on-archived
+      refusal.
+    when: |
+      The slice's edits are applied.
+    then: |
+      `npx jest tests/shell/specs.test.js` runs all tests; previously-
+      failing 4 tests now pass. No prior-passing test regresses.
+  - id: A2
+    given: |
+      A spec already archived via the tombstone path (active file
+      deleted, spec_archived event in `.caws/events.jsonl`).
+    when: |
+      `closeSpec(cawsDir, { id, resolution: 'completed', ... })` is
+      invoked for that id.
+    then: |
+      Returns Err with the existing diagnostic
+      `Spec "<id>" is archived; cannot close (legal transitions:
+      active → closed → archived).` and rule
+      LIFECYCLE_PLAN_REJECTED. The generic "not found at <path>"
+      diagnostic MUST NOT fire for this case.
+  - id: A3
+    given: |
+      tests/shell/specs.test.js A7 ("moves the file and emits
+      from_path/to_path on spec_archived").
+    when: |
+      The test is updated to reflect tombstone shape.
+    then: |
+      Test asserts: active file at `.caws/specs/<id>.yaml` is
+      deleted post-archive; no file is required at
+      `.caws/specs/.archive/<id>.yaml`; the `spec_archived` event
+      carries `from_path` and `blob_sha` (and optionally
+      `source_commit_sha`); the event does NOT carry `to_path`.
+  - id: A4
+    given: |
+      tests/shell/specs.test.js A3 ("--archived includes archived
+      specs").
+    when: |
+      The test is updated.
+    then: |
+      Asserts the new section header string:
+      `-- archived (recoverable from history) --` (which is the
+      string `runSpecsListCommand` actually emits per
+      `src/shell/commands/specs.ts:217`).
+  - id: A5
+    given: |
+      tests/shell/specs.test.js A4 ("finds archived specs").
+    when: |
+      The test is updated.
+    then: |
+      Asserts that `runSpecsShowCommand({id, archived: true})`
+      exits 0 and surfaces the recovered body (matching tombstone's
+      explicit-archived-flag contract per
+      `src/shell/commands/specs.ts:248`).
+  - id: A6
+    given: |
+      tests/shell/specs.test.js A8 ("refuses close on an archived
+      spec") — the assertion text is correct; the implementation
+      regression is what makes it fail.
+    when: |
+      The closeSpec event-log scan fix lands.
+    then: |
+      A8 passes WITHOUT modifying the test's stderr-match assertion.
+      The test continues to assert `/archived; cannot close/` and
+      the diagnostic now fires correctly.
+  - id: A7
+    given: |
+      Full pre-existing tombstone-specific test corpus:
+      specs-list-archived.test.js, specs-recover-show-archived.test.js,
+      events-verify-archive.test.js, specs-prune-archive.test.js,
+      lifecycle-rollback-failure-harness.test.js,
+      worktree-merge-a2-fault-injection.test.js,
+      specs-writer-autocommit.test.js, specs-writer-updated-at.test.js
+      (this slice's predecessor).
+    when: |
+      The slice's edits are applied.
+    then: |
+      All pre-existing tests remain green. The closeSpec implementation
+      fix is additive (new event-log scan in the cold path); the test
+      updates are confined to specs.test.js.
+non_functional:
+  reliability:
+    - >-
+      The defect class is "structural change in one writer (archiveSpec
+      tombstone restructure) propagated to its own callers but not to
+      sibling writers' diagnostic branches (closeSpec) or to the shell-
+      test layer." This slice closes the propagation gap for the
+      narrowest concrete surfaces (closeSpec archived-detection + one
+      shell test file). Other propagation gaps, if any surface later,
+      get their own narrow slices — explicit non-goal: do NOT extend
+      to a project-wide tombstone propagation audit in this slice.
 contracts: []
+# --- Triage ---------------------------------------------------------------
+# Origin: discovered 2026-05-27 during CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001
+# merge-resolution + post-merge regression check. The four failing tests in
+# tests/shell/specs.test.js were already broken on main as of the tombstone
+# merge (2a4cc30); they are NOT regressions introduced by sibling slices.
+#
+# Recon classification (verified 2026-05-27 against HEAD e823471):
+#   A3 list-archived header → stale test (CLI string changed)
+#   A4 show archived         → stale test (CLI now requires --archived flag)
+#   A7 archive file+event    → stale test (file no longer moved; events
+#                              dropped `to_path`)
+#   A8 close-on-archived     → REAL implementation regression in closeSpec
+#                              (file-existence check is dead post-tombstone)
+#
+# Path A (combined slice) chosen over Path B (split) because:
+# - Splitting would leave A8 broken on main for one more cycle.
+# - The closeSpec fix is small (~10 lines: event-log scan).
+# - The four failures share a root cause (tombstone propagation gap).
+#
+# Out of scope:
+#   - archiveSpec implementation (tombstone authority unchanged)
+#   - kernel event schema (spec_archived shape already matches tombstone)
+#   - Other shell-test files that may have stale archive assertions
+#     (none discovered in this slice's recon; if any surface, file
+#     separate hygiene slice)
+#   - Helper extraction (event-log scan is a 5-line inline; not a
+#     reusable primitive surface yet)
+#   - Release tooling (tag-driven per CLAUDE.md trap #7)
