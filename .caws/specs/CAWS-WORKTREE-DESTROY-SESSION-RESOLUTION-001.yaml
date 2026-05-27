@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: destroy-session-resolution
 created_at: '2026-05-27T07:25:07.834Z'
-updated_at: '2026-05-27T07:40:00.000Z'
+updated_at: '2026-05-27T07:45:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
@@ -16,6 +16,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/tests/shell/session
