@@ -214,7 +214,11 @@ describe('A3: caws specs list', () => {
 
     const r = capture(runSpecsListCommand, { cwd: repoRoot, includeArchived: true });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('-- archived --');
+    // TOMBSTONE-SHELL-TEST-RECONCILIATION-001 A4: section header
+    // updated to match the post-tombstone CLI output, which discloses
+    // that archived bodies are recoverable from git history (not the
+    // legacy .caws/specs/.archive/<id>.yaml file).
+    expect(r.stdout).toContain('-- archived (recoverable from history) --');
     expect(r.stdout).toContain('ARCH-002');
   });
 });
@@ -243,7 +247,7 @@ describe('A4: caws specs show', () => {
     expect(r.stderr).toMatch(/not found in \.caws\/specs/);
   });
 
-  it('finds archived specs', () => {
+  it('finds archived specs via explicit --archived flag', () => {
     capture(runSpecsCreateCommand, {
       cwd: repoRoot, id: 'FOUND-001', title: 'fnd', mode: 'chore', riskTier: 3,
     });
@@ -251,10 +255,22 @@ describe('A4: caws specs show', () => {
       cwd: repoRoot, id: 'FOUND-001', resolution: 'completed',
     });
     capture(runSpecsArchiveCommand, { cwd: repoRoot, id: 'FOUND-001' });
-    const r = capture(runSpecsShowCommand, { cwd: repoRoot, id: 'FOUND-001' });
+    // TOMBSTONE-SHELL-TEST-RECONCILIATION-001 A5: post-tombstone,
+    // `runSpecsShowCommand` walks ONLY the active path by default
+    // (per src/shell/commands/specs.ts:248). Recovery of archived
+    // bodies requires the explicit `archived: true` flag, which
+    // routes through `recoverArchivedSpec` (event-log + git blob).
+    // The pre-tombstone implicit-fallback behavior is gone by design.
+    const r = capture(runSpecsShowCommand, { cwd: repoRoot, id: 'FOUND-001', archived: true });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('id: FOUND-001');
-    expect(r.stdout).toContain('lifecycle_state: archived');
+    // The recovered body is the YAML snapshot taken just before
+    // archive — lifecycle_state at the time of archive was 'closed',
+    // since archive requires `lifecycle_state: closed`. The tombstone
+    // event marks the id as archived in the event log; the body
+    // itself is the pre-archive body, NOT a synthetic
+    // `lifecycle_state: archived` rewrite.
+    expect(r.stdout).toContain('lifecycle_state: closed');
   });
 });
 
@@ -344,12 +360,18 @@ describe('A6: caws specs close (event)', () => {
 // ============================================================
 // A7: archive performs filesystem move
 // ============================================================
-describe('A7: caws specs archive (filesystem move)', () => {
+describe('A7: caws specs archive (tombstone event)', () => {
   let repoRoot, cawsDir;
   beforeEach(() => { ({ repoRoot, cawsDir } = setup('specs-a7-')); });
   afterEach(() => rmrf(repoRoot));
 
-  it('moves the file and emits from_path/to_path on spec_archived', () => {
+  // TOMBSTONE-SHELL-TEST-RECONCILIATION-001 A3: post-tombstone
+  // archive is a deletion + spec_archived event carrying
+  // `from_path`, `blob_sha`, and optional `source_commit_sha`. No
+  // body is written to .caws/specs/.archive/; recovery is via the
+  // event log's blob_sha + `git show`. The legacy `to_path` field
+  // is gone.
+  it('deletes the active file and emits a tombstone spec_archived event', () => {
     capture(runSpecsCreateCommand, {
       cwd: repoRoot, id: 'ARC-001', title: 't', mode: 'chore', riskTier: 3,
     });
@@ -358,23 +380,30 @@ describe('A7: caws specs archive (filesystem move)', () => {
     });
 
     const beforePath = path.join(cawsDir, 'specs/ARC-001.yaml');
-    const afterPath = path.join(cawsDir, 'specs/.archive/ARC-001.yaml');
+    const legacyArchivePath = path.join(cawsDir, 'specs/.archive/ARC-001.yaml');
     expect(fs.existsSync(beforePath)).toBe(true);
-    expect(fs.existsSync(afterPath)).toBe(false);
+    expect(fs.existsSync(legacyArchivePath)).toBe(false);
 
     const r = capture(runSpecsArchiveCommand, { cwd: repoRoot, id: 'ARC-001' });
     expect(r.code).toBe(0);
+    // Active path is deleted.
     expect(fs.existsSync(beforePath)).toBe(false);
-    expect(fs.existsSync(afterPath)).toBe(true);
+    // NO body written under the legacy archive directory.
+    expect(fs.existsSync(legacyArchivePath)).toBe(false);
 
     const events = readEvents(cawsDir);
     const archEvent = events.find((e) => e.event === 'spec_archived');
     expect(archEvent).toBeDefined();
     expect(archEvent.spec_id).toBe('ARC-001');
-    expect(archEvent.data).toEqual({
-      from_path: '.caws/specs/ARC-001.yaml',
-      to_path: '.caws/specs/.archive/ARC-001.yaml',
-    });
+    // Tombstone event shape: from_path + blob_sha; no to_path.
+    expect(archEvent.data.from_path).toBe('.caws/specs/ARC-001.yaml');
+    expect(typeof archEvent.data.blob_sha).toBe('string');
+    expect(archEvent.data.blob_sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(archEvent.data.to_path).toBeUndefined();
+    // source_commit_sha is optional but, when present, must be a SHA.
+    if (archEvent.data.source_commit_sha !== undefined) {
+      expect(archEvent.data.source_commit_sha).toMatch(/^[0-9a-f]{40}$/);
+    }
   });
 });
 
