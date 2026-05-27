@@ -1,1 +1,13 @@
-{}
+{
+  "tombstone-shell-reconciliation": {
+    "specId": "TOMBSTONE-SHELL-TEST-RECONCILIATION-001",
+    "owner": {
+      "session_id": "bc73ba3b-8b48-4932-a7e2-8f3f699db486",
+      "platform": "claude-code"
+    },
+    "last_heartbeat": "2026-05-27T22:17:10.901Z",
+    "branch": "tombstone-shell-reconciliation",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/tombstone-shell-reconciliation"
+  }
+}
