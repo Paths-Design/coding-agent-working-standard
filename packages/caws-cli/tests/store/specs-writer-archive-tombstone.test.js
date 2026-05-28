@@ -763,51 +763,138 @@ describe('SEAM A4: closeSpec autocommit action literal', () => {
   });
 });
 
-// ─── SEAM A5: closeSpec readYamlSource fault-injection ─────────────────
+// ─── SEAM A5: closeSpec readYamlSource fault-injection (EACCES) ────────
 //
 // CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A5.
 //
 // After the active-file existence check, closeSpec reads the yaml via
-// readYamlSource and guards `if (!isOk(sourceResult)) return err(...)`.
-// The dist-380 ConditionalExpression mutant (→ if (false)) survived
-// because no test reached this branch with a read/parse failure while
-// the active file still exists.
+// readYamlSource and guards `if (!isOk(sourceResult)) return err(...)`
+// (dist line 380). The dist-380 ConditionalExpression mutant (→ if
+// (false)) initially survived.
 //
-// Fault injection: create the spec (active file present + tracked),
-// then overwrite the on-disk yaml with bytes that fail readYamlSource
-// / parseAndValidateSpec. The fs.existsSync check passes; the parse
-// guard must fire.
+// CRITICAL mechanism note: readYamlSource (src/store/yaml-store.ts) does
+// NOT parse YAML — it only reads raw bytes and fails on filesystem IO
+// errors (ENOENT/EACCES). A corrupt-but-readable file returns Ok(raw);
+// the structural failure happens LATER at parseAndValidateSpec. So the
+// first A5 attempt (writing non-parseable bytes) never reached the
+// line-380 guard — readYamlSource returned Ok, the guard passed, and the
+// parse failure fired downstream. That made the line-380 mutant LOOK
+// equivalent (both paths returned Err).
+//
+// To actually exercise — and distinguish — the line-380 guard, we need
+// readYamlSource itself to fail while the file still exists. The lever
+// is a permission error: chmod the file to 0o000 so fs.existsSync (378)
+// passes but fs.readFileSync (379) throws EACCES → readYamlSource Err →
+// the line-380 guard fires with a READ_IO_FAILED diagnostic
+// ("Failed to read ...").
+//
+// Under the mutant (if (false)): the guard is skipped, originalBytes =
+// sourceResult.value is undefined, parseAndValidateSpec(undefined) fails
+// with a PARSE diagnostic — a DIFFERENT message. Asserting the message
+// is the read-IO failure ("Failed to read") kills the mutant.
+//
+// Skipped on platforms where the test process can read 0o000 files
+// (e.g. running as root, or filesystems that ignore mode bits), since
+// the fault cannot be induced there.
 
-describe('SEAM A5: closeSpec readYamlSource fault-injection', () => {
+describe('SEAM A5: closeSpec readYamlSource fault-injection (EACCES)', () => {
   let fixture;
-  afterEach(() => fixture && rmrf(fixture.root));
+  let chmodTarget;
+  afterEach(() => {
+    // Restore permissions so rmrf can clean up.
+    if (chmodTarget && fs.existsSync(chmodTarget)) {
+      try { fs.chmodSync(chmodTarget, 0o644); } catch { /* ignore */ }
+    }
+    chmodTarget = undefined;
+    fixture && rmrf(fixture.root);
+  });
 
-  it('returns Err when the active spec yaml exists but is non-parseable', () => {
+  it('returns the READ_IO_FAILED diagnostic when the active yaml exists but is unreadable', () => {
     fixture = mkCawsGitRepo('seam-a5-');
 
     createSpec(fixture.cawsDir, {
-      id: 'CORRUPT-YAML-001', title: 't', mode: 'chore', riskTier: 3,
+      id: 'UNREADABLE-001', title: 't', mode: 'chore', riskTier: 3,
       now: NOW, actor: ACTOR,
     });
 
-    const activePath = path.join(fixture.cawsDir, 'specs', 'CORRUPT-YAML-001.yaml');
+    const activePath = path.join(fixture.cawsDir, 'specs', 'UNREADABLE-001.yaml');
     expect(fs.existsSync(activePath)).toBe(true);
 
-    // Corrupt the file to a non-parseable form. Unbalanced flow-mapping
-    // braces make js-yaml throw, so readYamlSource/parse returns Err
-    // while the file still exists on disk.
-    fs.writeFileSync(activePath, 'id: CORRUPT-YAML-001\n: : : {[}\n  bad: : :\n');
+    // Make the file unreadable. fs.existsSync still passes; readFileSync
+    // throws EACCES → readYamlSource Err → line-380 guard fires.
+    chmodTarget = activePath;
+    fs.chmodSync(activePath, 0o000);
+
+    // Guard against environments where 0o000 is still readable (root /
+    // permissive FS): if we can still read it, the fault can't be
+    // induced and the assertion below would be meaningless.
+    let stillReadable = false;
+    try { fs.readFileSync(activePath, 'utf8'); stillReadable = true; } catch { /* expected */ }
+    if (stillReadable) {
+      // eslint-disable-next-line no-console
+      console.warn('SEAM A5 skipped: 0o000 file still readable in this environment.');
+      return;
+    }
 
     const result = closeSpec(fixture.cawsDir, {
-      id: 'CORRUPT-YAML-001', resolution: 'completed', now: NOW, actor: ACTOR,
+      id: 'UNREADABLE-001', resolution: 'completed', now: NOW, actor: ACTOR,
     });
 
-    // The existsSync check passed (file is present), so this Err comes
-    // from the !isOk(sourceResult) guard, not the not-found branch.
     expect(result.ok).toBe(false);
     expect(result.errors.length).toBeGreaterThanOrEqual(1);
-    // Not the "not found" diagnostic — that branch is upstream of the
-    // existsSync check and would indicate the wrong path fired.
+    // The line-380 guard returns sourceResult.errors verbatim — the
+    // READ_IO_FAILED diagnostic from readYamlSource. Asserting on its
+    // distinctive "Failed to read" message kills the if(false) mutant,
+    // whose downstream parseAndValidateSpec(undefined) yields a parse
+    // diagnostic with different wording.
+    expect(result.errors[0].message).toMatch(/Failed to read/);
+    // And definitively NOT the not-found branch (upstream of existsSync).
     expect(result.errors[0].message).not.toMatch(/not found at/);
+  });
+});
+
+// ─── SEAM A7: createSpec success path + autocommit action literal ──────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A4 (createSpec half).
+//
+// The first SEAM pass covered closeSpec's autocommit ('close') but left
+// createSpec's success-path internals untested at the assertion level:
+//   - dist 345: if (!txnResult.ok) { return err(...) } — the
+//     ConditionalExpression and BlockStatement mutants survived because
+//     no test asserted a SUCCESSFUL create produces a clean committed
+//     state (the success path past the guard).
+//   - dist 349: attachAutoCommit(..., 'create', ...) — the 'create'
+//     StringLiteral mutant ('create' → '') survived because no test
+//     asserted the create autocommit subject.
+//
+// This test drives a clean createSpec and asserts the committed subject
+// is exactly 'chore(caws): create <id>' with a clean working tree.
+
+describe('SEAM A7: createSpec success path + autocommit action literal', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a successful create produces commit "chore(caws): create <id>" and a clean tree', () => {
+    fixture = mkCawsGitRepo('seam-a7-');
+
+    const result = createSpec(fixture.cawsDir, {
+      id: 'CREATE-COMMIT-001', title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    // The 'create' action literal flows into the autocommit subject.
+    // A StringLiteral mutant ('create' → '') yields "chore(caws):  "
+    // and fails this assertion.
+    expect(gitLastSubject(fixture.root)).toBe('chore(caws): create CREATE-COMMIT-001');
+    // Clean tree proves the txnResult.ok success path executed
+    // (dist-345) rather than the error branch, and the autocommit
+    // landed.
+    expect(gitStatus(fixture.root)).toBe('');
+    // The spec file is on disk and active.
+    expect(
+      fs.existsSync(path.join(fixture.cawsDir, 'specs', 'CREATE-COMMIT-001.yaml'))
+    ).toBe(true);
   });
 });
