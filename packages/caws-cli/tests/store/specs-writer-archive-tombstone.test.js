@@ -574,3 +574,240 @@ contracts: []
     expect(fs.existsSync(specPath)).toBe(true);
   });
 });
+
+// ─── SEAM A1: createSpec kernel-validation error branch ────────────────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A1.
+//
+// createSpec renders YAML then runs parseAndValidateSpec before any
+// write. If validation fails, it returns Err mapping each kernel
+// diagnostic through storeDiagnostic with subject ?? input.id and
+// data.source_rule. The previous suite never drove this branch, so the
+// mutants on dist 311-314 (the !isOk(parsed) guard, the error-map
+// arrow, the subject ?? fallback, the data object) all survived.
+//
+// Lever: inject a risk_tier outside 1|2|3 past the TypeScript type at
+// the JS test layer. renderInitialSpecYaml writes `risk_tier: 7`, which
+// fails the kernel schema, driving the error branch with a real
+// diagnostic.
+
+describe('SEAM A1: createSpec kernel-validation error branch', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('returns Err with a non-empty kernel diagnostic, subject defaulting to the id, and data.source_rule present', () => {
+    fixture = mkCawsGitRepo('seam-a1-');
+
+    const result = createSpec(fixture.cawsDir, {
+      id: 'BAD-TIER-001',
+      title: 'invalid risk tier',
+      mode: 'chore',
+      // Out-of-range tier — invalid per kernel schema. Cast past the
+      // TS union at the JS layer to reach the validation branch.
+      riskTier: 7,
+      now: NOW,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toBeDefined();
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+
+    const diag = result.errors[0];
+    // Message is the kernel diagnostic, not empty (kills the
+    // d.message → "" StringLiteral-adjacent mutants and proves the
+    // error-map arrow ran rather than returning undefined).
+    expect(typeof diag.message).toBe('string');
+    expect(diag.message.length).toBeGreaterThan(0);
+    // The kernel diagnostic for a schema violation carries its own
+    // subject — the JSON-pointer path to the failing field
+    // (e.g. "/risk_tier"). createSpec maps it through `d.subject ??
+    // input.id`, so the kernel's subject is preserved.
+    //
+    // Asserting the kernel subject value (not input.id) is the stronger
+    // check here:
+    //   - It kills the subject-strip ObjectLiteral mutant (stripped →
+    //     undefined ≠ "/risk_tier").
+    //   - It kills the `?? → &&` LogicalOperator mutant: with `&&`,
+    //     `d.subject && input.id` collapses a truthy d.subject to
+    //     input.id ("BAD-TIER-001"), which would NOT equal the kernel
+    //     field path. So this assertion fails under the mutant.
+    expect(diag.subject).toBe('/risk_tier');
+    // data.source_rule carries the originating kernel rule — kills the
+    // data ObjectLiteral → {} mutant.
+    expect(diag.data).toBeDefined();
+    expect(diag.data.source_rule).toBeDefined();
+
+    // No spec file was written (the error branch returns before the
+    // transaction).
+    expect(
+      fs.existsSync(path.join(fixture.cawsDir, 'specs', 'BAD-TIER-001.yaml'))
+    ).toBe(false);
+  });
+});
+
+// ─── SEAM A2: createSpec now-default fallback ──────────────────────────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A2.
+//
+// createSpec computes `now = (input.now ?? (() => new Date()))()`. The
+// existing suite always injects NOW, so the default arrow never ran and
+// the dist-317 mutants (?? → &&, and the () => new Date() arrow → () =>
+// undefined) survived. This test omits `now` so the fallback executes,
+// then asserts created_at is a real recent ISO timestamp.
+
+describe('SEAM A2: createSpec now-default fallback', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('omitting now uses the live clock; created_at is a valid ISO timestamp near real now', () => {
+    fixture = mkCawsGitRepo('seam-a2-');
+
+    const before = Date.now();
+    const result = createSpec(fixture.cawsDir, {
+      id: 'LIVE-CLOCK-001',
+      title: 'no injected now',
+      mode: 'chore',
+      riskTier: 3,
+      // now intentionally omitted — exercises the default arrow.
+      actor: ACTOR,
+    });
+    const after = Date.now();
+
+    expect(result.ok).toBe(true);
+
+    const body = fs.readFileSync(
+      path.join(fixture.cawsDir, 'specs', 'LIVE-CLOCK-001.yaml'),
+      'utf8'
+    );
+    const m = body.match(/created_at:\s*'([^']+)'/);
+    expect(m).not.toBeNull();
+    const createdAt = Date.parse(m[1]);
+    // Valid ISO timestamp.
+    expect(Number.isNaN(createdAt)).toBe(false);
+    // Within the wall-clock window of the call (a 5s slop guards CI
+    // jitter). A () => undefined mutant would make .toISOString() throw
+    // (TypeError on undefined) → test fails; a stale/zero value would
+    // fall outside the window.
+    expect(createdAt).toBeGreaterThanOrEqual(before - 5000);
+    expect(createdAt).toBeLessThanOrEqual(after + 5000);
+  });
+});
+
+// ─── SEAM A3: closeSpec id-validation guard ────────────────────────────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A3.
+//
+// closeSpec's first statement validates the spec id and returns Err
+// before any filesystem read. The dist-354 ConditionalExpression mutant
+// (if (!idValidation.ok) → if (false)) survived because no test drove
+// closeSpec with a structurally invalid id.
+
+describe('SEAM A3: closeSpec id-validation guard', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('returns Err for a pattern-violating id before touching the filesystem', () => {
+    fixture = mkCawsGitRepo('seam-a3-');
+
+    const result = closeSpec(fixture.cawsDir, {
+      // Lowercase + no trailing -<digits> — fails the v11 id pattern.
+      id: 'not a valid id',
+      resolution: 'completed',
+      now: NOW,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+    // The id-validation diagnostic names the v11 pattern.
+    expect(result.errors[0].message).toMatch(/v11 pattern/);
+  });
+});
+
+// ─── SEAM A4: closeSpec autocommit action literal ──────────────────────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A4.
+//
+// On a successful close, closeSpec calls attachAutoCommit(..., 'close',
+// ...), which produces a commit `chore(caws): close <id>`. The dist-349
+// StringLiteral mutant ('close' → "") and the dist-345 txnResult.ok
+// guard survived because no store-level test asserted the autocommit
+// subject after a successful close.
+
+describe('SEAM A4: closeSpec autocommit action literal', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a successful close produces a commit whose subject is "chore(caws): close <id>"', () => {
+    fixture = mkCawsGitRepo('seam-a4-');
+
+    createSpec(fixture.cawsDir, {
+      id: 'CLOSE-COMMIT-001', title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+
+    const result = closeSpec(fixture.cawsDir, {
+      id: 'CLOSE-COMMIT-001', resolution: 'completed', now: NOW, actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    // The autocommit subject carries the exact 'close' action literal.
+    // A StringLiteral mutant ('close' → "") yields "chore(caws):  " and
+    // fails this assertion.
+    expect(gitLastSubject(fixture.root)).toBe('chore(caws): close CLOSE-COMMIT-001');
+    // Working tree clean — proves the txnResult.ok success path ran
+    // (dist-345) rather than the error branch.
+    expect(gitStatus(fixture.root)).toBe('');
+  });
+});
+
+// ─── SEAM A5: closeSpec readYamlSource fault-injection ─────────────────
+//
+// CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001 A5.
+//
+// After the active-file existence check, closeSpec reads the yaml via
+// readYamlSource and guards `if (!isOk(sourceResult)) return err(...)`.
+// The dist-380 ConditionalExpression mutant (→ if (false)) survived
+// because no test reached this branch with a read/parse failure while
+// the active file still exists.
+//
+// Fault injection: create the spec (active file present + tracked),
+// then overwrite the on-disk yaml with bytes that fail readYamlSource
+// / parseAndValidateSpec. The fs.existsSync check passes; the parse
+// guard must fire.
+
+describe('SEAM A5: closeSpec readYamlSource fault-injection', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('returns Err when the active spec yaml exists but is non-parseable', () => {
+    fixture = mkCawsGitRepo('seam-a5-');
+
+    createSpec(fixture.cawsDir, {
+      id: 'CORRUPT-YAML-001', title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+
+    const activePath = path.join(fixture.cawsDir, 'specs', 'CORRUPT-YAML-001.yaml');
+    expect(fs.existsSync(activePath)).toBe(true);
+
+    // Corrupt the file to a non-parseable form. Unbalanced flow-mapping
+    // braces make js-yaml throw, so readYamlSource/parse returns Err
+    // while the file still exists on disk.
+    fs.writeFileSync(activePath, 'id: CORRUPT-YAML-001\n: : : {[}\n  bad: : :\n');
+
+    const result = closeSpec(fixture.cawsDir, {
+      id: 'CORRUPT-YAML-001', resolution: 'completed', now: NOW, actor: ACTOR,
+    });
+
+    // The existsSync check passed (file is present), so this Err comes
+    // from the !isOk(sourceResult) guard, not the not-found branch.
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+    // Not the "not found" diagnostic — that branch is upstream of the
+    // existsSync check and would indicate the wrong path fired.
+    expect(result.errors[0].message).not.toMatch(/not found at/);
+  });
+});
