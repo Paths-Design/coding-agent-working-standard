@@ -20,16 +20,5 @@
     "branch": "legacy-test-migration-specs",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/legacy-test-migration-specs"
-  },
-  "archive-collision-refusal": {
-    "specId": "CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-28T05:14:28.702Z",
-    "branch": "archive-collision-refusal",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/archive-collision-refusal"
   }
 }
