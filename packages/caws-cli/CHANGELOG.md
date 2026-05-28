@@ -1,3 +1,46 @@
+## [Unreleased]
+
+Removes ~9,300 lines of v10 dead source from the package
+(`CAWS-DEAD-SOURCE-CLEANUP-001`). Pure subtractive cleanup; no
+behavioral changes to the v11.1 surface. The deleted modules were
+already unreachable from `src/shell/index.ts` (the v11.1 command
+registration entry point); their corresponding tests were removed in
+`CAWS-DEAD-TEST-CLEANUP-001`.
+
+### Removed (no replacement; surfaces were retired in v11.0)
+
+* **src/commands:** removed 17 legacy command source files for
+  commands retired in v11.0 and not planned for v11.2+: `archive`,
+  `burnup`, `diagnose`, `evaluate`, `iterate`, `mode`, `parallel`,
+  `plan`, `provenance`, `quality-monitor`, `sidecar`, `templates`,
+  `tool`, `tutorial`, `validate`, `verify-acs`, `workflow`. The v11.1
+  command surface lives in `src/shell/commands/`.
+* **src/sidecars:** removed the entire directory (7 files). The
+  `caws sidecar` group is retired; equivalent telemetry now lives in
+  `events.jsonl` (audit) and `caws status` (state).
+* **src/parallel/parallel-manager.js:** removed. `caws parallel` is
+  deferred to v11.3+; the `caws worktree create` loop is the
+  multi-agent setup mechanism in v11.1.
+* **src/test-analysis.js:** removed. `caws test-analysis` was retired
+  in v11.0.
+* **src/utils/spec-resolver.js:** removed. v11.1 reads
+  `.caws/specs/<id>.yaml` directly via kernel canonical-authority
+  resolution.
+* **src/worktree/worktree-manager.js:** removed the dead `verify-acs`
+  require path from `autoCloseBoundSpec`. The function still returns
+  the same shape; the `acsPassing` and related fields now always
+  default to `null`/`0`/`[]` for backward compatibility with the one
+  internal caller that reads them.
+
+### Notes
+
+* No version bump; releases are tag-driven and this slice doesn't
+  change runtime behavior.
+* The 9 remaining `src/commands/*.js` files (`agents`, `gates`,
+  `init`, `scope`, `session`, `specs`, `status`, `waivers`,
+  `worktree`) are transitively dead but out of scope for this slice;
+  candidate targets for a future cleanup.
+
 ## [11.1.6](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.5...caws-cli-v11.1.6) (2026-05-21)
 
 Calibrates the Claude Code hook pack's command classifier
