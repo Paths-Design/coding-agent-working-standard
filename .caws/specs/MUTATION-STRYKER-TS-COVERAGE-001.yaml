@@ -3,23 +3,42 @@ title: 'Stryker TypeScript coverage for specs-writer.ts tombstone enforcement'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: mutation-stryker-ts
 created_at: '2026-05-28T16:40:39.839Z'
-updated_at: '2026-05-28T16:40:39.839Z'
+updated_at: '2026-05-28T17:30:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli (mutation test config + devDeps only; no runtime source change)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+    - package-lock.json
+  out:
+    - packages/caws-cli/src
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - Stryker mutate glob admits packages/caws-cli/src/store/specs-writer.ts so the tombstone-enforcement code added by CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001 receives at least one mutation pass.
+  - The mutation harness (tests/mutation/mutation-quality.test.js) fails the test when Stryker exec fails, instead of swallowing the error in a catch block.
+  - No runtime source under packages/caws-cli/src is modified; only test/build configuration and devDeps.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a clean checkout of the slice with new devDeps installed
+    when: 'npx stryker run --mutate packages/caws-cli/src/store/specs-writer.ts is executed from packages/caws-cli'
+    then: Stryker produces a mutation report with at least one mutant generated against specs-writer.ts and a kill/survive table is emitted to stdout.
+  - id: A2
+    given: Stryker is invoked and exits non-zero
+    when: the mutation-quality.test.js harness runs
+    then: the Jest test fails (not silently passes), surfacing the underlying Stryker error.
+  - id: A3
+    given: the Stryker mutation report from A1
+    when: the maintainer reads the kill/survive table for specs-writer.ts mutants
+    then: each surviving mutant on the tombstone-enforcement code path is named with file:line and mutator so test-improvement decisions can be made.
+non_functional:
+  reliability:
+    - Mutation run completes within 10 minutes wall-clock for the targeted single-file mutate glob.
 contracts: []
