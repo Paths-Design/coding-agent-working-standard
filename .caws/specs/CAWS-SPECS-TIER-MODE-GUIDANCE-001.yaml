@@ -2,10 +2,10 @@ id: CAWS-SPECS-TIER-MODE-GUIDANCE-001
 title: 'caws specs create surfaces tier-vs-mode requirements before refusal'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: specs-create-guidance
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-27T20:20:41.583Z'
-updated_at: '2026-05-27T20:20:41.583Z'
+updated_at: '2026-05-28T21:55:08.064Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/register.ts
