@@ -2,24 +2,84 @@ id: CAWS-V11-COMMAND-MATRIX-LOCK-001
 title: 'Authoritative v10.2 to v11 command surface matrix with two-axis classification and runtime mirror'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-command-matrix-lock at 795933dee856cf519c83343d6ccf03d13b960f4c'
 created_at: '2026-05-28T17:53:13.727Z'
-updated_at: '2026-05-28T17:53:13.727Z'
+updated_at: '2026-05-28T18:25:15.343Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs (v11 surface matrix doctrine)
+    - packages/caws-cli (runtime mirror module, bundled in dist/)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs/v11-surface-matrix.yaml
+    - docs/migration-v10-to-v11.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-cli/src/shell/legacy-command-map.js
+    - packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+    - .caws/specs/CAWS-V11-COMMAND-MATRIX-LOCK-001.yaml
+  out:
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - scripts/smoke-tests.mjs
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .caws/worktrees.json
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'docs/v11-surface-matrix.yaml is the single doctrine source for every v10.2 command/subcommand classification. There is no second prose authority.'
+  - 'Every matrix entry carries two axes: disposition (kept/renamed/replaced/removed/deferred) and v11_status (shipped/planned/intentionally_absent). The two axes answer two different questions and cannot be collapsed.'
+  - 'packages/caws-cli/src/shell/legacy-command-map.js is the runtime mirror of the YAML matrix. The mirror lives inside dist/ and ships with the npm tarball. The docs YAML does not.'
+  - 'Mirror and YAML are kept in semantic equivalence by a test, not by hand-list discipline. Any drift fails the test.'
+  - 'Slice 1 introduces no runtime behavior change. The mirror is exported but not yet consumed by index.js or error-handler.js. The unknown-command handler is unchanged.'
+  - 'Multi-token legacy commands (sidecar gaps, hooks install, session start, provenance verify, worktree prune, etc.) are represented as explicit matrix entries with the full command string as the `command` field. Slice 1 ships fixtures proving longest-prefix classification cases; the actual classifier behavior lands in Slice 2.'
+  - 'No command alias execution is introduced anywhere. Removed/renamed commands continue to fail with the existing generic unknown-command error until Slice 2 lands.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'The repo at HEAD after Slice 1 lands.'
+    when: 'docs/v11-surface-matrix.yaml is read.'
+    then: 'The file exists, parses as valid YAML, and contains a top-level `v10_2_commands:` list. Every entry has fields: command (string), disposition (one of kept|renamed|replaced|removed|deferred), v11_status (one of shipped|planned|intentionally_absent), replacement (string or null), since (string or null), source_docs (array of doc paths), implementation_probe (object with group and optional subcommand).'
+  - id: A2
+    given: 'docs/v11-surface-matrix.yaml after Slice 1 lands.'
+    when: 'The set of v10.2 commands documented in docs/migration-v10-to-v11.md "Bucket map" is compared against matrix entries.'
+    then: 'Every v10.2 command/subcommand listed in the migration doc has exactly one matching matrix entry. No command is missing. No command is duplicated. No `unclassified` bucket exists.'
+  - id: A3
+    given: 'docs/v11-surface-matrix.yaml after Slice 1 lands.'
+    when: 'Every matrix entry with v11_status="shipped" is inspected.'
+    then: 'The `implementation_probe.group` (and `.subcommand` if present) resolves to a real registered v11 command group/subcommand in packages/caws-cli/src/shell/register.ts. The test uses read-only commander introspection to verify, not a hand list.'
+  - id: A4
+    given: 'docs/v11-surface-matrix.yaml after Slice 1 lands.'
+    when: 'Every matrix entry is inspected for runtime diagnostic metadata.'
+    then: 'Every entry carries enough fields for a future runtime classifier (Slice 2) to emit typed migration guidance without re-reading docs at runtime. Concretely: `disposition` drives the message shape, `replacement` provides the v11 command name (or null for removed-no-replacement), `source_docs[0]` provides the doc anchor for the "see also" line. Slice 2 will consume these fields verbatim from the runtime mirror.'
+  - id: A5
+    given: 'The runtime artifact packages/caws-cli/src/shell/legacy-command-map.js after Slice 1 lands.'
+    when: 'The module is imported.'
+    then: 'It exports a `LEGACY_COMMAND_MAP` object (or equivalent named export) whose entries are semantically equivalent to docs/v11-surface-matrix.yaml — same set of commands, same disposition/v11_status/replacement/source_docs values. The mirror is hand-written to keep Slice 1 free of a build step. Equivalence is enforced by test, not by code generation.'
+  - id: A6
+    given: 'The matrix equivalence test packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js after Slice 1 lands.'
+    when: 'The test is run.'
+    then: 'It loads docs/v11-surface-matrix.yaml from disk, imports packages/caws-cli/src/shell/legacy-command-map.js, and asserts deep semantic equivalence (same commands, same per-command field values). If the YAML and the mirror diverge for any field, the test fails with a clear diff. The test also enforces A2 (no missing commands), A3 (shipped probes resolve to register.ts groups), and A4 (every entry has the diagnostic metadata Slice 2 will need).'
+  - id: A7
+    given: 'docs/v11-surface-matrix.yaml after Slice 1 lands.'
+    when: 'Multi-token legacy commands are inspected.'
+    then: 'Commands like "sidecar gaps", "hooks install", "session start", "provenance verify", "worktree prune", "mode current", "templates discover" are each represented as a single matrix entry whose `command` field is the full string (including the space). At least three fixture entries cover the longest-prefix-match cases (e.g., both "sidecar" as a one-token would-be-prefix AND "sidecar gaps" as the actual two-token entry). The classifier implementation that consumes these fixtures lands in Slice 2; Slice 1 only ships the data and the fixture set.'
+  - id: A8
+    given: 'The unknown-command surface in packages/caws-cli/src/index.js after Slice 1 lands.'
+    when: 'A user runs `caws validate` or any other removed v10.2 command.'
+    then: 'Behavior is unchanged from before Slice 1: generic "Unknown command" error, no typed migration guidance, no alias execution. Slice 1 does not modify packages/caws-cli/src/index.js. The matrix is present but unconsumed by runtime. Slice 2 wires consumption.'
+non_functional:
+  reliability:
+    - 'The equivalence test runs deterministically in under 2 seconds against the YAML + mirror.'
+  security:
+    - 'No new authority paths, no new state mutations, no new event types in this slice.'
+contracts:
+  - name: surface-matrix-equivalence
+    type: behavior
+    path: packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+    description: 'After this slice lands, the equivalence test enforces: docs/v11-surface-matrix.yaml and packages/caws-cli/src/shell/legacy-command-map.js are semantically equivalent at the granularity of per-command field values. Drift in either authority fails the test. The test is the only mechanism preventing the YAML and the runtime mirror from drifting; it must remain green in CI for the matrix to be load-bearing.'
