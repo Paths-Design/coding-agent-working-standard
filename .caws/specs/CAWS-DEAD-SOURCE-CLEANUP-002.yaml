@@ -82,7 +82,6 @@ scope:
     - packages/caws-cli/tests/worktree-destroy-commit.test.js
     - packages/caws-cli/tests/worktree-manager.test.js
   out:
-    - packages/caws-cli/src/shell
     - packages/caws-cli/src/store
     - packages/caws-cli/src/init
     - packages/caws-cli/src/config
