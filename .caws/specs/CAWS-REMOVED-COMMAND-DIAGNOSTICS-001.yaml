@@ -1,25 +1,111 @@
 id: CAWS-REMOVED-COMMAND-DIAGNOSTICS-001
 title: 'Typed migration diagnostics for removed/renamed/replaced/deferred v10.2 commands via runtime classifier over legacy-command-map'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: v11-removed-command-diagnostics
 created_at: '2026-05-28T18:39:53.900Z'
-updated_at: '2026-05-28T18:39:53.900Z'
+updated_at: '2026-05-28T18:51:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli (runtime unknown-command handler + single command-group registry)
+    - docs (migration-doc coverage assertion via test parser)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
+  # SCOPE AMENDED 2026-05-28 (per A3) — adds the two paths needed for the
+  # runtime-wiring commit: the single command-group registry exported
+  # from packages/caws-cli/src/shell/registered-command-groups.js and the
+  # unknown-command consumer in packages/caws-cli/src/index.js. Both were
+  # in scope.out (index.js) or unlisted (registered-command-groups.js,
+  # new file) on the opening commit. Coverage test is green at 6/6 and
+  # the matrix equivalence test remains green at 14/14, per spec
+  # invariant 2's precondition for amendment.
+  #
+  # error-handler.js stays in scope.out — owned by
+  # ERROR-HANDLER-V11-SURFACE-001 (parallel slice, explicit scope split).
+  # fresh-install-smoke.mjs stays in scope.out — Slice 3 owns the
+  # installed-artifact smoke extension.
+  # register.ts stays in scope.out for now; the runtime wiring commit
+  # consumes REGISTERED_COMMAND_GROUPS in index.js only. A future commit
+  # may amend scope again to refactor register.ts as a registry consumer.
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs/migration-v10-to-v11.md
+    - docs/v11-surface-matrix.yaml
+    - packages/caws-cli/src/shell/legacy-command-map.js
+    - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+    - packages/caws-cli/tests/matrix/migration-doc-coverage.test.js
+    - .caws/specs/CAWS-REMOVED-COMMAND-DIAGNOSTICS-001.yaml
+  out:
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - packages/caws-cli/src/commands
+    - scripts/smoke-tests.mjs
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - .caws/worktrees.json
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Slice 2 opening commit is evidentiary only: a parser-driven test that asserts every v10.2 command/subcommand row in docs/migration-v10-to-v11.md "Bucket map" tables is represented in docs/v11-surface-matrix.yaml. No runtime consumer imports legacy-command-map.js in the opening commit.'
+  - 'Runtime wiring lands only after the coverage test is green. Scope.in will be amended to admit packages/caws-cli/src/index.js and packages/caws-cli/src/shell/registered-command-groups.js before the wiring commit. Amendment goes through caws (spec YAML edit committed to main), not silent expansion.'
+  - 'The single REGISTERED_COMMAND_GROUPS authority is exported from packages/caws-cli/src/shell/registered-command-groups.js. packages/caws-cli/src/shell/register.ts and packages/caws-cli/src/index.js both consume it. The 8-entry VALID_COMMANDS hand-list in index.js is removed; no second hand list is introduced. Mechanical lock: caws --help groups == REGISTERED_COMMAND_GROUPS == legacy-command-map.js V11_REGISTERED_GROUPS == docs/v11-surface-matrix.yaml v11_registered_groups.'
+  - 'Removed/renamed/replaced/deferred commands fail with exit code 1 and typed migration guidance. No alias execution. No backwards-compat shim. caws validate does NOT silently run caws doctor && caws gates run; it prints a typed message naming the v11 replacement(s) and exits 1.'
+  - 'Multi-token legacy commands are classified by longest-prefix match against legacy-command-map.js entries. "caws sidecar gaps" matches the two-token entry; "caws sidecar" alone matches the one-token entry. Genuine typos (e.g. "caws statuz") still fire the existing fuzzy suggester against REGISTERED_COMMAND_GROUPS.'
+  - 'ERROR-HANDLER-V11-SURFACE-001 owns packages/caws-cli/src/error-handler.js exclusively. This slice never edits that file. Integration is verified by a single composite test that exercises both surfaces.'
+  - 'Slice 2 does not modify packages/caws-cli/scripts/fresh-install-smoke.mjs. Removed-command refusal assertions inside the installed-artifact smoke are owned by CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001 (Slice 3).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'The repo at HEAD after Slice 2 opening commit.'
+    when: 'packages/caws-cli/tests/matrix/migration-doc-coverage.test.js is run.'
+    then: 'The test parses docs/migration-v10-to-v11.md Bucket-map markdown tables, extracts every v10.2 command name (including multi-token like "sidecar gaps", "hooks install", "session start"), and asserts each is represented as a matrix entry in docs/v11-surface-matrix.yaml with consistent disposition. Missing rows fail with a clear list of unrepresented commands. The test does NOT modify or read packages/caws-cli/src/index.js or any runtime consumer.'
+  - id: A2
+    given: 'The Slice 2 opening commit lands.'
+    when: 'git log -p main is inspected.'
+    then: 'The opening commit touches exactly one file: packages/caws-cli/tests/matrix/migration-doc-coverage.test.js. No runtime file (index.js, error-handler.js, register.ts) appears in the diff. The commit message is chore(caws) and explicitly states "Slice 2 opening, no runtime wiring yet."'
+  - id: A3
+    given: 'A scope amendment commit lands between the opening commit and the runtime wiring commit.'
+    when: 'The diff of .caws/specs/CAWS-REMOVED-COMMAND-DIAGNOSTICS-001.yaml is inspected.'
+    then: 'The amendment commit adds packages/caws-cli/src/index.js and packages/caws-cli/src/shell/registered-command-groups.js to scope.in. It removes any path from scope.out that is being admitted to scope.in (e.g., index.js moves). updated_at is bumped. The commit message is chore(caws) and explicitly cites this AC id.'
+  - id: A4
+    given: 'The repo at HEAD after the runtime wiring commit.'
+    when: 'packages/caws-cli/src/shell/registered-command-groups.js is read.'
+    then: 'It exports REGISTERED_COMMAND_GROUPS as an array of the 12 v11 group names (init, doctor, scope, status, claim, gates, evidence, events, waiver, specs, worktree, agents). packages/caws-cli/src/shell/register.ts imports the same constant and iterates it for registration (or otherwise loads command implementations keyed by it). packages/caws-cli/src/index.js imports the same constant for unknown-command fuzzy suggestion. The 8-entry VALID_COMMANDS hand-list in index.js is removed entirely.'
+  - id: A5
+    given: 'The repo at HEAD after the runtime wiring commit.'
+    when: 'A user runs `caws validate` (or `caws verify`, `caws diagnose`, `caws hooks install`, `caws provenance verify`, `caws archive <id>`, `caws waivers list`).'
+    then: 'For each, exit code is 1 and stderr contains a typed migration message naming the v11 replacement(s) and a "See: docs/migration-v10-to-v11.md#<anchor>" line. No v11 command is silently executed. The output format is consistent across all renamed/replaced commands and is sourced from runtime_diagnostic.message + runtime_diagnostic.use in legacy-command-map.js.'
+  - id: A6
+    given: 'The repo at HEAD after the runtime wiring commit.'
+    when: 'A user runs `caws sidecar gaps` (or `caws sidecar drift`, `caws sidecar provenance`, `caws sidecar waiver-draft`, `caws burnup`, `caws verify-acs`, `caws evaluate`, `caws iterate`, `caws mode current`, `caws templates discover`).'
+    then: 'For each, exit code is 1 and stderr contains a typed "removed in v11" message. No suggestion to run a v11 command (replacement is null). The longest-prefix classifier correctly matches the two-token form for sidecar/templates/mode subcommands.'
+  - id: A7
+    given: 'The repo at HEAD after the runtime wiring commit.'
+    when: 'A user runs `caws session start` (or `caws parallel setup`, `caws worktree prune`, `caws worktree repair`, `caws worktree reconcile`).'
+    then: 'For each, exit code is 1 and stderr contains a typed "deferred to v11.2/v11.3+" message. The message reflects runtime_diagnostic.kind = "deferred" and includes any workaround from runtime_diagnostic.use (e.g., loop caws worktree create per spec).'
+  - id: A8
+    given: 'The repo at HEAD after the runtime wiring commit.'
+    when: 'A user runs `caws statuz` or any other genuine typo within Levenshtein distance 2 of a registered group.'
+    then: 'The output still uses the fuzzy suggester against REGISTERED_COMMAND_GROUPS (not VALID_COMMANDS). Suggestions cover all 12 registered groups, including events, specs, worktree, agents (which the stale 8-entry list missed). Exit code 1.'
+  - id: A9
+    given: 'The composite ownership test packages/caws-cli/tests/integration/removed-command-diagnostics.test.js.'
+    when: 'The test is run.'
+    then: 'It asserts: (1) every entry in legacy-command-map.js with disposition removed/renamed/replaced/deferred produces a typed diagnostic when invoked via spawned CLI; (2) the existing ERROR-HANDLER-V11-SURFACE-001 surface (which handles error-handler internal command suggestions) is unchanged — no regression. The composite test confirms both authorities cooperate without overlap.'
+  - id: A10
+    given: 'The matrix completeness test (CAWS-V11-COMMAND-MATRIX-LOCK-001 contract) and the new migration-doc coverage test.'
+    when: 'Both tests are run after every commit in this slice.'
+    then: 'Both remain green. Slice 2 must not weaken or drift the equivalence between YAML, JS mirror, and migration doc Bucket map.'
+non_functional:
+  reliability:
+    - 'Each typed diagnostic adds no more than 100ms latency to the unknown-command path.'
+    - 'The longest-prefix classifier is deterministic: the same input produces the same diagnostic across runs.'
+  security:
+    - 'No new authority paths. No new state mutations beyond the existing unknown-command stderr output.'
+    - 'No alias execution: removed commands never trigger v11 command execution as a side effect.'
+contracts:
+  - name: legacy-command-runtime-classifier
+    type: behavior
+    path: packages/caws-cli/src/shell/legacy-command-map.js
+    description: 'After this slice lands, the runtime classifier exported from this module (or a sibling module that consumes LEGACY_COMMAND_MAP) implements longest-prefix matching: given an argv array, it returns the matching entry whose `command` string is the longest prefix-match against the argv head. The classifier is pure: same inputs produce same outputs; no IO; no state. The unknown-command handler in packages/caws-cli/src/index.js consumes the classifier output to emit typed diagnostics. Drift in either the classifier behavior or the LEGACY_COMMAND_MAP shape is caught by the existing surface-matrix-completeness.test.js (equivalence) + the new migration-doc-coverage.test.js (completeness) + a new behavior test for the classifier itself.'
