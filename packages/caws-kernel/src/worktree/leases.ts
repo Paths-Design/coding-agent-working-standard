@@ -73,6 +73,15 @@ export type LeaseReason =
  * status enum is exactly {active, stopping, stopped} — 'stale' is read-side
  * classification only (computed by summarizeActiveAgents) and is NEVER
  * written here.
+ *
+ * SESSION-OWNERSHIP-METADATA-001 (lease-substrate amendment 2026-05-28)
+ * adds optional `claimed_paths` and `last_modified_paths`. These are
+ * advisory working-tree ownership metadata consumed by future provenance
+ * surfaces (working-tree provenance guard, push-range classifier, handoff
+ * event emitter). They are NOT authority — lease records remain
+ * operational cache. Absent fields mean "no information", not "no claims".
+ * The lease_version discriminator stays at 1 because the addition is
+ * additive on optional properties only.
  */
 export interface AgentLease {
   readonly lease_version: 1;
@@ -94,6 +103,27 @@ export interface AgentLease {
   readonly session_log_path?: string;
   readonly hook_pack_version?: number;
   readonly last_seen_reason: LeaseReason;
+  /**
+   * Paths this session has explicitly declared via the explicit-claim
+   * surface (e.g. `caws claim --paths <glob>...`). Strings are stored
+   * verbatim as the caller passed them — no glob expansion, no
+   * normalization that would lose information. Claim takeover requires
+   * explicit action, not TTL expiry.
+   *
+   * SESSION-OWNERSHIP-METADATA-001 A2.
+   */
+  readonly claimed_paths?: readonly string[];
+  /**
+   * TTL-bounded set of recently-touched paths. The TTL is CALLER-enforced,
+   * not writer-enforced — the substrate has no per-path timestamps and
+   * does not compute TTL membership from persisted state. Storage-bound
+   * invariants only (enforced at the store-write boundary in commit 2):
+   * non-empty strings, no null bytes, max 1000 entries (FIFO truncation
+   * preserving caller order).
+   *
+   * SESSION-OWNERSHIP-METADATA-001 A3.
+   */
+  readonly last_modified_paths?: readonly string[];
 }
 
 /**
