@@ -2,10 +2,11 @@ id: CAWS-REMOVED-COMMAND-DIAGNOSTICS-001
 title: 'Typed migration diagnostics for removed/renamed/replaced/deferred v10.2 commands via runtime classifier over legacy-command-map'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: v11-removed-command-diagnostics
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-removed-command-diagnostics at a7b7a2ddf228755af50a3e9ebf6b84edfa98ad6f'
 created_at: '2026-05-28T18:39:53.900Z'
-updated_at: '2026-05-28T19:02:00.000Z'
+updated_at: '2026-05-28T21:29:21.371Z'
 blast_radius:
   modules:
     - packages/caws-cli (runtime unknown-command handler + single command-group registry)
