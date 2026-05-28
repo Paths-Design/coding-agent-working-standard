@@ -7,19 +7,54 @@ created_at: '2026-05-28T19:45:07.992Z'
 updated_at: '2026-05-28T19:45:07.992Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli specs-writer createSpec/closeSpec test surface (test-only; no production source change)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/store/specs-writer-archive-tombstone.test.js
+    - packages/caws-cli/tests/store/specs-writer-autocommit.test.js
+    - packages/caws-cli/tests/shell/specs-archive-edge-cases.test.js
+  out:
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+    - packages/caws-cli/package.json
+    - package-lock.json
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - createSpec's kernel-validation error branch (specs-writer.ts ~line 418-428) is exercised by a test that drives parseAndValidateSpec to fail, killing the ConditionalExpression/BlockStatement/ArrowFunction/ObjectLiteral/LogicalOperator mutants on dist lines 311-314.
+  - createSpec's now-default fallback (input.now ?? (() => new Date())) is exercised by a test that omits now and asserts a real recent ISO created_at, killing the LogicalOperator and ArrowFunction mutants on dist line 317.
+  - closeSpec's id-validation guard, transaction-result guard, and autocommit action literal are exercised, killing the mutants on dist lines 345, 349, 354.
+  - closeSpec's post-existence readYamlSource Result guard (dist line 380) is killed by a fault-injection test that corrupts the on-disk active spec yaml to a non-parseable form, or is explicitly classified if unreachable.
+  - No production source under packages/caws-cli/src is modified; this is a test-only slice. If a survivor proves unreachable without a production test-seam, the spec is amended to admit the single specs-writer.ts change before editing.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a createSpec call whose rendered YAML fails kernel validation (e.g. an out-of-range risk_tier injected past the TS type at the JS test layer)
+    when: createSpec runs
+    then: it returns Err; Result.errors[0] carries the kernel diagnostic message (non-empty), subject defaults to the spec id, and data.source_rule is present — killing the createSpec parse-error-branch mutants (dist 311-314).
+  - id: A2
+    given: a createSpec call that omits the now injector
+    when: createSpec runs and the created spec yaml is read back
+    then: created_at is a valid ISO-8601 timestamp within a few seconds of now — proving the (() => new Date()) default arrow executed, killing the now-fallback mutants (dist 317).
+  - id: A3
+    given: a closeSpec call with a structurally invalid spec id (e.g. path-traversal or pattern-violating)
+    when: closeSpec runs
+    then: it returns Err from the idValidation guard before any filesystem read — killing the idValidation ConditionalExpression mutant (dist 354).
+  - id: A4
+    given: a normal lifecycle create then close of an active spec
+    when: closeSpec succeeds
+    then: the autocommit produces a commit whose subject is exactly "chore(caws): close <id>" — killing the autocommit action StringLiteral mutant (dist 349) and exercising the txnResult success path (dist 345).
+  - id: A5
+    given: an active spec whose on-disk yaml has been corrupted to a non-parseable form AFTER creation but while the active file still exists
+    when: closeSpec runs (passing the fs.existsSync check, then failing readYamlSource/parse)
+    then: closeSpec returns Err from the !isOk(sourceResult) guard — killing the dist-380 ConditionalExpression mutant. If this state cannot be constructed from the public API plus on-disk fixture manipulation, the survivor is documented in closure notes as a genuine production-seam requirement.
+  - id: A6
+    given: the targeted Stryker harness (the existing stryker.conf.js line ranges, run via the workspace-root stryker binary)
+    when: re-run after the new tests land
+    then: closure notes record the before/after killed/survived deltas; the target is to kill the tombstone-adjacent internals survivors (dist 311-317, 345-354) and either kill or explicitly classify the dist-380 readYamlSource survivor — driving the score toward 100% on the mutated line ranges or documenting every residual.
+non_functional:
+  reliability:
+    - New tests must not push the targeted-test runtime past 90s for the three-file Stryker test set, preserving the mutation-pass wall-clock budget.
 contracts: []
