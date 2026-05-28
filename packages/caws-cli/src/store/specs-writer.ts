@@ -38,6 +38,7 @@ import {
 } from '@paths.design/caws-kernel';
 
 import { appendEvent, loadEvents } from './events-store';
+import { loadSpecs } from './specs-store';
 import {
   autoCommit,
   isPathDirty,
@@ -50,7 +51,6 @@ import {
 import { withLifecycleLock } from './lifecycle-lock';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
-import { loadSpecs } from './specs-store';
 import {
   insertTopLevelScalarAfter,
   removeTopLevelScalar,

@@ -63,6 +63,8 @@ const JS_ALLOWLIST = [
   'index.js',
   'config/index.js',
   'error-handler.js',
+  'shell/legacy-command-map.js',
+  'shell/registered-command-groups.js',
   'utils/detection.js',
   'utils/error-categories.js',
 ];
