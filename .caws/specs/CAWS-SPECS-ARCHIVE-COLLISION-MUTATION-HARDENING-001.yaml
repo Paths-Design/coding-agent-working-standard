@@ -7,19 +7,55 @@ created_at: '2026-05-28T17:32:42.340Z'
 updated_at: '2026-05-28T17:32:42.340Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli tests for tombstone-identity enforcement (test surface only; no runtime source change unless a survivor proves unreachable without a test seam)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/store/specs-writer-archive-tombstone.test.js
+    - packages/caws-cli/tests/shell/specs-archive-collision-refusal.test.js
+    - packages/caws-cli/tests/shell/specs-archive-edge-cases.test.js
+  out:
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/package.json
+    - package-lock.json
+    - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - The tombstone-identity test suite distinguishes the spec_archived event type from other events (kills isArchivedViaTombstone equality and logical-operator survivors at specs-writer line 128).
+  - The tombstone test suite verifies spec_id matching independently of event-type matching (proves both arms of the AND in line 128 are load-bearing).
+  - The create-refusal diagnostic is asserted at the store-result layer (message contains the concrete "caws specs recover <id>" hint, subject equals the spec id, data.reason equals "archived_tombstone"); shell-stderr assertion alone is insufficient (kills line-304 StringLiteral and ObjectLiteral survivors).
+  - The legacy archived-file guard and the event-log tombstone guard at specs-writer line 373 are exercised independently — one test covers legacy-file presence without an event tombstone, another covers event tombstone without a legacy file (kills the ||→&& survivor on the disjunction).
+  - Surviving !isOk()/Result-inspection mutants in the slice surface are either killed by controlled failure-injection tests or explicitly classified and escalated into a follow-up seam slice; they are not silently waived.
+  - This slice does not edit Stryker config, the mutation harness, or the production surface in specs-writer.ts unless a survivor demonstrably cannot be killed without a test seam, in which case the scope is amended explicitly with that single file added.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a specs-writer-archive-tombstone test that constructs an events.jsonl with a same-id event whose event field is NOT 'spec_archived' (e.g. 'spec_created' or 'spec_closed')
+    when: createSpec runs against that cawsDir with the same id
+    then: createSpec succeeds (no tombstone refusal); isArchivedViaTombstone correctly returns false on non-spec_archived events.
+  - id: A2
+    given: a specs-writer-archive-tombstone test that constructs an events.jsonl with a spec_archived event for a DIFFERENT id than the one being created
+    when: createSpec runs for the requested id
+    then: createSpec succeeds; isArchivedViaTombstone correctly returns false because spec_id does not match.
+  - id: A3
+    given: the store-level createSpec call returning a refusal Result on tombstone collision
+    when: the test inspects the returned Result.error diagnostic
+    then: diagnostic.message contains the literal substring 'caws specs recover <id>' for the actual id; diagnostic.subject equals the spec id; diagnostic.data.reason equals 'archived_tombstone'. All three are asserted at the store layer, not only via shell stderr.
+  - id: A4
+    given: two tests against the line-373 OR-guard in createSpec
+    when: (a) only the legacy .caws/specs/.archive/<id>.yaml file is present (no event-log tombstone); and (b) only the event-log tombstone is present (no legacy archive file)
+    then: both cases produce the same refusal diagnostic, proving each disjunct fires independently. Mutating || to && would cause exactly one of these to silently succeed.
+  - id: A5
+    given: the surviving !isOk() and partial-failure mutants from MUTATION-STRYKER-TS-COVERAGE-001 (specs-writer lines 311, 380, and any other rollback-guard survivors)
+    when: a test attempts to induce the failure mode (e.g. lifecycle-transaction returning partial_failure_recovered)
+    then: either the test kills the mutant by asserting on the recovered/error outcome, or the survivor is documented in closure notes with the specific reason a controlled failure cannot be induced from the current API surface (escalating to a follow-up seam slice).
+  - id: A6
+    given: the targeted Stryker mutation harness from MUTATION-STRYKER-TS-COVERAGE-001 (MUTATION_TESTING=1 npx jest tests/mutation/)
+    when: re-run after the new tests land
+    then: closure notes record the before/after killed/survived deltas per acceptance criterion; success is measured against the high-signal survivor inventory, not against an arbitrary global score threshold.
+non_functional:
+  reliability:
+    - Test-hardening must not increase per-test runtime such that the targeted Stryker dry-run (currently ~27s for the three relevant tests) exceeds 90s, which would inflate the mutation-pass wall-clock unnecessarily.
 contracts: []
