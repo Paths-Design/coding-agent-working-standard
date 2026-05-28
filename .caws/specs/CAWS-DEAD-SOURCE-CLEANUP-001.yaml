@@ -80,22 +80,22 @@ invariants:
   - caws --help and per-group --help still list exactly the v11.1 surface (init, doctor, status, scope, claim, gates, evidence, waiver, specs, worktree) with no regression.
   - npm pack --dry-run on packages/caws-cli reports fewer files than before; specifically the deleted files no longer appear in the package inventory.
   - Build (esbuild/tsc) and lint pass for packages/caws-cli.
-  - worktree-manager.js no longer contains a require to ../commands/verify-acs nor an empty try/catch left from removing it.
+  - worktree-manager.js's autoCloseBoundSpec retains its existing verify-acs require and AC-collection block (originally targeted for removal, but reverted mid-merge because tests/worktree-auto-close-spec.test.js asserts the AC-collection behavior). Net change to this file by this slice is zero.
   - This slice does not modify packages/caws-kernel/src, .caws/policy.yaml, CODEOWNERS, .github/, packages/caws-cli/package.json, or any test file (those were cleaned in CAWS-DEAD-TEST-CLEANUP-001).
   - This slice does not create any replacement modules for the removed v10 commands. Removal only.
 acceptance:
   - id: A1
-    given: src/commands/archive.js, burnup.js, diagnose.js, evaluate.js, iterate.js, mode.js, parallel.js, plan.js, provenance.js, quality-monitor.js, sidecar.js, templates.js, tool.js, tutorial.js, validate.js, verify-acs.js, workflow.js
+    given: src/commands/archive.js, burnup.js, diagnose.js, evaluate.js, iterate.js, mode.js, parallel.js, plan.js, provenance.js, quality-monitor.js, sidecar.js, templates.js, tool.js, tutorial.js, validate.js, workflow.js (verify-acs.js was originally targeted but retained — see A3)
     when: this slice completes
-    then: each of the 17 files no longer exists, and no live src/ module requires any of them (grep returns zero hits outside the slice's own deletions)
+    then: each of the 16 listed files no longer exists, and no live src/ module requires any of them (grep returns zero hits outside the slice's own deletions). src/commands/verify-acs.js is RETAINED because tests/worktree-auto-close-spec.test.js asserts the AC-collection behavior in worktree-manager.js's autoCloseBoundSpec, which requires verify-acs.
   - id: A2
-    given: src/sidecars/, src/parallel/parallel-manager.js, src/test-analysis.js, src/utils/spec-resolver.js
+    given: src/sidecars/, src/parallel/parallel-manager.js, src/test-analysis.js (src/utils/spec-resolver.js was originally targeted but retained — see A3)
     when: this slice completes
-    then: none of these paths exists, and no live src/ module requires any of them
+    then: none of the 3 listed paths exists, and no live src/ module requires any of them. src/utils/spec-resolver.js is RETAINED because the surviving legacy command files (src/commands/specs.js, gates.js, status.js) require it, and those files are reached by tests/spec-creation.test.js, tests/specs-archive*.test.js, tests/specs-close-diff.test.js, tests/specs-contracts-warning.test.js, and tests/agent-claim.test.js via direct require('../src/commands/specs') imports.
   - id: A3
-    given: packages/caws-cli/src/worktree/worktree-manager.js
+    given: packages/caws-cli/src/utils/spec-resolver.js, src/commands/verify-acs.js, and src/worktree/worktree-manager.js
     when: this slice completes
-    then: the file no longer contains a require to ../commands/verify-acs or any reference to verifySpec from that module; the removal is clean (no empty try/catch left behind); autoCloseBoundSpec still returns the documented shape with acsPassing defaulting to null
+    then: all three files are RETAINED in their pre-slice state. spec-resolver.js and verify-acs.js are test-load-bearing through legacy command files and worktree-manager.js's autoCloseBoundSpec respectively (see A1 and A2 reasons). worktree-manager.js's verify-acs require and AC-collection block remain intact; the slice's net change to this file is zero (an initial edit removing the require was reverted). Full retirement of these three surfaces is the natural scope for a follow-on slice, paired with removal of the consuming legacy code and tests.
   - id: A4
     given: packages/caws-cli/src/shell/index.ts and src/shell/commands/
     when: this slice completes
@@ -107,7 +107,7 @@ acceptance:
   - id: A6
     given: npm pack --dry-run run in packages/caws-cli
     when: invoked from the canonical post-merge state
-    then: the package inventory does NOT include any of the 17 commands/*.js files, src/sidecars/*, src/parallel/parallel-manager.js, src/test-analysis.js, or src/utils/spec-resolver.js
+    then: the package inventory does NOT include any of the 16 deleted commands/*.js files, src/sidecars/*, src/parallel/parallel-manager.js, or src/test-analysis.js. src/commands/verify-acs.js and src/utils/spec-resolver.js remain in the package per A1/A2 retention.
   - id: A7
     given: the full packages/caws-cli jest test suite
     when: invoked from the canonical post-merge state
