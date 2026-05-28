@@ -2,10 +2,11 @@ id: CAWS-SPECS-WRITER-INTERNALS-MUTATION-SEAM-001
 title: 'Harden createSpec/closeSpec internals against remaining surviving mutants'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: specs-writer-internals-seam
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-writer-internals-seam at 4aa5001ee0a6852482e454398ad0211bb28644fd'
 created_at: '2026-05-28T19:45:07.992Z'
-updated_at: '2026-05-28T19:50:00.000Z'
+updated_at: '2026-05-28T21:13:55.809Z'
 blast_radius:
   modules:
     - packages/caws-cli specs-writer createSpec/closeSpec test surface (test-only; no production source change)
