@@ -139,6 +139,9 @@ describe('StoreSnapshot.filesystem', () => {
         // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: no specs loaded → no
         // spec-claim entries to stat → empty spec-claim-keyed map.
         specClaimedWorktreeDirByName: {},
+        // CAWS-ARCHIVE-AS-TOMBSTONE-001: no .caws/specs/.archive/ dir →
+        // countLegacyArchiveBodies returns 0.
+        legacyArchiveBodyCount: 0,
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
@@ -170,6 +173,9 @@ describe('StoreSnapshot.filesystem', () => {
         // WORKTREE-DOCTOR-HALF-STATE-FOLLOWUP-001: no specs loaded → no
         // spec-claim entries to stat → empty spec-claim-keyed map.
         specClaimedWorktreeDirByName: {},
+        // CAWS-ARCHIVE-AS-TOMBSTONE-001: no .caws/specs/.archive/ dir →
+        // countLegacyArchiveBodies returns 0.
+        legacyArchiveBodyCount: 0,
       });
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
