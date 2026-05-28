@@ -162,6 +162,199 @@ describe('runSpecsCreateCommand: archive-collision refusal', () => {
 });
 
 // ============================================================
+// HARDENING A4(a): closeSpec refuses on tombstone-only state
+// (event-log spec_archived present, legacy .archive/<id>.yaml absent)
+// ============================================================
+//
+// CAWS-SPECS-ARCHIVE-COLLISION-MUTATION-HARDENING-001 A4.
+//
+// closeSpec's archive-detection guard (specs-writer.ts line 498 /
+// dist line 373) is:
+//
+//   if (fs.existsSync(archived) || isArchivedViaTombstone(...)) {
+//     return err(...archived; cannot close...);
+//   }
+//
+// MUTATION-STRYKER-TS-COVERAGE-001 surfaced the surviving mutant
+// `|| → &&`. To kill it, each disjunct must be exercised
+// independently — one test where ONLY the legacy file is present, one
+// where ONLY the tombstone event is present. If both arms always fire
+// together, the AND-mutant survives because `(false && X)` and
+// `(false || X)` agree.
+//
+// A4(a): lifecycle-archive produces ONLY the tombstone event. v11
+// does NOT write .caws/specs/.archive/<id>.yaml (per
+// CAWS-ARCHIVE-AS-TOMBSTONE-001). Close attempt on the tombstoned
+// id must refuse.
+describe('runSpecsCloseCommand: refuses close on tombstone-only state (v11 lifecycle)', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setup('close-tombstone-only-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('after lifecycle archive (tombstone event only, no .archive file), close refuses with archived diagnostic', () => {
+    capture(runSpecsCreateCommand, {
+      cwd: repoRoot, id: 'CLOSE-TOMB-01', title: 't', mode: 'chore', riskTier: 3,
+    });
+    capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'CLOSE-TOMB-01', resolution: 'completed', reason: 'setup',
+    });
+    const arch = capture(runSpecsArchiveCommand, {
+      cwd: repoRoot, id: 'CLOSE-TOMB-01',
+    });
+    expect(arch.code).toBe(0);
+
+    // Pre-conditions for the disjunct isolation:
+    //   - active spec yaml absent (archive deleted it)
+    //   - legacy archive yaml ABSENT (v11 does not write .archive/)
+    //   - tombstone event present
+    const activePath = path.join(cawsDir, 'specs', 'CLOSE-TOMB-01.yaml');
+    const archivedPath = path.join(cawsDir, 'specs', '.archive', 'CLOSE-TOMB-01.yaml');
+    expect(fs.existsSync(activePath)).toBe(false);
+    expect(fs.existsSync(archivedPath)).toBe(false);
+    const eventsLog = path.join(cawsDir, 'events.jsonl');
+    const events = fs.readFileSync(eventsLog, 'utf8')
+      .split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    expect(events.find((e) => e.event === 'spec_archived' && e.spec_id === 'CLOSE-TOMB-01'))
+      .toBeDefined();
+
+    // Close attempt: tombstone arm alone must fire the refusal.
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'CLOSE-TOMB-01', resolution: 'completed', reason: 'should refuse',
+    });
+    expect(r.code).not.toBe(0);
+    // Diagnostic identifies the archived state, not generic "not found".
+    expect(r.stderr).toMatch(/archived/i);
+    expect(r.stderr).toContain('CLOSE-TOMB-01');
+    expect(r.stderr).not.toMatch(/not found at/);
+  });
+});
+
+// ============================================================
+// HARDENING A4(b): closeSpec refuses on legacy-file-only state
+// (legacy .archive/<id>.yaml present, NO spec_archived event)
+// ============================================================
+//
+// A4(b): hand-place a pre-tombstone v10-style archive file at
+// .caws/specs/.archive/<id>.yaml, WITHOUT ever running the v11
+// archive lifecycle for that id (so events.jsonl has no
+// spec_archived event for it). closeSpec's fs.existsSync(archived)
+// arm must independently fire the refusal.
+//
+// If `||` were mutated to `&&`, this state (legacy file present,
+// tombstone event absent) would slip past the guard and fall through
+// to "not found at <path>" — measurably different behavior.
+describe('runSpecsCloseCommand: refuses close on legacy-archive-file-only state', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setup('close-legacy-file-only-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('with .caws/specs/.archive/<id>.yaml present and no spec_archived event, close refuses with archived diagnostic', () => {
+    // Hand-construct the pre-tombstone legacy state: a body parked
+    // under .archive/ from a v10 archive operation, never replayed
+    // into the v11 event log. No active file is created.
+    const archiveDir = path.join(cawsDir, 'specs', '.archive');
+    fs.mkdirSync(archiveDir, { recursive: true });
+    const legacyPath = path.join(archiveDir, 'CLOSE-LEGACY-01.yaml');
+    fs.writeFileSync(
+      legacyPath,
+      `id: CLOSE-LEGACY-01
+title: legacy archived body
+risk_tier: 3
+mode: chore
+lifecycle_state: archived
+created_at: '2024-01-01T00:00:00.000Z'
+updated_at: '2024-01-01T00:00:00.000Z'
+blast_radius:
+  modules:
+    - x
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - x
+  out: []
+invariants:
+  - placeholder
+acceptance:
+  - id: A1
+    given: x
+    when: x
+    then: x
+non_functional: {}
+contracts: []
+`
+    );
+
+    // Pre-conditions for the disjunct isolation:
+    //   - active spec yaml absent (never created)
+    //   - legacy archive yaml PRESENT (just written)
+    //   - no spec_archived event in events.jsonl for this id
+    const activePath = path.join(cawsDir, 'specs', 'CLOSE-LEGACY-01.yaml');
+    expect(fs.existsSync(activePath)).toBe(false);
+    expect(fs.existsSync(legacyPath)).toBe(true);
+    const eventsLog = path.join(cawsDir, 'events.jsonl');
+    const events = fs.existsSync(eventsLog)
+      ? fs.readFileSync(eventsLog, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      : [];
+    expect(events.find((e) => e.event === 'spec_archived' && e.spec_id === 'CLOSE-LEGACY-01'))
+      .toBeUndefined();
+
+    // Close attempt: legacy-file arm alone must fire the refusal.
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'CLOSE-LEGACY-01', resolution: 'completed', reason: 'should refuse',
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toMatch(/archived/i);
+    expect(r.stderr).toContain('CLOSE-LEGACY-01');
+    expect(r.stderr).not.toMatch(/not found at/);
+  });
+});
+
+// ============================================================
+// HARDENING A4(c): closeSpec must SUCCEED on a normal active spec
+// (positive control — kills the ConditionalExpression-true mutant)
+// ============================================================
+//
+// CAWS-SPECS-ARCHIVE-COLLISION-MUTATION-HARDENING-001 A4 (positive control).
+//
+// The disjunction at specs-writer.ts line 498 only fires when the
+// active spec yaml is absent. The Stryker config narrows tests to
+// our three tombstone-focused files, so without a positive close-
+// success test in this set, the mutant
+//
+//   if (fs.existsSync(archived) || isArchivedViaTombstone(...))  →  if (true)
+//
+// survives — flipping it to `if (true)` would refuse EVERY close,
+// including normal active-spec closes, but no test in our slice
+// exercises that path.
+//
+// This test exercises the active-spec close branch so a `true` mutant
+// would refuse here and the test would fail.
+describe('runSpecsCloseCommand: succeeds on a normal active spec (positive control)', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setup('close-active-positive-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('lifecycle create → close on an active spec succeeds and patches lifecycle_state to closed', () => {
+    capture(runSpecsCreateCommand, {
+      cwd: repoRoot, id: 'CLOSE-ACTIVE-01', title: 't', mode: 'chore', riskTier: 3,
+    });
+    const activePath = path.join(cawsDir, 'specs', 'CLOSE-ACTIVE-01.yaml');
+    expect(fs.existsSync(activePath)).toBe(true);
+
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'CLOSE-ACTIVE-01', resolution: 'completed', reason: 'happy path',
+    });
+    expect(r.code).toBe(0);
+
+    // File still exists (close patches in-place; archive is what deletes).
+    expect(fs.existsSync(activePath)).toBe(true);
+    const body = fs.readFileSync(activePath, 'utf8');
+    expect(body).toMatch(/lifecycle_state:\s*closed/);
+  });
+});
+
+// ============================================================
 // close: comment preservation through the close patch
 // (ported from legacy specs-close-diff A1 — comment-preservation half;
 // v10 strict-line-count invariant is dropped because v11 intentionally
