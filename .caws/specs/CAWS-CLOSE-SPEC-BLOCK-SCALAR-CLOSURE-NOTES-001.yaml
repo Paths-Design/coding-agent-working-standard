@@ -2,7 +2,8 @@ id: CAWS-CLOSE-SPEC-BLOCK-SCALAR-CLOSURE-NOTES-001
 title: 'caws specs close (and worktree-merge auto-close) refuses when closure_notes is a pre-authored multi-line block scalar'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: close-block-scalar-notes
 created_at: '2026-05-28T21:15:00.000Z'
 updated_at: '2026-05-28T21:15:00.000Z'
 blast_radius:
