@@ -3,6 +3,7 @@ title: 'Reconcile migration guide and architecture doc with shipped v11.1 surfac
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: v11-migration-doctrine-drift
 created_at: '2026-05-28T21:39:59.804Z'
 updated_at: '2026-05-28T23:20:00.000Z'
 blast_radius:
