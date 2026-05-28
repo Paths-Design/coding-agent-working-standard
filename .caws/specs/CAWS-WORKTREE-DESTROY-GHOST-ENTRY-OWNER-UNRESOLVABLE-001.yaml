@@ -1,0 +1,85 @@
+id: CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001
+title: 'worktree destroy/claim cannot clear a ghost registry entry whose claude-code UUID owner is unresolvable after the directory is gone'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+blast_radius:
+  modules:
+    - packages/caws-cli
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src
+  out:
+    - packages/caws-kernel/
+    - packages/caws-types/
+    - packages/quality-gates/
+invariants:
+  - 'A ghost registry entry (registry record present, backing git worktree directory absent) for a CLOSED spec must have at least one sanctioned, non-hand-edit CLI path to removal that emits the normal audit event.'
+  - 'The session-resolution used by `worktree destroy` / `claim` must be able to resolve a `claude-code` UUID owner (owner.session_id of the form <uuid>, platform=claude-code) by the same durable_hook_envelope path that `caws status` already uses to print "← self".'
+  - 'No fix may weaken foreign-ownership protection for LIVE worktrees (directory present, another session actively bound). The relaxation applies only to ghost entries (path_exists=false) whose spec is closed.'
+acceptance:
+  - id: A1
+    given: 'a ghost registry entry (path_exists=false) for a closed spec, owned by a claude-code UUID session that is the current durable_hook_envelope session'
+    when: '`caws worktree destroy <name>` runs'
+    then: 'the resolver matches the current session to the registered owner (via durable_hook_envelope, as `caws status` does) and the destroy proceeds, removing the registry entry and emitting the worktree-destroyed audit event.'
+  - id: A2
+    given: 'the same ghost entry but the current session is NOT the owner'
+    when: '`caws worktree destroy <name>` runs'
+    then: 'it still refuses with the foreign-ownership error AND points at a working escape hatch for ghost entries (e.g. a `--prune-ghost` or `claim --takeover --detached <name>` that does not require cd-ing into a non-existent directory).'
+  - id: A3
+    given: 'a ghost entry'
+    when: '`caws claim <name> --takeover` runs from the repo root (not inside the missing worktree dir)'
+    then: 'for a ghost entry it does NOT hard-require cwd inside the worktree (the directory is gone); it accepts the name argument and performs the takeover, OR a dedicated detached path exists.'
+  - id: A4
+    given: 'a LIVE worktree (directory present) owned by a different active session'
+    when: 'any of the above paths is exercised'
+    then: 'foreign-ownership protection is unchanged — the live worktree is NOT destroyable by a non-owner. Negative lock test required.'
+non_functional: {}
+contracts: []
+closure_notes: |
+  EVIDENCE (Sterling, 2026-05-28, caws-cli 11.1.6 built post-d175db9):
+
+  The CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001 fix (merge d175db9) added a rich
+  "Session-resolution trace" to the worktree-destroy foreign-owner error and
+  unified the caws-<hash> capsule-candidate path. It did NOT close the case
+  where the registered owner is a `claude-code` UUID session
+  (owner.session_id="5dfee16a-176b-4f0a-a721-1cb06ee288dd", platform=claude-code)
+  and the worktree directory has already been removed (ghost entry).
+
+  Observed deadlock for TWO ghost entries (forward-ref-admission-02,
+  apc-03-runnable-evidence-01), both closed/completed specs, both
+  owner.session_id=5dfee16a, both path_exists=false:
+
+    caws status        → resolves 5dfee16a as "← self" (durable_hook_envelope)
+    caws worktree destroy <name>
+                       → store.lifecycle.plan_rejected: "owned by a different
+                         session (5dfee16a...)". Resolution trace:
+                           claude_env: absent — CLAUDE_SESSION_ID not set
+                           hook_env:   absent — HOOK_SESSION_ID not set
+                           capsule:    admitted (count=37) — none matched 5dfee16a
+                         i.e. destroy NEVER consults durable_hook_envelope, the
+                         very source status uses to call 5dfee16a "self".
+    caws claim <name> --takeover
+                       → "cwd is not inside a CAWS-tracked worktree" — but the
+                         directory is GONE, so there is nowhere to cd. The
+                         takeover escape hatch is unreachable for ghost entries.
+
+  doctor emits `doctor.worktree.ghost_registry_entry` with repair text "Remove
+  the entry from .caws/worktrees.json" — i.e. the only suggested fix is a
+  hand-edit, which the agent rules forbid (bypasses the audit event). There is
+  no sanctioned, event-emitting CLI path. That is the defect.
+
+  ROOT-CAUSE HYPOTHESIS: the destroy/claim session resolver enumerates
+  (CLAUDE_SESSION_ID env, HOOK_SESSION_ID env, capsule caws-<hash> candidates)
+  but omits the durable_hook_envelope claude-code-UUID resolver that `status`
+  uses. Two fixes needed: (1) add that resolver to destroy/claim so an owner
+  match is possible; (2) add a ghost-entry path that does not require an extant
+  directory (the directory-presence precondition on claim --takeover is wrong
+  for ghosts).
+
+  This spec is HANDED OFF to the ../caws repo for implementation (Sterling
+  cannot write to it across the worktree-write-guard). Sterling left both ghost
+  entries in .caws/worktrees.json untouched (no hand-edit) per agent doctrine;
+  they are harmless residue (closed specs, scope enforcement already lifted).
