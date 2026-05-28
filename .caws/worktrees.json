@@ -1,1 +1,13 @@
-{}
+{
+  "snapshot-vnext-facts-fixture-drift": {
+    "specId": "SNAPSHOT-VNEXT-FACTS-FIXTURE-DRIFT-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-28T02:36:55.708Z",
+    "branch": "snapshot-vnext-facts-fixture-drift",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/snapshot-vnext-facts-fixture-drift"
+  }
+}

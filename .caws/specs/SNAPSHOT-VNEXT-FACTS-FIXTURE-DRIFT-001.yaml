@@ -3,6 +3,7 @@ title: 'Restore snapshot-vnext-facts fixtures after legacyArchiveBodyCount field
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: snapshot-vnext-facts-fixture-drift
 created_at: '2026-05-28T02:31:30.228Z'
 updated_at: '2026-05-28T02:31:30.228Z'
 blast_radius:
