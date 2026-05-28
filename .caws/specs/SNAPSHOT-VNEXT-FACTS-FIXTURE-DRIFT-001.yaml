@@ -8,19 +8,78 @@ created_at: '2026-05-28T02:31:30.228Z'
 updated_at: '2026-05-28T02:31:30.228Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/SNAPSHOT-VNEXT-FACTS-FIXTURE-DRIFT-001.yaml
+    - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
+  out:
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/dist
+    - packages/caws-types/node_modules/@paths.design/caws-cli/dist
+    - packages/quality-gates/node_modules/@paths.design/caws-cli/dist
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Fixture-only repair. The slice MUST NOT modify production source,
+    exported types, bundled dist artifacts, package metadata, release
+    surfaces, policy, CODEOWNERS, or workflows. If updating the
+    exact-shape fixture reveals that legacyArchiveBodyCount is
+    semantically wrong, incorrectly typed, or should not exist in
+    StoreSnapshot.filesystem, stop and file a separate
+    production-contract spec.
+  - >-
+    Commit 2eaee3b (feat(kernel+cli): doctor surfaces legacy
+    .caws/specs/.archive/ bodies (A10)) added legacyArchiveBodyCount
+    to StoreSnapshot.filesystem and to the production
+    composeStoreSnapshot return shape. countLegacyArchiveBodies
+    returns 0 when the archive directory cannot be opened, so the
+    field is present (value 0) in both the uninitialized-repo path
+    and the full-bootstrap path. The two exact-shape fixtures in
+    snapshot-vnext-facts.test.js still assert the pre-2eaee3b shape
+    and therefore fail with a one-line diff naming the new field.
+    This drift is pure fixture lag, not a production contract change.
+  - >-
+    No new production code is shipped. No CHANGELOG entry, no
+    package version bump, no release surface change, no event
+    schema change, no kernel rule change, no doctor diagnostic
+    change. The remediation is to add legacyArchiveBodyCount 0
+    to the two existing exact-shape assertions in
+    snapshot-vnext-facts.test.js. Other tests in the same file
+    that assert structurally (specific key subsets) already pass
+    and are not modified.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'snapshot-vnext-facts.test.js as it exists on main before this slice (2 exact-shape fixtures missing the legacyArchiveBodyCount field).'
+    when: 'The slice ships its single fixture-update commit.'
+    then: 'Both exact-shape fixtures (the uninitialized-repo case at lines 123-146 and the full-bootstrap case at lines 148-177) now include legacyArchiveBodyCount 0 in the asserted snapshot.filesystem object. No other lines are changed in that file by this slice.'
+  - id: A2
+    given: 'The fixture update from A1 is in place.'
+    when: 'npx jest packages/caws-cli/tests/store/snapshot-vnext-facts.test.js runs from the canonical checkout or the bound worktree.'
+    then: 'All 14 tests in snapshot-vnext-facts.test.js pass (12 previously passing + 2 newly repaired).'
+  - id: A3
+    given: 'A1 and A2 hold.'
+    when: 'npx jest packages/caws-cli/tests/store/ runs.'
+    then: 'The full store suite reports 352/352 pass, restoring the green baseline that existed before commit 2eaee3b shipped the legacyArchiveBodyCount field without updating the exact-shape fixtures.'
+  - id: A4
+    given: 'The slice is complete and ready to merge.'
+    when: 'git diff main..<worktree-branch> is inspected for the implementation commit (excluding CAWS-managed lifecycle commits from worktree create/bind/merge/destroy/close).'
+    then: 'The implementation commit modifies exactly two paths .caws/specs/SNAPSHOT-VNEXT-FACTS-FIXTURE-DRIFT-001.yaml (spec body authoring) and packages/caws-cli/tests/store/snapshot-vnext-facts.test.js (fixture update). No file outside scope.in is modified.'
+  - id: A5
+    given: 'The slice ships and the spec closes.'
+    when: 'caws doctor runs from main with no other active specs that would re-introduce 1E/1W noise.'
+    then: 'The pre-existing 1E doctor.binding.spec_missing_registry for SESSION-OWNERSHIP-METADATA-001 is unchanged in shape and severity (slice did not touch the canonical 1E surface), and no new doctor finding is introduced by this slice. Negative lock so the fixture-update commit cannot accidentally land kernel/doctor changes.'
+non_functional:
+  reliability:
+    - >-
+      Fixture parity. The asserted shape in snapshot-vnext-facts must
+      mirror the production composeStoreSnapshot return shape. Future
+      additions to StoreSnapshot.filesystem must update both at once
+      (the slice that adds the field also updates the fixtures); this
+      slice repairs the legacy debt.
 contracts: []
