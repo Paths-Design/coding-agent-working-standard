@@ -72,12 +72,13 @@ If the long-term decision is to rebuild any of these surfaces in v11.x, that wor
 
 | v10.2 command | Status in v11.1 | Workaround |
 |---|---|---|
-| `caws agents list` / `caws agents show` | Planned for v11.2 | Read `.caws/agents.json` and `.caws/worktrees.json` directly |
 | `caws session` | Deferred to v11.3+ | Multi-agent session capsules are deferred; per-worktree binding remains the v11 isolation primitive |
 | `caws parallel setup` | Deferred to v11.3+ | Loop `caws worktree create <name> --spec <id>` per spec; there is no orchestration command in v11.1 |
 | `caws worktree prune` / `caws worktree repair` / `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly |
 
-**Multi-agent operators**: if you rely daily on `caws agents list/show`, `caws session`, or `caws parallel`, defer the upgrade until v11.2 ships. Single-agent users are unaffected.
+> **Note:** `caws agents list` and `caws agents show` are **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan" note below. The broader v11.2 multi-agent line (lease-backed ownership, the `claim_taken_over.v1` event) is still forthcoming.
+
+**Multi-agent operators**: if you rely daily on `caws session` or `caws parallel`, defer the upgrade until those land (v11.3+). `caws agents list/show` already ship in v11.1.x, so they are not a reason to defer. Single-agent users are unaffected.
 
 ---
 
@@ -334,8 +335,9 @@ Does your team rely DAILY on any of:
   NO  → Continue.
 
 Does your team rely DAILY on multi-agent commands:
-  caws agents list/show / caws session / caws parallel ?
-  YES → Defer the upgrade until v11.2 ships (agents inspection).
+  caws session / caws parallel ?
+  (caws agents list/show already ship in v11.1.x — not a defer trigger.)
+  YES → Defer the upgrade until those land (v11.3+).
         Single-agent or low-frequency multi-agent users can proceed.
   NO  → Continue.
 
@@ -447,9 +449,9 @@ The following are tracked in `.caws/specs/` and may close additional gaps as the
 - `PRUNE-REPAIR-WORKTREE-001` — restores `caws worktree prune/repair/reconcile` ergonomics on the v11 substrate.
 - `AUTH-BINDING-BRIDGE-001` — agent-session binding for non-worktree contexts (closes part of the multi-agent observability gap below).
 
-The v11.2 surface (planned, not shipped) will add `caws agents list/show`, `caws claim --spec`, worktree lifecycle helpers, and the `claim_taken_over.v1` event. v11.3+ scope includes the deferred `caws session` and `caws parallel` surfaces.
+`caws agents list/show` shipped ahead of plan in v11.1.x (alongside the `agents register/heartbeat/stop/prune` operational verbs). The remaining v11.2 surface (planned, not shipped) will add `caws claim --spec`, worktree lifecycle helpers (`prune/repair/reconcile`), and the `claim_taken_over.v1` event. v11.3+ scope includes the deferred `caws session` and `caws parallel` surfaces.
 
-If `caws agents list/show` is the blocker for your team, v11.2 is the version to wait for, not v11.1.
+`caws agents list/show` is no longer a reason to wait — it ships in v11.1.x. If `caws session` or `caws parallel` is the blocker for your team, that is the v11.3+ line to wait for.
 
 ---
 
