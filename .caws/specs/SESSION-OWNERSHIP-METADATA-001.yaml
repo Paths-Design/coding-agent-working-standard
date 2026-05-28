@@ -2,10 +2,11 @@ id: SESSION-OWNERSHIP-METADATA-001
 title: 'Session ownership metadata on the lease substrate (claimed_paths, last_modified_paths) for mechanical multi-agent coordination'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: session-ownership-metadata
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge session-ownership-metadata at 145c77c155a63f2e460d0dfa0baf8eb581d390a2'
 created_at: '2026-05-22T23:30:00.000Z'
-updated_at: '2026-05-28T03:35:00.000Z'
+updated_at: '2026-05-28T17:13:06.366Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/worktree
