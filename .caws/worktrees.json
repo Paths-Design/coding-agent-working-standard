@@ -1,13 +1,1 @@
-{
-  "doctor-severity-recal": {
-    "specId": "CAWS-DOCTOR-SEVERITY-RECALIBRATION-001",
-    "owner": {
-      "session_id": "caws-d66262ddcd76",
-      "platform": "darwin"
-    },
-    "last_heartbeat": "2026-05-27T23:05:19.414Z",
-    "branch": "doctor-severity-recal",
-    "baseBranch": "main",
-    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-severity-recal"
-  }
-}
+{}
