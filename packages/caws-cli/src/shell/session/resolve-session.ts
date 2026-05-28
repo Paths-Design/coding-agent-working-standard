@@ -69,6 +69,87 @@ const DURABLE_ENVELOPE_DIRNAME = 'tmp';
 const DURABLE_ENVELOPE_FILENAME = '.session-envelope.json';
 const DURABLE_ENVELOPE_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 
+// CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001
+// Per-repo caller-session pointer: `<repoRoot>/tmp/.caller-session.json`.
+// Written/refreshed by the hook (parse-input.sh) from the authoritative
+// hook-payload session_id. Consumed ONLY to disambiguate the
+// >=2-fresh-envelope case in agent-Bash where HOOK_SESSION_ID is absent.
+// Evidence, not authority: it can only narrow an ambiguous candidate set
+// to the caller's own envelope; it never widens authority, never relaxes
+// the foreign-claim refusal, and is NEVER a newest-wins fallback.
+const CALLER_SESSION_POINTER_FILENAME = '.caller-session.json';
+
+interface CallerSessionPointerShape {
+  readonly session_id: string;
+  readonly repo_root: string;
+  readonly last_seen_at: string;
+}
+
+function isCallerSessionPointerShape(
+  v: unknown
+): v is CallerSessionPointerShape {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.session_id === 'string' &&
+    o.session_id.length > 0 &&
+    typeof o.last_seen_at === 'string'
+  );
+}
+
+/**
+ * Read the caller-session pointer at `<tmpDir>/.caller-session.json` and
+ * return the named session_id IFF the pointer exists, parses, is
+ * repo-matched, and is fresh (same freshness window as envelopes).
+ * Returns null on any miss — absent, unreadable, malformed, repo
+ * mismatch, or stale. Total and non-throwing: a missing/bad pointer
+ * MUST degrade to the existing ambiguity refusal, never to a guess.
+ */
+function readCallerSessionPointer(args: {
+  repoRootReal: string;
+  tmpDir: string;
+  nowMs: number;
+}): string | null {
+  const pointerPath = path.join(args.tmpDir, CALLER_SESSION_POINTER_FILENAME);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(pointerPath, 'utf8');
+  } catch {
+    return null; // absent or unreadable
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null; // malformed
+  }
+  if (!isCallerSessionPointerShape(parsed)) return null;
+
+  // Repo-root filter (realpath both sides; tolerate a missing field by
+  // skipping the filter only when the pointer omits repo_root — but the
+  // shape guard requires session_id + last_seen_at, not repo_root, so a
+  // pointer without repo_root is treated as repo-agnostic and accepted).
+  if (typeof (parsed as { repo_root?: unknown }).repo_root === 'string') {
+    let pointerRepoReal: string;
+    try {
+      pointerRepoReal = fs.realpathSync((parsed as CallerSessionPointerShape).repo_root);
+    } catch {
+      pointerRepoReal = (parsed as CallerSessionPointerShape).repo_root;
+    }
+    if (pointerRepoReal !== args.repoRootReal) return null;
+  }
+
+  // Freshness filter on last_seen_at, same window as envelopes.
+  const lastSeenMs = Date.parse(parsed.last_seen_at);
+  if (
+    !Number.isFinite(lastSeenMs) ||
+    lastSeenMs < args.nowMs - DURABLE_ENVELOPE_FRESHNESS_MS
+  ) {
+    return null; // stale
+  }
+  return parsed.session_id;
+}
+
 interface DurableEnvelopeShape {
   readonly session_id: string;
   readonly repo_root: string;
@@ -520,6 +601,45 @@ export function resolveSession(
     now: opts.now ? opts.now() : new Date(),
   });
   if (envScan.candidates.length >= 2) {
+    // CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: before refusing, consult the
+    // governed caller-session pointer. In agent-Bash HOOK_SESSION_ID is
+    // absent (source 2 skipped), so this pointer is the only caller-
+    // identity signal available to disambiguate. If it positively names
+    // exactly one of the fresh candidates, select that candidate — the
+    // caller's own envelope. This is an explicit identity match, NOT a
+    // recency heuristic; "NEVER newest-wins" is preserved. Absent / stale /
+    // malformed / non-matching pointer → fall through to the refusal below.
+    let repoRootReal: string;
+    try {
+      repoRootReal = fs.realpathSync(repoRoot);
+    } catch {
+      repoRootReal = repoRoot;
+    }
+    const callerId = readCallerSessionPointer({
+      repoRootReal,
+      tmpDir,
+      nowMs: (opts.now ? opts.now() : new Date()).getTime(),
+    });
+    if (callerId !== null) {
+      const matches = envScan.candidates.filter(
+        (c) => c.envelope.session_id === callerId
+      );
+      if (matches.length === 1) {
+        const mine = matches[0]!;
+        return ok(
+          {
+            identity: {
+              session_id: mine.envelope.session_id,
+              platform: 'claude-code',
+            },
+            source: 'durable_hook_envelope',
+            envelopePath: mine.envelopePath,
+          },
+          envScan.warnings.length > 0 ? envScan.warnings : undefined
+        );
+      }
+    }
+
     const ids = envScan.candidates.map((c) => c.envelope.session_id);
     const paths = envScan.candidates.map((c) => c.envelopePath);
     return err([

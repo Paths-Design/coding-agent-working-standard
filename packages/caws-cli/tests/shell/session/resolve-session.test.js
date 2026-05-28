@@ -637,3 +637,180 @@ describe('CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: priority 2.5 bridge', () =>
     expect(r.value.identity.session_id).toBe('uuid-fresh');
   });
 });
+
+// ─── CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001 ──────────────────────────────
+//
+// Governed caller-session pointer disambiguates the >=2-fresh-envelope
+// case in agent-Bash, where HOOK_SESSION_ID is NOT in the process env
+// (so source 2 is skipped) and the durable-envelope scan would otherwise
+// refuse with SESSION_DURABLE_ENVELOPE_AMBIGUOUS, forcing capsule-mint
+// and a frozen rotating owner id.
+//
+// The hook writes/refreshes `<repo_root>/tmp/.caller-session.json` from
+// the authoritative hook-payload session_id. The resolver reads it ONLY
+// as a disambiguator: among already-fresh, already-repo-matched envelope
+// candidates, if the pointer names exactly one candidate's session_id,
+// that candidate is selected. Otherwise (absent / stale / malformed /
+// non-matching) the >=2 case still refuses. NEVER newest-wins.
+//
+// These tests deliberately set env: {} (HOOK_SESSION_ID unset) so the
+// ambiguity branch is actually reached — the failure-mode path. This is
+// the corrected framing after the first attempt's tests passed vacuously
+// via the source-2 early return.
+
+function writeCallerSessionPointer(repoRoot, sessionId, opts = {}) {
+  const pointerPath = path.join(repoRoot, 'tmp', '.caller-session.json');
+  fs.mkdirSync(path.join(repoRoot, 'tmp'), { recursive: true });
+  const payload = {
+    session_id: sessionId,
+    repo_root: opts.repoRoot ?? repoRoot,
+    last_seen_at: opts.lastSeenAt ?? '2026-05-27T06:58:00Z',
+  };
+  fs.writeFileSync(pointerPath, JSON.stringify(payload) + '\n');
+  return pointerPath;
+}
+
+describe('CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: caller-session-pointer disambiguation', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.root));
+
+  // A2: agent-Bash (no HOOK_SESSION_ID) + >=2 fresh envelopes + fresh
+  //     pointer naming one candidate → resolves to that candidate, NOT
+  //     the ambiguity error. Load-bearing proof the lockout is fixed.
+  it('A2: pointer naming one of two fresh envelopes resolves to it (no env signal)', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-mine', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-sibling', { lastSeenAt: '2026-05-27T06:59:00Z' }); // newer
+    writeCallerSessionPointer(tmp.root, 'uuid-mine', { lastSeenAt: '2026-05-27T06:55:00Z' });
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {}, // HOOK_SESSION_ID unset — the agent-Bash failure mode
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-mine');
+    expect(r.value.source).toBe('durable_hook_envelope');
+    expect(r.value.envelopePath).toMatch(/uuid-mine\/\.session-envelope\.json$/);
+    // The newer sibling envelope did NOT win — proves NOT newest-wins.
+  });
+
+  // A3a: pointer ABSENT → still refuses (no guessing).
+  it('A3a: two fresh envelopes + no pointer → still refuses SESSION_DURABLE_ENVELOPE_AMBIGUOUS', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:59:00Z' });
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(false);
+    const ambig = r.errors.find(
+      (e) => e.rule === 'shell.session.durable_envelope_ambiguous'
+    );
+    expect(ambig).toBeDefined();
+    expect(ambig.data.candidateCount).toBe(2);
+  });
+
+  // A3b: pointer names a session NOT among the fresh candidates → refuses.
+  it('A3b: pointer naming a non-candidate session → still refuses', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:59:00Z' });
+    writeCallerSessionPointer(tmp.root, 'uuid-Z'); // names nothing fresh
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(false);
+    const ambig = r.errors.find(
+      (e) => e.rule === 'shell.session.durable_envelope_ambiguous'
+    );
+    expect(ambig).toBeDefined();
+  });
+
+  // A3c: stale pointer (>24h on last_seen_at) → ignored → refuses.
+  it('A3c: stale pointer is ignored → two fresh envelopes still refuse', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:59:00Z' });
+    // Pointer names uuid-A but is stale (>24h before NOW 2026-05-27T07:00).
+    writeCallerSessionPointer(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-25T00:00:00Z' });
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(false);
+    const ambig = r.errors.find(
+      (e) => e.rule === 'shell.session.durable_envelope_ambiguous'
+    );
+    expect(ambig).toBeDefined();
+  });
+
+  // A3d: malformed pointer JSON → ignored → refuses (non-fatal).
+  it('A3d: malformed pointer is ignored → two fresh envelopes still refuse', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:59:00Z' });
+    fs.mkdirSync(path.join(tmp.root, 'tmp'), { recursive: true });
+    fs.writeFileSync(path.join(tmp.root, 'tmp', '.caller-session.json'), '{not json');
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(false);
+    const ambig = r.errors.find(
+      (e) => e.rule === 'shell.session.durable_envelope_ambiguous'
+    );
+    expect(ambig).toBeDefined();
+  });
+
+  // A4: single fresh envelope unchanged — pointer presence does not alter
+  //     the single-candidate accept path.
+  it('A4: single fresh envelope still wins, pointer or not', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-only', { lastSeenAt: '2026-05-27T06:55:00Z' });
+    writeCallerSessionPointer(tmp.root, 'uuid-only');
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-only');
+    expect(r.value.source).toBe('durable_hook_envelope');
+  });
+
+  // A5: HOOK_SESSION_ID env still early-returns before any scan/pointer.
+  it('A5: HOOK_SESSION_ID precedence unchanged (no pointer read on the source-2 path)', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-A', { lastSeenAt: '2026-05-27T06:50:00Z' });
+    writeDurableEnvelope(tmp.root, 'uuid-B', { lastSeenAt: '2026-05-27T06:59:00Z' });
+    writeCallerSessionPointer(tmp.root, 'uuid-A');
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: { HOOK_SESSION_ID: 'uuid-env-wins' },
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-env-wins');
+    expect(r.value.source).toBe('hook_env');
+  });
+});
