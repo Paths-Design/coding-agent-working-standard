@@ -4,22 +4,112 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-28T23:22:29.059Z'
-updated_at: '2026-05-28T23:22:29.059Z'
+updated_at: '2026-05-28T23:30:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001.yaml
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Installed-artifact authority: prove behavior from the PATH-resolved
+    installed binary, not source unit tests. The existing
+    fresh-install-smoke.mjs packs the CLI tarball, installs it into a
+    fresh project, and materializes a PATH shim (setupCliShim) that
+    resolves `caws` to the installed dist/index.js. This slice adds one
+    assertion phase that invokes that installed binary with removed/
+    renamed/replaced/deferred v10.2 commands and asserts the shipped
+    legacy-command diagnostics surface — closing the gap the review
+    named: Slice 2's classifier has source unit tests but no
+    installed-binary proof.
+  - >-
+    Exit 1 + typed guidance, never alias-execution. Each legacy command
+    invoked through the installed binary MUST exit 1 (the refusal
+    contract from CAWS-REMOVED-COMMAND-DIAGNOSTICS-001 Pivot 4) and emit
+    the disposition-appropriate typed guidance. The smoke asserts the
+    exit code directly from the spawned process status (NOT via a shell
+    pipe, which would mask it), and asserts a stable substring of the
+    diagnostic per command. No legacy command may exit 0 or dispatch a
+    v11 handler.
+  - >-
+    Extend, do not rewrite. This slice adds a single
+    assertLegacyCommandDiagnostics(...) step and its one call site in
+    main(), reusing the existing pack/install/shim infrastructure and the
+    step/ok/fail helpers. It does not restructure the existing A14.x
+    phases, the events/specs smoke chaining, or the prepublishOnly wiring.
+    Source, templates, kernel, and policy are scope.out — the smoke
+    asserts SHIPPED behavior, it does not change it.
+  - >-
+    Assertions track the shipped diagnostics verbatim, captured from the
+    built binary. The expected substrings are taken from the actual
+    installed-binary output (validate -> 'replaced in v11' + 'caws
+    doctor'; archive -> 'renamed to caws specs archive'; sidecar gaps ->
+    'removed in v11'; session start -> 'deferred to v11.3+'; worktree
+    prune -> 'planned for v11.2'; statuz -> 'Did you mean: caws status').
+    If a future change alters a diagnostic, the smoke fails loudly rather
+    than silently drifting — that is the intended release-gate behavior.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      The installed CLI binary (via the PATH shim over the freshly
+      installed tarball) is invoked as `caws validate`.
+    when: the smoke runs the legacy-diagnostics phase.
+    then: >-
+      The process exits 1 and stderr contains 'replaced in v11' and
+      'caws doctor' (replaced-disposition typed guidance). Asserted from
+      the spawned process status, not a piped shell exit.
+  - id: A2
+    given: The installed binary is invoked as `caws archive SOME-ID`.
+    when: the smoke runs.
+    then: >-
+      Exit 1; stderr contains 'renamed to caws specs archive' and
+      'caws specs archive' (renamed-disposition guidance).
+  - id: A3
+    given: The installed binary is invoked as `caws sidecar gaps`.
+    when: the smoke runs.
+    then: >-
+      Exit 1; stderr contains 'removed in v11' and does NOT contain a
+      'Use instead:' block (removed-without-replacement).
+  - id: A4
+    given: >-
+      The installed binary is invoked as `caws session start` and
+      `caws worktree prune`.
+    when: the smoke runs.
+    then: >-
+      Both exit 1. session start contains 'deferred to v11.3+'; worktree
+      prune contains 'planned for v11.2' (deferred dispositions).
+  - id: A5
+    given: The installed binary is invoked as `caws statuz` (a genuine typo).
+    when: the smoke runs.
+    then: >-
+      Exit 1; stderr contains the fuzzy suggestion 'Did you mean: caws
+      status' (the typo path, NOT a legacy diagnostic). Proves legacy
+      classification did not over-match a non-legacy token.
+  - id: A6
+    given: The full extended fresh-install-smoke.
+    when: it runs end-to-end via `npm run smoke:fresh-install` (or node).
+    then: >-
+      The new legacy-diagnostics phase runs after the existing A14.x
+      phases, all existing assertions still pass, and the script exits 0
+      overall (PASS). A regression making any legacy command exit 0 or
+      lose its typed guidance fails the smoke (and thus the prepublishOnly
+      release gate).
+non_functional:
+  reliability:
+    - >-
+      Promotes the removed-command diagnostics from source-unit evidence
+      to installed-artifact release-gate evidence. Because the smoke is
+      wired into prepublishOnly, a published tarball whose binary fails to
+      refuse a removed command (exit 0, or wrong/absent guidance) now
+      blocks the publish instead of shipping silently.
 contracts: []
