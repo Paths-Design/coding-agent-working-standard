@@ -229,15 +229,19 @@ describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001 opening: migration-doc Bucket-map
   });
 
   // ── Slice 2 opening invariant: no runtime consumer wired yet ─────────
-  test('opening invariant: index.js does not import legacy-command-map yet', () => {
+  // The opening commit (d928d68) asserted the negatives below ("not yet
+  // wired"). After the Slice 2 runtime-wiring commit, the invariants flip
+  // to positives: the consumer imports the mirror and the registry exists.
+  // Keeping these as live assertions (rather than deleting them) means the
+  // wiring stays proven and a future regression that un-wires the
+  // diagnostics path would fail here.
+  test('wiring invariant: index.js imports legacy-command-map', () => {
     const indexPath = path.join(REPO_ROOT, 'packages', 'caws-cli', 'src', 'index.js');
     const src = fs.readFileSync(indexPath, 'utf8');
-    expect(src).not.toMatch(/legacy-command-map/);
+    expect(src).toMatch(/legacy-command-map/);
   });
 
-  test('opening invariant: no registered-command-groups.js file exists yet', () => {
-    // Slice 2's runtime-wiring commit creates this. The opening commit
-    // must not.
+  test('wiring invariant: registered-command-groups.js exists', () => {
     const registryPath = path.join(
       REPO_ROOT,
       'packages',
@@ -246,6 +250,6 @@ describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001 opening: migration-doc Bucket-map
       'shell',
       'registered-command-groups.js'
     );
-    expect(fs.existsSync(registryPath)).toBe(false);
+    expect(fs.existsSync(registryPath)).toBe(true);
   });
 });
