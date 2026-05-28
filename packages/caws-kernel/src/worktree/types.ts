@@ -109,12 +109,6 @@ export interface WorktreeRegistry {
  *
  * This is freshness/display state for `caws agents list` and `caws status`.
  * It is not consulted for ownership decisions.
- *
- * `claimed_paths` and `last_modified_paths` (SESSION-OWNERSHIP-METADATA-001)
- * are optional working-tree ownership metadata. Consumers are advisory
- * surfaces (working-tree provenance guard, push-range classifier, handoff
- * event emitter); the kernel's ownership/scope/binding decisions are
- * unchanged. Absent values mean "no information", not "no claims".
  */
 export interface AgentRecord {
   readonly session_id: string;
@@ -122,62 +116,13 @@ export interface AgentRecord {
   readonly last_active: string;
   readonly bound_worktree?: string;
   readonly bound_spec_id?: string;
-  /**
-   * Paths this session has explicitly declared via the explicit-claim
-   * surface (e.g. `caws claim --paths <glob>...`). Strings are stored
-   * verbatim as the caller passed them — no glob expansion, no
-   * normalization that would lose information. Claim takeover requires
-   * explicit action, not TTL expiry.
-   */
-  readonly claimed_paths?: readonly string[];
-  /**
-   * TTL-bounded set of recently-touched paths. The TTL is CALLER-enforced,
-   * not writer-enforced — the substrate has no per-path timestamps and
-   * does not compute TTL membership from persisted state. Storage-bound
-   * invariants only: non-empty strings, no null bytes, max 1000 entries
-   * (FIFO truncation preserving caller order).
-   */
-  readonly last_modified_paths?: readonly string[];
 }
 
 /**
  * The full `.caws/agents.json` shape, keyed by session id.
- *
- * Note: the on-disk file also carries top-level metadata keys
- * (`version`, `agents`) alongside per-session records. Enumerators
- * MUST route through `isAgentRecord` rather than iterating values
- * naively. See SESSION-OWNERSHIP-METADATA-001 A8.
  */
 export interface AgentRegistry {
   readonly [session_id: string]: AgentRecord;
-}
-
-/**
- * Structural disambiguation predicate for `.caws/agents.json` values
- * (SESSION-OWNERSHIP-METADATA-001 A8).
- *
- * Returns `true` only for object values that look like agent records:
- * an object with a string `session_id` AND a string `last_active`.
- *
- * Filters out the on-disk top-level metadata keys (`version: 1`,
- * `agents: {}`) that live alongside per-session records but are not
- * themselves records. This is structural disambiguation, NOT structural
- * normalization — the on-disk shape is unchanged; consumers route
- * enumeration through this predicate so they see only true records.
- *
- * The predicate is intentionally minimal: it does not validate optional
- * fields (`claimed_paths`, `last_modified_paths`, etc.). A record that
- * passes this check may still have invalid optional fields; downstream
- * validation handles those.
- */
-export function isAgentRecord(value: unknown): value is AgentRecord {
-  if (typeof value !== 'object' || value === null) return false;
-  if (Array.isArray(value)) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.session_id === 'string' &&
-    typeof candidate.last_active === 'string'
-  );
 }
 
 // ----------------------------------------------------------------------------
