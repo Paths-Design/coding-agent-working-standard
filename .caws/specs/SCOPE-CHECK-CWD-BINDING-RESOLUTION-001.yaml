@@ -4,22 +4,24 @@ risk_tier: 2
 mode: chore
 lifecycle_state: active
 created_at: '2026-05-28T22:07:45.799Z'
-updated_at: '2026-05-28T22:07:45.799Z'
+updated_at: '2026-05-28T22:30:00.000Z'
 blast_radius:
   modules:
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
     - packages/caws-cli/src/shell/commands/scope.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
     - packages/caws-cli/src/shell/commands/scope.ts
-    - packages/caws-cli/src/store/repo-root.ts
     - packages/caws-cli/tests/shell/scope-check-cwd-binding.test.js
     - .caws/specs/SCOPE-CHECK-CWD-BINDING-RESOLUTION-001.yaml
   out:
     - .caws/policy.yaml
     - CODEOWNERS
     - packages/caws-cli/package.json
+    - packages/caws-cli/src/store
     - packages/caws-kernel
     - .claude/hooks
 invariants:
@@ -42,14 +44,61 @@ invariants:
     bound worktree and exit 1 (union REFUSE) from the main checkout, for the
     same path, same specs on disk.
   - >-
-    The binding resolution MUST derive the owning worktree from the TARGET PATH:
-    if the absolute target path lies under `<repoRoot>/.caws/worktrees/<name>/`,
-    or if a worktree's bound spec lists the path in `scope.in`, that worktree's
-    binding governs. Resolution walks from the path (git-common-dir + worktree
-    registry lookup), NOT from `process.cwd()`. When the path is genuinely under
-    no worktree binding, the existing unbound/union behavior is unchanged — this
-    fix narrows the false-unbound case, it does not relax union enforcement for
-    truly-unbound paths.
+    HISTORICAL ROOT CAUSE: resolveBinding (resolve-binding.ts) was written
+    BEFORE sparse-checkout existed, when worktrees materialized their files
+    locally and an edit happened on a worktree-LOCAL path. cwd/location matching
+    worked then because the agent's cwd and the edited file were both inside the
+    worktree dir. The canonical-spec-authority sparse-checkout guard
+    (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001) changed this: governed edits now
+    resolve to CANONICAL paths (e.g. `packages/caws-cli/src/store/specs-writer.ts`,
+    not `.caws/worktrees/<name>/packages/...`), so neither cwd nor path-location
+    finds the worktree. The binding resolution must catch up to the post-sparse
+    reality.
+  - >-
+    Binding resolution MUST follow a deterministic 3-step fallback chain,
+    most-authoritative first, and MUST NOT depend on process.cwd() for
+    correctness:
+      (1) cwd registry/porcelain match — existing behavior; if the caller is
+          physically inside a worktree, that worktree binds (strongest intent
+          signal, backward-compatible).
+      (2) target-path worktree-location match — if the absolute target path lies
+          under `<repoRoot>/.caws/worktrees/<name>/`, that worktree binds
+          (unambiguous: a path is in at most one worktree dir).
+      (3) target-path scope.in claim — find the active, bound spec(s) whose
+          `scope.in` admits the canonical target path; that spec's worktree
+          binds. This is the step that fixes the post-sparse canonical-path case.
+    Step (1) preserves all current behavior; steps (2) and (3) only ADD bindings
+    where today there is a false `unbound`.
+  - >-
+    Step-(3) tie-break is REFUSE-ON-CONFLICT, never silent selection. When more
+    than one active bound spec's `scope.in` admits the same canonical path
+    (a genuine cross-worktree scope collision), resolution MUST return a
+    distinct ambiguous-binding result that names every claimant spec/worktree —
+    it MUST NOT pick one by prefix length, registration order, or any heuristic.
+    Rationale: ambiguous authority is a real collision the operator must
+    resolve, not something the tool may paper over by guessing — consistent with
+    the project doctrine that authority is never auto-resolved from ambiguous
+    evidence. A single-claimant path resolves cleanly; a contested path surfaces
+    the conflict. When NO active bound spec claims the path, the existing
+    unbound/union behavior is unchanged — this fix narrows the false-unbound
+    case, it does not relax union enforcement for truly-unbound paths.
+  - >-
+    The ambiguous-binding refusal MUST be ACTIONABLE, not merely descriptive.
+    Beyond naming each claimant (spec id + worktree name + the matching
+    `scope.in` entry that caused the claim), the diagnostic MUST give the agent
+    a concrete resolution path it can read and act on WITHOUT guessing:
+      (a) the exact commands to inspect each claimant
+          (`caws specs show <id>` per claimant);
+      (b) the resolution options spelled out — narrow one spec's `scope.in` so
+          only one claims the path, OR (if both legitimately need it) the
+          recommendation to coordinate via the bound worktree that should own
+          the edit and route the change through that single spec;
+      (c) which claimant, if any, corresponds to the CURRENT cwd/session, so the
+          agent knows whether it is one of the contenders or an outside
+          observer.
+    The message must be specific enough that an agent hitting this refusal can
+    resolve it from the diagnostic text alone, without re-deriving the scope
+    overlap by hand (the failure mode this whole spec exists to eliminate).
   - >-
     This fix restores the guarantee CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 intended:
     scope-guard.sh delegates to `caws scope check "$REL_PATH"` (scope-guard.sh
@@ -97,15 +146,37 @@ acceptance:
       false-unbound case for worktree-owned paths; it does not admit genuinely
       out-of-scope, truly-unbound paths. This is the regression guard ensuring
       union enforcement still bites where it should.
+  - id: A4
+    given: |
+      TWO active bound specs both list the same canonical path in scope.in:
+      FEAT-A (worktree wt-a) and FEAT-B (worktree wt-b), each scope.in includes
+      packages/shared/thing.ts. A genuine cross-worktree collision.
+    when: |
+      `caws scope check packages/shared/thing.ts` is invoked from the main
+      checkout (step-3 scope.in-claim resolution, >1 claimant).
+    then: |
+      Resolution returns the distinct ambiguous-binding result (NOT a silent
+      pick, NOT a longest-prefix winner). The diagnostic:
+        - names BOTH claimants: spec id + worktree name + the scope.in entry
+          that matched, for each of FEAT-A and FEAT-B;
+        - prints the inspect commands `caws specs show FEAT-A` and
+          `caws specs show FEAT-B`;
+        - states the resolution options (narrow one spec's scope.in, or route
+          the edit through the single owning worktree);
+        - indicates which claimant (if any) matches the current cwd/session.
+      An agent could resolve the collision from this text alone. Exit is
+      non-zero (not a clean ADMIT) because authority is ambiguous.
 non_functional:
   reliability:
     - >-
-      Path-to-worktree resolution must be deterministic and not depend on
+      Path-to-binding resolution must be deterministic and not depend on
       process.cwd(). It reads the worktree registry (.caws/worktrees.json) and
-      the canonical specs once; no wall-clock, no cwd. A path that matches
-      multiple worktree scope.in entries (should not happen under correct
-      scope authoring) resolves to a single binding deterministically (e.g.
-      longest-prefix or first-registered) and the choice is documented.
+      the canonical specs once; no wall-clock, no cwd. When a path matches
+      multiple active bound specs' scope.in entries, resolution does NOT pick
+      one — it returns the ambiguous-binding result (refuse-on-conflict, per the
+      tie-break invariant). The only deterministic-selection cases are the
+      single-claimant path (one binding) and the cwd/location matches in
+      steps (1)/(2), which are unambiguous by construction.
 contracts: []
 closure_notes: |
   MOTIVATION (discovered 2026-05-28 during CAWS-SPECS-ARCHIVE-BATCH-FEEDBACK-001
