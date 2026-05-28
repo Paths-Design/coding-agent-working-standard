@@ -2,10 +2,11 @@ id: CAWS-DOCTOR-SEVERITY-RECALIBRATION-001
 title: 'Lifecycle-aware and source-aware doctor severities for benign skips'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: doctor-severity-recal
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implementation content is present on main via emergency checkpoint commits dfcd96a (wip checkpoint round 1) and 6199aa4 (wip checkpoint round 2) authored by parallel canonical-session agent. The owning worktree''s final clean implementation commit was 2e7f442 fix(doctor): lifecycle-aware severity for binding_spec_missing_registry and INFO for non_yaml_skipped. Targeted git diff --exit-code confirms the five doctor-severity source/test files (kernel/doctor/inspect.ts, kernel doctor-severity-recalibration.test.ts, cli store specs-store.ts + waivers-store.ts, cli specs-store-non-yaml-severity.test.js) are byte-identical between main and doctor-severity-recal. The worktree branch is NOT merged because it is based before dead-test-cleanup and dead-source-cleanup and would resurrect ~14385 lines of removed code. 2e7f442 retained as salvage/doctor-severity-recal-2e7f442 (pushed to origin) for provenance only, not as a merge source. Evidence on canonical main: kernel doctor 123/123 pass (includes 6 new severity tests), CLI specs-store-non-yaml-severity 5/5 pass (A4/A5/A6 all green including A6 negative lock that malformed YAML still ERROR). Two unrelated pre-existing failures in snapshot-vnext-facts.test.js (legacyArchiveBodyCount fixture drift from commit 2eaee3b) are not caused by this slice.'
 created_at: '2026-05-27T23:04:42.538Z'
-updated_at: '2026-05-27T23:04:42.538Z'
+updated_at: '2026-05-28T02:14:58.587Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/doctor/inspect.ts
