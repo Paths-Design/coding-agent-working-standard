@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: scope-check-cwd-binding
 created_at: '2026-05-28T22:07:45.799Z'
-updated_at: '2026-05-28T22:30:00.000Z'
+updated_at: '2026-05-28T22:45:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/binding/resolve-binding.ts
@@ -15,6 +15,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/src/shell/binding/types.ts
     - packages/caws-cli/src/shell/commands/scope.ts
     - packages/caws-cli/tests/shell/scope-check-cwd-binding.test.js
     - .caws/specs/SCOPE-CHECK-CWD-BINDING-RESOLUTION-001.yaml
