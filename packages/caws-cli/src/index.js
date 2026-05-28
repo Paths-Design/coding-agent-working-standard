@@ -40,8 +40,13 @@ const {
 // docs/architecture/caws-vnext-command-surface.md for the doctrine,
 // removal table, and the canonical v11 surface.
 //
-// What v11 ships: init, doctor, status, scope, claim, gates,
-// evidence, waiver. Nothing else.
+// What v11.1 ships: the twelve registered command groups — init,
+// doctor, status, scope, claim, gates, evidence, events, waiver, specs,
+// worktree, agents. The authoritative list is REGISTERED_COMMAND_GROUPS
+// (./shell/registered-command-groups), consumed by both register.ts and
+// the unknown-command suggester below. (The original v11.0.0 governed
+// core was eight groups; specs + worktree were restored in v11.1, and
+// events + agents shipped ahead of the broader v11.2 multi-agent plan.)
 
 // Initialize global configuration
 const program = new Command();

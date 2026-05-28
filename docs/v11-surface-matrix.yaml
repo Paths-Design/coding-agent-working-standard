@@ -30,8 +30,10 @@ source_authority:
 # Cross-checked against packages/caws-cli/src/shell/register.ts inline
 # .command() calls at lines 106, 163, 178, 211, 227, 272, 306, 369, 453,
 # 578, 793, 928. Twelve groups; matches caws --help output. The runtime
-# unknown-command suggester in packages/caws-cli/src/index.js is stale
-# at 8 entries — Slice 2 unifies these.
+# unknown-command suggester in packages/caws-cli/src/index.js consumes
+# this same twelve-group set via REGISTERED_COMMAND_GROUPS (unified by
+# CAWS-REMOVED-COMMAND-DIAGNOSTICS-001; the prior 8-entry hand-list is
+# gone).
 v11_registered_groups:
   - init
   - doctor

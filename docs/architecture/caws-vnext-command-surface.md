@@ -165,7 +165,7 @@ against a single resolved frame rather than re-deriving it.
 | `PRUNE-REPAIR-WORKTREE-001` (draft, feature, tier 2) | **Prerequisite for control-plane reconcile** | `caws worktree reconcile` belongs in this spec, not as a standalone command in the authority spec. Sequence before A7 of the control-plane spec. |
 | `LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001` (draft, chore, tier 3) | **Parallel-safe** | Fault-injection seam shipped (`CAWS_TEST_INJECT_LIFECYCLE_FAULT`, `packages/caws-cli/src/store/lifecycle-transaction.ts:225–273`). Test-only expansion across 7 callers (`createSpec`, `closeSpec`, `archiveSpec`, `createWorktree`, `bindWorktreeRepair`, `destroyWorktree`, `mergeWorktree`). Strengthens substrate before authority work increases transition count. Safe in its own worktree without blocking the authority lane. |
 | `SPECS-PROMOTE-DRAFT` (not yet drafted) | **Defer past v11.2** | Net-new doctrine: no `spec_promoted.v1.json` schema, no command-surface mention, no migration-guide entry. Requires its own doctrine decision (does `lifecycle_state: draft → active` warrant a typed event? does it need a 7-slot binding shape?). Do not draft in this tranche. |
-| v11.2 plan above (existing list) | **Authoritative** | The list (leases, claim_taken_over emission, bridge bindings, agents list/show, prune/repair/reconcile, rollback harness) stands as the v11.2 acceptance bar. Recon supplements, does not replace. |
+| v11.2 plan above (existing list) | **Authoritative** | The list (leases, claim_taken_over emission, bridge bindings, prune/repair/reconcile, rollback harness) stands as the v11.2 acceptance bar. Recon supplements, does not replace. (`agents list/show` was on this list but shipped ahead in v11.1.x — see "Shipped ahead of v11.2" in §2.) |
 
 ### v11.2 slice ordering
 
@@ -310,9 +310,15 @@ to preserve recon's no-side-edit discipline.
 ## 2. v11.0.0 command surface (kept)
 
 These eight command groups are the canonical authority surface for
-v11.0.0. v11.1 added `worktree` (a ninth group) and `specs` (a tenth) as
-restored lifecycle commands. v11.2 adds `agents` (an eleventh) for
-multi-agent observability. Every command group is implemented in
+v11.0.0. v11.1 grew the surface to **twelve** groups: it restored
+`worktree` (ninth) and `specs` (tenth) as lifecycle commands, added
+`events` (eleventh) for hash-chained audit-log maintenance
+(`migrate/rotate/verify-archive`), and `agents` (twelfth) for multi-agent
+observability. `agents` shipped ahead of the broader v11.2 multi-agent
+plan: its `register/heartbeat/stop/list/show/prune` subcommands are live
+in v11.1.x. The remaining v11.2 multi-agent line (lease-backed ownership,
+the `claim_taken_over.v1` event, worktree `prune/repair/reconcile`) is
+still forthcoming. Every command group is implemented in
 `packages/caws-cli/src/shell/`, composed atop
 `packages/caws-cli/src/store/` and `packages/caws-kernel/`.
 
@@ -337,12 +343,13 @@ multi-agent observability. Every command group is implemented in
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws specs` | vNext spec lifecycle. |
+| `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |
+| `caws agents register/heartbeat/stop/list/show/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. |
 
 ### Planned in v11.2 (multi-agent authority and observability)
 
 | Command | Purpose |
 |---|---|
-| `caws agents list/show` | Read-only inspector over agents/leases/worktrees/bridge/events. Restores agent visibility removed in v11.0.0. |
 | `caws claim --spec <id>` | Bridge claim — session ↔ spec binding outside a worktree. |
 | `caws claim --release [--spec <id>]` | Explicit relinquishment of a bridge binding. |
 | `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
