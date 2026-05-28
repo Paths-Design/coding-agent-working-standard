@@ -161,7 +161,13 @@ describe('A7: caws specs list --include-archived', () => {
     expect(r.stdout).not.toContain('LEGACY-ONLY-001');
   });
 
-  it('latest-write-wins: re-created spec_id after archive appears as active, not archived', () => {
+  it('tombstone identity: re-creating an archived spec_id is refused; archived entry remains visible in list --include-archived', () => {
+    // CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001 supersedes the previous
+    // latest-write-wins behavior. Archived spec ids are tombstoned
+    // identities — `caws specs create <id>` refuses if the id has a
+    // prior spec_archived event, regardless of whether an active file
+    // or registry entry exists. recover is the legitimate path for
+    // archived ids.
     fixture = mkCawsGitRepo('a7c-');
     capture(runSpecsCreateCommand, {
       cwd: fixture.root,
@@ -179,14 +185,18 @@ describe('A7: caws specs list --include-archived', () => {
       cwd: fixture.root,
       id: 'REBORN-001',
     });
-    // Re-create with the same id.
-    capture(runSpecsCreateCommand, {
+
+    // Attempt to re-create with the same id. This MUST refuse.
+    const recreate = capture(runSpecsCreateCommand, {
       cwd: fixture.root,
       id: 'REBORN-001',
       title: 'second incarnation',
       mode: 'chore',
       riskTier: 3,
     });
+    expect(recreate.code).not.toBe(0);
+    expect(recreate.stderr).toContain('REBORN-001');
+    expect(recreate.stderr).toContain('caws specs recover');
 
     const r = capture(runSpecsListCommand, {
       cwd: fixture.root,
@@ -194,11 +204,11 @@ describe('A7: caws specs list --include-archived', () => {
     });
 
     expect(r.code).toBe(0);
-    // Active section has the second incarnation.
-    expect(r.stdout).toContain('REBORN-001');
-    expect(r.stdout).toContain('second incarnation');
-    // Archived section does NOT also list REBORN-001 (active wins).
+    // Active section does NOT contain REBORN-001 (re-create was refused).
+    const activeSection = r.stdout.split('-- archived')[0];
+    expect(activeSection).not.toContain('second incarnation');
+    // Archived section DOES list REBORN-001 (still archived; identity intact).
     const archivedSection = r.stdout.split('-- archived')[1] || '';
-    expect(archivedSection).not.toContain('REBORN-001');
+    expect(archivedSection).toContain('REBORN-001');
   });
 });

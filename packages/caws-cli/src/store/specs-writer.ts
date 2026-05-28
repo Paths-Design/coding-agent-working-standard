@@ -151,9 +151,12 @@ function findSpecPath(cawsDir: string, id: string): string | null {
  * any match. Returns false if the event log is unreadable or empty
  * (no events means no archive can have happened in this repo).
  *
- * Diagnostic-only signal: the caller uses the result to choose
- * between "archived; cannot close" vs "not found" error messages.
- * Not consulted by any non-diagnostic code path.
+ * CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001: this predicate is now
+ * enforcement-grade, not diagnostic-only. createSpec consults it to
+ * refuse re-creation of an archived id (tombstone identity). closeSpec
+ * still uses it to choose between "archived; cannot close" vs
+ * "not found" diagnostics. recover/show/list continue to depend on
+ * the event log directly for archived-body retrieval.
  */
 function isArchivedViaTombstone(cawsDir: string, id: string): boolean {
   const result = loadEvents(cawsDir);
@@ -384,6 +387,25 @@ export function createSpec(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Spec "${input.id}" already exists at ${existing}.`,
         { subject: input.id, data: { existing_path: existing } }
+      )
+    );
+  }
+
+  // CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001: tombstone identity.
+  // findSpecPath above checks both active and pre-tombstone archive
+  // locations on disk. Post-CAWS-ARCHIVE-AS-TOMBSTONE-001 the active
+  // file is deleted and no archive body is written, so an
+  // archived-then-erased spec leaves no on-disk trace; only the
+  // spec_archived event remains. Without this second check, a
+  // re-created spec would silently reuse a tombstoned id, breaking
+  // the audit narrative on .caws/events.jsonl (recover/show by id
+  // would become ambiguous between archived and current bodies).
+  if (isArchivedViaTombstone(cawsDir, input.id)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" has a prior spec_archived event in .caws/events.jsonl; archived spec ids are tombstoned identities and cannot be re-created. Use \`caws specs recover ${input.id}\` to retrieve the archived body, or choose a different id.`,
+        { subject: input.id, data: { reason: 'archived_tombstone' } }
       )
     );
   }
