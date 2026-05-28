@@ -9,5 +9,16 @@
     "branch": "snapshot-vnext-facts-fixture-drift",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/snapshot-vnext-facts-fixture-drift"
+  },
+  "contracts-warning-port": {
+    "specId": "CAWS-SPECS-CONTRACTS-WARNING-PORT-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-28T02:48:41.431Z",
+    "branch": "contracts-warning-port",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/contracts-warning-port"
   }
 }

@@ -3,23 +3,72 @@ title: 'Port mode=feature contracts warning to runSpecsCreateCommand'
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: contracts-warning-port
 created_at: '2026-05-28T02:47:18.857Z'
 updated_at: '2026-05-28T02:47:18.857Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/tests/shell
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/tests/shell/specs-contracts-warning.test.js
+  out:
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/utils
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/gates
+    - packages/caws-cli/src/session
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/policy
+    - packages/caws-cli/src/init
+    - packages/caws-cli/src/spec
+    - packages/caws-cli/src/validation
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - .github
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - The warning fires only when `caws specs create` is invoked with `--mode feature`. Other modes (`refactor`, `fix`, `doc`, `chore`) MUST NOT emit it.
+  - The warning is non-fatal — `runSpecsCreateCommand` still returns 0 and the spec is created on disk regardless of whether the warning fires.
+  - The warning goes to stderr (via the bound `err()` writer), not stdout. Programmatic consumers piping stdout get clean output.
+  - The warning message references the spec id and the suggested remediation (`caws specs update <id>`). It does NOT include the on-disk file path of the spec — keeps the message portable and avoids leaking layout details to terminal output.
+  - This slice is implementation-only. It does NOT migrate the legacy `tests/specs-contracts-warning.test.js`; that test stays in place pointing at `src/commands/specs.js` until `CAWS-LEGACY-COMMAND-TEST-MIGRATION-001a` retires it. Both warnings (legacy and ported) coexist after this slice; both are correct because the v11 shell and the legacy command are independent surfaces.
+  - No edits to packages/caws-cli/src outside of src/shell/commands/specs.ts.
+  - No edits to package.json, CHANGELOG.md, .github, .caws/policy.yaml, CODEOWNERS, or any kernel file.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'caws specs create FEATCONTR-01 --mode feature --risk-tier 2 --title x is invoked in a CAWS-initialized cwd'
+    when: 'runSpecsCreateCommand completes successfully'
+    then: 'exit code is 0, the spec file is created at .caws/specs/FEATCONTR-01.yaml with mode=feature and contracts=[], AND a warning is emitted to stderr containing the literal substring FEATCONTR-01 and the literal substring "caws specs update"'
+  - id: A2
+    given: 'caws specs create CHORENOWARN-01 --mode chore --risk-tier 2 --title x is invoked in a CAWS-initialized cwd'
+    when: 'runSpecsCreateCommand completes successfully'
+    then: 'exit code is 0, the spec is created, AND NO warning containing contracts or "caws specs update" is emitted on either stderr or stdout'
+  - id: A3
+    given: 'the same chore invocation as A2 plus the same for --mode fix, --mode refactor, --mode doc'
+    when: 'each invocation completes'
+    then: 'none of the four non-feature modes emits the contracts warning'
+  - id: A4
+    given: 'a --mode feature invocation per A1'
+    when: 'the warning is emitted'
+    then: 'the warning message does NOT include the substring .caws/specs/ or any absolute filesystem path; only the spec id and the suggested "caws specs update <id>" command appear'
+  - id: A5
+    given: 'the new tests/shell/specs-contracts-warning.test.js file'
+    when: 'it is run via jest from the canonical post-merge state'
+    then: 'A1–A4 are exercised by concrete test cases (one per acceptance criterion or grouped logically), all pass, and the legacy tests/specs-contracts-warning.test.js continues to pass unchanged (independent surface — both warnings coexist)'
+  - id: A6
+    given: 'the v11 shell jest test surface'
+    when: 'the full packages/caws-cli jest suite is run from canonical post-merge state'
+    then: 'the failure count is the same 6 pre-existing failing suites OR fewer; no new failures introduced by this slice'
+non_functional:
+  reliability:
+    - the warning is a tiny additive behavior on a single command path; no risk of cascading changes to other commands or to stored state
 contracts: []
