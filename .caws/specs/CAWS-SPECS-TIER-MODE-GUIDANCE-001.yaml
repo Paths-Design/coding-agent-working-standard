@@ -3,6 +3,7 @@ title: 'caws specs create surfaces tier-vs-mode requirements before refusal'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: specs-create-guidance
 created_at: '2026-05-27T20:20:41.583Z'
 updated_at: '2026-05-27T20:20:41.583Z'
 blast_radius:
