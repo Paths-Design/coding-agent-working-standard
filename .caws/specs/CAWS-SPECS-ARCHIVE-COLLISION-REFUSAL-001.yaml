@@ -3,23 +3,84 @@ title: 'Refuse create on archived spec id (tombstone identity)'
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: archive-collision-refusal
 created_at: '2026-05-28T05:12:46.120Z'
 updated_at: '2026-05-28T05:12:46.120Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell/specs-archive-collision-refusal.test.js
+    - packages/caws-cli/tests/shell/specs-list-archived.test.js
+  out:
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/src/store/init-store.ts
+    - packages/caws-cli/src/store/specs-store.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/waivers-store.ts
+    - packages/caws-cli/src/gates
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/session
+    - packages/caws-cli/src/policy
+    - packages/caws-cli/src/init
+    - packages/caws-cli/src/utils
+    - packages/caws-cli/src/validation
+    - packages/caws-cli/src/index.js
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/tests/specs-archive-collision.test.js
+    - packages/caws-cli/tests/spec-creation.test.js
+    - .github
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Archived spec ids are tombstoned identities. `caws specs create <id>` refuses when a prior spec_archived event for <id> exists in .caws/events.jsonl, regardless of whether an active spec file or a registry entry currently exists for that id.'
+  - 'The refusal is structured: exit non-zero, diagnostic includes the spec id and the suggested remediation `caws specs recover <id>`.'
+  - 'No code is added to the create path beyond the tombstone check + diagnostic. The existing isArchivedViaTombstone helper (specs-writer.ts:158) is the authority signal; this slice elevates it from diagnostic-only to enforcement.'
+  - 'No legacy command source is touched (out-of-scope: src/commands/**). No 001a test files are touched (specs-archive-collision.test.js, spec-creation.test.js stay scope.out — 001a owns them).'
+  - 'No edits to packages/caws-kernel/src, .caws/policy.yaml, CODEOWNERS, .github/, packages/caws-cli/package.json, packages/caws-cli/CHANGELOG.md, or the rest of src/store outside specs-writer.ts.'
+  - 'The existing shell test tests/shell/specs-list-archived.test.js A6-A7 "latest-write-wins: re-created spec_id after archive appears as active, not archived" is RETIRED in this slice — its premise (latest-write-wins for re-created ids) contradicts the new tombstone-identity invariant. The describe is either deleted outright, or rewritten to assert the refusal.'
+  - 'recover, show, list, archive, and close behaviors are unchanged. recover remains the legitimate path for archived ids.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a fresh CAWS-initialized repo with no prior spec_archived events'
+    when: '`caws specs create NEVER-USED-01 --mode chore --risk-tier 3` is invoked'
+    then: 'exit code is 0; the spec is created normally; no warning or error references archive tombstones'
+  - id: A2
+    given: 'a CAWS-initialized repo where spec id TOMBSTONE-01 has been through the full create/close/archive lifecycle (events.jsonl contains a spec_archived event for TOMBSTONE-01; no active spec file or registry entry remains for it)'
+    when: '`caws specs create TOMBSTONE-01 --mode chore --risk-tier 3` is invoked'
+    then: 'exit code is non-zero; stderr contains the literal substrings TOMBSTONE-01 and `caws specs recover`; no spec file is written; no spec_created event is appended'
+  - id: A3
+    given: 'a CAWS-initialized repo where spec id ORPHAN-01 has a spec_archived event in events.jsonl but the registry.json file is absent or has no entry for ORPHAN-01 (simulating a partially-migrated or hand-edited state)'
+    when: '`caws specs create ORPHAN-01 --mode chore --risk-tier 3` is invoked'
+    then: 'the refusal still fires (events.jsonl is the authority, not registry.json); same exit/stderr shape as A2'
+  - id: A4
+    given: 'the refusal diagnostic from A2 or A3'
+    when: 'the message is inspected'
+    then: 'it names `caws specs recover <id>` (or `caws specs recover TOMBSTONE-01` / `caws specs recover ORPHAN-01` concretely) as the remediation. It does NOT suggest --force, --override, or any flag that does not exist in v11.'
+  - id: A5
+    given: 'tests/shell/specs-list-archived.test.js A6-A7 ("latest-write-wins: re-created spec_id after archive appears as active, not archived")'
+    when: 'this slice completes'
+    then: 'this describe block is either DELETED or REWRITTEN. If rewritten, it asserts the new tombstone-identity refusal instead of the old latest-write-wins admission. The previous semantics (a re-created id silently overriding the archived one in list output) MUST NOT remain in the test suite.'
+  - id: A6
+    given: 'all existing recover / show / list / archive / close tests under tests/shell/'
+    when: 'jest is run from canonical post-merge'
+    then: 'every test outside specs-list-archived.test.js A6-A7 continues to pass unchanged. The failure count is at most the 6 pre-existing failing suites; this slice introduces zero new failures.'
+  - id: A7
+    given: 'the new tests/shell/specs-archive-collision-refusal.test.js'
+    when: 'jest is run from canonical post-merge'
+    then: 'A1, A2, A3, A4 are exercised by concrete test cases and all pass'
+non_functional:
+  reliability:
+    - the tombstone check is cold-path (only fires when no active spec file exists); the event-log scan cost on create is O(events.jsonl size) but only on the rare archived-id collision case
+    - the existing isArchivedViaTombstone helper is reused; no duplicate event-log scanning logic introduced
+  security:
+    - tombstone-identity prevents the silent-id-reuse failure mode where an archived audit trail and a freshly-created spec collide on the same id, making event-log replay ambiguous for downstream consumers
 contracts: []
