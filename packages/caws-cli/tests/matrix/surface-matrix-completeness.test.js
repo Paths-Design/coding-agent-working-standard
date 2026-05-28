@@ -266,8 +266,14 @@ describe('CAWS-V11-COMMAND-MATRIX-LOCK-001: surface matrix completeness and equi
     expect(commands.has('provenance verify')).toBe(true);
   });
 
-  // ── A8: Slice 1 invariant — no runtime consumer imports the mirror ───
-  test('A8: packages/caws-cli/src/index.js does not import the mirror yet', () => {
+  // ── A8: consumer wiring — index.js consumes the mirror as of Slice 2 ──
+  // Slice 1 asserted index.js did NOT import the mirror. Slice 2
+  // (CAWS-REMOVED-COMMAND-DIAGNOSTICS-001) wired the classifier into the
+  // unknown-command path, so the invariant flips: index.js MUST now
+  // import the mirror. error-handler.js and register.ts remain mirror-free
+  // (scope-split invariant — error-handler is owned by
+  // ERROR-HANDLER-V11-SURFACE-001; register.ts wiring is deferred).
+  test('A8: packages/caws-cli/src/index.js imports the mirror (wired in Slice 2)', () => {
     const indexPath = path.join(
       REPO_ROOT,
       'packages',
@@ -276,10 +282,10 @@ describe('CAWS-V11-COMMAND-MATRIX-LOCK-001: surface matrix completeness and equi
       'index.js'
     );
     const indexSrc = fs.readFileSync(indexPath, 'utf8');
-    expect(indexSrc).not.toMatch(/legacy-command-map/);
+    expect(indexSrc).toMatch(/legacy-command-map/);
   });
 
-  test('A8: packages/caws-cli/src/error-handler.js does not import the mirror yet', () => {
+  test('A8: packages/caws-cli/src/error-handler.js does not import the mirror', () => {
     const errorHandlerPath = path.join(
       REPO_ROOT,
       'packages',
