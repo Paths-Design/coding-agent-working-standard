@@ -16,6 +16,12 @@ export type {
   WorktreeRegistry,
 } from './types';
 
+// SESSION-OWNERSHIP-METADATA-001 A8: structural disambiguation
+// predicate for agents.json values. Consumers enumerating active
+// agent records must route through this to avoid treating top-level
+// metadata keys (`version`, `agents`) as records.
+export { isAgentRecord } from './types';
+
 export { WORKTREE_RULES, WORKTREE_RULE_PREFIXES } from './rules';
 export type { WorktreeRule } from './rules';
 
