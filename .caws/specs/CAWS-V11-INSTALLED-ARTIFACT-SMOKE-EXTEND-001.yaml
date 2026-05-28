@@ -3,6 +3,7 @@ title: 'Extend fresh-install-smoke to prove installed-binary legacy-command diag
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: v11-installed-artifact-smoke
 created_at: '2026-05-28T23:22:29.059Z'
 updated_at: '2026-05-28T23:30:00.000Z'
 blast_radius:
