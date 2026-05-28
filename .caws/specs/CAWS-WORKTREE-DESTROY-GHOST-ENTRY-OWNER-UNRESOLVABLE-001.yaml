@@ -10,11 +10,18 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - packages/caws-cli/src
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/tests/shell/session/resolve-session-candidates.test.js
   out:
     - packages/caws-kernel/
     - packages/caws-types/
     - packages/quality-gates/
+    # NOTE (not a scope.out entry, to avoid trap #4 union-mode collision):
+    # packages/caws-cli/src/store/worktrees-writer.ts is owned by active
+    # sibling WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001. This fix is consumed
+    # transparently by the destroy path (resolveSessionCandidates feeds the
+    # existing admitsOwner check) and does NOT require editing that file.
 invariants:
   - 'A ghost registry entry (registry record present, backing git worktree directory absent) for a CLOSED spec must have at least one sanctioned, non-hand-edit CLI path to removal that emits the normal audit event.'
   - 'The session-resolution used by `worktree destroy` / `claim` must be able to resolve a `claude-code` UUID owner (owner.session_id of the form <uuid>, platform=claude-code) by the same durable_hook_envelope path that `caws status` already uses to print "← self".'
@@ -25,17 +32,17 @@ acceptance:
     when: '`caws worktree destroy <name>` runs'
     then: 'the resolver matches the current session to the registered owner (via durable_hook_envelope, as `caws status` does) and the destroy proceeds, removing the registry entry and emitting the worktree-destroyed audit event.'
   - id: A2
-    given: 'the same ghost entry but the current session is NOT the owner'
+    given: 'the same ghost entry but the current session is NOT the owner (no env id, no capsule, no fresh durable envelope matches the registered owner)'
     when: '`caws worktree destroy <name>` runs'
-    then: 'it still refuses with the foreign-ownership error AND points at a working escape hatch for ghost entries (e.g. a `--prune-ghost` or `claim --takeover --detached <name>` that does not require cd-ing into a non-existent directory).'
+    then: 'it still refuses with the foreign-ownership error and the session-resolution trace now includes a durable_hook_envelope line (admitted/absent) so the operator can see the envelope source was consulted and why it did not match.'
   - id: A3
-    given: 'a ghost entry'
-    when: '`caws claim <name> --takeover` runs from the repo root (not inside the missing worktree dir)'
-    then: 'for a ghost entry it does NOT hard-require cwd inside the worktree (the directory is gone); it accepts the name argument and performs the takeover, OR a dedicated detached path exists.'
+    given: 'two or more fresh durable hook envelopes match the repo (the agent-Bash ambiguity case)'
+    when: 'resolveSessionCandidates runs for an ownership comparison'
+    then: 'ALL fresh envelopes are admitted as candidates (the candidate set answers "can I speak for this owner?" — admitting all fresh envelopes is safe because admitsOwner does exact session_id equality, so a foreign owner still does not match). This differs deliberately from resolveSession, which refuses on >=2 because it must pick exactly one identity to STAMP.'
   - id: A4
-    given: 'a LIVE worktree (directory present) owned by a different active session'
-    when: 'any of the above paths is exercised'
-    then: 'foreign-ownership protection is unchanged — the live worktree is NOT destroyable by a non-owner. Negative lock test required.'
+    given: 'a LIVE worktree (directory present) owned by a different active session whose envelope is NOT present/fresh for the current caller'
+    when: '`caws worktree destroy <name>` runs'
+    then: 'foreign-ownership protection is unchanged — the live worktree is NOT destroyable by a non-owner. The durable-envelope source only ever ADDS candidates the caller can legitimately speak for; it never matches an owner the caller is not. Negative lock test required.'
 non_functional: {}
 contracts: []
 closure_notes: |
@@ -83,3 +90,27 @@ closure_notes: |
   cannot write to it across the worktree-write-guard). Sterling left both ghost
   entries in .caws/worktrees.json untouched (no hand-edit) per agent doctrine;
   they are harmless residue (closed specs, scope enforcement already lifted).
+
+  IMPLEMENTATION DECISION (caws repo, 2026-05-28, after reading the source):
+  The original two-fix hypothesis is superseded by a single minimal fix. The
+  destroy path in worktrees-writer.ts ALREADY no-ops the git-remove / dirty /
+  unmerged steps when the worktree directory is absent (fs.existsSync guards at
+  ~822/851) and emits the worktree_destroyed event regardless. The ONLY blocker
+  for a ghost entry is the ownership check (~807-818), which calls admitsOwner
+  against the candidate set from resolveSessionCandidates(). That helper is the
+  EXHAUSTIVE multi-source resolver — but it omits the durable_hook_envelope
+  source that the singular resolveSession() (used by `caws status`) consults at
+  step 2.5. That omission is the entire defect: status resolves 5dfee16a as
+  "self" via the envelope; destroy's candidate set never sees it.
+
+  FIX: add a durable_hook_envelope source to resolveSessionCandidates() in
+  resolve-session.ts, reusing the existing scanDurableEnvelopes(). Unlike
+  resolveSession (which REFUSES on >=2 fresh envelopes because it must STAMP one
+  identity), the candidates helper ADMITS ALL fresh envelopes — the set answers
+  "can I speak for this owner?", and admitsOwner does exact session_id equality,
+  so a foreign owner never matches (A4 preserved). No worktrees-writer.ts edit
+  (owned by sibling WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001); destroy consumes
+  the richer candidate set transparently. No new claim flag needed — `caws
+  worktree destroy <name>` becomes the sanctioned, audit-emitting ghost-clear
+  path once the owner can be matched. types.ts gains an optional now injector
+  for envelope-freshness test determinism.
