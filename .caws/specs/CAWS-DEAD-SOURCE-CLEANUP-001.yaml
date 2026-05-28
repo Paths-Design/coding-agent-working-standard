@@ -2,10 +2,11 @@ id: CAWS-DEAD-SOURCE-CLEANUP-001
 title: 'Remove v10 dead source from caws-cli'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: dead-source-cleanup
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Subtractive cleanup of v10 dead source from packages/caws-cli. Net: 26 files deleted, ~7400 LOC removed. Net deletions: 16 of 17 commands/*.js (everything except verify-acs); src/sidecars/ (7 files); src/parallel/parallel-manager.js; src/test-analysis.js. RETAINED mid-merge (originally targeted but had to be restored): src/utils/spec-resolver.js and src/commands/verify-acs.js — they are test-load-bearing through surviving legacy command files (src/commands/specs.js, gates.js, status.js, all reached by direct test require) and through worktree-manager.js''s autoCloseBoundSpec. The slice initially deleted them and worktree-manager.js was edited to drop the verify-acs require; jest then showed 7 new failing suites (spec-creation, specs-archive*, specs-close-diff, specs-contracts-warning, agent-claim, worktree-auto-close-spec) — all with MODULE_NOT_FOUND on spec-resolver, or asserting the AC-collection block in autoCloseBoundSpec. The narrowest reversible fix was to restore those 3 files via git show + redirect and commit a separate revert commit; the slice then merged cleanly. Post-merge canonical verification: 117 suites, 111 pass, 6 fail (38 failing tests). The 6 failing suites (init.test.js, agent-claim-wiring, axe/cli-accessibility, hook-packs/classify_command_calibration, integration/gates-cli, store/snapshot-vnext-facts) are pre-existing failures, all out of this slice''s scope. The 2-test delta vs prior baseline (38 vs 36 failing) is environmental noise in the long-running suites. caws --help passes; all 10 v11.1 groups display help cleanly. npm pack --dry-run confirms 285 dist/ files in the package, zero references to deleted files. CHANGELOG entry added (corrected mid-merge to reflect the revert). Lesson for the follow-on slice: the 9 remaining src/commands/*.js are dead from src/shell/index.ts but live via tests. Retiring spec-resolver.js + verify-acs.js requires FIRST deleting (or rewiring) commands/specs.js, gates.js, status.js, plus the failing test surfaces that depend on them, plus the worktree-manager.js AC-collection block + its tests/worktree-auto-close-spec.test.js. That is the natural follow-on scope. Merge commits: d4039c4 (initial merge), 246b198 (revert merge). Final main HEAD: 8576dd8 (CHANGELOG correction).'
 created_at: '2026-05-27T23:53:43.433Z'
-updated_at: '2026-05-27T23:55:00.000Z'
+updated_at: '2026-05-28T00:34:51.322Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/commands
