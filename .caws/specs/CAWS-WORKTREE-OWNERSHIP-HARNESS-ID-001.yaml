@@ -4,22 +4,134 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-28T21:41:23.156Z'
-updated_at: '2026-05-28T21:41:23.156Z'
+updated_at: '2026-05-28T22:05:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001.yaml
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/tests/shell/session/resolve-session.test.js
+    - packages/caws-cli/tests/shell/resolve-session-primitive.test.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Caller-keyed envelope disambiguation. When multiple fresh durable
+    hook envelopes match the repo_root (the normal multi-agent case,
+    where each active session writes its own
+    tmp/<id>/.session-envelope.json), the resolver MUST prefer the
+    envelope whose session_id equals the caller's own harness id
+    (HOOK_SESSION_ID, when present) instead of returning the
+    SESSION_DURABLE_ENVELOPE_AMBIGUOUS hard error. The ambiguity refusal
+    is correct ONLY when the caller's own identity is genuinely unknown
+    (HOOK_SESSION_ID unset AND no single envelope distinguishable). Today
+    the >=2-fresh-envelope branch refuses unconditionally
+    (resolve-session.ts ~L522), which degrades the envelope bridge to a
+    hard error precisely when siblings are active — making multi-agent
+    worse than single-agent. HOOK_SESSION_ID is threaded into the scan
+    as a disambiguator, not consumed only as the source-2 early return.
+  - >-
+    Stable-identity-at-stamp. The identity stamped into
+    worktrees.json:owner.session_id at worktree-create / bind time MUST
+    be the same stable identity that subsequent commands (status, claim,
+    merge, destroy) resolve to for the same session. A worktree created
+    by a continuous session must remain owned-by-you across that
+    session's lifetime, including across /compact. The defect: create
+    resolves with allowMint:true and, when HOOK_SESSION_ID is unset in
+    agent-Bash and no fresh envelope is yet on disk, falls through to
+    minting a caws-<hash> capsule (source 5) and freezes that minted id
+    as owner.session_id. Later commands resolve to the stable harness id
+    and mismatch, triggering the foreign-claim soft-block against the
+    session's own worktree. The minted capsule is a last-resort identity
+    and MUST NOT be the frozen ownership identity when a stable harness
+    identity is or will be available for the session.
+  - >-
+    Capsule mint stays last-resort, never silently authoritative for
+    ownership. Minting (source 5) remains the correct fallback for
+    genuine non-hook contexts (bare terminal, CI). This spec does not
+    remove minting; it ensures the harness-stable identity is preferred
+    and that a minted id does not become a sticky ownership lease that
+    locks a continuous session out of its own worktree. Stale lease is
+    evidence, never authority (doctrine invariant 6.8) is preserved:
+    this change makes the OWN-session case resolve correctly; it does
+    NOT relax the foreign-claim refusal for genuinely different sessions.
+  - >-
+    No new authority surface. This fix operates entirely within the
+    existing session-resolution precedence chain
+    (claude_env > hook_env > durable_hook_envelope > capsule >
+    cursor_env > minted) and the existing ResolvedSession.source
+    discriminator. It adds caller-keyed selection among fresh envelopes;
+    it does not add a sixth source, does not change the worktrees.json
+    schema, and does not touch the kernel binding patch shape. The
+    worktrees-writer and claim call sites are in scope.out: this slice
+    fixes WHICH identity the resolver returns, not how callers stamp it.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      Two fresh durable hook envelopes exist under tmp/ both matching the
+      repo_root (sibling sessions active), and HOOK_SESSION_ID is set in
+      the environment to one of the two envelope session_ids.
+    when: resolveSession runs (source 2.5 reached because source 1 is absent).
+    then: >-
+      The resolver returns ok with source durable_hook_envelope and
+      identity.session_id equal to the caller's HOOK_SESSION_ID envelope
+      — NOT the SESSION_DURABLE_ENVELOPE_AMBIGUOUS error. The sibling's
+      fresh envelope does not block the caller's resolution.
+  - id: A2
+    given: >-
+      Two or more fresh envelopes match repo_root and HOOK_SESSION_ID is
+      UNSET (genuine ambiguity — caller identity unknown).
+    when: resolveSession runs.
+    then: >-
+      The resolver still returns the SESSION_DURABLE_ENVELOPE_AMBIGUOUS
+      typed error (existing behavior preserved). The disambiguation only
+      fires when the caller's own id is known; it does not paper over
+      true ambiguity by guessing.
+  - id: A3
+    given: >-
+      Exactly one fresh envelope matches repo_root (single-agent case),
+      with or without HOOK_SESSION_ID set.
+    when: resolveSession runs.
+    then: >-
+      The resolver returns ok with source durable_hook_envelope and that
+      envelope's session_id (existing behavior preserved — no regression
+      to the single-envelope path).
+  - id: A4
+    given: >-
+      HOOK_SESSION_ID is set and non-empty (and not 'unknown').
+    when: resolveSession runs.
+    then: >-
+      Source 2 (hook_env) still returns immediately with that id, before
+      any envelope scan — the early-return precedence is unchanged. The
+      caller-keyed envelope selection in A1 is reached only when source 2
+      did not fire (e.g. HOOK_SESSION_ID unset but a matching envelope on
+      disk carries the harness id from a prior hook fire).
+  - id: A5
+    given: >-
+      No env identity, no fresh envelope, and allowMint is true.
+    when: resolveSession runs.
+    then: >-
+      Minting (source 5) still occurs and returns source minted — the
+      last-resort path is intact for genuine non-hook contexts. This
+      slice does not remove or gate minting beyond the existing
+      allowMint flag.
+non_functional:
+  reliability:
+    - >-
+      The fix removes a recurring multi-agent failure mode (own-session
+      foreign-claim lockout after capsule rotation / compact) without
+      relaxing the foreign-claim refusal for genuinely different sessions.
+      Observability of which source resolved (ResolvedSession.source) is
+      retained so caws status continues to report the resolution path.
 contracts: []
