@@ -4,22 +4,138 @@ risk_tier: 3
 mode: doc
 lifecycle_state: active
 created_at: '2026-05-28T21:39:59.804Z'
-updated_at: '2026-05-28T21:39:59.804Z'
+updated_at: '2026-05-28T23:20:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/migration-v10-to-v11.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/v11-surface-matrix.yaml
+    - packages/caws-cli/src/index.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-V11-MIGRATION-DOCTRINE-DRIFT-002.yaml
+    - docs/migration-v10-to-v11.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/v11-surface-matrix.yaml
+    - packages/caws-cli/src/index.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/templates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Reconcile against the EMPIRICAL shipped surface, not against
+    assumptions. The authoritative source for what ships is the
+    registered surface as reported by `caws <group> --help` on the built
+    binary, cross-checked against register.ts. Verified facts driving
+    this slice: `caws agents --help` lists list/show/register/heartbeat/
+    stop/prune as shipped (agents list AND show ARE shipped in v11.1.x);
+    `caws worktree --help` lists create/list/bind/destroy/merge/
+    migrate-registry/repair-sparse but NOT prune/repair/reconcile (those
+    are genuinely still deferred); `events` is a registered group (the
+    12th). Doc edits must match these, not restate stale plans.
+  - >-
+    Reconcile, never blanket-rewrite. Each drift instance is corrected
+    individually against the verified surface. Statements that are still
+    TRUE must be left intact. Specifically: migration-guide line ~78
+    ('caws worktree prune/repair/reconcile — Planned for v11.2') is
+    CORRECT (those subcommands are not registered) and MUST NOT be
+    changed. Only statements contradicted by the shipped surface are
+    edited. The deferred-to-v11.3+ surfaces (caws session, caws parallel)
+    remain correctly described as deferred.
+  - >-
+    No runtime behavior change. index.js edits are comment-only — the
+    stale 'What v11 ships: <8 commands>' narrative comment is corrected
+    to reflect the 12 registered groups. No code path, import, or
+    REGISTERED_COMMAND_GROUPS usage changes. The surface-matrix YAML edit
+    is a stale-comment correction only (the 'Slice 2 unifies these /
+    stale at 8 entries' note now describes completed work); the matrix
+    DATA (v10_2_commands, dispositions, v11_status) is already correct
+    and is NOT modified. Matrix-to-mirror equivalence tests must still pass.
+  - >-
+    Scope-bounded to truth-surface docs. This slice touches only the
+    migration guide, the architecture doc command surface + group count,
+    the surface-matrix stale comment, and the index.js narrative comment.
+    It does NOT touch the shell command surface
+    (packages/caws-cli/src/shell), templates, kernel, or policy — all
+    scope.out. register.ts consuming REGISTERED_COMMAND_GROUPS and kernel
+    Policy.gates generalization are separate later slices, not folded in.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      The migration guide currently classifies caws agents list/show as
+      'Planned for v11.2' (lines ~75, ~80, ~337, ~450, ~452) and routes
+      multi-agent operators to defer the upgrade for them.
+    when: the guide is reconciled.
+    then: >-
+      agents list/show are described as SHIPPED in v11.1.x (matching
+      `caws agents --help`). The decision-flowchart and 'defer the
+      upgrade' guidance no longer name agents list/show as a v11.2
+      blocker. caws session / caws parallel remain correctly deferred;
+      worktree prune/repair/reconcile remain correctly v11.2-planned.
+  - id: A2
+    given: >-
+      The migration guide has no coverage for the shipped agents
+      operational verbs (register/heartbeat/stop/prune) and omits
+      caws specs migrate and caws worktree migrate-registry/repair-sparse.
+    when: the guide is reconciled.
+    then: >-
+      The agents group's shipped verbs are acknowledged, and the
+      operator-facing migration tools (specs migrate, worktree
+      migrate-registry) are referenced where a v10.2 migrator would look.
+      hooks remove / hooks status gain coverage consistent with the
+      matrix (removed).
+  - id: A3
+    given: >-
+      The architecture doc (lines ~313-314) says the surface grew to
+      eleven groups and 'v11.2 adds agents', omitting events.
+    when: the doc is reconciled.
+    then: >-
+      The group count is 12, events is listed as a registered group in
+      the command surface, and agents is described as shipped in
+      v11.1.x (operational substrate + list/show) rather than a v11.2
+      addition. The nuance is preserved: list/show shipped; the broader
+      multi-agent v11.2 line (leases, claim_taken_over.v1 event) is still
+      forthcoming.
+  - id: A4
+    given: >-
+      docs/v11-surface-matrix.yaml line ~34 carries a stale comment that
+      index.js 'is stale at 8 entries — Slice 2 unifies these'.
+    when: the comment is corrected.
+    then: >-
+      The comment reflects that Slice 2 (CAWS-REMOVED-COMMAND-DIAGNOSTICS-001)
+      has shipped and index.js now uses the 12-group REGISTERED_COMMAND_GROUPS.
+      The matrix v10_2_commands DATA is unchanged; the equivalence and
+      completeness tests still pass.
+  - id: A5
+    given: >-
+      packages/caws-cli/src/index.js line ~43 carries a narrative comment
+      'What v11 ships: init, doctor, status, scope, claim, gates,
+      evidence, waiver. Nothing else.' — stale at 8 of 12 groups.
+    when: the comment is corrected.
+    then: >-
+      The comment lists the 12 registered groups (or points at
+      REGISTERED_COMMAND_GROUPS as the authority) and no longer says
+      'Nothing else' at 8. This is a comment-only edit; no code changes.
+      The full CLI test suite still passes.
+  - id: A6
+    given: The full set of reconciled docs and comments.
+    when: a post-edit grep re-checks the corrected statements.
+    then: >-
+      No corrected surface still claims agents list/show are unshipped,
+      no doc undercounts the group total below 12, and no still-true
+      statement (worktree prune/repair/reconcile deferred; session/
+      parallel deferred) was altered. Matrix data and tests unchanged.
+non_functional:
+  reliability:
+    - >-
+      Closes operator-facing truth drift: docs and comments that describe
+      states no longer true (agents list/show shipped, events is a group,
+      12 not 11 groups, Slice 2 unification done). Reduces the risk that
+      a v10.2 migrant reads the guide and incorrectly defers an upgrade
+      for capability that already shipped. No runtime behavior changes.
 contracts: []
