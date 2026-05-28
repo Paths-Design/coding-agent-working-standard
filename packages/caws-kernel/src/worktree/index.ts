@@ -45,11 +45,14 @@ export { canTransitionSpecWithWorktree } from './transitions';
 // share an apply function. See spec MULTI-AGENT-ACTIVITY-REGISTRY-001.
 
 export {
+  LAST_MODIFIED_PATHS_MAX_ENTRIES,
   LEASE_RULES,
   registerAgentSession,
   heartbeatAgentSession,
   stopAgentSession,
   summarizeActiveAgents,
+  updateAgentLeasePaths,
+  validateLeasePathMetadata,
 } from './leases';
 export type {
   AgentLease,
@@ -59,4 +62,6 @@ export type {
   LeaseReason,
   LeaseRegistry,
   LeaseRule,
+  UpdateAgentLeasePathsOptions,
+  ValidatedLeasePathMetadata,
 } from './leases';

@@ -221,27 +221,48 @@ export function registerShellCommands(
     });
 
   // -------------------------------------------------------------------
-  // caws claim [--takeover]
+  // caws claim [--takeover] [--paths <path>...]
   // -------------------------------------------------------------------
   program
     .command('claim')
     .description(
       'Surface ownership of the current worktree; with --takeover, ' +
-        'acquire ownership from a foreign session (writes prior_owners audit).'
+        'acquire ownership from a foreign session (writes prior_owners audit). ' +
+        'With --paths, declare working-tree ownership metadata on the current ' +
+        "session's lease (SESSION-OWNERSHIP-METADATA-001)."
     )
     .option(
       '--takeover',
       'Forcibly take ownership of a foreign-owned worktree. Required when ' +
         'the current owner is a different session.'
     )
+    // SESSION-OWNERSHIP-METADATA-001 commit 3: explicit claim of paths.
+    // Repeatable; verbatim caller order; no glob expansion; no
+    // normalization. The kernel validates non-empty / no-null-byte
+    // and refuses if no lease exists for the current session.
+    .option(
+      '--paths <path>',
+      'Declare a path as claimed by the current session. Repeatable; ' +
+        'order preserved; strings stored verbatim. Refused with no write if ' +
+        'no lease exists for the current session.',
+      (value: string, previous: readonly string[] | undefined) =>
+        previous === undefined ? [value] : [...previous, value]
+    )
     .option('--data', 'Show structured data block on diagnostics')
-    .action((opts: { takeover?: boolean; data?: boolean }) => {
-      const code = runClaimCommand({
-        takeover: opts.takeover === true,
-        showData: opts.data === true,
-      });
-      exit(code);
-    });
+    .action(
+      (opts: {
+        takeover?: boolean;
+        paths?: readonly string[];
+        data?: boolean;
+      }) => {
+        const code = runClaimCommand({
+          takeover: opts.takeover === true,
+          showData: opts.data === true,
+          ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
+        });
+        exit(code);
+      }
+    );
 
   // -------------------------------------------------------------------
   // caws gates run --spec <id> [--context <ctx>]

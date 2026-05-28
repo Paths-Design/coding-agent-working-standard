@@ -41,12 +41,15 @@
 import {
   assertOwnership,
   refreshAgentClaim,
+  updateAgentLeasePaths,
   type RegistryPatch,
 } from '@paths.design/caws-kernel';
 
 import {
+  applyLeasePatch,
   applyRegistryPatch,
   composeStoreSnapshot,
+  loadLeases,
   resolveRepoRoot,
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
@@ -65,6 +68,22 @@ export interface ClaimCommandOptions {
   readonly staleTtlMs?: number;
   /** Show optional `data` block on rendered diagnostics. */
   readonly showData?: boolean;
+  /**
+   * SESSION-OWNERSHIP-METADATA-001 commit 3: explicit claim of paths
+   * on the current session's lease (.caws/leases/<safe-session-id>.json).
+   * When present and non-empty, the command performs a post-ownership
+   * update_lease_paths apply that REPLACES the lease's claimed_paths
+   * field with this exact list (verbatim, in caller order). When
+   * undefined or empty array NOT supplied, the existing claim behavior
+   * is unchanged — agents.json refresh runs, no lease update happens.
+   * Empty array IS a valid explicit "no claims" declaration that
+   * replaces any prior claimed_paths.
+   *
+   * No glob expansion. No normalization. The kernel validates
+   * non-empty / no-null-byte and refuses with no write if no lease
+   * exists for the current session (LEASE_NOT_FOUND).
+   */
+  readonly paths?: readonly string[];
 }
 
 export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
@@ -203,6 +222,42 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     // a warning but continue.
     err('caws claim: warning — agents.json refresh failed (display only).');
     err(renderDiagnostics(refreshApply.errors, { showData }));
+  }
+
+  // 7b. SESSION-OWNERSHIP-METADATA-001 commit 3 — explicit claim of
+  // paths on the current session's lease. Runs only when --paths was
+  // supplied. Failure of this step does NOT regress ownership; it
+  // surfaces as a typed diagnostic and returns exit 1 so the operator
+  // sees that the paths were not stored.
+  if (opts.paths !== undefined) {
+    const leasesResult = loadLeases(cawsDir);
+    if (!leasesResult.ok) {
+      err('caws claim: --paths: failed to load leases.');
+      err(renderDiagnostics(leasesResult.errors, { showData }));
+      return 1;
+    }
+    const patchResult = updateAgentLeasePaths(leasesResult.value.leases, session, {
+      claimed_paths: opts.paths,
+    });
+    if (!patchResult.ok) {
+      err('caws claim: --paths: refused.');
+      err(renderDiagnostics(patchResult.errors, { showData }));
+      return 1;
+    }
+    const applyPathsResult = applyLeasePatch(cawsDir, patchResult.value);
+    if (!applyPathsResult.ok) {
+      err('caws claim: --paths: lease apply failed.');
+      err(renderDiagnostics(applyPathsResult.errors, { showData }));
+      return 1;
+    }
+    // Surface any warn-no-op diagnostics (missing lease file race
+    // between load and apply). Treat as refusal so the operator sees
+    // the paths were not stored.
+    if (applyPathsResult.value.diagnostics.length > 0) {
+      err('caws claim: --paths: lease apply produced diagnostics.');
+      err(renderDiagnostics(applyPathsResult.value.diagnostics, { showData }));
+      if (!applyPathsResult.value.wrote) return 1;
+    }
   }
 
   // 8. Render the Claim panel — re-read the worktree record so it shows
