@@ -357,3 +357,163 @@ gates:
 root_passthrough:
   - "src/foo.ts"
 `;
+
+// ─── SESSION-OWNERSHIP-METADATA-001 A10 fixtures ────────────────────
+// `agents.last_modified_paths_ttl_seconds` — TTL bound (60..86400, default 1800).
+// Policy metadata only; no runtime behavior change in this slice.
+
+export const POLICY_WITH_AGENTS_TTL_VALID = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 1800
+`;
+
+export const POLICY_WITH_AGENTS_TTL_MIN = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 60
+`;
+
+export const POLICY_WITH_AGENTS_TTL_MAX = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 86400
+`;
+
+export const POLICY_WITH_AGENTS_TTL_BELOW_MIN = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 59
+`;
+
+export const POLICY_WITH_AGENTS_TTL_ABOVE_MAX = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 86401
+`;
+
+export const POLICY_WITH_AGENTS_TTL_NON_INTEGER = `
+version: 1
+risk_tiers:
+  "1":
+    max_files: 10
+    max_loc: 250
+  "2":
+    max_files: 100
+    max_loc: 10000
+  "3":
+    max_files: 500
+    max_loc: 40000
+gates:
+  budget_limit:
+    enabled: true
+    mode: block
+  spec_completeness:
+    enabled: true
+    mode: block
+  scope_boundary:
+    enabled: true
+    mode: block
+agents:
+  last_modified_paths_ttl_seconds: 1800.5
+`;

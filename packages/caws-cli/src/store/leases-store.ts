@@ -339,6 +339,78 @@ export function applyLeasePatch(
     return ok({ wrote: true, diagnostics: [] });
   }
 
+  if (patch.kind === 'update_lease_paths') {
+    // SESSION-OWNERSHIP-METADATA-001 commit 2 — partial update of
+    // working-tree ownership metadata. The kernel has already
+    // validated and truncated; the store reads the prior lease,
+    // overlays only the named keys (claimed_paths/last_modified_paths),
+    // and atomic-writes back. last_active, status, last_seen_reason,
+    // and all context fields are preserved byte-semantically from the
+    // prior lease.
+    //
+    // Defensive refusal: if the target lease file is absent, this is
+    // a lifecycle mismatch (the kernel's existence check is on the
+    // in-memory LeaseRegistry; the on-disk file MAY have been deleted
+    // between load and apply). Surface as LEASE_STOP_NO_PRIOR_LEASE-
+    // class (the same diagnostic shape mark_stopped uses for the
+    // missing-lease case). No partial write.
+    if (!fs.existsSync(filePath)) {
+      const warn = diagnostic({
+        rule: STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
+        authority: 'kernel/diagnostics',
+        severity: 'warning',
+        message: `update_lease_paths: no existing lease file for session "${patch.session_id}" — nothing to update.`,
+        subject: filePath,
+        data: { session_id: patch.session_id },
+      });
+      return ok({ wrote: false, diagnostics: [warn] });
+    }
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LEASE_WRITE_FAILED,
+          `Failed to read existing lease for update_lease_paths: ${(e as Error).message}`,
+          { subject: filePath }
+        )
+      );
+    }
+
+    let prior: AgentLease;
+    try {
+      prior = JSON.parse(raw) as AgentLease;
+    } catch (e) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LEASE_FILE_MALFORMED,
+          `Existing lease file is not valid JSON: ${(e as Error).message}`,
+          { subject: filePath }
+        )
+      );
+    }
+
+    // Build the merged lease. Spread the prior first, then overlay
+    // only the keys explicitly present in the patch (per the
+    // documented per-field undefined = leave-alone semantic). This
+    // means a patch with claimed_paths absent does NOT delete the
+    // prior claimed_paths; an explicit empty array DOES set it to [].
+    const updated: AgentLease = {
+      ...prior,
+      ...(patch.claimed_paths !== undefined ? { claimed_paths: patch.claimed_paths } : {}),
+      ...(patch.last_modified_paths !== undefined
+        ? { last_modified_paths: patch.last_modified_paths }
+        : {}),
+    };
+
+    const contents = JSON.stringify(updated, null, 2) + '\n';
+    const w = writeFileAtomic(filePath, contents);
+    if (w.ok === false) return err(w.errors);
+    return ok({ wrote: true, diagnostics: [] });
+  }
+
   // delete_lease
   if (!fs.existsSync(filePath)) {
     // Idempotent: deleting an absent lease is a no-op success.
