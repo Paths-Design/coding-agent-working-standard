@@ -9,5 +9,16 @@
     "branch": "session-ownership-metadata",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/session-ownership-metadata"
+  },
+  "legacy-test-migration-specs": {
+    "specId": "CAWS-LEGACY-COMMAND-TEST-MIGRATION-001a",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-28T04:49:45.882Z",
+    "branch": "legacy-test-migration-specs",
+    "baseBranch": "main",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/legacy-test-migration-specs"
   }
 }
