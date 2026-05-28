@@ -7,19 +7,117 @@ created_at: '2026-05-28T21:21:16.716Z'
 updated_at: '2026-05-28T21:21:16.716Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli orphaned v10 source subtrees and the dead tests that import them (deletion-only; no live runtime source touched)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/gates
+    - packages/caws-cli/src/generators
+    - packages/caws-cli/src/policy
+    - packages/caws-cli/src/session
+    - packages/caws-cli/src/spec
+    - packages/caws-cli/src/validation
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/constants
+    - packages/caws-cli/src/budget-derivation.js
+    - packages/caws-cli/src/cicd-optimizer.js
+    - packages/caws-cli/src/minimal-cli.js
+    - packages/caws-cli/src/tool-interface.js
+    - packages/caws-cli/src/tool-loader.js
+    - packages/caws-cli/src/tool-validator.js
+    - packages/caws-cli/src/waivers-manager.js
+    - packages/caws-cli/src/shell/legacy-command-map.js
+    - packages/caws-cli/src/utils/agent-display.js
+    - packages/caws-cli/src/utils/agent-session.js
+    - packages/caws-cli/src/utils/async-utils.js
+    - packages/caws-cli/src/utils/command-wrapper.js
+    - packages/caws-cli/src/utils/event-log.js
+    - packages/caws-cli/src/utils/event-renderer.js
+    - packages/caws-cli/src/utils/finalization.js
+    - packages/caws-cli/src/utils/git-lock.js
+    - packages/caws-cli/src/utils/gitignore-updater.js
+    - packages/caws-cli/src/utils/ide-detection.js
+    - packages/caws-cli/src/utils/lifecycle-events.js
+    - packages/caws-cli/src/utils/project-analysis.js
+    - packages/caws-cli/src/utils/promise-utils.js
+    - packages/caws-cli/src/utils/quality-gates-errors.js
+    - packages/caws-cli/src/utils/quality-gates-utils.js
+    - packages/caws-cli/src/utils/schema-validator.js
+    - packages/caws-cli/src/utils/spec-resolver.js
+    - packages/caws-cli/src/utils/typescript-detector.js
+    - packages/caws-cli/src/utils/working-state.js
+    - packages/caws-cli/src/utils/yaml-validation.js
+    - packages/caws-cli/tests/agent-claim.test.js
+    - packages/caws-cli/tests/agent-claim-wiring.test.js
+    - packages/caws-cli/tests/budget-limit.test.js
+    - packages/caws-cli/tests/contract/schema-contract.test.js
+    - packages/caws-cli/tests/enforcement/waiver-enforcement.test.js
+    - packages/caws-cli/tests/event-log.test.js
+    - packages/caws-cli/tests/event-renderer.test.js
+    - packages/caws-cli/tests/gate-feedback.test.js
+    - packages/caws-cli/tests/gates.test.js
+    - packages/caws-cli/tests/ide-detection.test.js
+    - packages/caws-cli/tests/integration/error-handling.integration.test.js
+    - packages/caws-cli/tests/integration/event-log-parity.test.js
+    - packages/caws-cli/tests/lifecycle-events.test.js
+    - packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+    - packages/caws-cli/tests/policy-manager.test.js
+    - packages/caws-cli/tests/schema-load-validation.test.js
+    - packages/caws-cli/tests/schema-validator.test.js
+    - packages/caws-cli/tests/spec-file-manager.test.js
+    - packages/caws-cli/tests/validation/acceptance-criteria-alias.test.js
+    - packages/caws-cli/tests/validation/budget-derivation-absent-spec.test.js
+    - packages/caws-cli/tests/validation/budget-derivation-async.test.js
+    - packages/caws-cli/tests/validation/budget-derivation-waiver-shape.test.js
+    - packages/caws-cli/tests/validation/scope-version-optional.test.js
+    - packages/caws-cli/tests/validation/spec-id-regex.test.js
+    - packages/caws-cli/tests/validation/spec-validation.test.js
+    - packages/caws-cli/tests/waiver-id-generation.test.js
+    - packages/caws-cli/tests/waivers-prune.test.js
+    - packages/caws-cli/tests/working-state.test.js
+    - packages/caws-cli/tests/worktree-auto-activate-spec.test.js
+    - packages/caws-cli/tests/worktree-auto-close-spec.test.js
+    - packages/caws-cli/tests/worktree-destroy-commit.test.js
+    - packages/caws-cli/tests/worktree-manager.test.js
+  out:
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/init
+    - packages/caws-cli/src/config
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/src/utils/detection.js
+    - packages/caws-cli/src/utils/error-categories.js
+    - packages/caws-cli/scripts/build-cli.js
+    - packages/caws-cli/package.json
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - Only orphaned v10 source (files not on the build-cli.js JS allowlist and not compiled by tsconfig.vnext.json and not transitively required by any live entry) and the dead tests that import them are removed. No file reachable from dist/index.js is touched.
+  - After removal, the caws-cli build (build-cli.js + tsc -p tsconfig.vnext.json) succeeds unchanged, because none of the removed files were ever copied into or compiled for dist/.
+  - After removal, the full caws-cli Jest suite passes with no missing-module import errors, because every removed test imported only removed source.
+  - The live utils detection.js and error-categories.js are NOT removed; they are the only two live files under src/utils and are the JS allowlist entries the dist depends on.
+  - src/shell/legacy-command-map.js and tests/matrix/surface-matrix-completeness.test.js are removed together as a coupled pair (the matrix test is the only consumer of the map, and it asserts the map has no live runtime consumer).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: the caws-cli package after deleting the 53 orphaned source files plus the coupled legacy-command-map and the 32 dead-test files
+    when: the build runs (node scripts/build-cli.js followed by tsc -p tsconfig.vnext.json)
+    then: the build succeeds and dist/ contains the same file set as before removal (config, init, shell, store, utils, error-handler.js, index.js) with no missing-input errors.
+  - id: A2
+    given: the same post-removal state
+    when: the full caws-cli Jest suite runs (npx jest)
+    then: every remaining suite resolves its imports and the run completes with no Cannot-find-module errors originating from removed files; the pass count equals the prior live-test pass count.
+  - id: A3
+    given: a grep across the remaining src tree for requires of any removed module path
+    when: searching src/shell, src/store, src/init, src/config, src/index.js, src/error-handler.js
+    then: zero references to any removed file remain (proving nothing live depended on the removed surface).
+  - id: A4
+    given: the removed dead-test files
+    when: comparing the test inventory before and after
+    then: every removed test file imported at least one removed source file, and no removed test imported a surviving live file (no live coverage was deleted).
+non_functional:
+  reliability:
+    - The post-removal Jest suite wall-clock should drop measurably versus baseline, since 32 dead-test files (~10,500 LOC) no longer execute; record the before/after suite time and test count in closure notes.
 contracts: []
