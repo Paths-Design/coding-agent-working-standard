@@ -30,6 +30,7 @@ Every v10.2 command falls into exactly one of four buckets.
 | `caws diagnose` | `caws doctor` | Direct rename; same drift-detection responsibility. Exit codes: 0 clean, 1 findings, 2 composition failure. |
 | `caws hooks install` | `caws init --agent-surface claude-code` | Hook-pack adoption is now an init concern, not a separate command. The hook pack is the install surface; mid-session install requires a session restart to activate. |
 | `caws provenance` | `caws evidence record --type <test\|gate\|ac> --spec <id> --data <json>` + the hash-chained `.caws/events.jsonl` | The provenance shape changed. v10.2 scripts that read provenance command output will fail; the new audit surface is the events.jsonl chain. |
+| `caws scaffold` | `caws init` | Folded into `caws init`'s idempotent re-init flow. Previously misclassified under "Removed without replacement" — corrected by `CAWS-REMOVED-COMMAND-DIAGNOSTICS-001`. The matrix at `docs/v11-surface-matrix.yaml` always classified `scaffold` as `replaced`; this row reconciles the doc to the matrix. |
 
 ### Renamed (cosmetic; scripts will break on the old name)
 
@@ -59,7 +60,6 @@ The following v10.2 commands are **not present in v11.1 and have no v11.1 replac
 | `caws test-analysis` | Statistical analysis for budget prediction | Not present in v11.1 |
 | `caws tool <id>` | Generic tool runner | Niche utility; not present in v11.1 |
 | `caws templates discover/manage` | Template discovery | Hook-pack install is now the only template surface |
-| `caws scaffold` | Added CAWS components to existing project | Folded into `caws init`'s idempotent re-init flow |
 | `caws mode` | Complexity-tier management | Not present in v11.1 |
 | `caws tutorial` | Interactive guided learning | Doc-driven now |
 | `caws plan` | Implementation-plan generation | Not present in v11.1 |

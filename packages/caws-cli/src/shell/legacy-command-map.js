@@ -742,8 +742,90 @@ const LEGACY_COMMAND_MAP = Object.freeze([
   }),
 ]);
 
+// Index the map by command string for O(1) prefix probing.
+const MAP_BY_COMMAND = new Map(LEGACY_COMMAND_MAP.map((e) => [e.command, e]));
+
+/**
+ * Classify an argv tail against the legacy command map using LONGEST-PREFIX
+ * matching over the full (possibly multi-token) command strings.
+ *
+ * Pure function. No IO. No execution. No dispatch. Given the argv that
+ * Commander could not resolve, it returns the matching LEGACY_COMMAND_MAP
+ * entry whose `command` is the longest space-joined prefix of argv, or null
+ * if no legacy entry matches.
+ *
+ * Examples (with LEGACY_COMMAND_MAP holding both "sidecar" and
+ * "sidecar gaps"):
+ *   classifyLegacyCommand(['sidecar', 'gaps'])  -> the "sidecar gaps" entry
+ *   classifyLegacyCommand(['sidecar', 'xyzzy']) -> the "sidecar" entry
+ *   classifyLegacyCommand(['sidecar'])          -> the "sidecar" entry
+ *   classifyLegacyCommand(['statuz'])           -> null (genuine typo;
+ *                                                  caller falls back to the
+ *                                                  fuzzy suggester)
+ *
+ * @param {string[]} argv - command tokens (e.g. process.argv.slice(2)),
+ *   options included; options are ignored for matching since legacy command
+ *   strings never contain leading-dash tokens.
+ * @returns {object|null} a frozen LEGACY_COMMAND_MAP entry, or null.
+ */
+function classifyLegacyCommand(argv) {
+  if (!Array.isArray(argv) || argv.length === 0) return null;
+  // Drop option tokens (anything starting with '-') from the candidate
+  // prefix; legacy command names are positional words only.
+  const words = [];
+  for (const tok of argv) {
+    if (typeof tok !== 'string') break;
+    if (tok.startsWith('-')) break;
+    words.push(tok);
+  }
+  if (words.length === 0) return null;
+  // Try the longest prefix first, shrinking by one token until a match.
+  for (let n = words.length; n >= 1; n--) {
+    const candidate = words.slice(0, n).join(' ');
+    const entry = MAP_BY_COMMAND.get(candidate);
+    if (entry) return entry;
+  }
+  return null;
+}
+
+/**
+ * Build the operator-facing diagnostic lines for a classified legacy
+ * command entry. Pure: returns an array of strings, prints nothing.
+ *
+ * The shape is driven by the entry's runtimeDiagnostic.kind:
+ *   - removed   -> "removed in v11" message, no "use" guidance expected
+ *   - replaced  -> message + "Use instead:" lines from runtimeDiagnostic.use
+ *   - renamed   -> message + "Use instead:" lines
+ *   - deferred  -> "deferred" message + optional workaround "use" lines
+ *   - shipped   -> message (a deferred-in-doc-but-actually-shipped command;
+ *                  rare on the unknown-command path since shipped commands
+ *                  resolve in Commander, but handled for completeness)
+ *
+ * Always appends the doc anchor from sourceDocs[0] as a "See:" line.
+ *
+ * @param {object} entry - a LEGACY_COMMAND_MAP entry.
+ * @returns {string[]} diagnostic lines, in print order.
+ */
+function formatLegacyDiagnostic(entry) {
+  if (!entry || !entry.runtimeDiagnostic) return [];
+  const diag = entry.runtimeDiagnostic;
+  const lines = [diag.message];
+  if (Array.isArray(diag.use) && diag.use.length > 0) {
+    lines.push('Use instead:');
+    for (const u of diag.use) {
+      lines.push(`  ${u}`);
+    }
+  }
+  if (Array.isArray(entry.sourceDocs) && entry.sourceDocs.length > 0) {
+    lines.push(`See: ${entry.sourceDocs[0]}`);
+  }
+  return lines;
+}
+
 module.exports = {
   SCHEMA_VERSION,
   V11_REGISTERED_GROUPS,
   LEGACY_COMMAND_MAP,
+  classifyLegacyCommand,
+  formatLegacyDiagnostic,
 };
