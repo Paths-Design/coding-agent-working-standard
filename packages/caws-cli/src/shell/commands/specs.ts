@@ -169,19 +169,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
   const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
   out(`created ${outcome.id} at ${relSpecPath} (lifecycle_state: active)`);
-  // CAWS-SPECS-CONTRACTS-WARNING-PORT-001: feature specs default to
-  // `contracts: []`, which is a known schema-vs-practice gap. Emit a
-  // non-fatal warning so the author remembers to add a contract entry
-  // via `caws specs update <id>`. The warning does NOT include the
-  // on-disk path — keeps the message portable. Non-feature modes
-  // (refactor/fix/doc/chore) do not require contracts and stay silent.
-  if (opts.mode === 'feature') {
-    err(
-      `⚠  Spec ${outcome.id} has mode=feature but no contracts. ` +
-        `mode=feature without contracts is discouraged — ` +
-        `run 'caws specs update ${outcome.id}' to add a contract reference.`
-    );
-  }
   // CAWS-FIRST-CONTACT-UX-001 A4: the spec ships with TODO placeholders
   // in scope.in. Until those are replaced with real file paths, scope-guard
   // will reject every edit because no path is admitted. New users hit
