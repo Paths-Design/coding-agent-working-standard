@@ -1563,10 +1563,8 @@ function autoActivateBoundSpec(root, specId, specPathOverride = null) {
  * Flip a spec's status to `closed` by rewriting just the `status:` line.
  * Accepts both `draft` and `active` as source states — merge is the
  * authoritative "work done" signal regardless of whether the spec ever
- * transitioned through active. AC verification is not run here; the
- * v10 verify-acs surface was removed in v11.0. The acsPassing / ac* fields
- * remain on the return shape (defaulted to null / 0 / []) for backward
- * compatibility with callers that read them.
+ * transitioned through active. Runs verify-acs in collect-only mode
+ * before the flip and returns AC health so the caller can warn.
  * @param {string} root - Repo root
  * @param {string} specId - Spec identifier (e.g. CAWSFIX-14)
  * @returns {{specId: string|null, acsPassing: boolean|null, acsFailureCount: number, acsTotal: number, acsFailureIds: string[]}}
@@ -1590,6 +1588,24 @@ function autoCloseBoundSpec(root, specId) {
     if (/^status:[ \t]*closed[ \t]*$/m.test(original)) {
       result.specId = specId;
       return result;
+    }
+    // Run verify-acs in collect-only mode before flipping. Never throws —
+    // any error (missing tests, unavailable runner, malformed spec) leaves
+    // acsPassing: null so the caller knows verification didn't run.
+    try {
+      const yaml = require('js-yaml');
+      const { verifySpec } = require('../commands/verify-acs');
+      const parsed = yaml.load(original);
+      if (parsed && typeof parsed === 'object') {
+        const verdict = verifySpec(parsed, root, { run: false });
+        const fails = (verdict.results || []).filter((r) => r.status === 'FAIL');
+        result.acsTotal = (verdict.results || []).length;
+        result.acsFailureCount = fails.length;
+        result.acsFailureIds = fails.map((r) => r.id);
+        result.acsPassing = fails.length === 0;
+      }
+    } catch {
+      // verify-acs unavailable — don't block close
     }
     // Flip status. Accept both draft and active as source so specs that
     // never transitioned through active (D6 pre-CAWSFIX-23 drift) still close.
