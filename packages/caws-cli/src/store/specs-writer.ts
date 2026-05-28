@@ -38,6 +38,7 @@ import {
 } from '@paths.design/caws-kernel';
 
 import { appendEvent, loadEvents } from './events-store';
+import { loadSpecs } from './specs-store';
 import {
   autoCommit,
   isPathDirty,
@@ -50,7 +51,6 @@ import {
 import { withLifecycleLock } from './lifecycle-lock';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
-import { loadSpecs } from './specs-store';
 import {
   insertTopLevelScalarAfter,
   removeTopLevelScalar,
@@ -124,6 +124,20 @@ function specRelPath(
   repoRoot: string
 ): string {
   return path.relative(repoRoot, specPath(cawsDir, id));
+}
+function hasComplexTopLevelValue(source: string, key: string): boolean {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = source.match(new RegExp(`^${escapedKey}:(.*)$`, 'm'));
+  if (match === null) return false;
+  const rest = (match[1] ?? '').trim();
+  return (
+    rest === '' ||
+    rest.startsWith('#') ||
+    rest.startsWith('|') ||
+    rest.startsWith('>') ||
+    rest.startsWith('{') ||
+    rest.startsWith('[')
+  );
 }
 function archivedSpecPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', '.archive', `${id}.yaml`);
@@ -573,9 +587,11 @@ export function closeSpec(
     const escaped = `'${input.reason.replace(/'/g, "''")}'`;
     const hasNotes = /^closure_notes:/m.test(patched);
     if (hasNotes) {
-      const step3 = setTopLevelScalar(patched, 'closure_notes', escaped);
-      if (!step3.ok) return err(step3.errors);
-      patched = step3.value;
+      if (!hasComplexTopLevelValue(patched, 'closure_notes')) {
+        const step3 = setTopLevelScalar(patched, 'closure_notes', escaped);
+        if (!step3.ok) return err(step3.errors);
+        patched = step3.value;
+      }
     } else {
       const step3 = insertTopLevelScalarAfter(
         patched,

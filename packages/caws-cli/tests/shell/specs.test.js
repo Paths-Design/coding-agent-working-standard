@@ -157,6 +157,37 @@ describe('A2: create refusals', () => {
     expect(r.stderr).toMatch(/invalid --risk-tier/);
   });
 
+  it('batches missing create options with a copyable v11 invocation shape', () => {
+    const r = capture(runSpecsCreateCommand, {
+      cwd: repoRoot,
+      id: 'MISSING-001',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(
+      /missing required options: --title, --mode, --risk-tier/
+    );
+    expect(r.stderr).toMatch(
+      /caws specs create <id> --title "<short title>" --mode <feature\|refactor\|fix\|doc\|chore> --risk-tier <1\|2\|3>/
+    );
+    expect(r.stderr).toMatch(/--type is not supported in v11/);
+    expect(r.stderr).toMatch(/Risk tier 3 is appropriate/);
+    expect(r.stderr).toMatch(/replace TODOs in scope\.in/);
+  });
+
+  it('refuses legacy --type with explicit --mode guidance', () => {
+    const r = capture(runSpecsCreateCommand, {
+      cwd: repoRoot,
+      id: 'TYPE-001',
+      title: 't',
+      mode: 'feature',
+      riskTier: 3,
+      legacyType: 'feature',
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/--type is not supported in v11/);
+    expect(r.stderr).toMatch(/Use --mode instead/);
+  });
+
   it('refuses an invalid spec id pattern', () => {
     const r = capture(runSpecsCreateCommand, {
       cwd: repoRoot,
@@ -496,6 +527,25 @@ describe('CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001: --resolution defaults to comp
     // Post-fix: optional with default 'completed'.
     expect(resolutionOpt.mandatory).toBe(false);
     expect(resolutionOpt.defaultValue).toBe('completed');
+  });
+
+  it('specs create options are parsed by the action layer for batched diagnostics', () => {
+    const program = new Command();
+    program.exitOverride();
+    program.name('caws').version('test');
+    registerShellCommands(program, { exit: () => {} });
+    const specsCmd = program.commands.find((c) => c.name() === 'specs');
+    const createCmd = specsCmd.commands.find((c) => c.name() === 'create');
+
+    for (const long of ['--title', '--mode', '--risk-tier']) {
+      const opt = createCmd.options.find((o) => o.long === long);
+      expect(opt).toBeDefined();
+      expect(opt.mandatory).toBe(false);
+    }
+
+    const typeOpt = createCmd.options.find((o) => o.long === '--type');
+    expect(typeOpt).toBeDefined();
+    expect(typeOpt.mandatory).toBe(false);
   });
 
   it('Commander populates opts.resolution with "completed" when --resolution is omitted', () => {

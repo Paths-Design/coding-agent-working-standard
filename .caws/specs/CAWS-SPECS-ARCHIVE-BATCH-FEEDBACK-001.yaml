@@ -1,0 +1,243 @@
+id: CAWS-SPECS-ARCHIVE-BATCH-FEEDBACK-001
+title: 'caws specs archive: --filter/--all-closed batch selector with dry-run, JSON schema, and chain-verified summary'
+risk_tier: 2
+mode: chore
+lifecycle_state: active
+worktree: archive-batch-feedback
+created_at: '2026-05-28T21:41:56.808Z'
+updated_at: '2026-05-28T21:41:56.808Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/schemas/specs-archive-batch.schema.json
+    - packages/caws-cli/tests/shell/specs-archive-batch.test.js
+    - packages/caws-cli/tests/store/specs-archive-batch-selector.test.js
+    - .caws/specs/CAWS-SPECS-ARCHIVE-BATCH-FEEDBACK-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+invariants:
+  - >-
+    Only specs whose on-disk `lifecycle_state` is `closed` are ever selectable
+    by `--filter`/`--all-closed`. The selector intersects the id-glob match with
+    a hard `lifecycle_state == closed` floor read from the spec YAML on disk.
+    An active or draft spec MUST NOT be archivable via the batch selector under
+    any pattern, including `--filter '*'` / `--all-closed`. This is the
+    in-flight-work-protection invariant: a batch archive can never clobber a
+    spec another session is actively working.
+  - >-
+    The selector resolves the closed-set from a FILESYSTEM SCAN of the canonical
+    `.caws/specs/*.yaml` directory (resolved via `git rev-parse
+    --git-common-dir`, NOT worktree-local cwd), parsing each file's
+    `lifecycle_state` field. It MUST NOT derive the set from a registry or any
+    cached/derived status view. Rationale: the batch-archive command is a
+    cleanup tool whose value is catching files that drifted out of sync with
+    tooling (manual edits, half-completed ops, foreign-session writes). A
+    derived view would hide exactly the drifted-but-real `closed` files the
+    command should surface. There is no `registry.json` in v11; registry sync is
+    an explicit non-goal.
+  - >-
+    The matched closed-set is SNAPSHOTTED at invocation time and the batch
+    operates ONLY on that frozen list. Specs that become `closed` after the
+    snapshot (e.g. a concurrent session closes one mid-run) MUST NOT be added to
+    the batch. The snapshot is the contract: the set previewed by the dry-run is
+    exactly the set `--apply` attempts to archive.
+  - >-
+    Each snapshot item is independently re-validated under its own per-item lock
+    at the moment it is archived: the command re-reads the spec's
+    `lifecycle_state` and archives only if it is still `closed`. If the item
+    drifted between snapshot and apply (no longer `closed`, already archived,
+    deleted, or otherwise changed), that item is recorded in `skipped[]` with
+    its observed state and the batch CONTINUES (first-to-touch-wins, per-item
+    skip). The command MUST NOT whole-batch abort on drift — partially-completed
+    work stays committed and the remaining valid items are still archived.
+  - >-
+    The event log is written PER ITEM under the existing single-archive
+    interprocess lock (acquire -> re-validate closed -> append one
+    `spec_archived` event -> release), reusing the locked single-id primitive.
+    The batch MUST NOT introduce a "hold one lock across N appends" mode. Foreign
+    events from concurrent sessions MAY interleave between the batch's items;
+    this is acceptable because hash-chain integrity depends on append order, not
+    contiguity — each append re-reads the current chain tail under its own lock,
+    so `prev_hash` linkage stays correct. No foreign session is starved of the
+    event log for the batch duration.
+  - >-
+    Dry-run is the DEFAULT (no `--apply` flag). Dry-run is read-only and
+    lock-free: it MUST NOT acquire the writer lock, append events, or move any
+    file. Dry-run output renders the same per-item lines a live run would
+    produce, wrapped in explicit `===== DRY RUN =====` / `===== /DRY RUN =====`
+    fences, and closes with the exact copy-pasteable `--apply` command (echoing
+    the same selector). Any issue detectable read-only at snapshot time (e.g. an
+    unparseable matched file) is printed inline within the fenced block.
+  - >-
+    The `--json` output validates against the persisted JSON Schema at
+    `packages/caws-cli/src/shell/schemas/specs-archive-batch.schema.json`. The
+    envelope carries: `ok`, `dryRun`, `selector` (the filter/all-closed inputs),
+    `snapshot` (matched count + resolvedAt ISO-8601), three disjoint arrays
+    `archived` / `skipped` / `failed`, `events` (before / after / appended
+    counts), and `chainOk` (boolean chain-verification verdict). `archived`
+    entries carry id + archive path; `skipped` entries carry id + reason +
+    observed state; `failed` entries carry id + reason.
+  - >-
+    Exit code and `ok` are STRICT: `ok: true` and exit 0 ONLY when every
+    snapshot item was archived and both `skipped[]` and `failed[]` are empty. If
+    EITHER `skipped[]` OR `failed[]` is non-empty, `ok: false` and the process
+    exits non-zero. A skip is a non-archive the caller requested and MUST be
+    surfaced to scripts/CI, not silently treated as success.
+acceptance:
+  - id: A1
+    given: |
+      A canonical .caws/specs/ containing a mix of lifecycle_state values:
+      several `closed`, at least one `active`, at least one `draft`.
+    when: |
+      `caws specs archive --all-closed` (no --apply) is invoked.
+    then: |
+      Output is wrapped in `===== DRY RUN =====` / `===== /DRY RUN =====`
+      fences, lists exactly the closed specs (sorted, with a count header),
+      EXCLUDES every active and draft spec, mutates nothing on disk (no file
+      moved, events.jsonl line count unchanged), exits 0, and prints the exact
+      `caws specs archive --all-closed --apply` command to run for real.
+  - id: A2
+    given: |
+      Same fixture as A1.
+    when: |
+      `caws specs archive --filter 'CLI-*' --apply` is invoked and all matched
+      CLI-* specs are `closed`.
+    then: |
+      Each matched closed spec is moved to .caws/specs/.archive/ and gets
+      exactly one appended `spec_archived` event. A non-closed spec whose id
+      matches `CLI-*` (if any) is NOT archived. The summary footer reports
+      `archived N/N`, `events before->after (+N)`, and `chainOk: true`. Exit 0.
+      verifyChain over events.jsonl passes after the run.
+  - id: A3
+    given: |
+      A snapshot of closed specs is resolved, and BEFORE apply reaches item X,
+      item X is mutated out-of-band (simulated: its lifecycle_state is changed
+      from `closed` to `archived`, or the file is removed).
+    when: |
+      `caws specs archive --filter '<glob matching X and others>' --apply`
+      runs to completion.
+    then: |
+      Item X is recorded in `skipped[]` with reason naming the drift and the
+      observed state. The OTHER matched closed specs are still archived (no
+      whole-batch abort). `ok: false` and exit is non-zero because `skipped[]`
+      is non-empty. The summary distinguishes archived-count from skipped-count.
+  - id: A4
+    given: |
+      Same fixture as A2, invoked with `--json`.
+    when: |
+      `caws specs archive --filter 'CLI-*' --apply --json` is invoked.
+    then: |
+      Stdout is a single JSON object that validates against
+      packages/caws-cli/src/shell/schemas/specs-archive-batch.schema.json,
+      carries `dryRun: false`, the disjoint archived/skipped/failed arrays, the
+      events before/after/appended counts, and `chainOk: true`. The same
+      invocation without `--apply` produces an object with `dryRun: true` and an
+      empty `archived` array (nothing mutated).
+  - id: A5
+    given: |
+      A linked worktree with the sparse-checkout invariant (.caws/specs/
+      excluded from the worktree filesystem).
+    when: |
+      `caws specs archive --all-closed` (dry-run) is invoked from inside the
+      linked worktree.
+    then: |
+      The selector resolves the closed-set from CANONICAL .caws/specs/ (via
+      git-common-dir), NOT the empty/sparse worktree-local view, and lists the
+      same closed specs a canonical-cwd invocation would. No worktree-local
+      .caws/specs/* file is read or written.
+non_functional:
+  reliability:
+    - >-
+      The per-item archive path reuses the existing locked single-id primitive;
+      the batch adds no new lock mode. A crash mid-batch leaves the event chain
+      consistent at item boundaries (every appended event is fully written under
+      its own lock before the next item begins), so recovery is "re-run; already
+      -archived items are skipped as drift" with no chain repair needed.
+    - >-
+      Caller MUST inspect store-layer outcome `kind`, not just `isOk`: a
+      per-item archive returning `partial_failure_recovered` (rolled-back
+      transaction) is recorded in `failed[]`, NOT `archived[]`. Treating
+      `partial_failure_recovered` as success would over-report archives and
+      corrupt the summary's events-delta reconciliation.
+    - >-
+      The summary footer and `--json` envelope both surface the chain-
+      verification verdict (`chainOk`) and the events before/after/appended
+      delta, so the command proves its own audit integrity without the operator
+      running a separate `wc -l events.jsonl` + verifyChain pass (the manual
+      reconciliation done during the 82-spec cleanup that motivated this slice).
+      (Observability concern folded under reliability per non_functional's
+      four-subkey constraint: accessibility/performance/reliability/security.)
+contracts: []
+closure_notes: |
+  MOTIVATION (maintainer feedback, 2026-05-28):
+
+  During a control-plane-drift cleanup, the maintainer flagged that
+  `.caws/specs/` held 82 closed-but-unarchived specs. Archiving them
+  required a hand-rolled bash loop (`while read id; do caws specs archive
+  "$id"; done`) plus manual verification via `caws status`, `wc -l
+  events.jsonl`, file-count diffing, and a separate chain check — because
+  the single-id `caws specs archive` command:
+    - accepts only one id (no batch / selector),
+    - emits a single line per success and nothing aggregate,
+    - surfaces no chain verdict or events-delta (the operator must
+      reconstruct audit integrity by hand).
+
+  This slice adds a batch selector and self-proving feedback so the same
+  cleanup is one auditable, machine-readable command.
+
+  DESIGN DECISIONS (resolved via grill-me interrogation, 2026-05-28):
+
+    1. Snapshot at invocation; operate only on the frozen list; loud
+       per-item drift error; newly-closed specs are NOT added mid-run.
+    2. Per-item skip on drift, NEVER whole-batch abort. First-to-touch-wins.
+    3. `--filter` is a glob on spec id (== filename stem; verified
+       consistent across the archive dir). Hard floor: only `closed`
+       specs are selectable, protecting in-flight work.
+    4. Selector source is a FILESYSTEM scan of canonical .caws/specs/*.yaml
+       parsing `lifecycle_state` — NOT a derived/registry view — so the
+       cleanup catches drifted-but-real files. No registry.json in v11;
+       registry sync is a non-goal.
+    5. Dry-run by default, fenced `===== DRY RUN =====` output mirroring a
+       live run + the copy-pasteable `--apply` command.
+    6. `--json` schema persisted as a JSON Schema file; disjoint
+       archived/skipped/failed arrays + events delta + chainOk.
+    7. STRICT exit: ok=false / non-zero if skipped OR failed non-empty.
+    8. Per-item lock (reuse single-id primitive); no batch-lock mode.
+       Foreign events may interleave; chain integrity holds via per-append
+       tail re-read.
+
+  PRECEDENT: `caws specs migrate` (CAWS-MIGRATE-V10-SPECS-001) is the
+  in-repo batch shape this mirrors — dry-run default, --apply, --json with
+  separate human/JSON renderers, store-layer delegation returning a
+  structured result. Follow its renderApplyJson / renderApplyHuman split.
+
+  KNOWN DEPENDENCY / RISK: LOCK-INTERPROCESS-HARDEN-001 (draft) flags the
+  interprocess lock is not fully hardened. Per-item locking minimizes
+  exposure (no held-across-N mode) but does not fix the underlying gap; if
+  that lock is found unsafe during implementation, file/reference that spec
+  rather than working around it here.
+
+  NON-GOALS (explicit):
+    - registry.json sync (no registry in v11).
+    - field-based filters (`resolution=`, `--closed-before <date>`) —
+      future follow-up, not v1.
+    - batch-lock / hold-across-N lock mode — rejected.
+    - any change to the spec_archived event schema (kernel) — one event
+      per id, unchanged.
+
+  SCOPE NOTE: `--partial` from the original ask is intentionally OMITTED.
+  Per-item skip is always-on for drift (decision 2), making a separate
+  `--partial` flag redundant for the drift case. If a future need arises to
+  also tolerate hard `partial_failure_recovered` failures without flipping
+  exit code, that is a separate flag and a separate decision.

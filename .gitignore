@@ -456,6 +456,7 @@ public
 .caws/duplication-cache.json
 
 # CAWSFIX-15: agent-session tracking is per-CLI-invocation state, not repo state
+.caws/worktrees.json
 .caws/agents.json
 **/.caws/agents.json
 

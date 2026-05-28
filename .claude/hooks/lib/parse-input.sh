@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 9
+# hook_pack_version: 10
 # caws_min_major: 11
 # lineage_refs: 8,16
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -203,6 +203,38 @@ with open(sys.argv[6], "w") as f:
   }
   mv -f "$tmpfile" "$envelope_path" 2>/dev/null || {
     rm -f "$tmpfile" 2>/dev/null
+    return 0
+  }
+
+  # CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: also write/refresh the per-repo
+  # caller-session pointer at `<repo_root>/tmp/.caller-session.json`. In
+  # agent-Bash, HOOK_SESSION_ID is not in the env, so the resolver cannot
+  # tell which of several fresh sibling envelopes is the caller's. This
+  # pointer names the session that most recently fired a hook in this repo
+  # — the actively-working caller — so the resolver can disambiguate the
+  # >=2-fresh-envelope case to the caller's own envelope. Evidence only:
+  # the resolver treats absent/stale/non-matching pointers as "refuse",
+  # never as a guess. Reuses sid / repo_root / now from above.
+  local pointer_dir="$repo_root/tmp"
+  local pointer_path="$pointer_dir/.caller-session.json"
+  local pointer_tmp="$pointer_dir/.caller-session.tmp.$$"
+  mkdir -p "$pointer_dir" 2>/dev/null || return 0
+  python3 -c '
+import json, sys
+payload = {
+    "session_id": sys.argv[1],
+    "repo_root": sys.argv[2],
+    "last_seen_at": sys.argv[3],
+}
+with open(sys.argv[4], "w") as f:
+    json.dump(payload, f)
+    f.write("\n")
+' "$sid" "$repo_root" "$now" "$pointer_tmp" 2>/dev/null || {
+    rm -f "$pointer_tmp" 2>/dev/null
+    return 0
+  }
+  mv -f "$pointer_tmp" "$pointer_path" 2>/dev/null || {
+    rm -f "$pointer_tmp" 2>/dev/null
     return 0
   }
   return 0

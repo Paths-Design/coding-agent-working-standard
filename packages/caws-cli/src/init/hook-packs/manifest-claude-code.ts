@@ -142,7 +142,22 @@ import type { HookPackV1 } from './types';
 // `caws scope check --explain` exposes the structured detail.
 //
 // No new managed files; no stateModel changes.
-export const CLAUDE_CODE_PACK_VERSION = 9;
+//
+// Version 10: CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001. parse-input.sh now
+// also writes/refreshes a per-repo caller-session pointer at
+// `<repo_root>/tmp/.caller-session.json` (alongside the existing durable
+// envelope). In agent-Bash HOOK_SESSION_ID is absent, so when multiple
+// fresh sibling envelopes match the repo the resolver cannot tell which
+// is the caller's and refuses (then a rotating capsule gets frozen as
+// worktrees.json owner -> own-worktree foreign-claim lockout after
+// rotation/compact). The pointer names the session that most recently
+// fired a hook in this repo; the resolver consumes it ONLY to
+// disambiguate that >=2-fresh-envelope case to the caller's own
+// envelope. Evidence, not authority: absent/stale/malformed/non-matching
+// pointer still refuses. NEVER newest-wins. No new managed files (the
+// pointer is written by the already-shipped parse-input.sh); stateModel
+// gains the pointer write path.
+export const CLAUDE_CODE_PACK_VERSION = 10;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
@@ -170,6 +185,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       '.claude/hooks/state/guard-strikes-*.json',
       '.caws/leases/',
       'tmp/<session-id>/',
+      'tmp/.caller-session.json',
     ],
   },
   lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27],

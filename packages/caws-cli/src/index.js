@@ -24,6 +24,15 @@ const { CLI_VERSION } = require('./config');
 // Import error handling
 const { handleCliError, findSimilarCommand } = require('./error-handler');
 
+// Single authority for the registered v11 command groups (replaces the
+// stale hand-maintained VALID_COMMANDS list) and the legacy-command
+// diagnostic surface (CAWS-REMOVED-COMMAND-DIAGNOSTICS-001).
+const { REGISTERED_COMMAND_GROUPS } = require('./shell/registered-command-groups');
+const {
+  classifyLegacyCommand,
+  formatLegacyDiagnostic,
+} = require('./shell/legacy-command-map');
+
 // v11.0.0 entrypoint. The CLI surface is registered exclusively
 // through `registerShellCommands(program)` further down. All legacy
 // command groups, imports, public exports, and startup side effects
@@ -47,28 +56,43 @@ program.configureHelp({
   showError: () => {},
 });
 
-// v11.0.0 surface: exactly the 8 vNext command groups registered by
-// `registerShellCommands(program)`. Used by `findSimilarCommand` for
-// unknown-command suggestions. Must match `node dist/index.js --help`
-// output (excluding Commander's auto-generated `help` row).
-//
-// Slice 8a3.5 reconciliation: dropped 24 legacy entries removed in
-// 8a3.1–8a3.4 plus the stale `'quality-gates'` alias (alias was
-// removed in slice 6c but the suggester entry was never cleaned).
-// Added the 5 vNext groups that were missing from the suggester:
-// 'agents' (now removed), 'claim', 'doctor', 'evidence',
-// 'test-analysis' (now removed). Final list is exactly the 8 vNext
-// groups currently registered.
-const VALID_COMMANDS = [
-  'claim',
-  'doctor',
-  'evidence',
-  'gates',
-  'init',
-  'scope',
-  'status',
-  'waiver',
-];
+// The unknown-command fuzzy suggester reads REGISTERED_COMMAND_GROUPS
+// (imported above from ./shell/registered-command-groups), the single
+// authority for the registered v11 surface. The previous hand-maintained
+// 8-entry VALID_COMMANDS array was removed in
+// CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: it had drifted to 8 entries while
+// register.ts registers 12 groups, so suggestions never fired for events,
+// specs, worktree, or agents.
+
+// Shared unknown-command handler. First classifies the argv against the
+// legacy v10.2 command map (longest-prefix); if it matches, prints typed
+// migration guidance and exits 1 WITHOUT executing any v11 command (no
+// alias, no shim, no dispatch). If no legacy match, falls back to the
+// fuzzy suggester over REGISTERED_COMMAND_GROUPS for genuine typos.
+function reportUnknownCommand(commandName) {
+  const legacy = classifyLegacyCommand(process.argv.slice(2));
+  if (legacy) {
+    console.error(chalk.red(`\nUnknown command: ${commandName}`));
+    const lines = formatLegacyDiagnostic(legacy);
+    for (const line of lines) {
+      console.error(chalk.yellow(line));
+    }
+    process.exit(1);
+  }
+
+  const similar = findSimilarCommand(commandName, REGISTERED_COMMAND_GROUPS);
+  console.error(chalk.red(`\nUnknown command: ${commandName}`));
+  if (similar) {
+    console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
+  }
+  console.error(chalk.yellow('Run: caws --help for the full command list'));
+  console.error(
+    chalk.blue(
+      '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+    )
+  );
+  process.exit(1);
+}
 
 program.exitOverride((err) => {
   // Handle help and version requests gracefully
@@ -84,23 +108,7 @@ program.exitOverride((err) => {
 
   // Check for unknown command
   if (err.code === 'commander.unknownCommand') {
-    const similar = findSimilarCommand(commandName, VALID_COMMANDS);
-
-    console.error(chalk.red(`\nUnknown command: ${commandName}`));
-
-    if (similar) {
-      console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
-    }
-
-    console.error(chalk.yellow('Run: caws --help for the full command list'));
-    console.error(chalk.yellow('Try: caws --help for full command list'));
-    console.error(
-      chalk.blue(
-        '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
-      )
-    );
-
-    process.exit(1);
+    reportUnknownCommand(commandName);
   }
 
   // Check for unknown option
@@ -161,23 +169,7 @@ if (require.main === module) {
 
     // Check for unknown command
     if (error.code === 'commander.unknownCommand') {
-      const similar = findSimilarCommand(commandName, VALID_COMMANDS);
-
-      console.error(chalk.red(`\nUnknown command: ${commandName}`));
-
-      if (similar) {
-        console.error(chalk.yellow(`\nDid you mean: caws ${similar}?`));
-      }
-
-      console.error(chalk.yellow('Run: caws --help for the full command list'));
-      console.error(chalk.yellow('Try: caws --help for full command list'));
-      console.error(
-        chalk.blue(
-          '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
-        )
-      );
-
-      process.exit(1);
+      reportUnknownCommand(commandName);
     }
 
     // Check for unknown option

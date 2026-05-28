@@ -1,0 +1,161 @@
+id: CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001
+title: 'worktrees.json ownership must resolve to durable harness HOOK_SESSION_ID, not a rotating minted caws-hash capsule; fix resolve-session capsule fallthrough'
+risk_tier: 3
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-ownership-harness-id at d175db9de72c85685a5b941689d3158127edbe2e'
+created_at: '2026-05-28T21:41:23.156Z'
+updated_at: '2026-05-28T22:40:38.459Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - .claude/hooks/lib/parse-input.sh
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001.yaml
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/tests/shell/session/resolve-session.test.js
+    - packages/caws-cli/tests/shell/resolve-session-primitive.test.js
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/shell/caller-session-pointer.test.js
+    - .claude/hooks/lib/parse-input.sh
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+invariants:
+  - >-
+    Governed caller-identity signal, not a timing heuristic. The defect
+    is that in an agent-Bash invocation HOOK_SESSION_ID is NOT in the
+    process environment (the Claude Code hook process has it; the Bash
+    tool subprocess does not). So source 2 (hook_env) is skipped and the
+    resolver reaches the durable-envelope scan with NO caller-identity
+    signal. When two or more fresh envelopes match the repo_root (the
+    normal multi-agent state, each session writing its own
+    tmp/<id>/.session-envelope.json), the resolver cannot tell which is
+    the caller's and refuses (SESSION_DURABLE_ENVELOPE_AMBIGUOUS), then
+    the command layer mints a rotating caws-<hash> capsule and freezes
+    it as worktrees.json owner. The fix INTRODUCES a governed caller
+    identity signal — a hook-written, per-repo, short-lived caller-session
+    pointer — that the resolver consumes to select the caller's own
+    envelope among the fresh set. It is NOT resolver-only and it is NOT
+    newest-wins.
+  - >-
+    NEVER newest-wins is preserved and reinforced. The original
+    durable-envelope spec (CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001)
+    set the invariant that >=2 fresh envelopes must NEVER be
+    disambiguated by recency (resolve-session.ts: "NEVER newest-wins").
+    This slice does not relax that. "Most recent last_seen_at" is
+    scheduler luck, not identity. Disambiguation is permitted ONLY via
+    an explicit caller-identity match (the governed pointer or
+    HOOK_SESSION_ID), never by timestamp ordering. When no explicit
+    caller identity is available, the ambiguity refusal stands.
+  - >-
+    Hook writes the pointer; resolver reads it; neither stamps ownership.
+    The hook (.claude/hooks/lib/parse-input.sh) writes/refreshes a
+    per-repo caller-session pointer from the authoritative hook-payload
+    session_id, alongside the existing durable envelope write. The
+    resolver (resolve-session.ts) reads that pointer ONLY as a
+    disambiguator among already-fresh, already-repo-matched envelope
+    candidates. The pointer does not become a new top-level authority
+    source that bypasses CLAUDE_SESSION_ID/HOOK_SESSION_ID; it resolves
+    ambiguity within source 2.5. worktrees-writer.ts and claim.ts remain
+    in scope.out: this slice fixes WHICH identity the resolver returns,
+    not how callers stamp or compare it.
+  - >-
+    Pointer is evidence, not authority, and degrades safely. An absent,
+    stale, malformed, or non-matching caller-session pointer MUST NOT
+    silently authorize a guess. If the pointer cannot positively name a
+    fresh repo-matching candidate, the >=2-envelope case still refuses
+    with SESSION_DURABLE_ENVELOPE_AMBIGUOUS (existing typed diagnostic).
+    The pointer can only ever NARROW an ambiguous set to the caller's
+    own candidate; it can never widen authority or override the
+    foreign-claim refusal for genuinely different sessions. Stale lease
+    is evidence, never authority (doctrine 6.8) holds.
+  - >-
+    No new top-level source; existing precedence unchanged. The
+    precedence chain (claude_env > hook_env > durable_hook_envelope >
+    capsule > cursor_env > minted) and the ResolvedSession.source
+    discriminator are unchanged. hook_env still early-returns before any
+    scan when HOOK_SESSION_ID is set. The caller-session pointer operates
+    strictly inside the durable_hook_envelope (2.5) branch as the
+    ambiguity disambiguator. Minting (source 5) remains the last-resort
+    for genuine non-hook contexts (bare terminal, CI) and is not
+    removed or further gated by this slice.
+acceptance:
+  - id: A1
+    given: >-
+      A hook fire with an authoritative session_id in the hook payload,
+      in a repo with a tmp/ directory.
+    when: parse-input.sh runs its envelope/pointer write step.
+    then: >-
+      The hook writes/refreshes a per-repo caller-session pointer naming
+      that session_id (alongside the existing durable envelope write),
+      skipping the write when the session_id is missing or the literal
+      'unknown' (consistent with the resolver refusing 'unknown').
+  - id: A2
+    given: >-
+      Agent-Bash environment with HOOK_SESSION_ID UNSET, two or more
+      fresh repo-matching durable envelopes on disk, and a fresh
+      caller-session pointer naming exactly one of those envelope
+      session_ids.
+    when: resolveSession runs (source 2 skipped; source 2.5 scan reached).
+    then: >-
+      The resolver returns ok with source durable_hook_envelope and
+      identity.session_id equal to the pointer-named candidate — NOT the
+      SESSION_DURABLE_ENVELOPE_AMBIGUOUS error. This is the load-bearing
+      proof the lockout is fixed: the caller resolves to its own
+      envelope even with sibling envelopes present and no env signal.
+  - id: A3
+    given: >-
+      Two or more fresh repo-matching envelopes and a caller-session
+      pointer that is absent, stale, malformed, or names a session_id
+      that is not among the fresh candidates.
+    when: resolveSession runs.
+    then: >-
+      The resolver still returns the SESSION_DURABLE_ENVELOPE_AMBIGUOUS
+      typed error. The pointer narrows only to a positively-matched
+      caller candidate; it never papers over ambiguity by guessing, and
+      never falls back to newest-wins.
+  - id: A4
+    given: Exactly one fresh repo-matching envelope (single-agent case).
+    when: resolveSession runs, with or without a caller-session pointer.
+    then: >-
+      The resolver returns ok with source durable_hook_envelope and that
+      envelope's session_id — unchanged behavior, no regression to the
+      single-candidate accept path.
+  - id: A5
+    given: HOOK_SESSION_ID is set and non-empty (and not 'unknown').
+    when: resolveSession runs.
+    then: >-
+      Source 2 (hook_env) returns immediately with that id before any
+      envelope scan or pointer read — precedence unchanged. No
+      newest-wins fallback is introduced anywhere in the chain.
+  - id: A6
+    given: >-
+      The implementation of this slice across the hook and resolver.
+    when: the diff is reviewed against scope.
+    then: >-
+      No change is made to worktrees-writer.ts (owner stamp) or claim.ts
+      (ownership comparison) — they remain in scope.out. The slice
+      changes only the hook's pointer write and the resolver's
+      ambiguity-disambiguation read.
+non_functional:
+  reliability:
+    - >-
+      The fix removes a recurring multi-agent failure mode (own-session
+      foreign-claim lockout after capsule rotation / compact) by giving
+      the resolver a governed caller-identity signal in the agent-Bash
+      context where HOOK_SESSION_ID is unavailable — without relaxing the
+      foreign-claim refusal for genuinely different sessions and without
+      introducing a recency heuristic. Observability of which source
+      resolved (ResolvedSession.source) is retained so caws status
+      continues to report the resolution path.
+contracts: []

@@ -581,23 +581,34 @@ export function registerShellCommands(
   specsCmd
     .command('create <id>')
     .description('Create a new spec in lifecycle_state: active.')
-    .requiredOption('--title <title>', 'Short spec title')
-    .requiredOption(
+    .option('--title <title>', 'Short spec title')
+    .option(
       '--mode <mode>',
       'Spec mode: feature | refactor | fix | doc | chore'
     )
-    .requiredOption('--risk-tier <n>', 'Risk tier: 1, 2, or 3')
+    .option('--risk-tier <n>', 'Risk tier: 1, 2, or 3')
+    .option(
+      '--type <type>',
+      'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead'
+    )
     .option('--data', 'Show structured data block on diagnostics')
     .action(
       (
         id: string,
-        opts: { title: string; mode: string; riskTier: string; data?: boolean }
+        opts: {
+          title?: string;
+          mode?: string;
+          riskTier?: string;
+          type?: string;
+          data?: boolean;
+        }
       ) => {
         const code = runSpecsCreateCommand({
           id,
-          title: opts.title,
-          mode: opts.mode,
-          riskTier: opts.riskTier,
+          ...(opts.title !== undefined ? { title: opts.title } : {}),
+          ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+          ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
+          ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           showData: opts.data === true,
         });
         exit(code);

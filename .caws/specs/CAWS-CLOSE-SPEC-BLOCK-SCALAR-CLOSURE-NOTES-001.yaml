@@ -1,0 +1,189 @@
+id: CAWS-CLOSE-SPEC-BLOCK-SCALAR-CLOSURE-NOTES-001
+title: 'caws specs close (and worktree-merge auto-close) refuses when closure_notes is a pre-authored multi-line block scalar'
+risk_tier: 3
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge close-block-scalar-notes at cf8fda8fada6e675d84901648aeae245515ff0ad'
+created_at: '2026-05-28T21:15:00.000Z'
+updated_at: '2026-05-28T22:02:53.407Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/yaml-patch.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - .caws/specs/CAWS-CLOSE-SPEC-BLOCK-SCALAR-CLOSURE-NOTES-001.yaml
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/store/specs-writer-close.test.js
+  out:
+    - .caws/policy.yaml
+    - packages/caws-cli/src/store/yaml-patch.ts
+invariants:
+  - >-
+    Closing a spec MUST succeed when the spec already carries a
+    hand-authored multi-line block-scalar `closure_notes:` field. An
+    agent that authored rich per-AC closure notes in the YAML before
+    invoking `caws specs close` (or `caws worktree merge`) must not be
+    punished with a rolled-back close transaction.
+  - >-
+    `caws worktree merge` MUST NOT leave the system in
+    `store.lifecycle.partial_failure_unrecovered` (merge committed, spec
+    still active) because of a block-scalar `closure_notes`. The merge
+    and the close are composed; a close failure for this reason strands
+    the operator with a merged branch and an un-closed spec.
+acceptance:
+  - id: A1
+    given: >-
+      An active spec whose YAML already contains a multi-line block-scalar
+      `closure_notes: |` field authored by hand before closure.
+    when: |
+      The operator runs `caws specs close <id> --resolution completed
+      --reason "<text>"`.
+    then: |
+      The close succeeds. Either the existing block-scalar closure_notes
+      is preserved and the --reason is recorded on the spec_closed event
+      only, OR the --reason is appended/merged into the existing notes
+      without a raw-byte scalar-replacement refusal. The close MUST NOT
+      roll back with store.yaml_patch.ambiguous
+      ("...has a multi-line value (block scalar, nested mapping, or
+      unclosed flow); refusing scalar replacement").
+  - id: A2
+    given: >-
+      The same spec state as A1, bound to a worktree, with the worktree
+      branch ready to merge.
+    when: |
+      The operator runs `caws worktree merge <name>` (which composes
+      mergeWorktree → closeSpec, and may pass a reason).
+    then: |
+      The merge commits AND the spec is closed in one operation. The
+      result is NOT store.lifecycle.partial_failure_unrecovered. If the
+      close genuinely cannot proceed, the merge must surface a clear
+      recovery instruction rather than a buried scalar-patch error.
+  - id: A3
+    given: >-
+      An active spec with NO existing closure_notes field.
+    when: |
+      The operator runs `caws specs close <id> --resolution completed
+      --reason "<text>"`.
+    then: |
+      The existing behavior is preserved: closure_notes is inserted as a
+      single-line scalar after resolution and the close succeeds. This
+      regression-guards the happy path the current insert branch handles.
+  - id: A4
+    given: >-
+      An active spec WITH an existing block-scalar closure_notes, closed
+      WITHOUT --reason.
+    when: |
+      The operator runs `caws specs close <id> --resolution completed`
+      (no --reason).
+    then: |
+      The close succeeds and the block-scalar closure_notes is preserved
+      verbatim. (This is the current operator workaround; it must remain
+      valid and is the regression anchor for the "preserve existing
+      notes" path.)
+  - id: A5
+    given: >-
+      `caws worktree merge <name>` commits the merge but auto-close fails
+      on an existing block-scalar closure_notes field.
+    when: |
+      The command returns to the caller.
+    then: |
+      The process exit status MUST be non-zero. A printed
+      `caws worktree merge: failed.` diagnostic must not be paired with
+      shell-visible success. Agents routinely script this command and
+      branch on exit status; false success hides the stranded active spec
+      and skipped cleanup.
+non_functional:
+  reliability:
+    - >-
+      Failure-mode: composed-transaction strand. The defect is in
+      closeSpec() at packages/caws-cli/src/store/specs-writer.ts:572-589.
+      When `input.reason` is non-empty AND the spec already has a
+      `closure_notes:` key (hasNotes === true), closeSpec calls
+      setTopLevelScalar(patched, 'closure_notes', escaped). That helper
+      (packages/caws-cli/src/store/yaml-patch.ts:203) refuses with
+      "Top-level key \"closure_notes\" has a multi-line value (block
+      scalar, nested mapping, or unclosed flow); refusing scalar
+      replacement" whenever the existing value is a block scalar. The
+      refusal rolls back the entire close transaction. Via the composed
+      mergeWorktree → closeSpec path this produces
+      store.lifecycle.partial_failure_unrecovered: the worktree branch is
+      already merged (commit lands) but the spec remains active.
+    - >-
+      This is the SAME failure class already fixed for `updated_at` in
+      this very function under CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001
+      (specs-writer.ts:591-602). That fix added a has*-check +
+      insert-or-update fallback so a missing optional field would not roll
+      back the close. The closure_notes branch needs the analogous
+      hardening for the block-scalar case: when hasNotes is true and the
+      existing value is a block scalar, do NOT attempt a scalar
+      replacement. Recommended treatments (pick in the fix slice):
+      (a) when an existing block-scalar closure_notes is present, skip the
+      YAML write entirely and record --reason only on the spec_closed
+      event (closure_notes already carries the durable detail); or
+      (b) detect the block-scalar case and append the reason as an
+      additional block-scalar line rather than replacing the scalar; or
+      (c) teach setTopLevelScalar / add a setTopLevelBlockScalar variant
+      that can safely rewrite a block-scalar value. Option (a) is the
+      smallest correct fix and matches how agents actually use the field
+      (rich notes in YAML, short reason on the event).
+    - >-
+      Reproduction (observed 2026-05-28 in the Sterling consumer repo,
+      caws-cli v11.1.6, TWICE in one session — both
+      STERLING-PYRIGHT-FLOOR-REALIZATION-LEXICONAUGMENT-CAPSULE-01 and
+      STERLING-PYRIGHT-FLOOR-REALIZATION-INTRACAPSULE-FORWARD-REFS-01):
+      author a multi-line `closure_notes: |` block in the spec YAML, then
+      run `caws worktree merge <name>`. The merge commits; the auto-close
+      fails with partial_failure_unrecovered. Operator workaround that
+      DID work: verify the merge SHA, then
+      `caws specs close <id> --resolution completed --merge-commit <sha>`
+      WITHOUT --reason (the no-reason path never enters the closure_notes
+      branch at all), then destroy the worktree and delete the branch
+      manually (the merge's auto-cleanup also did not run because the
+      close failed).
+    - >-
+      Additional reproduction (observed 2026-05-28 in the Sterling
+      consumer repo, third hit in the same session):
+      `caws worktree merge postimagechecker-contravariance-01` printed
+      `caws worktree merge: failed.` and
+      `store.lifecycle.partial_failure_unrecovered: Merge succeeded
+      (commit adfd281195bf2d0e6e5cc7d0a9f74414c89dab8e) but spec close
+      failed. The bound spec remains active.` The operator then verified
+      implementation commit 678710f93 was an ancestor of HEAD and applied
+      the known recovery:
+      `caws specs close
+      STERLING-PYRIGHT-POSTIMAGECHECKER-PROTOCOL-CONTRAVARIANCE-01
+      --resolution completed --merge-commit
+      adfd281195bf2d0e6e5cc7d0a9f74414c89dab8e` (no --reason), which
+      closed successfully. The transcript also showed `=== exit: 0 ===`
+      after the failed merge pipeline, so the fix slice should verify
+      both the close hardening and the command's failure exit status.
+contracts: []
+# --------------------------------------------------------------------------
+# History
+# --------------------------------------------------------------------------
+#
+# 2026-05-28: Spec created in lifecycle_state: draft (parking state).
+#   Surfaced in the Sterling consumer repo (caws-cli v11.1.6) during two
+#   consecutive pyright-floor refactor slices. Both authored rich block-scalar
+#   closure_notes in the spec YAML before merging; both hit
+#   store.lifecycle.partial_failure_unrecovered on `caws worktree merge`
+#   (merge committed, spec left active). Root-caused to closeSpec()
+#   specs-writer.ts:572-589 calling setTopLevelScalar on an existing
+#   block-scalar closure_notes, which yaml-patch.ts:203 refuses.
+#   Same failure class as the already-fixed CAWS-MERGE-CLOSE-MISSING-
+#   UPDATED-AT-001 (specs-writer.ts:591-602) — apply the analogous
+#   has*-check + safe-fallback hardening to the closure_notes branch.
+#   Operator workaround: close WITHOUT --reason (no-reason path skips the
+#   closure_notes write), then manual worktree+branch teardown.
+#
+# 2026-05-28: Third reproduction added from Sterling:
+#   postimagechecker-contravariance-01 merged at adfd281195bf2d0e6e5cc7d0a9f74414c89dab8e,
+#   auto-close failed with partial_failure_unrecovered, manual no-reason
+#   close succeeded. Transcript also exposed a separate but adjacent
+#   contract hazard: failed merge output was followed by shell-visible
+#   `exit: 0`; this spec now requires a non-zero process status whenever
+#   worktree merge reports failed.

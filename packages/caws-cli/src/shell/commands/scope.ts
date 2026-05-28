@@ -67,13 +67,47 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     return 2;
   }
 
-  // 3. Binding from cwd
+  // 3. Binding — resolved from the TARGET PATH, not just cwd
+  //    (SCOPE-CHECK-CWD-BINDING-RESOLUTION-001). Passing `targetPath` lets
+  //    resolveBinding fall back to the path's owning worktree / claiming
+  //    spec when cwd is the main checkout, so `caws scope check <path>` is
+  //    cwd-independent and matches what the bound author sees.
   const bound = resolveBinding({
     repoRoot,
     cwd,
+    targetPath: opts.path,
     registry: snapshot.worktrees,
     specs: snapshot.specs,
   });
+
+  // 3a. Refuse-on-conflict: more than one active bound spec claims this path.
+  //     Authority is ambiguous; we do NOT guess. Emit an actionable refusal
+  //     that names every claimant, the inspect commands, and the resolution
+  //     options, then exit non-zero (check) / 0 with the detail (show).
+  if (bound.ambiguous !== undefined) {
+    const { targetPath, claimants } = bound.ambiguous;
+    const cwdClaimant =
+      bound.worktreeName !== undefined
+        ? claimants.find((c) => c.worktreeName === bound.worktreeName)
+        : undefined;
+    err(`caws scope ${mode}: ambiguous binding for "${targetPath}".`);
+    err(
+      `  ${claimants.length} active bound specs claim this path via scope.in; CAWS will not guess which governs:`
+    );
+    for (const c of claimants) {
+      const here = cwdClaimant !== undefined && c.specId === cwdClaimant.specId ? ' (current cwd/session)' : '';
+      err(`    - ${c.specId} (worktree ${c.worktreeName}) via scope.in "${c.matchedScopeInEntry}"${here}`);
+    }
+    err('  Inspect each claimant:');
+    for (const c of claimants) {
+      err(`    caws specs show ${c.specId}`);
+    }
+    err('  Resolve by EITHER:');
+    err('    (a) narrowing one spec\'s scope.in so only one claims this path, OR');
+    err('    (b) routing the edit through the single worktree that should own it');
+    err('        and removing the path from the other spec\'s scope.in.');
+    return 1;
+  }
 
   // 4. Require a loaded policy. Without it, the kernel can't evaluate
   //    non_governed_zones / root_passthrough / infra exemptions, and the
