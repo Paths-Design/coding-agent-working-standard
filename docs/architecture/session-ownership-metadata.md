@@ -1,9 +1,60 @@
 # Session ownership metadata — design note
 
-Status: draft (pre-activation review for `SESSION-OWNERSHIP-METADATA-001`)
-Date: 2026-05-22
+Status: implemented (post-doctrinal-amendment)
+Date: 2026-05-22 (original), amended 2026-05-28
 Spec: `.caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml`
 Related: `MULTI-AGENT-PUSH-RANGE-GUARD-001`, `WORKING-TREE-PROVENANCE-GUARD-001`, `MULTI-AGENT-HANDOFF-EVENT-001`
+
+> **Doctrinal amendment 2026-05-28 — substrate pivot (READ FIRST).**
+>
+> This document was authored 2026-05-22 against the `AgentRecord` /
+> `.caws/agents.json` substrate. The very next day,
+> `MULTI-AGENT-ACTIVITY-REGISTRY-001` closed and FROZE `.caws/agents.json`:
+> no new fields, no new readers, no new writers. The product requirement
+> (mechanically readable session ownership metadata) is unchanged, but
+> the **substrate is now the per-session `AgentLease` records** at
+> `.caws/leases/<safe-session-id>.json`, written via the kernel's
+> `updateAgentLeasePaths` and the store's `applyLeasePatch`.
+>
+> **What this means for any reader of the body below:**
+>
+> - Wherever this document says "extend `AgentRecord`", read "extend
+>   `AgentLease`" (declared at
+>   `packages/caws-kernel/src/worktree/leases.ts`).
+> - Wherever it says "agents.json", read
+>   "`.caws/leases/<safe-session-id>.json`".
+> - Wherever it says "`isAgentRecord` predicate", treat that as
+>   **WITHDRAWN**. The wrong-substrate Commit 1 (`51d0476`) briefly
+>   introduced `isAgentRecord` on the `AgentRecord` path; it was
+>   reverted in `ffcd4ba` and is NOT retained. The lease substrate
+>   does not need a structural-disambiguation predicate — each lease
+>   file's content IS the `AgentLease` record, with no mixed-key
+>   enumeration problem. If a future legacy-`agents.json` reader needs
+>   such a predicate, it belongs in the unfiled
+>   `AGENTS-JSON-STRUCTURE-NORMALIZATION-001` slice, NOT here.
+> - Wherever it says "`apply-patch.ts` writes claim/last_modified
+>   paths", read "the new `apply-lease-patch.ts` writer path applies
+>   `update_lease_paths` patches via `applyLeasePatch`; the legacy
+>   `applyRegistryPatch` is NOT extended."
+> - The `agents.last_modified_paths_ttl_seconds` policy key (A10) IS
+>   still part of the implemented slice — it lives at the same
+>   schema location with the same bounds. Only the store substrate
+>   that consumes it (well, that DOESN'T consume it, per the C1
+>   storage-bounds correction in §Q2) moved from `agents.json` to
+>   leases.
+>
+> The Q1–Q6 deliberations, the `bound_spec_id` recon correction, the
+> activation gate, the non-goals, and the storage-bounds vs TTL
+> distinction (Q2 corrected) all remain valid as design rationale.
+> Only the substrate name changed. The narrative is preserved below
+> rather than rewritten so the audit trail of how the slice arrived
+> at its final shape (including the wrong-substrate detour) stays
+> intact for future readers.
+>
+> Final spec invariants and acceptance live at
+> `.caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml`; that file's
+> doctrinal-amendment block is the authoritative substrate decision.
+> This doc remains historical.
 
 ## Purpose
 
@@ -61,7 +112,7 @@ The reader (`packages/caws-cli/src/store/agents-store.ts:20-40`) returns `value 
 
 > Metadata consumers MUST treat a top-level value as an agent record **if and only if** it is an object whose `session_id` is a string AND whose `last_active` is a string. Any other top-level value (including `version: 1` and `agents: {}` in the current on-disk shape) is ignored, not warned on, not treated as a stale agent.
 
-This is the minimum to prevent the new substrate (`claimed_paths`, `last_modified_paths`) from being read in contexts that would silently apply it to non-agent values. The helper should live alongside the existing reader (likely a new exported predicate `isAgentRecord(value: unknown): value is AgentRecord` in `agents-store.ts` or `worktree/types.ts`). All new consumer surfaces in this slice and the three downstream slices MUST route through it.
+This is the minimum to prevent the new substrate (`claimed_paths`, `last_modified_paths`) from being read in contexts that would silently apply it to non-agent values. ~~The helper should live alongside the existing reader (likely a new exported predicate `isAgentRecord(value: unknown): value is AgentRecord` in `agents-store.ts` or `worktree/types.ts`). All new consumer surfaces in this slice and the three downstream slices MUST route through it.~~ **SUPERSEDED 2026-05-28:** on the lease substrate, each `.caws/leases/<safe-session-id>.json` file's content IS an `AgentLease` record — there is no mixed-key enumeration problem and the `isAgentRecord` predicate is not needed. The substrate-level enumeration helper lives in `packages/caws-cli/src/store/leases-store.ts` (`loadLeases`) and returns a typed `Record<sessionId, AgentLease>` directly. The wrong-substrate predicate from `51d0476` was reverted in `ffcd4ba`.
 
 This is **not** structural normalization. The on-disk shape is unchanged; `version` and `agents: {}` remain. The doctor's stale-agent warnings on those keys remain (this slice does NOT amend doctor's diagnostics — that's covered by A6). What changes is that the substrate-level enumeration helper, and any helper added by this slice that returns "active agent records," is guarded by the predicate. Full structural cleanup remains `AGENTS-JSON-STRUCTURE-NORMALIZATION-001`.
 
@@ -85,7 +136,7 @@ Direct source inspection during the recon-stop before commit 1 showed that `boun
 
 There is no retrofit to do. The original finding was reconstructed from a quick agent summary rather than direct file read; the summary was wrong. **A9 has been withdrawn in place** in the spec (its id is preserved with a "withdrawn / corrected" body so the audit trail of the mistake remains visible).
 
-This correction is itself an instance of the failure mode the four-part bar exists to prevent: an agent reconstructed provenance from a summary instead of reading the file. It was caught by the maintainer-instructed recon stop before commit 1. That is the value of the recon stop. The substrate work is unaffected: A1, A8, and A10 remain valid. Commit 1 only widens `AgentRecord` with `claimed_paths` and `last_modified_paths` and adds the `isAgentRecord` predicate.
+This correction is itself an instance of the failure mode the four-part bar exists to prevent: an agent reconstructed provenance from a summary instead of reading the file. It was caught by the maintainer-instructed recon stop before commit 1. That is the value of the recon stop. The substrate work is unaffected: A1 and A10 remain valid. ~~Commit 1 only widens `AgentRecord` with `claimed_paths` and `last_modified_paths` and adds the `isAgentRecord` predicate.~~ **SUPERSEDED 2026-05-28:** the as-shipped Commit 1 (`3a560e9`) widens `AgentLease` with `claimed_paths` and `last_modified_paths` and ships `validateLeasePathMetadata` (structural validation + truncation helper) — NOT an `isAgentRecord` predicate. A8 was REINTERPRETED in the spec's doctrinal-amendment block: on the lease substrate, no top-level mixed-key disambiguation is needed (each lease file IS its `AgentLease`).
 
 ## Q1 — Implicit vs explicit claim semantics
 
@@ -136,7 +187,7 @@ This note: confirmed. The activator must NOT add any takeover surface to this sl
 What this slice MUST do for the takeover slice's benefit:
 
 1. Ensure `claimed_paths` is observable from any session (cross-session reads work, per A4 of the spec).
-2. Ensure the `agents.json` writer does NOT silently clobber another session's `claimed_paths` field. The current writer's `...prev` spread already does the right thing **per session**, since each session has its own record keyed by `session_id`. But the writer must not modify another session's record. Adding a defensive test (A2.2 candidate) that asserts "writing session A's record leaves session B's `claimed_paths` byte-identical" is recommended.
+2. ~~Ensure the `agents.json` writer does NOT silently clobber another session's `claimed_paths` field.~~ **SUPERSEDED 2026-05-28:** the lease-substrate writer is naturally per-session safe — each session writes to its own `.caws/leases/<safe-session-id>.json` file, so there is no shared mixed-key object the writer could clobber. The `applyLeasePatch` store function (from `apply-lease-patch.ts`) updates only the targeted session's lease file; other sessions' files are not touched at all. The cross-session non-clobber test from the original wording is therefore structurally guaranteed by the substrate shape rather than by writer discipline. The `agents.json` writer (`applyRegistryPatch`'s `refresh_agent` branch) is unchanged by this slice and remains frozen under `MULTI-AGENT-ACTIVITY-REGISTRY-001`.
 
 ## Q4 — Path normalization
 
@@ -188,7 +239,7 @@ The maintainer-stated constraint is that **commit 1 widens substrate only; no sh
   - `readonly claimed_paths?: readonly string[]`
   - `readonly last_modified_paths?: readonly string[]`
   - (NO `bound_spec_id` change — already declared at types.ts:118; A9 withdrawn.)
-- `packages/caws-cli/src/store/agents-store.ts` (or `worktree/types.ts`): export `isAgentRecord(value: unknown): value is AgentRecord` per the drift-mitigation predicate. This is the only behavior addition in commit 1.
+- ~~`packages/caws-cli/src/store/agents-store.ts` (or `worktree/types.ts`): export `isAgentRecord(value: unknown): value is AgentRecord` per the drift-mitigation predicate. This is the only behavior addition in commit 1.~~ **SUPERSEDED 2026-05-28:** as shipped, Commit 1 (`3a560e9`) widens `AgentLease` in `packages/caws-kernel/src/worktree/leases.ts` and exports `validateLeasePathMetadata` + `LAST_MODIFIED_PATHS_MAX_ENTRIES` from the kernel worktree barrel — no `isAgentRecord` predicate is added or needed. `packages/caws-cli/src/store/agents-store.ts` is untouched by the slice (frozen under `MULTI-AGENT-ACTIVITY-REGISTRY-001`).
 - Tests: A1 (v1 records load with new fields undefined), A8 (non-agent top-level keys ignored by predicate). A passive no-regression assertion for `bound_spec_id` (load a record carrying the field and confirm it is exposed through the typed interface) is **permitted but not required** — it is hardening, not new functionality.
 - No writer change in this commit. No policy schema change. No CLI surface.
 
