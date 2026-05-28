@@ -2,9 +2,11 @@ id: CAWS-SPECS-ARCHIVE-COLLISION-MUTATION-HARDENING-001
 title: 'Harden tombstone-identity test suite against surviving mutants'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge archive-collision-mutation-hardening at d9653fe57ee8920de371edd54014afe39317e684'
 created_at: '2026-05-28T17:32:42.340Z'
-updated_at: '2026-05-28T17:32:42.340Z'
+updated_at: '2026-05-28T19:32:53.528Z'
 blast_radius:
   modules:
     - packages/caws-cli tests for tombstone-identity enforcement (test surface only; no runtime source change unless a survivor proves unreachable without a test seam)

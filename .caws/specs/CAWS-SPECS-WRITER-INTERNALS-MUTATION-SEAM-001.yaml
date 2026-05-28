@@ -3,6 +3,7 @@ title: 'Harden createSpec/closeSpec internals against remaining surviving mutant
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: specs-writer-internals-seam
 created_at: '2026-05-28T19:45:07.992Z'
 updated_at: '2026-05-28T19:50:00.000Z'
 blast_radius:
