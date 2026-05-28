@@ -3,23 +3,115 @@ title: 'Remove v10 dead source from caws-cli'
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: dead-source-cleanup
 created_at: '2026-05-27T23:53:43.433Z'
-updated_at: '2026-05-27T23:53:43.433Z'
+updated_at: '2026-05-27T23:55:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/commands
+    - packages/caws-cli/src/sidecars
+    - packages/caws-cli/src/parallel
+    - packages/caws-cli/src/worktree
+    - packages/caws-cli/src/utils
+    - packages/caws-cli/src/test-analysis.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/commands/archive.js
+    - packages/caws-cli/src/commands/burnup.js
+    - packages/caws-cli/src/commands/diagnose.js
+    - packages/caws-cli/src/commands/evaluate.js
+    - packages/caws-cli/src/commands/iterate.js
+    - packages/caws-cli/src/commands/mode.js
+    - packages/caws-cli/src/commands/parallel.js
+    - packages/caws-cli/src/commands/plan.js
+    - packages/caws-cli/src/commands/provenance.js
+    - packages/caws-cli/src/commands/quality-monitor.js
+    - packages/caws-cli/src/commands/sidecar.js
+    - packages/caws-cli/src/commands/templates.js
+    - packages/caws-cli/src/commands/tool.js
+    - packages/caws-cli/src/commands/tutorial.js
+    - packages/caws-cli/src/commands/validate.js
+    - packages/caws-cli/src/commands/verify-acs.js
+    - packages/caws-cli/src/commands/workflow.js
+    - packages/caws-cli/src/sidecars
+    - packages/caws-cli/src/parallel/parallel-manager.js
+    - packages/caws-cli/src/test-analysis.js
+    - packages/caws-cli/src/utils/spec-resolver.js
+    - packages/caws-cli/src/worktree/worktree-manager.js
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/gates
+    - packages/caws-cli/src/session
+    - packages/caws-cli/src/policy
+    - packages/caws-cli/src/init
+    - packages/caws-cli/src/config
+    - packages/caws-cli/src/constants
+    - packages/caws-cli/src/spec
+    - packages/caws-cli/src/validation
+    - packages/caws-cli/src/generators
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/minimal-cli.js
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/src/budget-derivation.js
+    - packages/caws-cli/src/cicd-optimizer.js
+    - packages/caws-cli/src/waivers-manager.js
+    - packages/caws-cli/src/tool-interface.js
+    - packages/caws-cli/src/tool-loader.js
+    - packages/caws-cli/src/tool-validator.js
+    - packages/caws-cli/src/utils/working-state.js
+    - packages/caws-cli/src/utils/event-renderer.js
+    - packages/caws-cli/src/utils/event-log.js
+    - packages/caws-cli/src/utils/lifecycle-events.js
+    - packages/caws-cli/src/utils/finalization.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tests
+    - .github
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - No live source import/require points to the deleted files after this slice. Specifically src/shell/index.ts, src/index.js, src/store, src/gates, src/worktree (post-edit), src/session, src/policy, src/init, src/utils/* (except where in-scope), src/validation, src/spec, src/error-handler.js, src/budget-derivation.js, src/cicd-optimizer.js, src/waivers-manager.js, src/tool-*.js must not reference any deleted file.
+  - src/shell/index.ts and src/shell/commands/ remain the only v11 command-group surface — no edits to shell in this slice.
+  - caws --help and per-group --help still list exactly the v11.1 surface (init, doctor, status, scope, claim, gates, evidence, waiver, specs, worktree) with no regression.
+  - npm pack --dry-run on packages/caws-cli reports fewer files than before; specifically the deleted files no longer appear in the package inventory.
+  - Build (esbuild/tsc) and lint pass for packages/caws-cli.
+  - worktree-manager.js no longer contains a require to ../commands/verify-acs nor an empty try/catch left from removing it.
+  - This slice does not modify packages/caws-kernel/src, .caws/policy.yaml, CODEOWNERS, .github/, packages/caws-cli/package.json, or any test file (those were cleaned in CAWS-DEAD-TEST-CLEANUP-001).
+  - This slice does not create any replacement modules for the removed v10 commands. Removal only.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: src/commands/archive.js, burnup.js, diagnose.js, evaluate.js, iterate.js, mode.js, parallel.js, plan.js, provenance.js, quality-monitor.js, sidecar.js, templates.js, tool.js, tutorial.js, validate.js, verify-acs.js, workflow.js
+    when: this slice completes
+    then: each of the 17 files no longer exists, and no live src/ module requires any of them (grep returns zero hits outside the slice's own deletions)
+  - id: A2
+    given: src/sidecars/, src/parallel/parallel-manager.js, src/test-analysis.js, src/utils/spec-resolver.js
+    when: this slice completes
+    then: none of these paths exists, and no live src/ module requires any of them
+  - id: A3
+    given: packages/caws-cli/src/worktree/worktree-manager.js
+    when: this slice completes
+    then: the file no longer contains a require to ../commands/verify-acs or any reference to verifySpec from that module; the removal is clean (no empty try/catch left behind); autoCloseBoundSpec still returns the documented shape with acsPassing defaulting to null
+  - id: A4
+    given: packages/caws-cli/src/shell/index.ts and src/shell/commands/
+    when: this slice completes
+    then: zero file modifications appear in the diff for these paths; the live v11.1 surface is unchanged
+  - id: A5
+    given: caws --help and caws <group> --help for each of init, doctor, status, scope, claim, gates, evidence, waiver, specs, worktree
+    when: invoked from the canonical post-merge state
+    then: the help output exits 0 and lists the v11.1 surface without regression
+  - id: A6
+    given: npm pack --dry-run run in packages/caws-cli
+    when: invoked from the canonical post-merge state
+    then: the package inventory does NOT include any of the 17 commands/*.js files, src/sidecars/*, src/parallel/parallel-manager.js, src/test-analysis.js, or src/utils/spec-resolver.js
+  - id: A7
+    given: the full packages/caws-cli jest test suite
+    when: invoked from the canonical post-merge state
+    then: the failure count is the same six pre-existing suites (init.test.js, agent-claim-wiring.test.js, axe/cli-accessibility.test.js, hook-packs/classify_command_calibration.test.js, integration/gates-cli.test.js, store/snapshot-vnext-facts.test.js) OR fewer; any delta is classified in closure notes
+non_functional:
+  reliability:
+    - removal-only; no behavior changes to live v11.1 surface
 contracts: []

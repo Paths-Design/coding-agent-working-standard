@@ -9,5 +9,16 @@
     "branch": "doctor-severity-recal",
     "baseBranch": "main",
     "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-severity-recal"
+  },
+  "dead-source-cleanup": {
+    "specId": "CAWS-DEAD-SOURCE-CLEANUP-001",
+    "owner": {
+      "session_id": "caws-d66262ddcd76",
+      "platform": "darwin"
+    },
+    "last_heartbeat": "2026-05-27T23:55:11.869Z",
+    "branch": "dead-source-cleanup",
+    "baseBranch": "wip/doctor-severity-recal-checkpoint",
+    "path": "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/dead-source-cleanup"
   }
 }
