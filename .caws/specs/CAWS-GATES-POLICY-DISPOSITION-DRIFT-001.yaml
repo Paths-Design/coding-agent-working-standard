@@ -4,22 +4,124 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-28T21:33:20.965Z'
-updated_at: '2026-05-28T21:33:20.965Z'
+updated_at: '2026-05-28T22:55:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/gates/disposition.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-GATES-POLICY-DISPOSITION-DRIFT-001.yaml
+    - packages/caws-cli/src/shell/gates/disposition.ts
+    - packages/caws-cli/tests/shell/gates-command.test.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/gates/waiver-filter.ts
+    - packages/caws-cli/src/store
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Disposition derivation is policy-driven, not tuple-driven. The
+    authoritative iteration set for deriveDispositions MUST be the gates
+    actually declared in policy.gates, NOT the hardcoded KNOWN_GATE_IDS
+    tuple. Today disposition.ts iterates `for (const gateId of
+    KNOWN_GATE_IDS)` (5 entries) and only consults policy.gates[gateId]
+    for ids already in that tuple. A gate declared in policy.yaml with
+    mode: block but absent from KNOWN_GATE_IDS is therefore never
+    iterated, never produces a disposition, and never blocks — its
+    violations fall through to unmatchedViolations. That is a silent
+    governance bypass: the operator declared a blocking gate and the
+    derivation silently demoted it to non-blocking.
+  - >-
+    A policy-declared block gate can never be silently demoted. For every
+    gate id present in policy.gates with mode: block and enabled !==
+    false, if matching violations exist, its disposition MUST have
+    blocks === true and the result MUST contribute to anyBlocks. No code
+    path (hardcoded registry, alias table, or iteration set) may cause a
+    policy-declared block gate with violations to be omitted from
+    dispositions or recorded as non-blocking.
+  - >-
+    Known-gate registry, if retained, is metadata/order only — never an
+    authority filter. KNOWN_GATE_IDS may be kept for deterministic
+    ordering of the canonical five and for any display metadata, but it
+    MUST NOT be the set that decides which gates are evaluated. If a gate
+    is in policy.gates but not in KNOWN_GATE_IDS, it is still derived
+    (appended after the known set, in a stable order). The fix iterates
+    the union of policy.gates keys (authority) with optional known-order
+    preference; it does not gate evaluation on tuple membership.
+  - >-
+    Existing behavior is preserved for the canonical five and for
+    aliases. The five current gates (budget_limit, spec_completeness,
+    scope_boundary, god_object, todo_detection) retain their exact
+    current dispositions under the default policy. The
+    subprocess-to-policy alias map (canonicalGateName: god_objects ->
+    god_object, hidden-todo -> todo_detection) is unchanged — violations
+    are still grouped by canonical name before matching policy gates.
+    Skip/disabled handling (mode skip or enabled === false -> skipped,
+    blocks=false) and pass/fail outcome logic are unchanged.
+  - >-
+    Scope-bounded: derivation only. This slice changes only how
+    disposition.ts chooses its iteration set (and the gateConfigFor type
+    signature widening from the tuple type to string that this requires).
+    It does NOT change policy schema, gate semantics, the gates CLI
+    (commands/gates.ts), waiver filtering (waiver-filter.ts), evidence,
+    or doctor — all in scope.out. No new gate is added to the default
+    policy; the fix is proven with synthetic in-test policies.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A synthetic policy whose gates include an extra gate id (e.g.
+      'custom_block') not in KNOWN_GATE_IDS, declared mode: block,
+      enabled true, and a report carrying a violation for that gate.
+    when: deriveDispositions(report, policy) runs.
+    then: >-
+      The result contains a disposition for 'custom_block' with
+      outcome 'fail' and blocks === true, and result.anyBlocks === true.
+      The policy-declared block gate is NOT silently dropped.
+  - id: A2
+    given: >-
+      A synthetic policy with an extra gate id 'custom_warn' not in
+      KNOWN_GATE_IDS, declared mode: warn, with a matching violation.
+    when: deriveDispositions runs.
+    then: >-
+      The result contains a disposition for 'custom_warn' with mode
+      'warn', outcome 'fail', blocks === false — represented as warn,
+      not dropped into unmatchedViolations.
+  - id: A3
+    given: The default policy with exactly the canonical five gates.
+    when: deriveDispositions runs over a representative report.
+    then: >-
+      Each of budget_limit, spec_completeness, scope_boundary,
+      god_object, todo_detection retains the same outcome/blocks/mode it
+      produced before this change. No regression to the canonical five,
+      and their ordering is stable (known order preserved).
+  - id: A4
+    given: The deriveDispositions implementation after the fix.
+    when: the source is reviewed and exercised by A1/A2.
+    then: >-
+      KNOWN_GATE_IDS is not the authoritative iteration set: a gate
+      present only in policy.gates (not in the tuple) is still evaluated.
+      The iteration derives from policy.gates keys (union with the known
+      order), proven by A1/A2 passing.
+  - id: A5
+    given: >-
+      A synthetic policy that declares a non-canonical gate with mode:
+      block AND the implementation still references KNOWN_GATE_IDS for
+      ordering/metadata.
+    when: deriveDispositions runs.
+    then: >-
+      The retained known-gate registry cannot suppress the policy-declared
+      block gate: it still appears in dispositions with blocks === true.
+      Proves the registry is order/metadata only, not an authority filter.
+non_functional:
+  reliability:
+    - >-
+      Closes a silent governance-integrity hole: a newly declared
+      mode: block gate in policy.yaml is now guaranteed to block rather
+      than being silently demoted to non-blocking by a hardcoded
+      iteration set. The fix is derivation-local and preserves the
+      canonical five gates' behavior exactly.
 contracts: []
