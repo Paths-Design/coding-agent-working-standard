@@ -2,10 +2,11 @@ id: CAWS-SPECS-CONTRACTS-WARNING-PORT-001
 title: 'Port mode=feature contracts warning to runSpecsCreateCommand'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: contracts-warning-port
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'v11 kernel semantic rules (packages/caws-kernel/src/spec/validate-semantics.ts lines 27-51 — SPEC_RULES.TIER1_MISSING_CONTRACTS and SPEC_RULES.TIER2_MISSING_CONTRACTS) supersede the soft contracts warning this slice was porting. Discovery mid-implementation: v10 commands/specs.js::createSpec emitted an advisory stderr warning when mode=feature + contracts=[]. v11 kernel HARD-FAILS on mode!=chore + risk_tier in {1,2} + contracts=[] (narrow repair: ''Add at least one contract or change risk_tier to 3 or mode to chore''). risk_tier=3 + mode=feature + contracts=[] is explicitly permitted by the kernel — a deliberately-allowed early-development state. Therefore the warning has no remaining governance authority: tier 1/2 is unreachable because the kernel blocks creation, and tier 3 is a permitted state where the warning would just be noise. The merge commit bb08bb6 (port implementation + shell test) was reverted via eeea87f using git revert -m 1 (preserving the spec-authoring commit 484fb73 in the audit trail). Action items for the test-migration slice: classify tests/specs-contracts-warning.test.js (the legacy test against commands/specs.js) as delete-as-v11-architectural-shift in CAWS-LEGACY-COMMAND-TEST-MIGRATION-001a, same category as waivers-prune.test.js. Do NOT add CLAUDE.md doctrine for the warning. Do NOT touch validate-semantics.ts. No version bump; no CHANGELOG entry; no remaining behavior change.'
 created_at: '2026-05-28T02:47:18.857Z'
-updated_at: '2026-05-28T02:47:18.857Z'
+updated_at: '2026-05-28T04:48:15.584Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
