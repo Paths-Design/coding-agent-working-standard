@@ -119,6 +119,20 @@
         "require_signed_commits": { "type": "boolean" },
         "require_dual_control_for_governance": { "type": "boolean" }
       }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Policy metadata consulted by future agent-coordination collectors and consumers. Adding a property to this object is a schema-bump decision. This object does not introduce any runtime collection, writer-side TTL pruning, or lease write behavior change — it is read-only metadata that downstream slices (collector hooks, provenance guards, push-range classifiers) consult when assembling TTL-bounded path sets to pass to the lease writer. See SESSION-OWNERSHIP-METADATA-001 A10.",
+      "properties": {
+        "last_modified_paths_ttl_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 86400,
+          "default": 1800,
+          "description": "TTL window (in seconds) that callers consult when deciding whether a modified path is recent enough to include in the lease's last_modified_paths field. The lease writer enforces ONLY structural invariants (non-empty strings, no null bytes) and deterministic max-size truncation at 1000 entries; TTL membership is the CALLER's responsibility. Default 1800 (30 minutes). Bounds 60..86400 (1 minute to 24 hours). Setting this key has no effect in this slice — it is metadata for future collectors."
+        }
+      }
     }
   },
   "$defs": {

@@ -23,6 +23,12 @@ import {
   POLICY_CRITICAL_GATE_NOT_BLOCK,
   POLICY_RISKY_ROOT_PASSTHROUGH,
   POLICY_ROOT_PASSTHROUGH_WITH_SLASH,
+  POLICY_WITH_AGENTS_TTL_VALID,
+  POLICY_WITH_AGENTS_TTL_MIN,
+  POLICY_WITH_AGENTS_TTL_MAX,
+  POLICY_WITH_AGENTS_TTL_BELOW_MIN,
+  POLICY_WITH_AGENTS_TTL_ABOVE_MAX,
+  POLICY_WITH_AGENTS_TTL_NON_INTEGER,
 } from '../fixtures/policy-fixtures';
 
 const CORPUS_LIVE_POLICY = path.resolve(__dirname, '../../../../docs/rewrite/corpus/policy/policy.yaml.live');
@@ -237,6 +243,80 @@ describe('layer separation (rule namespaces)', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       for (const e of r.errors) expect(e.rule.startsWith('policy.semantic.')).toBe(true);
+    }
+  });
+});
+
+// ─── SESSION-OWNERSHIP-METADATA-001 A10 — agents.last_modified_paths_ttl_seconds ──
+//
+// Policy metadata only. The schema gain in this slice does NOT introduce
+// any runtime behavior: no writer-side TTL pruning, no lease write change,
+// no collector. Tests assert schema-layer validation surface only.
+
+describe('agents.last_modified_paths_ttl_seconds (A10)', () => {
+  it('omitting the entire agents block is valid (backward compat)', () => {
+    // VALID_MINIMAL_POLICY has no `agents` key at all.
+    const r = parseAndValidatePolicy(VALID_MINIMAL_POLICY);
+    expect(r.ok).toBe(true);
+  });
+
+  it('accepts last_modified_paths_ttl_seconds: 1800 (default)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_VALID);
+    expect(r.ok).toBe(true);
+  });
+
+  it('accepts last_modified_paths_ttl_seconds: 60 (minimum)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_MIN);
+    expect(r.ok).toBe(true);
+  });
+
+  it('accepts last_modified_paths_ttl_seconds: 86400 (maximum, 24h)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_MAX);
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects last_modified_paths_ttl_seconds: 59 (below minimum)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_BELOW_MIN);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Schema-layer rejection — every error must be policy.schema.*.
+      for (const e of r.errors) {
+        expect(e.rule.startsWith('policy.schema.')).toBe(true);
+      }
+    }
+  });
+
+  it('rejects last_modified_paths_ttl_seconds: 86401 (above maximum)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_ABOVE_MAX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      for (const e of r.errors) {
+        expect(e.rule.startsWith('policy.schema.')).toBe(true);
+      }
+    }
+  });
+
+  it('rejects last_modified_paths_ttl_seconds: 1800.5 (non-integer)', () => {
+    const r = parseAndValidatePolicy(POLICY_WITH_AGENTS_TTL_NON_INTEGER);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      for (const e of r.errors) {
+        expect(e.rule.startsWith('policy.schema.')).toBe(true);
+      }
+    }
+  });
+
+  it('rejects unknown property under the agents block (closed schema)', () => {
+    // Negative lock: agents is additionalProperties:false. Future keys
+    // must come through a schema bump, not silently. Guards against a
+    // future writer slipping in agents.collector_enabled or similar.
+    const policy = `${VALID_MINIMAL_POLICY}\nagents:\n  last_modified_paths_ttl_seconds: 1800\n  unknown_future_key: true\n`;
+    const r = parseAndValidatePolicy(policy);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      for (const e of r.errors) {
+        expect(e.rule.startsWith('policy.schema.')).toBe(true);
+      }
     }
   });
 });
