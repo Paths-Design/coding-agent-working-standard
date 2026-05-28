@@ -71,6 +71,42 @@ function listCapsules(cawsDir) {
   }
 }
 
+// Durable hook-session envelope fixture
+// (CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001). The scanner
+// looks under `<repoRoot>/tmp/<id>/.session-envelope.json` where repoRoot is
+// path.dirname(cawsDir) — i.e. the temp `root`. repo_root inside the envelope
+// is realpath-compared against the scan's repoRoot, so write the real path to
+// defeat macOS /tmp vs /private/tmp. lastSeenAt controls the freshness gate.
+function writeEnvelope(root, id, lastSeenAt, repoRootOverride) {
+  const realRoot = (() => {
+    try {
+      return fs.realpathSync(root);
+    } catch {
+      return root;
+    }
+  })();
+  const dir = path.join(root, 'tmp', id);
+  fs.mkdirSync(dir, { recursive: true });
+  const envelope = {
+    session_id: id,
+    repo_root: repoRootOverride !== undefined ? repoRootOverride : realRoot,
+    created_at: lastSeenAt,
+    last_seen_at: lastSeenAt,
+    hook_event: 'PostToolUse',
+  };
+  fs.writeFileSync(
+    path.join(dir, '.session-envelope.json'),
+    JSON.stringify(envelope, null, 2) + '\n'
+  );
+}
+
+// A fixed clock so envelope freshness is deterministic. Envelopes stamped
+// at FIXED_NOW are fresh; stamped >24h before are stale.
+const FIXED_NOW_ISO = '2026-05-28T12:00:00.000Z';
+const fixedNow = () => new Date(FIXED_NOW_ISO);
+const hoursAgoIso = (h) =>
+  new Date(new Date(FIXED_NOW_ISO).getTime() - h * 60 * 60 * 1000).toISOString();
+
 // ─── Resolver-level coverage ────────────────────────────────────────────
 
 describe('resolveSessionCandidates: exhaustive multi-source resolution', () => {
@@ -168,9 +204,18 @@ describe('resolveSessionCandidates: exhaustive multi-source resolution', () => {
       env: {},
     });
 
-    expect(r.trace).toHaveLength(4);
+    // Five sources are now consulted: the durable_hook_envelope source was
+    // added by CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001,
+    // mirroring resolveSession's step-2.5 between hook_env and capsule.
+    expect(r.trace).toHaveLength(5);
     const sources = r.trace.map((t) => t.source);
-    expect(sources).toEqual(['claude_env', 'hook_env', 'capsule', 'cursor_env']);
+    expect(sources).toEqual([
+      'claude_env',
+      'hook_env',
+      'durable_hook_envelope',
+      'capsule',
+      'cursor_env',
+    ]);
     for (const t of r.trace) {
       expect(t.outcome).toBe('absent');
       expect(t.reason).toBeDefined();
@@ -399,7 +444,10 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
   it('renders one line per source PLUS one candidate line per admitted ID', () => {
     tmp = mkTempCaws();
-    // Two capsules + one env => 3 candidates; trace has 4 source lines.
+    // Two capsules + one env => 3 candidates; trace has 5 source lines
+    // (durable_hook_envelope added by CAWS-WORKTREE-DESTROY-GHOST-ENTRY-
+    // OWNER-UNRESOLVABLE-001 — absent here, so it contributes a source
+    // line but no candidate line).
     writeCapsule(tmp.cawsDir, 'caws-cap1', '/wt-1');
     writeCapsule(tmp.cawsDir, 'caws-cap2', '/wt-2');
 
@@ -410,12 +458,12 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
     const text = describeCandidateTrace(candidates);
     const lines = text.split('\n');
-    // 4 source lines + 1 admitted-id line for claude_env + 2 admitted-id
-    // lines for capsule = 7 lines total.
-    expect(lines).toHaveLength(7);
+    // 5 source lines + 1 admitted-id line for claude_env + 2 admitted-id
+    // lines for capsule = 8 lines total.
+    expect(lines).toHaveLength(8);
   });
 
-  it('renders empty trace as four absent lines (no candidate lines)', () => {
+  it('renders empty trace as five absent lines (no candidate lines)', () => {
     tmp = mkTempCaws();
 
     const candidates = resolveSessionCandidates({
@@ -425,7 +473,9 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
     const text = describeCandidateTrace(candidates);
     const lines = text.split('\n');
-    expect(lines).toHaveLength(4);
+    // Five sources: claude_env, hook_env, durable_hook_envelope, capsule,
+    // cursor_env — all absent, no candidate lines.
+    expect(lines).toHaveLength(5);
   });
 
   it('L2: refusal-diagnostic-grade trace includes admitted session_ids inline', () => {
@@ -459,5 +509,167 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
     // But the raw ID is preserved for callers that need it.
     const capTrace = candidates.trace.find((t) => t.source === 'capsule');
     expect(capTrace.admittedIds).toEqual([longId]);
+  });
+});
+
+// ─── durable_hook_envelope source ───────────────────────────────────────
+//
+// CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001.
+//
+// The exhaustive ownership-comparison resolver previously omitted the
+// durable-hook-envelope source that the singular resolveSession() (and thus
+// `caws status`) consults at step 2.5. That omission meant a ghost worktree
+// entry owned by a claude-code UUID session — resolvable as "self" by status
+// via the envelope, but invisible to destroy's candidate set in agent-Bash
+// (HOOK_SESSION_ID absent, no capsule carrying the UUID) — could not be
+// destroyed by its legitimate owner, and the only doctor-suggested repair was
+// a forbidden hand-edit of worktrees.json. These tests prove the source is
+// now consulted, that ALL fresh envelopes are admitted (deliberate divergence
+// from resolveSession's >=2 refusal), and that foreign-ownership protection
+// is preserved (A4).
+
+describe('resolveSessionCandidates: durable_hook_envelope source', () => {
+  let tmp;
+  afterEach(() => tmp && cleanup(tmp.root));
+
+  it('A1: admits a fresh durable envelope as a candidate; admitsOwner matches its UUID', () => {
+    tmp = mkTempCaws();
+    const uuid = '5dfee16a-176b-4f0a-a721-1cb06ee288dd';
+    writeEnvelope(tmp.root, uuid, FIXED_NOW_ISO);
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {}, // agent-Bash: no CLAUDE_SESSION_ID / HOOK_SESSION_ID
+      now: fixedNow,
+    });
+
+    const envCand = candidates.candidates.find(
+      (c) => c.source === 'durable_hook_envelope'
+    );
+    expect(envCand).toBeDefined();
+    expect(envCand.identity.session_id).toBe(uuid);
+    expect(envCand.identity.platform).toBe('claude-code');
+    expect(typeof envCand.envelopePath).toBe('string');
+
+    // The ghost-clear core: the registered owner (a claude-code UUID) is now
+    // matched by the candidate set, so destroy's admitsOwner check admits.
+    const match = admitsOwner(candidates, uuid);
+    expect(match).not.toBeNull();
+    expect(match.source).toBe('durable_hook_envelope');
+
+    // Trace records the source as admitted with the UUID.
+    const t = candidates.trace.find((x) => x.source === 'durable_hook_envelope');
+    expect(t.outcome).toBe('admitted');
+    expect(t.count).toBe(1);
+    expect(t.admittedIds).toEqual([uuid]);
+  });
+
+  it('A3: admits ALL fresh envelopes (divergence from resolveSession >=2 refusal)', () => {
+    tmp = mkTempCaws();
+    const a = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const b = 'bbbbbbbb-2222-4222-8222-222222222222';
+    writeEnvelope(tmp.root, a, FIXED_NOW_ISO);
+    writeEnvelope(tmp.root, b, FIXED_NOW_ISO);
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+
+    const envCands = candidates.candidates.filter(
+      (c) => c.source === 'durable_hook_envelope'
+    );
+    expect(envCands.length).toBe(2);
+    const ids = envCands.map((c) => c.identity.session_id).sort();
+    expect(ids).toEqual([a, b]);
+
+    // Either owner can be matched — the comparison set answers "can I speak
+    // for this owner?" for both.
+    expect(admitsOwner(candidates, a)).not.toBeNull();
+    expect(admitsOwner(candidates, b)).not.toBeNull();
+
+    const t = candidates.trace.find((x) => x.source === 'durable_hook_envelope');
+    expect(t.outcome).toBe('admitted');
+    expect(t.count).toBe(2);
+  });
+
+  it('A4 (negative lock): a foreign owner whose envelope is NOT on disk is never matched', () => {
+    tmp = mkTempCaws();
+    // The caller has their OWN fresh envelope...
+    const mine = 'cccccccc-3333-4333-8333-333333333333';
+    writeEnvelope(tmp.root, mine, FIXED_NOW_ISO);
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+
+    // ...but a DIFFERENT session owns the live worktree. No envelope, no
+    // capsule, no env id carries that owner's id, so the candidate set has
+    // no match — destroy's refusal still fires.
+    const foreignOwner = 'dddddddd-4444-4444-8444-444444444444';
+    expect(admitsOwner(candidates, foreignOwner)).toBeNull();
+    // The caller's own id still matches (sanity: the source works at all).
+    expect(admitsOwner(candidates, mine)).not.toBeNull();
+  });
+
+  it('does NOT admit a stale (>24h) envelope; trace reports absent', () => {
+    tmp = mkTempCaws();
+    const stale = 'eeeeeeee-5555-4555-8555-555555555555';
+    writeEnvelope(tmp.root, stale, hoursAgoIso(25)); // 25h ago → stale
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+
+    expect(
+      candidates.candidates.find((c) => c.source === 'durable_hook_envelope')
+    ).toBeUndefined();
+    expect(admitsOwner(candidates, stale)).toBeNull();
+    const t = candidates.trace.find((x) => x.source === 'durable_hook_envelope');
+    expect(t.outcome).toBe('absent');
+  });
+
+  it('skips an envelope whose repo_root is a different repo', () => {
+    tmp = mkTempCaws();
+    const otherRepoId = 'ffffffff-6666-4666-8666-666666666666';
+    // Fresh envelope, but repo_root points elsewhere — must be skipped.
+    writeEnvelope(tmp.root, otherRepoId, FIXED_NOW_ISO, '/some/other/repo');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+
+    expect(
+      candidates.candidates.find((c) => c.source === 'durable_hook_envelope')
+    ).toBeUndefined();
+    expect(admitsOwner(candidates, otherRepoId)).toBeNull();
+  });
+
+  it('orders the envelope source between hook_env and capsule in the trace', () => {
+    tmp = mkTempCaws();
+    writeEnvelope(tmp.root, 'aaaaaaaa-1111-4111-8111-111111111111', FIXED_NOW_ISO);
+    writeCapsule(tmp.cawsDir, 'caws-cap', '/wt');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: { HOOK_SESSION_ID: 'caws-hook' },
+      now: fixedNow,
+    });
+
+    const sources = candidates.trace.map((t) => t.source);
+    expect(sources).toEqual([
+      'claude_env',
+      'hook_env',
+      'durable_hook_envelope',
+      'capsule',
+      'cursor_env',
+    ]);
   });
 });

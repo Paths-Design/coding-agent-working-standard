@@ -976,6 +976,64 @@ export function resolveSessionCandidates(
     });
   }
 
+  // 2.5. Durable hook envelopes on disk
+  //      CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001.
+  //
+  //      This source MIRRORS resolveSession's step 2.5 — the same
+  //      scanDurableEnvelopes() over `<repoRoot>/tmp/<id>/.session-envelope.json`,
+  //      repo-root-filtered and freshness-checked — but with one
+  //      deliberate divergence in the >=2 case.
+  //
+  //      resolveSession() REFUSES on >=2 fresh envelopes because it must
+  //      pick exactly ONE identity to STAMP onto a new record; guessing
+  //      would be newest-wins, which the spec forbids.
+  //
+  //      resolveSessionCandidates() ADMITS ALL fresh envelopes. This is an
+  //      ownership-COMPARISON surface — the question is "can the invoking
+  //      process speak for the registered owner?", answered downstream by
+  //      admitsOwner()'s exact session_id equality. Admitting every fresh
+  //      envelope cannot widen authority: a foreign owner whose envelope is
+  //      not on disk still has no matching candidate, so the destroy/merge
+  //      refusal still fires (A4). What it DOES fix is the ghost-entry case
+  //      where the registered owner IS one of the fresh envelopes (the
+  //      caller's own claude-code UUID session) but, in agent-Bash,
+  //      HOOK_SESSION_ID is absent and no capsule carries that UUID — so the
+  //      pre-fix candidate set never saw the owner, and destroy refused a
+  //      worktree the caller legitimately owns. `caws status` already
+  //      resolved that same UUID as "self" via this exact envelope source;
+  //      this aligns the comparison surface with the display surface.
+  const repoRoot = path.dirname(opts.cawsDir);
+  const tmpDir = path.join(repoRoot, DURABLE_ENVELOPE_DIRNAME);
+  const envScan = scanDurableEnvelopes({
+    repoRoot,
+    tmpDir,
+    now: opts.now ? opts.now() : new Date(),
+  });
+  if (envScan.candidates.length > 0) {
+    for (const c of envScan.candidates) {
+      candidates.push({
+        identity: {
+          session_id: c.envelope.session_id,
+          platform: 'claude-code',
+        },
+        source: 'durable_hook_envelope',
+        envelopePath: c.envelopePath,
+      });
+    }
+    trace.push({
+      source: 'durable_hook_envelope',
+      outcome: 'admitted',
+      count: envScan.candidates.length,
+      admittedIds: envScan.candidates.map((c) => c.envelope.session_id),
+    });
+  } else {
+    trace.push({
+      source: 'durable_hook_envelope',
+      outcome: 'absent',
+      reason: `no fresh durable hook envelope under ${tmpDir} matched repo_root ${repoRoot}`,
+    });
+  }
+
   // 3. ALL capsules on disk (NOT cwd-keyed; that is the key distinction
   //    from resolveSession's step-3 behavior)
   const capsuleResult = readAllCapsules(opts.cawsDir);

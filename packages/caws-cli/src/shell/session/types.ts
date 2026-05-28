@@ -74,6 +74,13 @@ export interface SessionCandidate {
   readonly source: SessionSource;
   /** Capsule on-disk path when source is 'capsule'; undefined for env sources. */
   readonly capsulePath?: string;
+  /**
+   * Durable-envelope on-disk path when source is 'durable_hook_envelope';
+   * undefined for all other sources. CAWS-WORKTREE-DESTROY-GHOST-ENTRY-
+   * OWNER-UNRESOLVABLE-001 — lets a refusal diagnostic point at the exact
+   * envelope file the candidate came from.
+   */
+  readonly envelopePath?: string;
 }
 
 /**
@@ -154,6 +161,14 @@ export interface ResolveCandidatesOptions {
   readonly env?: NodeJS.ProcessEnv;
   /** Injected `cawsDir` (the directory containing `sessions/`). Required. */
   readonly cawsDir: string;
+  /**
+   * Injected clock. Defaults to `() => new Date()`. Consumed by the
+   * durable-hook-envelope source to apply the same last_seen_at freshness
+   * window resolveSession uses (CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-
+   * UNRESOLVABLE-001). Tests inject a fixed clock to make envelope
+   * freshness deterministic.
+   */
+  readonly now?: () => Date;
 }
 
 export interface ResolveSessionOptions {
