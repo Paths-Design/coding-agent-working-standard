@@ -2,9 +2,11 @@ id: SNAPSHOT-VNEXT-FACTS-FIXTURE-DRIFT-001
 title: 'Restore snapshot-vnext-facts fixtures after legacyArchiveBodyCount field addition'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Fixture-only repair shipped. snapshot-vnext-facts.test.js exact-shape fixtures (uninitialized-repo case and full-bootstrap case) now include legacyArchiveBodyCount: 0, matching the production composeStoreSnapshot return shape introduced in commit 2eaee3b (feat(kernel+cli): doctor surfaces legacy .caws/specs/.archive/ bodies). Evidence: A1 met — 6-line diff confined to the two asserted snapshots with attribution comments. A2 met — snapshot-vnext-facts.test.js 14/14 pass from canonical post-merge. A3 met — full store suite (31 suites, 352 tests) 352/352 pass from canonical post-merge, restoring the green baseline that existed before commit 2eaee3b shipped the field without updating fixtures. A4 met — implementation commit 14accca modifies exactly packages/caws-cli/tests/store/snapshot-vnext-facts.test.js (the lone scope.in target); spec body commit dcea581 is the only other touch to .caws/specs/SNAPSHOT-VNEXT-FACTS-FIXTURE-DRIFT-001.yaml. A5 met — doctor 1E/3W/1I shape unchanged from main baseline (the SESSION-OWNERSHIP-METADATA-001 stale binding 1E persists as expected and is unrelated to this slice). No production source changed; no CHANGELOG, version bump, release tag, event schema, kernel rule, or doctor diagnostic touched. One worktree-environment artifact noted in implementation commit: specs-load-overbroad-scope.test.js asserts fs.existsSync(.caws/specs/) which is true on canonical (3/3 pass) and false in linked worktrees (1/3 pass) per the sparse-checkout invariant; not caused by this slice and not a regression. Lockfile drift from npm install in worktree (kernel version 1.1.1 -> 1.1.3) was restored before commit per scope.out hygiene; lockfile concerns belong to a separate slice.'
 created_at: '2026-05-28T02:31:30.228Z'
-updated_at: '2026-05-28T02:31:30.228Z'
+updated_at: '2026-05-28T02:54:24.070Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
