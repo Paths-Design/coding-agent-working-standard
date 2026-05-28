@@ -84,13 +84,53 @@ function canonicalGateName(subprocessGate: string): string {
   return SUBPROCESS_GATE_TO_POLICY_GATE[subprocessGate] ?? subprocessGate;
 }
 
+// gateId is a plain string: the authoritative iteration set is
+// policy.gates keys (CAWS-GATES-POLICY-DISPOSITION-DRIFT-001), which
+// includes gates beyond the canonical KNOWN_GATE_IDS tuple.
 function gateConfigFor(
   policy: Policy,
-  gateId: (typeof KNOWN_GATE_IDS)[number]
+  gateId: string
 ): { enabled: boolean; mode: GateMode } | undefined {
-  const cfg = policy.gates[gateId];
+  // Policy.gates is typed (in the kernel) as a fixed-shape object over the
+  // canonical gate names; the kernel type is scope.out for this slice. Read
+  // through a string-indexable view so policy-declared gates beyond the
+  // canonical set are reachable (CAWS-GATES-POLICY-DISPOSITION-DRIFT-001).
+  // The shape of each value (enabled, mode) is unchanged.
+  const gates = policy.gates as Record<
+    string,
+    { enabled: boolean; mode: string } | undefined
+  >;
+  const cfg = gates[gateId];
   if (cfg === undefined) return undefined;
   return { enabled: cfg.enabled, mode: cfg.mode as GateMode };
+}
+
+/**
+ * The authoritative iteration set for disposition derivation: every gate
+ * DECLARED in policy.gates. KNOWN_GATE_IDS is used ONLY to pin a stable,
+ * deterministic order for the canonical five (so existing output ordering
+ * is preserved); any additional policy-declared gate is appended after
+ * them in policy declaration order.
+ *
+ * CAWS-GATES-POLICY-DISPOSITION-DRIFT-001: iterating KNOWN_GATE_IDS alone
+ * silently demoted any policy-declared gate not in the tuple (a mode:block
+ * gate would never block). The known tuple is order/metadata only, never
+ * the authority filter for which gates are evaluated.
+ */
+function orderedPolicyGateIds(policy: Policy): string[] {
+  const declared = Object.keys(policy.gates);
+  const declaredSet = new Set(declared);
+  const ordered: string[] = [];
+  // Canonical five first, in their fixed order, when declared.
+  for (const id of KNOWN_GATE_IDS) {
+    if (declaredSet.has(id)) ordered.push(id);
+  }
+  // Then any other declared gate, in policy declaration order.
+  const known = new Set<string>(KNOWN_GATE_IDS);
+  for (const id of declared) {
+    if (!known.has(id)) ordered.push(id);
+  }
+  return ordered;
 }
 
 export function deriveDispositions(
@@ -107,7 +147,10 @@ export function deriveDispositions(
   }
 
   const dispositions: GateDisposition[] = [];
-  for (const gateId of KNOWN_GATE_IDS) {
+  // Iterate every POLICY-DECLARED gate (authority), ordered canonical-first
+  // for stable output. KNOWN_GATE_IDS is order/metadata only — it does NOT
+  // decide which gates are evaluated (CAWS-GATES-POLICY-DISPOSITION-DRIFT-001).
+  for (const gateId of orderedPolicyGateIds(policy)) {
     const cfg = gateConfigFor(policy, gateId);
     if (cfg === undefined) continue; // gate not declared in policy
     const violations = byGate.get(gateId) ?? [];

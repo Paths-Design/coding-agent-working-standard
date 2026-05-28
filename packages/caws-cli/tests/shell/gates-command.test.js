@@ -685,3 +685,157 @@ gates:
     expect(events.value.events).toHaveLength(5);
   });
 });
+
+// ─── CAWS-GATES-POLICY-DISPOSITION-DRIFT-001 ─────────────────────────────
+//
+// deriveDispositions must iterate the gates DECLARED IN policy.gates, not
+// the hardcoded KNOWN_GATE_IDS tuple. A gate present in policy.yaml with
+// mode: block but absent from KNOWN_GATE_IDS is otherwise never iterated,
+// never produces a disposition, and never blocks — a silent governance
+// bypass (its violations fall through to unmatchedViolations).
+//
+// NOTE the contrast with the existing test "violations on gates not
+// declared in policy → unmatchedViolations" (gate 'naming'): there the
+// gate is NOT in policy.gates at all, so unmatched is correct. Here the
+// gate IS declared in policy.gates but is NOT in KNOWN_GATE_IDS — it must
+// be dispositioned per its declared mode.
+
+describe('CAWS-GATES-POLICY-DISPOSITION-DRIFT-001: policy-driven disposition derivation', () => {
+  // Canonical-five policy plus extra non-canonical gates.
+  const policyWithExtras = {
+    version: 1,
+    risk_tiers: {
+      1: { max_files: 5, max_loc: 200 },
+      2: { max_files: 15, max_loc: 600 },
+      3: { max_files: 30, max_loc: 1500 },
+    },
+    gates: {
+      budget_limit: { enabled: true, mode: 'block' },
+      spec_completeness: { enabled: true, mode: 'block' },
+      scope_boundary: { enabled: true, mode: 'warn' },
+      god_object: { enabled: true, mode: 'warn' },
+      todo_detection: { enabled: false, mode: 'skip' },
+      // Non-canonical gates — declared in policy, absent from KNOWN_GATE_IDS:
+      custom_block: { enabled: true, mode: 'block' },
+      custom_warn: { enabled: true, mode: 'warn' },
+    },
+  };
+
+  // A1: a policy-declared block gate not in KNOWN_GATE_IDS, with a matching
+  //     violation, MUST produce a blocking disposition.
+  it('A1: non-canonical mode:block gate with a violation blocks (not silently dropped)', () => {
+    const r = deriveDispositions(FAIL_REPORT('custom_block'), policyWithExtras);
+    const d = r.dispositions.find((x) => x.gate_id === 'custom_block');
+    expect(d).toBeDefined();
+    expect(d.outcome).toBe('fail');
+    expect(d.blocks).toBe(true);
+    expect(r.anyBlocks).toBe(true);
+    // It must NOT have been demoted into unmatchedViolations.
+    expect(r.unmatchedViolations.some((v) => v.gate === 'custom_block')).toBe(
+      false
+    );
+  });
+
+  // A2: a policy-declared warn gate not in KNOWN_GATE_IDS is represented as
+  //     warn (blocks=false), NOT dropped.
+  it('A2: non-canonical mode:warn gate with a violation is represented as warn', () => {
+    const r = deriveDispositions(FAIL_REPORT('custom_warn'), policyWithExtras);
+    const d = r.dispositions.find((x) => x.gate_id === 'custom_warn');
+    expect(d).toBeDefined();
+    expect(d.mode).toBe('warn');
+    expect(d.outcome).toBe('fail');
+    expect(d.blocks).toBe(false);
+    expect(r.unmatchedViolations.some((v) => v.gate === 'custom_warn')).toBe(
+      false
+    );
+  });
+
+  // A3: the canonical five retain their exact dispositions under the
+  //     default (canonical-only) policy — no regression.
+  it('A3: canonical five unchanged under default policy', () => {
+    const defaultPolicy = {
+      version: 1,
+      risk_tiers: policyWithExtras.risk_tiers,
+      gates: {
+        budget_limit: { enabled: true, mode: 'block' },
+        spec_completeness: { enabled: true, mode: 'block' },
+        scope_boundary: { enabled: true, mode: 'warn' },
+        god_object: { enabled: true, mode: 'warn' },
+        todo_detection: { enabled: false, mode: 'skip' },
+      },
+    };
+    // block gate fails → blocks
+    let r = deriveDispositions(FAIL_REPORT('budget_limit'), defaultPolicy);
+    expect(r.dispositions.find((d) => d.gate_id === 'budget_limit').blocks).toBe(
+      true
+    );
+    expect(r.anyBlocks).toBe(true);
+    // warn gate fails → no block
+    r = deriveDispositions(FAIL_REPORT('scope_boundary'), defaultPolicy);
+    expect(
+      r.dispositions.find((d) => d.gate_id === 'scope_boundary').blocks
+    ).toBe(false);
+    expect(r.anyBlocks).toBe(false);
+    // skip/disabled gate → skipped
+    r = deriveDispositions(FAIL_REPORT('todo_detection', 5), defaultPolicy);
+    expect(
+      r.dispositions.find((d) => d.gate_id === 'todo_detection').outcome
+    ).toBe('skipped');
+    // clean run → all pass, no block
+    r = deriveDispositions(PASS_REPORT, defaultPolicy);
+    expect(r.anyBlocks).toBe(false);
+    // The canonical five are present and ordered first.
+    const ids = r.dispositions.map((d) => d.gate_id);
+    expect(ids.slice(0, 5)).toEqual([
+      'budget_limit',
+      'spec_completeness',
+      'scope_boundary',
+      'god_object',
+      'todo_detection',
+    ]);
+  });
+
+  // A4: KNOWN_GATE_IDS is not the authoritative iteration set — a gate
+  //     present only in policy.gates is still evaluated. Proven by A1/A2,
+  //     re-asserted here directly: a clean run over policyWithExtras
+  //     produces dispositions for the non-canonical gates too.
+  it('A4: non-canonical declared gates appear in dispositions even with no violations', () => {
+    const r = deriveDispositions(PASS_REPORT, policyWithExtras);
+    const ids = r.dispositions.map((d) => d.gate_id);
+    expect(ids).toContain('custom_block');
+    expect(ids).toContain('custom_warn');
+    // canonical five still present and ordered first
+    expect(ids.slice(0, 5)).toEqual([
+      'budget_limit',
+      'spec_completeness',
+      'scope_boundary',
+      'god_object',
+      'todo_detection',
+    ]);
+    // No-violation non-canonical gates pass, don't block.
+    expect(r.dispositions.find((d) => d.gate_id === 'custom_block').outcome).toBe(
+      'pass'
+    );
+    expect(r.anyBlocks).toBe(false);
+  });
+
+  // A5: the retained known-gate registry (if any) cannot suppress a
+  //     policy-declared block gate — even when the canonical five are all
+  //     present and the non-canonical block gate is declared last.
+  it('A5: retained known-gate registry cannot suppress a policy-declared block gate', () => {
+    // A report failing BOTH a canonical warn gate and a non-canonical block
+    // gate. The non-canonical block gate must still drive anyBlocks=true.
+    const report = {
+      ...PASS_REPORT,
+      violations: [
+        { gate: 'scope_boundary', type: 't', message: 'm', file: 'a', line: 1 },
+        { gate: 'custom_block', type: 't', message: 'm', file: 'b', line: 2 },
+      ],
+    };
+    const r = deriveDispositions(report, policyWithExtras);
+    const cb = r.dispositions.find((d) => d.gate_id === 'custom_block');
+    expect(cb).toBeDefined();
+    expect(cb.blocks).toBe(true);
+    expect(r.anyBlocks).toBe(true);
+  });
+});
