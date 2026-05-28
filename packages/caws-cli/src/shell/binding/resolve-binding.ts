@@ -28,6 +28,7 @@ import { spawnSync } from 'node:child_process';
 import { deriveBindingState } from '@paths.design/caws-kernel';
 
 import type {
+  BindingClaimant,
   GitWorktreeEntry,
   ResolveBindingInput,
   ResolvedBinding,
@@ -123,6 +124,74 @@ function findRegistryMatch(
   return best;
 }
 
+// SCOPE-CHECK-CWD-BINDING-RESOLUTION-001 helpers ─────────────────────────
+//
+// These power the target-path fallback (steps 2 and 3) when cwd does not
+// resolve a worktree. They are pure functions of (targetPath, registry,
+// specs) — no process.cwd(), no I/O beyond the realpath the caller already
+// did — so the binding for a path is identical from any invocation cwd.
+
+/**
+ * Normalize a repo-root-relative path to POSIX separators with no leading
+ * "./" or trailing slash, for stable matching against scope.in entries.
+ */
+function normalizeRel(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+/**
+ * Anchored glob match supporting `*` (any run of non-separator or separator
+ * chars within a segment-agnostic match) and `?` (single char). A bare
+ * directory entry (no glob meta) matches the entry itself OR any descendant
+ * (prefix match on a path boundary) — mirroring how scope.in directory
+ * entries admit files beneath them. No dependency on minimatch.
+ */
+function scopeEntryMatches(entry: string, target: string): boolean {
+  const e = normalizeRel(entry);
+  const t = normalizeRel(target);
+  if (e === t) return true;
+  if (!/[*?]/.test(e)) {
+    // Directory/prefix entry: admit descendants on a path boundary.
+    return t.startsWith(e + '/');
+  }
+  // Glob entry: translate to an anchored RegExp. `*` → [^/]-agnostic any,
+  // `?` → single char. Escape all other regex meta.
+  const rx = e
+    .split('')
+    .map((ch) => {
+      if (ch === '*') return '.*';
+      if (ch === '?') return '.';
+      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    })
+    .join('');
+  return new RegExp(`^${rx}$`).test(t);
+}
+
+/**
+ * Step (3): find every active bound spec whose scope.in admits `targetPath`.
+ * Returns one claimant per matching spec, naming the spec, its worktree, and
+ * the exact scope.in entry that matched (for the actionable refusal).
+ */
+function findScopeInClaimants(
+  targetPath: string,
+  input: ResolveBindingInput
+): BindingClaimant[] {
+  const claimants: BindingClaimant[] = [];
+  for (const [name, record] of Object.entries(input.registry)) {
+    const specId = record?.specId;
+    if (typeof specId !== 'string' || specId.length === 0) continue;
+    const spec = input.specs.find((s) => s.id === specId);
+    if (spec === undefined) continue;
+    if (spec.lifecycle_state !== 'active') continue;
+    const scopeIn = spec.scope?.in ?? [];
+    const matched = scopeIn.find((entry) => scopeEntryMatches(entry, targetPath));
+    if (matched !== undefined) {
+      claimants.push({ specId, worktreeName: name, matchedScopeInEntry: matched });
+    }
+  }
+  return claimants;
+}
+
 export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
   const cwdReal = safeRealpath(input.cwd);
   const repoRootReal = safeRealpath(input.repoRoot);
@@ -169,7 +238,46 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
   }
 
   if (candidate === null) {
-    return { binding: { kind: 'unbound' }, source: 'none' };
+    // SCOPE-CHECK-CWD-BINDING-RESOLUTION-001: cwd resolved no worktree.
+    // Before falling to `unbound`, try to resolve the binding from the
+    // TARGET PATH so the verdict is cwd-independent.
+    if (typeof input.targetPath === 'string' && input.targetPath.length > 0) {
+      const targetAbs = safeRealpath(
+        path.isAbsolute(input.targetPath)
+          ? input.targetPath
+          : path.join(repoRootReal, input.targetPath)
+      );
+
+      // Step (2): target-path worktree-location. If the absolute path lies
+      // under a registered worktree's path, that worktree binds. Unambiguous
+      // (a path is inside at most one worktree dir); take the deepest match.
+      const locMatch = findRegistryMatch(targetAbs, input.registry);
+      if (locMatch !== null) {
+        candidate = locMatch;
+        source = 'target_worktree_location';
+      } else {
+        // Step (3): target-path scope.in claim.
+        const claimants = findScopeInClaimants(input.targetPath, input);
+        if (claimants.length === 1) {
+          const only = claimants[0]!;
+          candidate = { name: only.worktreeName, path: '' };
+          source = 'target_scope_in_claim';
+        } else if (claimants.length > 1) {
+          // Refuse-on-conflict: name every claimant, pick none. `binding`
+          // stays `unbound` (safe default); the ambiguity rides in the
+          // dedicated `ambiguous` field that scope check inspects.
+          return {
+            binding: { kind: 'unbound' },
+            ambiguous: { targetPath: normalizeRel(input.targetPath), claimants },
+            source: 'target_scope_in_claim',
+          };
+        }
+      }
+    }
+
+    if (candidate === null) {
+      return { binding: { kind: 'unbound' }, source: 'none' };
+    }
   }
 
   // We have a worktree name. Now find the bound spec for kernel evaluation.
