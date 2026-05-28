@@ -2,10 +2,11 @@ id: CAWS-LEGACY-COMMAND-TEST-MIGRATION-001a
 title: 'Migrate legacy command-source test authority for specs/init family'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: legacy-test-migration-specs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Migrated test authority for the specs/init family from legacy src/commands/*.js to v11 shell/store entry points. Net: +232 / -2285 LOC. 5 legacy command-source test files deleted (spec-creation, specs-archive, specs-archive-collision, specs-close-diff, specs-contracts-warning, init), plus the new tests/shell/specs-archive-edge-cases.test.js carrying 6 ported v11-valid assertions (refuse-unknown-id, refuse-path-traversal, archive-collision-refusal, orphan-registry collision refusal, close comment-preservation, close idempotent already-closed). Prerequisite slice CAWS-SPECS-CONTRACTS-WARNING-PORT-001 (resolution=superseded at 3a7de03 — v11 kernel rule supersedes the warning) and CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001 (resolution=completed at 02bec93 — implemented tombstone-identity refusal on create + retired the legacy ''latest-write-wins'' test in specs-list-archived.test.js) were filed and closed mid-execution; both were unblocking governance gaps surfaced during 001a''s inspection phase. Post-merge canonical jest: 113 suites, 109 pass, 4 fail (down from 6 — init.test.js deletion drops by 1; store/snapshot-vnext-facts.test.js was fixed by a parallel slice). Remaining 4 failures: agent-claim-wiring (001b scope), axe/cli-accessibility (env), hook-packs/classify_command_calibration (env), integration/gates-cli (env). Zero new failures introduced by this slice. Zero remaining direct imports of src/commands/specs.js, src/commands/init.js, or src/utils/spec-resolver.js for the specs/init test family. The 4 remaining test files in the legacy commands/ import set (agent-claim*, waivers-prune, waiver-enforcement) belong to 001b territory and are explicitly scoped-out. Next slices: (1) CAWS-WAIVER-SELF-APPROVAL-PORT-001 prerequisite (lost CLAUDE_SESSION_ID self-approval prevention behavior); (2) CAWS-LEGACY-COMMAND-TEST-MIGRATION-001b (agent-claim + waiver tests); (3) CAWS-LEGACY-COMMAND-SOURCE-RETIRE-001 final source deletion.'
 created_at: '2026-05-28T04:48:45.098Z'
-updated_at: '2026-05-28T04:48:45.098Z'
+updated_at: '2026-05-28T05:47:42.864Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests
