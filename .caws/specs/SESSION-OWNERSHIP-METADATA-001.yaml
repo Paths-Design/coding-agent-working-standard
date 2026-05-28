@@ -137,13 +137,13 @@ invariants:
     of per-session JSON files, NOT a single mixed-key JSON object. Each
     lease file's content IS the AgentLease record; there is no
     top-level metadata key issue here (unlike .caws/agents.json, which
-    is out of scope for this slice). The legacy isAgentRecord predicate
-    surface introduced by the wrong-substrate Commit 1 (51d0476) is
-    retained as a kernel utility for any future legacy-agents.json
-    reader, but is NOT a load-bearing part of this slice's lease-substrate
-    path. The agents.json structural-normalization slice
-    (AGENTS-JSON-STRUCTURE-NORMALIZATION-001, unfiled) remains a separate
-    future concern.
+    is out of scope for this slice). The wrong-substrate Commit 1
+    (51d0476) briefly introduced an isAgentRecord predicate on the
+    agents.json substrate; it was REVERTED in ffcd4ba and is NOT
+    retained. If a future legacy-agents.json reader needs structural
+    disambiguation, it should reintroduce a similar utility under the
+    unfiled AGENTS-JSON-STRUCTURE-NORMALIZATION-001 slice. This slice's
+    lease-substrate path does not need it.
   - >-
     No kernel authority change. The kernel's worktree binding logic,
     ownership decisions, and scope evaluation are all unchanged.
@@ -282,12 +282,13 @@ acceptance:
       introduce a predicate over agents.json values; that mixed-key
       problem belongs to the unfiled
       AGENTS-JSON-STRUCTURE-NORMALIZATION-001 slice. The
-      isAgentRecord predicate introduced by the wrong-substrate
-      Commit 1 (51d0476, reverted) is retained in kernel as a
-      utility for any future legacy-agents.json reader, but is NOT
-      load-bearing for this slice's lease-substrate deliverable.
-      Negative lock: no new code path in this slice reads or
-      writes .caws/agents.json.
+      isAgentRecord predicate briefly introduced by the wrong-
+      substrate Commit 1 (51d0476) was REVERTED in ffcd4ba and is
+      NOT retained. If a future legacy-agents.json reader needs
+      structural disambiguation, it should reintroduce a similar
+      utility under the unfiled normalization slice. Negative lock:
+      no new code path in this slice reads or writes
+      .caws/agents.json.
   - id: A9
     given: |
       A9 was originally drafted to retrofit `bound_spec_id` into
