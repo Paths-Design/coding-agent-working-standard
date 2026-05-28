@@ -2,10 +2,11 @@ id: CAWS-DEAD-SOURCE-CLEANUP-002
 title: 'Remove remaining v10 orphaned source and dead tests from caws-cli'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: dead-source-cleanup-002
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge dead-source-cleanup-002 at 07f6c1189f665061e066a23ff10f129118c5d742'
 created_at: '2026-05-28T21:21:16.716Z'
-updated_at: '2026-05-28T21:21:16.716Z'
+updated_at: '2026-05-28T23:41:12.251Z'
 blast_radius:
   modules:
     - packages/caws-cli orphaned v10 source subtrees and the dead tests that import them (deletion-only; no live runtime source touched)
