@@ -379,10 +379,16 @@ function readLease(projectDir, sessionId) {
 }
 
 function assertHookPackV3(pack) {
-  step('A14.4 — installed hook pack reports v3 with three new agent-*.sh');
-  if (pack.packVersion !== 3) {
-    fail('installed manifest pack version mismatch', {
-      expected: 3, got: pack.packVersion,
+  step('A14.4 — installed hook pack reports v>=3 with three agent-*.sh');
+  // The three agent-*.sh files were introduced in hook pack v3. This check
+  // validates they are present/managed/executable, so the version floor is
+  // 3 — NOT an exact pin. A later pack bump (v9, v10, …) must not fail this
+  // assertion; pinning the exact version here is what made the smoke go
+  // stale at literal `3` while the pack advanced (caught by
+  // CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001). Assert the floor.
+  if (typeof pack.packVersion !== 'number' || pack.packVersion < 3) {
+    fail('installed manifest pack version below the v3 floor', {
+      minimum: 3, got: pack.packVersion,
     });
   }
   const required = ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh'];
@@ -392,7 +398,7 @@ function assertHookPackV3(pack) {
     if (!entry.managed) fail(`${name} is not managed:true`);
     if (!entry.executable) fail(`${name} is not executable:true`);
   }
-  ok('hook pack v3 with all three agent-*.sh as managed+executable');
+  ok(`hook pack v${pack.packVersion} (>=3) with all three agent-*.sh as managed+executable`);
 }
 
 function assertSessionStartCreatesLease(projectDir, shimDir) {
@@ -593,6 +599,109 @@ function assertCliStaysHookProtocolFree(projectDir, installedRoot) {
   ok('installed CLI stdout is CAWS-native JSON with zero hook-protocol tokens');
 }
 
+// A14.12 — CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001: removed/renamed/
+// replaced/deferred v10.2 commands, invoked through the installed binary,
+// must exit 1 with disposition-appropriate typed migration guidance — and
+// must NEVER exit 0 or dispatch a v11 handler. This promotes the Slice-2
+// classifier (CAWS-REMOVED-COMMAND-DIAGNOSTICS-001) from source-unit
+// evidence to installed-artifact release-gate evidence: the smoke runs in
+// prepublishOnly, so a tarball whose binary fails to refuse a removed
+// command blocks the publish.
+//
+// Exit code is read from the spawned process .status directly — NEVER via
+// a shell pipe, which reports the LAST pipeline stage's code and would mask
+// a wrong CLI exit (a real footgun observed while capturing these
+// expectations). Expected substrings were captured verbatim from the built
+// binary.
+function assertLegacyCommandDiagnostics(projectDir, installedRoot) {
+  step('A14.12 — installed binary refuses legacy v10.2 commands (exit 1 + typed guidance)');
+  const cli = join(installedRoot, 'dist', 'index.js');
+
+  // Each case: argv, the disposition it exercises, substrings that MUST be
+  // present in stderr, and substrings that MUST be absent.
+  const cases = [
+    {
+      argv: ['validate'],
+      disposition: 'replaced',
+      mustInclude: ['replaced in v11', 'caws doctor'],
+      mustExclude: [],
+    },
+    {
+      argv: ['archive', 'SOME-ID'],
+      disposition: 'renamed',
+      mustInclude: ['renamed to caws specs archive', 'caws specs archive'],
+      mustExclude: [],
+    },
+    {
+      argv: ['sidecar', 'gaps'],
+      disposition: 'removed',
+      mustInclude: ['removed in v11'],
+      // removed-without-replacement: no "Use instead:" block.
+      mustExclude: ['Use instead:'],
+    },
+    {
+      argv: ['session', 'start'],
+      disposition: 'deferred',
+      mustInclude: ['deferred to v11.3+'],
+      mustExclude: [],
+    },
+    {
+      argv: ['worktree', 'prune'],
+      disposition: 'deferred',
+      mustInclude: ['planned for v11.2'],
+      mustExclude: [],
+    },
+    {
+      argv: ['statuz'],
+      disposition: 'typo (fuzzy suggester, not legacy)',
+      mustInclude: ['Did you mean: caws status'],
+      // A genuine typo must NOT be classified as a legacy command.
+      mustExclude: ['replaced in v11', 'removed in v11', 'renamed to', 'deferred to'],
+    },
+  ];
+
+  for (const c of cases) {
+    const r = spawnSync('node', [cli, ...c.argv], {
+      cwd: projectDir,
+      encoding: 'utf8',
+    });
+    const label = `caws ${c.argv.join(' ')} (${c.disposition})`;
+
+    // 1. Exit code MUST be 1 — the refusal contract. Read from .status,
+    //    never a shell pipe.
+    if (r.status !== 1) {
+      fail(`${label}: expected exit 1, got ${r.status}`, {
+        exitCode: r.status,
+        stdout: (r.stdout || '').trim().slice(0, 1000),
+        stderr: (r.stderr || '').trim().slice(0, 1000),
+        hint: 'Legacy commands must refuse with exit 1, never alias-execute or exit 0.',
+      });
+    }
+
+    const combined = `${r.stdout || ''}\n${r.stderr || ''}`;
+
+    // 2. Required typed guidance present.
+    const missing = c.mustInclude.filter((s) => !combined.includes(s));
+    if (missing.length > 0) {
+      fail(`${label}: missing required diagnostic substring(s)`, {
+        missing,
+        output: combined.trim().slice(0, 1500),
+      });
+    }
+
+    // 3. Forbidden substrings absent.
+    const leaked = c.mustExclude.filter((s) => combined.includes(s));
+    if (leaked.length > 0) {
+      fail(`${label}: diagnostic contained forbidden substring(s)`, {
+        leaked,
+        output: combined.trim().slice(0, 1500),
+      });
+    }
+  }
+
+  ok(`installed binary refuses all ${cases.length} legacy/typo cases with exit 1 + typed guidance`);
+}
+
 function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfSessionId) {
   step('A14.11 — heartbeat hook composes envelope without jq on PATH');
   const pathNoJq = pathWithoutJq(shimDir);
@@ -690,6 +799,10 @@ try {
 
   // A14.11 — heartbeat hook works without jq on PATH.
   assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfId);
+
+  // A14.12 — installed binary refuses legacy v10.2 commands with exit 1 +
+  // typed migration guidance (CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001).
+  assertLegacyCommandDiagnostics(projectDir, installedRoot);
 
   const elapsedMs = Date.now() - startMs;
   log(colors.green(`\n[fresh-install-smoke] PASS in ${elapsedMs}ms — published tarball is install-safe AND multi-agent substrate is live from installed artifacts`));
