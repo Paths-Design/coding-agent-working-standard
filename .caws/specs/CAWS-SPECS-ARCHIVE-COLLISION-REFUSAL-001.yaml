@@ -2,10 +2,11 @@ id: CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001
 title: 'Refuse create on archived spec id (tombstone identity)'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: archive-collision-refusal
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Refuse create on archived spec id implemented. createSpec at specs-writer.ts now calls isArchivedViaTombstone immediately after findSpecPath; on match returns STORE_RULES.LIFECYCLE_PLAN_REJECTED with diagnostic naming the id and suggesting ''caws specs recover <id>''. The legacy ''latest-write-wins'' describe in tests/shell/specs-list-archived.test.js was rewritten in-place to assert the new refusal — re-create attempt fails, archived entry remains visible in list --include-archived, active section does not carry the re-creation. New shell test tests/shell/specs-archive-collision-refusal.test.js covers A1 (happy path), A2 (full lifecycle + refusal, no spec_created event appended), A3 (orphan registry — events.jsonl is the authority), A4 (diagnostic shape — concrete recover command, no v10 --force/--override). 4/4 pass; the rewritten latest-write-wins test passes. Full jest post-merge: 118 suites, 113 pass, 5 fail (down from 6 — snapshot-vnext-facts was fixed by a parallel slice). The 5 remaining failures are all pre-existing: agent-claim-wiring (001b scope), axe/cli-accessibility (environmental), hook-packs/classify_command_calibration (environmental), init.test.js (scaffold/cursor-hooks miss; 001a will delete it), integration/gates-cli (environmental). Zero new failures introduced by this slice. Ready to unblock CAWS-LEGACY-COMMAND-TEST-MIGRATION-001a — the failing archive-collision-refusal assertion in tests/shell/specs-archive-edge-cases.test.js will now pass against v11.'
 created_at: '2026-05-28T05:12:46.120Z'
-updated_at: '2026-05-28T05:12:46.120Z'
+updated_at: '2026-05-28T05:31:50.875Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
