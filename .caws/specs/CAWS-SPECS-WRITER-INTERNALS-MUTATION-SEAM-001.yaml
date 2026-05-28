@@ -45,7 +45,7 @@ acceptance:
   - id: A4
     given: a normal lifecycle create then close of an active spec
     when: closeSpec succeeds
-    then: the autocommit produces a commit whose subject is exactly "chore(caws): close <id>", killing the autocommit action string-literal mutant on dist 349 and exercising the txnResult success path on dist 345.
+    then: 'the autocommit produces a commit whose subject is exactly "chore(caws): close <id>", killing the autocommit action string-literal mutant on dist 349 and exercising the txnResult success path on dist 345.'
   - id: A5
     given: an active spec whose on-disk yaml has been corrupted to a non-parseable form after creation while the active file still exists
     when: closeSpec runs and passes the fs.existsSync check but then fails readYamlSource or parse
