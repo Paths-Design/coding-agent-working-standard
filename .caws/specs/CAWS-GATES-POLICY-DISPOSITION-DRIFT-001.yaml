@@ -3,6 +3,7 @@ title: 'deriveDispositions must iterate policy-declared gates, not a hardcoded s
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: v11-gates-disposition-drift
 created_at: '2026-05-28T21:33:20.965Z'
 updated_at: '2026-05-28T22:55:00.000Z'
 blast_radius:
