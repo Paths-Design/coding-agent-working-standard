@@ -1,7 +1,8 @@
-// `caws claim [--takeover]` — surface and (optionally) acquire ownership
-// of the current worktree.
+// `caws claim [--takeover] [--paths <path>...]` — surface and (optionally)
+// acquire ownership of the current worktree, and (optionally) update the
+// current session's lease claimed_paths.
 //
-// Pipeline:
+// Pipeline (--paths absent — existing legacy behavior, byte-equivalent):
 //   1. resolveRepoRoot(cwd)
 //   2. composeStoreSnapshot (worktrees + agents + specs)
 //   3. resolveSession({ allowMint: true })        — write op, mints if needed
@@ -14,9 +15,19 @@
 //                              `caws worktree create`/`bind` to mint)
 //   6. If a patch was returned, applyRegistryPatch (atomic write to
 //      worktrees.json). prior_owners is append-only.
-//   7. ALWAYS refresh agents.json freshness for the current session
-//      via kernel.refreshAgentClaim → applyRegistryPatch.
+//   7. Refresh agents.json freshness for the current session via
+//      kernel.refreshAgentClaim → applyRegistryPatch.
 //   8. Render the Claim panel.
+//
+// Pipeline (--paths present — leases-only branch, A8 negative lock):
+//   1–6. As above (ownership semantics MUST be preserved before any lease
+//        write — refusing or taking over still happens first).
+//   7'.  SKIP refreshAgentClaim entirely. The --paths branch must NOT
+//        read, create, or write .caws/agents.json. The lease substrate
+//        is the sole storage target.
+//   7b.  loadLeases → updateAgentLeasePaths → applyLeasePatch. On any
+//        failure exit 1 with a typed diagnostic.
+//   8.   Render the Claim panel.
 //
 // Exit codes:
 //   0 = ownership is established for the current session (same-session
@@ -200,35 +211,46 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     }
   }
 
-  // 7. Refresh agents.json — even when ownership was already ours.
-  //    Visible references to lifecycle verbs refresh agents.json so
-  //    freshness display stays current independent of IDE hooks.
-  //    refreshAgentClaim only fails on a malformed session shape; we
-  //    just validated this session via resolveSession, so Err here
-  //    would be a real bug. Treat it as exit 2.
-  const refreshResult = refreshAgentClaim(snapshot.agents, session, now, {
-    bound_worktree: worktreeName,
-    ...(record.specId !== undefined ? { bound_spec_id: record.specId } : {}),
-  });
-  if (!refreshResult.ok) {
-    err('caws claim: internal — refreshAgentClaim returned Err with a validated session.');
-    err(renderDiagnostics(refreshResult.errors, { showData }));
-    return 2;
-  }
-  const refreshApply = applyRegistryPatch(cawsDir, refreshResult.value);
-  if (!refreshApply.ok) {
-    // Apply failure is a hygiene problem (disk I/O on agents.json),
-    // not an authority problem. Ownership is already secured; surface
-    // a warning but continue.
-    err('caws claim: warning — agents.json refresh failed (display only).');
-    err(renderDiagnostics(refreshApply.errors, { showData }));
+  // 7. Refresh agents.json — ONLY on the legacy `--paths` absent branch.
+  //
+  // SESSION-OWNERSHIP-METADATA-001 commit 3a (A8 negative lock):
+  // The `--paths` branch is leases-only. It MUST NOT read, create, or
+  // write .caws/agents.json. Routing through refreshAgentClaim here
+  // would re-merge the operational-cache / governance-state boundary
+  // the leases substrate exists to preserve (see
+  // MULTI-AGENT-ACTIVITY-REGISTRY-001 invariant 2 + spec A8).
+  //
+  // When `--paths` is absent, behavior is unchanged: visible references
+  // to lifecycle verbs refresh agents.json so freshness display stays
+  // current independent of IDE hooks. refreshAgentClaim only fails on
+  // a malformed session shape; we just validated this session via
+  // resolveSession, so Err here would be a real bug. Treat it as exit 2.
+  if (opts.paths === undefined) {
+    const refreshResult = refreshAgentClaim(snapshot.agents, session, now, {
+      bound_worktree: worktreeName,
+      ...(record.specId !== undefined ? { bound_spec_id: record.specId } : {}),
+    });
+    if (!refreshResult.ok) {
+      err('caws claim: internal — refreshAgentClaim returned Err with a validated session.');
+      err(renderDiagnostics(refreshResult.errors, { showData }));
+      return 2;
+    }
+    const refreshApply = applyRegistryPatch(cawsDir, refreshResult.value);
+    if (!refreshApply.ok) {
+      // Apply failure is a hygiene problem (disk I/O on agents.json),
+      // not an authority problem. Ownership is already secured; surface
+      // a warning but continue.
+      err('caws claim: warning — agents.json refresh failed (display only).');
+      err(renderDiagnostics(refreshApply.errors, { showData }));
+    }
   }
 
   // 7b. SESSION-OWNERSHIP-METADATA-001 commit 3 — explicit claim of
   // paths on the current session's lease. Runs only when --paths was
-  // supplied. Failure of this step does NOT regress ownership; it
-  // surfaces as a typed diagnostic and returns exit 1 so the operator
-  // sees that the paths were not stored.
+  // supplied. The agents.json refresh in step 7 is intentionally
+  // skipped on this branch (A8 negative lock). Failure of this step
+  // does NOT regress ownership; it surfaces as a typed diagnostic and
+  // returns exit 1 so the operator sees that the paths were not stored.
   if (opts.paths !== undefined) {
     const leasesResult = loadLeases(cawsDir);
     if (!leasesResult.ok) {
@@ -252,7 +274,8 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     }
     // Surface any warn-no-op diagnostics (missing lease file race
     // between load and apply). Treat as refusal so the operator sees
-    // the paths were not stored.
+    // the paths were not stored. wrote=false also means the lease was
+    // not fabricated — A8 negative lock holds even on this edge.
     if (applyPathsResult.value.diagnostics.length > 0) {
       err('caws claim: --paths: lease apply produced diagnostics.');
       err(renderDiagnostics(applyPathsResult.value.diagnostics, { showData }));

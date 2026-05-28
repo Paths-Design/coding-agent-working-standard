@@ -384,9 +384,9 @@ describe('caws claim --paths []: explicit "no claims" state', () => {
   });
 });
 
-// ─── A7 negative lock: lease/agents independence preserved ──────────
+// ─── A7 / A8 negative lock: leases-only branch, no agents.json or events.jsonl writes ──
 
-describe('caws claim --paths: A7 negative lock', () => {
+describe('caws claim --paths: A7/A8 negative lock', () => {
   it('--paths success path does NOT write events.jsonl', () => {
     const env = mkRepoWithWorktree({
       prefix: 'claim-paths-no-ev-',
@@ -404,6 +404,105 @@ describe('caws claim --paths: A7 negative lock', () => {
       expect(r.code).toBe(0);
       const eventsPath = path.join(env.mainRoot, '.caws', 'events.jsonl');
       expect(fs.existsSync(eventsPath)).toBe(false);
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  // SESSION-OWNERSHIP-METADATA-001 commit 3a — A8 negative lock proper.
+  // The --paths branch is leases-only. It must not read, create, or write
+  // .caws/agents.json. Routing through refreshAgentClaim would re-merge
+  // the operational-cache / governance-state boundary; this test proves
+  // the implementation has the gate in place.
+  it('--paths success path does NOT create .caws/agents.json', () => {
+    const env = mkRepoWithWorktree({
+      prefix: 'claim-paths-no-agents-',
+      owner: { session_id: 'sess-me', platform: 'claude-code' },
+    });
+    try {
+      writeLeaseFile(env.mainRoot, 'sess-me');
+      const agentsPath = path.join(env.mainRoot, '.caws', 'agents.json');
+      // Pre-condition: agents.json does not exist on this fresh fixture.
+      expect(fs.existsSync(agentsPath)).toBe(false);
+
+      const r = captureRun({
+        cwd: env.worktreeRoot,
+        env: { CLAUDE_SESSION_ID: 'sess-me' },
+        paths: ['packages/foo/**', 'tests/foo.test.js'],
+      });
+
+      expect(r.code).toBe(0);
+      // Post-condition: claimed_paths landed in the lease.
+      const after = readLeaseFile(env.mainRoot, 'sess-me');
+      expect(after.claimed_paths).toEqual([
+        'packages/foo/**',
+        'tests/foo.test.js',
+      ]);
+      // Post-condition: agents.json STILL does not exist. The --paths
+      // branch did not refresh, create, or touch it.
+      expect(fs.existsSync(agentsPath)).toBe(false);
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  it('--paths refused (no lease) does NOT create .caws/agents.json and does NOT fabricate lease', () => {
+    const env = mkRepoWithWorktree({
+      prefix: 'claim-paths-refused-no-agents-',
+      owner: { session_id: 'sess-me', platform: 'claude-code' },
+    });
+    try {
+      // No lease file written for sess-me.
+      const agentsPath = path.join(env.mainRoot, '.caws', 'agents.json');
+      const leasePath = path.join(
+        env.mainRoot, '.caws', 'leases', 'sess-me.json'
+      );
+      expect(fs.existsSync(agentsPath)).toBe(false);
+      expect(fs.existsSync(leasePath)).toBe(false);
+
+      const r = captureRun({
+        cwd: env.worktreeRoot,
+        env: { CLAUDE_SESSION_ID: 'sess-me' },
+        paths: ['a'],
+      });
+
+      // Lease-missing refusal: exit 1.
+      expect(r.code).toBe(1);
+      // The lease was NOT fabricated.
+      expect(fs.existsSync(leasePath)).toBe(false);
+      // agents.json was NOT created as a side effect of the failed
+      // --paths attempt. The gate in claim.ts skips refreshAgentClaim
+      // for the --paths branch regardless of whether the lease write
+      // ultimately succeeds.
+      expect(fs.existsSync(agentsPath)).toBe(false);
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  // Positive counterpart: the existing-behavior path STILL writes
+  // agents.json. This guards against a future regression where someone
+  // narrows the gate too aggressively and breaks the legacy refresh.
+  it('--paths absent: existing behavior STILL refreshes agents.json', () => {
+    const env = mkRepoWithWorktree({
+      prefix: 'claim-no-paths-refreshes-agents-',
+      owner: { session_id: 'sess-me', platform: 'claude-code' },
+    });
+    try {
+      const agentsPath = path.join(env.mainRoot, '.caws', 'agents.json');
+      expect(fs.existsSync(agentsPath)).toBe(false);
+
+      const r = captureRun({
+        cwd: env.worktreeRoot,
+        env: { CLAUDE_SESSION_ID: 'sess-me' },
+        // No `paths` key — legacy path.
+      });
+
+      expect(r.code).toBe(0);
+      // agents.json was created by refreshAgentClaim → applyRegistryPatch.
+      expect(fs.existsSync(agentsPath)).toBe(true);
+      const agents = JSON.parse(fs.readFileSync(agentsPath, 'utf8'));
+      expect(agents['sess-me']).toBeDefined();
     } finally {
       env.cleanup();
     }
