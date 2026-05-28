@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: v11-removed-command-diagnostics
 created_at: '2026-05-28T18:39:53.900Z'
-updated_at: '2026-05-28T18:51:00.000Z'
+updated_at: '2026-05-28T19:02:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli (runtime unknown-command handler + single command-group registry)
@@ -37,6 +37,7 @@ scope:
     - packages/caws-cli/src/index.js
     - packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
     - packages/caws-cli/tests/matrix/migration-doc-coverage.test.js
+    - packages/caws-cli/tests/shell/removed-command-diagnostics.test.js
     - .caws/specs/CAWS-REMOVED-COMMAND-DIAGNOSTICS-001.yaml
   out:
     - packages/caws-cli/src/error-handler.js
