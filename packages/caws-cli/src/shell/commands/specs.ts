@@ -115,26 +115,66 @@ function buildActorOrError(
 
 export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly id: string;
-  readonly title: string;
-  readonly mode: string;
-  readonly riskTier: number | string;
+  readonly title?: string;
+  readonly mode?: string;
+  readonly riskTier?: number | string;
+  readonly legacyType?: string;
 }
+
+const SPECS_CREATE_USAGE = [
+  'Usage:',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>',
+  '',
+  'Example:',
+  '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
+  '',
+  'Notes:',
+  '  --type is not supported in v11. Use --mode instead.',
+  '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
+  '  After creation, edit .caws/specs/<id>.yaml and replace TODOs in scope.in, invariants, and acceptance.',
+].join('\n');
 
 export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
-  if (!VALID_MODES.includes(opts.mode as ValidMode)) {
+  if (opts.legacyType !== undefined) {
+    err('caws specs create: --type is not supported in v11. Use --mode instead.');
+    err(SPECS_CREATE_USAGE);
+    return 1;
+  }
+
+  const missing = [
+    opts.title === undefined ? '--title' : undefined,
+    opts.mode === undefined ? '--mode' : undefined,
+    opts.riskTier === undefined ? '--risk-tier' : undefined,
+  ].filter((v): v is string => v !== undefined);
+  if (missing.length > 0) {
+    err(`caws specs create: missing required options: ${missing.join(', ')}`);
+    err(SPECS_CREATE_USAGE);
+    return 1;
+  }
+
+  const title = opts.title;
+  const mode = opts.mode;
+  const rawRiskTier = opts.riskTier;
+  if (title === undefined || mode === undefined || rawRiskTier === undefined) {
+    err('caws specs create: missing required options.');
+    err(SPECS_CREATE_USAGE);
+    return 1;
+  }
+
+  if (!VALID_MODES.includes(mode as ValidMode)) {
     err(
-      `caws specs create: invalid --mode "${opts.mode}". Expected one of: ${VALID_MODES.join(', ')}.`
+      `caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`
     );
     return 1;
   }
-  const riskTier = typeof opts.riskTier === 'string'
-    ? Number.parseInt(opts.riskTier, 10)
-    : opts.riskTier;
+  const riskTier = typeof rawRiskTier === 'string'
+    ? Number.parseInt(rawRiskTier, 10)
+    : rawRiskTier;
   if (riskTier !== 1 && riskTier !== 2 && riskTier !== 3) {
     err(
-      `caws specs create: invalid --risk-tier "${opts.riskTier}". Expected 1, 2, or 3.`
+      `caws specs create: invalid --risk-tier "${rawRiskTier}". Expected 1, 2, or 3.`
     );
     return 1;
   }
@@ -149,8 +189,8 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
 
   const result = createSpec(ctx.cawsDir, {
     id: opts.id,
-    title: opts.title,
-    mode: opts.mode as ValidMode,
+    title,
+    mode: mode as ValidMode,
     riskTier: riskTier as 1 | 2 | 3,
     initialState: 'active',
     now: nowFn,
