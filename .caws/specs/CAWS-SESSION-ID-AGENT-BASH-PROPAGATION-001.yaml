@@ -2,10 +2,11 @@ id: CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001
 title: 'Parallel-agent ownership misattribution: agent-Bash caws subprocess lacks HOOK_SESSION_ID, falls to racy shared caller-session pointer'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: session-id-propagation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge session-id-propagation at cf6069b2a875e5425f1e67a97987607a0f205fea'
 created_at: '2026-05-29T01:48:21.123Z'
-updated_at: '2026-05-29T02:18:00.000Z'
+updated_at: '2026-05-29T03:12:30.978Z'
 blast_radius:
   modules:
     - Shell session resolver (packages/caws-cli/src/shell/session/resolve-session.ts) and the claude-code hook pack caller-identity substrate (.claude/hooks/lib/parse-input.sh + templates/hook-packs/claude-code/lib/parse-input.sh). Implementation is a fast-follow; this spec records the root cause and the proposed fix.
