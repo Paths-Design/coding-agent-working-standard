@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_retired.v1.json",
+  "title": "spec_retired event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the governed retirement of a never-activated DRAFT spec (CAWS-SPECS-RETIRE-DRAFT-001). Retirement is a tombstone, mirroring spec_archived's post-CAWS-ARCHIVE-AS-TOMBSTONE-001 shape: the draft yaml is deleted from disk and this event carries the git blob_sha needed to reconstruct the body via `git show <blob_sha>`. There is no legacy variant — this event type is new. retire-draft refuses non-draft specs and refuses drafts not tracked at HEAD (blob_sha would be unavailable), so blob_sha is always a real 40-hex sha here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from_path", "blob_sha"],
+  "properties": {
+    "from_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repo-root-relative path the draft yaml occupied before deletion (e.g. .caws/specs/FOO-001.yaml)."
+    },
+    "blob_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full 40-hex git blob sha of the draft yaml content at the moment of retirement. Authoritative recovery target via `git show <blob_sha>` (topology-independent)."
+    },
+    "source_commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Optional. Commit that last contained from_path. Human-audit metadata only; recovery uses blob_sha."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional human-readable note on why the draft was retired."
+    }
+  }
+}

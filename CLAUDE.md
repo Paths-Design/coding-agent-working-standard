@@ -34,8 +34,9 @@ Currently absent: `caws claim --spec <id>` (bridge claims for non-worktree conte
 ## v11 spec workflow
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level working spec.
-- v11.1 ships `caws specs create/list/show/close/archive`. Author specs via the CLI; `caws doctor` and `caws gates run --spec <id>` validate.
+- v11.1 ships `caws specs create/list/show/close/archive/retire-draft`. Author specs via the CLI; `caws doctor` and `caws gates run --spec <id>` validate.
 - Acceptance criteria use Given/When/Then format (see existing specs in `.caws/specs/` for the shape).
+- **Lifecycle exits by current state:** active → `caws specs close`; closed → `caws specs archive`; **never-activated draft → `caws specs retire-draft <id>`**. retire-draft is the governed exit for a draft that should never have existed — it deletes the draft via tombstone and appends a recoverable `spec_retired` event (recover with `caws specs show <id> --archived`). **Do NOT `git rm .caws/specs/<id>.yaml`** to retire a draft: raw deletion bypasses the YAML-state audit, the hash-chained event, and the recovery path. `caws specs create` always makes *active* specs, so a `draft` on disk is either hand-authored or pre-existing residue — retire-draft is its sanctioned removal.
 
 ## Governed paths (require special handling)
 
