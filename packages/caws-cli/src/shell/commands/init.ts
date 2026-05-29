@@ -44,7 +44,10 @@ import type {
 import { manageGitignore } from '../../init/gitignore-manage';
 import { initProject, resolveRepoRoot } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
-import { renderGitignore } from '../render/init-gitignore';
+import {
+  renderGitignore,
+  renderGitignoreSkippedNotGit,
+} from '../render/init-gitignore';
 import { renderInit } from '../render/init';
 import {
   renderActivationContract,
@@ -201,10 +204,17 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // marked, idempotent block ignoring ephemeral .caws/ state while leaving
   // authority state (specs/policy/waivers) tracked. Advisory: a write failure
   // is a warning, not a hard error — init's exit code is unchanged.
-  const gitignoreResult = manageGitignore(repoRoot, {
-    adopt: opts.adopt === true,
-  });
-  out(renderGitignore(gitignoreResult));
+  //
+  // Gated on git presence: a .gitignore in a non-git directory is inert noise,
+  // so skip the step (same predicate the commit-hint at step 5 uses).
+  if (isInsideGitWorkingTree(repoRoot)) {
+    const gitignoreResult = manageGitignore(repoRoot, {
+      adopt: opts.adopt === true,
+    });
+    out(renderGitignore(gitignoreResult));
+  } else {
+    out(renderGitignoreSkippedNotGit());
+  }
 
   // Step 2: choose the agent surface and install the hook pack.
   const detection = detectAgentHarness(repoRoot);
