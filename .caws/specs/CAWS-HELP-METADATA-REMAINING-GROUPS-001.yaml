@@ -1,0 +1,25 @@
+id: CAWS-HELP-METADATA-REMAINING-GROUPS-001
+title: 'Help-metadata authority slice 3: wire remaining 11 groups, fix W3/W4 help prose, enable global L5 no-inline-strings lock + full L1 set-equality'
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-29T09:28:25.294Z'
+updated_at: '2026-05-29T09:28:25.294Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
