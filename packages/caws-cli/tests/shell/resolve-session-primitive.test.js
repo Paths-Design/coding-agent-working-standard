@@ -112,3 +112,106 @@ describe('resolveSession — mint discipline', () => {
     expect(r.value.identity.session_id).toBe('caws-from-capsule');
   });
 });
+
+// CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: CLAUDE_CODE_SESSION_ID is the
+// harness UUID Claude Code exports into every tool subprocess (including
+// agent-Bash, where HOOK_SESSION_ID does NOT propagate). Adding it as
+// authority tier 1.5 resolves the agent-Bash write path deterministically
+// to the true caller instead of falling through to the racy
+// tmp/.caller-session.json pointer that misattributed worktree ownership.
+describe('resolveSession — CLAUDE_CODE_SESSION_ID (tier 1.5)', () => {
+  let cawsDir;
+  let worktreeRoot;
+  let repoRoot;
+  afterEach(() => {
+    for (const d of [cawsDir, worktreeRoot, repoRoot]) {
+      if (d) fs.rmSync(d, { recursive: true, force: true });
+    }
+    cawsDir = worktreeRoot = repoRoot = undefined;
+  });
+
+  function setup() {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-ccsid-repo-'));
+    cawsDir = path.join(repoRoot, '.caws');
+    fs.mkdirSync(cawsDir, { recursive: true });
+    worktreeRoot = repoRoot;
+  }
+
+  // Write a fresh durable envelope at <repoRoot>/tmp/<id>/.session-envelope.json
+  function writeEnvelope(id, nowIso) {
+    const dir = path.join(repoRoot, 'tmp', id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, '.session-envelope.json'),
+      JSON.stringify({
+        session_id: id,
+        repo_root: repoRoot,
+        created_at: nowIso,
+        last_seen_at: nowIso,
+        hook_event: 'PreToolUse',
+      }) + '\n'
+    );
+  }
+
+  it('CLAUDE_CODE_SESSION_ID resolves identity when set', () => {
+    setup();
+    const r = resolveSession({
+      env: { CLAUDE_CODE_SESSION_ID: 'cc-sid-7afd0e73' },
+      cawsDir,
+      worktreeRoot,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.source).toBe('claude_code_env');
+    expect(r.value.identity.session_id).toBe('cc-sid-7afd0e73');
+    expect(r.value.identity.platform).toBe('claude-code');
+  });
+
+  it('operator override (CLAUDE_SESSION_ID) still wins over CLAUDE_CODE_SESSION_ID', () => {
+    setup();
+    const r = resolveSession({
+      env: {
+        CLAUDE_SESSION_ID: 'operator-pin',
+        CLAUDE_CODE_SESSION_ID: 'cc-harness-id',
+      },
+      cawsDir,
+      worktreeRoot,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.source).toBe('claude_env');
+    expect(r.value.identity.session_id).toBe('operator-pin');
+  });
+
+  it('literal "unknown" and empty are refused (falls through)', () => {
+    setup();
+    const r = resolveSession({
+      env: { CLAUDE_CODE_SESSION_ID: 'unknown' },
+      cawsDir,
+      worktreeRoot,
+    });
+    // No other source → read-only default returns the no-identity error.
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(SHELL_RULES.SESSION_NO_STABLE_IDENTITY);
+  });
+
+  it('REGRESSION: with >=2 fresh durable envelopes (the race condition), CLAUDE_CODE_SESSION_ID resolves the true caller deterministically — not whichever envelope the racy fallback would pick', () => {
+    setup();
+    const now = new Date('2026-05-29T02:00:00.000Z');
+    const nowIso = now.toISOString();
+    // Two concurrent sessions' fresh envelopes — pre-fix, this drove the
+    // resolver into the .caller-session.json last-writer-wins disambiguator.
+    writeEnvelope('14132976-sibling', nowIso);
+    writeEnvelope('7afd0e73-me', nowIso);
+    const r = resolveSession({
+      // HOOK_SESSION_ID intentionally absent (the agent-Bash condition).
+      // CLAUDE_CODE_SESSION_ID names the real caller and is now tier 1.5,
+      // resolved BEFORE the ambiguous envelope scan.
+      env: { CLAUDE_CODE_SESSION_ID: '7afd0e73-me' },
+      cawsDir,
+      worktreeRoot,
+      now: () => now,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.source).toBe('claude_code_env');
+    expect(r.value.identity.session_id).toBe('7afd0e73-me');
+  });
+});

@@ -4,10 +4,16 @@
 // used both for display ("which agent is doing this?") and — for governed
 // writes — for authority decisions in the kernel.
 //
-// Source priority (pinned in the rewrite plan):
-//   1. CLAUDE_SESSION_ID env
-//   2. CAWS session capsule bound to this shell+worktree
-//   3. CURSOR_TRACE_ID env (low-stability fallback)
+// Source priority (see resolve-session.ts for the authoritative chain):
+//   1.   CLAUDE_SESSION_ID env (operator override)
+//   1.5. CLAUDE_CODE_SESSION_ID env (Claude Code harness UUID; survives the
+//        tool boundary into agent-Bash — CAWS-SESSION-ID-AGENT-BASH-
+//        PROPAGATION-001)
+//   2.   HOOK_SESSION_ID env (hook envelope; does not propagate to agent-Bash)
+//   2.5. durable hook envelope on disk
+//   3.   CAWS session capsule bound to this shell+worktree
+//   4.   CURSOR_TRACE_ID env (low-stability fallback)
+//   5.   minted capsule (write-class only)
 //
 // `agents.json last-active` is NEVER an authority source.
 
@@ -15,6 +21,7 @@ import type { SessionIdentity } from '@paths.design/caws-kernel';
 
 export type SessionSource =
   | 'claude_env'
+  | 'claude_code_env'
   | 'hook_env'
   | 'durable_hook_envelope'
   | 'capsule'

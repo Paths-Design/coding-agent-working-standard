@@ -146,6 +146,11 @@ describe('A1: destroy from canonical succeeds when owner matches an existing cap
       cwd: repoRoot,
       name: 'wt-a1',
       specId: 'FEAT-001',
+      // Pin env so the create actor resolves hermetically. Without this the
+      // command falls to process.env, and a live Claude Code session leaks
+      // CLAUDE_CODE_SESSION_ID (resolver tier 1.5), changing the capsule-mint
+      // count this test asserts on. CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001.
+      env: {},
     });
     expect(create.code).toBe(0);
     wtRoot = path.join(cawsDir, 'worktrees', 'wt-a1');
@@ -213,6 +218,7 @@ describe('A2: destroy still refuses a genuinely-foreign owner', () => {
       cwd: repoRoot,
       name: 'wt-a2',
       specId: 'FEAT-001',
+      env: {}, // hermetic — see wt-a1 note (CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001)
     });
     expect(create.code).toBe(0);
 
@@ -257,10 +263,10 @@ describe('A3: destroy from a sibling worktree cwd succeeds with a valid capsule'
       id: 'FEAT-002', title: 'sibling', mode: 'feature', riskTier: 3,
     });
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-target', specId: 'FEAT-001',
+      cwd: repoRoot, name: 'wt-target', specId: 'FEAT-001', env: {},
     });
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-sibling', specId: 'FEAT-002',
+      cwd: repoRoot, name: 'wt-sibling', specId: 'FEAT-002', env: {},
     });
     const targetRoot = path.join(cawsDir, 'worktrees', 'wt-target');
     const siblingRoot = path.join(cawsDir, 'worktrees', 'wt-sibling');
@@ -293,7 +299,7 @@ describe('A4: destroy refuses when no session source resolves; never mints', () 
     ({ repoRoot, cawsDir } = setupRepoWithSpec('a4-'));
 
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-a4', specId: 'FEAT-001',
+      cwd: repoRoot, name: 'wt-a4', specId: 'FEAT-001', env: {},
     });
     setOwner(cawsDir, 'wt-a4', 'caws-foreign-only');
 
@@ -358,7 +364,7 @@ describe('A5: claim then destroy works with no intermediate recovery', () => {
     ({ repoRoot, cawsDir } = setupRepoWithSpec('a5-'));
 
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-a5', specId: 'FEAT-001',
+      cwd: repoRoot, name: 'wt-a5', specId: 'FEAT-001', env: {},
     });
     const wtRoot = path.join(cawsDir, 'worktrees', 'wt-a5');
 
@@ -400,7 +406,7 @@ describe('A5: claim then destroy works with no intermediate recovery', () => {
     ({ repoRoot, cawsDir } = setupRepoWithSpec('a5b-'));
 
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-a5b', specId: 'FEAT-001',
+      cwd: repoRoot, name: 'wt-a5b', specId: 'FEAT-001', env: {},
     });
     const wtRoot = path.join(cawsDir, 'worktrees', 'wt-a5b');
 
@@ -447,7 +453,7 @@ describe('merge-A1: same multi-candidate admission applies to runWorktreeMergeCo
     ({ repoRoot, cawsDir } = setupRepoWithSpec('mA1-'));
 
     capture(runWorktreeCreateCommand, {
-      cwd: repoRoot, name: 'wt-mA1', specId: 'FEAT-001',
+      cwd: repoRoot, name: 'wt-mA1', specId: 'FEAT-001', env: {},
     });
     const wtRoot = path.join(cawsDir, 'worktrees', 'wt-mA1');
 

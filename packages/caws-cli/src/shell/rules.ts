@@ -17,6 +17,13 @@ export const SHELL_RULE_PREFIXES = {
 export const SHELL_RULES = {
   // Session identity resolution.
   SESSION_RESOLVED_FROM_CLAUDE_ENV: 'shell.session.resolved_from_claude_env',
+  // CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: CLAUDE_CODE_SESSION_ID is the
+  // harness session UUID exported by Claude Code into EVERY tool subprocess
+  // (including agent-Bash), so it resolves the agent-Bash write path
+  // deterministically without falling through to the racy
+  // tmp/.caller-session.json pointer. Authority tier 1.5.
+  SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV:
+    'shell.session.resolved_from_claude_code_env',
   SESSION_RESOLVED_FROM_HOOK_ENV: 'shell.session.resolved_from_hook_env',
   SESSION_RESOLVED_FROM_CAPSULE: 'shell.session.resolved_from_capsule',
   SESSION_RESOLVED_FROM_CURSOR_ENV: 'shell.session.resolved_from_cursor_env',

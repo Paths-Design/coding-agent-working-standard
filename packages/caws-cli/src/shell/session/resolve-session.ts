@@ -563,6 +563,32 @@ export function resolveSession(
     });
   }
 
+  // 1.5. CLAUDE_CODE_SESSION_ID env (authority source #1.5 — the harness's
+  //      own per-session UUID, exported by Claude Code into EVERY tool
+  //      subprocess, including the agent's Bash tool. Unlike HOOK_SESSION_ID
+  //      (set only inside the hook's own shell, so it does NOT propagate to
+  //      an agent-issued `caws` call), CLAUDE_CODE_SESSION_ID survives the
+  //      tool boundary. Admitting it here resolves the agent-Bash write path
+  //      deterministically to the true caller, so concurrent sessions no
+  //      longer fall through to the racy tmp/.caller-session.json pointer
+  //      (the last-writer-wins singleton that caused worktree-ownership
+  //      misattribution). CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001.
+  //
+  //      Refuse the literal 'unknown' and empty string for the same reason
+  //      tier-2 does: never alias a broken context into a shared identity.
+  //      Stays below CLAUDE_SESSION_ID so the operator override still wins.
+  const claudeCodeId = env['CLAUDE_CODE_SESSION_ID'];
+  if (
+    typeof claudeCodeId === 'string' &&
+    claudeCodeId.length > 0 &&
+    claudeCodeId !== 'unknown'
+  ) {
+    return ok({
+      identity: { session_id: claudeCodeId, platform: 'claude-code' },
+      source: 'claude_code_env',
+    });
+  }
+
   // 2. HOOK_SESSION_ID env (authority source #2 — harness-stable id
   //    exported by the Claude Code hook envelope via lib/parse-input.sh).
   //    Refuse the literal 'unknown' (parse-input.sh's fallback when the
@@ -735,6 +761,11 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_ENV,
         `Session identity from CLAUDE_SESSION_ID env: ${s.identity.session_id}`
+      );
+    case 'claude_code_env':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
+        `Session identity from CLAUDE_CODE_SESSION_ID env (Claude Code harness, survives the tool boundary): ${s.identity.session_id}`
       );
     case 'hook_env':
       return infoDiag(
@@ -946,6 +977,41 @@ export function resolveSessionCandidates(
       source: 'claude_env',
       outcome: 'absent',
       reason: 'CLAUDE_SESSION_ID not set',
+    });
+  }
+
+  // 1.5. CLAUDE_CODE_SESSION_ID env (refuse literal 'unknown' and empty).
+  //      CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: the harness UUID that
+  //      survives the tool boundary into agent-Bash. Admitted as a candidate
+  //      so ownership comparison can match a worktree owner stamped from this
+  //      same source — exact session_id equality, never widens authority.
+  const claudeCodeId = env['CLAUDE_CODE_SESSION_ID'];
+  if (
+    typeof claudeCodeId === 'string' &&
+    claudeCodeId.length > 0 &&
+    claudeCodeId !== 'unknown'
+  ) {
+    candidates.push({
+      identity: { session_id: claudeCodeId, platform: 'claude-code' },
+      source: 'claude_code_env',
+    });
+    trace.push({
+      source: 'claude_code_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [claudeCodeId],
+    });
+  } else if (claudeCodeId === 'unknown') {
+    trace.push({
+      source: 'claude_code_env',
+      outcome: 'rejected',
+      reason: 'CLAUDE_CODE_SESSION_ID is literal "unknown"',
+    });
+  } else {
+    trace.push({
+      source: 'claude_code_env',
+      outcome: 'absent',
+      reason: 'CLAUDE_CODE_SESSION_ID not set',
     });
   }
 
