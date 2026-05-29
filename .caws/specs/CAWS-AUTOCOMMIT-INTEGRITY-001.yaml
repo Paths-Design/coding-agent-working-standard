@@ -7,19 +7,123 @@ created_at: '2026-05-29T00:56:06.864Z'
 updated_at: '2026-05-29T00:56:06.864Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-AUTOCOMMIT-INTEGRITY-001.yaml
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/tests/store/git-autocommit.test.js
+    - packages/caws-cli/tests/shell/specs.test.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Path-scoped commit. autoCommit MUST commit ONLY the paths it staged,
+    never the ambient index. Today git-autocommit.ts stages with
+    `git add -- <paths>` (correct) but then commits with a bare
+    `git commit -m <msg>` (NO pathspec), which commits the ENTIRE index
+    — sweeping any file a concurrent sibling session pre-staged into the
+    shared cross-worktree index. The fix changes the commit to
+    `git commit -- <paths> -m <msg>` (or equivalent) so a foreign
+    pre-staged file is NEVER carried into a CAWS lifecycle commit. This
+    is the single shared utility behind specs create/close/archive AND
+    every worktrees-writer transition, so the fix is one-site and total.
+  - >-
+    Success is never decoupled from the audit commit. A lifecycle
+    command (caws specs close/create/archive; caws worktree
+    create/bind/destroy/merge) MUST NOT report plain success while the
+    audit commit did not land. Today the shell handlers print
+    "closed/created/archived ..." and return 0 without inspecting
+    outcome.data.audit_commit.kind. When kind === 'refused_dirty', the
+    handler MUST surface it: a clearly-marked warning naming the file(s)
+    left uncommitted, the underlying reason, and the manual-commit
+    remedy. The lifecycle YAML change still stands (it is on disk); the
+    contract is that the user is TOLD the audit commit did not land,
+    not that the command silently claims success.
+  - >-
+    No hook bypass; no behavior regression for the clean path. The fix
+    MUST NOT add --no-verify / --no-gpg-sign or any bypass. The
+    kind:'committed' (clean) and kind:'skipped_no_git' paths and their
+    existing outcomes are unchanged. Only (a) the commit pathspec and
+    (b) the handler surfacing of refused_dirty change. The
+    wasDirtyBeforeWrite refusal semantics (kind:'refused_dirty' when the
+    target was dirty before the writer's own write) are preserved.
+  - >-
+    Scope-bounded to the utility + the two shell handlers + their tests.
+    specs-writer.ts and worktrees-writer.ts (the callers that build the
+    AutoCommitInput) are scope.out — they already pass the correct
+    `paths`; the bug is in how git-autocommit.ts USES those paths at
+    commit time and how the shell SURFACES the outcome. No kernel,
+    policy, or event-schema change.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A repo where a sibling has pre-staged an unrelated file
+      (sibling.txt) in the shared index, and a CAWS writer has staged
+      and is about to commit its own path (own.yaml) via autoCommit.
+    when: autoCommit runs its commit step.
+    then: >-
+      The resulting commit contains ONLY own.yaml. sibling.txt remains
+      staged-but-uncommitted in the index, untouched. Proven by
+      inspecting the commit's name-only file list (exactly [own.yaml])
+      and confirming git diff --cached still shows sibling.txt.
+  - id: A2
+    given: >-
+      autoCommit is called with paths that, after staging, produce a
+      non-empty diff, with the bare-commit replaced by a path-scoped
+      commit.
+    when: the commit succeeds.
+    then: >-
+      kind === 'committed' with a real short sha, and HEAD's tree
+      differs from its parent ONLY in the staged paths. The existing
+      git-autocommit.test.js clean-path assertions still pass.
+  - id: A3
+    given: >-
+      A spec close whose autoCommit returns kind === 'refused_dirty'
+      (e.g. simulated commit failure / dirty-before-write).
+    when: runSpecsCloseCommand completes.
+    then: >-
+      The command surfaces the refused_dirty outcome on stderr — naming
+      the uncommitted file and the reason and the manual remedy — rather
+      than printing a bare "closed ..." success line with no warning.
+      The YAML change is still on disk (close is not rolled back). Exit
+      code reflects the un-landed audit commit per the chosen policy
+      (at minimum a distinct non-silent warning).
+  - id: A4
+    given: >-
+      A normal spec close in a clean repo with no sibling contention.
+    when: runSpecsCloseCommand completes.
+    then: >-
+      Behavior is UNCHANGED from today: the close commits cleanly,
+      prints "closed <id> (resolution: ...)", exits 0, and the audit
+      commit lands. No regression for the happy path.
+  - id: A5
+    given: The fix applied to git-autocommit.ts.
+    when: the full caws-cli store + shell test suites run.
+    then: >-
+      All existing git-autocommit, specs-writer, and worktrees-writer
+      autocommit tests pass (no regression to the shared utility's other
+      callers), plus the new A1/A3 tests are green.
+non_functional:
+  reliability:
+    - >-
+      Closes a governance-integrity hole: a lifecycle command could
+      report success while (a) leaving its change uncommitted and (b)
+      sweeping a concurrent sibling session's pre-staged file into the
+      shared index — the exact cross-session attribution failure CAWS
+      exists to prevent, originating from CAWS's own store layer. After
+      this fix, a CAWS lifecycle commit carries only its own paths, and
+      a non-landed audit commit is always surfaced, never silent.
 contracts: []
