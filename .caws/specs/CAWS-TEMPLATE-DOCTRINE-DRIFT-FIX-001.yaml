@@ -3,23 +3,51 @@ title: 'Fix shipped template and package command drift'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: template-doctrine-drift-fix
 created_at: '2026-05-29T00:59:38.015Z'
 updated_at: '2026-05-29T00:59:38.015Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - package.json
+    - CLAUDE.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
+    - packages/caws-cli/templates/.claude/rules/worktree-isolation.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-TEMPLATE-DOCTRINE-DRIFT-FIX-001.yaml
+    - package.json
+    - CLAUDE.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
+    - packages/caws-cli/templates/.claude/rules/worktree-isolation.md
+  out:
+    - docs
+    - packages/caws-cli/src
+    - packages/caws-kernel
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Root and shipped template doctrine must describe the currently
+    installed v11.1 surface: no removed command is presented as current
+    usage, shipped agents commands are not described as deferred, and
+    worktree guidance must not mention removed `caws parallel setup`.
+  - >-
+    Root package scripts must not call removed CAWS commands.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the root package scripts
+    when: they are scanned for removed CAWS commands
+    then: no script invokes `caws validate`; validation guidance uses the v11 surfaces (`caws doctor` and/or `caws gates run`) instead.
+  - id: A2
+    given: root CLAUDE.md and shipped CAWS templates
+    when: they are scanned for command-count and multi-agent guidance
+    then: they describe 12 shipped command groups, shipped `agents list/show`, and no longer claim agents are planned for v11.2.
+  - id: A3
+    given: the template worktree-isolation rule
+    when: it is scanned for worktree setup commands
+    then: it uses `caws worktree create <name> --spec <id>` and contains no `caws parallel setup` guidance.
 non_functional: {}
 contracts: []
