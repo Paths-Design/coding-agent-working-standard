@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
 
 const DEFAULT_OUTPUT = path.join(repoRoot, 'dist', 'main');
+const CLI_PACKAGE = path.join(repoRoot, 'packages', 'caws-cli');
 const CLI_DIST = path.join(repoRoot, 'packages', 'caws-cli', 'dist');
 const CLI_BIN = path.join(CLI_DIST, 'index.js');
 
@@ -23,6 +24,7 @@ function usage() {
     '  --install          Always run npm ci before building',
     '  --skip-install     Do not install dependencies, even if node_modules is absent',
     '  --skip-build       Only refresh symlinks; requires existing package dist',
+    '  --no-global-link   Do not npm-link the local CLI into the active Node prefix',
     '  --help             Show this help',
   ].join('\n');
 }
@@ -32,6 +34,7 @@ function parseArgs(argv) {
     outputDir: DEFAULT_OUTPUT,
     install: 'auto',
     build: true,
+    globalLink: true,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -51,6 +54,8 @@ function parseArgs(argv) {
       opts.install = 'never';
     } else if (arg === '--skip-build') {
       opts.build = false;
+    } else if (arg === '--no-global-link') {
+      opts.globalLink = false;
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -69,6 +74,14 @@ function run(cmd, args) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function runCapture(cmd, args, options = {}) {
+  return spawnSync(cmd, args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    ...options,
+  });
 }
 
 function requirePath(target, label) {
@@ -90,6 +103,59 @@ function symlinkRelative(target, linkPath, type) {
   const relativeTarget = path.relative(path.dirname(linkPath), target);
   fs.symlinkSync(relativeTarget, linkPath, type);
   console.log(`linked ${path.relative(repoRoot, linkPath)} -> ${relativeTarget}`);
+}
+
+function existingCawsBin() {
+  const result = runCapture('sh', ['-lc', 'which -a caws 2>/dev/null || true']);
+  const candidates = result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return candidates.find((candidate) => {
+    const resolved = path.resolve(candidate);
+    return !resolved.startsWith(repoRoot) && !resolved.includes(`${path.sep}node_modules${path.sep}.bin${path.sep}`);
+  }) ?? null;
+}
+
+function firstWritablePathDir() {
+  for (const entry of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (entry.length === 0) continue;
+    try {
+      fs.accessSync(entry, fs.constants.W_OK);
+      return entry;
+    } catch {
+      // Keep scanning PATH.
+    }
+  }
+  return null;
+}
+
+function linkGlobalShim() {
+  const existing = existingCawsBin();
+  const linkPath = existing ?? path.join(firstWritablePathDir() ?? '', 'caws');
+  if (!linkPath || linkPath === 'caws') {
+    throw new Error('could not find a writable PATH directory for the global caws shim');
+  }
+  const parent = path.dirname(linkPath);
+  fs.accessSync(parent, fs.constants.W_OK);
+  removeIfExists(linkPath);
+  fs.symlinkSync(CLI_BIN, linkPath, 'file');
+  console.log(`linked ${linkPath} -> ${CLI_BIN}`);
+}
+
+function linkGlobalCli() {
+  requirePath(path.join(CLI_PACKAGE, 'package.json'), 'CLI package metadata');
+  requirePath(CLI_BIN, 'CLI bin output');
+  console.log('$ npm link --workspace @paths.design/caws-cli');
+  const result = spawnSync('npm', ['link', '--workspace', '@paths.design/caws-cli'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.status === 0) return;
+
+  console.log('npm link failed; falling back to a direct caws shim on PATH.');
+  linkGlobalShim();
 }
 
 function main() {
@@ -124,6 +190,12 @@ function main() {
   fs.mkdirSync(opts.outputDir, { recursive: true });
   symlinkRelative(CLI_DIST, path.join(opts.outputDir, 'caws-cli-dist'), 'dir');
   symlinkRelative(CLI_BIN, path.join(opts.outputDir, 'caws'), 'file');
+
+  if (opts.globalLink) {
+    linkGlobalCli();
+  } else {
+    console.log('skipping global npm link by request.');
+  }
 
   console.log(`build-main-dist-link complete: ${path.relative(repoRoot, opts.outputDir)}`);
 }
