@@ -16,6 +16,17 @@
 import type { Command } from 'commander';
 
 import {
+  INIT_COMMAND_META,
+  DOCTOR_COMMAND_META,
+  STATUS_COMMAND_META,
+  CLAIM_COMMAND_META,
+  PREPUSH_COMMAND_META,
+  SCOPE_COMMAND_META,
+  GATES_COMMAND_META,
+  EVIDENCE_COMMAND_META,
+  EVENTS_COMMAND_META,
+  WAIVER_COMMAND_META,
+  AGENTS_COMMAND_META,
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   type GroupCommandMeta,
@@ -114,10 +125,39 @@ function renderOptionDescription(opt: CommandOptionMeta): string {
   return opt.description;
 }
 
+/** Commander value collector for repeatable string options — accumulates each
+ * occurrence into an array, verbatim caller order, no normalization. Shared by
+ * every `collect: true` metadata option (claim --paths, prepush --ack, waiver
+ * create --gate). */
+function collectOption(
+  value: string,
+  previous: readonly string[] | undefined
+): string[] {
+  return previous === undefined ? [value] : [...previous, value];
+}
+
 /** Apply one metadata option to a Commander command, choosing
- * required/optional and passing a default value when declared. */
+ * required/optional, supplying a collector for repeatable (`collect`) options,
+ * and passing a default value when declared. */
 function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
   const description = renderOptionDescription(opt);
+  if (opt.collect === true) {
+    // Repeatable option: Commander needs the collector fn. Whether to seed an
+    // initial [] is preserved from the prior hand-written behavior and encoded
+    // in metadata as defaultValue: [] (e.g. prepush --ack, waiver --gate seed
+    // so the value is always an array; claim --paths omits the seed so an
+    // unsupplied option stays `undefined`).
+    const seed =
+      opt.defaultValue !== undefined ? (opt.defaultValue as string[]) : undefined;
+    if (opt.required === true) {
+      cmd.requiredOption(opt.flag, description, collectOption, seed ?? ([] as string[]));
+    } else if (seed !== undefined) {
+      cmd.option(opt.flag, description, collectOption, seed);
+    } else {
+      cmd.option(opt.flag, description, collectOption);
+    }
+    return;
+  }
   if (opt.required === true) {
     cmd.requiredOption(opt.flag, description);
     return;
@@ -152,6 +192,17 @@ function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
   group.description(meta.description);
 }
 
+/** Register a FLAT top-level command from LeafCommandMeta (init/doctor/status/
+ * claim/prepush): name(+arg), description, options — all metadata-driven.
+ * Returns the configured Command so the caller can attach `.action()`. */
+function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
+  const cmd = program.command(leafCommandName(leaf)).description(leaf.description);
+  for (const opt of leaf.options) {
+    applyOptionMeta(cmd, opt);
+  }
+  return cmd;
+}
+
 /** Look up a leaf's metadata within a group by subcommand name. Throws if the
  * metadata is missing — a wiring bug should fail loudly at registration, not
  * silently register a command with no help. */
@@ -180,33 +231,7 @@ export function registerShellCommands(
   // Replaces the legacy `caws init` registration removed from
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
-  program
-    .command('init')
-    .description(
-      'Bootstrap the canonical vNext .caws/ project state (idempotent; ' +
-        'refuses to overwrite legacy single-spec layout). With ' +
-        '--agent-surface, also installs the corresponding hook pack.'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
-    .option(
-      '--agent-surface <name>',
-      'Install a hook pack for an agent harness ' +
-        '(claude-code | cursor | windsurf | none). When omitted, init ' +
-        'attempts filesystem detection and skips hook install when ' +
-        'ambiguous.'
-    )
-    .option(
-      '--overwrite',
-      'For hook-pack install: replace drifted or unmanaged files at ' +
-        'managed pack paths. CAUTION: local edits to those files will ' +
-        'be lost.'
-    )
-    .option(
-      '--adopt',
-      'For hook-pack install: leave drifted or unmanaged files in place ' +
-        'without enforcing pack contents. CAUTION: pack drift is no ' +
-        'longer tracked for those paths.'
-    )
+  defineFlat(program, INIT_COMMAND_META)
     .action(
       (opts: {
         data?: boolean;
@@ -237,10 +262,7 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws doctor
   // -------------------------------------------------------------------
-  program
-    .command('doctor')
-    .description('Run drift detection against the current .caws/ state')
-    .option('--data', 'Show structured data block on findings/diagnostics')
+  defineFlat(program, DOCTOR_COMMAND_META)
     .action((opts: { data?: boolean }) => {
       const code = runDoctorCommand({
         showData: opts.data === true,
@@ -252,14 +274,10 @@ export function registerShellCommands(
   // caws scope show <path>   /   caws scope check <path>
   // (replaces the legacy `scope` group entirely)
   // -------------------------------------------------------------------
-  const scopeCmd = program
-    .command('scope')
-    .description('Evaluate file paths against the bound spec scope');
+  const scopeCmd = program.command('scope');
+  applyGroupMeta(scopeCmd, SCOPE_COMMAND_META);
 
-  scopeCmd
-    .command('show <path>')
-    .description('Explain the scope decision for <path>; always exits 0')
-    .option('--data', 'Show structured data block')
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'show'))
     .action((p: string, opts: { data?: boolean }) => {
       const code = runScopeCommand({
         path: p,
@@ -269,10 +287,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  scopeCmd
-    .command('check <path>')
-    .description('Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise')
-    .option('--data', 'Show structured data block')
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'check'))
     .action((p: string, opts: { data?: boolean }) => {
       const code = runScopeCommand({
         path: p,
@@ -285,12 +300,7 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws status — read-only dashboard (replaces legacy status)
   // -------------------------------------------------------------------
-  program
-    .command('status')
-    .description(
-      'Read-only dashboard: project, current context, claim, and doctor findings'
-    )
-    .option('--data', 'Show structured data block on rendered diagnostics')
+  defineFlat(program, STATUS_COMMAND_META)
     .action((opts: { data?: boolean }) => {
       const code = runStatusCommand({
         showData: opts.data === true,
@@ -301,32 +311,7 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws claim [--takeover] [--paths <path>...]
   // -------------------------------------------------------------------
-  program
-    .command('claim')
-    .description(
-      'Surface ownership of the current worktree; with --takeover, ' +
-        'acquire ownership from a foreign session (writes prior_owners audit). ' +
-        'With --paths, declare working-tree ownership metadata on the current ' +
-        "session's lease (SESSION-OWNERSHIP-METADATA-001)."
-    )
-    .option(
-      '--takeover',
-      'Forcibly take ownership of a foreign-owned worktree. Required when ' +
-        'the current owner is a different session.'
-    )
-    // SESSION-OWNERSHIP-METADATA-001 commit 3: explicit claim of paths.
-    // Repeatable; verbatim caller order; no glob expansion; no
-    // normalization. The kernel validates non-empty / no-null-byte
-    // and refuses if no lease exists for the current session.
-    .option(
-      '--paths <path>',
-      'Declare a path as claimed by the current session. Repeatable; ' +
-        'order preserved; strings stored verbatim. Refused with no write if ' +
-        'no lease exists for the current session.',
-      (value: string, previous: readonly string[] | undefined) =>
-        previous === undefined ? [value] : [...previous, value]
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineFlat(program, CLAIM_COMMAND_META)
     .action(
       (opts: {
         takeover?: boolean;
@@ -346,24 +331,10 @@ export function registerShellCommands(
   // caws gates run --spec <id> [--context <ctx>]
   // (replaces the legacy `gates` group and `quality-gates` alias)
   // -------------------------------------------------------------------
-  const gatesCmd = program
-    .command('gates')
-    .description('Run quality gates against the current changes (policy-driven)');
+  const gatesCmd = program.command('gates');
+  applyGroupMeta(gatesCmd, GATES_COMMAND_META);
 
-  gatesCmd
-    .command('run')
-    .description(
-      'Run CAWS-local policy evaluators and apply policy.gates[gate].mode ' +
-        'to decide block/warn/skip. Appends one gate_evaluated event per ' +
-        'policy-declared gate.'
-    )
-    .requiredOption('--spec <id>', 'Spec id this gate run is about')
-    .option(
-      '--context <ctx>',
-      'Compatibility no-op retained from the former quality-gates subprocess path',
-      'cli'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'run'))
     .action(
       (opts: { spec: string; context: string; data?: boolean }) => {
         const code = runGatesRunCommand(
@@ -379,27 +350,7 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws prepush — MULTI-AGENT-PUSH-RANGE-GUARD-001
   // -------------------------------------------------------------------
-  program
-    .command('prepush')
-    .description(
-      'Classify the outgoing commit range before publish and refuse ' +
-        'commits not attributable to the current slice. Diagnose/decide ' +
-        'only — does NOT run git push.'
-    )
-    .option('--remote <remote>', 'Push remote', 'origin')
-    .option('--branch <branch>', 'Push branch', 'main')
-    .option('--base <ref>', 'Base ref override (default <remote>/<branch>)')
-    .option('--spec <id>', 'Current session active spec id (for slice-match)')
-    .option(
-      '--ack <sha>',
-      'Acknowledge an unexpected commit by SHA (repeatable)',
-      (val: string, acc: string[]) => {
-        acc.push(val);
-        return acc;
-      },
-      [] as string[]
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineFlat(program, PREPUSH_COMMAND_META)
     .action(
       (opts: {
         remote: string;
@@ -424,18 +375,10 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws evidence record
   // -------------------------------------------------------------------
-  const evidenceCmd = program
-    .command('evidence')
-    .description('Record typed evidence events into .caws/events.jsonl');
+  const evidenceCmd = program.command('evidence');
+  applyGroupMeta(evidenceCmd, EVIDENCE_COMMAND_META);
 
-  evidenceCmd
-    .command('record')
-    .description('Append a typed evidence event (test|gate|ac)')
-    .requiredOption('--type <kind>', 'Evidence kind: test | gate | ac')
-    .requiredOption('--spec <id>', 'Spec id this evidence is about')
-    .requiredOption('--data <json>', 'Event payload as a JSON object string')
-    .option('--actor-kind <kind>', 'Actor kind: agent | human | system | automation', 'agent')
-    .option('--actor-id <id>', 'Override actor id (defaults to session id)')
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'record'))
     .action(
       (opts: {
         type: string;
@@ -487,19 +430,10 @@ export function registerShellCommands(
   //   - verify-archive: recompute archive sha256+line count vs the
   //              most recent chain_rotated event.
   // -------------------------------------------------------------------
-  const eventsCmd = program
-    .command('events')
-    .description('Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)');
+  const eventsCmd = program.command('events');
+  applyGroupMeta(eventsCmd, EVENTS_COMMAND_META);
 
-  eventsCmd
-    .command('migrate')
-    .description('Migrate a v10-shape events.jsonl to a v11 chain via chain_rotated rotation. Dry-run by default; --apply executes.')
-    .requiredOption('--from <version>', 'Source schema version (only v10 supported in v11.2)')
-    .option('--apply', 'Execute the rotation (default is dry-run)')
-    .option('--reason <text>', 'Operator reason recorded into the chain_rotated payload (required for --apply)')
-    .option('--actor-kind <kind>', 'Actor kind: agent | human | system | automation', 'agent')
-    .option('--actor-id <id>', 'Override actor id (defaults to session id)')
-    .option('--allow-partial-upgrade', 'Allow rotation when v10 specs are still present (off by default; see CAWS-MIGRATE-V10-SPECS-001)')
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'migrate'))
     .action(
       (opts: {
         from: string;
@@ -530,13 +464,7 @@ export function registerShellCommands(
       }
     );
 
-  eventsCmd
-    .command('rotate')
-    .description('Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.')
-    .requiredOption('--reason <text>', 'Operator reason recorded into the chain_rotated payload')
-    .option('--actor-kind <kind>', 'Actor kind: agent | human | system | automation', 'agent')
-    .option('--actor-id <id>', 'Override actor id (defaults to session id)')
-    .option('--allow-clean', 'Allow rotation of a clean v11 chain (friction flag)')
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'rotate'))
     .action(
       (opts: {
         reason: string;
@@ -556,9 +484,7 @@ export function registerShellCommands(
       }
     );
 
-  eventsCmd
-    .command('verify-archive')
-    .description('Verify that the archive file named in the most recent chain_rotated event byte-matches its committed digest + line count.')
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'verify-archive'))
     .action(() => {
       const code = runEventsVerifyArchiveCommand({});
       exit(code);
@@ -571,35 +497,10 @@ export function registerShellCommands(
   // `waivers` group is removed in src/index.js as part of slice 7a.4 —
   // no compatibility alias, no feature flag.
   // -------------------------------------------------------------------
-  const waiverCmd = program
-    .command('waiver')
-    .description(
-      'Manage CAWS waivers (bounded exception records that suppress matching gate violations)'
-    );
+  const waiverCmd = program.command('waiver');
+  applyGroupMeta(waiverCmd, WAIVER_COMMAND_META);
 
-  waiverCmd
-    .command('create <id>')
-    .description(
-      'Create a new active waiver. Validates against the kernel before writing.'
-    )
-    .requiredOption('--title <title>', 'Short waiver title (≥5 chars)')
-    .requiredOption(
-      '--gate <gate>',
-      'Gate id this waiver covers; repeat for multiple gates',
-      collectMulti,
-      [] as string[]
-    )
-    .requiredOption('--reason <reason>', 'Justification for the waiver')
-    .requiredOption('--approved-by <id>', 'Approver identity')
-    .requiredOption(
-      '--expires-at <iso>',
-      'Expiry as an ISO-8601 datetime with timezone'
-    )
-    .option(
-      '--spec <id>',
-      'Optional spec id this waiver is scoped to (omit for project-wide)'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'create'))
     .action(
       (
         id: string,
@@ -627,14 +528,7 @@ export function registerShellCommands(
       }
     );
 
-  waiverCmd
-    .command('list')
-    .description(
-      'List waivers. By default excludes revoked and expired records.'
-    )
-    .option('--include-revoked', 'Include revoked waivers')
-    .option('--include-expired', 'Include expired waivers')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'list'))
     .action(
       (opts: {
         includeRevoked?: boolean;
@@ -650,10 +544,7 @@ export function registerShellCommands(
       }
     );
 
-  waiverCmd
-    .command('show <id>')
-    .description('Show a waiver, including its derived effectiveness at now.')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'show'))
     .action((id: string, opts: { data?: boolean }) => {
       const code = runWaiverShowCommand({
         id,
@@ -662,17 +553,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  waiverCmd
-    .command('revoke <id>')
-    .description(
-      'Revoke a waiver. Writes a revocation record; refuses double-revoke.'
-    )
-    .option('--revoked-by <id>', 'Identity recorded in revocation.revoked_by')
-    .option(
-      '--reason <reason>',
-      'Reason recorded in revocation.reason (recommended for audit)'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'revoke'))
     .action(
       (
         id: string,
@@ -940,22 +821,10 @@ export function registerShellCommands(
     });
 
   // ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ────────────────────
-  const agentsCmd = program
-    .command('agents')
-    .description(
-      'Agent liveness substrate: register/heartbeat/stop/list/show/prune. ' +
-        'Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.'
-    );
+  const agentsCmd = program.command('agents');
+  applyGroupMeta(agentsCmd, AGENTS_COMMAND_META);
 
-  agentsCmd
-    .command('register')
-    .description('Register this session in .caws/leases/. Hook-invoked at SessionStart.')
-    .option('--session-id <id>', 'Explicit session id (required for hook-invoked usage; overrides resolveSession)')
-    .option('--platform <p>', 'Platform tag (e.g., claude-code, cursor, manual)')
-    .option('--reason <r>', 'session_start | pre_tool_use | manual_register | claim | status')
-    .option('--json', 'Emit CAWS-native JSON to stdout (never hookSpecificOutput)')
-    .option('--include-active-summary', 'Include active_agent_count + active_agents in JSON output')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'register'))
     .action(
       (opts: {
         sessionId?: string;
@@ -977,16 +846,7 @@ export function registerShellCommands(
       }
     );
 
-  agentsCmd
-    .command('heartbeat')
-    .description('Refresh this session\'s lease. Hook-invoked at PreToolUse. Throttle-aware.')
-    .option('--session-id <id>', 'Explicit session id (required for hook-invoked usage)')
-    .option('--platform <p>', 'Platform tag')
-    .option('--reason <r>', 'pre_tool_use | claim | status | manual_register')
-    .option('--throttle <ms>', 'Skip write if last_active within this many ms (default: 0 — no throttle)')
-    .option('--json', 'Emit CAWS-native JSON to stdout')
-    .option('--include-active-summary', 'Include active_agent_count + active_agents in JSON output')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'heartbeat'))
     .action(
       (opts: {
         sessionId?: string;
@@ -1011,13 +871,7 @@ export function registerShellCommands(
       }
     );
 
-  agentsCmd
-    .command('stop')
-    .description('Mark this session\'s lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.')
-    .option('--session-id <id>', 'Explicit session id')
-    .option('--platform <p>', 'Platform tag')
-    .option('--json', 'Emit CAWS-native JSON to stdout')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'stop'))
     .action((opts: { sessionId?: string; platform?: string; json?: boolean; data?: boolean }) => {
       const code = runAgentsStopCommand({
         ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
@@ -1028,15 +882,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  agentsCmd
-    .command('list')
-    .description('List active / stale / stopped agents. Read-only.')
-    .option('--include-stale', 'Include stale (active-but-TTL-expired) records')
-    .option('--include-stopped', 'Include stopped records')
-    .option('--active', 'Active-only (overrides --include-* flags); TTL-classified active, not raw status field')
-    .option('--stale-ttl-ms <ms>', 'TTL for stale classification (default: 1800000 = 30m)')
-    .option('--json', 'Emit CAWS-native JSON to stdout')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'list'))
     .action(
       (opts: {
         includeStale?: boolean;
@@ -1059,11 +905,7 @@ export function registerShellCommands(
       }
     );
 
-  agentsCmd
-    .command('show <id>')
-    .description('Show one lease by session id. Read-only.')
-    .option('--json', 'Emit CAWS-native JSON to stdout')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'show'))
     .action((id: string, opts: { json?: boolean; data?: boolean }) => {
       const code = runAgentsShowCommand({
         id,
@@ -1073,18 +915,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  agentsCmd
-    .command('prune')
-    .description(
-      'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. ' +
-        'Never invoked by hooks.'
-    )
-    .requiredOption('--status <s>', 'stopped | stale')
-    .requiredOption('--older-than-ms <ms>', 'Retention threshold in milliseconds')
-    .option('--stale-ttl-ms <ms>', 'TTL for stale classification (used with --status stale; default 30m)')
-    .option('--apply', 'Actually delete (default: dry-run)')
-    .option('--json', 'Emit CAWS-native JSON to stdout')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'prune'))
     .action(
       (opts: {
         status: string;
@@ -1115,10 +946,4 @@ export function registerShellCommands(
         exit(code);
       }
     );
-}
-
-/** Commander value collector for repeatable string options. */
-function collectMulti(value: string, prev: string[]): string[] {
-  prev.push(value);
-  return prev;
 }
