@@ -3,6 +3,7 @@ title: 'caws doctor warns when .caws/ has specs but ephemeral runtime state is n
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: doctor-gi-drift
 blast_radius:
   modules:
     - packages/caws-cli/src/init/gitignore-drift.ts
