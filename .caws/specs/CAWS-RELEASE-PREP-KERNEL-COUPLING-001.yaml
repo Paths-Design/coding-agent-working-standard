@@ -7,19 +7,96 @@ created_at: '2026-05-29T08:25:05.716Z'
 updated_at: '2026-05-29T08:25:05.716Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/package.json
+    - packages/caws-kernel/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-kernel/package.json
+    - packages/caws-kernel/CHANGELOG.md
+    - packages/caws-cli/package.json
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/CAWS-RELEASE-PREP-KERNEL-COUPLING-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - packages/quality-gates
+    - .github/workflows
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Version + CHANGELOG metadata only; NO source, schema, or CI change. This
+    slice edits version strings, a dependency range, and CHANGELOG prose. It
+    does NOT touch packages/caws-kernel/src (the spec_retired schema already
+    landed under QG/retire-draft slices) or packages/caws-cli/src. The kernel
+    bump is the version label for source that is ALREADY on main; this slice
+    does not author kernel code.
+  - >-
+    Coupled-release ordering fix (the registry-stale-kernel footgun). The
+    published kernel 1.1.3 does NOT contain the spec_retired event schema, but
+    the CLI's `caws specs retire-draft` calls the kernel appendEvent path which
+    validates against the kernel PAYLOAD_SCHEMAS at runtime. The CLI's current
+    dep range `^1.1.0` is satisfied by the stale registry 1.1.3, so a fresh
+    install would resolve a kernel that rejects spec_retired. This slice (a)
+    bumps the kernel version to 1.1.4 so the new schema ships under a new
+    version, and (b) pins the CLI dep to `^1.1.4` so no fresh install can
+    resolve the pre-spec_retired kernel. This is the exact mitigation the
+    release-procedure "registry-stale kernel resolution" footgun prescribes.
+  - >-
+    Kernel 1.1.4 is additive/backward-compatible (a new event schema +
+    registration only); patch bump is correct (consistent with the prior
+    1.1.0->1.1.1->1.1.2->1.1.3 additive cadence). CLI 11.1.6->11.1.7 matches
+    the already-named release-train (the orphan worktree release-caws-11-1-7-train).
+  - >-
+    quality-gates is NOT a release-ordering dependency and is untouched. The
+    CLI references @paths.design/quality-gates only via a subprocess adapter
+    (spawnSync of a `caws-quality-gates` bin with graceful ENOENT), never a
+    runtime require; the package was not modified this campaign (0 files); the
+    published 2.1.0 satisfies the CLI's `^2.0.0`. No quality-gates publish is
+    needed and packages/quality-gates is scope.out.
+  - >-
+    Publish/tag remain the maintainer boundary. This slice prepares the
+    version + dep + CHANGELOG edits and proves the coupling with a
+    LOCALLY-PACKED kernel smoke; it does NOT run `npm publish`, `npm dist-tag`,
+    or push any git tag. The kernel publish (manual, per docs/release-procedure.md
+    "Publishing caws-kernel") and the `caws-cli-vX.Y.Z` tag push are the
+    maintainer's actions, in that order.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: packages/caws-kernel/package.json after the bump.
+    when: its version is read.
+    then: 'version is 1.1.4 (was 1.1.3). The bump is the version label for the spec_retired schema already present in src on main.'
+  - id: A2
+    given: packages/caws-cli/package.json after the bump.
+    when: its version and kernel dependency range are read.
+    then: 'version is 11.1.7 (was 11.1.6); dependencies["@paths.design/caws-kernel"] is "^1.1.4" (was "^1.1.0") so a fresh install cannot resolve the pre-spec_retired registry kernel.'
+  - id: A3
+    given: A kernel tarball PACKED FROM THE LOCAL 1.1.4 source (npm pack) and a CLI tarball packed from local.
+    when: both are installed into a fresh scratch project and `caws specs retire-draft` is exercised end-to-end on a draft fixture.
+    then: 'retire-draft succeeds (the spec_retired event validates against the locally-packed kernel''s PAYLOAD_SCHEMAS). This proves the coupling the registry will provide once kernel 1.1.4 is published — distinct from the current registry-stale 1.1.3 which would reject spec_retired.'
+  - id: A4
+    given: Both CHANGELOGs after the slice.
+    when: they are read.
+    then: 'packages/caws-kernel/CHANGELOG.md has a 1.1.4 section describing the spec_retired event addition; packages/caws-cli/CHANGELOG.md has an 11.1.7 section summarizing the campaign surface (prepush, retire-draft, advisory hooks, header reconcile, doc reconcile, nondoc drift) and the kernel ^1.1.4 dependency pin. No marketing language; evidence-based.'
+  - id: A5
+    given: The repo after the slice.
+    when: '`caws doctor` and the caws-cli/kernel build run.'
+    then: 'doctor reports no new load errors; both packages build clean. No behavioral or test-count regression (version/CHANGELOG-only change).'
+  - id: A6
+    given: The release-ordering boundary.
+    when: this slice completes.
+    then: 'NO npm publish, NO dist-tag, NO git tag push has been performed by the agent. The slice stops at the prepared edits + the locally-packed smoke proof; the kernel publish and CLI tag push are handed to the maintainer in the documented order (kernel first, then CLI tag).'
+non_functional:
+  reliability:
+    - >-
+      Prevents the runtime-break class the release-procedure doc names as the
+      "registry-stale kernel resolution" footgun: shipping a CLI that calls a
+      new kernel symbol (spec_retired) while its dep range resolves a published
+      kernel that predates the symbol. The locally-packed smoke is the proof
+      gate that the matching kernel tarball — not a registry-stale one — is what
+      satisfies the pinned range.
 contracts: []
