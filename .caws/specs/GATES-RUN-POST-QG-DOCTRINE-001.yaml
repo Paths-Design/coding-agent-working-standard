@@ -1,13 +1,16 @@
 id: GATES-RUN-POST-QG-DOCTRINE-001
 title: 'Redefine caws gates run after quality-gates package deprecation'
-risk_tier: 3
+risk_tier: 1
 mode: feature
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-gates-run-post-qg at 7ba15ad6c90965197de454d576a6c53e9ddeb9a0'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-29T09:40:00.000Z'
+updated_at: '2026-05-29T09:21:42.444Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/gates
     - packages/caws-cli/tests/integration/gates-cli.test.js
     - packages/caws-kernel/src/schemas/events
@@ -17,6 +20,7 @@ operational_rollback_slo: 30m
 scope:
   in:
     - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/gates
     - packages/caws-cli/tests/integration/gates-cli.test.js
     - packages/caws-cli/tests/shell/gates-command.test.js
@@ -62,17 +66,20 @@ non_functional:
     - 'The new command contract is exercised under env.CI=true to prevent recurrence of the v11.1.0 JSON-stdout class of bug.'
   security:
     - 'No new subprocess spawn surface is added without contract tests covering stdout/stderr separation.'
-contracts: []
+observability:
+  - 'Every caws gates run invocation continues to append one gate_evaluated event per policy-declared gate via the store appendEvent path.'
+  - 'The selected post-quality-gates option is recorded in doctrine before the implementation closes.'
+rollback:
+  - 'Rollback is a revert of the command/doctrine commit; no event-log migration is introduced by this slice.'
+contracts:
+  - name: caws gates run transition contract
+    type: behavior
+    path: packages/caws-cli/src/shell/commands/gates.ts
+    description: 'caws gates run remains a governed policy runner and does not change exit-code, event-append, waiver, or policy-mode semantics while the quality-gates package is deprecated.'
 # --- Risk tier note --------------------------------------------------------
-# risk_tier: 3 is provisional for the draft state. The implementation is
-# almost certainly T1 because it touches the v11 canonical command surface
-# and may change documented invariants. Before flipping lifecycle_state to
-# active, raise to T1 and author:
-#   - contracts: the new caws gates run interface (CLI args, exit codes,
-#     events.jsonl shape, policy.yaml interaction)
-#   - non_functional.observability: how the new path is instrumented
-#   - non_functional.reliability.rollback: how a regression is reverted
-#     without leaving events.jsonl in an inconsistent state
+# Activated at risk_tier: 1 because this slice changes a canonical command
+# surface and removes the production subprocess path. Contracts,
+# observability, and rollback are recorded above.
 #
 # --- Preconditions (informational; schema does not admit a preconditions field) ---
 # - QG-HOOKS-EXTRACT-001 is closed (hook replacements exist).
