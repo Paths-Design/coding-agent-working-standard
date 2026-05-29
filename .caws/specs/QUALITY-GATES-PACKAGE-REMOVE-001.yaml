@@ -4,7 +4,7 @@ risk_tier: 3
 mode: chore
 lifecycle_state: draft
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-29T00:30:00.000Z'
 blast_radius:
   modules:
     - packages/quality-gates
@@ -27,6 +27,11 @@ scope:
     - docs/architecture/quality-gates-deprecation.md
     - turbo.json
     - .caws/specs/QUALITY-GATES-PACKAGE-REMOVE-001.yaml
+    - .caws/code-freeze.yaml
+    - .caws/quality-exceptions.json
+    - .caws/duplication-exceptions.yaml
+    - .caws/refactor-baselines.yaml
+    - .caws/refactor-targets.yaml
   out:
     - packages/caws-cli/templates/hook-packs
     - packages/caws-cli/src/shell/commands/gates.ts
@@ -36,6 +41,7 @@ invariants:
   - 'No npm unpublish of any caws-quality-gates version is performed; prior versions remain on the registry as archival artifacts.'
   - 'CI passes without invoking run-quality-gates.mjs after the slice closes.'
   - 'package-lock.json is regenerated cleanly; no orphan references to caws-quality-gates remain.'
+  - 'The 5 root .caws config files consumed only by packages/quality-gates (code-freeze.yaml, quality-exceptions.json, duplication-exceptions.yaml, refactor-baselines.yaml, refactor-targets.yaml) are removed together with the package; they have no reader outside packages/quality-gates (verified via git grep 2026-05-29) and would otherwise be orphaned config.'
 acceptance:
   - id: A1
     given: 'The repo state after this slice closes.'
