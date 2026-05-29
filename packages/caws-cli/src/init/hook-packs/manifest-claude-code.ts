@@ -482,6 +482,37 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       managed: true,
     },
     {
+      // OPT-IN PostToolUse advisory: runs `caws gates run --spec <id>`
+      // after source edits. Commented out in the default post_tool_use
+      // HANDLERS array; ship the v11-correct source so consumers can
+      // enable it. Promoted from Sterling per
+      // HOOK-PACK-DIVERGENCE-RECONCILE-001.
+      destPath: '.claude/hooks/quality-check.sh',
+      sourcePath: 'quality-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // OPT-IN PostToolUse advisory: validates .caws/specs/*.yaml on
+      // edit (YAML syntax + terminal-status AC coverage). Commented out
+      // by default. Promoted from Sterling (v11-correct: does not call
+      // the removed `caws validate`).
+      destPath: '.claude/hooks/validate-spec.sh',
+      sourcePath: 'validate-spec.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // OPT-IN Stop handler: reminds about active worktrees at session
+      // end. Commented out in the default stop HANDLERS array. Promoted
+      // from Sterling (dual-shape entriesOf + 'fresh' detection). Sources
+      // lib/caws-state.sh.
+      destPath: '.claude/hooks/stop-worktree-check.sh',
+      sourcePath: 'stop-worktree-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
       // PreToolUse (LAST): rewrites caws worktree merge|destroy
       // bash commands for CWD safety + output suppression.
       // MUST be last in dispatch/pre_tool_use.sh because it emits
