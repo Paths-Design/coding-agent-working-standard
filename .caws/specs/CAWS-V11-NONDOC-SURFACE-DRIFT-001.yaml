@@ -2,10 +2,11 @@ id: CAWS-V11-NONDOC-SURFACE-DRIFT-001
 title: 'Fix v11 surface drift in non-doc files: dead npm-script targets and template CLAUDE.md (non_functional keys, group count, specs lifecycle, archive prose)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: nondoc-surface-drift
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge nondoc-surface-drift at 2d15c060212449c1b0cbb99c76ef4449c0aa9f52'
 created_at: '2026-05-29T01:35:18.049Z'
-updated_at: '2026-05-29T07:58:00.000Z'
+updated_at: '2026-05-29T08:13:38.923Z'
 blast_radius:
   modules:
     - Root package.json npm-script targets (dead apps/tools/caws/*.js references) and the caws init template CLAUDE.md non_functional doctrine line. No source, schema, policy, or CI change.
