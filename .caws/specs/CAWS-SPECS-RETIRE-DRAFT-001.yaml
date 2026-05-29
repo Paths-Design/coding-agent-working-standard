@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: specs-retire-draft
 created_at: '2026-05-29T04:08:57.425Z'
-updated_at: '2026-05-29T04:09:30.000Z'
+updated_at: '2026-05-29T04:15:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
@@ -23,6 +23,7 @@ scope:
     - packages/caws-cli/tests/shell/specs-retire-draft.test.js
     - packages/caws-cli/tests/store/specs-retire-draft.test.js
     - packages/caws-kernel/src/schemas/events
+    - packages/caws-kernel/src/schemas/events.v1.json
     - packages/caws-kernel/src/evidence
     - docs/architecture/caws-vnext-command-surface.md
     - CLAUDE.md
