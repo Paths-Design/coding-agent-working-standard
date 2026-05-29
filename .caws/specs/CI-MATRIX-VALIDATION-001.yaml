@@ -2,10 +2,11 @@ id: CI-MATRIX-VALIDATION-001
 title: 'Multi-platform fresh-machine CI matrix for published CAWS packages'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: ci-matrix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge ci-matrix at d7807d9a64712961515c3a939c40749bf6218f82'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-29T18:45:00.000Z'
+updated_at: '2026-05-29T18:47:16.426Z'
 blast_radius:
   modules:
     - .github/workflows/ci-matrix.yml
