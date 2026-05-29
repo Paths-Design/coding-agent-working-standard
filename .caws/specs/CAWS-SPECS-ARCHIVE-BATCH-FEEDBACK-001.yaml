@@ -2,10 +2,10 @@ id: CAWS-SPECS-ARCHIVE-BATCH-FEEDBACK-001
 title: 'caws specs archive: --filter/--all-closed batch selector with dry-run, JSON schema, and chain-verified summary'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: archive-batch-feedback
+lifecycle_state: closed
+resolution: abandoned
 created_at: '2026-05-28T21:41:56.808Z'
-updated_at: '2026-05-28T21:41:56.808Z'
+updated_at: '2026-05-29T00:52:26.736Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
