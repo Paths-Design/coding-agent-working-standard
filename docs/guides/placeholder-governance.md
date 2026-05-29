@@ -194,12 +194,14 @@ console.log(`Debt score: ${debtScore.total}/${DEFAULT_PLACEHOLDER_CONFIG.maxDebt
 The placeholder governance gate runs automatically as part of CAWS quality gates:
 
 ```bash
-# Run all gates (includes placeholder governance)
-npm run quality-gates
+# Run all gates for a spec (policy-driven; gate selection from .caws/policy.yaml)
+caws gates run --spec <id>
 
-# Run only placeholder gate
-npm run quality-gates -- --gates=placeholders
+# Run in commit context (e.g. from a pre-commit hook)
+caws gates run --spec <id> --context commit
 ```
+
+There is no `--gates=placeholders` filter flag. Gate selection is entirely policy-driven: enable or disable the placeholder gate by setting its `mode` in `.caws/policy.yaml` (`block`, `warn`, or `skip`).
 
 ### Gate Output
 
@@ -296,12 +298,16 @@ Aggregate `placeholders[].impact` into a numeric *debt score* surfaced in report
 ### Quality Gate Commands
 
 ```bash
-# Check placeholder governance
-caws quality-gates --gates=placeholders
+# Run all policy-declared gates (placeholder governance included if mode: block|warn)
+caws gates run --spec <id>
+```
 
-# Validate with TypeScript
+```typescript
+// Validate with TypeScript
 import { validatePlaceholderGovernance } from '@paths.design/caws-types';
 ```
+
+Gate selection is policy-driven via `.caws/policy.yaml`. There is no `--gates=placeholders` flag and no `caws quality-gates` command in v11.
 
 ## Telemetry & UX
 

@@ -83,8 +83,8 @@ npm run test
 # Check linting
 npm run lint
 
-# Validate configurations
-npm run validate
+# Validate CAWS specs and config (drift detection + schema validation)
+caws doctor
 ```
 
 ### 5. Update Documentation

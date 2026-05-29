@@ -2,20 +2,20 @@
 doc_id: hooks-and-agent-workflows
 authority: reference
 status: active
-title: Agent runtime hooks and workflow integration (v11.0.0)
+title: Agent runtime hooks and workflow integration (v11.1.6)
 owner: vNext rewrite team
 updated: 2026-05-15
 ---
 
-# Agent runtime hooks and workflow integration (v11.0.0)
+# Agent runtime hooks and workflow integration (v11.1.6)
 
-> Guide to integrating AI coding assistants (Cursor, Windsurf/Cascade, Copilot, MCP clients) with CAWS v11.0.0 quality and audit surfaces.
+> Guide to integrating AI coding assistants (Cursor, Windsurf/Cascade, Copilot, MCP clients) with CAWS v11.1.6 quality and audit surfaces.
 
 ## Overview
 
 CAWS does not ship its own runtime hooks. The integration patterns below describe how *agent runtimes* should call out to v11 CAWS commands during their own hook lifecycles.
 
-> **v11 posture (A1).** CAWS v11 ships eight command groups. The hook examples that follow use only those commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11.1.6 posture (A1).** CAWS v11.1.6 ships twelve command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## Integration Patterns
 
@@ -439,7 +439,7 @@ caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expire
 
 ### Platform-Specific Migration
 
-- **Cursor Users**: Enable hooks during `caws init`
+- **Cursor Users**: Install the Cursor hook pack: `caws init --agent-surface cursor` (there is no interactive hook-enable prompt)
 - **VS Code Users**: Install CAWS extension from marketplace
 - **Windsurf Users**: Import CAWS Cascade workflows
 - **Copilot Users**: Use CAWS Preview SDK extensions

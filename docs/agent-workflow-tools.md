@@ -2,16 +2,16 @@
 doc_id: agent-workflow-tools
 authority: reference
 status: active
-title: Agent workflow tools (v11.0.0)
+title: Agent workflow tools (v11.1)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
-# Agent workflow tools (v11.0.0)
+# Agent workflow tools (v11.1)
 
-This guide shows agents how to use the v11.0.0 CAWS surface to navigate quality gates and recover from common blocks. The full CLI reference is at [`docs/api/cli.md`](api/cli.md); the doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md).
+This guide shows agents how to use the v11.1 CAWS surface to navigate quality gates and recover from common blocks. The full CLI reference is at [`docs/api/cli.md`](api/cli.md); the doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md).
 
-> **v11 surface only.** This doc references exactly the eight v11 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed. Pin to `caws-cli@^10.2.x` if you need them today.
+> **v11.1 surface.** This doc references the thirteen v11.1 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed and not returning.
 
 ## When you get blocked
 
@@ -114,7 +114,7 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 
 ---
 
-## v11 command cheat sheet
+## v11.1 command cheat sheet
 
 | Situation | Command |
 |---|---|
@@ -131,17 +131,30 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 | List waivers | `caws waiver list` |
 | Show waiver | `caws waiver show <id>` |
 | Revoke waiver | `caws waiver revoke <id>` |
+| Create a spec | `caws specs create <id> --title "..." --risk-tier T1` |
+| List specs | `caws specs list` |
+| Show a spec | `caws specs show <id>` |
+| Close a spec | `caws specs close <id>` |
+| Archive a spec | `caws specs archive <id>` |
+| Create a worktree | `caws worktree create <name> --spec <id>` |
+| List worktrees | `caws worktree list` |
+| Merge a worktree | `caws worktree merge <name>` |
+| Destroy a worktree | `caws worktree destroy <name>` |
+| List active agents | `caws agents list` |
+| Show one agent | `caws agents show <session-id>` |
 
 ---
 
 ## Daily agent loop
 
-1. **Author the spec** in `.caws/specs/<id>.yaml`. v11 does not ship a spec generator — author the YAML directly.
-2. **Verify scope** with `caws scope check <path>` for each file you intend to touch.
-3. **Implement and test.** Run your project's test suite as usual.
-4. **Record typed evidence** as ACs close: `caws evidence record --type ac --spec <id> --data '{"id":"A1","status":"satisfied"}'`.
-5. **Run gates** with `caws gates run --spec <id>`. If anything blocks, fix or waive.
-6. **Re-check** with `caws doctor` and `caws status` before declaring done.
+1. **Create the spec**: `caws specs create <id> --title "..." --risk-tier T1`. Edit the generated `.caws/specs/<id>.yaml` to set `scope.in`, `scope.out`, and acceptance criteria.
+2. **Create and enter the worktree**: `caws worktree create <name> --spec <id>`. Run `caws claim` inside to surface ownership.
+3. **Verify scope** with `caws scope check <path>` for each file you intend to touch.
+4. **Implement and test.** Run your project's test suite as usual.
+5. **Record typed evidence** as ACs close: `caws evidence record --type ac --spec <id> --data '{"id":"A1","status":"satisfied"}'`.
+6. **Run gates** with `caws gates run --spec <id>`. If anything blocks, fix or waive.
+7. **Re-check** with `caws doctor` and `caws status` before declaring done.
+8. **Merge and close**: `caws worktree merge <name>` (auto-closes the bound spec). Then `caws worktree destroy <name>`.
 
 ---
 

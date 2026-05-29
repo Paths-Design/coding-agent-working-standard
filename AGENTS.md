@@ -6,7 +6,7 @@
 
 The v11 cutover is complete. `main` runs the v11.1 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-**v11.1 ships eleven command groups.** Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `parallel`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `sidecar`) will fail if invoked. The multi-agent surface (`agents list/show`, `session`, `parallel`) is deferred to v11.2/v11.3+.
+**v11.1 ships twelve command groups** (plus the auto-generated `help`). Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
 
 **Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11.1 is not a drop-in replacement for every v10.2 workflow.
 
@@ -23,15 +23,17 @@ The v11 cutover is complete. `main` runs the v11.1 surface (kernel/store/shell a
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
-| `caws specs create / list / show / close / archive` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
+| `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
+| `caws specs create / list / show / recover / close / archive / prune-archive / migrate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
 | `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
+| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 
 Run `caws <group> --help` for full options and flag details.
 
 ## Specs in v11
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level `working-spec.yaml`.
-- v11.1 ships `caws specs create/list/show/close/archive`. You can also author the YAML directly — see existing specs in `.caws/specs/` for the shape.
+- v11.1 ships `caws specs create/list/show/recover/close/archive/prune-archive/migrate`. Create with `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`, then edit the generated YAML. See existing specs in `.caws/specs/` for the shape.
 - v11 does **not** ship `caws validate` (removed in v11.0, not returning). Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
 - Acceptance criteria use Given/When/Then format.
 - A spec's `scope.in` / `scope.out` defines what files an agent may touch. `caws scope check <path>` enforces it.
@@ -80,7 +82,8 @@ If `.caws/working-spec.yaml` exists, `caws init` refuses. Migrate that file into
 
 ```bash
 # 1. Author a spec for your work
-$EDITOR .caws/specs/FEAT-1.yaml
+caws specs create FEAT-1 --title "Short title" --mode feature --risk-tier 3
+$EDITOR .caws/specs/FEAT-1.yaml          # fill in scope / invariants / acceptance
 
 # 2. Verify scope/structure
 caws doctor
@@ -103,20 +106,27 @@ caws status
 
 ## Worktree-based parallel agent work
 
-When multiple agents work on the same project, each agent **must** work in its own git worktree. v11 does not ship the legacy `caws parallel setup` orchestration — create worktrees with `git worktree` directly, then use `caws claim` to surface and record ownership.
+When multiple agents work on the same project, each agent **must** work in its own git worktree. CAWS's model is to **partition authority, not add channels between agents**: one spec + one bound worktree per agent, scope enforced from `scope.in`/`scope.out`, ownership in `.caws/worktrees.json`. There is no `caws parallel setup` (deferred to v11.3+) — loop `caws worktree create` per spec.
 
 ```bash
-# Set up an isolated worktree (host-side, before agent starts)
-git worktree add ../my-proj-agent-auth -b agent-auth
-cd ../my-proj-agent-auth
+# Create an isolated worktree bound to your spec (writes the binding atomically,
+# emits worktree_created + worktree_bound)
+caws worktree create wt-auth --spec FEAT-AUTH
+cd .caws/worktrees/wt-auth
 
-# Inside the worktree, surface the claim
+# Surface the claim and see who else is live
 caws claim                                 # prints owner; exits 0 if you own it
+caws status                                # Agents panel: other live sessions
+caws agents list                           # active / stale / stopped sessions
+
+# When done: merge (auto-closes the bound spec) and destroy
+caws worktree merge wt-auth
+caws worktree destroy wt-auth
 ```
 
 ### Foreign-claim soft-block
 
-`caws claim` (and `bind` / `merge` in lifecycle-shipping versions) refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal looks like:
+`caws claim`, `caws worktree bind`, and `caws worktree merge` refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal looks like:
 
 ```
 Worktree 'wt-foreign' is claimed by 8be65780-...:claude-code
@@ -142,13 +152,13 @@ These are enforced by code, not docs. Don't try to work around them.
 
 ## Risk tiers (your quality contract)
 
-| Tier | Coverage | Mutation | Contracts | Use Case |
-|---|---|---|---|---|
-| **T1** | 90%+ | 70%+ | Required | Auth, billing, migrations |
-| **T2** | 80%+ | 50%+ | Required | Features, APIs, data writes |
-| **T3** | 70%+ | 30%+ | Optional | UI, internal tools |
+| Tier | Contracts | Change-budget posture | Use Case |
+|---|---|---|---|
+| **1** | Required | Tightest (smallest `max_files` / `max_loc`) | Auth, billing, migrations |
+| **2** | Required | Moderate | Features, APIs, data writes |
+| **3** | Optional | Loosest | UI, internal tools |
 
-Set the tier in your spec's `risk_tier` field. `caws gates run --spec <id>` enforces the corresponding requirements as configured by the project's `policy.yaml`.
+Set the tier in your spec's `risk_tier` field (integer `1`/`2`/`3`). Tier governs change-budget thresholds (derived from `.caws/policy.yaml` `risk_tiers`) and whether contracts are required. **Coverage and mutation are NOT v11 CAWS gates** — the v10 "90%/80%/70%" coverage table is gone; run coverage/mutation thresholds in your own CI. `caws gates run --spec <id>` evaluates the gates declared in `policy.yaml` (each with a `mode` of block/warn/skip).
 
 ## Waivers
 

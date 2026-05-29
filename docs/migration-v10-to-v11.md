@@ -10,7 +10,7 @@ This guide does not promise compatibility. It documents the gap, the workarounds
 
 ## What v11 is and is not
 
-**v11.1 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The 10 governed-core command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`, `specs`, `worktree`) are stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
+**v11.1 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The 12 governed-core command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`) are stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
 
 **v11.1 is not** a compatibility shim over v10.2. A meaningful fraction of the v10.2 surface has been removed without replacement; another fraction is deferred to v11.2 or v11.3+. If your team relies daily on the removed surfaces, this upgrade is operational work, not a version bump.
 
@@ -74,11 +74,26 @@ If the long-term decision is to rebuild any of these surfaces in v11.x, that wor
 |---|---|---|
 | `caws session` | Deferred to v11.3+ | Multi-agent session capsules are deferred; per-worktree binding remains the v11 isolation primitive |
 | `caws parallel setup` | Deferred to v11.3+ | Loop `caws worktree create <name> --spec <id>` per spec; there is no orchestration command in v11.1 |
-| `caws worktree prune` / `caws worktree repair` / `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly |
+| `caws worktree prune` / `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly. Note: `caws worktree repair-sparse` **shipped in v11.1** — only `prune` and `reconcile` remain deferred. |
 
-> **Note:** `caws agents list` and `caws agents show` are **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan" note below. The broader v11.2 multi-agent line (lease-backed ownership, the `claim_taken_over.v1` event) is still forthcoming.
+> **Note:** The full `agents` group (`register/heartbeat/stop/list/show/prune`) and the full `events` group (`migrate/rotate/verify-archive`) are **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan (v11.1.x)" section below. The broader v11.2 multi-agent line (lease-backed ownership, the `claim_taken_over.v1` event) is still forthcoming.
 
-**Multi-agent operators**: if you rely daily on `caws session` or `caws parallel`, defer the upgrade until those land (v11.3+). `caws agents list/show` already ship in v11.1.x, so they are not a reason to defer. Single-agent users are unaffected.
+**Multi-agent operators**: if you rely daily on `caws session` or `caws parallel`, defer the upgrade until those land (v11.3+). The full `agents` group already ships in v11.1.x, so it is not a reason to defer. Single-agent users are unaffected.
+
+### Shipped ahead of plan (v11.1.x)
+
+The following surfaces were planned for v11.2 but shipped in v11.1.x. They are **not** deferred and must not be listed as such:
+
+| Surface | Shipped subcommands | Notes |
+|---|---|---|
+| `caws events` | `migrate`, `rotate`, `verify-archive` | Maintenance commands for `.caws/events.jsonl`. `migrate` converts v10-shape logs to v11 chain format; `rotate` archives and starts a fresh chain; `verify-archive` validates archive byte integrity. |
+| `caws agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Full agent liveness substrate. Operational cache only — never authority. Hook-invoked at SessionStart/PreToolUse/Stop; `prune` is operator-invoked with `--apply`. |
+| `caws specs recover` | — | Recovers an archived spec body from the event log + git history without mutating `.caws/specs/`. |
+| `caws specs prune-archive` | — | Migrates legacy archive tombstone bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` executes. |
+| `caws specs migrate` | — | v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). |
+| `caws worktree migrate-registry` | — | Converts v10.2 legacy-envelope `.caws/worktrees.json` to v11 flat-map shape. Idempotent. |
+| `caws worktree repair-sparse` | — | Restores the `.caws/specs` sparse-checkout invariant on a linked worktree. Non-destructive. |
+| `caws claim --paths` | — | Declares working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 
 ---
 
@@ -186,7 +201,7 @@ If your project has a singleton:
 #    - Defunct? Delete it.
 
 # 2a. If it's active work — extract its content into a new feature spec:
-caws specs create MY-CURRENT-WORK-001 --type feature --title "..." 
+caws specs create MY-CURRENT-WORK-001 --mode feature --risk-tier 1 --title "..."
 # Then copy scope.in / scope.out / acceptance from .caws/working-spec.yaml
 # into the new file, adjust to v11 schema (no scope.out globs, contracts
 # required for tier 2, etc. — see CLAUDE.md authoring traps).
@@ -336,7 +351,7 @@ Does your team rely DAILY on any of:
 
 Does your team rely DAILY on multi-agent commands:
   caws session / caws parallel ?
-  (caws agents list/show already ship in v11.1.x — not a defer trigger.)
+  (The full caws agents group already ships in v11.1.x — not a defer trigger.)
   YES → Defer the upgrade until those land (v11.3+).
         Single-agent or low-frequency multi-agent users can proceed.
   NO  → Continue.
@@ -368,7 +383,7 @@ upgraded to 11.x:
    `CLAUDE.md` and `agents.md` at project root from
    `packages/caws-cli/templates/`. The 10.x templates referenced
    `caws validate`, `caws iterate`, `caws verify-acs`, `caws burnup`,
-   `caws specs create --type feature`, and `caws validate --spec-id <id>`
+   `caws specs create --type feature` (removed v10 alias; v11 uses `--mode`), and `caws validate --spec-id <id>`
    — all of which are removed or renamed in v11. Upgrading the CLI does
    not rewrite those project files, and CLAUDE.md is exactly the surface
    AI agents read first. Future agents in those projects will keep
@@ -446,12 +461,12 @@ The following are tracked in `.caws/specs/` and may close additional gaps as the
 - `CAWS-CLI-BIN-EXECUTABLE-BIT-001` — workspace-install `chmod +x` defect (not user-facing in normal `npm install -g` flow).
 - `DANGER-LATCH-CALIBRATION-001` — calibrates the Claude Code hook pack's command classifier (only relevant if you adopted the hook pack via `caws init --agent-surface claude-code`).
 - `WORKTREE-MERGE-A2-FAULT-INJECTION-001` — adds an automated regression for the merge → spec-close honest-failure path (closes a manual-proof gap, not a behavior gap).
-- `PRUNE-REPAIR-WORKTREE-001` — restores `caws worktree prune/repair/reconcile` ergonomics on the v11 substrate.
-- `AUTH-BINDING-BRIDGE-001` — agent-session binding for non-worktree contexts (closes part of the multi-agent observability gap below).
+- `PRUNE-REPAIR-WORKTREE-001` — restores `caws worktree prune/reconcile` ergonomics on the v11 substrate. Note: `caws worktree repair-sparse` **already shipped in v11.1**; only `prune` and `reconcile` remain open under this spec.
+- `AUTH-BINDING-BRIDGE-001` — agent-session binding for non-worktree contexts. Note: `caws claim --paths` **already shipped in v11.1** (SESSION-OWNERSHIP-METADATA-001), partially closing this gap. The remaining open item is `caws claim --spec <id>` bridge claims for non-worktree contexts, deferred to v11.2.
 
-`caws agents list/show` shipped ahead of plan in v11.1.x (alongside the `agents register/heartbeat/stop/prune` operational verbs). The remaining v11.2 surface (planned, not shipped) will add `caws claim --spec`, worktree lifecycle helpers (`prune/repair/reconcile`), and the `claim_taken_over.v1` event. v11.3+ scope includes the deferred `caws session` and `caws parallel` surfaces.
+The full `agents` group (`register/heartbeat/stop/list/show/prune`) and full `events` group (`migrate/rotate/verify-archive`) shipped ahead of plan in v11.1.x. The remaining v11.2 surface (planned, not shipped) will add `caws claim --spec`, worktree lifecycle helpers (`prune/reconcile`), and the `claim_taken_over.v1` event. v11.3+ scope includes the deferred `caws session` and `caws parallel` surfaces.
 
-`caws agents list/show` is no longer a reason to wait — it ships in v11.1.x. If `caws session` or `caws parallel` is the blocker for your team, that is the v11.3+ line to wait for.
+The full `agents` group is no longer a reason to wait — it ships in v11.1.x. If `caws session` or `caws parallel` is the blocker for your team, that is the v11.3+ line to wait for.
 
 ---
 
@@ -473,7 +488,7 @@ This guide was authored as part of `DOC-MIGRATION-V10-TO-V11-001`, an active tie
 The four-bucket classification (Replaced / Renamed / Removed-without-replacement / Deferred) is intentional: it forces every v10.2 command into an explicit category, so no surface is unaddressed and no surface is overclaimed.
 
 Last verified against:
-- `@paths.design/caws-cli@11.1.7` (current npm latest as of 2026-05-27)
+- `@paths.design/caws-cli@11.1.6` (current npm latest as of 2026-05-28)
 - main branch HEAD `2e4b7ab` (post-release-tag-driven merge + spec closure)
 - Downstream reference: Sterling repo's CAWS-1117-* migration commit chain (2026-05-26)
   documented in the "Project doctrine drift" section above.

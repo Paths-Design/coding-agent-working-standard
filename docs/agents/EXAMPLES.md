@@ -2,14 +2,16 @@
 doc_id: agents-examples
 authority: reference
 status: active
-title: CAWS Examples — Real Feature Specs (v11.0.0)
+title: CAWS Examples — Real Feature Specs (v11.1.6)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
 # CAWS Examples — Real Feature Specs
 
 **Example working specifications from real projects**
+
+> All examples conform to the v11.1.6 kernel schema (`packages/caws-kernel/src/schemas/spec.v1.json`). Create specs with `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>`, then edit to add scope/invariants/acceptance. Fields `change_budget`, `threats`, `migrations`, `human_override`, `ai_assessment` are rejected by the schema and must not appear. `non_functional` accepts only four string-array subkeys: `accessibility`, `performance`, `reliability`, `security`.
 
 ---
 
@@ -25,20 +27,14 @@ id: EXT-002
 title: "Add Theme Switcher Extension"
 risk_tier: 2
 mode: feature
-change_budget:
-  max_files: 15
-  max_loc: 500
+lifecycle_state: active
 blast_radius:
   modules: ["extension", "webview", "commands"]
   data_migration: false
 operational_rollback_slo: "5m"
-threats:
-  - "Webview CSP violations"
-  - "Extension activation performance"
-  - "Theme persistence failures"
 scope:
   in: ["src/", "webview/", "package.json"]
-  out: ["node_modules/", "out/", "*.vsix"]
+  out: ["node_modules/", "out/"]
 invariants:
   - "Webview only accesses workspace files via VS Code API"
   - "Extension activates in <1s on typical machine"
@@ -58,47 +54,30 @@ acceptance:
     when: "Extension reactivates"
     then: "Previous theme selection is restored"
 non_functional:
-  a11y:
+  accessibility:
     - "keyboard navigation"
     - "screen reader support"
     - "high contrast theme support"
-  perf:
-    api_p95_ms: 100
+  performance:
+    - "activation < 1000ms on typical machine"
   security:
     - "CSP enforcement for webviews"
     - "No arbitrary filesystem access"
     - "Safe theme name validation"
 contracts:
-  - type: "vscode-api"
+  - name: "vscode-api"
+    type: "api"
     path: "src/contracts/vscode.d.ts"
 observability:
-  logs:
-    - "extension.activated"
-    - "theme.changed"
-    - "webview.loaded"
-  metrics:
-    - "activation_duration"
-    - "theme_change_count"
-  traces:
-    - "theme_switch_flow"
-    - "webview_initialization"
-migrations: []
+  - "extension.activated"
+  - "theme.changed"
+  - "webview.loaded"
+  - "activation_duration metric"
+  - "theme_change_count metric"
 rollback:
   - "Disable extension"
   - "Remove webview HTML/CSS/JS files"
   - "Revert package.json contributions"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 8
-  uncertainty_areas:
-    - "VS Code API compatibility across versions"
-  complexity_factors:
-    - "Webview security model"
-    - "Theme API integration"
-  risk_factors: []
 ```
 
 ---
@@ -115,17 +94,11 @@ id: LIB-003
 title: "Add Accessible Button Component"
 risk_tier: 2
 mode: feature
-change_budget:
-  max_files: 10
-  max_loc: 400
+lifecycle_state: active
 blast_radius:
   modules: ["components", "types", "stories"]
   data_migration: false
 operational_rollback_slo: "5m"
-threats:
-  - "Breaking API changes"
-  - "Accessibility regressions"
-  - "Bundle size increase"
 scope:
   in: ["src/components/Button/", "src/types/", "stories/"]
   out: ["src/components/other/", "node_modules/"]
@@ -148,42 +121,27 @@ acceptance:
     when: "Loading prop is true"
     then: "Button shows loading indicator and is disabled"
 non_functional:
-  a11y:
+  accessibility:
     - "WCAG 2.1 AA compliance"
     - "Keyboard navigation support"
     - "Screen reader compatibility"
     - "Focus management"
-  perf:
-    bundle_size_kb: 5
+  performance:
+    - "bundle size impact < 5KB"
   security:
     - "XSS prevention in button content"
     - "Safe event handler binding"
 contracts:
-  - type: "typescript"
+  - name: "button-component-api"
+    type: "schema"
     path: "src/types/button.ts"
 observability:
-  logs: []
-  metrics:
-    - "button_click_count"
-    - "button_render_count"
-  traces: []
-migrations: []
+  - "button_click_count metric"
+  - "button_render_count metric"
 rollback:
   - "Remove Button component files"
   - "Update component exports"
   - "Remove button stories"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 8
-  uncertainty_areas:
-    - "Cross-browser accessibility support"
-  complexity_factors:
-    - "Multiple button variants (primary, secondary, ghost)"
-    - "Loading and disabled states"
-  risk_factors: []
 ```
 
 ---
@@ -200,18 +158,11 @@ id: API-004
 title: "Implement JWT Authentication"
 risk_tier: 1
 mode: feature
-change_budget:
-  max_files: 20
-  max_loc: 1000
+lifecycle_state: active
 blast_radius:
   modules: ["auth", "users", "middleware", "database"]
   data_migration: true
 operational_rollback_slo: "15m"
-threats:
-  - "Authentication bypass vulnerabilities"
-  - "Token exposure in logs"
-  - "Database migration failures"
-  - "Service downtime during deployment"
 scope:
   in: ["src/auth/", "src/users/", "src/middleware/", "migrations/"]
   out: ["src/other-services/", "node_modules/"]
@@ -243,10 +194,13 @@ acceptance:
     when: "Token is used afterward"
     then: "401 Unauthorized is returned"
 non_functional:
-  a11y:
-    - "API documentation accessible"
-  perf:
-    api_p95_ms: 200
+  accessibility:
+    - "API documentation accessible without authentication"
+  performance:
+    - "auth endpoint p95 < 200ms"
+  reliability:
+    - "database migration rollback tested before deployment"
+    - "token blacklist survives service restart"
   security:
     - "JWT tokens properly signed"
     - "Password hashing with bcrypt"
@@ -255,46 +209,22 @@ non_functional:
     - "Helmet security headers"
     - "Input validation and sanitization"
 contracts:
-  - type: "openapi"
+  - name: "auth-openapi"
+    type: "api"
     path: "docs/api/auth.yaml"
 observability:
-  logs:
-    - "auth.login.success"
-    - "auth.login.failure"
-    - "auth.token.expired"
-    - "auth.logout"
-  metrics:
-    - "auth_requests_total"
-    - "auth_failures_total"
-    - "active_sessions"
-  traces:
-    - "auth_flow"
-    - "token_validation"
-migrations:
-  - "Add users table with password_hash column"
-  - "Add user_sessions table for token blacklisting"
-  - "Update existing users with hashed passwords"
+  - "auth.login.success"
+  - "auth.login.failure"
+  - "auth.token.expired"
+  - "auth.logout"
+  - "auth_requests_total metric"
+  - "auth_failures_total metric"
+  - "active_sessions metric"
 rollback:
   - "Revert database migration"
   - "Remove authentication middleware"
   - "Restore original endpoint access"
   - "Clear any cached tokens"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 7
-  uncertainty_areas:
-    - "JWT key rotation strategy"
-    - "Session management edge cases"
-  complexity_factors:
-    - "Database migration with existing users"
-    - "Token refresh implementation"
-    - "Rate limiting implementation"
-  risk_factors:
-    - "Security-critical functionality"
-    - "Database migration complexity"
 ```
 
 ---
@@ -311,17 +241,11 @@ id: REFACTOR-005
 title: "Extract User Service Layer"
 risk_tier: 2
 mode: refactor
-change_budget:
-  max_files: 15
-  max_loc: 500
+lifecycle_state: active
 blast_radius:
   modules: ["controllers", "services", "models"]
   data_migration: false
 operational_rollback_slo: "5m"
-threats:
-  - "Behavioral changes during extraction"
-  - "Import/reference update failures"
-  - "Test coverage gaps"
 scope:
   in: ["src/controllers/", "src/services/", "src/models/", "tests/"]
   out: ["src/views/", "src/public/", "node_modules/"]
@@ -344,38 +268,22 @@ acceptance:
     when: "Called directly"
     then: "Behave identically to controller logic"
 non_functional:
-  a11y: []
-  perf:
-    api_p95_ms: 250
+  performance:
+    - "api p95 < 250ms (no regression)"
   security:
     - "Input validation preserved"
     - "Authorization checks maintained"
 contracts:
-  - type: "typescript"
+  - name: "user-service-types"
+    type: "schema"
     path: "src/types/services.ts"
 observability:
-  logs: []
-  metrics:
-    - "service_method_calls"
-  traces:
-    - "service_operation_flow"
-migrations: []
+  - "service_method_calls metric"
+  - "service_operation_flow trace"
 rollback:
   - "Revert controller files to original state"
   - "Remove service layer files"
   - "Update imports back to original"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 9
-  uncertainty_areas:
-    - "Edge case behavior preservation"
-  complexity_factors:
-    - "Maintaining exact API compatibility"
-    - "Updating all imports and references"
-  risk_factors: []
 ```
 
 ---
@@ -392,17 +300,11 @@ id: FIX-006
 title: "Fix Memory Leak in CSV Processor"
 risk_tier: 1
 mode: fix
-change_budget:
-  max_files: 5
-  max_loc: 100
+lifecycle_state: active
 blast_radius:
   modules: ["csv-processor", "file-upload"]
   data_migration: false
 operational_rollback_slo: "1m"
-threats:
-  - "Service crashes under load"
-  - "Data corruption during processing"
-  - "Incomplete processing of large files"
 scope:
   in: ["src/csv-processor.ts", "tests/csv-processor.test.ts"]
   out: ["src/other-modules/", "node_modules/"]
@@ -425,40 +327,27 @@ acceptance:
     when: "Restarted"
     then: "Can resume from interruption point"
 non_functional:
-  a11y: []
-  perf:
-    api_p95_ms: 5000
+  performance:
+    - "processing p95 < 5000ms"
+  reliability:
+    - "memory usage bounded under 100MB for 10MB+ files"
   security:
     - "File upload size limits enforced"
     - "Path traversal prevented"
-contracts: []
+contracts:
+  - name: "csv-processor-behavior"
+    type: "behavior"
+    description: "Memory-bounded streaming CSV processing contract"
 observability:
-  logs:
-    - "csv.processing.started"
-    - "csv.processing.completed"
-    - "csv.processing.error"
-  metrics:
-    - "csv_files_processed"
-    - "csv_processing_duration"
-    - "memory_usage_peak"
-  traces:
-    - "csv_processing_pipeline"
-migrations: []
+  - "csv.processing.started"
+  - "csv.processing.completed"
+  - "csv.processing.error"
+  - "csv_files_processed metric"
+  - "csv_processing_duration metric"
+  - "memory_usage_peak metric"
 rollback:
   - "Revert csv-processor.ts to previous version"
   - "Remove any new test files"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 8
-  uncertainty_areas:
-    - "Memory usage patterns in production"
-  complexity_factors:
-    - "Streaming processing implementation"
-  risk_factors:
-    - "Memory leak could cause service outages"
 ```
 
 ---
@@ -475,16 +364,10 @@ id: DOC-007
 title: "Add API Documentation"
 risk_tier: 3
 mode: doc
-change_budget:
-  max_files: 10
-  max_loc: 1500
+lifecycle_state: active
 blast_radius:
   modules: ["docs"]
   data_migration: false
-operational_rollback_slo: "1m"
-threats:
-  - "Documentation becomes outdated"
-  - "Incomplete coverage"
 scope:
   in: ["docs/", "src/"]
   out: ["src/tests/", "node_modules/"]
@@ -502,30 +385,14 @@ acceptance:
     when: "Runs it"
     then: "Code executes successfully"
 non_functional:
-  a11y:
+  accessibility:
     - "Documentation accessible without JavaScript"
-  perf: {}
-  security: []
 contracts: []
 observability:
-  logs: []
-  metrics:
-    - "docs_page_views"
-  traces: []
-migrations: []
+  - "docs_page_views metric"
 rollback:
   - "Remove documentation files"
   - "Revert any API changes made for documentation"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 9
-  uncertainty_areas: []
-  complexity_factors:
-    - "Comprehensive API surface"
-  risk_factors: []
 ```
 
 ---
@@ -542,16 +409,10 @@ id: CLI-008
 title: "Add Interactive Mode to CLI"
 risk_tier: 3
 mode: feature
-change_budget:
-  max_files: 5
-  max_loc: 150
+lifecycle_state: active
 blast_radius:
   modules: ["cli", "commands"]
   data_migration: false
-operational_rollback_slo: "1m"
-threats:
-  - "Interactive mode disrupts existing usage"
-  - "New dependencies increase bundle size"
 scope:
   in: ["src/cli/", "src/commands/"]
   out: ["src/other/", "node_modules/"]
@@ -569,32 +430,16 @@ acceptance:
     when: "No --interactive flag"
     then: "Behavior identical to before"
 non_functional:
-  a11y: []
-  perf:
-    api_p95_ms: 50
-  security: []
+  performance:
+    - "interactive prompt response < 50ms"
 contracts: []
 observability:
-  logs:
-    - "cli.interactive.started"
-    - "cli.interactive.completed"
-  metrics:
-    - "cli_interactive_usage"
-  traces: []
-migrations: []
+  - "cli.interactive.started"
+  - "cli.interactive.completed"
+  - "cli_interactive_usage metric"
 rollback:
   - "Remove interactive mode code"
   - "Remove inquirer dependency"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 9
-  uncertainty_areas: []
-  complexity_factors:
-    - "CLI UX design"
-  risk_factors: []
 ```
 
 ---
@@ -611,17 +456,11 @@ id: MONO-009
 title: "Add Shared Button Component"
 risk_tier: 1
 mode: feature
-change_budget:
-  max_files: 15
-  max_loc: 400
+lifecycle_state: active
 blast_radius:
-  modules: ["shared/ui", "packages/*"]
+  modules: ["shared/ui", "packages/app1", "packages/app2"]
   data_migration: false
 operational_rollback_slo: "10m"
-threats:
-  - "Breaking changes in consuming packages"
-  - "Version mismatch issues"
-  - "Build system incompatibilities"
 scope:
   in: ["packages/shared/src/ui/", "packages/app1/", "packages/app2/"]
   out: ["packages/other/", "node_modules/"]
@@ -640,38 +479,22 @@ acceptance:
     when: "All packages build"
     then: "No breaking changes detected"
 non_functional:
-  a11y:
+  accessibility:
     - "WCAG 2.1 AA compliance"
-  perf:
-    bundle_size_kb: 15
+  performance:
+    - "shared bundle contribution < 15KB"
   security:
     - "XSS prevention"
 contracts:
-  - type: "typescript"
+  - name: "shared-ui-types"
+    type: "schema"
     path: "packages/shared/src/types/ui.ts"
 observability:
-  logs: []
-  metrics:
-    - "shared_component_usage"
-  traces: []
-migrations: []
+  - "shared_component_usage metric"
 rollback:
   - "Remove shared component"
   - "Update package imports"
   - "Revert consuming package changes"
-human_override:
-  enabled: false
-experimental_mode:
-  enabled: false
-ai_assessment:
-  confidence_level: 7
-  uncertainty_areas:
-    - "Cross-package type compatibility"
-  complexity_factors:
-    - "Monorepo build coordination"
-    - "Package versioning strategy"
-  risk_factors:
-    - "Breaking changes across multiple packages"
 ```
 
 ---
@@ -723,15 +546,15 @@ ai_assessment:
 ## Using These Examples
 
 1. **Find Similar Project**: Look for examples matching your project type and risk level
-2. **Copy Structure**: Use the YAML structure as a starting point
-3. **Customize Values**: Update IDs, titles, scopes, and budgets for your specific case
-4. **Verify early**: Run `caws doctor` and `caws gates run --spec <id>` to catch issues (v11 has no `caws validate`)
-5. **Iterate**: Refine based on your project's specific requirements
+2. **Create via CLI**: Run `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>` to generate the base YAML
+3. **Edit the result**: Add scope, invariants, acceptance criteria, and non-functional requirements from the examples above
+4. **Verify early**: Run `caws doctor` and `caws gates run --spec <id>` to catch issues (`caws validate` and `caws scaffold` do not exist in v11)
+5. **Iterate**: Refine based on your project's specific requirements; use `caws specs show <id>` to inspect the current state
 
 These examples show how CAWS scales from simple fixes to complex monorepo changes while maintaining consistent quality and safety standards.
 
 ---
 
-**Examples Version**: 11.0  
-**CAWS Version**: 11.0.0  
-**Last Updated**: 2026-05-15
+**Examples Version**: 11.1  
+**CAWS Version**: 11.1.6  
+**Last Updated**: 2026-05-28

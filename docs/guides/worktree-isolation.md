@@ -2,20 +2,18 @@
 doc_id: worktree-isolation-guide
 authority: reference
 status: active
-title: Git worktree isolation for parallel agents (v11.0.0)
+title: Git worktree isolation for parallel agents (v11.1)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
-# Git worktree isolation for parallel agents (v11.0.0)
+# Git worktree isolation for parallel agents (v11.1)
 
 ## Overview
 
-Multiple AI agents working on the same repo in parallel must work in **isolated git worktrees**. This guide covers the v11.0.0 workflow: create worktrees with `git worktree` directly, surface and govern ownership with `caws claim`.
+Multiple AI agents working on the same repo in parallel must work in **isolated git worktrees**. This guide covers the v11.1 workflow: create worktrees with `caws worktree create`, surface and govern ownership with `caws claim`.
 
-> **v11 posture (A1).** v11.0.0 does not ship `caws worktree create | destroy | merge | bind | prune | repair` or `caws parallel setup | status | merge | teardown`. Worktree lifecycle returns in v11.1. Today, use plain `git worktree` for create/destroy/merge and `caws claim` for ownership.
->
-> If your project relies on the legacy lifecycle automation, pin `caws-cli@^10.2.x`.
+> **v11.1 surface.** v11.1 ships full worktree lifecycle: `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse`. Use these commands — they write bidirectional bindings, emit audit events, and enforce ownership. `caws parallel setup` does not exist and is not planned; loop `caws worktree create` per spec instead.
 
 ## Why worktrees?
 
@@ -28,24 +26,26 @@ When 2+ agents run on the same project, the common failures are:
 
 Worktrees give each agent its own working directory and branch, so concurrent edits don't fight.
 
-## Quick start (v11)
+## Quick start (v11.1)
 
 ```bash
-# 1. Create the worktree externally (host-side, before the agent starts)
-git worktree add ../my-proj-agent-auth -b agent-auth
+# 1. Create the worktree and bind it to a spec in one command (host-side)
+caws worktree create my-proj-agent-auth --spec <spec-id>
+# Creates .caws/worktrees/my-proj-agent-auth/, checks out a new branch,
+# writes the bidirectional binding, and emits worktree_created + worktree_bound events.
 
 # 2. Inside the worktree, surface ownership via CAWS
-cd ../my-proj-agent-auth
+cd .caws/worktrees/my-proj-agent-auth
 caws claim
 # Prints: <sessionId>:<platform>, last heartbeat, any tmp/<sessionId>/ session-log path
 # If the worktree has no prior owner, the current session takes it.
 ```
 
-That's it. The agent now works in `../my-proj-agent-auth/` on branch `agent-auth`. `caws claim` records ownership in `.caws/worktrees.json`.
+The agent now works in `.caws/worktrees/my-proj-agent-auth/` on the generated branch. `caws claim` records ownership in `.caws/worktrees.json`. List all worktrees with `caws worktree list`.
 
 ## Ownership and the foreign-claim soft-block
 
-`caws claim` (and, in v11.1, the lifecycle commands) refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal looks like:
+`caws claim`, `caws worktree bind`, `caws worktree merge`, and `caws worktree destroy` all refuse to mutate a worktree owned by a different session id without `--takeover`. The refusal looks like:
 
 ```
 Worktree '<name>' is claimed by 8be65780-...:claude-code
@@ -66,13 +66,16 @@ Decision-gating uses session-id equality only. Do not interpret the heartbeat ag
 Each agent owns a feature directory. Define `scope.in` in each spec to enforce file-level boundaries:
 
 ```bash
-# Host-side
-git worktree add ../proj-auth -b feat/auth
-git worktree add ../proj-payments -b feat/payments
+# Host-side: create specs then bind worktrees
+caws specs create auth --title "Auth feature"
+caws specs create payments --title "Payments feature"
 
-# Each agent edits its spec
-# .caws/specs/auth.yaml:    scope.in: [src/auth/**, tests/auth/**]
+# Edit each spec's scope.in before creating the worktrees
+# .caws/specs/auth.yaml:     scope.in: [src/auth/**, tests/auth/**]
 # .caws/specs/payments.yaml: scope.in: [src/payments/**, tests/payments/**]
+
+caws worktree create proj-auth --spec auth
+caws worktree create proj-payments --spec payments
 
 # Inside each worktree, the agent runs
 caws claim
@@ -90,34 +93,31 @@ Each agent owns a layer (frontend, backend, infra). Same shape — different `sc
 A worktree is a cheap way to try a risky change without polluting `main`:
 
 ```bash
-git worktree add ../proj-experiment -b experiment/new-orm
+caws specs create experiment-new-orm --title "Experiment: new ORM"
+caws worktree create proj-experiment --spec experiment-new-orm
+cd .caws/worktrees/proj-experiment
 # ... try it ...
-# If it works:
-git checkout main && git merge --no-ff experiment/new-orm
-# If it fails:
-git worktree remove ../proj-experiment --force
-git branch -D experiment/new-orm
+# If it works — merge and auto-close the bound spec:
+caws worktree merge proj-experiment
+caws worktree destroy proj-experiment
+# If it fails — abandon:
+caws worktree destroy proj-experiment --abandon-unmerged
 ```
 
 ## Merging work back
 
-v11 does not ship `caws worktree merge` or `caws parallel merge`. Use `git` directly:
+Use `caws worktree merge` — it merges the branch into base and auto-closes the bound spec in a single transaction. Then destroy the worktree:
 
 ```bash
-# From the main working directory
-git checkout main
+# From the canonical checkout (main working directory)
+caws worktree merge proj-auth
+caws worktree destroy proj-auth
 
-# Merge each agent's branch
-git merge --no-ff agent-auth
-git merge --no-ff agent-payments
-
-# Clean up worktrees
-git worktree remove ../proj-auth
-git worktree remove ../proj-payments
-git branch -d agent-auth agent-payments
+caws worktree merge proj-payments
+caws worktree destroy proj-payments
 ```
 
-The `merge(worktree): <description>` commit-message convention is recommended (and enforced by this repo's commit-msg hook) for non-fast-forward merges from agent branches into base.
+`caws worktree merge` emits a `worktree_merged` event and calls `caws specs close` on the bound spec automatically. The `merge(worktree): <description>` commit-message convention is enforced by this repo's commit-msg hook for non-fast-forward merges.
 
 ## Workspace package managers (pnpm, yarn, npm workspaces)
 
@@ -188,8 +188,6 @@ Doctor surfaces drift: orphaned worktree entries, missing directories, ownership
 **Agents are still committing to base.**
 Check that each agent is `cd`'d into its worktree, not the main repo. The pre-commit hook in this repo blocks direct base-branch commits during active worktree sessions; only `merge(worktree):` and `wip(checkpoint):` commits are allowed.
 
-**Want lifecycle automation back?**
-Pin `caws-cli@^10.2.x` until v11.1 ships vNext spec/worktree lifecycle. Do not mix the two CLIs in the same project — they write to overlapping state.
 
 ## See also
 

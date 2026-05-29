@@ -12,33 +12,38 @@
 ## 1) Quick Start
 
 ```bash
-# scaffold a change by mode and id
-npm run caws:start FEAT-1234 feature "Apply coupon at checkout"
+# create a spec for the change
+caws specs create FEAT-1234 --title "Apply coupon at checkout" --risk-tier T1
 
 # edit spec & plan
-code .caws/specs/<spec-id>.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md
+code .caws/specs/FEAT-1234.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md
 
-# validate spec + policies locally
-npm run caws:validate
+# validate spec + project health
+caws doctor
 
-# run the full local gate battery
-npm run caws:verify
+# run the full local gate battery against the spec
+caws gates run --spec FEAT-1234
 ```
+
+> Note: `npm run caws:start`, `npm run caws:validate`, and `npm run caws:verify` are project-local wrapper scripts. If your project defines them, they may wrap the commands above. The canonical v11.1 commands are `caws specs create`, `caws doctor`, and `caws gates run --spec <id>`.
 
 ## 2) Spec Layout Convention
 
 ```
 .caws/
-  <spec-id>.yaml
-  specs/FEAT-1234.yaml              # optional feature-specific spec
+  specs/
+    FEAT-1234.yaml                  # one file per feature; no root-level spec
+    FEAT-1235.yaml
 docs/FEAT-1234/
   feature.plan.md
   test-plan.md
   codemod/                          # refactor mode only
 ```
 
+> v11 has no project-level root spec. `caws init` refuses legacy `.caws/<spec-id>.yaml` layouts. All specs live under `.caws/specs/`.
+
 **When to split a feature spec?**
-Single domain → `specs/FEAT-…yaml`. Cross-cutting or architectural → update `<spec-id>.yaml`.
+Single domain → one `specs/FEAT-…yaml`. Cross-cutting or architectural → multiple specs with non-overlapping `scope.in`.
 
 ## 3) Checklists (copy into PR)
 

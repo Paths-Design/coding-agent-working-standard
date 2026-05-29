@@ -1,8 +1,8 @@
 # CAWS Monitoring & Observability
 
 **Author**: @darianrosebrook  
-**Last Updated**: October 10, 2025  
-**Status**: Production Ready
+**Last Updated**: 2026-05-28  
+**Status**: Production Ready (v11.1.6)
 
 ## Overview
 
@@ -77,7 +77,7 @@ echo "   ✅ Help command works"
 
 # Check 4: Basic commands available
 echo "4. Checking core commands..."
-COMMANDS=("validate" "status" "diagnose" "evaluate" "iterate")
+COMMANDS=("doctor" "status" "scope" "gates" "specs")
 for cmd in "${COMMANDS[@]}"; do
     if ! caws $cmd --help > /dev/null 2>&1; then
         echo "   ❌ Command '$cmd' not available"
@@ -282,7 +282,7 @@ module.exports = new Telemetry();
 | --------- | -------------------- | -------------------------------------------- |
 | **ERROR** | Failures, exceptions | "Failed to parse .caws/specs/<id>.yaml"      |
 | **WARN**  | Recoverable issues   | "Deprecated flag used: --old-flag"           |
-| **INFO**  | Important events     | "Validation complete: 0 errors"              |
+| **INFO**  | Important events     | "Gates run complete: 0 violations"           |
 | **DEBUG** | Detailed debugging   | "Loaded spec from .caws/specs/<id>.yaml"     |
 
 ### Log Format (JSON)
@@ -290,17 +290,17 @@ module.exports = new Telemetry();
 ```javascript
 // Structured logging format
 {
-  "timestamp": "2025-10-10T14:30:00.000Z",
+  "timestamp": "2026-05-28T14:30:00.000Z",
   "level": "INFO",
-  "message": "Validation complete",
-  "command": "validate",
+  "message": "Gates run complete",
+  "command": "gates",
   "duration": 120,
   "errors": 0,
   "warnings": 2,
   "metadata": {
     "spec_id": "<feature-spec-id>",
     "risk_tier": 1,
-    "version": "3.4.0"
+    "version": "11.1.6"
   }
 }
 ```
@@ -380,9 +380,9 @@ describe('Performance Budgets', () => {
     expect(duration).toBeLessThan(500);
   });
 
-  test('Validation command < 2s', async () => {
+  test('Doctor command < 2s', async () => {
     const start = Date.now();
-    execSync('node dist/index.js validate', { stdio: 'pipe' });
+    execSync('node dist/index.js doctor', { stdio: 'pipe' });
     const duration = Date.now() - start;
 
     expect(duration).toBeLessThan(2000);
@@ -607,5 +607,5 @@ For monitoring issues or questions:
 
 ---
 
-**Last Updated**: October 10, 2025  
-**Next Review**: January 2026
+**Last Updated**: 2026-05-28  
+**Next Review**: 2026-08-28

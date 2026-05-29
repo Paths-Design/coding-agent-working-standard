@@ -1,27 +1,39 @@
-# Testing npm Publishing
+# npm Publishing Verification
 
 **Author**: @darianrosebrook  
-**Date**: October 10, 2025  
-**Purpose**: Verify npm publishing setup before first production release
+**Date**: October 10, 2025 (revised 2026-05-28 for tag-driven release reality)  
+**Purpose**: Verify npm publishing setup before production releases
+
+> **Canonical release doc**: `docs/release-procedure.md` — if anything here
+> conflicts, the release-procedure doc wins. This file covers pre-publish
+> verification steps and local smoke testing; it does not duplicate the full
+> release procedure.
 
 ---
 
 ## Pre-Publishing Checklist
 
-Before attempting to publish CAWS to npm, verify these requirements:
+Before publishing CAWS to npm, verify these requirements:
 
 ### 1. npm Account Setup
 
 - [ ] npm account created at [npmjs.com](https://www.npmjs.com)
-- [ ] 2FA enabled on npm account (required for publishing)
+- [ ] 2FA enabled on npm account (required for publishing interactively)
 - [ ] Member of `@paths.design` organization on npm (or owner)
-- [ ] Automation token created with publish permissions
+- [ ] Granular npm token created with publish permissions and 2FA-bypass enabled
 
-### 2. GitHub Secrets Configured
+### 2. GitHub Environment Configured
 
-- [ ] `NPM_TOKEN` secret added to GitHub repository
-- [ ] Token has correct permissions (`Automation` type)
+- [ ] `NPM_TOKEN` secret added to the **Release** GitHub environment (not just repository secrets)
+- [ ] Token type: granular npm token with **bypass 2FA for write actions** enabled
 - [ ] Token can publish to `@paths.design` scope
+
+> **Auth mechanism**: CI publishes via `NPM_TOKEN` stored in the `Release`
+> GitHub environment. The workflow uses `npm publish --provenance`.
+> OIDC trusted-publisher is a planned future enhancement — it is NOT the
+> current mechanism. The `id-token: write` permission in the workflow is
+> retained for that future migration but has no effect on the current
+> NPM_TOKEN-based publish.
 
 ### 3. Package Configuration
 
@@ -31,11 +43,15 @@ Before attempting to publish CAWS to npm, verify these requirements:
 - [ ] LICENSE file exists (MIT)
 - [ ] README.md exists and is current
 
-### 4. semantic-release Configuration
+### 4. Tag-Driven Release Pre-flight
 
-- [ ] `.releaserc.json` has `npmPublish: true`
-- [ ] `provenance: true` for SLSA attestation
-- [ ] `pkgRoot` points to correct package: `packages/caws-cli`
+- [ ] `packages/caws-cli/package.json` version matches the intended tag (e.g., `11.1.6`)
+- [ ] `packages/caws-cli/CHANGELOG.md` has a section for that version
+- [ ] Fresh-install smoke passes locally (`npm run smoke:fresh-install -w @paths.design/caws-cli`)
+
+> There is no `.releaserc.json` and semantic-release is not used. CI does not
+> bump versions or generate changelogs. The maintainer does both manually
+> before tagging.
 
 ---
 
@@ -55,6 +71,14 @@ npm whoami
 npm org ls @paths.design
 # Should list you as a member/owner
 ```
+
+> **Note**: interactive `npm login` and `NPM_TOKEN` env-var auth are different
+> identities to the registry. If your account has 2FA enabled, interactive
+> `npm publish` still requires an OTP (`--otp=<code>`). Granular npm tokens
+> with bypass-2FA work for `NPM_TOKEN`-based CI publishes but do not carry
+> over to `npm whoami` sessions. If you see `EOTP` with a valid `npm whoami`,
+> the token has 2FA-bypass and the session does not — use the token via env
+> (see Step 7 below).
 
 ### Step 2: Verify Package Scope Access
 
@@ -130,66 +154,80 @@ npm publish --dry-run
 # Verify files that would be published
 ```
 
-### Step 7: Publish to Test Tag (Optional but Recommended)
+### Step 7: Local Token-Based Publish Test (Optional)
 
 ```bash
-# Publish with 'beta' tag instead of 'latest'
-# This allows testing without affecting production users
-npm publish --tag beta
+# Test token-based auth locally (mirrors how CI publishes)
+export NPM_TOKEN="npm_xxxxx"
+export NODE_AUTH_TOKEN="${NPM_TOKEN}"
+npm whoami
+# Verifies the token is valid
 
-# Verify it was published
+# If you need to publish manually to a beta tag:
+npm publish --tag beta --provenance
 npm view @paths.design/caws-cli@beta
 
-# Test installation
-npm install -g @paths.design/caws-cli@beta
-caws --version
-
-# If successful, promote to latest
-npm dist-tag add @paths.design/caws-cli@3.4.0 latest
-
-# Or if there are issues, deprecate
-npm deprecate @paths.design/caws-cli@3.4.0 "Test release, use production version"
+# If successful, promote to latest (only after confirming quality)
+# npm dist-tag add @paths.design/caws-cli@11.1.6 latest
 ```
 
 ---
 
 ## CI/CD Testing
 
-### Step 8: Test GitHub Actions Workflow
+### Step 8: Test the Release Workflow via a Tag Push
+
+The Release workflow is **tag-driven**. Pushing to `main` or any branch does
+**not** trigger a release. There is no `push: branches` trigger in
+`.github/workflows/release.yml`.
+
+To observe the workflow running without completing a real publish, push a
+refused-tag-pattern. The workflow fires on `caws-kernel-v*` and bare `v*`
+tags, immediately refuses them, deletes the tag from origin, and exits
+non-zero. This lets you confirm the workflow runs and the auth plumbing is
+wired correctly:
 
 ```bash
-# Make a test commit to trigger release workflow
-git checkout -b test/release-workflow
+# Push a refused-pattern tag to exercise the workflow.
+# The workflow will fire, emit a structured refusal, delete the tag, and exit
+# non-zero. No npm publish occurs. The tag will not remain on origin.
+git tag caws-kernel-v0.0.0-test -m "Workflow smoke: refused-pattern test"
+git push origin caws-kernel-v0.0.0-test
 
-# Make a minor change
-echo "# Test Release" >> docs/test.md
-git add docs/test.md
-git commit -m "test: verify release workflow"
-
-# Push to trigger workflow
-git push origin test/release-workflow
-
-# Monitor workflow in GitHub Actions
+# Monitor workflow in GitHub Actions:
 # https://github.com/Paths-Design/coding-agent-working-standard/actions
+# Expect: workflow runs, logs "refused", tag is auto-deleted from origin.
+
+# To trigger an actual candidate run (which will also refuse if package.json
+# version doesn't match or CHANGELOG section is missing), push a
+# caws-cli-v* tag matching a version bump you've already committed:
+#
+#   git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+#   git push origin caws-cli-v11.1.6
+#
+# See docs/release-procedure.md for the full pre-tag checklist before doing this.
 ```
 
-### Step 9: Verify OIDC Setup
+### Step 9: Verify NPM_TOKEN Auth in the Release Environment
 
-The release workflow should:
+Check the workflow runs with valid credentials:
 
-- [ ] Authenticate with npm using OIDC
-- [ ] Run security audit
-- [ ] Run all tests
-- [ ] Build packages
-- [ ] Publish with provenance
+- [ ] `NPM_TOKEN` is present in the **Release** GitHub environment (not just repository secrets)
+- [ ] The token is a granular npm token with **bypass 2FA for write actions** enabled
+- [ ] The token can publish to the `@paths.design` scope
 
 Check workflow logs for:
 
 ```
-✅ Setup NPM authentication with OIDC
-✅ Verify NPM Authentication
-✅ Release
+✓ gh api ref read confirmed.
+step.end ... step=npm_publish ... ok=true
+registry.verify.ok
+release.success
 ```
+
+> **Not** "Setup NPM authentication with OIDC" — the current mechanism is
+> NPM_TOKEN, not OIDC. If you see OIDC steps in logs, the workflow has been
+> updated; consult `docs/release-procedure.md`.
 
 ---
 
@@ -199,7 +237,7 @@ Check workflow logs for:
 
 ```bash
 # Cause: npm token not configured
-# Fix: Set NPM_TOKEN in GitHub secrets
+# Fix: Set NPM_TOKEN in the Release GitHub environment (not just repo secrets)
 
 # Test locally:
 export NPM_TOKEN="npm_xxxxx"
@@ -214,7 +252,7 @@ npm whoami
 
 npm org ls @paths.design
 
-# Or recreate token with correct permissions
+# Or recreate token with correct permissions (Read and write for @paths.design)
 ```
 
 ### Error: `E404 Not Found`
@@ -231,9 +269,8 @@ npm org ls @paths.design
 
 ```bash
 # Cause: 2FA required for publishing
-# Fix: Either:
-# 1. Use automation token (recommended)
-# 2. Or set 2FA to "Authorization only" (not "Authorization and writes")
+# Fix: Use a granular npm token with "bypass 2FA for write actions" enabled.
+# Interactive session 2FA bypass does not transfer to token-based auth.
 ```
 
 ### Warning: Large Package Size
@@ -262,43 +299,34 @@ echo "*.test.js" >> .npmignore
 
 ---
 
-## First Production Release Checklist
+## Production Release Checklist
 
-Once all testing is complete:
+Before pushing the release tag:
 
-- [ ] All tests in this document passed
-- [ ] npm authentication verified
+- [ ] All pre-publish steps above passed
+- [ ] npm authentication verified (NPM_TOKEN in Release environment)
 - [ ] Package builds successfully
 - [ ] CLI works from tarball
-- [ ] CI/CD workflow completes
-- [ ] Provenance attestation included
+- [ ] `packages/caws-cli/package.json` version bumped manually (e.g., `11.1.6`)
+- [ ] `packages/caws-cli/CHANGELOG.md` section authored for the version
+- [ ] Fresh-install smoke passes: `npm run smoke:fresh-install -w @paths.design/caws-cli`
 - [ ] Security audit clean
 - [ ] LICENSE file present
 - [ ] README.md current
-- [ ] CHANGELOG.md updated
-- [ ] Version bumped (semantic-release handles this)
 
-### Trigger First Release
+### Trigger a Release
+
+Releases are triggered by pushing a `caws-cli-vX.Y.Z` tag. Branch pushes
+**never** publish. Full procedure in `docs/release-procedure.md`.
 
 ```bash
-# Merge to main with conventional commit
-git checkout main
-git pull origin main
+# After committing the version bump and CHANGELOG section:
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+git push origin caws-cli-v11.1.6
 
-# Make release commit
-git commit --allow-empty -m "feat: initial public release
-
-- CLI with all core commands
-- MCP server for AI agents
-- Comprehensive documentation
-- Release-ready deployment
-
-BREAKING CHANGE: First public release"
-
-git push origin main
-
-# Monitor release at:
+# Monitor at:
 # https://github.com/Paths-Design/coding-agent-working-standard/actions
+gh run watch
 ```
 
 ### Verify Published Package
@@ -307,7 +335,7 @@ git push origin main
 # Wait 2-5 minutes for npm CDN propagation
 
 # Verify package is live
-npm view @paths.design/caws-cli
+npm view @paths.design/caws-cli@11.1.6 version
 
 # Test clean installation
 docker run --rm -it node:22-alpine sh -c "
@@ -327,24 +355,18 @@ npm audit signatures @paths.design/caws-cli
 
 ## Post-Release Actions
 
-After successful first release:
+After a successful release:
 
-1. **Announce Release**
-   - Update README badges
-   - Create GitHub Discussion
-   - Tweet about release (if applicable)
-
-2. **Monitor Initial Adoption**
+1. **Monitor Initial Adoption**
    - Check download stats after 24h
    - Monitor GitHub issues for problems
    - Watch CI/CD for any failures
 
-3. **Update Documentation**
-   - Mark NPM_PUBLISHING_TEST.md as complete
-   - Update DEPLOYMENT.md with actual experience
+2. **Update Documentation**
+   - Update README badges if needed
    - Document any issues encountered
 
-4. **Plan Next Release**
+3. **Plan Next Release**
    - Set up monitoring for download trends
    - Schedule regular dependency updates
    - Plan feature releases
@@ -353,43 +375,43 @@ After successful first release:
 
 ## Rollback Plan
 
-If first release has critical issues:
+If a release has critical issues:
 
 ```bash
 # Option 1: Deprecate (preferred)
-npm deprecate @paths.design/caws-cli@3.4.0 "Initial release has issues, wait for 3.4.1"
+npm deprecate @paths.design/caws-cli@11.1.6 "Issue found, wait for 11.1.7"
 
-# Option 2: Unpublish (only if <72 hours)
-npm unpublish @paths.design/caws-cli@3.4.0
+# Option 2: Unpublish (only if <72 hours and no downstream dependents)
+npm unpublish @paths.design/caws-cli@11.1.6
 
 # Option 3: Publish hotfix
-# See docs/ROLLBACK.md for detailed procedures
+# Bump to 11.1.7, author CHANGELOG, commit, tag caws-cli-v11.1.7, push tag.
+# See docs/release-procedure.md § Failure recovery.
 ```
 
 ---
 
 ## Success Criteria
 
-First release is successful when:
+A release is successful when:
 
-- Package published to npm
+- Package published to npm with the correct version
 - Installation works globally: `npm install -g @paths.design/caws-cli`
 - CLI commands execute correctly
-- Provenance attestation present
+- Provenance attestation present (`npm audit signatures`)
 - No critical security vulnerabilities
 - Bundle size < 5 MB
 - README displays correctly on npmjs.com
-- All CI/CD checks passing
+- GitHub Release created with CHANGELOG section as body
+- All CI workflow steps green
 
 ---
 
 ## Resources
 
+- **Release Procedure** (canonical): `docs/release-procedure.md`
 - **npm Publishing Docs**: https://docs.npmjs.com/cli/v10/commands/npm-publish
-- **semantic-release**: https://semantic-release.gitbook.io/
 - **SLSA Provenance**: https://slsa.dev/provenance/
-- **Deployment Guide**: `docs/DEPLOYMENT.md`
-- **Rollback Guide**: `docs/ROLLBACK.md`
 
 ---
 
@@ -402,5 +424,5 @@ Questions about publishing?
 
 ---
 
-**Status**: Ready for first publish test  
-**Next Step**: Follow Step 1 above to begin verification
+**Status**: Tag-driven release procedure in effect as of v11.1.4+1  
+**See**: `docs/release-procedure.md` for the full step-by-step procedure

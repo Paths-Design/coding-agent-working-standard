@@ -1,34 +1,32 @@
 # CAWS Project Documentation
 
 ## Overview
-This project is built with the **Coding Agent Working Standard (CAWS)** - an engineering-grade framework that ensures quality, reliability, and maintainability in AI-assisted development.
+This project is built with the **Coding Agent Working Standard (CAWS)** — a framework for quality-assured, multi-agent AI-assisted development. CAWS partitions authority across agents (scope, worktree binding, ownership) so concurrent work stays safe and attributable.
 
 ## Key Features
-- **Quality Gates**: Automated validation of scope, budget, and standards
-- **Comprehensive Testing**: Unit, contract, integration, and mutation testing
-- **Observability**: Structured logging, metrics, and tracing
-- **Rollback Ready**: Feature flags and migration support
-- **Provenance Tracking**: SBOM and SLSA attestation generation
+- **Quality Gates**: Policy-driven validation of scope, budget, and standards (`caws gates run`)
+- **Scope Binding**: Each spec declares `scope.in`/`scope.out`; the scope guard enforces edit boundaries
+- **Worktree Isolation**: `caws worktree create` binds a git worktree to a spec for safe parallel work
+- **Hash-chained Audit**: Every lifecycle action appends a typed event to `.caws/events.jsonl`
 
 ## Getting Started
 
 ### 1. Project Setup
-The project is already scaffolded with CAWS. Review and customize:
-- `.caws/specs/<spec-id>.yaml` - Per-feature specifications (canonical, the only spec location)
-- `.caws/policy.yaml` - Risk tier definitions
-- `.github/workflows/caws.yml` - CI/CD quality gates
+The project is already initialized with CAWS. Review and customize:
+- `.caws/specs/<spec-id>.yaml` — Per-feature specifications (canonical; the only spec location)
+- `.caws/policy.yaml` — Risk tier definitions and gate modes
+- `.github/workflows/` — CI quality gates (wire your own hooks against `caws gates run`)
 
 ### 2. Development Workflow
-1. **Plan**: Update the active feature spec with requirements and scope
-2. **Implement**: Follow agent conduct rules and mode constraints
-3. **Verify**: Run tests and quality gates locally
-4. **Document**: Update documentation and generate provenance
+1. **Plan**: Create or update a feature spec with `caws specs create <id>` and edit its scope/invariants/acceptance
+2. **Implement**: Stay within the spec's declared scope and mode
+3. **Verify**: Run `caws doctor` and `caws gates run --spec <id>` locally
+4. **Record**: Append evidence with `caws evidence record`
 
 ### 3. Quality Assurance
-- Run `npm run test` for all tests
-- Check trust score with CAWS tools
-- Validate against working specification
-- Ensure rollback capabilities
+- Run `npm test` for the test suite
+- `caws doctor` — project-wide drift detection and schema validation
+- `caws gates run --spec <id> --context commit` — policy-driven gates for one spec
 
 ## Architecture
 
@@ -46,15 +44,15 @@ tests/                 # Test suites
 ├── integration/      # Integration tests
 └── e2e/              # End-to-end tests
 
-apps/tools/caws/       # CAWS utilities
-└── prompt-lint.js    # Prompt validation
-└── attest.js         # SBOM/attestation generation
+.caws/                 # CAWS control plane
+├── specs/            # Per-feature specs (canonical)
+├── policy.yaml       # Gates + risk-tier budgets
+└── events.jsonl      # Hash-chained audit log
 ```
 
 ### Key Patterns
 - **Dependency Injection**: For testability and determinism
 - **Interface Segregation**: Clean boundaries and contracts
-- **Observability**: Structured logging and metrics
 - **Property Testing**: Edge cases and invariants
 
 ## Development Guidelines
@@ -63,23 +61,22 @@ apps/tools/caws/       # CAWS utilities
 1. **Spec Adherence**: Stay within declared scope and mode
 2. **Determinism**: Inject time, UUID, and random dependencies
 3. **Comprehensive Testing**: Unit + property + integration tests
-4. **Observability**: Log, metric, and trace key operations
-5. **Rollback Ready**: Feature flags and migration support
+4. **No fake implementations**: No placeholder stubs, no `TODO` in committed code
+5. **Prove claims**: Provide test/gate evidence, not assertions
 
 ### Code Quality
-- **Type Safety**: Full TypeScript coverage
-- **Test Coverage**: 80%+ branch coverage, 50%+ mutation score
-- **Performance**: API p95 < 250ms, accessibility compliance
+- **Type Safety**: Full TypeScript coverage where applicable
+- **Test Coverage**: Set thresholds in your CI; CAWS does not ship coverage gates in v11
+- **Performance**: Track latency/accessibility budgets under the spec's `non_functional`
 - **Security**: Input validation, rate limiting, secret scanning
 
 ## Deployment
 
 ### CI/CD Pipeline
-The project includes automated quality gates:
-- Static analysis and security scanning
-- Unit and integration testing
-- Performance and accessibility validation
-- Provenance and attestation generation
+Wire your CI to the CAWS surface:
+- `caws doctor` for drift detection
+- `caws gates run --spec <id> --context ci` for policy-driven gates
+- Static analysis, security scanning, and tests as your project requires
 
 ### Environment Setup
 1. Configure environment variables
@@ -87,64 +84,41 @@ The project includes automated quality gates:
 3. Establish rollback procedures
 4. Document operational runbooks
 
-## Monitoring & Observability
-
-### Metrics
-- Request latency and throughput
-- Error rates and types
-- Resource utilization
-- Business metrics
-
-### Logging
-- Structured logs with correlation IDs
-- Error tracking and alerting
-- Performance monitoring
-- Security event logging
-
-### Tracing
-- Distributed request tracing
-- Performance profiling
-- Dependency analysis
-- Root cause identification
-
 ## Troubleshooting
 
 ### Common Issues
-1. **Trust Score Low**: Check test coverage and quality gates
-2. **Scope Violations**: Ensure changes align with the active spec
-3. **Budget Exceeded**: Review change size and complexity
+1. **Scope Violations**: Run `caws scope show <path>` — it reports whether your binding is authoritative or union mode and names the responsible spec
+2. **Gate Failures**: Run `caws gates run --spec <id>` and inspect the output + exit code
+3. **Binding Drift**: Repair with `caws worktree bind <name> --spec <id>`
 4. **Flaky Tests**: Use property testing and proper mocking
 
 ### Support
-- Check `agents.md` for comprehensive documentation
-- Review CI/CD logs for quality gate failures
-- Use CAWS tools for validation and debugging
-- Follow agent conduct rules for collaboration
+- Check `AGENTS.md` for the agent quickstart
+- Review CI logs for quality gate failures
+- Use `caws doctor` and `caws status` for validation and diagnosis
 
 ## Contributing
 
 ### Development Process
-1. Update the active feature specification
+1. Create or update a feature spec (`caws specs create <id>`)
 2. Create comprehensive tests
-3. Implement with quality gates
-4. Generate provenance artifacts
+3. Implement within the spec's scope
+4. Run `caws doctor` + `caws gates run`
 5. Document changes thoroughly
 
 ### Code Review
 - Review against the active feature spec
-- Check trust score and quality gates
-- Validate observability and rollback
+- Check gate results and scope adherence
+- Validate rollback where applicable
 - Ensure documentation completeness
 
 ## Resources
 
-- **[CAWS Framework](agents.md)**: Complete system documentation
-- **[Canonical Specs](.caws/specs/)**: Project requirements
-- **[Quality Gates](.github/workflows/caws.yml)**: CI/CD pipeline
-- **[Tools](apps/tools/caws/)**: Development utilities
+- **[Agent Quickstart](../AGENTS.md)**: How agents work in this project
+- **[Canonical Specs](../.caws/specs/)**: Project requirements
+- **[Policy](../.caws/policy.yaml)**: Gates and risk-tier budgets
 
 ---
 
 **Maintainer**: @darianrosebrook
-**Framework**: CAWS v1.0
-**Updated**: $(date)
+**Framework**: CAWS v11
