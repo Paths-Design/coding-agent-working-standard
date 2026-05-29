@@ -2,9 +2,11 @@ id: DANGER-LATCH-UX-001
 title: 'Fix reset-danger-latch --current session-id mismatch; single-latch fallback; recommend --session; lib-ify session-id sanitize'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Fixed the reset-danger-latch --current deadlock: (1) sanitize_session moved to lib/caws-state.sh so block-dangerous (writer) and reset-danger-latch (clearer) compute identical sentinel filenames; (2) --current falls back to the sole latch when its resolved candidate is absent (2+ -> refuses, points at --session/--all); (3) block-dangerous replay message recommends --session <id> over --current. Plus rm scratch-path calibration: rm -rf under /tmp, /private/tmp, /var/folders, $TMPDIR -> allow; catastrophic/ambiguous (/ ~ . temp-root /etc repo-relative) stay deny/ask. Documented limit: ''cd /tmp && rm -rf <relative>'' stays ask (cwd not tracked across &&). Updated substitution-escalation test to /etc (scratch nested in $() is now correctly allow). +21 tests (danger_latch_ux 6, rm_scratch_path_calibration 15); 278/278 hook-pack pass. Doc-lifecycle: no ephemeral docs; CHANGELOG updated. Consumers need refresh as follow-step.'
 created_at: '2026-05-29T23:16:43.934Z'
-updated_at: '2026-05-29T23:16:43.934Z'
+updated_at: '2026-05-29T23:28:32.212Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
