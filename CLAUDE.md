@@ -29,6 +29,7 @@ Currently absent: `caws claim --spec <id>` (bridge claims for non-worktree conte
 1. Run `caws status` and `caws doctor`. The `claim` panel surfaces worktree ownership; doctor surfaces drift.
 2. For multi-agent work: create your worktree with `caws worktree create <name> --spec <id>`. The command writes the bidirectional worktree↔spec binding, registers ownership, and emits the `worktree_created` + `worktree_bound` events. There is no `caws parallel setup` — loop `caws worktree create` per spec.
 3. `caws claim` surfaces or takes worktree ownership. `caws claim --takeover` acquires from a foreign session and writes a `prior_owners` audit entry.
+4. When you create or update your CAWS spec, ensure that it is committed after changes to avoid multi-agent confusion.
 
 ## v11 spec workflow
 
