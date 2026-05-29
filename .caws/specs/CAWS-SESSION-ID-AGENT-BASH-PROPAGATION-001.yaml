@@ -3,8 +3,9 @@ title: 'Parallel-agent ownership misattribution: agent-Bash caws subprocess lack
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: session-id-propagation
 created_at: '2026-05-29T01:48:21.123Z'
-updated_at: '2026-05-29T02:05:00.000Z'
+updated_at: '2026-05-29T02:08:00.000Z'
 blast_radius:
   modules:
     - Shell session resolver (packages/caws-cli/src/shell/session/resolve-session.ts) and the claude-code hook pack caller-identity substrate (.claude/hooks/lib/parse-input.sh + templates/hook-packs/claude-code/lib/parse-input.sh). Implementation is a fast-follow; this spec records the root cause and the proposed fix.
@@ -13,6 +14,8 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/src/shell/rules.ts
     - .claude/hooks/lib/parse-input.sh
     - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
     - packages/caws-cli/tests/shell/resolve-session-primitive.test.js
