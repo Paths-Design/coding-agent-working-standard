@@ -1,25 +1,166 @@
 id: CAWS-SPECS-RETIRE-DRAFT-001
 title: 'caws specs retire-draft: governed draft-only lifecycle retirement (tombstone + recoverable spec_retired event), not raw git rm'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-29T04:08:57.425Z'
-updated_at: '2026-05-29T04:08:57.425Z'
+updated_at: '2026-05-29T04:09:30.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-kernel/src/schemas/events
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-SPECS-RETIRE-DRAFT-001.yaml
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/specs-store.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/specs-retire-draft.test.js
+    - packages/caws-cli/tests/store/specs-retire-draft.test.js
+    - packages/caws-kernel/src/schemas/events
+    - packages/caws-kernel/src/evidence
+    - docs/architecture/caws-vnext-command-surface.md
+    - CLAUDE.md
+  out:
+    - .caws/events.jsonl
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/src/shell/gates
+    - packages/caws-cli/src/shell/push-range
+    - packages/caws-cli/src/store/worktrees-writer.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Draft-only lifecycle transition. `caws specs retire-draft <id>` MUST
+    succeed ONLY when the target spec's lifecycle_state is `draft`. It
+    MUST refuse active, closed, and archived specs with a typed diagnostic
+    and a non-zero exit. This closes the gap where a never-activated draft
+    had no sanctioned CLI exit (close requires active; archive requires
+    closed) — raw `git rm .caws/specs/<id>.yaml` was the only path, which
+    bypasses the YAML status flip, the event audit record, and recovery.
+  - >-
+    Tombstone, not raw deletion. Retirement mirrors the post-
+    CAWS-ARCHIVE-AS-TOMBSTONE-001 archive flow: the spec file is deleted
+    from disk, and a hash-chained `spec_retired` event is appended (via
+    the store appendEvent path — NEVER a direct write to events.jsonl)
+    carrying enough metadata (from_path + git blob_sha + optional
+    source_commit_sha + optional reason) to reconstruct the retired draft
+    via `git show <blob_sha>`. No new lifecycle_state value is introduced
+    (the enum stays draft/active/closed/archived); the spec_retired event
+    is the durable signal, exactly as spec_archived is for archive.
+  - >-
+    Recoverable. A retired draft MUST be reconstructable from the event
+    log + git history alone (the spec_retired event's blob_sha + git show),
+    with no dependence on a body written to .caws/specs/.archive/. The
+    blob_sha MUST be captured BEFORE any mutation; if the spec is not
+    tracked at HEAD (blob_sha null), retire-draft refuses (the draft must
+    be committed first, same precondition as archiveSpec).
+  - >-
+    Path-scoped, no sibling sweep. The retirement commit stages and
+    commits ONLY the retired spec's own path (the deletion), via the
+    path-scoped autoCommit established by CAWS-AUTOCOMMIT-INTEGRITY-001.
+    It MUST NOT sweep a concurrent sibling session's staged/dirty files
+    from the shared index. The shell handler surfaces a refused_dirty
+    audit-commit outcome (warning, operation still succeeded) per
+    CAWS-AUTOCOMMIT-INTEGRITY-002 — it does not silently claim success.
+  - >-
+    Scope-bounded; gates/push-range untouched. This slice adds the
+    retire-draft command + its store writer + the spec_retired event
+    schema + recovery support + the doctrine line. It does NOT touch the
+    gates surface (Slice B) or push-range (Slice A2) — both scope.out.
+    worktrees-writer.ts is scope.out (retire-draft does not unbind a
+    worktree; a bound draft is an edge case the command refuses or the
+    operator unbinds first — see A-refuse cases).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: A spec with lifecycle_state:draft, tracked at HEAD.
+    when: '`caws specs retire-draft <id>` runs.'
+    then: >-
+      Exit 0. The spec file is removed from .caws/specs/. A spec_retired
+      event is appended with from_path, blob_sha (40-hex), and the chain
+      links (prev_hash = prior tail event_hash, event_hash sha256). The
+      audit commit lands (or a refused_dirty warning is surfaced, never
+      silent). `caws specs list` no longer shows the id among active.
+  - id: A2
+    given: A spec with lifecycle_state of active, closed, or archived.
+    when: '`caws specs retire-draft <id>` runs.'
+    then: >-
+      The command REFUSES with a typed diagnostic naming the actual
+      lifecycle_state and the correct alternative (close for active,
+      archive for closed). Non-zero exit. No file deletion, no event
+      appended, no mutation.
+  - id: A3
+    given: A draft spec NOT tracked at HEAD (uncommitted/untracked file).
+    when: '`caws specs retire-draft <id>` runs.'
+    then: >-
+      The command refuses with a typed diagnostic (blob_sha unavailable —
+      commit the draft first), rather than deleting an unrecoverable body.
+      Non-zero exit; no mutation. Mirrors archiveSpec's null-blob refusal.
+  - id: A4
+    given: The new spec_retired.v1.json event schema.
+    when: an appended spec_retired event is validated.
+    then: >-
+      The schema is REQUIRES_SPEC_ID, additionalProperties:false, requires
+      from_path + blob_sha (^[0-9a-f]{40}$), allows optional
+      source_commit_sha + reason. It is registered in the kernel event
+      vocabulary (events.v1.json enum, KNOWN_EVENT_TYPES, REQUIRES_SPEC_ID
+      class, PAYLOAD_SCHEMAS) so appendEvent accepts it; a payload missing
+      blob_sha or from_path is rejected.
+  - id: A5
+    given: A retired draft and its spec_retired event.
+    when: a recovery path is invoked (e.g. `caws specs show <id> --archived`
+      or a retire-aware recover predicate).
+    then: >-
+      The retired draft body is reconstructed byte-identically from the
+      event's blob_sha via git show — the same mechanism as archived-spec
+      recovery. The recovery predicate scans spec_retired events (not only
+      spec_archived).
+  - id: A6
+    given: A concurrent sibling has unrelated files staged in the shared index.
+    when: '`caws specs retire-draft <id>` commits the deletion.'
+    then: >-
+      The resulting commit contains ONLY the retired spec path; the
+      sibling's staged files remain staged-uncommitted, untouched. Proven
+      by inspecting the commit's name-only file list (path-scoped commit
+      from CAWS-AUTOCOMMIT-INTEGRITY-001).
+  - id: A7
+    given: The retire-draft store function + shell command.
+    when: the caws-cli store + shell suites run.
+    then: >-
+      New tests cover: shell happy-path (A1), shell refusal for each wrong
+      state (A2), store-level draft-only precondition, untracked refusal
+      (A3), event shape + chain (A4), and recovery (A5). Tests use isolated
+      fixture git repos (mkdtemp + git init), never the live repo. Existing
+      specs-writer / specs-store tests still pass (no regression).
+  - id: A8
+    given: The doctrine docs (CLAUDE.md, command-surface doc).
+    when: an agent looks for how to retire a never-activated draft.
+    then: >-
+      The docs state that raw `git rm .caws/specs/<id>.yaml` is NOT the
+      governed path for draft retirement; `caws specs retire-draft <id>`
+      is. The spec lifecycle section names retire-draft alongside
+      close/archive with its draft-only precondition.
+non_functional:
+  reliability:
+    - >-
+      Closes the draft-lifecycle retirement gap: a never-activated draft
+      now has a sanctioned, audited, recoverable CLI exit instead of raw
+      git rm (which the maintainer had to use to delete 5 stale drafts
+      earlier, bypassing the audit trail). The retirement is a hash-chained
+      event with blob-based recovery, consistent with archive-as-tombstone.
+contracts:
+  - name: retire-draft-governed-tombstone
+    type: behavior
+    description: >-
+      Draft retirement is a governed lifecycle/tombstone transition, not
+      raw deletion. It retires draft specs ONLY and refuses
+      active/closed/archived with typed diagnostics + non-zero exit. It
+      captures blob_sha before mutation, appends a hash-chained
+      spec_retired event via the store appendEvent path, deletes the file
+      via a path-scoped commit (no sibling sweep), and leaves evidence
+      sufficient to reconstruct the retired draft via git show. No new
+      lifecycle_state value; the event is the durable signal.
