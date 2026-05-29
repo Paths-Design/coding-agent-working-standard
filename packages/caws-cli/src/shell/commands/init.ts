@@ -41,8 +41,10 @@ import type {
   AgentSurface,
   HookPackInstallResult,
 } from '../../init/hook-packs/types';
+import { manageGitignore } from '../../init/gitignore-manage';
 import { initProject, resolveRepoRoot } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
+import { renderGitignore } from '../render/init-gitignore';
 import { renderInit } from '../render/init';
 import {
   renderActivationContract,
@@ -192,6 +194,17 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return isLegacy ? 1 : 2;
   }
   out(renderInit({ result: result.value, repoRoot }));
+
+  // Step 1b: manage the .gitignore ephemeral-state block. Step 1 (initProject)
+  // just wrote agents.json + worktrees.json to disk; without ignore rules they
+  // are untracked-but-not-ignored, inviting accidental commits. This writes a
+  // marked, idempotent block ignoring ephemeral .caws/ state while leaving
+  // authority state (specs/policy/waivers) tracked. Advisory: a write failure
+  // is a warning, not a hard error — init's exit code is unchanged.
+  const gitignoreResult = manageGitignore(repoRoot, {
+    adopt: opts.adopt === true,
+  });
+  out(renderGitignore(gitignoreResult));
 
   // Step 2: choose the agent surface and install the hook pack.
   const detection = detectAgentHarness(repoRoot);
