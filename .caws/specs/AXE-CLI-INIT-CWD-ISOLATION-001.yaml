@@ -7,19 +7,54 @@ created_at: '2026-05-29T07:13:11.959Z'
 updated_at: '2026-05-29T07:13:11.959Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/axe
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/axe/cli-accessibility.test.js
+    - .caws/specs/AXE-CLI-INIT-CWD-ISOLATION-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Test-only slice. No production source under packages/caws-cli/src or any
+    hook-pack template is modified. The fix changes assertions and test
+    invocation hygiene in cli-accessibility.test.js only.
+  - >-
+    Every `caws init` invocation in this test runs with an explicit
+    `cwd` pointed at an isolated temp directory, never inheriting the
+    jest process CWD (which is the live initialized CAWS repo). This is
+    what caused the two failures: init resolved the real repo root and
+    reported "already initialized" instead of the asserted behavior.
+  - >-
+    Assertions reflect the v11 command contract. `caws init` in v11 takes
+    NO project-name positional argument (Usage: `caws init [options]`), so
+    the removed-v10 expectations ("Project name is required", project-name
+    sanitization warnings) are dropped and replaced with assertions over a
+    real v11 init error/no-op surface.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: the axe Error Message Accessibility suite
+    when: it exercises a v11 `caws init` error path with an explicit isolated cwd
+    then: >-
+      the assertion targets an error the v11 surface actually emits (e.g. an
+      unknown --agent-surface value) and passes; the obsolete "Project name is
+      required" expectation is removed
+  - id: A2
+    given: the "invalid project names" test premised on v10 project-name validation
+    when: the v11 surface no longer validates or sanitizes a project-name argument
+    then: >-
+      the test is re-targeted or removed so it no longer asserts a removed-v10
+      contract, and the suite is green
+  - id: A3
+    given: the full cli-accessibility suite after the fix
+    when: run via `npx jest tests/axe/cli-accessibility.test.js`
+    then: all tests pass and no init invocation mutates the live repo working tree
+non_functional:
+  accessibility:
+    - >-
+      The retained error-message assertions still verify the v11 accessibility
+      contract: errors are clear, actionable, and concise (bounded line count).
 contracts: []
