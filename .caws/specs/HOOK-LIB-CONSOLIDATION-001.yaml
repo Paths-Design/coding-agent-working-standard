@@ -3,23 +3,171 @@ title: 'Extract duplicated hook logic into shared lib/; consolidate same-concern
 risk_tier: 3
 mode: refactor
 lifecycle_state: active
-created_at: '2026-05-29T20:42:45.216Z'
-updated_at: '2026-05-29T20:42:45.216Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/src/init/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
   out: []
+
+# ---------------------------------------------------------------------------
+# DESIGN / EXTRACTION MAP (the work order — produced by the audit under
+# HOOK-PACK-DIVERGENCE-RECONCILE-001 + a duplication grep across the pack).
+#
+# Principle (user, 2026-05-29): "Having a lot of hooks is fine. Having a lot
+# of duplicate hook LOGIC is not." The pack architecture (thin dispatchers ->
+# self-filtering handlers -> lib/) is correct; the defect is shared logic
+# copy-pasted into per-hook `node -e` blocks instead of living in lib/. Every
+# v11-drift bug fixed in the reconcile slice was a drifted copy of one of the
+# utilities below.
+#
+# Established offload pattern to follow: lib/parse-input.sh,
+# lib/run-handlers.sh, lib/caws-state.sh (shared bash fns + exported JS
+# helper-strings inlined into node -e), and session_log_renderer.py (heavy
+# logic in a dedicated script the thin hook calls).
+#
+# === TIER 1 — CORRECTNESS DRIFT (consolidate first; these can DISAGREE) ===
+#
+# T1a. glob-to-scope-regexp. TWO DIFFERENT algorithms for "does this path
+#      match a spec scope.in/scope.out pattern":
+#        - scope-guard.sh:          `*` -> `.*`, UNANCHORED. `**` not special.
+#        - worktree-write-guard.sh: `**`->`.+`, `*`->`[^/]*`, anchored ^...$,
+#                                   metachars escaped. (the correct one)
+#      Consequence: path `python/a/b.py` vs pattern `python/*` => MATCH in
+#      scope-guard (`.*` crosses `/`) but NO-MATCH in write-guard. Two guards,
+#      two answers, same question -> latent false-positive/false-negative
+#      scope split. FIX: one exported CAWS_NODE_GLOB_TO_SCOPE_REGEXP JS helper
+#      in lib/caws-state.sh (adopt the write-guard algorithm); both guards
+#      inline it. Call-sites: scope-guard.sh, worktree-write-guard.sh.
+#
+# T1b. dual-shape entriesOf. TWO return contracts for "read worktrees.json":
+#        - lib/caws-state.sh CAWS_NODE_ENTRIES_OF: returns [{name, ...entry}]
+#          OBJECT shape. Used by worktree-write-guard, stop-worktree-check.
+#        - worktree-guard.sh (x3 inline) + session-caws-status.sh (x1 inline):
+#          return [key, value] PAIR shape (Object.entries style).
+#      This is the AC A1 holdout deferred from HOOK-PACK-DIVERGENCE-RECONCILE-001.
+#      FIX: unify on the lib object shape; rewrite the 4 holdout call-site
+#      loops (3 in worktree-guard, 1 in session-caws-status) to consume
+#      {name,...} instead of [k,v]. Re-verify each guard after rewrite.
+#      (Supersedes the un-filed HOOK-PACK-ENTRIESOF-UNIFY-01 placeholder.)
+#
+# === TIER 2 — REAL DUPLICATION, LOW DIVERGENCE RISK (maintainability) ===
+#
+# T2a. _realpath + linked-worktree/canonical-root detection. The
+#      git-common-dir-vs-git-dir + realpath-normalize logic is inline in 5
+#      hooks: worktree-write-guard (has the canonical _realpath), worktree-guard,
+#      session-caws-status, stop-worktree-check, quiet-merge. lib/caws-state.sh
+#      already has resolve_canonical_dir but most don't use it. FIX: move
+#      _realpath + an is_linked_worktree / canonical_root bash helper into
+#      lib/caws-state.sh; all 5 source it.
+#
+# T2b. CURRENT_BRANCH + active-worktree-count. "what branch am I on / how many
+#      active worktrees / does any claim this file" recomputed in
+#      worktree-guard, worktree-write-guard, session-caws-status,
+#      stop-worktree-check (+ agent-heartbeat via the CLI). FIX: shared
+#      caws_current_branch + caws_active_worktrees (count + names) bash fns in
+#      lib/caws-state.sh built on the unified entriesOf (T1b).
+#
+# === TIER 3 — JSON ENVELOPES + SPEC LOADING (the "same thing differently") ==
+#
+# T3a. Claude Code JSON emit envelopes. 12 hooks emit block/ask/
+#      additionalContext JSON, with at least 5 DIFFERENT function names for
+#      the same envelopes: emit_block_json/emit_ask_json (block-dangerous),
+#      emit_block/emit_permission_ask/emit_warning_allow (guard-strikes,
+#      worktree-guard), emit_post_context (validate-spec), + raw inline jq -n
+#      / printf in quiet-merge, agent-heartbeat, scan-secrets, naming-check,
+#      god-object-check, duplicate-export-check, loc-delta-check, quality-check.
+#      FIX: a new lib/emit.sh with canonical helpers — emit_block(reason),
+#      emit_ask(reason), emit_additional_context(text) (PreToolUse) and the
+#      PostToolUse additionalContext variant — jq-based with printf fallback.
+#      Each hook sources it and drops its bespoke emitter. NOTE: guard-strikes'
+#      progressive emitters (warn/ask/block by strike count) stay in
+#      guard-strikes.sh but call lib/emit.sh primitives.
+#
+# T3b. js-yaml spec-scope loading. scope-guard, worktree-write-guard,
+#      quality-check, validate-spec each load a .caws/specs/<id>.yaml and read
+#      scope.in/scope.out / lifecycle. Folds naturally into the same lib work
+#      as T1a/T1b: a CAWS_NODE_LOAD_SPEC_SCOPE helper (load + extract
+#      scope+lifecycle, malformed -> typed error) shared by all four.
+#
+# === ALREADY CONSOLIDATED (no action) ===
+#   - progressive strikes: guard-strikes.sh is the shared impl (good model).
+#   - hook input parsing: lib/parse-input.sh.
+#   - handler fan-out + stdout priority: lib/run-handlers.sh.
+#   - session log rendering: session_log_renderer.py.
+#
+# === ORTHOGONAL (separate slice, not logic-consolidation) ===
+#   - Rename worktree-write-guard.sh vs worktree-guard.sh (confusing pair) +
+#     ship a hook-surface README (event -> handler -> purpose -> edit-when).
+#     Discoverability, not dedup. Track separately.
+#
+# SEQUENCING: T1 first (correctness), then T2 (build on unified entriesOf),
+# then T3 (mechanical once primitives exist). Land in canonical template +
+# tests; refresh consumers via `caws init --overwrite` as a follow-step.
+# Each tier is independently committable with a test gate. Pack version stays
+# v11 unless a consumer-visible behavior changes (T1a could: scope-guard match
+# results change for `**` patterns — call that out in CHANGELOG and consider a
+# bump if it alters any existing project's scope decisions).
+# ---------------------------------------------------------------------------
+
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Exactly one implementation of each consolidated utility exists in lib/;
+    no hook inlines a private copy of glob-to-scope-regexp, entriesOf,
+    realpath/linked-worktree detection, active-worktree-count, or a JSON
+    emit envelope.
+  - >-
+    The unified glob-to-scope-regexp uses the anchored, **-vs-*-distinct,
+    metachar-escaped algorithm (worktree-write-guard's), so scope-guard and
+    worktree-write-guard always agree on whether a path matches a scope
+    pattern.
+  - >-
+    All registry reads use lib/caws-state.sh object-shape entriesOf; the
+    [key,value]-pair variant is removed from worktree-guard and
+    session-caws-status.
+  - >-
+    No safety guard is weakened: block-dangerous latch + classifier,
+    scope-guard malformed-spec DENY, worktree-write-guard base-branch
+    enforcement, run-handlers block>ask>advisory priority all preserved
+    byte-for-behavior.
+  - >-
+    Each consolidated lib utility has a focused test (glob match table,
+    entriesOf dual-shape fixtures, emit-envelope JSON shape); install.test
+    asserts every new lib file is managed + headered + registered.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: scope-guard and worktree-write-guard both classify the same (path, pattern) pairs
+    when: a shared glob-to-scope-regexp helper replaces both inline algorithms
+    then: they return identical match results across a fixture table incl. `**`, `*`, `?`, anchoring, dotted literals
+  - id: A2
+    given: worktree-guard and session-caws-status inline [key,value]-pair entriesOf
+    when: they are rewired to lib/caws-state.sh object-shape entriesOf
+    then: each still detects active worktrees correctly under both v10 envelope and v11 flat-map registry fixtures
+  - id: A3
+    given: _realpath / linked-worktree detection is inline in 5 hooks
+    when: it moves to lib/caws-state.sh and all 5 source it
+    then: linked-worktree refusal + canonical-root rewrite behave identically (re-verified per hook)
+  - id: A4
+    given: 12 hooks emit Claude Code JSON via 5+ differently-named bespoke emitters
+    when: a lib/emit.sh provides canonical emit_block/emit_ask/emit_additional_context
+    then: every hook sources it; the emitted JSON shape is unchanged and install.test asserts lib/emit.sh is managed+registered
+  - id: A5
+    given: the consolidation may change scope-guard `**` matching behavior
+    when: T1a lands
+    then: the CHANGELOG names any consumer-visible scope-decision change and the pack-version-bump decision is recorded
 non_functional: {}
-contracts: []
+contracts:
+  - name: hook-shared-lib-utilities-v1
+    invariant: >-
+      lib/caws-state.sh and lib/emit.sh expose the single canonical
+      implementation of registry reads, glob-to-scope matching, worktree
+      detection, and Claude Code JSON emission consumed by all claude-code
+      hooks; per-hook private copies are prohibited.
