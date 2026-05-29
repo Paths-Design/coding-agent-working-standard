@@ -504,3 +504,152 @@ describe('caws init — first-contact commit hint', () => {
     expect(r2.stdout).not.toMatch(/git add \.caws\//);
   });
 });
+
+// ============================================================
+// .gitignore ephemeral-state block (CAWS-INIT-GITIGNORE-MANAGE-001)
+// ============================================================
+describe('caws init — .gitignore ephemeral-state block', () => {
+  let repo;
+  afterEach(() => rmrf(repo));
+
+  /** True if `p` is ignored in `repo` per real git semantics. */
+  function isIgnored(repo, p) {
+    try {
+      execFileSync('git', ['-C', repo, 'check-ignore', '-q', '--', p]);
+      return true; // exit 0 = ignored
+    } catch {
+      return false; // exit 1 = not ignored
+    }
+  }
+
+  const BEGIN = '# >>> caws gitignore (managed';
+  const END = '# <<< caws gitignore <<<';
+
+  // A1: fresh repo, no .gitignore → created with block; ephemeral ignored,
+  // authority NOT ignored.
+  it('A1: creates .gitignore and ignores ephemeral state, not authority state', () => {
+    repo = mkBareGitRepo('caws-gi-a1-');
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+
+    const gi = path.join(repo, '.gitignore');
+    expect(fs.existsSync(gi)).toBe(true);
+    const body = fs.readFileSync(gi, 'utf8');
+    expect(body).toContain(BEGIN);
+    expect(body).toContain(END);
+
+    // Ephemeral → ignored.
+    for (const p of [
+      '.caws/worktrees.json',
+      '.caws/agents.json',
+      '.caws/leases/x.json',
+      '.caws/events.jsonl',
+      '.caws/worktrees/wt1',
+      '.caws/cache/y',
+    ]) {
+      expect(isIgnored(repo, p)).toBe(true);
+    }
+
+    // Authority → NOT ignored (must stay trackable).
+    for (const p of [
+      '.caws/policy.yaml',
+      '.caws/specs/FEAT-001.yaml',
+      '.caws/waivers/W-1.json',
+    ]) {
+      expect(isIgnored(repo, p)).toBe(false);
+    }
+
+    expect(r.stdout).toMatch(/\.gitignore ephemeral-state block/);
+  });
+
+  // A2: existing .gitignore with user rules → block appended, user rules
+  // byte-preserved, no reorder.
+  it('A2: appends the block to an existing .gitignore, preserving user rules', () => {
+    repo = mkBareGitRepo('caws-gi-a2-');
+    const gi = path.join(repo, '.gitignore');
+    const userContent = 'node_modules/\n*.log\ndist/\n';
+    fs.writeFileSync(gi, userContent, 'utf8');
+
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+
+    const body = fs.readFileSync(gi, 'utf8');
+    // User rules preserved verbatim at the head.
+    expect(body.startsWith(userContent)).toBe(true);
+    // Block appended after.
+    expect(body).toContain(BEGIN);
+    expect(body.indexOf('node_modules/')).toBeLessThan(body.indexOf(BEGIN));
+    // User's own pattern still ignored (not clobbered).
+    expect(isIgnored(repo, 'node_modules/foo')).toBe(true);
+    // And ephemeral caws now ignored too.
+    expect(isIgnored(repo, '.caws/agents.json')).toBe(true);
+  });
+
+  // A3: re-run → byte-identical, block not duplicated.
+  it('A3: re-running init produces a byte-identical .gitignore (no duplicate block)', () => {
+    repo = mkBareGitRepo('caws-gi-a3-');
+    expect(capture(runInitCommand, { cwd: repo }).code).toBe(0);
+    const gi = path.join(repo, '.gitignore');
+    const afterFirst = fs.readFileSync(gi, 'utf8');
+
+    const r2 = capture(runInitCommand, { cwd: repo });
+    expect(r2.code).toBe(0);
+    const afterSecond = fs.readFileSync(gi, 'utf8');
+
+    expect(afterSecond).toBe(afterFirst);
+    // Exactly one managed block.
+    const occurrences = afterSecond.split(BEGIN).length - 1;
+    expect(occurrences).toBe(1);
+    expect(r2.stdout).toMatch(/already current|No change/);
+  });
+
+  // A4: stale managed block (different markers) → replaced in place; content
+  // outside markers untouched.
+  it('A4: replaces a stale managed block in place, preserving surrounding content', () => {
+    repo = mkBareGitRepo('caws-gi-a4-');
+    const gi = path.join(repo, '.gitignore');
+    // Simulate an older managed block (v0 markers, stale entries) with user
+    // content on both sides.
+    const stale = [
+      'user-top-rule/',
+      '',
+      '# >>> caws gitignore (managed, v0) >>>',
+      '.caws/old-ephemeral-thing',
+      '# <<< caws gitignore <<<',
+      '',
+      'user-bottom-rule/',
+      '',
+    ].join('\n');
+    fs.writeFileSync(gi, stale, 'utf8');
+
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+
+    const body = fs.readFileSync(gi, 'utf8');
+    // Surrounding user content preserved.
+    expect(body).toContain('user-top-rule/');
+    expect(body).toContain('user-bottom-rule/');
+    // Stale entry gone; current entries present.
+    expect(body).not.toContain('.caws/old-ephemeral-thing');
+    expect(body).toContain('.caws/worktrees.json');
+    // Still exactly one managed block.
+    expect(body.split(BEGIN).length - 1).toBe(1);
+    expect(isIgnored(repo, '.caws/agents.json')).toBe(true);
+  });
+
+  // A5: --adopt with no existing block → nothing written.
+  it('A5: --adopt does not write a managed block', () => {
+    repo = mkBareGitRepo('caws-gi-a5-');
+    const r = capture(runInitCommand, { cwd: repo, adopt: true });
+    expect(r.code).toBe(0);
+
+    const gi = path.join(repo, '.gitignore');
+    // Either no .gitignore, or one without the managed block.
+    if (fs.existsSync(gi)) {
+      expect(fs.readFileSync(gi, 'utf8')).not.toContain(BEGIN);
+    }
+    // Ephemeral state is therefore NOT ignored under --adopt.
+    expect(isIgnored(repo, '.caws/agents.json')).toBe(false);
+    expect(r.stdout).toMatch(/adopt/i);
+  });
+});
