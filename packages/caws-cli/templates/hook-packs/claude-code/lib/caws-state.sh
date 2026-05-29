@@ -1,0 +1,179 @@
+#!/bin/bash
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 8,16
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# Shared CAWS state-resolution helpers for Claude Code hooks.
+#
+# Source this file from any hook that needs to:
+#   - Resolve the canonical (main) repo's .caws/ directory from a worktree
+#     or main-repo cwd
+#   - Extract the worktree name from a .caws/worktrees/<name>/ path
+#   - Inline a v10/v11 dual-shape registry reader into a node -e block
+#
+# Why this lives in lib/ instead of being inlined per-hook:
+#   The v11 cutover (CAWS-1117-V11-HOOK-DRIFT-MERGE-01) surfaced a class of
+#   bugs where hooks read .caws/worktrees.json under v10 envelope shape
+#   {worktrees: {<name>: {...}}}  while the registry had already been
+#   migrated to v11 flat-map shape {<name>: {...}} by
+#   CAWS-1117-WORKTREE-REGISTRY-CLEAN-01. Six callsites across four hooks
+#   silently returned [] against the new shape, and the doc-cull worktree
+#   sibling agent (turn-027) hit strike 3/3 because scope-guard.sh ALSO had
+#   a separate v10-only reader at line 300 that this slice missed initially.
+#
+#   Factoring the readers here makes the v10/v11 dual-shape contract a
+#   single point of change. Future schema bumps (v11→v12) land in one
+#   place instead of N callsites across N hooks.
+#
+# Bash functions exported:
+#   resolve_canonical_dir <start-dir>
+#       Walks `git rev-parse --git-common-dir` from <start-dir> upward to
+#       find the main repo root (the one containing .caws/). Returns the
+#       canonical dir on stdout. Falls back to <start-dir> if git is
+#       unavailable, the dir is not in a git repo, or no .caws/ is found
+#       at the canonical location. Exit code is always 0 (advisory).
+#
+#   extract_worktree_name <dir>
+#       If <dir> matches the pattern .../.caws/worktrees/<name>($|/),
+#       prints <name> on stdout and returns 0. Otherwise prints nothing
+#       and returns 1.
+#
+# Node-helper string constants:
+#   CAWS_NODE_ENTRIES_OF
+#       A JS function declaration string. Inline it into a node -e block
+#       to get an entriesOf(reg) helper that returns Object.values()
+#       against both v10 envelope and v11 flat-map shapes. Usage:
+#           node -e "
+#               $CAWS_NODE_ENTRIES_OF
+#               var reg = JSON.parse(...);
+#               var entries = entriesOf(reg);
+#               ...
+#           "
+#       The helper synthesizes entry.name from the outer key when
+#       absent (a v11 flat-map quirk) so downstream code can treat
+#       entries uniformly.
+#
+#   CAWS_NODE_LIFECYCLE
+#       A JS function declaration string for lifecycle(spec). Reads
+#       v11 spec.lifecycle_state first, falls back to v10 spec.status.
+#       Returns undefined when neither is present.
+
+# Guard against double-sourcing.
+if [[ -n "${_CAWS_STATE_SH_LOADED:-}" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+_CAWS_STATE_SH_LOADED=1
+
+resolve_canonical_dir() {
+  local start="${1:-}"
+  if [[ -z "$start" ]]; then
+    return 0
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    printf '%s\n' "$start"
+    return 0
+  fi
+  local common_dir
+  common_dir=$(cd "$start" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null || echo "")
+  if [[ -z "$common_dir" ]] || [[ "$common_dir" == ".git" ]]; then
+    printf '%s\n' "$start"
+    return 0
+  fi
+  local candidate
+  candidate=$(cd "$start" && cd "$common_dir/.." 2>/dev/null && pwd || echo "")
+  if [[ -n "$candidate" ]] && [[ -d "$candidate/.caws" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  printf '%s\n' "$start"
+}
+
+extract_worktree_name() {
+  local dir="${1:-}"
+  if [[ "$dir" =~ ^(.*\/\.caws\/worktrees\/([^/]+))($|/) ]]; then
+    printf '%s\n' "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  return 1
+}
+
+# Shared node-helper strings. These are JS function declarations that
+# any hook can inline into a node -e block to get dual-shape readers.
+#
+# Maintenance contract: when the v11 registry shape or spec lifecycle
+# field set changes, update THIS file. All hooks that source it will
+# pick up the change.
+
+# entriesOf(reg) — registry entries from either v10 envelope or v11
+# flat-map shape. Returns Array<{name, ...entry}> with synthesized
+# .name from the outer key where the entry lacks one.
+export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
+  if (!r || typeof r !== "object") return [];
+  // v10 envelope: { version, worktrees: { <name>: {...} } }
+  if (r.worktrees && typeof r.worktrees === "object") {
+    var src = r.worktrees;
+    var out0 = [];
+    for (var k in src) if (Object.prototype.hasOwnProperty.call(src, k)) {
+      var v = src[k];
+      if (v && typeof v === "object") {
+        if (!v.name) v = Object.assign({}, v, { name: k });
+        out0.push(v);
+      }
+    }
+    return out0;
+  }
+  // v11 flat-map: { <name>: {...} } at top level. Filter for entry-shaped
+  // values (objects with a status field) so we ignore stray top-level
+  // metadata like a future "version" sibling.
+  var out = [];
+  for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
+    var v2 = r[k2];
+    if (v2 && typeof v2 === "object" && typeof v2.status === "string") {
+      if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
+      out.push(v2);
+    }
+  }
+  return out;
+}'
+
+# entryByName(reg, name) — single entry lookup from either shape. Returns
+# the entry object or null. Use this when you know the name in advance
+# (e.g. scope-guard resolving the authoritative spec for a specific
+# worktree) rather than iterating all entries.
+export CAWS_NODE_ENTRY_BY_NAME='function entryByName(r, name) {
+  if (!r || typeof r !== "object" || !name) return null;
+  if (r.worktrees && typeof r.worktrees === "object") {
+    return r.worktrees[name] || null;
+  }
+  var v = r[name];
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  // Per CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01: previous discriminator
+  // rejected v11-CLI-created entries because caws-cli 11.1.7
+  // worktree-create no longer emits status. Admit any object that
+  // carries at least one v11/v10 marker field.
+  if (typeof v.status === "string") return v;
+  if (typeof v.spec_id === "string") return v;
+  if (typeof v.specId === "string") return v;
+  if (typeof v.path === "string") return v;
+  if (typeof v.branch === "string") return v;
+  if (typeof v.name === "string") return v;
+  return null;
+}'
+
+# entrySpecId(entry) — extract the bound spec id from a registry entry,
+# accepting both v11 spec_id and v10 specId. Returns the id string or null.
+export CAWS_NODE_ENTRY_SPEC_ID='function entrySpecId(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  return entry.spec_id || entry.specId || null;
+}'
+
+# lifecycle(spec) — read v11 spec.lifecycle_state first, fall back to v10
+# spec.status. Returns the lifecycle string or undefined. Use with a
+# TERMINAL set like { closed: 1, archived: 1, completed: 1 } to filter
+# out finished specs from active-set walks.
+export CAWS_NODE_LIFECYCLE='function lifecycle(s) {
+  if (!s || typeof s !== "object") return undefined;
+  return s.lifecycle_state || s.status;
+}'

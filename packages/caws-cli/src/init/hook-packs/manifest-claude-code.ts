@@ -357,6 +357,18 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: false,
       managed: true,
     },
+    {
+      // Shared v10/v11 dual-shape registry/state readers. Sourced by
+      // worktree-guard, worktree-write-guard, scope-guard,
+      // session-caws-status, and stop-worktree-check so the registry-shape
+      // contract is a single point of change (promoted from Sterling per
+      // HOOK-PACK-DIVERGENCE-RECONCILE-001; originally
+      // CAWS-1117-V11-HOOK-DRIFT-MERGE-01 + CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01).
+      destPath: '.claude/hooks/lib/caws-state.sh',
+      sourcePath: 'lib/caws-state.sh',
+      executable: false,
+      managed: true,
+    },
 
     // -- Dispatch entrypoints invoked from .claude/settings.json --
     {
