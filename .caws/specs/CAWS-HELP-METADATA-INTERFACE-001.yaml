@@ -3,6 +3,7 @@ title: 'Help-metadata authority slice 1: command-metadata.ts typed interface + e
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: help-metadata-s1-interface
 created_at: '2026-05-29T08:54:12.126Z'
 updated_at: '2026-05-29T08:54:12.126Z'
 blast_radius:
