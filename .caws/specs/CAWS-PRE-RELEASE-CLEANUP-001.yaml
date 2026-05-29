@@ -2,10 +2,11 @@ id: CAWS-PRE-RELEASE-CLEANUP-001
 title: 'Pre-release command-surface + lifecycle-prose drift cleanup (prepush, retire-draft, spec_retired); build/help parity'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: pre-release-cleanup
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge pre-release-cleanup at b66032af1a2f91354cfd88ffa3ba04a1297b040e'
 created_at: '2026-05-29T04:54:21.327Z'
-updated_at: '2026-05-29T04:54:21.327Z'
+updated_at: '2026-05-29T05:00:55.881Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
