@@ -7,19 +7,122 @@ created_at: '2026-05-29T06:09:37.666Z'
 updated_at: '2026-05-29T06:09:37.666Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - .caws/specs/CAWS-HOOK-PACK-HEADER-VERSION-RECONCILE-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/quality-gates
+    - packages/caws-cli/package.json
+    - packages/caws-cli/templates/CLAUDE.md
+    - CODEOWNERS
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Header-only changes to the bundled hook files. This slice edits ONLY the
+    `# hook_pack_version: N` header line of each managed file under
+    packages/caws-cli/templates/hook-packs/claude-code (and dispatch/, lib/),
+    moving every file still at 9 or 10 up to 11 so that every managed file's
+    header equals CLAUDE_CODE_PACK.packVersion (11). It does NOT change any
+    hook's executable logic, detection behavior, dispatcher HANDLERS, or the
+    manifest (manifest-claude-code.ts is in packages/caws-cli/src, scope.out —
+    it already declares packVersion 11 from QG-HOOKS-EXTRACT-001).
+  - >-
+    Restores the pack-version invariant the install reporter relies on. The
+    installer (packages/caws-cli/src/init/hook-install.ts) classifies a file
+    whose installed header `hookPackVersion < packVersion` as
+    `managed_old_version` and force-updates it on reinstall. The v10 bump
+    (CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001) bumped packVersion to 10 but only
+    moved lib/parse-input.sh's header to 10, leaving 24 files at 9 — so a
+    reinstall reported spurious `updated` on unchanged files and silently
+    overwrote managed drift (the install.test.js A2/A5 + the
+    `creates every manifest file` A1 assertion have been RED since v10).
+    Bumping every header to 11 makes a clean reinstall report all-Unchanged
+    and makes managed_drift refuse as designed.
+  - >-
+    Test version-pins move with the headers. The historical version-pin
+    assertions in install.test.js that read a template header and expect
+    `hook_pack_version: 9` (the v3 lease-substrate dispatcher checks, the v6
+    renderer check, the v7 promoted-hook checks, the scope-guard pin) are
+    updated to `11` in lockstep with the header bump, because they assert the
+    CURRENT bundled template version, not a frozen historical value. The
+    version `1` fixture-string assertion (a synthetic header literal inside the
+    test, not a real bundled file) is left unchanged.
+  - >-
+    Two self-inflicted QG-HOOKS-EXTRACT-001 test bugs are corrected (test-only,
+    in install.test.js): (1) the new "post_tool_use dispatcher registers all
+    four advisory handlers" test uses a HANDLERS regex `/HANDLERS=\(([^)]+)\)/`
+    that stops at the literal `)` inside an `(exit 0)` comment — it is widened
+    to match through the array-closing parenthesis on its own line; (2) the new
+    "advisory hooks do not couple to the quality-gates package at runtime" test
+    bans the STRINGS `quality-gates` and `.mjs`, which legitimately appear in
+    the hooks' design-reference COMMENTS — it is narrowed to assert no RUNTIME
+    coupling (no `source`/`require`/execution of a quality-gates module),
+    matching the spec's stated boundary (inspection is permitted; only mutation
+    and runtime coupling are forbidden).
+  - >-
+    No production code change. packages/caws-cli/src is scope.out. The
+    install reporter, manifest, and hook detection logic are unchanged; this
+    slice is header-text + test-assertion hygiene only. Build output semantics
+    are unchanged (the templates are copied verbatim by the installer).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: Every managed file under templates/hook-packs/claude-code.
+    when: its `# hook_pack_version:` header is read.
+    then: >-
+      It equals 11 (== CLAUDE_CODE_PACK.packVersion). No file remains at 9 or
+      10. (The four QG hooks + post_tool_use dispatcher were already 11 from
+      QG-HOOKS-EXTRACT-001; this slice moves the remaining ~24 files.)
+  - id: A2
+    given: A fresh `caws init --agent-surface claude-code` followed by a second run.
+    when: install.test.js A1/A2 run.
+    then: >-
+      The fresh install creates every file with a header at packVersion (the
+      `creates every manifest file` assertion passes); the second run reports
+      all files Unchanged with no `Updated`/`Created` (the idempotent-reinstall
+      assertion passes).
+  - id: A3
+    given: A clean install whose scope-guard.sh is then locally drifted.
+    when: the install.test.js A5 managed-drift test runs.
+    then: >-
+      The reinstall REFUSES with exit 1 and `managed_drift` (no longer
+      force-updates via the `managed_old_version` path, because the installed
+      header now equals packVersion).
+  - id: A4
+    given: The QG-HOOKS-EXTRACT-001 dispatcher-registration test.
+    when: it parses the post_tool_use.sh HANDLERS array.
+    then: >-
+      The widened regex captures the full array (through the closing `)` on its
+      own line, not the `(exit 0)` comment paren) and finds all four advisory
+      handler names. The test passes.
+  - id: A5
+    given: The QG-HOOKS-EXTRACT-001 no-runtime-coupling test.
+    when: it inspects each advisory hook script.
+    then: >-
+      It asserts no runtime coupling to packages/quality-gates (no source/
+      require/exec of a quality-gates module) while permitting design-reference
+      mentions in comments. The test passes against the shipped hooks (which
+      reference quality-gates only in lineage comments).
+  - id: A6
+    given: The full caws-cli hook-pack test suite after the header bump + test fixes.
+    when: '`npx jest tests/init/hook-packs/` runs on the canonical rebuilt dist.'
+    then: >-
+      All suites pass (100/100), including the four QG hook behavior suites
+      (22 tests) and the install/manifest suite. No new failures; the three
+      previously-RED install-reporter assertions are now green.
+non_functional:
+  reliability:
+    - >-
+      Removes the silent managed-drift-overwrite hazard introduced at the v10
+      bump: with all headers at packVersion, the install reporter's
+      managed_drift refusal works as designed instead of being shadowed by the
+      managed_old_version force-update. This matters for any consumer
+      reinstalling the pack after locally editing a hook.
 contracts: []
