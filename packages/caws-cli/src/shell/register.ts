@@ -623,7 +623,9 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const specsCmd = program
     .command('specs')
-    .description('Manage CAWS spec lifecycle (create/list/show/close/archive)');
+    .description(
+      'Manage CAWS spec lifecycle (create/list/show/close/archive/retire-draft/recover/prune-archive)'
+    );
 
   specsCmd
     .command('create <id>')
