@@ -2,10 +2,11 @@ id: CAWS-AUTOCOMMIT-INTEGRITY-002
 title: 'Correct CAWS-AUTOCOMMIT-INTEGRITY-001 exit-code policy: surfaceAuditCommit warns but does not flip exit code (operation success != audit-commit landing)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: v11-autocommit-integrity-002
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-autocommit-integrity-002 at 8601ca59a303c1d8cea58ed2c28f7a1096b2478d'
 created_at: '2026-05-29T01:35:07.155Z'
-updated_at: '2026-05-29T01:35:07.155Z'
+updated_at: '2026-05-29T01:42:22.607Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
