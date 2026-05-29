@@ -124,7 +124,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/close/archive/prune-archive/migrate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)',
   subcommands: [
     {
       kind: 'leaf',
@@ -199,6 +199,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--reason <text>', description: 'Optional human-readable retirement note' },
         DATA_OPTION,
       ],
+    },
+    {
+      kind: 'leaf',
+      name: 'activate',
+      argument: { name: 'id', required: true, description: 'Draft spec id to activate' },
+      description:
+        'Activate a pre-authored draft spec. Draft-only: patches lifecycle_state to active and appends spec_activated.',
+      options: [DATA_OPTION],
     },
     {
       kind: 'leaf',

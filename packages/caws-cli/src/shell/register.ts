@@ -39,6 +39,7 @@ import {
   runInitCommand,
   runPrepushCommand,
   runScopeCommand,
+  runSpecsActivateCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
@@ -756,6 +757,15 @@ export function registerShellCommands(
       const code = runSpecsRetireDraftCommand({
         id,
         ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'activate'))
+    .action((id: string, opts: { data?: boolean }) => {
+      const code = runSpecsActivateCommand({
+        id,
         showData: opts.data === true,
       });
       exit(code);

@@ -28,6 +28,7 @@ import type {
   SpecsMigrateApplyResult,
 } from '../../store';
 import {
+  activateSpec,
   archiveSpec,
   closeSpec,
   createSpec,
@@ -390,6 +391,44 @@ export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
   } else {
     stdoutFn(result.value.source);
   }
+  return 0;
+}
+
+// ─── caws specs activate ──────────────────────────────────────────────────
+
+export interface SpecsActivateOptions extends BaseCommandOptions {
+  readonly id: string;
+}
+
+export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'activate');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'activate'
+  );
+  if (actor === null) return 2;
+
+  const result = activateSpec(ctx.cawsDir, {
+    id: opts.id,
+    now: nowFn,
+    actor,
+  });
+  if (!isOk(result)) {
+    err('caws specs activate: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs activate: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`activated ${outcome.id}`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 

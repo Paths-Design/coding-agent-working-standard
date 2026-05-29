@@ -5,6 +5,7 @@
 // operations:
 //
 //   createSpec  — write a new .caws/specs/<id>.yaml (active) + spec_created
+//   activateSpec — raw-byte patch lifecycle_state draft→active + spec_activated
 //   closeSpec   — raw-byte patch lifecycle_state/resolution/closure_notes
 //                  /updated_at on existing spec + spec_closed
 //   archiveSpec — move .caws/specs/<id>.yaml → .caws/specs/.archive/<id>.yaml,
@@ -79,6 +80,12 @@ export interface CloseSpecInput {
   readonly reason?: string;
   readonly mergeCommit?: string;
   readonly supersededBy?: string;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+export interface ActivateSpecInput {
+  readonly id: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -279,7 +286,7 @@ function gitLastCommitForPath(
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'close' | 'archive',
+  action: 'create' | 'activate' | 'close' | 'archive',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -306,7 +313,7 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'close' | 'archive',
+  action: 'create' | 'activate' | 'close' | 'archive',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -488,6 +495,118 @@ export function createSpec(
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
   return attachAutoCommit(outcome, cawsDir, input.id, 'create', wasDirtyBeforeWrite);
+}
+
+// ─── activateSpec ────────────────────────────────────────────────────────
+
+export function activateSpec(
+  cawsDir: string,
+  input: ActivateSpecInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+  const parsed = parseAndValidateSpec(originalBytes);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule },
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+  if (spec.lifecycle_state !== 'draft') {
+    const alternative =
+      spec.lifecycle_state === 'active'
+        ? `Spec "${input.id}" is already active.`
+        : spec.lifecycle_state === 'closed'
+          ? `Use \`caws specs archive ${input.id}\` to archive a closed spec.`
+          : `Archived specs cannot be activated. Use \`caws specs recover ${input.id}\` to inspect the archived body.`;
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is in lifecycle_state "${spec.lifecycle_state}"; activate only activates drafts. ${alternative}`,
+        { subject: input.id, data: { current_state: spec.lifecycle_state } }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  let patched = originalBytes;
+  const step1 = setTopLevelScalar(patched, 'lifecycle_state', 'active');
+  if (!step1.ok) return err(step1.errors);
+  patched = step1.value;
+
+  const hasUpdatedAt = /^updated_at:/m.test(patched);
+  if (hasUpdatedAt) {
+    const step2 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!step2.ok) return err(step2.errors);
+    patched = step2.value;
+  } else {
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const step2 = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!step2.ok) return err(step2.errors);
+    patched = step2.value;
+  }
+
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'planned-bytes validation failed' },
+        })
+      )
+    );
+  }
+
+  const event: EventBody = {
+    event: 'spec_activated',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: {
+      previous_lifecycle_state: 'draft',
+      lifecycle_state: 'active',
+    },
+  } as unknown as EventBody;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: patched }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'activate', wasDirtyBeforeWrite);
 }
 
 // ─── closeSpec ───────────────────────────────────────────────────────────

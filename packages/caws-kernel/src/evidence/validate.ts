@@ -41,6 +41,7 @@ import evidenceRecordedSchema from '../schemas/events/evidence_recorded.v1.json'
 import gateEvaluatedSchema from '../schemas/events/gate_evaluated.v1.json';
 import specArchivedSchema from '../schemas/events/spec_archived.v1.json';
 import specArchivePrunedSchema from '../schemas/events/spec_archive_pruned.v1.json';
+import specActivatedSchema from '../schemas/events/spec_activated.v1.json';
 import specRetiredSchema from '../schemas/events/spec_retired.v1.json';
 import specClosedSchema from '../schemas/events/spec_closed.v1.json';
 import specCreatedSchema from '../schemas/events/spec_created.v1.json';
@@ -96,6 +97,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   gate_evaluated: gateEvaluatedSchema,
   spec_archived: specArchivedSchema,
   spec_archive_pruned: specArchivePrunedSchema,
+  spec_activated: specActivatedSchema,
   spec_retired: specRetiredSchema,
   spec_closed: specClosedSchema,
   spec_created: specCreatedSchema,
@@ -587,6 +589,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'spec_created',
   'spec_validated',
   'spec_updated',
+  'spec_activated',
   'spec_closed',
   'spec_archived',
   'spec_archive_pruned',
