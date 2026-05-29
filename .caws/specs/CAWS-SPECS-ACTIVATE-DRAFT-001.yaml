@@ -1,25 +1,70 @@
 id: CAWS-SPECS-ACTIVATE-DRAFT-001
 title: 'Governed draft spec activation'
-risk_tier: 3
+risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-specs-activate-draft at f5a327613ce3cc6c9eed0b559f0e90a7f3867f0a'
 created_at: '2026-05-29T09:22:58.573Z'
-updated_at: '2026-05-29T09:22:58.573Z'
+updated_at: '2026-05-29T09:32:30.934Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-kernel/src/evidence
+    - packages/caws-kernel/src/schemas/events
+    - docs/architecture/caws-vnext-command-surface.md
   data_migration: false
-operational_rollback_slo: 5m
+operational_rollback_slo: 30m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/store/specs-activate-draft.test.js
+    - packages/caws-cli/tests/shell/specs-activate-draft.test.js
+    - packages/caws-kernel/src/evidence/types.ts
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/schemas/events.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_activated.v1.json
+    - docs/architecture/caws-vnext-command-surface.md
+    - .caws/specs/CAWS-SPECS-ACTIVATE-DRAFT-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/quality-gates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Draft activation is a governed lifecycle transition: `caws specs activate <id>` patches lifecycle_state from draft to active and appends exactly one `spec_activated` event through appendEvent.'
+  - 'Activation refuses non-draft specs with a typed diagnostic and does not mutate state.'
+  - 'Activation is not creation. It preserves the existing spec body, comments, scope, acceptance, contracts, and all fields other than lifecycle_state and updated_at.'
+  - 'Tier semantic validation applies to the activated body before writing; a draft that is invalid as active is refused with diagnostics.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'A tracked spec with lifecycle_state: draft.'
+    when: '`caws specs activate <id>` runs.'
+    then: 'The spec YAML has lifecycle_state: active, updated_at is refreshed, and one spec_activated event is appended.'
+  - id: A2
+    given: 'A spec whose lifecycle_state is active, closed, or archived.'
+    when: '`caws specs activate <id>` runs.'
+    then: 'The command exits non-zero with a diagnostic naming the current lifecycle_state and no mutation occurs.'
+  - id: A3
+    given: 'A draft spec that would fail active-tier semantic validation.'
+    when: '`caws specs activate <id>` runs.'
+    then: 'The command refuses before writing and prints the kernel diagnostics.'
+  - id: A4
+    given: 'The command surface help and doctrine docs.'
+    when: 'They are read after this slice lands.'
+    then: 'They describe `caws specs activate <id>` as the governed draft-to-active path and no longer require hand-editing lifecycle_state.'
+non_functional:
+  reliability:
+    - 'Activation uses the existing lifecycle transaction machinery so event append failure rolls back the YAML patch when possible.'
+  security:
+    - 'Activation does not bypass scope, worktree, or claim semantics; it only changes spec lifecycle state.'
+contracts:
+  - name: specs activate lifecycle contract
+    type: behavior
+    path: packages/caws-cli/src/store/specs-writer.ts
+    description: 'Only draft specs can transition to active; the transition appends spec_activated and preserves all unrelated spec bytes.'
