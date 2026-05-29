@@ -2,9 +2,11 @@ id: CAWS-DEAD-TEMPLATE-V10-RESIDUE-CLEANUP-001
 title: 'Remove the dead non-hook-packs caws-cli template tree + deferred v10 agent-operating-spec residue'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'All 5 ACs proven. A1: npm pack pack-neutral (11 deleted dirs never packed; hook-packs still 34; deleted test never packed). A2: caws doctor load 0E/0W/0I, no new findings. A3: only residual refs are docs/changelog mentions + src/config/index.js graceful legacy multi-path probe (its provenance.js never existed). A4: QG-config-removal follow-up recorded in GATES-RUN-POST-QG-DOCTRINE-001. A5: jest --listTests CI mode shows 0 cursor-hooks matches + no missing-file error; tests/integration 8 passed/1 skipped/0 failed. Loose template-root v11 doctrine files (agents.md/CLAUDE.md/COMMIT_CONVENTIONS.md/OIDC_SETUP.md) preserved; orphan .caws/worktrees dirs left for a quiet-period prune.'
 created_at: '2026-05-29T08:43:19.813Z'
-updated_at: '2026-05-29T09:25:00.000Z'
+updated_at: '2026-05-29T09:02:26.047Z'
 blast_radius:
   modules:
     - dead non-hook-packs caws-cli template tree (deletion-only; 11 dirs not in package.json files, zero shipped-dist references; superseded by the v11 hook-packs + --agent-surface model)
