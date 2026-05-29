@@ -3,23 +3,67 @@ title: 'Reword init .gitignore step renderer to not emit the literal ''policy.ya
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-created_at: '2026-05-29T17:33:15.428Z'
-updated_at: '2026-05-29T17:33:15.428Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/render/init-gitignore.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/render/init-gitignore.ts
+    - .caws/specs/CAWS-INIT-GITIGNORE-RENDER-PROSE-FIX-001.yaml
+  out:
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/shell/init-command.test.js
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Renderer prose no longer contains the literal token "policy.yaml". The
+    init .gitignore step panel (renderGitignore, created/adopted branches)
+    described the authority-state split using "policy.yaml", which collides with
+    the pre-existing init-command test "partially-initialized state is filled in
+    additively" — that test asserts the init stdout does NOT match /policy\.yaml/
+    (the pre-existing policy.yaml must not appear in the created-paths list). The
+    reword keeps the same meaning (authority state = specs, policy, waivers stays
+    tracked) using "policy" (no ".yaml") so the panel does not trip the test's
+    not-created guard. No behavior change; renderer text only.
+  - >-
+    No change to the managed block, the entry set, or the gitignore-manage logic.
+    Only src/shell/render/init-gitignore.ts display strings change. The actual
+    .gitignore block content (gitignore-manage.ts EPHEMERAL_CAWS_ENTRIES + the
+    in-file comment) is unchanged and still untouched by this fix — the in-block
+    comment legitimately names .caws/policy.yaml inside .gitignore itself, which
+    is correct and is NOT part of init's stdout (so it does not affect the test).
+  - >-
+    Full init-command suite green on canonical. After the reword, the complete
+    tests/shell/init-command.test.js suite passes (26/26) on canonical where the
+    binary builds — including both the partially-initialized test and the five
+    A1-A5 gitignore tests.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: packages/caws-cli/src/shell/render/init-gitignore.ts after the fix.
+    when: the file is read.
+    then: >-
+      No display string in the created/adopted/any branch contains the literal
+      "policy.yaml"; the authority-state split is described using "policy"
+      (without the ".yaml" suffix) while keeping the same meaning.
+  - id: A2
+    given: The full tests/shell/init-command.test.js suite on canonical.
+    when: it runs against the rebuilt binary.
+    then: >-
+      All tests pass (26/26), including "partially-initialized state is filled in
+      additively" (its /policy\.yaml/ not-match guard is satisfied) and the five
+      A1-A5 .gitignore tests.
+non_functional:
+  reliability:
+    - >-
+      Resolves a regression introduced by CAWS-INIT-GITIGNORE-MANAGE-001: the new
+      step's panel prose tripped an existing test's broad stdout guard. Fixing the
+      renderer prose (rather than weakening the test) preserves the test's intent
+      — the pre-existing policy.yaml must not be reported as a created path — and
+      keeps the init output honest.
 contracts: []
