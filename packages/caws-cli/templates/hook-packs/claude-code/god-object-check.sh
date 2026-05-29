@@ -30,6 +30,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input || exit 0
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -86,17 +88,7 @@ if (( SLOC >= THRESHOLD )); then
   REL="$FILE_PATH"
   MSG="God-object advisory: ${REL} is ${SLOC} SLOC (>= ${THRESHOLD} threshold). Large single-responsibility-overloaded modules are hard to test and review. Consider splitting it into focused units. (Advisory only — set CAWS_GOD_OBJECT_LOC to tune; this never blocks.)"
   # PostToolUse advisory: surface via additionalContext, exit 0.
-  if command -v jq >/dev/null 2>&1; then
-    jq -n --arg msg "$MSG" '{
-      hookSpecificOutput: {
-        hookEventName: "PostToolUse",
-        additionalContext: $msg
-      }
-    }'
-  else
-    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":%s}}\n' \
-      "$(printf '%s' "$MSG" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{printf "\"%s\"", $0}')"
-  fi
+  emit_additional_context "$MSG" "PostToolUse"
 fi
 
 exit 0

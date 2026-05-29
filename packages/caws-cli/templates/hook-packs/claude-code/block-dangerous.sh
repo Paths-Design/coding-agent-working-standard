@@ -22,6 +22,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=lib/emit.sh
+# Canonical Claude Code envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+
 danger_state_dir() {
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
   local state_dir="$project_dir/.claude/hooks/state"
@@ -36,21 +40,11 @@ danger_latch_file() {
   printf '%s/danger-latch-%s.json\n' "$(danger_state_dir)" "$safe_session"
 }
 
-emit_block_json() {
-  local reason="$1"
-  jq -n --arg msg "$reason" '{ decision: "block", reason: $msg }'
-}
-
-emit_ask_json() {
-  local reason="$1"
-  jq -n --arg msg "$reason" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: $msg
-    }
-  }'
-}
+# Thin adapters over the canonical lib/emit.sh primitives. Kept as named
+# wrappers so the 8 call-sites below stay unchanged; the envelope JSON
+# lives only in lib/emit.sh (HOOK-LIB-CONSOLIDATION-001 T3a).
+emit_block_json() { emit_block "$1"; }
+emit_ask_json() { emit_ask "$1"; }
 
 record_danger_latch() {
   local file="$1"

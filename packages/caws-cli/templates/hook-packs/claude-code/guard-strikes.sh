@@ -19,6 +19,14 @@
 # Never edit guard-strikes-*.json files by hand — use reset-strikes.sh so the
 # reason is logged to .claude/logs/strike-resets.log.
 
+# This file is SOURCED by scope-guard.sh / worktree-guard.sh. Locate lib/
+# relative to THIS file (BASH_SOURCE[0]) so the canonical emit primitives
+# are available regardless of the sourcing hook's cwd
+# (HOOK-LIB-CONSOLIDATION-001 T3a).
+_GUARD_STRIKES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/emit.sh
+source "$_GUARD_STRIKES_DIR/lib/emit.sh" 2>/dev/null || true
+
 guard_worktree_state_dir() {
   local cwd_hint="${1:-}"
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
@@ -83,37 +91,13 @@ guard_record_strike() {
   printf '%s\n' "$current_count"
 }
 
-guard_emit_warning_allow() {
-  local message="$1"
-
-  jq -n --arg msg "$message" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      additionalContext: $msg
-    }
-  }'
-}
-
-guard_emit_permission_ask() {
-  local message="$1"
-
-  jq -n --arg msg "$message" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: $msg
-    }
-  }'
-}
-
-guard_emit_block() {
-  local message="$1"
-
-  jq -n --arg msg "$message" '{
-    decision: "block",
-    reason: $msg
-  }'
-}
+# Progressive-strike emitters: thin adapters over the canonical
+# lib/emit.sh primitives. The progressive logic (warn -> ask -> block by
+# strike count) stays here; the envelope JSON lives only in lib/emit.sh
+# (HOOK-LIB-CONSOLIDATION-001 T3a).
+guard_emit_warning_allow() { emit_additional_context "$1"; }
+guard_emit_permission_ask() { emit_ask "$1"; }
+guard_emit_block() { emit_block "$1"; }
 
 guard_enforce_progressive_strikes() {
   local session_id="$1"

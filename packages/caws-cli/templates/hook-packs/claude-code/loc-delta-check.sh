@@ -29,6 +29,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input || exit 0
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -80,12 +82,7 @@ DELTA=$(( NEW_LINES - OLD_LINES ))
 
 if (( DELTA > THRESHOLD )); then
   MSG="LOC-delta advisory: this edit to ${FILE_PATH} adds ~${DELTA} lines (> ${THRESHOLD} threshold). Large single edits are hard to review and often signal that the change should be split into smaller, focused commits or that a new module is warranted. (Advisory only — set CAWS_LOC_DELTA_WARN_THRESHOLD to tune; this never blocks.)"
-  jq -n --arg msg "$MSG" '{
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      additionalContext: $msg
-    }
-  }'
+  emit_additional_context "$MSG" "PostToolUse"
 fi
 
 exit 0

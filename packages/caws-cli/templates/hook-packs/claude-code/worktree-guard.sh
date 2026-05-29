@@ -24,6 +24,9 @@ source "$SCRIPT_DIR/lib/parse-input.sh"
 # (v10 envelope / v11 flat-map) registry reader. Replaces three inline
 # copies that had drifted (HOOK-LIB-CONSOLIDATION-001 T1b).
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# shellcheck source=lib/emit.sh
+# Canonical Claude Code envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
@@ -301,22 +304,12 @@ if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
   fi
 
   if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "Merging into base branch ('"$BASE_BRANCH"') while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
-      }
-    }'
+    emit_additional_context "Merging into base branch ($BASE_BRANCH) while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
     exit 0
   fi
 
   if echo "$COMMAND" | grep -qE 'git\s+commit\b' && ! echo "$COMMAND" | grep -qE '--amend'; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "NOTE: committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by Claude hooks. Avoid --amend and force-push while worktrees are active."
-      }
-    }'
+    emit_additional_context "NOTE: committing to the base branch ($BASE_BRANCH) while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by Claude hooks. Avoid --amend and force-push while worktrees are active."
     exit 0
   fi
 fi

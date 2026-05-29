@@ -21,6 +21,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -71,12 +73,7 @@ SECRET_DIRS=(
 # Check if file matches secret patterns
 for pattern in "${SECRET_FILE_PATTERNS[@]}"; do
   if [[ "$FILENAME" == $pattern ]]; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "WARNING: This file may contain secrets. Do not include sensitive values in your response. If you need to reference credentials, use placeholders like <API_KEY> instead of actual values."
-      }
-    }'
+    emit_additional_context "WARNING: This file may contain secrets. Do not include sensitive values in your response. If you need to reference credentials, use placeholders like <API_KEY> instead of actual values."
     exit 0
   fi
 done
@@ -84,12 +81,7 @@ done
 # Check if file is in a sensitive directory
 for dir in "${SECRET_DIRS[@]}"; do
   if [[ "$FILE_PATH" == *"/$dir/"* ]] || [[ "$FILE_PATH" == *"/$dir" ]]; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "WARNING: This file is in a sensitive directory that may contain secrets. Do not include any sensitive values in your response."
-      }
-    }'
+    emit_additional_context "WARNING: This file is in a sensitive directory that may contain secrets. Do not include any sensitive values in your response."
     exit 0
   fi
 done

@@ -369,6 +369,18 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: false,
       managed: true,
     },
+    {
+      // Canonical Claude Code hook-output envelope emitters (emit_block /
+      // emit_ask / emit_additional_context). Sourced by block-dangerous,
+      // guard-strikes, validate-spec, and the code-quality hooks so the
+      // three envelope shapes live in one place instead of being
+      // copy-pasted under 5+ names across 12 hooks
+      // (HOOK-LIB-CONSOLIDATION-001 T3a).
+      destPath: '.claude/hooks/lib/emit.sh',
+      sourcePath: 'lib/emit.sh',
+      executable: false,
+      managed: true,
+    },
 
     // -- Dispatch entrypoints invoked from .claude/settings.json --
     {

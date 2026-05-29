@@ -124,6 +124,9 @@ describe('Claude Code pack manifest', () => {
     expect(ids).toContain('.claude/hooks/CLAUDE.md');
     expect(ids).toContain('.claude/hooks/dispatch/pre_tool_use.sh');
     expect(ids).toContain('.claude/hooks/lib/parse-input.sh');
+    // HOOK-LIB-CONSOLIDATION-001: shared-utility libs are managed too.
+    expect(ids).toContain('.claude/hooks/lib/caws-state.sh');
+    expect(ids).toContain('.claude/hooks/lib/emit.sh');
 
     for (const f of CLAUDE_CODE_PACK.installedFiles) {
       expect(f.managed).toBe(true);

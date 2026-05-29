@@ -66,6 +66,50 @@
     is one field of a tightly-coupled git-snapshot block (branch +
     head_sha + dirty_count), not a standalone copy of the base-branch
     decision concern.
+  - **Tier 3 — single canonical hook-output emitter (`lib/emit.sh`).**
+    12 hooks hand-rolled Claude Code's block / ask / additionalContext
+    JSON envelopes under 5+ different function names
+    (`emit_block_json`/`emit_ask_json`, `guard_emit_block`/
+    `guard_emit_permission_ask`/`guard_emit_warning_allow`,
+    `emit_post_context`, plus raw inline `echo '{...}'` / `jq -n` /
+    `printf` / node `JSON.stringify`). They now all route through three
+    primitives in `lib/emit.sh` — `emit_block`, `emit_ask`,
+    `emit_additional_context [event]` — jq-based with a pure-bash printf
+    fallback. Named per-hook wrappers were kept as thin one-line adapters
+    where call-sites were numerous (`block-dangerous`, `guard-strikes`);
+    the envelope JSON exists in exactly one place. **Correctness fix:** the
+    inline `echo '{...}'` emitters in `naming-check`, `scan-secrets`, and
+    the worktree-guard base-branch notices interpolated a filename/branch
+    directly into the JSON string with no escaping, so a value containing
+    a `"` or `\` produced invalid JSON. `emit_*` escapes correctly (jq, or
+    the fallback's explicit metachar escaping). Hooks migrated:
+    `block-dangerous`, `guard-strikes`, `validate-spec`, `naming-check`,
+    `scan-secrets`, `god-object-check`, `loc-delta-check`,
+    `duplicate-export-check`, `quality-check`, `agent-heartbeat`,
+    `worktree-guard`. `quiet-merge`'s `updatedInput` envelope was left
+    inline — it is a different mechanism (input rewriting), not one of the
+    three decision/context shapes. `agent-heartbeat` and `validate-spec`
+    had node build the envelope; node now emits the bare message text and
+    bash wraps it via `emit_*`, leaving the suppression / validation logic
+    untouched.
+  - **T3b (js-yaml spec-scope loading) NARROWED — not done.** The spec
+    flagged four hooks as loading `.caws/specs/<id>.yaml`, but on
+    inspection only `scope-guard` (walk-all-specs union mode) and
+    `worktree-write-guard` (per-binding) actually load-a-spec-and-read-
+    `scope`, and they do so with genuinely different iteration patterns;
+    `quality-check` only tests for the specs dir's existence and shells out
+    to `caws gates run`, and `validate-spec` parses the single edited file
+    to validate its YAML (not to read scope). The shared read primitive
+    (`yaml.load(fs.readFileSync(path))` + `.scope`) is a 2-line idiom that
+    has NOT drifted (unlike the glob matcher and `entriesOf`, which had),
+    so a forced `CAWS_NODE_LOAD_SPEC_SCOPE` helper would couple two
+    safety-guard spec-access paths for marginal gain. Deferred rather than
+    churned.
+  - New tests: `emit_envelopes.test.js` (10 cases — all three emitters on
+    both the jq and no-jq fallback paths, plus the escaping regression).
+    After Tier 3 no hook inlines a block/ask/additionalContext envelope —
+    `lib/emit.sh` is the only definition (verified by grep across the pack;
+    only `quiet-merge`'s `updatedInput` shape remains, by design).
 
 * **hook-pack (claude-code): reconciled the canonical pack into the union
   of three divergent forks** (`HOOK-PACK-DIVERGENCE-RECONCILE-001`). An
