@@ -398,7 +398,7 @@ describe('CAWS-AUTOCOMMIT-INTEGRITY-001: audit-commit surfacing on close', () =>
   beforeEach(() => { ({ repoRoot, cawsDir } = setup('specs-autocommit-')); });
   afterEach(() => rmrf(repoRoot));
 
-  it('A3: surfaces refused_dirty (warning + exit 1) when the audit commit does not land', () => {
+  it('A3: surfaces refused_dirty (warning, exit 0) when the audit commit does not land', () => {
     // Create the spec, then COMMIT it clean so it is tracked at HEAD.
     capture(runSpecsCreateCommand, {
       cwd: repoRoot, id: 'DIRTY-001', title: 't', mode: 'chore', riskTier: 3,
@@ -417,10 +417,12 @@ describe('CAWS-AUTOCOMMIT-INTEGRITY-001: audit-commit surfacing on close', () =>
 
     // The lifecycle YAML change still landed on disk (close is not rolled back).
     expect(fs.readFileSync(specPath, 'utf8')).toMatch(/lifecycle_state:\s*closed/);
-    // But the command MUST surface the non-landed audit commit, not report bare success.
-    expect(r.code).toBe(1);
+    // The command surfaces the non-landed audit commit on stderr (not silent)...
     expect(r.stderr).toMatch(/applied but NOT committed/);
     expect(r.stderr).toMatch(/commit it manually|git log/i);
+    // ...but exits 0: the close OPERATION succeeded; a non-landed audit
+    // commit is a warning, not a command failure (CAWS-AUTOCOMMIT-INTEGRITY-002).
+    expect(r.code).toBe(0);
   });
 
   it('A4: clean close commits, prints success, exits 0 (no regression)', () => {

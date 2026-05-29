@@ -77,13 +77,18 @@ function setupIO(opts: BaseCommandOptions) {
  * change uncommitted: the user has to know to commit it manually, or the
  * spec sits dirty and the next session inherits ambiguous state.
  *
- * Returns true when a refusal was surfaced (caller may adjust exit code).
- * (CAWS-AUTOCOMMIT-INTEGRITY-001)
+ * Emits the warning on stderr only; does NOT change the command's exit
+ * code. The lifecycle OPERATION succeeded (the YAML change is on disk);
+ * whether the audit COMMIT landed is a separate fact, surfaced loudly but
+ * never turned into a command failure. Flipping the exit code conflates
+ * the two and breaks callers that legitimately run where the repo cannot
+ * auto-commit. (CAWS-AUTOCOMMIT-INTEGRITY-001 surfaced it;
+ * CAWS-AUTOCOMMIT-INTEGRITY-002 corrected the exit-code policy.)
  */
 function surfaceAuditCommit(
   auditCommit: { readonly kind: string; readonly reason?: string } | undefined,
   err: (s: string) => void
-): boolean {
+): void {
   if (auditCommit !== undefined && auditCommit.kind === 'refused_dirty') {
     err('caws specs: the lifecycle change was applied but NOT committed.');
     if (auditCommit.reason !== undefined && auditCommit.reason.length > 0) {
@@ -94,9 +99,7 @@ function surfaceAuditCommit(
         'did not land. Commit it manually (git add <spec> && git commit), ' +
         'then verify with git log.'
     );
-    return true;
   }
-  return false;
 }
 
 function resolveCawsCtx(
@@ -249,7 +252,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   out(`  edit: ${relSpecPath}`);
   out('  scope.in must list the file paths your slice will touch.');
   out('  Until then, scope-guard rejects every edit (no path admitted).');
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
@@ -434,7 +437,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     return 1;
   }
   out(`closed ${outcome.id} (resolution: ${opts.resolution})`);
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
@@ -476,7 +479,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     return 1;
   }
   out(`archived ${outcome.id} → ${path.relative(ctx.repoRoot, outcome.path)}`);
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 

@@ -67,13 +67,16 @@ function setupIO(opts: BaseCommandOptions) {
  * the working tree), but the automatic audit commit did NOT land. The
  * command MUST NOT report bare success while leaving the registry change
  * uncommitted — the next session would inherit ambiguous control-plane
- * state. Returns true when a refusal was surfaced.
- * (CAWS-AUTOCOMMIT-INTEGRITY-001)
+ * state. Emits the warning on stderr only; does NOT change the command's
+ * exit code — the worktree OPERATION succeeded, and whether the audit
+ * COMMIT landed is surfaced loudly but never turned into a command
+ * failure. (CAWS-AUTOCOMMIT-INTEGRITY-001 surfaced it;
+ * CAWS-AUTOCOMMIT-INTEGRITY-002 corrected the exit-code policy.)
  */
 function surfaceAuditCommit(
   auditCommit: unknown,
   err: (s: string) => void
-): boolean {
+): void {
   const ac =
     auditCommit !== null && typeof auditCommit === 'object'
       ? (auditCommit as { kind?: unknown; reason?: unknown })
@@ -87,9 +90,7 @@ function surfaceAuditCommit(
       '  The control-plane change is in your working tree but the audit ' +
         'commit did not land. Commit it manually, then verify with git log.'
     );
-    return true;
   }
-  return false;
 }
 
 function resolveCawsCtx(
@@ -194,7 +195,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   // Without this hint, users continue editing in the canonical checkout
   // and trigger union-mode scope behavior they can't explain.
   out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
@@ -265,7 +266,7 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
     return 2;
   }
   out(`bound ${outcome.name} → ${opts.specId}`);
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
@@ -319,7 +320,7 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
     return 2;
   }
   out(`destroyed ${outcome.name}`);
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
@@ -380,7 +381,7 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   out(
     `merged ${outcome.name} (merge_commit: ${outcome.data?.merge_commit}; auto_closed_spec: ${outcome.data?.spec_id})`
   );
-  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
 
