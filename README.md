@@ -16,7 +16,7 @@ The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `
 
 ## What v11.1 ships
 
-Twelve command groups (plus the auto-generated `help`).
+Thirteen command groups (plus the auto-generated `help`).
 
 | Command | Purpose |
 |---|---|
@@ -30,9 +30,10 @@ Twelve command groups (plus the auto-generated `help`).
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
-| `caws specs create / list / show / recover / close / archive / prune-archive / migrate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
+| `caws specs create / list / show / recover / close / archive / retire-draft / prune-archive / migrate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Lifecycle exits by state: active → `close`, closed → `archive`, never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). |
 | `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
+| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the outgoing commit range and refuses commits not attributable to the current slice. Diagnose/decide only — does NOT run `git push`. |
 
 Run `caws <group> --help` for full options.
 
