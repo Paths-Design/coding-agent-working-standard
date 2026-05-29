@@ -3,6 +3,7 @@ title: 'CAWS-governed push refuses to silently include commits outside the curre
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: multi-agent-push-range-guard
 created_at: '2026-05-22T22:30:00.000Z'
 updated_at: '2026-05-29T02:10:00.000Z'
 blast_radius:
