@@ -21,6 +21,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { runDoctorCommand } = require('../../dist/shell');
+const {
+  renderManagedBlock,
+} = require('../../dist/init/gitignore-manage');
 
 const NOW = new Date('2026-05-14T12:00:00.000Z');
 
@@ -122,6 +125,13 @@ describe('runDoctorCommand — happy and unhappy paths', () => {
       fs.mkdirSync(path.join(repoRoot, '.caws', 'waivers'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, '.caws', 'worktrees.json'), '{}');
       fs.writeFileSync(path.join(repoRoot, '.caws', 'agents.json'), '{}');
+      // A truly clean project also has the current managed .gitignore block;
+      // without it, the gitignore-drift check (CAWS-DOCTOR-GITIGNORE-DRIFT-001)
+      // would (correctly) fire a WARNING. Write it so this stays 0W.
+      fs.writeFileSync(
+        path.join(repoRoot, '.gitignore'),
+        renderManagedBlock() + '\n'
+      );
       const r = captureRun(repoRoot);
       expect(r.code).toBe(0);
       expect(r.stdout).toMatch(/Doctor findings:\s*\n\s*\(none\)/);
@@ -223,6 +233,85 @@ describe('runDoctorCommand — happy and unhappy paths', () => {
       // Either rule fires depending on whether the kernel rejects on hash
       // mismatch or chain validity; both come from the doctor namespace.
       expect(r.stdout).toMatch(/doctor\.event\./);
+    });
+  });
+
+  // ============================================================
+  // gitignore-drift finding (CAWS-DOCTOR-GITIGNORE-DRIFT-001)
+  // ============================================================
+  describe('gitignore-drift: ephemeral .caws state not git-ignored', () => {
+    let repoRoot;
+    afterEach(() => rmrf(repoRoot));
+
+    const DRIFT_RULE = 'shell.gitignore.ephemeral_state_untracked';
+
+    /** Seed a canonical, otherwise-clean project (spec + policy + registries)
+     * but WITHOUT a .gitignore, so the only variable is the drift check. */
+    function seedCleanProject(prefix) {
+      const root = mkTempGitRepo(prefix);
+      fs.writeFileSync(
+        path.join(root, '.caws', 'specs', 'FOO-1.yaml'),
+        VALID_SPEC('FOO-1')
+      );
+      fs.writeFileSync(path.join(root, '.caws', 'policy.yaml'), VALID_POLICY);
+      fs.mkdirSync(path.join(root, '.caws', 'waivers'), { recursive: true });
+      fs.writeFileSync(path.join(root, '.caws', 'worktrees.json'), '{}');
+      fs.writeFileSync(path.join(root, '.caws', 'agents.json'), '{}');
+      return root;
+    }
+
+    // A1: git repo + spec + NO .gitignore → one WARNING, exit still 0.
+    it('A1: warns when there is a spec and no .gitignore, but does not error', () => {
+      repoRoot = seedCleanProject('caws-doctor-gidrift-a1-');
+      const r = captureRun(repoRoot);
+      // WARNING only — exit code is not flipped to 1.
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(DRIFT_RULE);
+      expect(r.stdout).toMatch(/Summary:\s+findings 0E\/1W\/0I/);
+    });
+
+    // A2: current managed block → no drift finding.
+    it('A2: no drift finding when the current managed block is present', () => {
+      repoRoot = seedCleanProject('caws-doctor-gidrift-a2-');
+      fs.writeFileSync(
+        path.join(repoRoot, '.gitignore'),
+        renderManagedBlock() + '\n'
+      );
+      const r = captureRun(repoRoot);
+      expect(r.code).toBe(0);
+      expect(r.stdout).not.toContain(DRIFT_RULE);
+    });
+
+    // A3: stale managed block (old version markers) → WARNING.
+    it('A3: warns when the managed block is stale (older version)', () => {
+      repoRoot = seedCleanProject('caws-doctor-gidrift-a3-');
+      const stale = [
+        '# >>> caws gitignore (managed, v0) >>>',
+        '.caws/old-ephemeral-thing',
+        '# <<< caws gitignore <<<',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(repoRoot, '.gitignore'), stale);
+      const r = captureRun(repoRoot);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(DRIFT_RULE);
+    });
+
+    // A4: .caws/ with no specs → no drift finding (not a real project yet).
+    it('A4: no drift finding when there are no specs', () => {
+      repoRoot = mkTempGitRepo('caws-doctor-gidrift-a4-');
+      // .caws/specs/ exists (mkTempGitRepo seeds it) but is empty; no policy
+      // either. The drift check requires at least one spec.
+      const r = captureRun(repoRoot);
+      expect(r.stdout).not.toContain(DRIFT_RULE);
+    });
+
+    // A5: the finding points the user at `caws init`.
+    it('A5: the drift finding names caws init as the fix', () => {
+      repoRoot = seedCleanProject('caws-doctor-gidrift-a5-');
+      const r = captureRun(repoRoot, { showData: true });
+      expect(r.stdout).toContain(DRIFT_RULE);
+      expect(r.stdout).toMatch(/caws init/);
     });
   });
 });
