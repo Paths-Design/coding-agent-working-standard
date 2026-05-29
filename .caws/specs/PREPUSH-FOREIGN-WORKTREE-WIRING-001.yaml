@@ -2,10 +2,11 @@ id: PREPUSH-FOREIGN-WORKTREE-WIRING-001
 title: 'Wire prepush command to reach A4 foreign-worktree ERROR refusal + A3/A7 command tests + prepush.ts cleanups'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: prepush-fw-wiring
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge prepush-fw-wiring at b4fe5443821b7476c5ff39150a340ceef11135a0'
 created_at: '2026-05-29T04:18:53.074Z'
-updated_at: '2026-05-29T04:18:53.074Z'
+updated_at: '2026-05-29T04:50:01.148Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
