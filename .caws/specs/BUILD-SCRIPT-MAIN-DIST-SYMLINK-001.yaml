@@ -2,24 +2,41 @@ id: BUILD-SCRIPT-MAIN-DIST-SYMLINK-001
 title: 'Build main and symlink dist output'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-build-main-dist-link at 4c6341a7102ee90d2d891669f0927e434e75d2dc'
 created_at: '2026-05-29T21:27:56.728Z'
-updated_at: '2026-05-29T21:27:56.728Z'
+updated_at: '2026-05-29T21:32:07.083Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - scripts
+    - package.json
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - scripts/build-main-dist-link.mjs
+    - package.json
+    - .caws/specs/BUILD-SCRIPT-MAIN-DIST-SYMLINK-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - packages/quality-gates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The helper builds the current checkout without modifying package source files.'
+  - 'The helper creates deterministic symlinks under a generated root dist path and refuses missing build output.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A checkout with dependencies available.'
+    when: '`npm run build:main-dist-link -- --skip-install` runs.'
+    then: 'The script builds the CLI package and creates root dist symlinks to packages/caws-cli/dist and its caws bin.'
+  - id: A2
+    given: 'A fresh checkout without node_modules.'
+    when: '`npm run build:main-dist-link` runs.'
+    then: 'The script installs workspace dependencies before building.'
+  - id: A3
+    given: 'The CLI build output is missing after build.'
+    when: 'The helper reaches symlink creation.'
+    then: 'It exits non-zero with a clear missing-output diagnostic.'
 non_functional: {}
 contracts: []
