@@ -1,5 +1,30 @@
 ## [Unreleased]
 
+### Fixed
+
+* **hook-pack (danger latch): `reset-danger-latch.sh --current` could not
+  clear the latch a session actually wrote** (`DANGER-LATCH-UX-001`). The
+  latch is WRITTEN by `block-dangerous.sh` keyed to the stdin session id, but
+  CLEARED by a human running the reset from a shell with no Claude session id
+  in its env — so `--current` resolved to `danger-latch-unknown.json`, found
+  nothing, printed "nothing to clear", and left the real sentinel blocking
+  (only `--all` broke the deadlock). Three coupled fixes: (1) `sanitize_session`
+  moved to `lib/caws-state.sh` so writer and clearer compute identical sentinel
+  filenames; (2) `--current` falls back to the SOLE existing latch when its
+  resolved candidate is absent (2+ latches → refuses, points at
+  `--session`/`--all`, never clearing ambiguously); (3) `block-dangerous.sh`'s
+  replay message recommends `--session <id>` over `--current`. +6 tests;
+  verified end-to-end against the exact deadlock.
+* **hook-pack (classify_command.py): recursive deletes under a system temp
+  root no longer latch** (`DANGER-LATCH-UX-001`). `rm -rf /tmp/<x>`,
+  `/private/tmp/<x>`, `/var/folders/<x>`, `$TMPDIR/<x>` classify as `allow`
+  instead of engaging the latch — agents constantly create/tear-down fixtures
+  under the OS temp dir. Catastrophic/ambiguous forms stay governed: `rm -rf /`
+  → deny, `~`/`.` → deny, the temp ROOT itself → ask, `/etc`/repo-relative →
+  ask. Documented limitation: `cd /tmp && rm -rf <relative>` stays `ask` (a
+  static classifier cannot track cwd across `&&`; use the absolute form or
+  `mktemp -d`). +15 tests.
+
 ### Changed
 
 * **hook-pack (classify_command.py): admit read-only `git worktree` forms**
