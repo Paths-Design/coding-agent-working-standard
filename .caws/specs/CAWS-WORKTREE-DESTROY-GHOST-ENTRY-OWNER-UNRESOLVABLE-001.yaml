@@ -2,7 +2,9 @@ id: CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001
 title: 'worktree destroy/claim cannot clear a ghost registry entry whose claude-code UUID owner is unresolvable after the directory is gone'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+updated_at: '2026-05-29T00:08:55.819Z'
+resolution: completed
 blast_radius:
   modules:
     - packages/caws-cli
