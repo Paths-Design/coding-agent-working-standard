@@ -3,7 +3,6 @@ title: 'worktree destroy/claim cannot clear a ghost registry entry whose claude-
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: ghost-entry-owner
 blast_radius:
   modules:
     - packages/caws-cli
