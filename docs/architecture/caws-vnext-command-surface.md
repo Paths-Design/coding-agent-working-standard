@@ -314,16 +314,19 @@ to preserve recon's no-side-edit discipline.
 ## 2. Command surface
 
 The v11.0.0 governed core shipped eight command groups. v11.1 grew the
-surface to **twelve** named groups (plus the auto-generated `help`): it
+surface to **thirteen** named groups (plus the auto-generated `help`): it
 restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
 added `events` (eleventh) for hash-chained audit-log maintenance
-(`migrate/rotate/verify-archive`), and `agents` (twelfth) for multi-agent
-observability. `agents` shipped ahead of the broader v11.2 multi-agent
-plan: its `register/heartbeat/stop/list/show/prune` subcommands are all
-live in v11.1.x. The remaining v11.2 multi-agent line (lease-backed
-ownership, the `claim_taken_over.v1` event, worktree `prune/reconcile`)
-is still forthcoming. Every command group is implemented in
-`packages/caws-cli/src/shell/`, composed atop
+(`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
+observability, and `prepush` (thirteenth) — the governed pre-push range
+check (MULTI-AGENT-PUSH-RANGE-GUARD-001) that classifies the outgoing
+commit range and refuses commits not attributable to the current slice
+without running `git push` itself. `agents` shipped ahead of the broader
+v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
+subcommands are all live in v11.1.x. The remaining v11.2 multi-agent line
+(lease-backed ownership, the `claim_taken_over.v1` event, worktree
+`prune/reconcile`) is still forthcoming. Every command group is
+implemented in `packages/caws-cli/src/shell/`, composed atop
 `packages/caws-cli/src/store/` and `packages/caws-kernel/`.
 
 ### v11.0.0 (governed core)
@@ -347,7 +350,7 @@ is still forthcoming. Every command group is implemented in
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
 | `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
-| `caws specs create/list/show/close/archive` | vNext spec lifecycle. |
+| `caws specs create/list/show/close/archive/retire-draft` | vNext spec lifecycle. Exits by state: active → close, closed → archive, never-activated draft → retire-draft. |
 | `caws specs recover <id>` | Recover an archived OR retired spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
 | `caws specs retire-draft <id>` | Governed retirement of a never-activated DRAFT spec (CAWS-SPECS-RETIRE-DRAFT-001). Draft-only: refuses active (use close), closed (use archive), archived. Tombstone — deletes the draft YAML and appends a recoverable `spec_retired` event (recover via `specs show --archived` / `specs recover`). The sanctioned alternative to raw `git rm .caws/specs/<id>.yaml`, which bypasses the audit + recovery path. |
 | `caws specs prune-archive` | Migrate legacy `.caws/specs/.archive/<id>.yaml` bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` to execute. Unrecoverable bodies quarantined, never silently deleted. |
@@ -356,6 +359,7 @@ is still forthcoming. Every command group is implemented in
 | `caws agents register/heartbeat/stop/list/show/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
+| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Enumerates the outgoing commit range (`<base>..HEAD`, default `origin/main`), classifies each commit's spec provenance (file-touch + commit-subject), escalates foreign-worktree presence, and refuses commits not attributable to the current slice unless `--ack <sha>`'d. Diagnose/decide only — never rewrites, drops, or pushes. v1 is opt-in (`prepush`-first; no raw `git push` interception). |
 
 ### Planned in v11.2 (multi-agent authority and observability)
 

@@ -10,13 +10,13 @@ The v11 cutover is complete. `main` runs the v11.1 surface, published to npm as 
 
 **For teams migrating from v10.2:** read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is the canonical line for new work but is **not a drop-in replacement** for every v10.2 workflow — some commands (`sidecar`, `burnup`, `verify-acs`, `evaluate`, `test-analysis`) are removed without v11.1 replacements, while `agents list/show` now ships in the v11.1 surface. The migration guide classifies every v10.2 command into one of four buckets (Replaced / Renamed / Removed-no-replacement / Deferred), documents the rollback one-liner, and includes CI migration recipes.
 
-## v11.1 ships twelve command groups
+## v11.1 ships thirteen command groups
 
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents
+init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents  prepush
 ```
 
-(The governed-core groups plus lifecycle, event-maintenance, and agent-liveness surfaces.)
+(The governed-core groups plus lifecycle, event-maintenance, agent-liveness, and the `prepush` governed pre-push range check. `prepush` (MULTI-AGENT-PUSH-RANGE-GUARD-001) classifies the outgoing commit range and refuses commits not attributable to the current slice — it does NOT run `git push` itself.)
 
 Removed in v11.0 and not planned to return: `scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`, `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`. The hash-chained `.caws/events.jsonl` is the audit surface; users wire their own hooks against `caws gates run`.
 
