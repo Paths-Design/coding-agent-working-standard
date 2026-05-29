@@ -68,6 +68,37 @@ function setupIO(opts: BaseCommandOptions) {
   return { cwd, nowFn, env, out, err: errFn, showData };
 }
 
+/**
+ * Surface a non-landed audit commit. The lifecycle YAML change has been
+ * applied to the working tree (the transaction succeeded), but the
+ * automatic audit commit did NOT land — typically because the target was
+ * dirty before the write, or a consumer pre-commit hook refused. A
+ * lifecycle command MUST NOT print a bare success line while leaving the
+ * change uncommitted: the user has to know to commit it manually, or the
+ * spec sits dirty and the next session inherits ambiguous state.
+ *
+ * Returns true when a refusal was surfaced (caller may adjust exit code).
+ * (CAWS-AUTOCOMMIT-INTEGRITY-001)
+ */
+function surfaceAuditCommit(
+  auditCommit: { readonly kind: string; readonly reason?: string } | undefined,
+  err: (s: string) => void
+): boolean {
+  if (auditCommit !== undefined && auditCommit.kind === 'refused_dirty') {
+    err('caws specs: the lifecycle change was applied but NOT committed.');
+    if (auditCommit.reason !== undefined && auditCommit.reason.length > 0) {
+      err(`  reason: ${auditCommit.reason}`);
+    }
+    err(
+      '  The spec YAML is changed in your working tree but the audit commit ' +
+        'did not land. Commit it manually (git add <spec> && git commit), ' +
+        'then verify with git log.'
+    );
+    return true;
+  }
+  return false;
+}
+
 function resolveCawsCtx(
   cwd: string,
   errFn: (line: string) => void,
@@ -218,6 +249,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   out(`  edit: ${relSpecPath}`);
   out('  scope.in must list the file paths your slice will touch.');
   out('  Until then, scope-guard rejects every edit (no path admitted).');
+  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
   return 0;
 }
 
@@ -402,6 +434,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     return 1;
   }
   out(`closed ${outcome.id} (resolution: ${opts.resolution})`);
+  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
   return 0;
 }
 
@@ -443,6 +476,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     return 1;
   }
   out(`archived ${outcome.id} → ${path.relative(ctx.repoRoot, outcome.path)}`);
+  if (surfaceAuditCommit(outcome.data?.audit_commit, err)) return 1;
   return 0;
 }
 

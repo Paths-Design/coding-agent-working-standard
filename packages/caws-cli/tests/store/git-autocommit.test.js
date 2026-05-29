@@ -47,6 +47,62 @@ function stageAndCommit(repoRoot, message) {
 }
 
 // ============================================================
+// CAWS-AUTOCOMMIT-INTEGRITY-001 A1: path-scoped commit must NOT
+// sweep a foreign pre-staged file from the shared index.
+// ============================================================
+describe('autoCommit — A1: path-scoped commit ignores ambient index', () => {
+  let repoRoot;
+  afterEach(() => rmrf(repoRoot));
+
+  it('commits ONLY the writer\'s paths, leaving a sibling-staged file uncommitted', () => {
+    repoRoot = mkBareGitRepo('autocommit-a1-pathscope-');
+    // Baseline: both files exist and are committed.
+    writeFile(repoRoot, '.caws/worktrees.json', '{}\n');
+    writeFile(repoRoot, 'sibling.txt', 'baseline\n');
+    stageAndCommit(repoRoot, 'chore: initial');
+
+    // A concurrent sibling session pre-stages an UNRELATED file into the
+    // shared index (the cross-worktree shared-index hazard).
+    writeFile(repoRoot, 'sibling.txt', 'sibling work in progress\n');
+    execFileSync('git', ['-C', repoRoot, 'add', '--', 'sibling.txt']);
+
+    // The CAWS writer mutates its OWN file and calls autoCommit.
+    writeFile(
+      repoRoot,
+      '.caws/worktrees.json',
+      JSON.stringify({ foo: { specId: 'BAR-001' } }, null, 2)
+    );
+    const outcome = autoCommit({
+      repoRoot,
+      paths: ['.caws/worktrees.json'],
+      message: 'chore(caws): bind foo to BAR-001',
+      wasDirtyBeforeWrite: false,
+    });
+
+    expect(outcome.kind).toBe('committed');
+
+    // The commit must contain EXACTLY the writer's path — never sibling.txt.
+    const committedFiles = execFileSync(
+      'git',
+      ['-C', repoRoot, 'show', '--name-only', '--pretty=format:', 'HEAD'],
+      { encoding: 'utf8' }
+    )
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(committedFiles).toEqual(['.caws/worktrees.json']);
+
+    // sibling.txt must remain staged-but-uncommitted, untouched.
+    const stagedAfter = execFileSync(
+      'git',
+      ['-C', repoRoot, 'diff', '--cached', '--name-only'],
+      { encoding: 'utf8' }
+    ).trim();
+    expect(stagedAfter).toBe('sibling.txt');
+  });
+});
+
+// ============================================================
 // A6: clean baseline → commit succeeds, returns sha
 // ============================================================
 describe('autoCommit — A6: clean baseline', () => {
