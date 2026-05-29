@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: dead-template-residue
 created_at: '2026-05-29T08:43:19.813Z'
-updated_at: '2026-05-29T09:10:00.000Z'
+updated_at: '2026-05-29T09:25:00.000Z'
 blast_radius:
   modules:
     - dead non-hook-packs caws-cli template tree (deletion-only; 11 dirs not in package.json files, zero shipped-dist references; superseded by the v11 hook-packs + --agent-surface model)
@@ -25,6 +25,8 @@ scope:
     - packages/caws-cli/templates/codemod
     - packages/caws-cli/templates/docs
     - packages/caws-cli/templates/scripts
+    - packages/caws-cli/tests/integration/cursor-hooks.test.js
+    - packages/caws-cli/jest.config.js
     - .caws/agent-operating-spec.yaml
     - .caws/specs/GATES-RUN-POST-QG-DOCTRINE-001.yaml
     - .caws/specs/CAWS-DEAD-TEMPLATE-V10-RESIDUE-CLEANUP-001.yaml
@@ -45,6 +47,8 @@ invariants:
   - agent-operating-spec.yaml has zero live readers (its only remaining reference is historical investigation prose in docs/rewrite/investigations/04-template-drift.md, which is a point-in-time record, not a consumer). Its v10 budget-overrun/validation model is superseded by the v11 governance surface (policy.yaml + CLAUDE.md).
   - The quality-gates config files (code-freeze, quality-exceptions, duplication-exceptions, refactor-baselines, refactor-targets) are explicitly excluded; they still have live readers in packages/quality-gates and belong to the GATES-RUN-POST-QG-DOCTRINE-001 retirement decision. This slice only records them as a tracked follow-up there.
   - 'Untracked, gitignored orphan worktree dirs under .caws/worktrees/* are out of scope: they do not affect the tarball, and the active sibling session is writing tmp pointers into them, so they are a quiet-period prune job, not release-cleanup work.'
+  - tests/integration/cursor-hooks.test.js asserted that templates/.cursor/hooks exists "for --agent-surface cursor install", but dist/init/hook-packs/register.js sets IMPLEMENTED_SURFACES = ['claude-code'] and documents cursor/windsurf as recognized-but-not-yet-implemented (they never read templates/.cursor). The test guarded v10 behavior, so it is removed with the tree. Its CI-only testPathIgnorePatterns entry in jest.config.js is removed in the same edit to honor the config's stated invariant that every ignore path must resolve to an existing file.
+  - 'Loose template-root files (templates/agents.md, CLAUDE.md, COMMIT_CONVENTIONS.md, OIDC_SETUP.md) are explicitly NOT removed: they carry current "CAWS v11.1+" doctrine content, not v10 residue, and removing live doctrine is out of this slice''s remit even though they are also unshipped.'
 acceptance:
   - id: A1
     given: the repo after removing the 11 non-hook-packs template dirs
@@ -57,7 +61,11 @@ acceptance:
   - id: A3
     given: a git grep across the tracked tree for the removed template dirs and for agent-operating-spec
     when: searching outside .caws/specs and docs/rewrite (historical records) and node_modules
-    then: zero live references remain, proving nothing read these files.
+    then: the only remaining matches are documentation/changelog mentions or graceful best-effort loaders (src/config/index.js legacy multi-path probe, whose referenced templates/.caws/tools/provenance.js never existed on disk) — no live consumer breaks.
+  - id: A5
+    given: the caws-cli jest suite after removing cursor-hooks.test.js and its jest.config.js ignore entry
+    when: npx jest runs both locally (no CI env) and with CI=1
+    then: the suite collects with no missing-file errors, no reference to the deleted test remains in jest.config.js, and no previously-passing test regresses due to the template-tree removal.
   - id: A4
     given: GATES-RUN-POST-QG-DOCTRINE-001 after this slice
     when: its spec body is read
