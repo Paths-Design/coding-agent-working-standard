@@ -111,61 +111,91 @@ describe('CLI Accessibility Tests', () => {
 
   describe('Error Message Accessibility', () => {
     test('should provide clear and helpful error messages', () => {
-      // Accessibility Contract: Error messages should be clear and actionable
+      // Accessibility Contract: Error messages should be clear and actionable.
+      //
+      // v11 `caws init` takes NO project-name positional argument (Usage:
+      // `caws init [options]`), so the v10 "Project name is required" error
+      // no longer exists. The real v11 init error surface we exercise here is
+      // an unknown --agent-surface value, which emits a structured, bounded,
+      // actionable diagnostic. Run with an explicit cwd so the invocation can
+      // never inherit the jest CWD (the live initialized CAWS repo).
 
       let errorOutput;
 
       try {
-        execSync(`node "${cliPath}" init ""`, { encoding: 'utf8' });
+        execSync(`node "${cliPath}" init --agent-surface bogus-surface`, {
+          encoding: 'utf8',
+          cwd: testTempDir,
+          stdio: 'pipe',
+        });
       } catch (error) {
         errorOutput = (error.stdout || '') + (error.stderr || '');
       }
 
-      if (errorOutput) {
-        // Accessibility Contract: Error messages should explain the problem
-        expect(errorOutput).toContain('Project name is required');
+      // The unknown-surface path must fail with diagnostic output.
+      expect(errorOutput).toBeTruthy();
 
-        // Accessibility Contract: Error messages should suggest solutions
-        expect(errorOutput).toContain('Usage:');
+      // Accessibility Contract: Error messages should explain the problem.
+      expect(errorOutput).toMatch(/unknown --agent-surface/i);
 
-        // Accessibility Contract: Error messages should be concise but complete
-        const errorLines = errorOutput.split('\n').filter((line) => line.trim());
-        expect(errorLines.length).toBeGreaterThan(0);
-        expect(errorLines.length).toBeLessThanOrEqual(10); // Shouldn't be overwhelming
-      }
+      // Accessibility Contract: Error messages should suggest valid choices.
+      expect(errorOutput).toMatch(/known values:/i);
+      expect(errorOutput).toContain('claude-code');
+
+      // Accessibility Contract: Error messages should be concise but complete.
+      const errorLines = errorOutput.split('\n').filter((line) => line.trim());
+      expect(errorLines.length).toBeGreaterThan(0);
+      expect(errorLines.length).toBeLessThanOrEqual(10); // Shouldn't be overwhelming
     });
 
-    test('should handle invalid project names accessibly', () => {
-      // Accessibility Contract: Invalid input should produce helpful feedback
+    test('init in an already-governed directory reports the no-op accessibly', () => {
+      // Accessibility Contract: an idempotent re-init should communicate its
+      // no-op clearly rather than erroring or going silent.
+      //
+      // v11 has no project-name validation/sanitization (that was a removed
+      // v10 scaffolding concern), so this replaces the old "invalid project
+      // names" test. We initialize a fresh isolated repo, then re-init it and
+      // assert the second run's message is clear and bounded. Explicit cwd
+      // keeps every invocation off the live repo.
 
-      const invalidNames = [
-        '', // Empty name
-        'a'.repeat(100), // Too long
-        'test/project', // Invalid characters
-        'test project', // Spaces
-      ];
+      const repo = path.join(
+        require('os').tmpdir(),
+        'caws-axe-init-noop-' + Date.now()
+      );
+      fs.mkdirSync(repo, { recursive: true });
+      try {
+        execSync('git init --quiet', { cwd: repo });
+        execSync('git config user.email t@t.com', { cwd: repo });
+        execSync('git config user.name T', { cwd: repo });
+        execSync('git commit --quiet --allow-empty -m init', { cwd: repo });
 
-      invalidNames.forEach((invalidName) => {
-        try {
-          const output = execSync(`node "${cliPath}" init "${invalidName}"`, {
-            encoding: 'utf8',
-            stdio: 'pipe',
-          });
+        // First init: bootstraps canonical .caws/ in the isolated repo.
+        const first = execSync(`node "${cliPath}" init --agent-surface none`, {
+          encoding: 'utf8',
+          cwd: repo,
+          stdio: 'pipe',
+        });
+        expect(first).toMatch(/created \d+ path/i);
 
-          // If it succeeds, it should have sanitized the name with a warning
-          if (invalidName === 'test/project' || invalidName === 'test project') {
-            expect(output).toMatch(/sanitized|warning/i);
-          }
-        } catch (error) {
-          const errorOutput = (error.stdout || '') + (error.stderr || '');
+        // Second init: idempotent no-op with a clear message.
+        const second = execSync(`node "${cliPath}" init --agent-surface none`, {
+          encoding: 'utf8',
+          cwd: repo,
+          stdio: 'pipe',
+        });
 
-          if (errorOutput) {
-            // Accessibility Contract: Each error should provide clear guidance
-            expect(errorOutput.length).toBeGreaterThan(10); // Should have meaningful content
-            expect(errorOutput).toMatch(/error|required|invalid|too long|cannot|exists|sanitized/i); // Should indicate an error or warning
-          }
+        // Accessibility Contract: the no-op is communicated, not silent.
+        expect(second.trim().length).toBeGreaterThan(10);
+        expect(second).toMatch(/already initialized|no changes|unchanged/i);
+
+        // Accessibility Contract: concise but complete.
+        const lines = second.split('\n').filter((line) => line.trim());
+        expect(lines.length).toBeGreaterThan(0);
+      } finally {
+        if (fs.existsSync(repo)) {
+          fs.rmSync(repo, { recursive: true, force: true });
         }
-      });
+      }
     });
   });
 
