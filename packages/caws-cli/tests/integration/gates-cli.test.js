@@ -6,7 +6,7 @@
  * `gate_evaluated` events emitted to .caws/events.jsonl.
  *
  * v11 contract notes:
- *   - `caws gates run --spec <id> [--context cli|commit|ci]`
+ *   - `caws gates run --spec <id>`
  *   - No `--json` flag; v11 emits a text disposition table.
  *   - Structured per-gate detail lives in events.jsonl, not stdout.
  *   - Exit 0 when all gates pass; exit 1 when any block-mode gate fails.
@@ -112,13 +112,9 @@ function createTestProject(overrides = {}) {
   return { dir, specId };
 }
 
-// LOCK-INTERPROCESS-HARDEN-001 (fixed): the quality-gates subprocess
-// now uses a per-cwd lock at `<cwd>/docs-status/quality-gates.lock`.
-// Each test creates an isolated project dir, so parallel jest workers
-// no longer contend.
-//
-// Per-suite timeout still raised to 240s as a defense-in-depth bound;
-// a single-run subprocess is ~5-15s, so this gives plenty of headroom.
+// This suite used to contend on the quality-gates subprocess lock. The
+// production gates path is now local-only, but the helpers remain conservative
+// because historical CI diagnostics still benefit from the wider timeout.
 jest.setTimeout(240000);
 
 function clearQGLockIn(projectDir) {
@@ -147,8 +143,8 @@ function isLockContention(result) {
  *
  * Timeout 30s per attempt. Up to 3 retries on lock contention to handle
  * parallel jest workers competing for the shared
- * <quality-gates-pkg>/docs-status/quality-gates.lock. Total worst-case
- * wall time per call: ~100s. jest.setTimeout above is 120s.
+ * <quality-gates-pkg>/docs-status/quality-gates.lock if an older build is
+ * under test. Current production code does not spawn quality-gates.
  */
 function runOnce(projectDir, specId, extraArgs) {
   clearQGLockIn(projectDir);
@@ -326,10 +322,10 @@ describe('gates CLI integration (v11.1)', () => {
       }
     });
 
-    test('exits 0 with commit context and no staged files', () => {
+    test('exits 0 with no staged files', () => {
       ctx = createTestProject();
 
-      const args = ['--context=commit'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(result.stdout).toContain('Overall: OK');
@@ -337,29 +333,7 @@ describe('gates CLI integration (v11.1)', () => {
   });
 
   describe('budget exceeded (block mode)', () => {
-    // LEGACY-TEST-RECONCILE-001 perf-test-contract correction follow-up:
-    // this single test invokes the full caws-quality-gates subprocess
-    // with staged files, which is the heaviest single subprocess in
-    // the gates-cli suite. Under parallel jest workers competing for
-    // cold disk-cache, it has been observed at 172-180s — straddling
-    // the per-call timeout. The same product invariant
-    // ("budget_limit blocks when files_changed > max_files") is proven
-    // by the sandbox lifecycle smoke (.rehearsal-smoke/run.sh exit 1
-    // with budget_limit violation event), which runs single-process
-    // without contention. Gated behind CAWS_RUN_PERF_BUDGETS=1 alongside
-    // the perf-budgets load-sensitive assertions.
-    const runHeavySubprocess = process.env.CAWS_RUN_PERF_BUDGETS === '1';
-    const budgetTest = runHeavySubprocess ? test : test.skip;
-    budgetTest('exits 1 when staged file count exceeds tier-3 budget in block mode', () => {
-      // LEGACY-TEST-RECONCILE-001 perf-test-contract correction:
-      // earlier version used a tier-1 spec + 10 staged files, which
-      // triggered heavy semantic evaluation in the quality-gates
-      // subprocess (180s+ under parallel jest load). The product
-      // invariant ("budget_limit blocks when files_changed > max_files")
-      // is proven equally by a tier-3 spec with max_files=1 + 2 staged
-      // files, with far less subprocess work — stays robust under
-      // contention. Tier-1 heavy-spec coverage lives in the sandbox
-      // smoke (rehearsal-smoke/run.sh), not this default test surface.
+    test('exits 1 when staged file count exceeds tier-3 budget in block mode', () => {
       ctx = createTestProject({
         policy: {
           version: 1,
@@ -390,7 +364,7 @@ describe('gates CLI integration (v11.1)', () => {
       }
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const args = ['--context=commit'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 1, ctx.dir, ctx.specId, args);
 
@@ -424,7 +398,7 @@ describe('gates CLI integration (v11.1)', () => {
     test('each gate_evaluated event has gate_id, mode, result, violations, waived_count', () => {
       ctx = createTestProject();
 
-      const args = ['--context=cli'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 0, ctx.dir, ctx.specId, args);
 
@@ -446,7 +420,7 @@ describe('gates CLI integration (v11.1)', () => {
     test('one gate_evaluated event is appended per policy-declared gate', () => {
       ctx = createTestProject();
 
-      runGatesCli(ctx.dir, ctx.specId, ['--context=cli']);
+      runGatesCli(ctx.dir, ctx.specId, []);
 
       const events = readGateEvents(ctx.dir);
       const gateIds = events.map((e) => e.data.gate_id).sort();
@@ -461,7 +435,7 @@ describe('gates CLI integration (v11.1)', () => {
     test('produces human-readable disposition table on stdout', () => {
       ctx = createTestProject();
 
-      const args = ['--context=cli'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 0, ctx.dir, ctx.specId, args);
 
@@ -474,22 +448,15 @@ describe('gates CLI integration (v11.1)', () => {
     test('text output is not valid JSON', () => {
       ctx = createTestProject();
 
-      const args = ['--context=cli'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 0, ctx.dir, ctx.specId, args);
       expect(() => JSON.parse(result.stdout)).toThrow();
     });
   });
 
-  describe('unmatched violations are surfaced (not silently dropped)', () => {
-    test('subprocess gates with no canonical policy mapping appear in the rendered output', () => {
-      // 10 new files trigger the subprocess `code_freeze` gate, which has
-      // no canonical policy gate mapping (refused alias — semantically
-      // distinct from `budget_limit`). The rendered text must report it
-      // under "Unmatched violations" so the operator can see what the
-      // subprocess found even when policy does not declare a matching
-      // gate. Silent suppression here would let real-quality issues slip
-      // past the operator.
+  describe('unmatched violations', () => {
+    test('production gates run is local-only and emits no unmatched subprocess violations', () => {
       ctx = createTestProject();
 
       fs.ensureDirSync(path.join(ctx.dir, 'src'));
@@ -501,14 +468,11 @@ describe('gates CLI integration (v11.1)', () => {
       }
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const args = ['--context=commit'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
-      // Exit 0 because no policy-declared gate blocks (default policy is
-      // all warn). The subprocess code_freeze violation surfaces as an
-      // unmatched violation, not as a block.
       expectExit(result, 0, ctx.dir, ctx.specId, args);
-      expect(result.stdout).toContain('Unmatched violations');
-      expect(result.stdout).toContain('code_freeze');
+      expect(result.stdout).not.toContain('Unmatched violations');
+      expect(result.stdout).not.toContain('code_freeze');
     });
   });
 
@@ -538,7 +502,7 @@ describe('gates CLI integration (v11.1)', () => {
       fs.writeFileSync(path.join(ctx.dir, 'vendor', 'lib.js'), '// out of scope\n');
       execFileSync('git', ['add', '.'], { cwd: ctx.dir, stdio: 'pipe' });
 
-      const args = ['--context=commit'];
+      const args = [];
       const result = runGatesCli(ctx.dir, ctx.specId, args);
       expectExit(result, 1, ctx.dir, ctx.specId, args);
 

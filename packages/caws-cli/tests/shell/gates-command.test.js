@@ -2,11 +2,11 @@
  * Tests for `caws gates run` and its supporting modules.
  *
  * The slice's load-bearing invariants:
- *   - policy owns block/warn/skip (subprocess only reports violations)
- *   - subprocess JSON shape is validated before trust
+ *   - policy owns block/warn/skip (external reports only report violations)
+ *   - injected legacy report JSON shape is validated before trust
  *   - events go through events-store.appendEvent ONLY
  *   - missing policy → exit 2 (gates cannot decide mode without it)
- *   - subprocess contract failures → exit 2
+ *   - injected legacy report contract failures → exit 2
  */
 
 'use strict';
@@ -397,7 +397,7 @@ describe('runGatesRunCommand — exit codes', () => {
     expect(fs.existsSync(path.join(repoRoot, '.caws', 'events.jsonl'))).toBe(false);
   });
 
-  it('malformed subprocess JSON → exit 2, contract failure, NO events', () => {
+  it('malformed injected report JSON → exit 2, contract failure, NO events', () => {
     repoRoot = mkTempGitRepo('caws-gates-bad-json-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
     const r = captureRun(repoRoot, () => ({
@@ -406,12 +406,12 @@ describe('runGatesRunCommand — exit codes', () => {
       stderr: '',
     }));
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/subprocess contract failure/);
+    expect(r.stderr).toMatch(/report contract failure/);
     expect(r.stderr).toMatch(/report_not_json/);
     expect(fs.existsSync(path.join(repoRoot, '.caws', 'events.jsonl'))).toBe(false);
   });
 
-  it('subprocess JSON missing required fields → exit 2, contract failure', () => {
+  it('injected report JSON missing required fields → exit 2, contract failure', () => {
     repoRoot = mkTempGitRepo('caws-gates-bad-shape-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
     const r = captureRun(repoRoot, () => ({
@@ -423,7 +423,7 @@ describe('runGatesRunCommand — exit codes', () => {
     expect(r.stderr).toMatch(/report_invalid_shape/);
   });
 
-  it('subprocess ENOENT → exit 2 with subprocess_not_found', () => {
+  it('injected report ENOENT → exit 2 with subprocess_not_found', () => {
     repoRoot = mkTempGitRepo('caws-gates-noexec-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
     const enoent = Object.assign(new Error('not found'), { code: 'ENOENT' });
@@ -437,7 +437,7 @@ describe('runGatesRunCommand — exit codes', () => {
     expect(r.stderr).toMatch(/subprocess_not_found/);
   });
 
-  it('subprocess empty stdout (no JSON at all) → exit 2', () => {
+  it('injected report empty stdout (no JSON at all) → exit 2', () => {
     repoRoot = mkTempGitRepo('caws-gates-emptyout-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
     const r = captureRun(repoRoot, () => ({

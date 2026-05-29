@@ -339,7 +339,7 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 | `caws scope show <path>` | Explain the scope decision for `<path>`; always exits 0. |
 | `caws scope check <path>` | Enforce the scope decision for `<path>`; exits 0 on admit, 1 otherwise. |
 | `caws claim [--takeover]` | Surface or take ownership of the current worktree; writes `prior_owners` audit on takeover. |
-| `caws gates run --spec <id>` | Run quality gates against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
+| `caws gates run --spec <id>` | Run CAWS-local policy evaluators against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
 
@@ -347,11 +347,22 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 `@paths.design/quality-gates` is deprecated as a standalone batch-scanner
 package. The current safety posture is hooks-first for edit-time advisory
 signals, with `caws gates run` remaining the governed policy-gate runner
-pending `GATES-RUN-POST-QG-DOCTRINE-001`. The hook-pack checks are the
+under the Option B transition recorded below. The hook-pack checks are the
 canonical replacement for the package's load-bearing detection intent; they
 do not import, execute, or publish `packages/quality-gates`. The
 deprecation rationale and the v11.1.2 release-governance incident are
 recorded in `docs/architecture/quality-gates-deprecation.md`.
+
+**`caws gates run` post-quality-gates decision (2026-05-29).**
+`GATES-RUN-POST-QG-DOCTRINE-001` chooses Option B as the transition
+contract: keep `caws gates run` in the v11 canonical command surface, but
+stop spawning `caws-quality-gates` from the production command path. The
+command now evaluates CAWS-local policy checks (`budget_limit`,
+`scope_boundary`, `spec_completeness`) and still appends one
+`gate_evaluated` event per policy-declared gate. The package-backed
+code-quality checks move to hook-pack advisory surfaces until a later
+doctrine slice decides whether hook-emitted events become the target
+Option A.
 
 ### Added in v11.1 (lifecycle restoration)
 

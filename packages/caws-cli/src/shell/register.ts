@@ -277,14 +277,14 @@ export function registerShellCommands(
   gatesCmd
     .command('run')
     .description(
-      'Invoke quality-gates subprocess and apply policy.gates[gate].mode ' +
+      'Run CAWS-local policy evaluators and apply policy.gates[gate].mode ' +
         'to decide block/warn/skip. Appends one gate_evaluated event per ' +
         'policy-declared gate.'
     )
     .requiredOption('--spec <id>', 'Spec id this gate run is about')
     .option(
       '--context <ctx>',
-      'Subprocess context: cli | commit | ci',
+      'Compatibility no-op retained from the former quality-gates subprocess path',
       'cli'
     )
     .option('--data', 'Show structured data block on diagnostics')
@@ -293,7 +293,6 @@ export function registerShellCommands(
         const code = runGatesRunCommand(
           { specId: opts.spec },
           {
-            subprocessArgs: [`--context=${opts.context}`],
             showData: opts.data === true,
           }
         );
