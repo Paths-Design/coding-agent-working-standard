@@ -3,6 +3,7 @@ title: 'Reconcile resolve-session-candidates trace expectations to the 6-source 
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: resolve-session-trace
 created_at: '2026-05-29T04:57:00.836Z'
 updated_at: '2026-05-29T04:57:00.836Z'
 blast_radius:
