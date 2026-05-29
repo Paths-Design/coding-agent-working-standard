@@ -3,6 +3,7 @@ title: 'Reword init .gitignore step renderer to not emit the literal ''policy.ya
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: init-gi-fix
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/render/init-gitignore.ts
