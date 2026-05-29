@@ -3,6 +3,7 @@ title: 'Correct CAWS-AUTOCOMMIT-INTEGRITY-001 exit-code policy: surfaceAuditComm
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: v11-autocommit-integrity-002
 created_at: '2026-05-29T01:35:07.155Z'
 updated_at: '2026-05-29T01:35:07.155Z'
 blast_radius:
