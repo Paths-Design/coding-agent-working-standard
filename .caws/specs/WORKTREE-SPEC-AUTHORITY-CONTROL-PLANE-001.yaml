@@ -2,9 +2,11 @@ id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001
 title: 'CAWS state is control-plane; worktrees carry bindings, not mutable spec authority'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Deferred to the v11.2 authority line; scope subsumed by the forthcoming v11.2 control-plane spec set (bridge bindings, agents list/show rewrite, claim_taken_over.v1, worktree prune/repair/reconcile, binding lifecycle). Closed for the v11.1.x stabilization release per release-blocker board; no code was stranded (spec-only, verified no unmerged branch).'
 created_at: '2026-05-21T00:00:00.000Z'
-updated_at: '2026-05-22T22:00:00.000Z'
+updated_at: '2026-05-29T00:32:27.443Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
