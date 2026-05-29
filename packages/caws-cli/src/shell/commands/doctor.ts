@@ -25,9 +25,10 @@
 // receives a number. `registerShellCommands(program)` (Slice 5c.9) is the
 // only place that wires this to Commander.
 
-import type { Diagnostic } from '@paths.design/caws-kernel';
+import type { Diagnostic, DoctorFinding } from '@paths.design/caws-kernel';
 import { inspectProjectState } from '@paths.design/caws-kernel';
 
+import { detectGitignoreDrift } from '../../init/gitignore-drift';
 import {
   composeDoctorSnapshot,
   resolveRepoRoot,
@@ -85,6 +86,15 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
     return 2;
   }
 
+  // 3b. CLI-side findings the kernel does not own. The gitignore-drift check is
+  // a shell concern (the kernel knows nothing about .gitignore or init's
+  // managed-block format), so it is computed here and merged into the findings
+  // list alongside the kernel report (CAWS-DOCTOR-GITIGNORE-DRIFT-001).
+  const gitignoreDrift = detectGitignoreDrift(repoRoot, cawsDir);
+  const findings: DoctorFinding[] = gitignoreDrift
+    ? [...report.findings, gitignoreDrift]
+    : [...report.findings];
+
   // 4. Render store-load diagnostics — kept SEPARATE from doctor findings.
   const loadDiagnostics: Diagnostic[] = [
     ...snapshot.specDiagnostics,
@@ -103,15 +113,15 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   // 5. Render doctor findings — separate section.
   out('');
   out('Doctor findings:');
-  if (report.findings.length === 0) {
+  if (findings.length === 0) {
     out('  (none)');
   } else {
-    out(renderFindings(report.findings, { showData }));
+    out(renderFindings(findings, { showData }));
   }
 
   // 6. Exit code
   const loadCounts = countSeverities(loadDiagnostics);
-  const findingCounts = countFindingSeverities(report.findings);
+  const findingCounts = countFindingSeverities(findings);
   const hasErrors = findingCounts.errors > 0 || loadCounts.errors > 0;
 
   out('');
