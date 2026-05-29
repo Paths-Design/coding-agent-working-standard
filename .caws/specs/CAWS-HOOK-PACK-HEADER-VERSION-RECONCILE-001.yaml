@@ -3,6 +3,7 @@ title: 'Reconcile bundled hook-pack header versions to packVersion 11; fix two s
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: hookpack-header-reconcile
 created_at: '2026-05-29T06:09:37.666Z'
 updated_at: '2026-05-29T06:09:37.666Z'
 blast_radius:
