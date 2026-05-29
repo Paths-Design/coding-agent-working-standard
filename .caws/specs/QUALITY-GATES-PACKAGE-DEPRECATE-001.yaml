@@ -2,9 +2,11 @@ id: QUALITY-GATES-PACKAGE-DEPRECATE-001
 title: 'Mark quality-gates package as deprecated and stop treating it as a release target'
 risk_tier: 2
 mode: chore
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-quality-gates-deprecate at fb1f64fdb51fd7d8ba168868251fe2d0d965f807'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-29T09:07:36.561Z'
 blast_radius:
   modules:
     - packages/quality-gates/README.md
