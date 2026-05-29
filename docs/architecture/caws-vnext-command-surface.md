@@ -4,7 +4,7 @@ authority: architecture
 status: active
 title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.1.6]
 owner: vNext rewrite team
-updated: 2026-05-19
+updated: 2026-05-29
 governs:
   modules:
     - packages/caws-cli/src/index.js
@@ -21,7 +21,7 @@ governs:
 **Status:** active. v11.0.0 → v11.1.6 shipped (governed core, worktree lifecycle restored, events group, agents group). v11.2 in planning (multi-agent authority and observability — see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-29
 
 This document is the doctrine source for the v11 cutover and its follow-on
 releases. It captures the cutover posture, the command surface that ships,
@@ -342,6 +342,16 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 | `caws gates run --spec <id>` | Run quality gates against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+
+**Quality-gates package deprecation (2026-05-29).**
+`@paths.design/quality-gates` is deprecated as a standalone batch-scanner
+package. The current safety posture is hooks-first for edit-time advisory
+signals, with `caws gates run` remaining the governed policy-gate runner
+pending `GATES-RUN-POST-QG-DOCTRINE-001`. The hook-pack checks are the
+canonical replacement for the package's load-bearing detection intent; they
+do not import, execute, or publish `packages/quality-gates`. The
+deprecation rationale and the v11.1.2 release-governance incident are
+recorded in `docs/architecture/quality-gates-deprecation.md`.
 
 ### Added in v11.1 (lifecycle restoration)
 

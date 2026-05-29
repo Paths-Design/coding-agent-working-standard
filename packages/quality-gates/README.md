@@ -1,5 +1,13 @@
 # Quality Gates - Code Quality Enforcement
 
+> **Deprecated.** `@paths.design/quality-gates` is no longer the canonical
+> CAWS quality surface. New CAWS work should use the hook-pack checks installed
+> by `caws init --agent-surface claude-code` for edit-time feedback, plus
+> `caws gates run`, `caws doctor`, and `caws evidence` for governed project
+> state. See
+> [`docs/architecture/quality-gates-deprecation.md`](../../docs/architecture/quality-gates-deprecation.md)
+> for the deprecation rationale and release-governance incident record.
+
 **Configurable, language-agnostic quality gates for preventing functional duplication, architectural drift, and code quality regression.** These gates work cohesively to maintain code quality across development, CI/CD, and production environments, supporting Python, Go, Java, C#, Ruby, PHP, C++, Kotlin, Swift, Scala, Rust, and more.
 
 ## Priority Focus

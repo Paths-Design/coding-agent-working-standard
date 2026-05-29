@@ -72,7 +72,12 @@ const PACKAGES = [
       pkgRoot: 'packages/caws-cli',
     },
   },
-  // caws-types and quality-gates are folded into caws-cli — no longer published separately
+  // caws-types and quality-gates are folded into caws-cli — no longer
+  // published separately. A commit that touches only packages/quality-gates/
+  // cannot publish @paths.design/caws-cli because this PACKAGES list has no
+  // quality-gates entry and NON_OWNED_SCOPES denies scope:quality-gates for
+  // release-capable commit types. A quality-gates package publish would need
+  // an explicit future release lane and maintainer authorization.
 ];
 
 /**
