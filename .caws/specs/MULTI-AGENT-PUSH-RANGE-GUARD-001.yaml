@@ -1,25 +1,34 @@
 id: MULTI-AGENT-PUSH-RANGE-GUARD-001
 title: 'CAWS-governed push refuses to silently include commits outside the current session''s slice range'
-risk_tier: 3
-mode: chore
-lifecycle_state: draft
+risk_tier: 2
+mode: feature
+lifecycle_state: active
 created_at: '2026-05-22T22:30:00.000Z'
-updated_at: '2026-05-22T22:30:00.000Z'
+updated_at: '2026-05-29T02:10:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
-    - packages/caws-cli/src/store
-    - packages/caws-kernel/src/doctor
-    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-cli/src/shell/push-range
+    - packages/caws-cli/src/index.js
   data_migration: false
 operational_rollback_slo: 30m
 scope:
   in:
     - .caws/specs/MULTI-AGENT-PUSH-RANGE-GUARD-001.yaml
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - packages/caws-cli/src/shell/push-range
+    - packages/caws-cli/tests/shell/prepush-command.test.js
+    - packages/caws-cli/tests/shell/push-range-classifier.test.js
   out:
+    - .caws/code-freeze.yaml
     - .caws/policy.yaml
     - .caws/events.jsonl
-    - packages/caws-kernel/src/scope
+    - packages/caws-kernel
+    - .github/workflows
+    - .releaserc.json
+    - scripts/multi-package-release.mjs
 invariants:
   - >-
     Diagnose/decide, NOT repair. This slice introduces detection and
@@ -119,18 +128,20 @@ invariants:
 acceptance:
   - id: A0
     given: |
-      No Authority Decision Record (ADR or doctrine section) exists
-      for the push guard mechanism.
+      The Authority Decision Record docs/architecture/adr/0001-multi-
+      agent-push-range-guard.md is committed (4666aa1), answering Q1-Q6.
     when: |
       A reviewer evaluates whether this spec is ready to activate.
     then: |
-      The spec is REJECTED for activation. The ADR must exist as a
-      committed file (proposed: a new section in
-      docs/architecture/caws-vnext-command-surface.md, or a
-      dedicated docs/architecture/adr/*.md) answering the six open
-      design questions in the triage block below, before any
-      implementation work begins. The ADR is the activator's
-      deliverable; this draft only captures intent.
+      The activation gate is SATISFIED. ADR 0001 answers all six design
+      questions; the v1 mechanism is narrowed per the maintainer's
+      prepush-first direction: `caws prepush` (classify + refuse) ships
+      first, NO raw `git push` middleware, NO persistent `.caws/sessions`
+      slice-base state (v1 uses `origin/main..HEAD` default or an explicit
+      `--base <ref>`/`--base-sha <sha>`), per-SHA `--ack` only, and the
+      release claim is "governed pre-push check" — NOT "prevents". The
+      Q2 slice-base-storage and Q5 push-target ADR answers that assumed
+      persistent session state are superseded by this v1 narrowing.
   - id: A1
     given: |
       A repository with one active spec ACTIVE-FOO-001 and two
@@ -241,6 +252,32 @@ acceptance:
       is (a) — refuse — because v1 keeps the push surface single-
       cwd to avoid the worktree-binding/push-target coupling that
       A4-A7 of the authority slice will eventually need to resolve.
+  - id: A8
+    given: |
+      The working tree has an uncommitted change to a governed-path or
+      otherwise-dirty file (e.g. a staged sibling spec, a deleted
+      governed config) at the time `caws prepush` is invoked.
+    when: |
+      The guard runs its preflight, before outgoing-range classification.
+    then: |
+      The guard refuses early with a clear diagnostic naming the dirty
+      path(s), UNLESS policy explicitly declares the path non-blocking.
+      A dirty working tree is surfaced before the range report so the
+      operator resolves provenance ambiguity (whose change is this?)
+      before publishing. Exit code is non-zero on this refuse path.
+  - id: A9
+    given: |
+      The full prepush test suite.
+    when: |
+      It runs.
+    then: |
+      Every test uses an isolated fixture git repo (mkdtemp + git init +
+      synthetic specs/commits), NEVER this repo's live history or live
+      .caws/ state. The classifier is exercised as a pure function with
+      injected inputs; the command surface is exercised with injected
+      out/err/cwd and an injected git runner where practical. No test
+      reads origin or performs a real push. A7-equivalent: prepush exits
+      non-zero on any refusal path and zero on a clean attributable pass.
 non_functional:
   reliability:
     - >-
@@ -268,7 +305,20 @@ non_functional:
       O(commits * specs) file-touch matching; the constants are
       small. If implementation reveals a need for indexing or
       caching, the activation amends this clause.
-contracts: []
+contracts:
+  - name: push-range-guard-diagnose-decide-only
+    type: invariant
+    description: >-
+      A push-range guard classifies the exact outgoing commit range before
+      publish. It may diagnose, refuse, and require explicit SHA-scoped
+      acknowledgement. It must NOT rewrite, drop, reorder, amend, stash,
+      rebase, or push commits itself. The classifier is a pure function of
+      (outgoing commits, per-commit touched files, active/recently-closed
+      specs' scope.in, foreign worktrees, base ref) → structured report +
+      decision; the thin command surface renders the report and, only on a
+      clean pass or full per-SHA acknowledgement, may invoke git push as a
+      separate step. v1 ships `caws prepush` (classify + refuse) first; raw
+      `git push` middleware is explicitly NOT attempted.
 # --- Triage ----------------------------------------------------------------
 # Origin
 # ------
