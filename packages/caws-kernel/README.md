@@ -4,7 +4,7 @@ Pure TypeScript governance primitives for CAWS vNext.
 
 ## Status
 
-This package is **pre-1.0 and unstable**. It is the foundation of the CAWS rewrite per `docs/rewrite/`. The public API will change without warning until v1.0.
+This package is **stable** (v1.1.3, published to npm as `@paths.design/caws-kernel`). It is the governance primitive layer consumed by `@paths.design/caws-cli@^11`. The public API follows semantic versioning; breaking changes are gated behind a major-version bump.
 
 ## Boundary
 
@@ -12,7 +12,7 @@ This package is **pre-1.0 and unstable**. It is the foundation of the CAWS rewri
 - **Returns `Result<T>`**: validation failures return structured diagnostics; programmer errors throw.
 - **Schemas are authoritative**: the JSON Schema files in `src/schemas/` define the contract; TypeScript types are generated/curated to match.
 
-I/O adapters live separately (`packages/caws-cli` shell layer; future `caws-kernel/store` Node-only submodule).
+I/O adapters live separately in `packages/caws-cli` (the shell layer).
 
 ## Layout
 

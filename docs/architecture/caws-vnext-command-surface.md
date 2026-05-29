@@ -2,7 +2,7 @@
 doc_id: caws-vnext-command-surface
 authority: architecture
 status: active
-title: CAWS vNext command surface (v11.0.0 → v11.2)
+title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.1.6]
 owner: vNext rewrite team
 updated: 2026-05-19
 governs:
@@ -18,7 +18,7 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.1.2 shipped (governed core, worktree lifecycle restored). v11.2 in planning (multi-agent authority and observability — see §1).
+**Status:** active. v11.0.0 → v11.1.6 shipped (governed core, worktree lifecycle restored, events group, agents group). v11.2 in planning (multi-agent authority and observability — see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
 **Last updated:** 2026-05-19
@@ -113,11 +113,14 @@ recovery ergonomics. The deliverables are:
   binding. Bridge has the full lifecycle (acquire, observe, refuse,
   takeover, release via `--release`, retire via spec close/archive,
   prune).
-- **`caws agents list/show`** vNext rewrite — pure read-only composition
-  over agents/leases/worktrees/bridge/events stores. Restores agent
-  visibility removed in v11.0.0.
-- **`caws worktree prune/repair/reconcile`** — recovery ergonomics for
-  ghost worktree entries and ghost bridge bindings.
+- **`caws agents list/show`** — **SHIPPED in v11.1.x** (ahead of the
+  full v11.2 release). Pure read-only composition over leases/worktrees
+  stores. Restores agent visibility removed in v11.0.0. See §2 "Added in
+  v11.1" and "Shipped ahead of v11.2" for subcommand detail.
+- **`caws worktree prune/reconcile`** — recovery ergonomics for ghost
+  worktree entries and ghost bridge bindings. (`repair-sparse` shipped in
+  v11.1 — see §2 "Added in v11.1". The planned `repair` and `reconcile`
+  subcommands remain v11.2.)
 - **Adversarial fault-injection harness** on `lifecycle-transaction` to
   prove every step boundary is rollback-safe.
 
@@ -144,7 +147,7 @@ prune      — operator-driven cleanup of ghost/stale entries
 
 | Binding | acquire | observe | refuse | takeover | release | retire | prune |
 |---|---|---|---|---|---|---|---|
-| Worktree binding | `worktree create` | `worktree list`, `status`, `agents` | `worktree create` collision | `claim --takeover` (v11.2) | `worktree destroy` | `worktree merge` auto-close | `worktree prune` (v11.2) |
+| Worktree binding | `worktree create` | `worktree list`, `status`, `agents` | `worktree create` collision | `claim --takeover` (shipped v11.1) | `worktree destroy` | `worktree merge` auto-close | `worktree prune` (v11.2) |
 | Bridge binding | `claim --spec <id>` (v11.2) | `agents`, `status` | `claim --spec` collision (v11.2) | `claim --spec --takeover` (v11.2) | `claim --release` (v11.2) | spec close/archive auto-retire (v11.2) | `worktree prune` extension (v11.2) |
 | Lease (presence, not authority) | first write-class command with stable identity | `agents list/show` | n/a (presence is not exclusive) | n/a | n/a — natural refresh-or-decay | stale_after_seconds decay | `worktree prune` extension (v11.2) |
 
@@ -290,9 +293,10 @@ for v11.2 unless half-state detection surfaces a concrete UX failure.
 5. `WORKTREE-NODE-MODULES-001` (or equivalent) — execution ergonomics so agents stop falling back to main for builds/tests. Promoted from deferred only if friction blocks every worktree slice.
 
 Other v11.2 deliverables from the §1 plan list — leases,
-`claim_taken_over` event emission, bridge bindings, `agents list/show`
-— are tracked separately and **not displaced** by this ordering. The
-worktree/authority line is a parallel lane.
+`claim_taken_over` event emission, bridge bindings (`agents list/show`
+shipped in v11.1 — not a v11.2 deliverable) — are tracked separately
+and **not displaced** by this ordering. The worktree/authority line is
+a parallel lane.
 
 #### Drift note (recorded, not fixed)
 
@@ -307,18 +311,18 @@ to preserve recon's no-side-edit discipline.
 
 ---
 
-## 2. v11.0.0 command surface (kept)
+## 2. Command surface
 
-These eight command groups are the canonical authority surface for
-v11.0.0. v11.1 grew the surface to **twelve** groups: it restored
-`worktree` (ninth) and `specs` (tenth) as lifecycle commands, added
-`events` (eleventh) for hash-chained audit-log maintenance
+The v11.0.0 governed core shipped eight command groups. v11.1 grew the
+surface to **twelve** named groups (plus the auto-generated `help`): it
+restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
+added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), and `agents` (twelfth) for multi-agent
 observability. `agents` shipped ahead of the broader v11.2 multi-agent
-plan: its `register/heartbeat/stop/list/show/prune` subcommands are live
-in v11.1.x. The remaining v11.2 multi-agent line (lease-backed ownership,
-the `claim_taken_over.v1` event, worktree `prune/repair/reconcile`) is
-still forthcoming. Every command group is implemented in
+plan: its `register/heartbeat/stop/list/show/prune` subcommands are all
+live in v11.1.x. The remaining v11.2 multi-agent line (lease-backed
+ownership, the `claim_taken_over.v1` event, worktree `prune/reconcile`)
+is still forthcoming. Every command group is implemented in
 `packages/caws-cli/src/shell/`, composed atop
 `packages/caws-cli/src/store/` and `packages/caws-kernel/`.
 
@@ -341,10 +345,16 @@ still forthcoming. Every command group is implemented in
 | Command | Purpose |
 |---|---|
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
-| `caws specs` | vNext spec lifecycle. |
+| `caws specs create/list/show/close/archive` | vNext spec lifecycle. |
+| `caws specs recover <id>` | Recover an archived spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
+| `caws specs prune-archive` | Migrate legacy `.caws/specs/.archive/<id>.yaml` bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` to execute. Unrecoverable bodies quarantined, never silently deleted. |
+| `caws specs migrate` | v10→v11 spec YAML migrator. Dry-run by default; `--apply --partial` for partial migration. |
 | `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |
 | `caws agents register/heartbeat/stop/list/show/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. |
+| `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
+| `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 
 ### Planned in v11.2 (multi-agent authority and observability)
 
@@ -353,18 +363,20 @@ still forthcoming. Every command group is implemented in
 | `caws claim --spec <id>` | Bridge claim — session ↔ spec binding outside a worktree. |
 | `caws claim --release [--spec <id>]` | Explicit relinquishment of a bridge binding. |
 | `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
-| `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. |
+| `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. (Distinct from the shipped `repair-sparse`.) |
 | `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
 
 ### Shipped ahead of v11.2 (MULTI-AGENT-ACTIVITY-REGISTRY-001)
 
 These operational verbs ship the `.caws/leases/<session_id>` substrate
-the v11.2 `agents list/show` surface will read. They went live in
-v11.1.x ahead of the full v11.2 release because the canonical-checkout
-hijack incident (failure-lineage Entry 19) needed visibility
-immediately. The CLI surface is invoked exclusively by the Claude Code
-hook pack v3 at SessionStart / PreToolUse / Stop; humans rarely type
-them directly.
+that `caws agents list/show` reads. Both the write verbs (`register`,
+`heartbeat`, `stop`, `prune`) and the read surface (`list`, `show`)
+went live in v11.1.x ahead of the full v11.2 release because the
+canonical-checkout hijack incident (failure-lineage Entry 19) needed
+visibility immediately. The write verbs are invoked exclusively by the
+Claude Code hook pack v3 at SessionStart / PreToolUse / Stop; humans
+rarely type them directly. `list` and `show` are typed directly by
+operators and agents inspecting session state.
 
 | Command | Purpose |
 |---|---|
@@ -383,10 +395,15 @@ emits its own protocol-specific envelope. Changing Claude Code's hook
 envelope format does not require changing kernel lease logic or store
 lease writes.
 
-### Help banner (built CLI)
+### Help banner (v11.0.0 historical snapshot)
+
+> **Historical — captured at v11.0.0.** The current v11.1.6 surface has
+> 12 named groups: `init doctor scope status claim gates evidence waiver
+> events specs worktree agents` plus the auto-generated `help`. Run
+> `caws --help` against the installed CLI to see the live banner.
 
 ```
-$ caws --help
+$ caws --help   # v11.0.0 snapshot — 8 groups only
 Commands:
   init      Bootstrap the canonical vNext .caws/ project state...
   doctor    Run drift detection against the current .caws/ state
@@ -398,9 +415,14 @@ Commands:
   waiver    Manage CAWS waivers...
 ```
 
-Exactly these eight groups, plus the auto-generated `help`.
+Exactly these eight groups (plus auto-generated `help`) at v11.0.0. See
+§2 tables above for the full v11.1.x surface.
 
-### Count reconciliation (against `caws-next` @ `52d6165`)
+### Count reconciliation (against `caws-next` @ `52d6165`, v11.0.0 historical)
+
+> **Historical — captured at v11.0.0 (8 vNext groups).** The `VALID_COMMANDS`
+> rewrite happened in slice 8a3; audit 8a4 confirmed equality. Current
+> v11.1.6 has 12 named groups — these counts reflect the pre-removal state.
 
 | Source | Count | Notes |
 |---|---|---|
@@ -445,13 +467,13 @@ Reason categories:
 | `scaffold` | `src/scaffold/index.js` (793 LOC) | yes | `.caws/`, `.git/hooks/`, IDE configs, gitignore | **SH** | `caws init` (governed core only) |
 | `validate \| verify` | `src/commands/validate.js` (357 LOC) | yes (`appendEvent` on legacy log) | `working-spec.yaml` fallback via `spec-resolver`; legacy `events.jsonl` writer | **AC** | `caws doctor` covers spec health; v11.1 will re-add explicit validation |
 | `archive <change-id>` | `src/commands/archive.js` (500 LOC) | yes | `.caws/provenance/chain.json`, `working-spec.yaml` | **PE + LG** | (none in v11.0; provenance superseded by events.jsonl) |
-| `specs list/create/show/update/delete/close/archive/conflicts/migrate/types` | `src/commands/specs.js` (1656 LOC) | yes (`appendEvent` on legacy log) | `.caws/specs/<id>.yaml`, `.caws/specs/registry.json`, legacy `working-spec.yaml` (migrate) | **LG + AC** | v11.1 vNext spec lifecycle; for v11.0 use direct YAML edits + `caws doctor` |
+| `specs list/create/show/update/delete/close/archive/conflicts/migrate/types` | `src/commands/specs.js` (1656 LOC) | yes (`appendEvent` on legacy log) | `.caws/specs/<id>.yaml`, `.caws/specs/registry.json`, legacy `working-spec.yaml` (migrate) | **LG + AC** | **Removed in v11.0; RESTORED in v11.1** as vNext `caws specs create/list/show/close/archive/recover/prune-archive/migrate`. Note: `update`, `delete`, `conflicts`, `types` are NOT restored — they have no v11.1 replacement. |
 | `sidecar drift/gaps/waiver-draft/provenance` | `src/commands/sidecar.js` (74 LOC) | no (read + advisory) | reads via `sidecars/` subsystem | **PNC** | (none; advisory only) |
 | `mode current/set/compare/recommend/details` | `src/commands/mode.js` (269 LOC) | yes | `.caws/mode.yaml` (separate state file) | **PNC + AC** | (none; complexity tier metadata not in v11) |
 | `tutorial [type]` | `src/commands/tutorial.js` (480 LOC) | no | none | **PNC** | (none) |
 | `plan <action>` | `src/commands/plan.js` (438 LOC) | yes (writes plan markdown to `--output`) | user-specified path | **PNC** | (none) |
-| `worktree create/list/destroy/merge/prune/repair/bind/claim` | `src/commands/worktree.js` (502 LOC) | yes | `.caws/worktrees.json`, git worktrees | **LG** | v11.1 vNext worktree lifecycle; `caws claim` handles ownership |
-| `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | **PNC** (overlaps with vNext `status`/claim panel) | `caws status` shows partial info; richer inspector deferred to v11.1+ as `status --agents` or `claim show` |
+| `worktree create/list/destroy/merge/prune/repair/bind/claim` | `src/commands/worktree.js` (502 LOC) | yes | `.caws/worktrees.json`, git worktrees | **LG** | **Removed in v11.0; RESTORED in v11.1** as vNext `caws worktree create/list/bind/destroy/merge/migrate-registry/repair-sparse`. `caws claim` handles ownership. |
+| `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | **PNC** (overlaps with vNext `status`/claim panel) | **Removed in v11.0; RESTORED in v11.1** as `caws agents list/show` (plus `register/heartbeat/stop/prune`). Reads `.caws/leases/` (not legacy `.caws/agents.json`). |
 | `session start/checkpoint/end/list/show/briefing` | `src/commands/session.js` (312 LOC) | yes | `.caws/sessions/`, `.caws/sessions.json` (separate state) | **PNC + AC** | v11 doctor does not observe sessions; re-add later if needed |
 | `parallel setup/status/merge/teardown` | `src/commands/parallel.js` (242 LOC) | yes | `.caws/parallel/...` (separate state); creates worktrees | **LG** | v11.1 lifecycle work |
 | `templates [subcommand]` | `src/commands/templates.js` (237 LOC) | no | reads `templates/` | **PNC** | (none) |

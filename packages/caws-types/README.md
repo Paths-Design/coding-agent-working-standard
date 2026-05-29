@@ -31,7 +31,7 @@ const spec: WorkingSpec = {
 const result: CAWSValidationResult = {
   passed: true,
   verdict: 'pass',
-  cawsVersion: '3.4.0',
+  cawsVersion: '<caws-cli-version>',  // e.g. '11.1.6'
   timestamp: new Date().toISOString(),
   budgetCompliance: {
     /* ... */
@@ -42,6 +42,8 @@ const result: CAWSValidationResult = {
 ```
 
 ## Exported Types
+
+> **Authoritative list**: Run `npm run build` and inspect `dist/index.d.ts` for the complete, current export surface. The sections below document the primary stable exports; the package also exports placeholder governance types (`PlaceholderImpact`, `PlaceholderReason`, `PlaceholderScope`, etc.) from `placeholder-types` and `placeholder-helpers`.
 
 ### Working Spec Types
 
@@ -91,10 +93,7 @@ const result: CAWSValidationResult = {
 
 ## Version Compatibility
 
-This package follows the CAWS CLI versioning:
-
-- Major version matches CAWS CLI major version
-- Minor/patch versions may diverge for type-only changes
+This package is versioned independently from the CAWS CLI. The current package version is **2.0.0**; the current CLI version is **11.1.6**. Major versions do not track each other. Check the [CHANGELOG](./CHANGELOG.md) or the package release notes for compatibility information when upgrading either package.
 
 ## License
 

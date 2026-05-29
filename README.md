@@ -8,7 +8,7 @@ This repository is the source for the `@paths.design/caws-cli` and `@paths.desig
 
 ## Status: v11.1.x is the canonical line
 
-The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core; v11.2 is in planning (multi-agent authority and observability — see the doctrine doc §1).
+The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.2 is in planning (multi-agent *authority* — bridge claims, lease-backed enforcement — see the doctrine doc §1).
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — historical context in deeper docs may still describe v10 behavior.
 
@@ -16,21 +16,23 @@ The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `
 
 ## What v11.1 ships
 
-Eleven command groups.
+Twelve command groups (plus the auto-generated `help`).
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. |
+| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. `--agent-surface <claude-code\|cursor\|windsurf\|none>` installs a hook pack. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
-| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
+| `caws status` | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
 | `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 admit / 1 refuse. |
-| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. |
-| `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
+| `caws claim [--takeover] [--paths <path>]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease. |
+| `caws gates run --spec <id> [--context <cli\|commit\|ci>]` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
+| `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
-| `caws specs create / list / show / close / archive` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
+| `caws specs create / list / show / recover / close / archive / prune-archive / migrate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
 | `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
+| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 
 Run `caws <group> --help` for full options.
 
@@ -71,7 +73,11 @@ It refuses to run if legacy `.caws/working-spec.yaml` is present. Migrate that f
 
 ### Author a spec
 
-v11 does not ship a spec generator. Author the YAML directly in `.caws/specs/<id>.yaml` — see existing specs in this repo's `.caws/specs/` for the shape. Acceptance criteria use Given/When/Then format.
+```bash
+caws specs create FEAT-1 --title "Short title" --mode feature --risk-tier 3
+```
+
+This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: active`. Edit it to fill in `scope.in`/`scope.out`, `invariants`, `acceptance` (Given/When/Then), `non_functional`, and `contracts` — see existing specs in this repo's `.caws/specs/` for the shape, and [`docs/api/schema.md`](docs/api/schema.md) for the field reference.
 
 ### Daily commands
 
@@ -89,6 +95,35 @@ caws evidence record \
   --type test --spec FEAT-1 \
   --data '{"name":"unit","status":"pass"}'
 ```
+
+## Multi-agent work
+
+CAWS is built for concurrent agents. Its answer to "who can write what?" is to
+**partition authority, not to add channels between agents.** Each agent gets its
+own spec and its own bound worktree; the scope guard enforces edit boundaries
+from `scope.in`/`scope.out`; ownership lives in `.caws/worktrees.json`.
+
+```bash
+# One spec + one worktree per agent (loop this per agent; there is no
+# `caws parallel setup` — that surface is deferred to v11.3+)
+caws specs create FEAT-AUTH --title "Auth" --mode feature --risk-tier 2
+caws worktree create wt-auth --spec FEAT-AUTH   # writes the binding atomically
+cd .caws/worktrees/wt-auth
+
+# See who else is live before mutating shared state
+caws status            # Agents panel + claim ownership
+caws agents list       # active / stale / stopped sessions
+
+# Finish: merge (auto-closes the bound spec) and destroy
+caws worktree merge wt-auth
+caws worktree destroy wt-auth
+```
+
+`caws agents` leases (`.caws/leases/`) are **visibility only** — a stale lease is
+evidence, never authority. The only authority transition is an explicit
+`caws claim --takeover`, which writes a durable `prior_owners` audit. This is the
+lesson the failure lineage keeps teaching: collision is solved by non-overlapping
+authority, not by inter-agent messaging. See [`docs/guides/multi-agent-workflow.md`](docs/guides/multi-agent-workflow.md).
 
 ## Architecture (v11)
 

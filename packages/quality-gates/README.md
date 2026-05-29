@@ -74,12 +74,13 @@ Gates import from this module rather than maintaining their own extension lists.
 Quality gates integrate with CAWS CLI waivers for controlled exceptions:
 
 ```bash
-# Create waiver for architectural work
-caws waivers create \
-  --title="Emergency hotfix waiver" \
-  --reason=emergency_hotfix \
-  --gates=hidden-todo \
-  --expires-at=2025-12-31T23:59:59Z
+# Create waiver for architectural work (note: singular 'waiver', not 'waivers')
+caws waiver create <waiver-id> \
+  --title "Emergency hotfix waiver" \
+  --gate hidden-todo \
+  --reason "emergency hotfix required" \
+  --approved-by "maintainer" \
+  --expires-at 2025-12-31T23:59:59Z
 
 # Quality gates automatically apply waivers
 node run-quality-gates.mjs  # Waived violations won't block commits
@@ -325,15 +326,22 @@ node packages/quality-gates/run-quality-gates.mjs --ci --gates=duplication
 
 #### 3. CAWS Integration
 
+The `caws quality-gates` command was removed in v11. The v11 gate surface is policy-driven via `caws gates run`:
+
 ```bash
-# As part of CAWS workflow
-caws quality-gates --run-all
+# Run policy-driven gates for a spec (gate selection is driven by .caws/policy.yaml)
+caws gates run --spec <spec-id>
 
-# CAWS with specific gates
-caws quality-gates --gates=naming,god_objects
+# Run in a specific context
+caws gates run --spec <spec-id> --context commit
+caws gates run --spec <spec-id> --context ci
+```
 
-# CAWS in CI mode
-caws quality-gates --ci --json
+The standalone tool can still be invoked directly for ad-hoc scanning without CAWS CLI:
+
+```bash
+node packages/quality-gates/run-quality-gates.mjs
+node packages/quality-gates/run-quality-gates.mjs --ci
 ```
 
 #### 4. Pre-commit Hook
@@ -365,7 +373,7 @@ node packages/quality-gates/run-quality-gates.mjs --ci' > .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
-**Note:** CAWS scaffold automatically sets up pre-commit hooks that detect and use the installed package.
+**Note:** `caws init --agent-surface <claude-code|cursor|windsurf|none>` installs the hook pack including a pre-commit hook that invokes the installed quality-gates package. For manual setup, add the invocation above to `.git/hooks/pre-commit` and `chmod +x` it.
 
 ### Command Line Options
 
@@ -588,7 +596,7 @@ jq '.violations | group_by(.gate) | map({gate: .[0].gate, count: length})' docs-
 
 ```bash
 # Error: Invalid gate names: invalid_gate
-# Valid gates: naming, code_freeze, duplication, god_objects, documentation
+# Valid gates: naming, code_freeze, duplication, god_objects, hidden-todo, documentation, simplification, placeholders
 
 # Fix: Use valid gate names
 node packages/quality-gates/run-quality-gates.mjs --gates=naming,duplication
@@ -675,12 +683,6 @@ node packages/quality-gates/run-quality-gates.mjs --gates=naming,god_objects  # 
 - **CAWS Integration**: See CAWS documentation for workflow integration
 - **Exception Framework**: `packages/quality-gates/shared-exception-framework.mjs --help`
 - **Refactoring Progress**: `packages/quality-gates/monitor-refactoring-progress.mjs`
-
-### Audit Reports
-
-- **Naming Violations**: `docs/audits/v3-codebase-audit-2025-10/06-naming-violations.md`
-- **Duplication Report**: `docs/audits/v3-codebase-audit-2025-10/02-duplication-report.md`
-- **God Objects Analysis**: `docs/audits/v3-codebase-audit-2025-10/03-god-objects-analysis.md`
 
 ---
 
