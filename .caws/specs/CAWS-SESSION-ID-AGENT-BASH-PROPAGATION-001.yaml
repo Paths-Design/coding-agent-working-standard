@@ -7,19 +7,46 @@ created_at: '2026-05-29T01:48:21.123Z'
 updated_at: '2026-05-29T01:48:21.123Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - Shell session resolver (packages/caws-cli/src/shell/session/resolve-session.ts) and the claude-code hook pack caller-identity substrate (.claude/hooks/lib/parse-input.sh + templates/hook-packs/claude-code/lib/parse-input.sh). Implementation is a fast-follow; this spec records the root cause and the proposed fix.
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - .claude/hooks/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/tests/shell/resolve-session-primitive.test.js
+    - packages/caws-cli/tests/shell/caller-session-pointer.test.js
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - CLAUDE.md
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Root cause (confirmed empirically 2026-05-29): the agent Bash tool runs with HOOK_SESSION_ID unset (verified: `echo $HOOK_SESSION_ID` => empty in agent Bash). parse-input.sh exports HOOK_SESSION_ID only into the hook''s own subshell; Claude Code hooks run as separate processes and cannot inject env into the tool''s shell. So a `caws` command the agent invokes directly skips resolveSession tier-1 (CLAUDE_SESSION_ID) and tier-2 (HOOK_SESSION_ID) and lands in tier-2.5 (durable-envelope scan).'
+  - 'The race: with N>=2 concurrent agents there are >=2 fresh tmp/<id>/.session-envelope.json files, so tier-2.5 consults the disambiguator tmp/.caller-session.json (written by parse-input.sh lines 209-239). That pointer is a SINGLE shared per-repo file overwritten last-writer-wins by whichever session most recently fired ANY hook. A `caws worktree create` issued while a sibling''s PreToolUse hook fired last is stamped with the sibling''s session_id as owner.'
+  - 'This is a regression/gap in the now-closed CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001, which introduced .caller-session.json to fix capsule-fallthrough but substituted a last-writer-wins shared singleton for per-process identity. The transcript folder (tmp/<HOOK_SESSION_ID>/) is unaffected because session-log.sh reads HOOK_SESSION_ID directly in-process — which is why it is the only stable id (maintainer observation, 2026-05-29).'
+  - 'Proposed fix direction (to be confirmed in implementation): make the agent-Bash caws subprocess resolve to the harness id deterministically rather than via the racy pointer. Candidate mechanisms, in preference order: (1) thread the harness session id into the caws invocation env via a per-session wrapper/alias the hook pack installs (so tier-2 hook_env wins); (2) replace the single shared .caller-session.json with a per-cwd or per-PID-tree caller pointer keyed so concurrent agents cannot clobber each other; (3) have the resolver prefer the durable envelope whose tmp/<id>/ most recently received THIS process''s own marker. No fix may relax the foreign-claim refusal or introduce newest-wins authority — stale lease is evidence, never authority.'
+  - 'Out of scope and untouched: .caws/policy.yaml, CODEOWNERS, CLAUDE.md, and the worktrees-writer ownership-comparison surface (resolveSessionCandidates/admitsOwner already admit all fresh envelopes for COMPARISON; the defect is on the WRITE/stamp path in resolveSession, not the comparison path).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: two or more concurrent agent sessions active in the same repo, each having fired hooks, with HOOK_SESSION_ID unset in each agent''s Bash tool shell
+    when: one agent runs a write-class caws command that stamps ownership (e.g. caws worktree create)
+    then: the owner recorded in .caws/worktrees.json is the invoking agent''s harness session id, deterministically, regardless of which sibling fired a hook most recently.
+  - id: A2
+    given: the repo with two fresh durable envelopes and a tmp/.caller-session.json naming the OTHER session
+    when: resolveSession runs for a write-class command on behalf of the actual caller
+    then: it resolves to the caller''s own harness id (not the pointer''s last-writer), or refuses with a typed ambiguity diagnostic — never silently stamps the wrong session.
+  - id: A3
+    given: a single-agent repo (one fresh envelope, HOOK_SESSION_ID unset in agent Bash)
+    when: any caws write-class command runs
+    then: resolution is unchanged from today (the sole fresh envelope resolves cleanly); no regression to the common single-agent path.
+  - id: A4
+    given: the implemented fix
+    when: the caws-cli resolve-session test suite runs
+    then: a new regression test reproduces the >=2-fresh-envelope last-writer-wins misattribution and asserts the fix resolves to the correct caller; existing resolve-session tests still pass.
+non_functional:
+  security:
+    - The fix must not weaken the foreign-claim refusal or admit a session to take ownership it did not earn; session_id equality remains the only ownership-admission rule.
+  reliability:
+    - No newest-wins or recency-based authority. Ambiguity that cannot be resolved to the true caller must REFUSE with a typed diagnostic, not guess. Stale lease/pointer is evidence, never authority (doctrine invariant 8).
 contracts: []
