@@ -7,19 +7,35 @@ created_at: '2026-05-29T01:35:18.049Z'
 updated_at: '2026-05-29T01:35:18.049Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - Root package.json npm-script targets (dead apps/tools/caws/*.js references) and the caws init template CLAUDE.md non_functional doctrine line. No source, schema, policy, or CI change.
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - package.json
+    - packages/caws-cli/templates/CLAUDE.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - CLAUDE.md
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every npm script under scripts in root package.json either delegates (turbo/caws/bash to a file that exists) or is removed; no script references a nonexistent apps/tools/caws/*.js target. Confirmed: caws:start -> apps/tools/caws/start.js and caws:pr-comment -> apps/tools/caws/pr-comment.js are both MISSING and must be removed or repointed.'
+  - 'The caws init template CLAUDE.md describes non_functional with all four kernel-admitted subkeys (accessibility, performance, reliability, security), matching packages/caws-kernel/src/schemas/spec.v1.json; the stale "only reliability and performance admitted" line is corrected.'
+  - 'No behavior, source, schema, policy, or CI change; the npm-script fix only removes/repoints dead delegations and the template fix is a doctrine-text correction. Root CLAUDE.md is out of scope (already v11-correct) and untouched.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: root package.json after the fix
+    when: each scripts entry's file target is checked for existence on disk
+    then: no script references a missing apps/tools/caws/*.js file; caws:start and caws:pr-comment are removed or repointed to a real target.
+  - id: A2
+    given: packages/caws-cli/templates/CLAUDE.md after the fix
+    when: the non_functional doctrine line is compared to the kernel schema
+    then: it lists accessibility, performance, reliability, and security as the admitted subkeys; no "only reliability and performance" claim remains.
+  - id: A3
+    given: the repo after the fix
+    when: caws doctor runs and the caws-cli build/test suite runs
+    then: doctor reports no new load errors and the change introduces no behavioral or test-count regression.
+non_functional:
+  reliability:
+    - Documentation/config-text change only; reversible via git. No runtime state, schema, policy, or CI file is modified.
 contracts: []
