@@ -1,7 +1,7 @@
 {
   "name": "@paths.design/quality-gates",
   "version": "2.1.0",
-  "description": "CAWS Quality Gates - Automated code quality enforcement for CAWS projects",
+  "description": "[DEPRECATED] CAWS batch quality scanner; use CAWS hook-packs plus caws gates run/doctor/evidence instead",
   "main": "run-quality-gates.mjs",
   "type": "module",
   "bin": {
