@@ -1,9 +1,9 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 9
+# hook_pack_version: 11
 # caws_min_major: 11
-# lineage_refs: 8,16,25,27
+# lineage_refs: 8,16,25,27,28,29,30,31
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # PostToolUse dispatcher for Claude Code hooks.
 #
@@ -54,6 +54,17 @@ HANDLERS=(
   # "quality-check.sh"
   # "validate-spec.sh"
   "naming-check.sh"
+  # -- QG-HOOKS-EXTRACT-001: advisory edit-time quality plane --
+  # Each self-filters by tool + file type and emits at most one
+  # additionalContext block; all are advisory (exit 0) except
+  # shortcut-language-check, which escalates via guard-strikes on the
+  # third session strike. Independent of `caws gates run` (option-C
+  # doctrine: gates run is the governed policy-gate runner; these are
+  # installed hook-pack utilities the repo tunes via env).
+  "god-object-check.sh"
+  "shortcut-language-check.sh"
+  "duplicate-export-check.sh"
+  "loc-delta-check.sh"
   # "doc-frontmatter-check.sh"
   # "audit.sh tool-use"
   "plan-transcript-snapshot.sh"
