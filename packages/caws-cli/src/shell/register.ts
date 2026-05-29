@@ -16,6 +16,13 @@
 import type { Command } from 'commander';
 
 import {
+  SPECS_COMMAND_META,
+  WORKTREE_COMMAND_META,
+  type GroupCommandMeta,
+  type LeafCommandMeta,
+  type CommandOptionMeta,
+} from './command-metadata';
+import {
   runAgentsHeartbeatCommand,
   runAgentsListCommand,
   runAgentsPruneCommand,
@@ -87,6 +94,74 @@ function parseDataOption(raw: string | undefined): Record<string, unknown> {
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
   return value === 'test' || value === 'gate' || value === 'ac';
+}
+
+// ── Metadata-driven help wiring (CAWS-CLI-HELP-METADATA-AUTHORITY-001) ──────
+// register.ts no longer authors `.description()` / `.option()` string literals
+// for groups present in COMMAND_SURFACE_METADATA; it reads them from the typed
+// metadata so the help text has a single, lock-tested source. The `.action()`
+// handlers stay inline (they bind to the run*Command functions); only the
+// help/option surface is metadata-driven.
+
+/** Render an option's help string: prose, plus a derived "value list" when the
+ * option is enum-backed (allowedValues). The value list is the locked part —
+ * the lock test asserts it equals the kernel/schema enum. */
+function renderOptionDescription(opt: CommandOptionMeta): string {
+  if (opt.allowedValues && opt.allowedValues.length > 0) {
+    return `${opt.description}: ${opt.allowedValues.join(' | ')}`;
+  }
+  return opt.description;
+}
+
+/** Apply one metadata option to a Commander command, choosing
+ * required/optional and passing a default value when declared. */
+function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
+  const description = renderOptionDescription(opt);
+  if (opt.required === true) {
+    cmd.requiredOption(opt.flag, description);
+    return;
+  }
+  if (opt.defaultValue !== undefined) {
+    cmd.option(opt.flag, description, opt.defaultValue as string | boolean | string[]);
+    return;
+  }
+  cmd.option(opt.flag, description);
+}
+
+/** Construct the `.command()` name string with the metadata's positional
+ * argument suffix (`<name>` required, `[name]` optional), e.g. "create <id>". */
+function leafCommandName(leaf: LeafCommandMeta): string {
+  if (!leaf.argument) return leaf.name;
+  const { name, required } = leaf.argument;
+  return required ? `${leaf.name} <${name}>` : `${leaf.name} [${name}]`;
+}
+
+/** Register a leaf subcommand from metadata: name(+arg), description, options.
+ * Returns the configured Command so the caller can attach `.action()`. */
+function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
+  const cmd = group.command(leafCommandName(leaf)).description(leaf.description);
+  for (const opt of leaf.options) {
+    applyOptionMeta(cmd, opt);
+  }
+  return cmd;
+}
+
+/** Apply the group-level description from metadata to a Commander group. */
+function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
+  group.description(meta.description);
+}
+
+/** Look up a leaf's metadata within a group by subcommand name. Throws if the
+ * metadata is missing — a wiring bug should fail loudly at registration, not
+ * silently register a command with no help. */
+function leafMeta(meta: GroupCommandMeta, name: string): LeafCommandMeta {
+  const found = meta.subcommands.find((s) => s.name === name);
+  if (!found) {
+    throw new Error(
+      `register.ts: no metadata for "${meta.name} ${name}" in COMMAND_SURFACE_METADATA`
+    );
+  }
+  return found;
 }
 
 export function registerShellCommands(
@@ -621,26 +696,10 @@ export function registerShellCommands(
   // Slice 4). The shell layer parses args + builds the actor envelope;
   // the writer owns YAML patching + event append.
   // -------------------------------------------------------------------
-  const specsCmd = program
-    .command('specs')
-    .description(
-      'Manage CAWS spec lifecycle (create/list/show/close/archive/retire-draft/recover/prune-archive)'
-    );
+  const specsCmd = program.command('specs');
+  applyGroupMeta(specsCmd, SPECS_COMMAND_META);
 
-  specsCmd
-    .command('create <id>')
-    .description('Create a new spec in lifecycle_state: active.')
-    .option('--title <title>', 'Short spec title')
-    .option(
-      '--mode <mode>',
-      'Spec mode: feature | refactor | fix | doc | chore'
-    )
-    .option('--risk-tier <n>', 'Risk tier: 1, 2, or 3')
-    .option(
-      '--type <type>',
-      'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'create'))
     .action(
       (
         id: string,
@@ -664,11 +723,7 @@ export function registerShellCommands(
       }
     );
 
-  specsCmd
-    .command('list')
-    .description('List specs. By default excludes archived specs.')
-    .option('--archived', 'Include archived specs in the listing')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list'))
     .action((opts: { archived?: boolean; data?: boolean }) => {
       const code = runSpecsListCommand({
         includeArchived: opts.archived === true,
@@ -677,16 +732,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  specsCmd
-    .command('show <id>')
-    .description(
-      'Show a spec by id. Defaults to active specs only; pass --archived to recover an archived spec body from the event log + git history.'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
-    .option(
-      '--archived',
-      'Recover an archived spec body via the event log + git show <blob_sha>. The body is NOT loaded from .caws/specs/.archive/ (which the post-CAWS-ARCHIVE-AS-TOMBSTONE-001 archive flow does not write).'
-    )
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'show'))
     .action((id: string, opts: { data?: boolean; archived?: boolean }) => {
       const code = runSpecsShowCommand({
         id,
@@ -696,13 +742,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  specsCmd
-    .command('recover <id>')
-    .description(
-      'Recover an archived spec body via the event log + git show <blob_sha>. Topology-independent (works with merge commits, rebases, cherry-picks). Reads .caws/events.jsonl for the spec_archived event, validates the blob_sha, runs git show, prints to stdout (or --out <path>). Does NOT mutate .caws/specs/.'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
-    .option('--out <path>', 'Write the recovered body to this path instead of stdout')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'recover'))
     .action((id: string, opts: { data?: boolean; out?: string }) => {
       const code = runSpecsRecoverCommand({
         id,
@@ -712,13 +752,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  specsCmd
-    .command('retire-draft <id>')
-    .description(
-      'Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), closed (use archive), and archived specs. Deletes the draft YAML and appends a recoverable spec_retired event (recover via caws specs show <id> --archived). The governed alternative to raw git rm.'
-    )
-    .option('--reason <text>', 'Optional human-readable retirement note')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'retire-draft'))
     .action((id: string, opts: { reason?: string; data?: boolean }) => {
       const code = runSpecsRetireDraftCommand({
         id,
@@ -728,29 +762,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  specsCmd
-    .command('close <id>')
-    .description(
-      'Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed event.'
-    )
-    .option(
-      '--resolution <r>',
-      'Resolution: completed | superseded | abandoned',
-      'completed'
-    )
-    .option(
-      '--reason <text>',
-      'Closure notes recorded on the spec YAML and the spec_closed event'
-    )
-    .option(
-      '--merge-commit <sha>',
-      'Optional merge commit SHA (e.g., when closure follows a worktree merge)'
-    )
-    .option(
-      '--superseded-by <id>',
-      'Spec id that supersedes this one (use with --resolution superseded)'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'close'))
     .action(
       (
         id: string,
@@ -778,16 +790,7 @@ export function registerShellCommands(
       }
     );
 
-  specsCmd
-    .command('archive <id>')
-    .description(
-      'Archive a closed spec. Moves the YAML file to .caws/specs/.archive/; appends spec_archived event.'
-    )
-    .option(
-      '--reason <text>',
-      'Archive reason (advisory; spec_archived schema does not carry it)'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'archive'))
     .action(
       (id: string, opts: { reason?: string; data?: boolean }) => {
         const code = runSpecsArchiveCommand({
@@ -799,13 +802,7 @@ export function registerShellCommands(
       }
     );
 
-  specsCmd
-    .command('prune-archive')
-    .description(
-      'Migrate legacy .caws/specs/.archive/<id>.yaml bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass --apply to execute. Recoverable bodies (reachable via git log --follow) are removed from the working tree; unrecoverable bodies are QUARANTINED to .caws/specs/.archive/.unrecoverable/ (never silently deleted, no override flag). Emits one spec_archive_pruned event per id on --apply.'
-    )
-    .option('--apply', 'Execute the migration. Default is dry-run.')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-archive'))
     .action((opts: { apply?: boolean; data?: boolean }) => {
       const code = runSpecsPruneArchiveCommand({
         ...(opts.apply === true ? { apply: true } : {}),
@@ -814,26 +811,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  specsCmd
-    .command('migrate')
-    .description(
-      'v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; --apply opts into mutation. --apply without --partial refuses if any spec hits a "refused" verdict. --apply --partial writes migratable specs, skips refused, emits a durable JSON report under .caws/migrations/v10-specs/.'
-    )
-    .requiredOption(
-      '--from <version>',
-      'Source schema version (only v10 is supported in v11.2)'
-    )
-    .option('--apply', 'Write migrated YAMLs to disk (default: dry-run)')
-    .option(
-      '--partial',
-      'Allow apply to proceed even when some specs are refused (only meaningful with --apply)'
-    )
-    .option(
-      '--lifecycle-mapping <path>',
-      'Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.'
-    )
-    .option('--json', 'Emit machine-readable JSON output instead of human text')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'migrate'))
     .action(
       (opts: {
         from: string;
@@ -865,21 +843,10 @@ export function registerShellCommands(
   // substrate from Slice 4 + applyRegistryPatch + specs-writer.closeSpec
   // for auto-close on merge).
   // -------------------------------------------------------------------
-  const worktreeCmd = program
-    .command('worktree')
-    .description(
-      'Manage CAWS worktrees (create/list/bind/destroy/merge). Worktrees are git worktrees bound to active specs.'
-    );
+  const worktreeCmd = program.command('worktree');
+  applyGroupMeta(worktreeCmd, WORKTREE_COMMAND_META);
 
-  worktreeCmd
-    .command('create <name>')
-    .description(
-      'Create a new git worktree under .caws/worktrees/<name> bound to an active spec.'
-    )
-    .requiredOption('--spec <id>', 'Active spec id to bind the worktree to')
-    .option('--base-branch <branch>', 'Base branch to start from (default: current branch)')
-    .option('--branch <branch>', 'New branch name (default: worktree name)')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'create'))
     .action(
       (
         name: string,
@@ -901,22 +868,13 @@ export function registerShellCommands(
       }
     );
 
-  worktreeCmd
-    .command('list')
-    .description('List registered worktrees with branch, spec binding, and owner.')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'list'))
     .action((opts: { data?: boolean }) => {
       const code = runWorktreeListCommand({ showData: opts.data === true });
       exit(code);
     });
 
-  worktreeCmd
-    .command('bind <name>')
-    .description(
-      'Repair bidirectional binding between a worktree and a spec (one-sided → bound).'
-    )
-    .requiredOption('--spec <id>', 'Spec id to bind the worktree to')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'bind'))
     .action((name: string, opts: { spec: string; data?: boolean }) => {
       const code = runWorktreeBindCommand({
         name,
@@ -926,16 +884,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  worktreeCmd
-    .command('destroy <name>')
-    .description(
-      'Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use --abandon-unmerged to override branch check only).'
-    )
-    .option(
-      '--abandon-unmerged',
-      'Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'destroy'))
     .action(
       (name: string, opts: { abandonUnmerged?: boolean; data?: boolean }) => {
         const code = runWorktreeDestroyCommand({
@@ -947,14 +896,7 @@ export function registerShellCommands(
       }
     );
 
-  worktreeCmd
-    .command('merge <name>')
-    .description(
-      'Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close.'
-    )
-    .option('--dry-run', 'Validate prerequisites only; no git, no file writes, no events')
-    .option('--message <text>', 'Custom merge commit message (default: merge(worktree): <name>)')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'merge'))
     .action(
       (
         name: string,
@@ -970,13 +912,7 @@ export function registerShellCommands(
       }
     );
 
-  worktreeCmd
-    .command('migrate-registry')
-    .description(
-      'Convert v10.2 legacy-envelope .caws/worktrees.json into the v11 flat-map shape. Destroyed records are omitted iff no spec claims them and their path is absent; refuses otherwise. Idempotent on already-flat files.'
-    )
-    .option('--dry-run', 'Classify and report what would happen; do not write.')
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'migrate-registry'))
     .action((opts: { dryRun?: boolean; data?: boolean }) => {
       const code = runWorktreeMigrateRegistryCommand({
         ...(opts.dryRun === true ? { dryRun: true } : {}),
@@ -985,12 +921,7 @@ export function registerShellCommands(
       exit(code);
     });
 
-  worktreeCmd
-    .command('repair-sparse <name>')
-    .description(
-      'Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if .caws/specs/ has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it. Use this after a `git sparse-checkout disable` has materialized canonical spec files into the worktree.'
-    )
-    .option('--data', 'Show structured data block on diagnostics')
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair-sparse'))
     .action((name: string, opts: { data?: boolean }) => {
       const code = runWorktreeRepairSparseCommand({
         name,
