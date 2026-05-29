@@ -23,6 +23,7 @@
     "validate": "turbo run validate",
     "typecheck": "turbo run typecheck --continue",
     "clean": "turbo run clean",
+    "build:main-dist-link": "node scripts/build-main-dist-link.mjs",
 
     "// Test scripts (with smart fallbacks)": "",
     "test:contract": "find packages -type d -path '*/tests/contract' | head -1 | xargs test -d && npx jest --testPathPattern=contract --passWithNoTests || echo '⚠️  Contract tests not found - run tests in packages with contract test directories'",
