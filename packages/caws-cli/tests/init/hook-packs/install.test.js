@@ -345,10 +345,13 @@ describe('Claude Code pack manifest', () => {
           .map((l) => l.trim())
           .filter((l) => l.length > 0 && !l.startsWith('#'));
         for (const line of codeLines) {
-          // No executable reference to the quality-gates package or any
-          // .mjs module from the hook body.
+          // No executable reference to the quality-gates package from the
+          // hook body. (`.mjs` is intentionally NOT banned: duplicate-export-
+          // check.sh legitimately lists *.mjs as a JS/TS source extension it
+          // inspects — that is a file-type predicate, not a quality-gates
+          // module reference.)
           expect(line).not.toMatch(/quality-gates/);
-          expect(line).not.toMatch(/\.mjs\b/);
+          expect(line).not.toMatch(/quality-gates.*\.mjs/);
           expect(line).not.toMatch(/\b(source|require|import)\b.*quality-gates/);
         }
       }
@@ -776,11 +779,11 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
     expect(entry.executable).toBe(false);
   });
 
-  it('A1: renderer carries a CAWS-MANAGED-HOOK header at v6', () => {
+  it('A1: renderer carries a CAWS-MANAGED-HOOK header at packVersion', () => {
     const content = fs.readFileSync(rendererPath, 'utf8');
     expect(content).toContain('CAWS-MANAGED-HOOK');
     expect(content).toContain('hook_pack: claude-code');
-    expect(content).toContain('hook_pack_version: 9');
+    expect(content).toContain('hook_pack_version: 11');
     expect(content).toContain('caws_min_major: 11');
   });
 
