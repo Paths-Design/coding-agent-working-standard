@@ -538,10 +538,16 @@ describe('DANGER-LATCH-CALIBRATION-001 wrappers: env/time/nohup respected', () =
 // ===========================================================================
 
 describe('DANGER-LATCH-CALIBRATION-001 substitution: $(...) deny still escalates', () => {
-  it('echo $(rm -rf /tmp/x) → escalates to ask or deny via substitution', () => {
-    // The outer `echo` is allow, but the substitution body `rm -rf /tmp/x`
-    // is a recursive delete — escalates the overall decision.
-    const { decision } = classify('echo $(rm -rf /tmp/x)');
+  it('echo $(rm -rf /etc) → escalates to ask or deny via substitution', () => {
+    // The outer `echo` is allow, but the substitution body `rm -rf /etc`
+    // is a recursive delete of a system path — escalates the overall
+    // decision. NOTE: the target must NOT be a system-scratch path
+    // (/tmp, $TMPDIR, /var/folders) — those are admitted by the
+    // rm scratch-path calibration (DANGER-LATCH-UX-001) even when nested
+    // in a substitution, because a scratch delete is genuinely safe. The
+    // invariant this test guards is "substitution does not HIDE a
+    // DANGEROUS delete", so it uses a non-scratch system path.
+    const { decision } = classify('echo $(rm -rf /etc)');
     expect(decision).not.toBe('allow');
   });
 

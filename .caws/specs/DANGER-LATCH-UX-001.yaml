@@ -12,7 +12,11 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/caws-state.sh
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'

@@ -48,6 +48,11 @@
 #       Prints the current branch of the checkout at [dir] (default cwd),
 #       or "unknown" if git is unavailable.
 #
+#   sanitize_session <session-id>
+#       Normalize a session id into a filesystem-safe token for state
+#       sentinel filenames. Used by the danger-latch writer and clearer so
+#       their filenames always match.
+#
 #   is_canonical_checkout [dir]
 #       Returns 0 if [dir] is the canonical (main) checkout (git-dir ==
 #       git-common-dir), 1 if it is a linked worktree or git is absent.
@@ -159,6 +164,18 @@ _realpath() {
 caws_current_branch() {
   local dir="${1:-.}"
   ( cd "$dir" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null ) || echo "unknown"
+}
+
+# sanitize_session <session-id>
+#   Normalize a Claude Code session id into a filesystem-safe token for use
+#   in state sentinel filenames (e.g. danger-latch-<token>.json). The
+#   danger-latch WRITER (block-dangerous.sh) and CLEARER
+#   (reset-danger-latch.sh) MUST use the identical transform or the clear
+#   path computes a different filename than the write path and silently
+#   fails to clear the real sentinel (DANGER-LATCH-UX-001). One canonical
+#   copy here guarantees they agree.
+sanitize_session() {
+  printf '%s' "${1:-}" | tr -c 'A-Za-z0-9._-' '_'
 }
 
 # is_canonical_checkout [dir]

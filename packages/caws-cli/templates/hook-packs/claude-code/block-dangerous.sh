@@ -25,6 +25,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/emit.sh
 # Canonical Claude Code envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
 source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+# shellcheck source=lib/caws-state.sh
+# sanitize_session — the canonical session-id->filename transform shared with
+# reset-danger-latch.sh so the latch WRITER and CLEARER agree on the sentinel
+# filename (DANGER-LATCH-UX-001).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 
 danger_state_dir() {
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
@@ -36,7 +41,13 @@ danger_state_dir() {
 danger_latch_file() {
   local session_id="$1"
   local safe_session
-  safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
+  # Prefer the shared lib transform (DANGER-LATCH-UX-001); fall back to the
+  # identical inline transform if the lib was not sourced.
+  if command -v sanitize_session >/dev/null 2>&1; then
+    safe_session=$(sanitize_session "$session_id")
+  else
+    safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
+  fi
   printf '%s/danger-latch-%s.json\n' "$(danger_state_dir)" "$safe_session"
 }
 
@@ -104,7 +115,7 @@ if [[ -f "$LATCH_FILE" ]]; then
     [[ -n "$ORIG_WHY" ]] && TRIGGER_NOTE="$TRIGGER_NOTE (reason: $ORIG_WHY)"
     TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for the whole session, so every Bash call blocks until it is cleared."
   fi
-  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You CANNOT clear this yourself — the reset is human-only by design. Ask the user to run: bash .claude/hooks/reset-danger-latch.sh --current --reason \"<why this is safe>\". Sentinel: $LATCH_FILE"
+  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You CANNOT clear this yourself — the reset is human-only by design. Ask the user to run (use --session with THIS session id, not --current, because --current cannot resolve the session from a human shell): bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   exit 0
 fi

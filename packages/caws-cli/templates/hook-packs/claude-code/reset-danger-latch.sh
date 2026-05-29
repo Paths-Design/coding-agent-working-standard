@@ -71,10 +71,15 @@ if [[ "$MODE" == "session" && -z "$SESSION_ARG" ]]; then
   exit 2
 fi
 
-# Mirror block-dangerous.sh's danger_latch_file() session-id sanitization.
-sanitize_session() {
-  printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'
-}
+# sanitize_session comes from lib/caws-state.sh so the clearer's filename
+# transform is byte-identical to block-dangerous.sh's writer transform
+# (DANGER-LATCH-UX-001). If the lib is somehow absent, fall back to a local
+# copy of the identical transform rather than failing the reset.
+if ! source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || ! command -v sanitize_session >/dev/null 2>&1; then
+  sanitize_session() {
+    printf '%s' "${1:-}" | tr -c 'A-Za-z0-9._-' '_'
+  }
+fi
 
 # --- Resolve the set of latch files to clear --------------------------------
 declare -a LATCH_FILES=()
@@ -82,7 +87,40 @@ declare -a LATCH_FILES=()
 case "$MODE" in
   current)
     SESSION_ID="${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}"
-    LATCH_FILES+=("$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ID").json")
+    CANDIDATE="$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ID").json"
+    if [[ -f "$CANDIDATE" ]]; then
+      LATCH_FILES+=("$CANDIDATE")
+    else
+      # DANGER-LATCH-UX-001: --current is usually run by a HUMAN from a shell
+      # that has no Claude session id in its env, so SESSION_ID resolves to
+      # "unknown" and the computed filename does not match the sentinel the
+      # agent's session actually wrote (keyed to the stdin session id). When
+      # the resolved candidate is absent but EXACTLY ONE latch sentinel
+      # exists, clear that one — "the current latch" almost always means
+      # "the one latch that exists". With 0 or 2+, fall through (the
+      # not-found path below prints guidance to use --session <id>).
+      declare -a _found=()
+      if [[ -d "$STATE_DIR" ]]; then
+        while IFS= read -r f; do
+          [[ -n "$f" ]] && _found+=("$f")
+        done < <(find "$STATE_DIR" -maxdepth 1 -type f -name 'danger-latch-*.json' 2>/dev/null)
+      fi
+      if [[ "${#_found[@]}" -eq 1 ]]; then
+        echo "reset-danger-latch.sh: no latch for resolved session '$SESSION_ID'," >&2
+        echo "  but exactly one latch exists — clearing it: ${_found[0]}" >&2
+        LATCH_FILES+=("${_found[0]}")
+      else
+        # Record the candidate so the not-found branch reports it; if 2+
+        # latches exist, the guidance below tells the human to use --session.
+        LATCH_FILES+=("$CANDIDATE")
+        if [[ "${#_found[@]}" -gt 1 ]]; then
+          echo "reset-danger-latch.sh: ${#_found[@]} latches exist and --current cannot" >&2
+          echo "  disambiguate (no session id in this shell). Use --all, or --session <id>" >&2
+          echo "  with the id from the block message. Latches:" >&2
+          for f in "${_found[@]}"; do echo "    - $f" >&2; done
+        fi
+      fi
+    fi
     ;;
   session)
     LATCH_FILES+=("$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ARG").json")
