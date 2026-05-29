@@ -40,6 +40,7 @@ const REGISTERED_COMMAND_GROUPS = Object.freeze([
   'specs',
   'worktree',
   'agents',
+  'prepush',
 ]);
 
 module.exports = {

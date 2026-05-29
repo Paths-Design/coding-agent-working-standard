@@ -155,7 +155,7 @@ describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: no alias execution / diagnostic-
 
 describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: single command-group registry', () => {
   // ── A4: registry shape ────────────────────────────────────────────────
-  test('REGISTERED_COMMAND_GROUPS is exactly the 12 v11 groups', () => {
+  test('REGISTERED_COMMAND_GROUPS is exactly the 13 v11 groups', () => {
     expect([...REGISTERED_COMMAND_GROUPS].sort()).toEqual(
       [
         'agents',
@@ -165,6 +165,7 @@ describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: single command-group registry', 
         'events',
         'gates',
         'init',
+        'prepush',
         'scope',
         'specs',
         'status',
