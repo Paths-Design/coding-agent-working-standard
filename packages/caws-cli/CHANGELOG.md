@@ -1,5 +1,22 @@
 ## [Unreleased]
 
+### Fixed
+
+* **hook-pack (claude-code): `reset-danger-latch.sh` was a no-op
+  wrapper.** Since pack v1 the shipped `reset-danger-latch.sh`
+  delegated to `$PROJECT_DIR/packages/caws-cli/templates/.claude/hooks/reset-danger-latch.sh`
+  — a path that exists in no consumer repo (and not in this monorepo
+  either). Every reset attempt exited 2 with "template is
+  unavailable", so a `block-dangerous.sh` latch could never be
+  cleared via the documented tool; a blocked Claude session was
+  effectively stuck. Replaced the wrapper with the real
+  implementation: `--current | --all | --session <id>`, a mandatory
+  `--reason`, and a JSONL audit record per cleared latch appended to
+  `.claude/logs/danger-latch-resets.log`. The latch-file path and
+  session-id sanitization mirror `block-dangerous.sh` exactly. Pack
+  version unchanged (already v11; this repairs a never-functional
+  file rather than changing a working contract).
+
 Removes ~7,400 lines of v10 dead source from the package
 (`CAWS-DEAD-SOURCE-CLEANUP-001`). Pure subtractive cleanup; no
 behavioral changes to the v11.1 surface. The deleted modules are
