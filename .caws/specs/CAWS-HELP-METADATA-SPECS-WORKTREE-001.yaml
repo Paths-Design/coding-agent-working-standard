@@ -3,6 +3,7 @@ title: 'Help-metadata authority slice 2: populate+wire specs+worktree COMMAND_SU
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: help-metadata-s2
 created_at: '2026-05-29T09:02:21.677Z'
 updated_at: '2026-05-29T09:02:21.677Z'
 blast_radius:
