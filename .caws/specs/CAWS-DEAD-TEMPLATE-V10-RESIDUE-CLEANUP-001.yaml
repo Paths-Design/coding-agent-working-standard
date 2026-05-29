@@ -3,7 +3,6 @@ title: 'Remove the dead non-hook-packs caws-cli template tree + deferred v10 age
 risk_tier: 3
 mode: chore
 lifecycle_state: active
-worktree: dead-template-residue
 created_at: '2026-05-29T08:43:19.813Z'
 updated_at: '2026-05-29T09:25:00.000Z'
 blast_radius:
