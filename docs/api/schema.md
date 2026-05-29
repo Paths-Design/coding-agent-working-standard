@@ -2,9 +2,9 @@
 doc_id: caws-schema
 authority: reference
 status: active
-title: CAWS Schema Specifications (v11.0.0)
+title: CAWS Schema Specifications (v11.1.6)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
 # CAWS Schema Specifications
@@ -15,7 +15,7 @@ CAWS uses JSON Schema for validation and TypeScript interfaces for type safety. 
 
 ## Feature Specification Schema
 
-> **Note:** vNext is multi-spec only. The schema below documents the legacy single-file `working-spec.yaml` shape; per-feature specs in `.caws/specs/<id>.yaml` use the same schema. The kernel's canonical version lives at `packages/caws-kernel/src/schemas/spec.v1.json`.
+> **Note:** vNext is multi-spec only. Specs live at `.caws/specs/<id>.yaml`. There is no legacy single-file `working-spec.yaml`. The kernel's canonical JSON Schema lives at `packages/caws-kernel/src/schemas/spec.v1.json` with `additionalProperties: false` — it rejects any field not listed in that schema (including `change_budget`, `acceptance_criteria`, `status`, and any v10 aliases).
 
 The feature specification defines a single feature's requirements and constraints.
 
@@ -24,16 +24,18 @@ The feature specification defines a single feature's requirements and constraint
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Feature Spec",
+  "$id": "https://caws.paths.design/schemas/spec.v1.json",
+  "title": "CAWS Spec",
+  "description": "Strict spec schema for CAWS v11. Authority for spec shape, lifecycle, and forbidden surfaces. Rejects: change_budget, acceptance_criteria, mode:development, scope.include, scope.exclude, unknown top-level fields.",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "id",
     "title",
     "risk_tier",
     "mode",
-    "change_budget",
+    "lifecycle_state",
     "blast_radius",
-    "operational_rollback_slo",
     "scope",
     "invariants",
     "acceptance",
@@ -43,508 +45,413 @@ The feature specification defines a single feature's requirements and constraint
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[A-Z]+-\\d+$",
-      "description": "Project identifier (e.g., FEAT-1234)",
-      "examples": ["FEAT-1234", "AUTH-456", "API-789"]
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Spec identifier. Uppercase prefix segments, numeric final segment, optional lowercase suffix.",
+      "examples": ["FEAT-001", "CAWS-RELEASE-TAG-DRIVEN-001", "AUTH-007a"]
     },
     "title": {
       "type": "string",
-      "minLength": 8,
-      "description": "Descriptive project title",
-      "examples": ["User Authentication Service", "API Gateway Refactor"]
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Descriptive spec title"
     },
     "risk_tier": {
       "type": "integer",
       "enum": [1, 2, 3],
-      "description": "Risk tier: 1 (critical), 2 (standard), 3 (low risk)"
+      "description": "Tier 1 most strict, Tier 3 least. String forms ('T1', '1') are NOT accepted."
     },
     "mode": {
       "type": "string",
-      "enum": ["refactor", "feature", "fix", "doc", "chore"],
-      "description": "Project mode"
+      "enum": ["feature", "refactor", "fix", "doc", "chore"],
+      "description": "Closed vocabulary. 'development' is rejected — choose a real mode."
     },
-    "change_budget": {
-      "type": "object",
-      "properties": {
-        "max_files": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Maximum number of files to change"
-        },
-        "max_loc": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Maximum lines of code to change"
-        }
-      },
-      "required": ["max_files", "max_loc"],
-      "additionalProperties": false
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "active", "closed", "archived"],
+      "description": "Primary lifecycle axis. Replaces v10 'status:' field (rejected by kernel)."
     },
-    "blast_radius": {
-      "type": "object",
-      "properties": {
-        "modules": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Modules affected by the change"
-        },
-        "data_migration": {
-          "type": "boolean",
-          "description": "Whether data migration is required"
+    "resolution": {
+      "type": "string",
+      "enum": ["completed", "superseded", "abandoned"],
+      "description": "Only set after closure (lifecycle_state in {closed, archived})."
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Operational metadata for active specs. NOT a lifecycle state. Blocked specs still enforce scope.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": { "type": "string", "minLength": 1 },
+          "waiting_on": { "type": "string" },
+          "since": { "type": "string", "format": "date-time" }
         }
-      },
-      "required": ["modules", "data_migration"],
-      "additionalProperties": false
+      }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "When resolution=superseded, the spec id this one supersedes."
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "When this spec is itself superseded by another."
+    },
+    "worktree": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Bidirectional binding: when set, worktrees.json[worktree].specId must equal this spec's id."
     },
     "operational_rollback_slo": {
       "type": "string",
-      "pattern": "^[0-9]+m$|^[0-9]+h$|^[0-9]+d$",
-      "description": "Operational rollback SLO (e.g., 5m, 1h, 24h)",
+      "description": "Time budget for operational rollback (e.g. '5m', '1h'). Required for Tier 1 via semantic check (not JSON Schema required).",
       "examples": ["5m", "1h", "24h"]
     },
-    "threats": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Potential threats and risks"
+    "blast_radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modules"],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "description": "Non-empty list of modules affected by this change"
+        },
+        "data_migration": {
+          "type": "boolean",
+          "description": "Whether data migration is required (optional)"
+        }
+      }
     },
     "scope": {
       "type": "object",
+      "additionalProperties": false,
+      "description": "Authoritative scope. 'in' is required and non-empty. 'out' rejects glob patterns. 'include'/'exclude' aliases are NOT accepted.",
       "required": ["in"],
       "properties": {
         "in": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
-          "description": "Files/features in scope"
+          "description": "Files/directories in scope (literal prefix matches)"
         },
         "out": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "Files/features out of scope"
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": { "pattern": "[*?]" },
+            "description": "Directory paths only. Glob patterns (*, ?) are rejected."
+          },
+          "description": "Files/directories explicitly out of scope. No glob patterns."
         }
       }
     },
     "invariants": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": { "type": "string", "minLength": 1 },
       "minItems": 1,
-      "description": "System invariants that must be maintained"
+      "description": "System invariants that must be maintained throughout this slice"
     },
     "acceptance": {
       "type": "array",
+      "description": "Acceptance criteria in Given/When/Then format. Canonical key. 'acceptance_criteria' alias is rejected.",
       "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "given", "when", "then"],
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^A\\d+$",
-            "description": "Acceptance criteria ID"
+            "description": "Acceptance criteria ID, e.g. A1, A2"
           },
-          "given": {
-            "type": "string",
-            "description": "Given clause"
-          },
-          "when": {
-            "type": "string",
-            "description": "When clause"
-          },
-          "then": {
-            "type": "string",
-            "description": "Then clause"
-          }
+          "given": { "type": "string", "minLength": 1 },
+          "when": { "type": "string", "minLength": 1 },
+          "then": { "type": "string", "minLength": 1 },
+          "test_command": { "type": "string" },
+          "test_nodeids": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "string" },
+          "narrative": { "type": "string" }
         }
-      },
-      "description": "Acceptance criteria in Given-When-Then format"
+      }
     },
     "non_functional": {
       "type": "object",
+      "additionalProperties": false,
+      "description": "Exactly four permitted subkeys. Observability concerns belong under reliability.",
       "properties": {
-        "a11y": {
+        "performance": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Accessibility requirements"
-        },
-        "perf": {
-          "type": "object",
-          "properties": {
-            "api_p95_ms": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "API p95 latency in milliseconds"
-            },
-            "lcp_ms": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Largest Contentful Paint in milliseconds"
-            }
-          },
-          "additionalProperties": false
+          "description": "Performance requirements as free-text strings"
         },
         "security": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Security requirements"
+          "description": "Security requirements as free-text strings"
+        },
+        "accessibility": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Accessibility requirements as free-text strings"
+        },
+        "reliability": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Reliability and observability requirements as free-text strings"
         }
-      },
-      "additionalProperties": false
+      }
     },
     "contracts": {
       "type": "array",
-      "minItems": 1,
+      "description": "Tier 1+2 require non-empty contracts (semantic check). Empty array is structurally valid for Tier 3.",
       "items": {
         "type": "object",
-        "required": ["type", "path"],
+        "additionalProperties": false,
+        "required": ["name", "type"],
         "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Contract name"
+          },
           "type": {
             "type": "string",
-            "enum": ["openapi", "graphql", "proto", "pact"],
+            "enum": ["api", "schema", "contract-test", "behavior"],
             "description": "Contract type"
           },
           "path": {
             "type": "string",
-            "description": "Path to contract specification"
+            "description": "Optional path to contract specification"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description"
           }
         }
       }
     },
     "observability": {
-      "type": "object",
-      "properties": {
-        "logs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Log events to emit"
-        },
-        "metrics": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Metrics to collect"
-        },
-        "traces": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Traces to capture"
-        }
-      }
-    },
-    "migrations": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Migration steps"
+      "description": "Observability statements as free-text strings. Tier 1 required via semantic check.",
+      "items": { "type": "string" }
     },
     "rollback": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Rollback steps"
+      "description": "Rollback steps as free-text strings. Tier 1 required non-empty via semantic check.",
+      "items": { "type": "string" }
     },
-    "human_override": {
+    "experimental_mode": {
       "type": "object",
+      "description": "Tier 3 only. Semantic check rejects on Tier 1 or 2.",
+      "additionalProperties": false,
+      "required": ["enabled", "rationale", "expires_at"],
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Whether human override is enabled for this change"
-        },
-        "approver": {
-          "type": "string",
-          "description": "GitHub username or email of the approver"
-        },
-        "rationale": {
-          "type": "string",
-          "description": "Reason for the override (urgency, low risk, etc.)"
-        },
-        "waived_gates": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["coverage", "mutation", "contracts", "manual_review", "trust_score"]
-          },
-          "description": "Quality gates to waive"
-        },
-        "approved_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "When the override was approved"
-        },
-        "expires_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "When the override expires"
-        }
-      },
-      "description": "Human override for urgent or low-risk changes"
+        "enabled": { "type": "boolean" },
+        "rationale": { "type": "string", "minLength": 1 },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
     },
-    "ai_assessment": {
-      "type": "object",
-      "properties": {
-        "confidence_level": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 10,
-          "description": "AI's self-assessed confidence (1-10)"
-        },
-        "uncertainty_areas": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Areas where AI is uncertain"
-        },
-        "complexity_factors": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Factors increasing complexity"
-        },
-        "risk_factors": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Identified risk factors"
-        }
-      },
-      "description": "AI self-assessment of confidence and uncertainty"
-    },
-    "git_config": {
-      "type": "object",
-      "properties": {
-        "author_name": {
-          "type": "string",
-          "description": "Git author name for commits"
-        },
-        "author_email": {
-          "type": "string",
-          "format": "email",
-          "description": "Git author email for commits"
-        }
-      },
-      "description": "Git configuration for commit attribution"
-    }
-  },
-  "additionalProperties": false
-}
-```
-
-### TypeScript Interface
-
-```typescript
-interface WorkingSpec {
-  id: string;                    // e.g., "FEAT-1234"
-  title: string;                 // Descriptive name
-  risk_tier: 1 | 2 | 3;         // Risk classification
-  mode: 'refactor' | 'feature' | 'fix' | 'doc' | 'chore';
-
-  change_budget: {
-    max_files: number;          // Minimum 1
-    max_loc: number;            // Minimum 1
-  };
-
-  blast_radius: {
-    modules: string[];          // Affected modules
-    data_migration: boolean;    // Requires data migration
-  };
-
-  operational_rollback_slo: string; // e.g., "5m", "1h", "24h"
-
-  threats?: string[];            // Optional threats
-  scope: {
-    in: string[];               // In scope (required)
-    out?: string[];             // Out of scope (optional)
-  };
-  invariants: string[];          // Must be maintained
-  acceptance: AcceptanceCriteria[];
-
-  non_functional: {
-    a11y: string[];             // Accessibility requirements
-    perf: {
-      api_p95_ms: number;       // API performance budget
-      lcp_ms?: number;          // Frontend performance budget
-    };
-    security: string[];         // Security requirements
-  };
-
-  contracts: ContractSpec[];
-  observability?: ObservabilityConfig;
-  migrations?: string[];         // Migration steps
-  rollback?: string[];           // Rollback steps
-  human_override?: HumanOverride; // Optional human override
-  ai_assessment?: AIAssessment;   // Optional AI self-assessment
-  git_config?: {
-    author_name: string;         // Git author name
-    author_email: string;        // Git author email
-  };                             // Optional git configuration
-}
-
-interface AcceptanceCriteria {
-  id: string;                    // e.g., "A1", "A2"
-  given: string;                 // Given clause
-  when: string;                  // When clause
-  then: string;                  // Then clause
-}
-
-interface ContractSpec {
-  type: 'openapi' | 'graphql' | 'proto' | 'pact';
-  path: string;                  // Path to specification
-}
-
-interface ObservabilityConfig {
-  logs: string[];                // Log events
-  metrics: string[];             // Metrics to collect
-  traces: string[];              // Traces to capture
-}
-```
-
-## Provenance Schema
-
-### JSON Schema
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Provenance Manifest",
-  "type": "object",
-  "required": [
-    "agent",
-    "model",
-    "model_hash",
-    "tool_allowlist",
-    "commit",
-    "artifacts",
-    "results",
-    "approvals",
-    "sbom",
-    "attestation"
-  ],
-  "properties": {
-    "agent": {
-      "type": "string",
-      "description": "Agent identifier"
-    },
-    "model": {
-      "type": "string",
-      "description": "Model identifier"
-    },
-    "model_hash": {
-      "type": "string",
-      "description": "Model hash for reproducibility"
-    },
-    "tool_allowlist": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Allowed tools for the agent"
-    },
-    "prompts": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Prompts used by the agent"
-    },
-    "commit": {
-      "type": "string",
-      "description": "Git commit hash"
-    },
-    "artifacts": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Generated artifacts"
-    },
-    "results": {
-      "type": "object",
-      "properties": {
-        "coverage_branch": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Branch coverage percentage"
-        },
-        "mutation_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Mutation test score"
-        },
-        "tests_passed": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Number of tests passed"
-        },
-        "contracts": {
-          "type": "object",
-          "properties": {
-            "consumer": { "type": "boolean" },
-            "provider": { "type": "boolean" }
-          }
-        },
-        "a11y": {
-          "type": "string",
-          "enum": ["pass", "fail", "partial"]
-        },
-        "perf": { "type": "object" }
-      },
-      "additionalProperties": true
-    },
-    "approvals": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Human approvals"
-    },
-    "sbom": {
-      "type": "string",
-      "description": "SBOM attestation"
-    },
-    "attestation": {
-      "type": "string",
-      "description": "SLSA attestation"
-    },
-    "timestamp": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "version": {
-      "type": "string"
-    },
-    "hash": {
-      "type": "string"
-    }
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "owner": { "type": "string" },
+    "closure_notes": { "type": "string" }
   }
 }
 ```
 
+> **Removed in v11:** `change_budget` (with `max_files`/`max_loc`) is rejected by the kernel. File and LOC budgets now derive from `.caws/policy.yaml` risk-tier thresholds; the spec never encodes them directly.
+
+> **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`, `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use `lifecycle_state`), `migrations`, `human_override`, `ai_assessment`, `git_config`, `threats`, `notes`, `non_goals`, `bounded_claim`, `dependencies`, `type` (top-level), `description` (top-level).
+
 ### TypeScript Interface
 
 ```typescript
-interface ProvenanceManifest {
-  agent: string;                 // Agent identifier
-  model: string;                 // Model identifier
-  model_hash: string;            // Model hash
-  tool_allowlist: string[];      // Allowed tools
-  prompts?: string[];            // Prompts used
-  commit: string | null;         // Git commit hash
-  artifacts: string[];           // Generated artifacts
-  results: ProvenanceResults;    // Test and quality results
-  approvals: string[];           // Human approvals
-  sbom: string;                  // SBOM data
-  attestation: string;           // SLSA attestation
-  timestamp?: string;            // ISO timestamp
-  version?: string;              // Manifest version
-  hash: string;                  // Manifest hash
+interface CawsSpec {
+  // Required fields (11)
+  id: string;                        // Pattern: ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$
+  title: string;
+  risk_tier: 1 | 2 | 3;
+  mode: 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
+  lifecycle_state: 'draft' | 'active' | 'closed' | 'archived';
+  blast_radius: BlastRadius;
+  scope: SpecScope;
+  invariants: string[];              // minItems: 1
+  acceptance: AcceptanceCriteria[];  // minItems: 1
+  non_functional: NonFunctional;
+  contracts: ContractSpec[];
+
+  // Optional fields
+  resolution?: 'completed' | 'superseded' | 'abandoned';
+  blockers?: Blocker[];
+  supersedes?: string;               // spec id pattern
+  superseded_by?: string;            // spec id pattern
+  worktree?: string;                 // bound worktree name
+  operational_rollback_slo?: string; // e.g. "5m", "1h" — required for Tier 1 via semantic check
+  observability?: string[];          // required for Tier 1 via semantic check
+  rollback?: string[];               // required non-empty for Tier 1 via semantic check
+  experimental_mode?: ExperimentalMode; // Tier 3 only
+  created_at?: string;               // ISO 8601
+  updated_at?: string;               // ISO 8601
+  owner?: string;
+  closure_notes?: string;
 }
 
-interface ProvenanceResults {
-  coverage_branch?: number;      // 0-1
-  mutation_score?: number;       // 0-1
-  tests_passed?: number;         // Count
-  contracts?: {
-    consumer: boolean;           // Consumer contract tests
-    provider: boolean;           // Provider contract tests
-  };
-  a11y?: 'pass' | 'fail' | 'partial'; // Accessibility results
-  perf?: PerformanceResults;     // Performance metrics
-  [key: string]: any;            // Additional results
+interface BlastRadius {
+  modules: string[];       // Non-empty list of affected modules
+  data_migration?: boolean; // Optional; not required
 }
 
-interface PerformanceResults {
-  api_p95_ms?: number;           // API p95 latency
-  lcp_ms?: number;               // Largest Contentful Paint
-  [key: string]: number | undefined;
+interface SpecScope {
+  in: string[];            // Required, non-empty; literal prefix matches
+  out?: string[];          // Optional; directory paths only, no glob patterns
+}
+
+interface AcceptanceCriteria {
+  id: string;              // Pattern: ^A\d+$
+  given: string;
+  when: string;
+  then: string;
+  test_command?: string;
+  test_nodeids?: string[];
+  evidence?: string;
+  narrative?: string;
+}
+
+interface NonFunctional {
+  // additionalProperties: false — exactly these four subkeys permitted
+  performance?: string[];
+  security?: string[];
+  accessibility?: string[];
+  reliability?: string[];  // Use for observability concerns too
+}
+
+interface ContractSpec {
+  name: string;                                          // Required
+  type: 'api' | 'schema' | 'contract-test' | 'behavior'; // Required
+  path?: string;
+  description?: string;
+}
+
+interface Blocker {
+  reason: string;          // Required
+  waiting_on?: string;
+  since?: string;          // ISO 8601
+}
+
+interface ExperimentalMode {
+  enabled: boolean;
+  rationale: string;
+  expires_at: string;      // ISO 8601
 }
 ```
+
+### Example: Tier-2 Feature Spec
+
+```yaml
+id: CAWS-AUTH-001
+title: "Add OAuth2 token refresh endpoint"
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+blast_radius:
+  modules:
+    - packages/caws-cli/src/commands/auth
+    - packages/caws-cli/tests/auth
+scope:
+  in:
+    - packages/caws-cli/src/commands/auth
+    - packages/caws-cli/tests/auth
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - "Existing auth tokens remain valid after this change"
+  - "No new top-level commands added to the CLI surface"
+acceptance:
+  - id: A1
+    given: "A valid refresh token exists"
+    when: "the user runs caws auth refresh"
+    then: "a new access token is issued and the old one is revoked"
+  - id: A2
+    given: "An expired refresh token is presented"
+    when: "the user runs caws auth refresh"
+    then: "the command exits non-zero with a structured error message"
+non_functional:
+  security:
+    - "Refresh tokens must be single-use; reuse returns 401"
+    - "Tokens stored at rest must be encrypted"
+  reliability:
+    - "Refresh endpoint must return within 500ms at p95"
+  performance: []
+  accessibility: []
+contracts:
+  - name: "auth-token-api"
+    type: api
+    path: docs/api/auth-token.yaml
+    description: "Token refresh endpoint contract"
+created_at: "2026-05-28T00:00:00Z"
+updated_at: "2026-05-28T00:00:00Z"
+owner: "darianrosebrook"
+```
+
+### Example: Tier-1 Spec (with required Tier-1 fields)
+
+```yaml
+id: CAWS-INFRA-001
+title: "Migrate events.jsonl to append-only store"
+risk_tier: 1
+mode: refactor
+lifecycle_state: active
+operational_rollback_slo: "5m"
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/store
+  data_migration: true
+scope:
+  in:
+    - packages/caws-kernel/src/store
+    - packages/caws-kernel/tests/store
+invariants:
+  - "events.jsonl remains hash-chained after migration"
+  - "All existing event types validate against their v1 schemas"
+acceptance:
+  - id: A1
+    given: "An existing events.jsonl file"
+    when: "the migration runs"
+    then: "all events are re-validated and the chain is intact"
+non_functional:
+  reliability:
+    - "Migration must be atomic — partial write leaves the store in original state"
+  performance:
+    - "Migration completes in under 30s for a 10k-event log"
+  security: []
+  accessibility: []
+contracts:
+  - name: "events-jsonl-append-only"
+    type: schema
+    path: packages/caws-kernel/src/schemas/events
+observability:
+  - "Emit migration_started and migration_completed events"
+  - "Log event count and chain-hash before and after"
+rollback:
+  - "git revert the migration commit"
+  - "Restore events.jsonl from pre-migration backup at .caws/events.jsonl.bak"
+created_at: "2026-05-28T00:00:00Z"
+updated_at: "2026-05-28T00:00:00Z"
+owner: "darianrosebrook"
+```
+
+## Audit Surface: .caws/events.jsonl
+
+The `caws provenance` command was removed in v11 and there is no provenance schema in the kernel. The audit surface is the hash-chained `.caws/events.jsonl` file, which receives typed event records appended by lifecycle commands (`caws gates run`, `caws specs close`, `caws specs archive`, `caws worktree create`, etc.). Each event record carries a `prev_hash` field that chains to the previous entry. The event schemas live at `packages/caws-kernel/src/schemas/events/*.v1.json`.
+
+Users needing an audit trail wire their own hooks against `caws gates run` output; they do not consume a provenance manifest.
 
 ## Tier Policy Configuration
 
@@ -575,14 +482,6 @@ interface PerformanceResults {
         "requires_manual_review": {
           "type": "boolean"
         },
-        "max_files": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_loc": {
-          "type": "integer",
-          "minimum": 1
-        },
         "allowed_modes": {
           "type": "array",
           "items": {
@@ -595,8 +494,6 @@ interface PerformanceResults {
         "min_branch",
         "min_mutation",
         "requires_contracts",
-        "max_files",
-        "max_loc",
         "allowed_modes"
       ]
     }
@@ -604,18 +501,18 @@ interface PerformanceResults {
 }
 ```
 
+> **Note:** `max_files` and `max_loc` are no longer part of the tier policy schema. Change budgets were removed from the spec schema in v11; budget enforcement derives entirely from `.caws/policy.yaml` risk-tier configuration.
+
 ### TypeScript Interface
 
 ```typescript
 interface TierPolicy {
   [tier: string]: {
-    min_branch: number;           // 0-1
-    min_mutation: number;         // 0-1
-    requires_contracts: boolean;  // Contract requirement
-    requires_manual_review: boolean; // Manual review needed
-    max_files: number;            // File limit
-    max_loc: number;              // LOC limit
-    allowed_modes: Mode[];        // Allowed project modes
+    min_branch: number;                // 0-1
+    min_mutation: number;              // 0-1
+    requires_contracts: boolean;       // Contract requirement
+    requires_manual_review?: boolean;  // Manual review needed
+    allowed_modes: Mode[];             // Allowed project modes
   };
 }
 
@@ -643,6 +540,50 @@ type Mode = 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
 
 ```typescript
 type ToolAllowlist = string[];
+```
+
+## Waivers
+
+In v11, waivers are per-file records at `.caws/waivers/<id>.yaml`. They are created, listed, and revoked via the `caws waiver` command group (singular — there is no `caws waivers` alias).
+
+### v11 Waiver File Schema
+
+Each `.caws/waivers/<id>.yaml` file has the following shape:
+
+```yaml
+id: WAIVER-001
+gate: coverage
+reason: "Bootstrapping phase — coverage gate not yet wired for this package"
+approved_by: "darianrosebrook"
+expires_at: "2026-08-01T00:00:00Z"
+spec_id: CAWS-AUTH-001   # optional: scope waiver to a specific spec
+created_at: "2026-05-28T00:00:00Z"
+```
+
+### Creating a Waiver
+
+```bash
+caws waiver create <id> \
+  --gate <gate-name> \
+  --reason "..." \
+  --approved-by "<approver>" \
+  --expires-at <iso8601>
+```
+
+Gate names are policy-defined (configured in `.caws/policy.yaml`). Waivers filter violations; they do not change the gate's `mode` (block/warn/skip). The reason field is free-text — no closed enum.
+
+### TypeScript Interface
+
+```typescript
+interface WaiverRecord {
+  id: string;             // Waiver identifier
+  gate: string;           // Policy-defined gate name (free-text; not a closed enum)
+  reason: string;         // Free-text rationale
+  approved_by: string;    // Approver identifier
+  expires_at: string;     // ISO 8601
+  spec_id?: string;       // Optional: scope waiver to a specific spec
+  created_at?: string;    // ISO 8601
+}
 ```
 
 ## SBOM Schema (SPDX)
@@ -769,110 +710,6 @@ interface Relationship {
   relationshipType: string;
   relatedSpdxElement: string;
 }
-
-interface HumanOverride {
-  enabled: boolean;               // Whether override is active
-  approver: string;               // Who approved the override
-  rationale: string;              // Reason for override
-  waived_gates: WaivedGate[];     // Gates to skip
-  approved_at: string;            // ISO timestamp
-  expires_at: string;             // ISO timestamp
-}
-
-type WaivedGate = 'coverage' | 'mutation' | 'contracts' | 'manual_review' | 'trust_score';
-
-interface AIAssessment {
-  confidence_level: number;       // 1-10 scale
-  uncertainty_areas: string[];   // Areas of uncertainty
-  complexity_factors: string[];   // Complexity factors
-  risk_factors: string[];         // Identified risks
-}
-
-## Waivers Configuration Schema
-
-### JSON Schema
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Waivers Configuration",
-  "type": "object",
-  "properties": {
-    "waivers": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Unique waiver identifier"
-          },
-          "description": {
-            "type": "string",
-            "description": "Description of why waiver is needed"
-          },
-          "gates": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": ["coverage", "mutation", "contracts", "manual_review", "trust_score"]
-            },
-            "description": "Quality gates to waive"
-          },
-          "reason": {
-            "type": "string",
-            "enum": ["urgent_fix", "experimental", "legacy_code", "resource_constraints", "other"],
-            "description": "Reason for the waiver"
-          },
-          "approver": {
-            "type": "string",
-            "description": "Who approved the waiver"
-          },
-          "expires_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the waiver expires"
-          },
-          "projects": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Specific projects this waiver applies to"
-          },
-          "max_trust_score": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Maximum trust score allowed with this waiver"
-          }
-        },
-        "required": ["id", "description", "gates", "reason", "approver", "expires_at"]
-      }
-    }
-  },
-  "required": ["waivers"]
-}
-```
-
-### TypeScript Interface
-
-```typescript
-interface WaiversConfig {
-  waivers: Waiver[];
-}
-
-interface Waiver {
-  id: string;                    // Unique identifier
-  description: string;           // Description of waiver
-  gates: WaivedGate[];           // Gates to skip
-  reason: WaiverReason;          // Reason for waiver
-  approver: string;              // Who approved
-  expires_at: string;            // ISO timestamp
-  projects?: string[];           // Specific projects
-  max_trust_score?: number;      // Max trust score with waiver
-}
-
-type WaiverReason = 'urgent_fix' | 'experimental' | 'legacy_code' | 'resource_constraints' | 'other';
-```
 ```
 
 ## Validation
@@ -892,12 +729,12 @@ All schemas are validated using:
 ### Runtime Validation
 ```typescript
 import Ajv from 'ajv';
-import featureSpecSchema from './schemas/working-spec.schema.json';
+import specSchema from './schemas/spec.v1.json';
 
 const ajv = new Ajv();
-const validate = ajv.compile(featureSpecSchema);
+const validate = ajv.compile(specSchema);
 
-const isValid = validate(workingSpec);
+const isValid = validate(spec);
 if (!isValid) {
   console.error('Validation errors:', validate.errors);
 }
@@ -906,23 +743,21 @@ if (!isValid) {
 ## Extensions
 
 ### Custom Schemas
-Users can extend CAWS schemas:
-- Add custom fields to working specifications
-- Create project-specific validation rules
-- Define domain-specific contract types
-- Implement custom quality metrics
+Users can extend CAWS schemas with care:
+- The spec schema uses `additionalProperties: false` — unknown top-level fields cause validation failure
+- Policy and gate configuration in `.caws/policy.yaml` is the extension point for budget and threshold customization
+- The events schema (`packages/caws-kernel/src/schemas/events/*.v1.json`) must be updated before new fields can appear in event payloads
 
 ### Schema Evolution
-- Backward compatibility maintained across versions
-- Deprecation notices for removed fields
-- Migration guides for breaking changes
-- Community-driven schema improvements
+- The kernel schema is the single source of truth; this document tracks it
+- Breaking changes (field removal, enum narrowing) require a spec and a changelog entry
+- Deprecated fields emit `spec.schema.violation` immediately — there is no grace period
 
 ## References
 
+- [`packages/caws-kernel/src/schemas/spec.v1.json`](../../packages/caws-kernel/src/schemas/spec.v1.json) — canonical spec schema (authority)
 - [JSON Schema Specification](https://json-schema.org/)
 - [SPDX Specification](https://spdx.github.io/spdx-spec/)
 - [SLSA Specification](https://slsa.dev/spec/v0.1/)
-- [in-toto Specification](https://in-toto.io/)
 
-For questions about schema validation or extension, see the [CAWS Documentation](docs/README.md) or create a GitHub issue.
+For questions about schema validation or extension, see the [CAWS Documentation](../README.md) or create a GitHub issue.
