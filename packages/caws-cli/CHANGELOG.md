@@ -1,5 +1,43 @@
 ## [Unreleased]
 
+### Changed
+
+* **hook-pack (claude-code): reconciled the canonical pack into the union
+  of three divergent forks** (`HOOK-PACK-DIVERGENCE-RECONCILE-001`). An
+  audit of the shipped template against two consumer forks (a Sterling
+  monorepo on pack v5, and the caws monorepo's own stale `.claude/hooks/`)
+  found improvements scattered across all three. The canonical template is
+  now the union:
+  - **New `lib/caws-state.sh`** — shared v10/v11 dual-shape registry/state
+    readers (`entriesOf`, `entryByName`, `entrySpecId`, `lifecycle`). The
+    pack previously inlined these per-callsite and lacked the
+    status-absent-entry fix for caws-cli ≥ 11.1.7 worktree-create output.
+  - **`agent-heartbeat.sh`** — two-layer emit suppression (SHA256 peer-set
+    change-detection + 60s hysteresis window). Stops the multi-agent notice
+    from firing every tool call (~12kB/turn) when the peer set is unchanged.
+  - **`scope-guard.sh`** — malformed-bound-spec DENY-by-default. A worktree
+    whose bound spec has unparseable YAML is now refused (naming the file)
+    instead of silently falling into weaker union-mode enforcement.
+  - **`block-dangerous.sh`** — `PROTECTED_HOOK_REL` guard: blocks shell-based
+    mutation/redirect of `worktree-write-guard.sh` (the guard cannot be
+    rewritten by the agent it judges).
+  - **`worktree-write-guard.sh`** — base-branch write enforcement restored
+    (was fail-open `exit 0` pending the now-archived CLI-WORKTREE-001):
+    blocks source writes on the base branch with active worktrees, with a
+    scope-contention diagnosis (claimed/clear/unknown), allows inside-
+    worktree / allowlisted-path / MERGE_HEAD edits. Fixed a realpath
+    asymmetry (`/tmp` vs `/private/tmp`) the prior normalization introduced.
+  - **Three opt-in hooks promoted** (commented-out in default dispatch,
+    shipped for consumers to enable): `quality-check.sh`, `validate-spec.sh`,
+    `stop-worktree-check.sh` — the v11-correct Sterling versions (the
+    monorepo-local copies called removed `caws validate` / `--quiet/--json`
+    flags). `doc-frontmatter-check.sh` was NOT promoted (Sterling-specific
+    doc-governance schema).
+  - The caws monorepo's own `.claude/hooks/` was refreshed from the
+    reconciled template (it had been running an obsolete regex-based
+    `block-dangerous.sh` with the classifier commented out).
+  Pack version unchanged at v11; `caws init --overwrite` pulls the union.
+
 ### Fixed
 
 * **hook-pack (claude-code): dangerous-command guard latched the CAWS
