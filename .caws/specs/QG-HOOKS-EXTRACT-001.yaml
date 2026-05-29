@@ -3,6 +3,7 @@ title: 'Extract load-bearing quality-gates signals into advisory single-file hoo
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: qg-hooks-extract
 created_at: '2026-05-29T05:43:11.574Z'
 updated_at: '2026-05-29T05:43:11.574Z'
 blast_radius:
