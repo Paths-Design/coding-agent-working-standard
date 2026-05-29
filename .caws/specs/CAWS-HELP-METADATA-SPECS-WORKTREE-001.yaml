@@ -7,19 +7,153 @@ created_at: '2026-05-29T09:02:21.677Z'
 updated_at: '2026-05-29T09:02:21.677Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
+    - .caws/specs/CAWS-HELP-METADATA-SPECS-WORKTREE-001.yaml
+  out:
+    - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Two groups populated, eleven still empty. command-metadata.ts populates
+    COMMAND_SURFACE_METADATA with exactly two GroupCommandMeta entries — `specs`
+    (9 subcommands: create/list/show/recover/retire-draft/close/archive/
+    prune-archive/migrate) and `worktree` (7 subcommands: create/list/bind/
+    destroy/merge/migrate-registry/repair-sparse) — each implementing the
+    LeafCommandMeta/CommandOptionMeta interfaces from slice 1. The remaining 11
+    groups (init, doctor, status, scope, claim, gates, evidence, events, waiver,
+    agents, prepush) are NOT yet in the array; they land in slice 3. The two
+    metadata objects are co-located as exported consts in command-metadata.ts
+    (the handler modules commands/specs.ts and commands/worktree.ts are NOT in
+    scope this slice — co-location into the handlers is a slice-3 refinement; for
+    slice 2 the metadata lives in command-metadata.ts so the aggregate and the
+    metadata stay in one scope-admitted file).
+  - >-
+    register.ts consumes the two populated groups via a metadata-driven helper;
+    no behavior change. An applyLeafMeta-style helper in register.ts reads each
+    populated GroupCommandMeta and drives `.description()`, `.command(<name
+    [arg]>)`, `.option()/.requiredOption()` from the metadata instead of inline
+    literals — for the `specs` and `worktree` groups ONLY. The registered command
+    names, argument arity, option flags, required-ness, default values, and
+    action wiring are byte-for-byte the SAME surface as before (verified by the
+    existing matrix/surface/register suites). The 11 unmigrated groups keep their
+    current inline `.description()/.option()` calls untouched.
+  - >-
+    W1 fixed (archive is a tombstone, not a move). The `specs archive` description
+    no longer says "Moves the YAML file to .caws/specs/.archive/" (false since
+    CAWS-ARCHIVE-AS-TOMBSTONE-001). The metadata description states the tombstone
+    semantics: archive deletes the closed spec's YAML and appends a recoverable
+    spec_archived event carrying blob_sha (recover via caws specs show <id>
+    --archived / caws specs recover <id>). The archive --reason option keeps its
+    honest prose ("advisory; the spec_archived schema does not carry it") — I2 is
+    already accurate and is preserved verbatim through the metadata.
+  - >-
+    W2 fixed (worktree group lists every subcommand). The `worktree` group
+    description enumerates all seven subcommands
+    (create/list/bind/destroy/merge/migrate-registry/repair-sparse), not the
+    stale "create/list/bind/destroy/merge" that omitted migrate-registry and
+    repair-sparse.
+  - >-
+    Enum option values derived from kernel arrays. The `specs create --mode`
+    option carries allowedValues = SPEC_MODES and `specs close --resolution`
+    carries allowedValues = SPEC_RESOLUTIONS, both imported from
+    @paths.design/caws-kernel (the slice-0 const arrays). register.ts renders the
+    flag help as "<prose>: <v1> | <v2> | ..." from allowedValues rather than a
+    re-typed inline list, so the accepted-value enumeration is the derived,
+    lock-tested part. (specs create --risk-tier accepts RISK_TIERS but its flag is
+    a free `<n>`; allowedValues = RISK_TIERS records the accepted set for the
+    lock test even though the prose stays "1, 2, or 3".)
+  - >-
+    Lock test L1 + L3 enabled for the populated groups. help-metadata-lock.test.js
+    flips L1 from skipped to live: the metadata group-name set is asserted to be a
+    SUBSET of REGISTERED_COMMAND_GROUPS (subset, not equality, while groups are
+    partially populated — full equality lands in slice 3 when all 13 are present),
+    and `specs`+`worktree` are asserted present. L3 is added and live: every
+    populated option whose allowedValues is set is deep-equal to the corresponding
+    kernel enum (SPEC_MODES/SPEC_RESOLUTIONS/RISK_TIERS) — enum drift becomes a
+    test failure. L4 (non-empty descriptions) stays live and now exercises real
+    entries. L5 (no inline strings in register.ts) stays documented-as-slice-3
+    (cannot enable globally until all groups are metadata-driven).
+  - >-
+    Build + typecheck + full caws-cli suite green; doctor clean. command-metadata.ts
+    and register.ts compile under tsconfig.vnext; the help-metadata lock test
+    passes with L1/L3/L4 live; the existing matrix/surface/register suites pass
+    unchanged (same registered surface); caws doctor reports no new load errors.
+    `caws specs archive --help` and `caws worktree --help` reflect the corrected
+    prose.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: command-metadata.ts after the slice.
+    when: COMMAND_SURFACE_METADATA is read.
+    then: >-
+      It contains exactly two GroupCommandMeta entries, `specs` (9 subcommands)
+      and `worktree` (7 subcommands), each subcommand a LeafCommandMeta with the
+      correct name, argument, description, and options. specs create --mode has
+      allowedValues === SPEC_MODES; specs close --resolution has allowedValues
+      === SPEC_RESOLUTIONS; specs create --risk-tier has allowedValues ===
+      RISK_TIERS. The array is still frozen.
+  - id: A2
+    given: register.ts after the slice.
+    when: the specs and worktree groups are registered.
+    then: >-
+      Both groups are driven from COMMAND_SURFACE_METADATA via the metadata
+      helper; no inline `.description()`/`.option()` string literal remains for
+      those two groups. The registered surface (command names, arg arity, option
+      flags, required-ness, defaults) is identical to before — the matrix/surface/
+      register lock suites pass unchanged.
+  - id: A3
+    given: '`caws specs archive --help` after the slice.'
+    when: it is rendered.
+    then: >-
+      The description states archive is a tombstone (deletes the YAML, appends a
+      recoverable spec_archived event with blob_sha), NOT "Moves the YAML file to
+      .caws/specs/.archive/". W1 is resolved.
+  - id: A4
+    given: '`caws worktree --help` after the slice.'
+    when: the group description is rendered.
+    then: >-
+      It enumerates all seven subcommands
+      (create/list/bind/destroy/merge/migrate-registry/repair-sparse). W2 is
+      resolved.
+  - id: A5
+    given: tests/shell/help-metadata-lock.test.js after the slice.
+    when: it runs against the rebuilt dist.
+    then: >-
+      L1 is LIVE (no longer skipped): the metadata group set is a subset of
+      REGISTERED_COMMAND_GROUPS and includes specs + worktree. L3 is LIVE: each
+      populated allowedValues deep-equals its kernel enum. L4 stays live over the
+      now-populated entries. The suite is green.
+  - id: A6
+    given: The repo after the slice.
+    when: caws doctor + the caws-cli build + the focused matrix/surface/register/
+      help-metadata suites run on canonical.
+    then: >-
+      Build + typecheck clean; all suites pass; no registered-surface change; caws
+      doctor reports no new load errors. No behavior or test-count regression
+      beyond the newly-enabled L1/L3 assertions.
+non_functional:
+  reliability:
+    - >-
+      Converts the two highest-churn command groups (specs, worktree) from
+      hand-authored help literals to a single typed metadata authority, fixing two
+      confirmed-wrong help strings (W1 archive-as-move, W2 worktree-subcommand
+      omission) at the same time. The enum option values become machine-derived
+      and lock-tested against the kernel arrays so --mode/--resolution/--risk-tier
+      help can no longer silently diverge from the validation enums. Zero
+      registered-surface change: the lock harness proves the metadata-driven
+      registration reproduces the prior surface exactly.
 contracts: []
