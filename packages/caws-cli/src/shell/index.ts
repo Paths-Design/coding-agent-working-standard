@@ -95,6 +95,9 @@ export type {
   GatesRunCommandRequest,
 } from './commands/gates';
 
+export { runPrepushCommand } from './commands/prepush';
+export type { PrepushCommandOptions } from './commands/prepush';
+
 export { renderGatesRun } from './render/gates';
 export {
   validateGatesReport,

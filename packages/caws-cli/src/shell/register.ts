@@ -30,6 +30,7 @@ import {
   runEvidenceRecordCommand,
   runGatesRunCommand,
   runInitCommand,
+  runPrepushCommand,
   runScopeCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
@@ -295,6 +296,51 @@ export function registerShellCommands(
             showData: opts.data === true,
           }
         );
+        exit(code);
+      }
+    );
+
+  // -------------------------------------------------------------------
+  // caws prepush — MULTI-AGENT-PUSH-RANGE-GUARD-001
+  // -------------------------------------------------------------------
+  program
+    .command('prepush')
+    .description(
+      'Classify the outgoing commit range before publish and refuse ' +
+        'commits not attributable to the current slice. Diagnose/decide ' +
+        'only — does NOT run git push.'
+    )
+    .option('--remote <remote>', 'Push remote', 'origin')
+    .option('--branch <branch>', 'Push branch', 'main')
+    .option('--base <ref>', 'Base ref override (default <remote>/<branch>)')
+    .option('--spec <id>', 'Current session active spec id (for slice-match)')
+    .option(
+      '--ack <sha>',
+      'Acknowledge an unexpected commit by SHA (repeatable)',
+      (val: string, acc: string[]) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[]
+    )
+    .option('--data', 'Show structured data block on diagnostics')
+    .action(
+      (opts: {
+        remote: string;
+        branch: string;
+        base?: string;
+        spec?: string;
+        ack: string[];
+        data?: boolean;
+      }) => {
+        const code = runPrepushCommand({
+          remote: opts.remote,
+          branch: opts.branch,
+          ...(opts.base !== undefined ? { base: opts.base } : {}),
+          ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+          ack: opts.ack,
+          showData: opts.data === true,
+        });
         exit(code);
       }
     );
