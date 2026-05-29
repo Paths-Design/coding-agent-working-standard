@@ -32,6 +32,24 @@ const {
 const {
   REGISTERED_COMMAND_GROUPS,
 } = require('../../src/shell/registered-command-groups');
+const {
+  SPEC_MODES,
+  SPEC_RESOLUTIONS,
+  RISK_TIERS,
+} = require('@paths.design/caws-kernel');
+
+/**
+ * Map of option flag → the kernel enum it must mirror. Any option carrying
+ * `allowedValues` MUST appear here, and its allowedValues MUST deep-equal the
+ * named kernel enum. This is the mechanical enum-drift lock (L3): if a flag
+ * grows enum-backed values without a kernel-enum binding, or its values drift
+ * from the kernel array, the test fails.
+ */
+const ALLOWED_VALUE_AUTHORITIES = {
+  '--mode <mode>': SPEC_MODES,
+  '--resolution <r>': SPEC_RESOLUTIONS,
+  '--risk-tier <n>': RISK_TIERS,
+};
 
 /** Flatten every leaf+group description string in the metadata. */
 function allDescriptions(meta) {
@@ -67,27 +85,60 @@ describe('help-metadata lock (CAWS-CLI-HELP-METADATA-AUTHORITY-001)', () => {
     }
   });
 
-  // ── L1: metadata group set == REGISTERED_COMMAND_GROUPS ─────────────────
-  // ENFORCED FROM SLICE 2. Skipped in slice 1 because COMMAND_SURFACE_METADATA
-  // is still empty (population is group-by-group in slices 2-3); asserting
-  // set-equality with the 13 registered groups now would fail spuriously.
-  // When the first group lands in slice 2, flip this from `it.skip` to `it`
-  // and assert subset-or-equality as appropriate to the slice.
-  it.skip('L1: metadata group names == REGISTERED_COMMAND_GROUPS (slice 2+)', () => {
+  // ── L1: metadata group set ⊆ REGISTERED_COMMAND_GROUPS ──────────────────
+  // ENFORCED FROM SLICE 2. While groups are populated incrementally (slices
+  // 2-3), the metadata set is a SUBSET of the 13 registered groups, and the
+  // groups populated so far MUST be present. Slice 3 tightens this to full
+  // set-equality once all 13 groups are in the metadata.
+  it('L1: metadata group names are a subset of REGISTERED_COMMAND_GROUPS', () => {
     const metaGroups = COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'group').map(
       (e) => e.name
     );
     const flatLeaves = COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'leaf').map(
       (e) => e.name
     );
-    const allNames = new Set([...metaGroups, ...flatLeaves]);
+    const allNames = [...metaGroups, ...flatLeaves];
     const registered = new Set(REGISTERED_COMMAND_GROUPS);
-    expect(allNames).toEqual(registered);
+    for (const name of allNames) {
+      expect(registered.has(name)).toBe(true);
+    }
   });
 
-  // L3 (allowedValues == kernel enum) and L5 (no inline strings in register.ts)
-  // are introduced in slices 2-3 as the first enum-backed options and the first
-  // metadata-driven register.ts groups land. They are intentionally not present
-  // yet — the skeleton documents the staging rather than asserting unenforced
-  // invariants.
+  it('L1: the slice-2 groups (specs, worktree) are present in the metadata', () => {
+    const groupNames = new Set(
+      COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'group').map((e) => e.name)
+    );
+    expect(groupNames.has('specs')).toBe(true);
+    expect(groupNames.has('worktree')).toBe(true);
+  });
+
+  // ── L3: enum-backed option values deep-equal their kernel enum ───────────
+  // LIVE from slice 2. Every option carrying `allowedValues` must mirror a
+  // kernel enum exactly (value-for-value, same order). This is the mechanical
+  // lock that keeps --mode/--resolution/--risk-tier help in sync with the
+  // validation enums — drift becomes a test failure rather than a silent lie.
+  it('L3: every option allowedValues deep-equals its kernel enum', () => {
+    let enumBackedOptions = 0;
+    for (const entry of COMMAND_SURFACE_METADATA) {
+      const leaves = entry.kind === 'group' ? entry.subcommands : [entry];
+      for (const leaf of leaves) {
+        for (const opt of leaf.options) {
+          if (opt.allowedValues === undefined) continue;
+          enumBackedOptions += 1;
+          const authority = ALLOWED_VALUE_AUTHORITIES[opt.flag];
+          // Every enum-backed flag must have a declared kernel authority.
+          expect(authority).toBeDefined();
+          expect(opt.allowedValues).toEqual(authority);
+        }
+      }
+    }
+    // Guard: slice 2 introduces --mode, --resolution, --risk-tier — at least
+    // three enum-backed options must exist, so this test cannot pass vacuously.
+    expect(enumBackedOptions).toBeGreaterThanOrEqual(3);
+  });
+
+  // L5 (no inline `.description('...')` / `.option('...')` string literals in
+  // register.ts) becomes a global lock in slice 3, once all 13 groups are
+  // metadata-driven. It is intentionally not asserted yet — the 11 unmigrated
+  // groups still carry inline literals.
 });
