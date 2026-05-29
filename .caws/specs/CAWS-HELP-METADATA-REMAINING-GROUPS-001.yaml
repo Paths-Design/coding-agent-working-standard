@@ -3,23 +3,145 @@ title: 'Help-metadata authority slice 3: wire remaining 11 groups, fix W3/W4 hel
 risk_tier: 3
 mode: feature
 lifecycle_state: active
-created_at: '2026-05-29T09:28:25.294Z'
-updated_at: '2026-05-29T09:28:25.294Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
+    - .caws/specs/CAWS-HELP-METADATA-REMAINING-GROUPS-001.yaml
+  out:
+    - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    All thirteen groups populated. command-metadata.ts adds the remaining 11
+    surface entries to COMMAND_SURFACE_METADATA: the five FLAT top-level commands
+    (init, doctor, status, claim, prepush) as LeafCommandMeta, and the six
+    multi-subcommand groups (scope[show,check], gates[run], evidence[record],
+    events[migrate,rotate,verify-archive], waiver[create,list,show,revoke],
+    agents[register,heartbeat,stop,list,show,prune]) as GroupCommandMeta. Together
+    with specs+worktree (slice 2) the metadata now describes every registered
+    surface name. register.ts consumes ALL of them via the slice-2 helpers
+    (applyGroupMeta/defineLeaf/leafMeta) plus a defineFlat helper for the five
+    top-level leaf commands.
+  - >-
+    No registered-surface change. Every command name, positional argument arity,
+    option flag, required-ness, default value, and action wiring is byte-for-byte
+    identical to the pre-slice surface (proven by the matrix/surface/register lock
+    suites passing unchanged). This is a help-text single-sourcing refactor, not a
+    behavior change. The action handlers stay inline; only .description()/
+    .argument()/.option() flow from metadata.
+  - >-
+    W3 fixed as an HONEST-PROSE fix, NOT a requiredOption flip. specs create
+    --title/--mode/--risk-tier are functionally required but the handler
+    (runSpecsCreateCommand) deliberately performs its own missing-args check to
+    emit rich guidance (the SPECS_CREATE_USAGE block + the --type-alias hint)
+    that Commander .requiredOption() pre-validation would pre-empt and degrade.
+    Flipping to .requiredOption() would regress CAWS-SPECS-TIER-MODE-GUIDANCE-001
+    UX and the --type guidance path. So the metadata marks these option
+    descriptions as "(required)" in prose while leaving them as .option() — the
+    help text states the requirement; the handler remains the validator. This is
+    the doctrine-correct read of "claims match enforcement": say required, let the
+    handler enforce with good UX.
+  - >-
+    W4 fixed (gates run exit codes documented). The gates run description states
+    the full exit-code contract: 0/1 on gate disposition, 2 on hard composition
+    error (no policy / subprocess-contract failure), 3 on evidence-integrity
+    failure (a gate_evaluated event failed to append/validate). The prior prose
+    was silent on 2 and 3.
+  - >-
+    I1 stays honest (events migrate --reason is conditionally required). --reason
+    is required only with --apply; the handler enforces that conditional. It stays
+    .option() with prose "required with --apply" — NOT .requiredOption() (which
+    would wrongly require it for dry-run). Same honest-prose principle as W3.
+  - >-
+    Global L5 lock enabled. tests/shell/help-metadata-lock.test.js adds L5: a
+    static scan of register.ts asserts no inline .description('...') / .option(
+    '...','...') string-literal help text remains — every help string flows
+    through COMMAND_SURFACE_METADATA. The scan reads the register.ts source and
+    fails if a .description( or .option( call carries a bare string-literal help
+    arg rather than a metadata-derived value. (The flag token in .option(flag,
+    ...) is metadata-sourced; the lock targets the human-readable help text.)
+  - >-
+    L1 tightened to full set-equality. With all 13 groups present, L1 flips from
+    subset to exact equality: the metadata top-level-name set (group names +
+    flat leaf names) EQUALS REGISTERED_COMMAND_GROUPS. L3 (allowedValues ==
+    kernel enum) and L4 (non-empty descriptions) stay live over the full surface.
+  - >-
+    Build + typecheck + full caws-cli suite green; doctor clean; live-binary
+    --help parity. tsc clean; the help-metadata lock passes with L1(equality)/L3/
+    L4/L5 live; matrix/surface/register unchanged; full focused caws-cli suite
+    passes on canonical; caws doctor reports no new load errors; the built binary
+    renders the W3/W4 prose and all 13 groups' help from metadata.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: command-metadata.ts after the slice.
+    when: COMMAND_SURFACE_METADATA is read.
+    then: >-
+      It contains all 13 surface entries: 5 flat LeafCommandMeta (init, doctor,
+      status, claim, prepush) and 8 GroupCommandMeta (scope, gates, evidence,
+      events, waiver, agents, specs, worktree). Every leaf/option has a non-empty
+      description; --mode/--resolution/--risk-tier carry kernel-enum allowedValues.
+  - id: A2
+    given: register.ts after the slice.
+    when: the full surface is registered.
+    then: >-
+      Every group and flat command is driven from COMMAND_SURFACE_METADATA; NO
+      inline .description()/.option() help-string literal remains anywhere in
+      register.ts. The registered surface is identical to before (matrix/surface/
+      register lock suites pass unchanged).
+  - id: A3
+    given: '`caws gates run --help` after the slice (W4).'
+    when: it is rendered.
+    then: >-
+      The description documents exit codes 0/1 (disposition), 2 (hard composition
+      error), and 3 (evidence-integrity failure).
+  - id: A4
+    given: '`caws specs create --help` after the slice (W3).'
+    when: it is rendered.
+    then: >-
+      --title, --mode, --risk-tier are marked required in the help prose, while
+      remaining .option() so the handler keeps emitting its guidance diagnostic on
+      omission (CAWS-SPECS-TIER-MODE-GUIDANCE-001 behavior unchanged — verified by
+      the specs suite still passing).
+  - id: A5
+    given: tests/shell/help-metadata-lock.test.js after the slice.
+    when: it runs against the rebuilt dist.
+    then: >-
+      L1 asserts full set-equality of metadata top-level names with
+      REGISTERED_COMMAND_GROUPS; L5 asserts register.ts carries no inline help
+      string literals; L3 and L4 stay live over the full surface. The suite is
+      green.
+  - id: A6
+    given: The repo after the slice.
+    when: caws doctor + the caws-cli build + the focused caws-cli suite run on canonical.
+    then: >-
+      Build + typecheck clean; the full focused suite passes; no registered-surface
+      change; caws doctor reports no new load errors. The release-blocking
+      durability bar (every help string single-sourced + lock-tested) is met.
+non_functional:
+  reliability:
+    - >-
+      Completes the durable --help authority: every .description()/.option() help
+      string in register.ts now flows from a single typed, lock-tested
+      COMMAND_SURFACE_METADATA, so help/behavior drift becomes a compile or test
+      failure across the entire 13-group surface rather than a silent lie. Fixes
+      the last confirmed drift items (W3 honest required-prose, W4 gates exit
+      codes) and turns on the global no-inline-strings lock (L5) plus full
+      group-set equality (L1) — the invariants that make the authority
+      self-enforcing. This is the slice the v11.1.7 release was blocked on.
 contracts: []
