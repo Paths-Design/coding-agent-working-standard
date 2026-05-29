@@ -3,23 +3,115 @@ title: 'caws doctor warns when .caws/ has specs but ephemeral runtime state is n
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-created_at: '2026-05-29T18:18:54.992Z'
-updated_at: '2026-05-29T18:18:54.992Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/gitignore-drift.ts
+    - packages/caws-cli/src/shell/commands/doctor.ts
+    - packages/caws-cli/tests/shell/doctor-command.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/gitignore-drift.ts
+    - packages/caws-cli/src/shell/commands/doctor.ts
+    - packages/caws-cli/tests/shell/doctor-command.test.js
+    - .caws/specs/CAWS-DOCTOR-GITIGNORE-DRIFT-001.yaml
+  out:
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    New CLI-side doctor check detects ungitignored ephemeral .caws/ state. A new
+    module packages/caws-cli/src/init/gitignore-drift.ts exports a pure function
+    (e.g. detectGitignoreDrift(repoRoot)) that returns zero or one DoctorFinding.
+    It reuses the gitignore-manage primitives (the managed-block markers +
+    EPHEMERAL_CAWS_ENTRIES + computeGitignore) WITHOUT modifying gitignore-manage
+    (that file is scope.out). doctor.ts calls it and appends the finding to the
+    rendered/counted findings list. The check is a CLI/shell concern, NOT a
+    kernel one: the kernel inspectProjectState does not know about .gitignore or
+    init's managed-block format, so this stays in the CLI layer alongside the
+    kernel findings.
+  - >-
+    Fires ONLY when there is genuine drift AND .caws/ is a real project. The
+    finding is emitted when ALL hold: (a) the repo is a git working tree (a
+    .gitignore is meaningful); (b) .caws/ exists with at least one spec (an
+    actual CAWS project, not a bare dir); (c) computeGitignore(currentContent)
+    would change the file — i.e. the managed block is ABSENT or STALE (different
+    version / drifted entries) such that at least one ephemeral path is currently
+    NOT ignored. When the managed block is already current (computeGitignore →
+    unchanged), NO finding is emitted. This reuses the exact same drift
+    determination the init step uses, so doctor and init never disagree.
+  - >-
+    Severity is WARNING, not error. The drift is a hygiene gap (ephemeral runtime
+    state could be accidentally committed), not a correctness failure. WARNING
+    surfaces it in the findings section and the W count without flipping caws
+    doctor's exit code to 1 — every project that predates
+    CAWS-INIT-GITIGNORE-MANAGE-001 would otherwise newly exit 1, which is too
+    aggressive for a patch. Consistent with the existing stale-heartbeat WARNING
+    baseline. doctor's exit code remains driven by ERROR-severity findings only.
+  - >-
+    The finding names the fix. message + narrowRepair point the user at
+    `caws init` (idempotent; it writes/updates the managed block) and name which
+    ephemeral paths are currently un-ignored. The repair text does NOT instruct a
+    raw .gitignore hand-edit — `caws init` is the sanctioned, version-tracked
+    path (it keeps the block markers + version current).
+  - >-
+    Reuses gitignore-manage as the single source of the entry set + drift logic.
+    The drift module imports GITIGNORE markers, EPHEMERAL_CAWS_ENTRIES, and
+    computeGitignore from gitignore-manage. It does not re-list the ephemeral
+    paths or re-implement block detection — so when the managed entry set evolves
+    (block version bump), the doctor check follows automatically and cannot drift
+    from what init actually writes.
+  - >-
+    Tests: drift-present → WARNING finding; current-block → no finding; non-git
+    or no-specs → no finding; exit code unaffected. doctor-command.test.js gains
+    cases: (a) git repo + specs + NO .gitignore → exactly one gitignore-drift
+    WARNING, doctor still exits 0 (no errors); (b) git repo + specs + current
+    managed block → no gitignore-drift finding; (c) git repo + specs + STALE
+    block → WARNING; (d) .caws/ with no specs → no finding; (e) the finding
+    message references `caws init`.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: A git repo with .caws/ containing >=1 spec and no managed .gitignore block.
+    when: caws doctor runs.
+    then: >-
+      Exactly one gitignore-drift finding is emitted at WARNING severity, naming
+      the un-ignored ephemeral paths and pointing at `caws init` to fix; doctor
+      still exits 0 (the finding is a warning, not an error).
+  - id: A2
+    given: A git repo whose .gitignore already has the current managed block.
+    when: caws doctor runs.
+    then: 'No gitignore-drift finding is emitted (computeGitignore → unchanged).'
+  - id: A3
+    given: A git repo whose .gitignore has a STALE managed block (older version / drifted entries).
+    when: caws doctor runs.
+    then: 'A gitignore-drift WARNING is emitted (the block would be updated by init).'
+  - id: A4
+    given: A .caws/ directory with no specs (bare bootstrap), or a non-git directory.
+    when: the drift check runs.
+    then: >-
+      No gitignore-drift finding is emitted — the check requires both a git work
+      tree and at least one spec before it considers drift meaningful.
+  - id: A5
+    given: The doctor command + the new check.
+    when: the focused doctor + init suites + build run on canonical.
+    then: >-
+      Build + typecheck clean; doctor-command tests pass including the new cases;
+      no regression to existing doctor findings or exit-code behavior.
+non_functional:
+  reliability:
+    - >-
+      Closes the visibility gap for projects that predate
+      CAWS-INIT-GITIGNORE-MANAGE-001 (e.g. an existing .caws/ with specs but no
+      managed .gitignore block — the surgery-ward / canonical-repo state): without
+      this, those projects silently leave worktrees.json/agents.json/leases/
+      events.jsonl untracked-but-not-ignored and users only discover it by
+      accident. doctor now surfaces the drift and routes to the idempotent
+      `caws init` fix. Reusing gitignore-manage's entry set + drift logic
+      guarantees doctor and init never disagree about what counts as drift.
 contracts: []
