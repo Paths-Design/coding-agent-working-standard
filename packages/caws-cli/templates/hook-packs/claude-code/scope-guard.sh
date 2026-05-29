@@ -234,6 +234,12 @@ if command -v node >/dev/null 2>&1; then
       // Draft specs are collected but separately tagged.
       var specs = [];
 
+      // INV-5 (harvested from Sterling, CAWS-1117-SCOPE-GUARD-V11-DETECTION-01):
+      // track specs that FAILED to parse. A malformed spec must not silently
+      // weaken enforcement — if the worktree's bound spec is among them we
+      // DENY rather than fall into the weaker union mode below.
+      var malformedSpecs = [];
+
       var specsDir = '$SPECS_DIR';
       if (fs.existsSync(specsDir)) {
         var files = fs.readdirSync(specsDir).filter(function(f) { return f.endsWith('.yaml') || f.endsWith('.yml'); });
@@ -244,7 +250,11 @@ if command -v node >/dev/null 2>&1; then
             var state = lifecycleOf(s);
             if (TERMINAL[state]) continue;
             specs.push({ source: files[fi], spec: s, state: state });
-          } catch (_) {}
+          } catch (parseErr) {
+            malformedSpecs.push(files[fi]);
+            process.stderr.write('scope-guard: malformed spec at ' +
+              files[fi] + ': ' + (parseErr && parseErr.message) + '\n');
+          }
         }
       }
 
@@ -279,6 +289,31 @@ if command -v node >/dev/null 2>&1; then
                 if (candidate.id === boundId && candidate.worktree === worktreeName) {
                   authoritativeSpec = specs[si];
                   break;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // INV-5 DENY-by-default (harvested from Sterling): if the worktree's
+      // bound spec ID maps to a file we FAILED to parse, we cannot honor
+      // the authoritative spec. Refuse rather than silently dropping into
+      // union mode (quietly weaker enforcement). Names the malformed file
+      // so the user can fix it.
+      if (worktreeName && malformedSpecs.length > 0) {
+        try {
+          var mRegistryPath = path.join(projectDir, '.caws', 'worktrees.json');
+          if (fs.existsSync(mRegistryPath)) {
+            var mRegistry = JSON.parse(fs.readFileSync(mRegistryPath, 'utf8'));
+            var mEntry = worktreeEntry(mRegistry, worktreeName);
+            var mBoundId = boundSpecIdOf(mEntry);
+            if (mBoundId) {
+              for (var mi = 0; mi < malformedSpecs.length; mi++) {
+                var mFileBase = malformedSpecs[mi].replace(/\.ya?ml$/i, '');
+                if (mFileBase === mBoundId) {
+                  console.log('malformed_bound_spec:' + malformedSpecs[mi]);
+                  process.exit(0);
                 }
               }
             }
@@ -352,6 +387,17 @@ if command -v node >/dev/null 2>&1; then
     else
       emit_scope_progression "This file is marked out-of-scope in '$SOURCE' by pattern '$PATTERN'. Mode: authoritative (checking only your bound spec)."
     fi
+    exit 0
+  fi
+
+  if [[ "$SCOPE_CHECK" == malformed_bound_spec:* ]]; then
+    # INV-5 (harvested from Sterling): the worktree's bound spec failed to
+    # parse. We cannot honor authoritative scope, and silently dropping to
+    # union mode would be quietly weaker enforcement — so refuse and name
+    # the malformed file. Routed through the strike system like an
+    # out-of-scope refusal.
+    MALFORMED_FILE="${SCOPE_CHECK#malformed_bound_spec:}"
+    emit_scope_progression "Your worktree's bound spec '.caws/specs/$MALFORMED_FILE' failed to parse (invalid YAML). Scope cannot be enforced authoritatively, so the edit is refused rather than falling back to weaker union-mode checks. Fix the YAML in '$MALFORMED_FILE', then retry."
     exit 0
   fi
 

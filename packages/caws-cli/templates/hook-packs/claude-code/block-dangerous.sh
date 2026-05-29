@@ -115,6 +115,33 @@ if [[ -f "$LATCH_FILE" ]]; then
   exit 0
 fi
 
+# --- Protect the write guard itself from shell-based self-modification ---
+# (harvested from Sterling/caws-local per HOOK-PACK-DIVERGENCE-RECONCILE-001).
+# Keep this narrow: only block obvious mutating commands that target the
+# specific guard path, either relatively or absolutely. The classifier does
+# not cover "agent rewrites the guard that is about to judge its commands,"
+# so this is a dedicated pre-check before classifier delegation.
+PROTECTED_HOOK_REL=".claude/hooks/worktree-write-guard.sh"
+PROTECTED_HOOK_ABS="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/worktree-write-guard.sh"
+if printf '%s' "$COMMAND" | grep -qF "$PROTECTED_HOOK_REL" || printf '%s' "$COMMAND" | grep -qF "$PROTECTED_HOOK_ABS"; then
+  # Allow checkpoint-oriented git flows that only stage/commit the protected file.
+  if printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+(add|commit|status|diff|log|show)\b'; then
+    :
+  # Mutating utilities (cp, mv, rm, sed, etc.) targeting the protected path.
+  elif printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])(cp|mv|rm|sed|perl|python|python3|ruby|node|tee|touch|truncate|install|chmod)[[:space:]]'; then
+    record_danger_latch "$LATCH_FILE" "block" "shell edit of protected guard" "$COMMAND"
+    emit_block_json "$PROTECTED_HOOK_REL is protected from Bash-based edits — it is the guard that enforces worktree write boundaries. Do not modify it via the shell. Ask the user for permission before modifying this hook. Command was: $COMMAND"
+    exit 0
+  # Output-redirect operators that write to a file. Match `>` or `>>` only
+  # when NOT followed by `&` (fd-redirects like 2>&1, >&2 are read-only
+  # plumbing). `<<` heredoc is INPUT and never writes a file, so excluded.
+  elif printf '%s' "$COMMAND" | grep -qE '(>>|>)[^&]'; then
+    record_danger_latch "$LATCH_FILE" "block" "shell redirect into protected guard" "$COMMAND"
+    emit_block_json "$PROTECTED_HOOK_REL is protected from Bash-based edits — it is the guard that enforces worktree write boundaries. Do not redirect output into it. Ask the user for permission before modifying this hook. Command was: $COMMAND"
+    exit 0
+  fi
+fi
+
 # --- Python classifier (preferred path) ---
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
 if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
