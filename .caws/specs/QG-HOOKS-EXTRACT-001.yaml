@@ -2,10 +2,11 @@ id: QG-HOOKS-EXTRACT-001
 title: 'Extract load-bearing quality-gates signals into advisory single-file hooks'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: qg-hooks-extract
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge qg-hooks-extract at 346b12685f2ee91d81d78359697231690aed8444'
 created_at: '2026-05-29T05:43:11.574Z'
-updated_at: '2026-05-29T05:43:11.574Z'
+updated_at: '2026-05-29T06:04:57.184Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
