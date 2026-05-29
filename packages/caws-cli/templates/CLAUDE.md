@@ -26,13 +26,13 @@ caws gates run --spec <SPEC-ID> --context commit
 
 ## CAWS Workflow
 
-v11.1+ ships ten governed command groups:
+v11.1+ ships twelve governed command groups:
 
 ```
-init  doctor  status  scope  claim  gates  evidence  waiver  specs  worktree
+init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents
 ```
 
-A multi-agent `agents` surface (list/show) is planned for v11.2; until then use `caws status` plus direct reads of `.caws/agents.json` and `.caws/worktrees.json`.
+The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`.
 
 ### Per-feature workflow
 
@@ -78,9 +78,11 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 - `caws claim [--takeover]` — surface or take worktree ownership. `--takeover` writes a `prior_owners` audit on the registry entry.
 - `caws gates run --spec <id> --context commit` — run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. No `--quiet`, no `--json`; capture combined output and inspect exit code.
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
+- `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
 - `caws specs create | list | show | close | archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag.
 - `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse` — worktree lifecycle. `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
+- `caws agents register | heartbeat | stop | list | show | prune` — agent liveness substrate. `list/show` are read-only; ownership decisions still use `claim`/`worktree`.
 
 Run `caws <group> --help` for full options.
 
