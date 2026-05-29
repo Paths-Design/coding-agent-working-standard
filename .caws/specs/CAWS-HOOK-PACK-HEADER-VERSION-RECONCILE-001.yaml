@@ -2,10 +2,11 @@ id: CAWS-HOOK-PACK-HEADER-VERSION-RECONCILE-001
 title: 'Reconcile bundled hook-pack header versions to packVersion 11; fix two self-inflicted install.test.js assertions'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: hookpack-header-reconcile
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hookpack-header-reconcile at aac4dc043a3c944fcdb7be480f162119f91cb3f9'
 created_at: '2026-05-29T06:09:37.666Z'
-updated_at: '2026-05-29T06:09:37.666Z'
+updated_at: '2026-05-29T06:15:30.996Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
