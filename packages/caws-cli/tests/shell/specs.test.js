@@ -389,6 +389,61 @@ describe('A6: caws specs close (event)', () => {
 });
 
 // ============================================================
+// CAWS-AUTOCOMMIT-INTEGRITY-001 A3/A4: close surfaces a
+// non-landed audit commit (refused_dirty) instead of silently
+// reporting success; clean close is unchanged.
+// ============================================================
+describe('CAWS-AUTOCOMMIT-INTEGRITY-001: audit-commit surfacing on close', () => {
+  let repoRoot, cawsDir;
+  beforeEach(() => { ({ repoRoot, cawsDir } = setup('specs-autocommit-')); });
+  afterEach(() => rmrf(repoRoot));
+
+  it('A3: surfaces refused_dirty (warning + exit 1) when the audit commit does not land', () => {
+    // Create the spec, then COMMIT it clean so it is tracked at HEAD.
+    capture(runSpecsCreateCommand, {
+      cwd: repoRoot, id: 'DIRTY-001', title: 't', mode: 'chore', riskTier: 3,
+    });
+    execFileSync('git', ['-C', repoRoot, 'add', '-A']);
+    execFileSync('git', ['-C', repoRoot, 'commit', '--quiet', '-m', 'add spec']);
+
+    // Make the spec file dirty BEFORE the close (unrelated uncommitted edit).
+    // closeSpec sees wasDirtyBeforeWrite=true → autoCommit returns refused_dirty.
+    const specPath = path.join(cawsDir, 'specs/DIRTY-001.yaml');
+    fs.appendFileSync(specPath, '\n# unrelated local edit\n');
+
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'DIRTY-001', resolution: 'completed', reason: 'done',
+    });
+
+    // The lifecycle YAML change still landed on disk (close is not rolled back).
+    expect(fs.readFileSync(specPath, 'utf8')).toMatch(/lifecycle_state:\s*closed/);
+    // But the command MUST surface the non-landed audit commit, not report bare success.
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/applied but NOT committed/);
+    expect(r.stderr).toMatch(/commit it manually|git log/i);
+  });
+
+  it('A4: clean close commits, prints success, exits 0 (no regression)', () => {
+    capture(runSpecsCreateCommand, {
+      cwd: repoRoot, id: 'CLEAN-001', title: 't', mode: 'chore', riskTier: 3,
+    });
+    execFileSync('git', ['-C', repoRoot, 'add', '-A']);
+    execFileSync('git', ['-C', repoRoot, 'commit', '--quiet', '-m', 'add spec']);
+
+    const r = capture(runSpecsCloseCommand, {
+      cwd: repoRoot, id: 'CLEAN-001', resolution: 'completed', reason: 'done',
+    });
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/closed CLEAN-001 \(resolution: completed\)/);
+    expect(r.stderr).not.toMatch(/applied but NOT committed/);
+    // The audit commit landed: working tree is clean of the spec change.
+    const status = execFileSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' });
+    expect(status).not.toMatch(/specs\/CLEAN-001\.yaml/);
+  });
+});
+
+// ============================================================
 // A7: archive performs filesystem move
 // ============================================================
 describe('A7: caws specs archive (tombstone event)', () => {

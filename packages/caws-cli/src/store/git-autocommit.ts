@@ -159,8 +159,16 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
     return { kind: 'committed', sha: '' };
   }
 
+  // Commit ONLY the writer's own paths via an explicit pathspec.
+  // A bare `git commit -m <msg>` commits the ENTIRE index, which under
+  // a shared cross-worktree index (a concurrent sibling session may have
+  // pre-staged unrelated files) would sweep those foreign files into a
+  // CAWS lifecycle commit — the exact cross-session attribution failure
+  // CAWS exists to prevent. Path-scoping the commit makes it total over
+  // ambient index state: only `input.paths` are committed, whatever else
+  // is staged. (CAWS-AUTOCOMMIT-INTEGRITY-001)
   const commitResult = runGit(
-    ['commit', '-m', input.message],
+    ['commit', '-m', input.message, '--', ...input.paths],
     input.repoRoot
   );
   if (!commitResult.ok) {
