@@ -3,6 +3,7 @@ title: 'caws init writes a marked, idempotent .gitignore block for ephemeral .ca
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: init-gitignore
 created_at: '2026-05-29T17:25:01.732Z'
 updated_at: '2026-05-29T17:25:01.732Z'
 blast_radius:
