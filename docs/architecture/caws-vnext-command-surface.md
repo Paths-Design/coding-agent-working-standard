@@ -348,7 +348,8 @@ is still forthcoming. Every command group is implemented in
 | `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws specs create/list/show/close/archive` | vNext spec lifecycle. |
-| `caws specs recover <id>` | Recover an archived spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
+| `caws specs recover <id>` | Recover an archived OR retired spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
+| `caws specs retire-draft <id>` | Governed retirement of a never-activated DRAFT spec (CAWS-SPECS-RETIRE-DRAFT-001). Draft-only: refuses active (use close), closed (use archive), archived. Tombstone — deletes the draft YAML and appends a recoverable `spec_retired` event (recover via `specs show --archived` / `specs recover`). The sanctioned alternative to raw `git rm .caws/specs/<id>.yaml`, which bypasses the audit + recovery path. |
 | `caws specs prune-archive` | Migrate legacy `.caws/specs/.archive/<id>.yaml` bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` to execute. Unrecoverable bodies quarantined, never silently deleted. |
 | `caws specs migrate` | v10→v11 spec YAML migrator. Dry-run by default; `--apply --partial` for partial migration. |
 | `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |

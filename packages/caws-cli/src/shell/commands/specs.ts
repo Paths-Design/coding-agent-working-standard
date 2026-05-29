@@ -34,6 +34,7 @@ import {
   listSpecs,
   pruneArchive,
   recoverArchivedSpec,
+  retireDraftSpec,
   showSpec,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '@paths.design/caws-kernel';
@@ -479,6 +480,50 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     return 1;
   }
   out(`archived ${outcome.id} → ${path.relative(ctx.repoRoot, outcome.path)}`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs retire-draft (CAWS-SPECS-RETIRE-DRAFT-001) ─────────────────
+
+export interface SpecsRetireDraftOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly reason?: string;
+}
+
+export function runSpecsRetireDraftCommand(
+  opts: SpecsRetireDraftOptions
+): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'retire-draft');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'retire-draft'
+  );
+  if (actor === null) return 2;
+
+  const input: Parameters<typeof retireDraftSpec>[1] = {
+    id: opts.id,
+    now: nowFn,
+    actor,
+  };
+  if (opts.reason !== undefined) (input as { reason?: string }).reason = opts.reason;
+
+  const result = retireDraftSpec(ctx.cawsDir, input);
+  if (!isOk(result)) {
+    err('caws specs retire-draft: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs retire-draft: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`retired draft ${outcome.id} (recoverable via caws specs show ${outcome.id} --archived)`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

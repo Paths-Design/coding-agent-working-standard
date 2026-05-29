@@ -35,6 +35,7 @@ import {
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
+  runSpecsRetireDraftCommand,
   runSpecsCloseCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
@@ -705,6 +706,22 @@ export function registerShellCommands(
         id,
         showData: opts.data === true,
         ...(typeof opts.out === 'string' && opts.out.length > 0 ? { outPath: opts.out } : {}),
+      });
+      exit(code);
+    });
+
+  specsCmd
+    .command('retire-draft <id>')
+    .description(
+      'Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), closed (use archive), and archived specs. Deletes the draft YAML and appends a recoverable spec_retired event (recover via caws specs show <id> --archived). The governed alternative to raw git rm.'
+    )
+    .option('--reason <text>', 'Optional human-readable retirement note')
+    .option('--data', 'Show structured data block on diagnostics')
+    .action((id: string, opts: { reason?: string; data?: boolean }) => {
+      const code = runSpecsRetireDraftCommand({
+        id,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
       });
       exit(code);
     });
