@@ -7,19 +7,63 @@ created_at: '2026-05-29T19:11:39.719Z'
 updated_at: '2026-05-29T19:11:39.719Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
+    - packages/caws-cli/CHANGELOG.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Plain `git add` and `git commit` (without --amend) resolve to "allow",
+    not "ask". They no longer engage the dangerous-command session latch.
+  - >-
+    `git commit --amend` continues to resolve to "ask" (history rewrite /
+    attribution vector — failure-lineage Entry 17 intro, Entry 18).
+  - >-
+    Branch-creating `git checkout -b`/`-B` and `git switch -c`/`-C` resolve
+    to "allow". Bare `git checkout <path>`, `git checkout .`,
+    `git restore .` remain governed by CONFIRM_SEGMENT_PATTERNS (discard
+    changes). `git switch` with -f/--force/--discard-changes resolves to
+    "ask".
+  - >-
+    No deny/confirm pattern is weakened: git push --force, reset --hard,
+    rebase, cherry-pick, clean -f, git-bootstrap (init) and its
+    flag-split variants, rm -rf, and pipe-to-shell all keep their prior
+    decisions.
+  - >-
+    The sticky-latch replay message names which command first engaged the
+    latch (read from the latch file), so an agent stops misattributing the
+    block to the command it is currently running.
+  - >-
+    The block message states the agent cannot self-reset the latch and
+    must ask the user to run reset-danger-latch.sh.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the calibrated classifier
+    when: '`git add path.py` and `git commit -m "msg"` are classified'
+    then: both return decision "allow" with empty reason
+  - id: A2
+    given: the calibrated classifier
+    when: '`git commit --amend` is classified'
+    then: decision is "ask" (never "allow")
+  - id: A3
+    given: the calibrated classifier
+    when: '`git checkout -b feat` and `git switch -c feat` are classified'
+    then: both return "allow"; bare `git checkout .` stays "ask"; `git switch -f x` stays "ask"
+  - id: A4
+    given: the calibrated classifier
+    when: 'force-push, reset --hard, rebase, cherry-pick, and the git-bootstrap (init) flag-split family are classified'
+    then: every one keeps its prior ask/deny decision (no regression)
+  - id: A5
+    given: a session whose latch was engaged by command X
+    when: a later Bash call hits the sticky latch
+    then: the block reason names command X and states the reset is human-only
 non_functional: {}
 contracts: []

@@ -550,3 +550,93 @@ describe('DANGER-LATCH-CALIBRATION-001 substitution: $(...) deny still escalates
     expect(decision).not.toBe('allow');
   });
 });
+
+// ===========================================================================
+// DANGER-LATCH-WORKFLOW-CALIBRATION-001 — admit everyday git workflow writes
+//
+// The prior read-only-only allow-list swept plain `git add` / `git commit`
+// into "unknown git subcommand -> ask", and an `ask` engages the sticky
+// session latch. That trapped agents on the CAWS-documented happy path
+// (commit the spec on main, then create the worktree). This slice admits
+// the non-destructive everyday-workflow writes while keeping every
+// destructive variant governed. See failure-lineage Entry 17.
+// ===========================================================================
+
+describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A1: plain add/commit allowed', () => {
+  it('git add path.py → allow', () => {
+    expect(classify('git add path.py').decision).toBe('allow');
+  });
+
+  it('git commit -m "msg" → allow', () => {
+    expect(classify('git commit -m "msg"').decision).toBe('allow');
+  });
+
+  it('git add -A && git commit -m "feat: x" → allow (full commit loop)', () => {
+    expect(classify('git add -A && git commit -m "feat: x"').decision).toBe('allow');
+  });
+
+  it('git commit message mentioning a dangerous phrase stays allow (quote-safe)', () => {
+    // The dangerous phrase is inside the quoted commit message, not
+    // executable surface — must not trip a deny/confirm pattern.
+    expect(classify('git commit -m "fix: handle git push --force edge case"').decision).toBe('allow');
+  });
+});
+
+describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A2: commit --amend stays ask', () => {
+  it('git commit --amend -m "rewrite" → ask (never allow)', () => {
+    const { decision, reason } = classify('git commit --amend -m "rewrite"');
+    expect(decision).toBe('ask');
+    expect(reason.toLowerCase()).toContain('amend');
+  });
+
+  it('git commit --amend --no-edit → ask (never allow)', () => {
+    expect(classify('git commit --amend --no-edit').decision).toBe('ask');
+  });
+});
+
+describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A3: branch-create allowed, discard stays governed', () => {
+  it('git checkout -b feature → allow', () => {
+    expect(classify('git checkout -b feature').decision).toBe('allow');
+  });
+
+  it('git switch -c feature → allow', () => {
+    expect(classify('git switch -c feature').decision).toBe('allow');
+  });
+
+  it('git switch main → allow (switch refuses to clobber dirty tree)', () => {
+    expect(classify('git switch main').decision).toBe('allow');
+  });
+
+  it('git checkout . → ask (discards all changes)', () => {
+    expect(classify('git checkout .').decision).not.toBe('allow');
+  });
+
+  it('git checkout main → ask (bare checkout to existing ref not auto-admitted)', () => {
+    expect(classify('git checkout main').decision).not.toBe('allow');
+  });
+
+  it('git switch -f main → ask (force discards local state)', () => {
+    expect(classify('git switch -f main').decision).not.toBe('allow');
+  });
+});
+
+describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A4: no destructive regression', () => {
+  const mustNotAllow = [
+    'git push --force origin main',
+    'git push -f origin main',
+    'git reset --hard HEAD~1',
+    'git rebase main',
+    'git cherry-pick abc123',
+    'git clean -fd',
+    'rm -rf /Users/x/important',
+    // Entry 17 bootstrap family — flag-split variants must still engage.
+    'git init',
+    'git --bare init',
+    'git -C /tmp/foo init',
+  ];
+  mustNotAllow.forEach((cmd) => {
+    it(`${cmd} → NOT allow (regression guard)`, () => {
+      expect(classify(cmd).decision).not.toBe('allow');
+    });
+  });
+});

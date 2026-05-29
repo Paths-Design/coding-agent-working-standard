@@ -93,7 +93,24 @@ fi
 
 LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
 if [[ -f "$LATCH_FILE" ]]; then
-  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. Ask the user to clear the latch with .claude/hooks/reset-danger-latch.sh before more Bash commands may run. Sentinel: $LATCH_FILE"
+  # Surface which command FIRST engaged the latch so the agent stops
+  # misattributing the block to the command it happens to be running now
+  # (the latch is sticky per-session; every later Bash call hits this
+  # branch regardless of what it is). Read the original command + reason
+  # from the latch file when jq is available.
+  ORIG_CMD=""
+  ORIG_WHY=""
+  if command -v jq >/dev/null 2>&1; then
+    ORIG_CMD=$(jq -r '.command // ""' "$LATCH_FILE" 2>/dev/null)
+    ORIG_WHY=$(jq -r '.reason // ""' "$LATCH_FILE" 2>/dev/null)
+  fi
+  TRIGGER_NOTE="The latch was engaged earlier in this session"
+  if [[ -n "$ORIG_CMD" ]]; then
+    TRIGGER_NOTE="$TRIGGER_NOTE by this command: \`${ORIG_CMD%%$'\n'*}\`"
+    [[ -n "$ORIG_WHY" ]] && TRIGGER_NOTE="$TRIGGER_NOTE (reason: $ORIG_WHY)"
+    TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for the whole session, so every Bash call blocks until it is cleared."
+  fi
+  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You CANNOT clear this yourself — the reset is human-only by design. Ask the user to run: bash .claude/hooks/reset-danger-latch.sh --current --reason \"<why this is safe>\". Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   exit 0
 fi

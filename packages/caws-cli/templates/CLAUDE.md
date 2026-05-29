@@ -228,11 +228,29 @@ See `.claude/hooks/CLAUDE.md` for the canonical pack lineage map (which hook cov
 
 ### Dangerous-command latch
 
-`block-dangerous.sh` is a human-review boundary, not a syntax check. When it returns `block` or `ask`:
+`block-dangerous.sh` is a human-review boundary, not a syntax check.
+
+**Everyday git workflow is admitted and does NOT latch.** The
+classifier allows `git add`, `git commit` (without `--amend`),
+`git checkout -b` / `git switch -c` (branch creation), and `git switch`.
+The CAWS happy path — commit the spec on `main`, then create the
+worktree — runs clean:
+
+```bash
+git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001 spec"
+caws worktree create wt-feat-001 --spec FEAT-001
+```
+
+The latch is reserved for genuinely dangerous or bypass-shaped commands:
+force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`,
+`commit --amend` (history rewrite), bare `checkout <path>` / `checkout .`
+(discards changes), `rm -rf` outside safe prefixes, pipe-to-shell, and
+the `git init` bootstrap family (including flag-split variants like
+`git --bare init`). When the hook returns `block` or `ask`:
 
 1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
-2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch.
-3. To clear, ask the user to run:
+2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch. The block message names which command first engaged the latch — if it is not the command you just ran, the latch is sticky from an earlier command, not a problem with the current one.
+3. **You cannot clear the latch yourself** — the reset is human-only by design. Ask the user to run:
    ```bash
    bash .claude/hooks/reset-danger-latch.sh --current --reason "<why this is safe>"
    ```

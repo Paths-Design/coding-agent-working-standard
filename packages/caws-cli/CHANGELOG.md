@@ -2,6 +2,29 @@
 
 ### Fixed
 
+* **hook-pack (claude-code): dangerous-command guard latched the CAWS
+  happy path.** The `DANGER-LATCH-CALIBRATION-001` allow-list admitted
+  only read-only git subcommands, so plain `git add` and `git commit`
+  fell through to "unknown git subcommand → ask" — and an `ask` engages
+  the sticky per-session latch. The first commit of real work latched
+  the session and hard-blocked every subsequent Bash call, which is
+  exactly the CAWS-documented workflow (commit the spec on `main`, then
+  `caws worktree create`). `DANGER-LATCH-WORKFLOW-CALIBRATION-001` now
+  admits the non-destructive everyday-workflow writes — `git add`,
+  `git commit` (without `--amend`), branch-creating `git checkout -b` /
+  `git switch -c`, and `git switch` — while keeping every destructive
+  variant governed: `commit --amend`, force-push, `reset --hard`,
+  `rebase`, `cherry-pick`, `clean -f`, bare `checkout <path>` /
+  `checkout .`, `rm -rf`, pipe-to-shell, and the `git init` bootstrap
+  family (including flag-split variants) all keep their prior ask/deny
+  decisions (22 new regression tests; 101/101 calibration tests pass).
+  Two UX fixes ship alongside: the sticky-latch block message now names
+  which command *first* engaged the latch (agents were misattributing
+  the block to whatever they ran next), and it states explicitly that
+  the reset is human-only. Pack version unchanged at v11 — `caws init`
+  on a fresh repo gets the fix; existing installs pick it up via
+  `caws init --overwrite`.
+
 * **hook-pack (claude-code): `reset-danger-latch.sh` was a no-op
   wrapper.** Since pack v1 the shipped `reset-danger-latch.sh`
   delegated to `$PROJECT_DIR/packages/caws-cli/templates/.claude/hooks/reset-danger-latch.sh`

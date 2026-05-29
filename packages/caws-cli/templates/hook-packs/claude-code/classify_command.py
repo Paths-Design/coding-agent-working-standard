@@ -186,10 +186,38 @@ ALLOWED_SIMPLE_COMMANDS: set[str] = {
     # classify_allow_list handles find specifically.
 }
 
-# Allowed git subcommands (read-only).
+# Allowed git subcommands.
+#
+# Two classes live here:
+#   - Read-only inspection: status, log, diff, show, branch, tag, remote,
+#     config, rev-parse, ls-files, blame (gated to read-only forms in
+#     classify_allow_list).
+#   - Everyday-workflow writes whose plain form the failure-lineage corpus
+#     has NEVER recorded as a loss or attribution incident
+#     (DANGER-LATCH-WORKFLOW-CALIBRATION-001): "add" and "commit". These
+#     mutate the index / create a new commit object but do not rewrite
+#     history, discard working-tree state, or touch a remote. Their
+#     dangerous variants ("commit" with --amend) are special-cased to
+#     "ask" in classify_allow_list, and worktree-guard.sh independently
+#     governs commit-on-main / inherited-dirty-state coordination
+#     (failure-lineage Entry 17 intro, Entry 18). Branch-creating
+#     "checkout -b" / "switch -c" are admitted by their own special-cases;
+#     bare "checkout <path>" / "checkout ." stay denied by
+#     CONFIRM_SEGMENT_PATTERNS because they discard changes.
+#
+# Why widen: the prior read-only-only calibration swept plain "git add" /
+# "git commit" into "unknown git subcommand -> ask", and an "ask" engages
+# the sticky session latch. That trapped agents on the CAWS-documented
+# happy path (commit the spec on main, then create the worktree): the
+# first commit of real work latched the session and hard-blocked every
+# subsequent Bash call. The latch must fire on panic/bypass patterns
+# (the flag-split git-bootstrap of Entry 17, force-push, rm -rf), not on
+# calm everyday commits. See failure-lineage Entry 17 "What it doesn't
+# catch" for why the latch -- not the allow-list -- is the deep control.
 ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     "status", "log", "diff", "show", "branch", "tag",
     "remote", "config", "rev-parse", "ls-files", "blame",
+    "add",
 }
 
 # Allowed gh top-level groups + subcommands. Format: "group action".
@@ -812,6 +840,53 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             if any(t in ("--get", "--get-all", "--get-regexp", "--list", "-l") for t in tokens):
                 return ("allow", "")
             return None
+        # Special-case `git commit` — admit plain commit (creates a new
+        # commit object; not destructive). REJECT --amend, which rewrites
+        # the last commit and is the attribution-theft vector of
+        # failure-lineage Entry 17's intro and Entry 18. --amend falls
+        # through to "ask" and is additionally blocked by worktree-guard.sh
+        # while worktrees are active.
+        if sub == "commit":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            # `--amend` rewrites the last commit (history-rewrite +
+            # attribution-theft vector, failure-lineage Entry 17 intro /
+            # Entry 18). Return None so it falls through to the
+            # governed-family default → "ask"; the allow-list is suppress-
+            # only and cannot itself escalate.
+            if any(t == "--amend" or t.startswith("--amend=") for t in tokens):
+                return None
+            return ("allow", "")
+        # Special-case `git checkout` — admit ONLY the branch-creating form
+        # (-b / -B). Bare `git checkout <path>` and `git checkout .` discard
+        # working-tree changes and are governed by CONFIRM_SEGMENT_PATTERNS;
+        # `git checkout <branch>` is left to the existing tier (it can
+        # silently abandon uncommitted work in some states). Only branch
+        # creation is unambiguously safe.
+        if sub == "checkout":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            if any(t in ("-b", "-B") for t in tokens):
+                return ("allow", "")
+            return None
+        # Special-case `git switch` — admit the branch-creating form
+        # (-c / -C). Plain `git switch <branch>` refuses to move when the
+        # working tree has conflicting local changes (unlike checkout), so
+        # it is also admitted; REJECT the force/discard forms
+        # (-f / --force / --discard-changes), which throw away local state
+        # and fall through to "ask".
+        if sub == "switch":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            if any(t in ("-f", "--force", "--discard-changes") for t in tokens):
+                return None
+            return ("allow", "")
         if sub in ALLOWED_GIT_SUBCOMMANDS:
             return ("allow", "")
         return None
@@ -907,6 +982,31 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
     if cmd_base == "git":
         sub = detect_git_subcommand(segment)
         if sub is not None:
+            # Name the specific rejected variant when the subcommand itself
+            # is an admitted everyday-workflow write but this invocation
+            # used a dangerous flag (the allow-list special-case returned
+            # None for it). Keeps the "ask" reason accurate instead of
+            # mislabeling a known subcommand as "unknown".
+            if sub == "commit":
+                return (
+                    "ask",
+                    "git commit --amend rewrites the last commit — a "
+                    "history-rewrite and attribution-theft vector "
+                    "(failure-lineage Entry 17/18); ask before invoking",
+                )
+            if sub == "switch":
+                return (
+                    "ask",
+                    "git switch with --force/--discard-changes throws away "
+                    "local changes; ask before invoking",
+                )
+            if sub == "checkout":
+                return (
+                    "ask",
+                    "git checkout to an existing branch/path can discard "
+                    "uncommitted work; only `checkout -b` is auto-admitted; "
+                    "ask before invoking",
+                )
             return (
                 "ask",
                 f"unknown git subcommand: {sub} — not on the documented "
