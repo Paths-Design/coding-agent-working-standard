@@ -218,3 +218,16 @@ export type {
 
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';
+
+// CAWS-CLI-HELP-METADATA-AUTHORITY-001: the typed single-source command
+// metadata that register.ts consumes (populated group-by-group in slices 2-3)
+// and that the help-metadata lock test asserts against the kernel enums +
+// REGISTERED_COMMAND_GROUPS.
+export { COMMAND_SURFACE_METADATA } from './command-metadata';
+export type {
+  CommandMeta,
+  LeafCommandMeta,
+  GroupCommandMeta,
+  CommandOptionMeta,
+  CommandArgMeta,
+} from './command-metadata';
