@@ -90,6 +90,13 @@ export interface ArchiveSpecInput {
   readonly actor: EventBody['actor'];
 }
 
+export interface RetireDraftSpecInput {
+  readonly id: string;
+  readonly reason?: string;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
 export type SpecWriterOutcome =
   | {
       readonly kind: 'success';
@@ -909,6 +916,166 @@ export function archiveSpec(
   });
 }
 
+// ─── retireDraftSpec ─────────────────────────────────────────────────────
+//
+// CAWS-SPECS-RETIRE-DRAFT-001. Governed retirement of a never-activated
+// DRAFT spec. Mirrors archiveSpec's tombstone flow exactly, with two
+// differences: the precondition is lifecycle_state === 'draft' (not
+// 'closed'), and the event is spec_retired (which DOES carry an optional
+// reason, unlike spec_archived). No new lifecycle_state value — the
+// spec_retired event is the durable signal, and the body is deleted +
+// recoverable via `git show <blob_sha>`.
+
+export function retireDraftSpec(
+  cawsDir: string,
+  input: RetireDraftSpecInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const fromPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(fromPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${fromPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  // Validate current state: must be draft. Active → close; closed → archive.
+  const sourceResult = readYamlSource(fromPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const parsed = parseAndValidateSpec(sourceResult.value);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule },
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+  if (spec.lifecycle_state !== 'draft') {
+    const alternative =
+      spec.lifecycle_state === 'active'
+        ? `Use \`caws specs close ${input.id}\` to close an active spec.`
+        : spec.lifecycle_state === 'closed'
+          ? `Use \`caws specs archive ${input.id}\` to archive a closed spec.`
+          : `Only draft specs can be retired.`;
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is in lifecycle_state "${spec.lifecycle_state}"; retire-draft only retires drafts. ${alternative}`,
+        { subject: input.id, data: { current_state: spec.lifecycle_state } }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const fromRel = path.relative(repoRoot, fromPath);
+
+  // Capture blob_sha BEFORE any mutation — the authoritative recovery
+  // target. Refuse if the draft is not tracked at HEAD (no recovery path),
+  // mirroring archiveSpec's null-blob refusal.
+  const blobSha = gitBlobShaAtHead(repoRoot, fromRel);
+  if (blobSha === null) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is not tracked at HEAD. Cannot retire: blob_sha is the authoritative recovery target, and without it the retirement event would have no recovery path. Commit the draft first, then re-run retire-draft.`,
+        { subject: input.id, data: { from_path: fromRel } }
+      )
+    );
+  }
+  const sourceCommitSha = gitLastCommitForPath(repoRoot, fromRel);
+
+  const eventData: Record<string, unknown> = {
+    from_path: fromRel,
+    blob_sha: blobSha,
+  };
+  if (sourceCommitSha !== null) {
+    eventData.source_commit_sha = sourceCommitSha;
+  }
+  if (input.reason !== undefined && input.reason.length > 0) {
+    eventData.reason = input.reason;
+  }
+  const event: EventBody = {
+    event: 'spec_retired',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: eventData,
+  } as unknown as EventBody;
+
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, fromRel);
+
+  let unlinkOk = false;
+  let unlinkError: string | null = null;
+
+  const txnResult = withLifecycleLock(cawsDir, () => {
+    const r = runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [],
+      events: [event],
+    });
+    if (!r.ok) return r;
+    if (r.value.kind !== 'success') return r;
+    try {
+      fs.unlinkSync(fromPath);
+      unlinkOk = true;
+    } catch (e) {
+      const cause = e as { message?: string };
+      unlinkError = cause.message ?? 'unknown unlink error';
+    }
+    return r;
+  });
+
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  if (txnResult.value.kind !== 'success') {
+    return ok({
+      kind: 'partial_failure_recovered',
+      cause: txnResult.value.cause,
+    });
+  }
+  if (!unlinkOk) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        `spec_retired event appended (blob_sha=${blobSha}) but unlink of ${fromPath} failed (${unlinkError}). The body is recoverable via \`git show ${blobSha}\` but the draft file still exists on disk.`,
+        {
+          subject: input.id,
+          data: {
+            from_path: fromPath,
+            blob_sha: blobSha,
+            recovery_instruction: `Manually remove ${fromPath}; the body is in git history at blob ${blobSha}.`,
+          },
+        }
+      )
+    );
+  }
+
+  const audit = autoCommit({
+    repoRoot,
+    paths: [fromRel],
+    message: `chore(caws): retire-draft ${input.id}`,
+    wasDirtyBeforeWrite,
+  });
+
+  return ok({
+    kind: 'success',
+    id: input.id,
+    path: fromPath,
+    data: { audit_commit: audit },
+  });
+}
+
 // ─── Outcome mapper ──────────────────────────────────────────────────────
 
 function mapTxnToOutcome(
@@ -1193,10 +1360,15 @@ function findArchivedSpecEvent(
     } catch {
       continue;
     }
+    // CAWS-SPECS-RETIRE-DRAFT-001 A5: recovery also resolves a retired
+    // draft. spec_retired shares the identical {from_path, blob_sha}
+    // tombstone shape as spec_archived, so the same git-show recovery
+    // path reconstructs it. Accept either event type.
+    const evtType = (parsed as { event?: unknown }).event;
     if (
       typeof parsed !== 'object' ||
       parsed === null ||
-      (parsed as { event?: unknown }).event !== 'spec_archived' ||
+      (evtType !== 'spec_archived' && evtType !== 'spec_retired') ||
       (parsed as { spec_id?: unknown }).spec_id !== specId
     ) {
       continue;
