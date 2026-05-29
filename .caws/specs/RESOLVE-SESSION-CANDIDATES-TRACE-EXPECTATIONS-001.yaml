@@ -2,10 +2,11 @@ id: RESOLVE-SESSION-CANDIDATES-TRACE-EXPECTATIONS-001
 title: 'Reconcile resolve-session-candidates trace expectations to the 6-source order after claude_code_env tier-1.5 (test-only)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: resolve-session-trace
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge resolve-session-trace at a5639e00f7353a5119c66dea9bbd92b3357e96e7'
 created_at: '2026-05-29T04:57:00.836Z'
-updated_at: '2026-05-29T04:57:00.836Z'
+updated_at: '2026-05-29T05:00:43.734Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/shell/session
