@@ -7,19 +7,149 @@ created_at: '2026-05-29T17:25:01.732Z'
 updated_at: '2026-05-29T17:25:01.732Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-gitignore.ts
+    - packages/caws-cli/tests/shell/init-command.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-gitignore.ts
+    - packages/caws-cli/tests/shell/init-command.test.js
+    - .caws/specs/CAWS-INIT-GITIGNORE-MANAGE-001.yaml
+  out:
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/harness-detect.ts
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    New init step manages a MARKED .gitignore block for ephemeral .caws/ state.
+    caws init writes a fenced, version-marked block to the repo-root .gitignore
+    listing the ephemeral/runtime/local .caws/ paths that must NEVER be tracked:
+    .caws/worktrees/, .caws/worktrees.json, .caws/agents.json, .caws/leases/,
+    .caws/cache/, .caws/sessions/, .caws/state/, .caws/duplication-cache.json,
+    .caws/events.jsonl, .caws/events.jsonl.lock. The block is delimited by
+    explicit BEGIN/END markers carrying a block version (e.g.
+    "# >>> caws gitignore (managed, v1) >>>" ... "# <<< caws gitignore <<<") so
+    it is machine-locatable for idempotent update.
+  - >-
+    AUTHORITY state is NEVER added to the ignore block. .caws/specs/,
+    .caws/policy.yaml, and .caws/waivers/ are the versioned source of truth and
+    MUST remain trackable — the managed block contains no entry that would match
+    them. A short comment inside the block states the track-vs-ignore split so a
+    human reading .gitignore understands why specs/policy/waivers are absent.
+  - >-
+    Idempotent: append-once, update-in-place, never duplicate. On first run the
+    block is appended to .gitignore (creating the file if absent). On re-run, if
+    a managed block with the markers already exists it is REPLACED in place (so a
+    block-version bump updates the entries) and NOT appended again. Running init
+    twice produces byte-identical .gitignore. The detection keys on the marker
+    lines, not on the entry contents.
+  - >-
+    Never clobbers user content. Only the bytes BETWEEN the managed markers are
+    owned by caws; everything else in .gitignore is preserved verbatim (the
+    user's own rules, ordering, comments, trailing newline policy). If
+    .gitignore has no managed block, the block is appended after the existing
+    content (preceded by a single blank-line separator) — existing rules are
+    untouched. caws never reorders or removes user lines.
+  - >-
+    Respects --overwrite / --adopt consistently with the hook-pack step.
+    Default: write/update the managed block. With --adopt: if a managed block is
+    ABSENT, do not create one (leave .gitignore as-is) and report adopted; if
+    present, leave it untouched. The step never silently overwrites
+    user-authored lines regardless of flag (only the managed-marker region is
+    ever rewritten). --overwrite refreshes the managed block to the current
+    block version even if the on-disk block was hand-edited inside the markers.
+  - >-
+    Stepwise reporting consistent with init existing panels. The step renders a
+    panel (mirroring renderSettingsWiring / renderHookPackInstall) reporting one
+    of: created (.gitignore did not exist), block_added (appended to existing
+    file), block_updated (replaced an out-of-date managed block), unchanged
+    (managed block already current), adopted (--adopt, no block written). The
+    init exit code is unchanged by this step (advisory/observational; a
+    .gitignore write failure is a WARNING, not a hard error — init still exits 0
+    on an otherwise-successful bootstrap).
+  - >-
+    The ignore set matches what the bootstrap + hook pack actually write. The
+    entries correspond exactly to the runtime artifacts produced by initProject
+    (agents.json, worktrees.json) and the agent-register/heartbeat/stop hooks
+    (leases/), the event-log writer (events.jsonl[.lock]), and the worktree/cache
+    machinery (worktrees/, cache/, sessions/, state/, duplication-cache.json) —
+    the same classification the canonical CAWS repo .gitignore uses. No entry is
+    speculative; each names a path some CAWS code path writes.
+  - >-
+    Tests prove create / append / idempotent-rerun / update-on-version-bump /
+    no-clobber / authority-not-ignored. tests/shell/init-command.test.js gains
+    cases: (a) fresh repo with no .gitignore -> file created with the block;
+    (b) existing .gitignore with user rules -> block appended, user rules byte-
+    preserved; (c) re-run -> byte-identical (no duplicate block); (d) stale
+    managed block (old version markers) -> replaced in place; (e) a path under
+    .caws/specs/ / policy.yaml / waivers/ is NOT matched by the resulting
+    ignore rules; (f) --adopt with no block -> no block written.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: A fresh git repo with no .gitignore, after caws init.
+    when: .gitignore is read and git check-ignore is evaluated.
+    then: >-
+      .gitignore exists and contains the marked managed block; the ephemeral
+      paths (.caws/worktrees.json, .caws/agents.json, .caws/leases/,
+      .caws/events.jsonl, .caws/worktrees/, .caws/cache/) are ignored, and
+      .caws/policy.yaml / .caws/specs/<x>.yaml / .caws/waivers/<x>.json are NOT
+      ignored.
+  - id: A2
+    given: A repo whose .gitignore already has user-authored rules, after caws init.
+    when: .gitignore is read.
+    then: >-
+      The pre-existing user rules are byte-preserved; the caws managed block is
+      appended after them (separated by one blank line); no user line is
+      reordered or removed.
+  - id: A3
+    given: A repo where caws init has already run once.
+    when: caws init is run a second time.
+    then: >-
+      .gitignore is byte-identical to after the first run — the managed block is
+      updated in place, never duplicated. The step reports "unchanged".
+  - id: A4
+    given: A repo whose .gitignore contains an out-of-date managed block (older
+      block-version markers / different entries).
+    when: caws init is run.
+    then: >-
+      The managed block region is replaced with the current entries and version
+      marker; content outside the markers is untouched. The step reports
+      "block_updated".
+  - id: A5
+    given: caws init --adopt in a repo with no existing managed block.
+    when: the gitignore step runs.
+    then: >-
+      No managed block is written; existing .gitignore content (if any) is
+      untouched; the step reports "adopted".
+  - id: A6
+    given: The init command surface + the new step.
+    when: caws init runs end-to-end and the focused init test suite + build run.
+    then: >-
+      The step renders its panel alongside the existing bootstrap / hook-pack /
+      settings panels; init exit code is unchanged (0 on successful bootstrap
+      even if the gitignore write warns); tsc clean; the new + existing
+      init-command tests pass.
+non_functional:
+  reliability:
+    - >-
+      Closes the guaranteed first-run gap: initProject writes agents.json +
+      worktrees.json to disk, so without managed ignore rules every new CAWS
+      project leaves per-CLI-invocation runtime state untracked-but-not-ignored,
+      inviting accidental commits via the very `git add .caws/` the init "Next:"
+      hint suggests. The marked-block + idempotent-update design (mirroring the
+      hook-pack managed-file discipline) lets the ignore set evolve with the
+      runtime surface across releases without duplicating or clobbering user
+      content. Authority state (specs/policy/waivers) stays tracked by
+      construction — the block contains no entry that matches it.
 contracts: []
