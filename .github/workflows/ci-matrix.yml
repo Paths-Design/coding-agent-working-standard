@@ -1,0 +1,139 @@
+# CI matrix — cross-platform fresh-machine verification of the published CAWS CLI
+# (CI-MATRIX-VALIDATION-001).
+#
+# WHY: pre-publish validation (release.yml -> fresh-install-smoke.mjs) only
+# proves the tarball works on ubuntu/node-22. There is no evidence the PUBLISHED
+# package runs on Windows, macOS, or on a different Node major. This matrix is
+# the true outside-in test: it installs @paths.design/caws-cli from the npm
+# registry on each (OS x Node) cell and runs the v11 smoke sequence
+# (init -> specs create -> worktree create -> gates run) end to end.
+#
+# POSTURE: this is POST-PUBLISH verification. Releases are tag-driven and
+# immutable, so a red cell cannot retroactively block the publish that already
+# happened — it is the signal that a PATCH release is required. The matrix runs:
+#   - automatically after the Release workflow completes (verifies what just
+#     shipped), and
+#   - on demand via workflow_dispatch with an explicit version, so a maintainer
+#     can rehearse a version before cutting the next tag.
+# The complementary PRE-publish tarball smoke stays in release.yml; this does
+# not duplicate it (different input: registry package vs local tarball; different
+# axis: OS x Node grid vs single ubuntu/node-22 cell).
+
+name: CI Matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published version to verify (npm dist-tag or exact X.Y.Z)"
+        required: false
+        default: "latest"
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    # On workflow_run, only verify when the Release actually succeeded; on
+    # workflow_dispatch, always run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["20", "22"]
+    steps:
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: "https://registry.npmjs.org"
+
+      # Resolve the version to verify. workflow_dispatch passes an explicit
+      # input; the post-Release run defaults to the `latest` dist-tag (the
+      # publish that just completed sets latest).
+      - name: Resolve target version
+        id: ver
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="latest"; fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Verifying @paths.design/caws-cli@${VERSION}"
+
+      - name: Install published CAWS CLI from npm (fresh, global)
+        shell: bash
+        run: |
+          npm config set fetch-retries 3
+          npm config set fetch-retry-mintimeout 20000
+          npm install -g "@paths.design/caws-cli@${{ steps.ver.outputs.version }}"
+          echo "Installed:"
+          caws --version
+
+      # engines guard (A3): if this Node major is below the package's declared
+      # minimum, the install or first invocation must fail loudly rather than
+      # silently regress. `npm install -g` honors engines with engine-strict;
+      # set it so an unsupported Node fails the cell.
+      - name: Enforce engines (no silent unsupported-Node regression)
+        shell: bash
+        run: npm config set engine-strict true
+
+      # The v11 smoke sequence, in a fresh git repo, exercising the
+      # cross-platform-sensitive paths: init (writes .caws/ + hook pack +
+      # .gitignore), specs create (YAML write + event append), worktree create
+      # (git worktree + sparse-checkout + binding), gates run (policy
+      # evaluation + event append). Runs identically on every OS; Windows
+      # divergences (path separators, line endings, shell quoting) surface here.
+      - name: Smoke — init / specs create / worktree create / gates run
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$(mktemp -d 2>/dev/null || mktemp -d -t caws-matrix)"
+          cd "$WORK"
+          git init --quiet .
+          git config user.email "ci@example.com"
+          git config user.name "CI Matrix"
+          git commit --quiet --allow-empty -m "init"
+
+          echo "== caws init =="
+          caws init --agent-surface claude-code
+          test -f .caws/policy.yaml || { echo "::error::init did not create .caws/policy.yaml"; exit 1; }
+          test -f .gitignore || { echo "::error::init did not create .gitignore"; exit 1; }
+          grep -q "caws gitignore (managed" .gitignore || { echo "::error::init did not write the managed .gitignore block"; exit 1; }
+
+          echo "== caws specs create =="
+          caws specs create CI-SMOKE-001 --title "CI matrix smoke" --mode chore --risk-tier 3
+          test -f .caws/specs/CI-SMOKE-001.yaml || { echo "::error::specs create did not write the spec"; exit 1; }
+
+          echo "== caws worktree create =="
+          caws worktree create ci-smoke-wt --spec CI-SMOKE-001
+          test -d .caws/worktrees/ci-smoke-wt || { echo "::error::worktree create did not produce the worktree dir"; exit 1; }
+
+          echo "== caws gates run =="
+          # gates run exit codes: 0/1 disposition, 2 composition error, 3
+          # evidence-integrity. A non-(2|3) exit means the command itself ran;
+          # 2/3 are hard failures of the command surface and fail the cell.
+          set +e
+          caws gates run --spec CI-SMOKE-001
+          GATES_RC=$?
+          set -e
+          if [ "$GATES_RC" = "2" ] || [ "$GATES_RC" = "3" ]; then
+            echo "::error::gates run hard-failed (exit ${GATES_RC})"
+            exit 1
+          fi
+          echo "== caws doctor (must not exit 2 = composition failure) =="
+          set +e
+          caws doctor
+          DOCTOR_RC=$?
+          set -e
+          if [ "$DOCTOR_RC" = "2" ]; then
+            echo "::error::doctor composition failed (exit 2)"
+            exit 1
+          fi
+
+          echo "Smoke OK on ${{ matrix.os }} / node ${{ matrix.node }} for version ${{ steps.ver.outputs.version }}"
