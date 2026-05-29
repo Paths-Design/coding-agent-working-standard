@@ -3,6 +3,7 @@ title: 'Fix axe cli-accessibility init tests: cwd isolation + drop removed-v10 p
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: axe-init-isolation
 created_at: '2026-05-29T07:13:11.959Z'
 updated_at: '2026-05-29T07:13:11.959Z'
 blast_radius:
