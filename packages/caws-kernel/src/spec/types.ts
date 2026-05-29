@@ -1,15 +1,28 @@
 // Spec types. Hand-curated to match src/schemas/spec.v1.json.
 // Generation from JSON Schema is deferred to caws-types replacement (later slice).
+//
+// The closed enums are exported as `const` value arrays (the single runtime
+// source), and the corresponding TYPES are derived from them. This lets
+// consumers (e.g. the CLI's --mode/--resolution/--risk-tier option help and
+// validation) import the values rather than re-declaring them — eliminating
+// the enum-duplication drift class (CAWS-CLI-HELP-METADATA-AUTHORITY-001).
+// The arrays MUST mirror the corresponding enums in src/schemas/spec.v1.json,
+// which remains the validation authority; a lock test asserts the equality.
 
-export type RiskTier = 1 | 2 | 3;
+export const RISK_TIERS = [1, 2, 3] as const;
+export type RiskTier = (typeof RISK_TIERS)[number];
 
-export type Mode = 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
+export const SPEC_MODES = ['feature', 'refactor', 'fix', 'doc', 'chore'] as const;
+export type Mode = (typeof SPEC_MODES)[number];
 
-export type LifecycleState = 'draft' | 'active' | 'closed' | 'archived';
+export const SPEC_LIFECYCLE_STATES = ['draft', 'active', 'closed', 'archived'] as const;
+export type LifecycleState = (typeof SPEC_LIFECYCLE_STATES)[number];
 
-export type Resolution = 'completed' | 'superseded' | 'abandoned';
+export const SPEC_RESOLUTIONS = ['completed', 'superseded', 'abandoned'] as const;
+export type Resolution = (typeof SPEC_RESOLUTIONS)[number];
 
-export type ContractType = 'api' | 'schema' | 'contract-test' | 'behavior';
+export const CONTRACT_TYPES = ['api', 'schema', 'contract-test', 'behavior'] as const;
+export type ContractType = (typeof CONTRACT_TYPES)[number];
 
 export interface Contract {
   name: string;

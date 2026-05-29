@@ -38,15 +38,21 @@ import {
   showSpec,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '@paths.design/caws-kernel';
+import { SPEC_MODES, SPEC_RESOLUTIONS } from '@paths.design/caws-kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 
-const VALID_MODES = ['feature', 'refactor', 'fix', 'doc', 'chore'] as const;
+// --mode / --resolution validation reads the kernel's single enum source
+// (SPEC_MODES / SPEC_RESOLUTIONS) rather than re-declaring the values here.
+// This eliminated the prior local VALID_MODES / VALID_RESOLUTIONS duplicate
+// (CAWS-CLI-HELP-METADATA-AUTHORITY-001). The kernel arrays mirror
+// spec.v1.json, which remains the validation authority.
+const VALID_MODES = SPEC_MODES;
 type ValidMode = (typeof VALID_MODES)[number];
 
-const VALID_RESOLUTIONS = ['completed', 'superseded', 'abandoned'] as const;
+const VALID_RESOLUTIONS = SPEC_RESOLUTIONS;
 type ValidResolution = (typeof VALID_RESOLUTIONS)[number];
 
 interface BaseCommandOptions {
