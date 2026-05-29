@@ -2,8 +2,10 @@ id: CAWS-DOCTOR-GITIGNORE-DRIFT-001
 title: 'caws doctor warns when .caws/ has specs but ephemeral runtime state is not git-ignored (missing/stale managed block); points at caws init to fix'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: doctor-gi-drift
+lifecycle_state: closed
+updated_at: '2026-05-29T18:24:03.652Z'
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge doctor-gi-drift at e194925d722561276736138530d2387608855b71'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/gitignore-drift.ts
