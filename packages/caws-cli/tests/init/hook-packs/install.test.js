@@ -192,7 +192,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 9');
+        expect(content).toContain('hook_pack_version: 11');
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -208,13 +208,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 9');
+      expect(sessionStart).toContain('hook_pack_version: 11');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 9');
+      expect(preToolUse).toContain('hook_pack_version: 11');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -229,7 +229,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 9');
+      expect(stop).toContain('hook_pack_version: 11');
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -313,7 +313,10 @@ describe('Claude Code pack manifest', () => {
         path.join(packRoot, 'dispatch', 'post_tool_use.sh'), 'utf8'
       );
       expect(postToolUse).toContain('hook_pack_version: 11');
-      const handlersMatch = postToolUse.match(/HANDLERS=\(([^)]+)\)/s);
+      // Match the array body up to the closing paren on its own line.
+      // A plain [^)]+ would stop early at the "(exit 0)" paren inside an
+      // inline comment, so anchor the terminator to a line-leading ")".
+      const handlersMatch = postToolUse.match(/HANDLERS=\(\n([\s\S]*?)\n\)/);
       expect(handlersMatch).not.toBeNull();
       const handlers = handlersMatch[1]
         .split('\n')
@@ -327,15 +330,27 @@ describe('Claude Code pack manifest', () => {
     it('advisory hooks do not couple to the quality-gates package at runtime', () => {
       // Option-C boundary: the hooks reimplement detection intent in bash.
       // They must not shell out to, require, or import any quality-gates
-      // module. (Reading source for design reference is fine; this asserts
-      // no RUNTIME coupling in the shipped script.)
+      // module. Reading source for design reference is permitted and the
+      // hooks DO cite packages/quality-gates in lineage comments — so the
+      // assertion targets RUNTIME coupling (executable references), not
+      // documentation mentions. We scan only non-comment code lines for any
+      // invocation/source/require of a quality-gates module or a .mjs file.
       const packRoot = path.resolve(
         __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
       );
       for (const name of ADVISORY_HOOKS) {
         const content = fs.readFileSync(path.join(packRoot, name), 'utf8');
-        expect(content).not.toMatch(/quality-gates/);
-        expect(content).not.toMatch(/\.mjs/);
+        const codeLines = content
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('#'));
+        for (const line of codeLines) {
+          // No executable reference to the quality-gates package or any
+          // .mjs module from the hook body.
+          expect(line).not.toMatch(/quality-gates/);
+          expect(line).not.toMatch(/\.mjs\b/);
+          expect(line).not.toMatch(/\b(source|require|import)\b.*quality-gates/);
+        }
       }
     });
   });
@@ -865,7 +880,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
       const content = fs.readFileSync(path.join(packRoot, h.name), 'utf8');
       expect(content).toContain('CAWS-MANAGED-HOOK');
       expect(content).toContain('hook_pack: claude-code');
-      expect(content).toContain('hook_pack_version: 9');
+      expect(content).toContain('hook_pack_version: 11');
       expect(content).toContain('caws_min_major: 11');
       // Each promoted hook cites at least one lineage entry from
       // the 22-25 range.
@@ -1171,6 +1186,6 @@ describe('CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 — pack v9', () => {
       path.join(packRoot, 'scope-guard.sh'),
       'utf8'
     );
-    expect(content).toMatch(/^# hook_pack_version: 9$/m);
+    expect(content).toMatch(/^# hook_pack_version: 11$/m);
   });
 });
