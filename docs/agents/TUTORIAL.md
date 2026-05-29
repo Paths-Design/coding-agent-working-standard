@@ -2,16 +2,16 @@
 doc_id: agents-tutorial
 authority: reference
 status: active
-title: CAWS Tutorial — Step-by-Step Guide (v11.0.0)
+title: CAWS Tutorial — Step-by-Step Guide (v11.1.6)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
 # CAWS Tutorial — Step-by-Step Guide
 
-**Hands-on tutorial for implementing CAWS v11.0.0 in your project**
+**Hands-on tutorial for implementing CAWS v11.1.6 in your project**
 
-> **v11 surface only.** This tutorial uses the v11 commands: `init`, `doctor`, `status`, `scope`, `gates`, `evidence`, `waiver`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11.1 surface.** This tutorial uses the v11.1.6 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
@@ -49,56 +49,35 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 caws init
 ```
 
-This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`, `agents.json`. (v11 does not ship an interactive wizard or templates; author the spec by hand in the next step.)
+This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`, `agents.json`.
 
 ### Create the feature spec
 
-Create `.caws/specs/user-preferences.yaml` with these fields:
+Use the CLI to create the spec — this is the canonical path:
 
-```yaml
-id: FEAT-PREFS
-title: Add User Preferences Storage
-risk_tier: T2
-mode: feature
-change_budget:
-  max_files: 8
-  max_loc: 200
-blast_radius:
-  modules: [ui, storage, types]
-  data_migration: false
-operational_rollback_slo: 5m
+```bash
+caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature --risk-tier 2
 ```
 
-(See [`docs/api/schema.md`](../api/schema.md) for the full schema.)
-
-**Result**: `.caws/specs/<spec-id>.yaml` is created with:
+This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: active`. Now edit it to add scope, invariants, acceptance, and non-functional requirements:
 
 ```yaml
 id: PREF-001
 title: "Add User Preferences Storage"
 risk_tier: 2
 mode: feature
-change_budget:
-  max_files: 8
-  max_loc: 200
-# ... rest auto-generated
-```
-
-### Customize Feature Spec
-
-Edit `.caws/specs/<spec-id>.yaml` to add project-specific details:
-
-```yaml
+lifecycle_state: active
+blast_radius:
+  modules: [ui, storage, types]
+  data_migration: false
 scope:
   in: ["src/preferences/", "src/types/", "tests/"]
   out: ["src/unrelated/", "node_modules/"]
-
 invariants:
   - "Preferences are validated before storage"
   - "Invalid preferences fall back to defaults"
   - "Storage errors don't crash the application"
   - "TypeScript types prevent runtime errors"
-
 acceptance:
   - id: "A1"
     given: "User changes theme preference"
@@ -112,12 +91,17 @@ acceptance:
     given: "localStorage is unavailable"
     when: "Preference save is attempted"
     then: "Operation fails gracefully without errors"
-
 non_functional:
-  a11y: ["keyboard navigation", "screen reader support"]
-  perf: { api_p95_ms: 50 }
+  accessibility: ["keyboard navigation", "screen reader support"]
+  performance: ["preference read/write < 50ms"]
   security: ["input validation", "XSS prevention"]
+contracts:
+  - name: "preferences-storage"
+    type: "behavior"
+    description: "localStorage contract for preference persistence"
 ```
+
+(See the kernel schema at `packages/caws-kernel/src/schemas/spec.v1.json` for all valid fields.)
 
 ### Verify spec / drift
 
@@ -431,11 +415,17 @@ scope:
   in: ["src/preferences/", "src/types/", "tests/", "src/hooks/"]
 ```
 
-### Generate Final Report
+### Record completion evidence
 
 ```bash
-# Generate completion report
-node apps/tools/caws/completion-report.js PREF-001
+# Record each acceptance criterion as satisfied
+caws evidence record --type ac --spec PREF-001 --data '{"id":"A1","status":"satisfied"}'
+caws evidence record --type ac --spec PREF-001 --data '{"id":"A2","status":"satisfied"}'
+caws evidence record --type ac --spec PREF-001 --data '{"id":"A3","status":"satisfied"}'
+
+# Check overall spec status
+caws status
+caws specs show PREF-001
 ```
 
 ---
@@ -565,6 +555,6 @@ This ensures your storage works correctly with any valid input combination.
 
 **Happy coding with CAWS!**
 
-**Tutorial Version**: 1.0  
-**CAWS Version**: 3.1.0  
-**Last Updated**: October 2, 2025
+**Tutorial Version**: 2.0  
+**CAWS Version**: 11.1.6  
+**Last Updated**: 2026-05-28

@@ -2,23 +2,21 @@
 doc_id: agents-full-guide
 authority: reference
 status: active
-title: CAWS Agent Workflow Guide (v11.0.0)
+title: CAWS Agent Workflow Guide (v11.1.6)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
-# CAWS — Agent Workflow Guide (v11.0.0)
+# CAWS — Agent Workflow Guide (v11.1.6)
 
 **Coding Agent Working Standard** — engineering-grade operating system for AI-assisted development.
 
-**Version**: 11.0.0
-**Last Updated**: 2026-05-15
+**Version**: 11.1.6
+**Last Updated**: 2026-05-28
 
-> **v11 posture (A1).** This guide describes the v11.0.0 surface — eight command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `waiver`). Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `hooks`, `scaffold`, `specs`, `worktree`, `parallel`, `mode`, etc.) are no longer registered with the CLI entry point.
+> **v11.1 posture (A1).** This guide describes the v11.1.6 surface — twelve command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents` (plus the auto-generated `help`). Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md). When this guide and the doctrine doc disagree, the doctrine doc wins.
->
-> If you need the legacy lifecycle commands today, pin `caws-cli@^10.2.x` until v11.1 reintroduces vNext spec/worktree lifecycle.
 
 ---
 
@@ -79,28 +77,32 @@ Risk tiers drive rigor and determine quality gates:
 
 ### Key Invariants (Never Violate These)
 
-1. **Atomic Change Budget**: Stay within `max_files` and `max_loc` limits
+1. **Scope Discipline**: Only edit files admitted by `scope.in`; check with `caws scope show <path>` before writing
 2. **In-Place Refactors**: No shadow files (`enhanced-*`, `new-*`, `v2-*`, etc.)
 3. **Deterministic Code**: Use injected time/uuid/random for testability
 4. **Secure Prompts**: Never include secrets, `.env` files, or keys in context
-5. **Provenance**: All changes are tracked and attributable
+5. **Provenance**: All changes are tracked via the hash-chained `events.jsonl` audit trail
 
 ### The Feature Spec - Your Blueprint
 
-Every task needs a working spec at `.caws/specs/<spec-id>.yaml`:
+Every task needs a working spec at `.caws/specs/<spec-id>.yaml`. Create one with the CLI, then fill in the project-specific fields:
+
+```bash
+caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1
+```
+
+Then edit the generated file to add scope, invariants, acceptance, and non-functional requirements:
 
 ```yaml
 id: FEAT-001
 title: 'Add user authentication flow'
 risk_tier: 1
 mode: feature
-change_budget:
-  max_files: 25
-  max_loc: 1000
+lifecycle_state: active
+operational_rollback_slo: '5m'
 blast_radius:
   modules: ['auth', 'api']
   data_migration: false
-operational_rollback_slo: '5m'
 scope:
   in: ['src/auth/', 'tests/auth/', 'package.json']
   out: ['src/billing/', 'node_modules/']
@@ -118,11 +120,12 @@ acceptance:
     when: 'User attempts to access protected route'
     then: 'User is redirected to login with error message'
 non_functional:
-  a11y: ['keyboard-navigation', 'screen-reader-labels']
-  perf: { api_p95_ms: 250, lcp_ms: 2500 }
+  accessibility: ['keyboard-navigation', 'screen-reader-labels']
+  performance: ['api p95 < 250ms', 'LCP < 2500ms']
   security: ['input-validation', 'csrf-protection', 'rate-limiting']
 contracts:
-  - type: 'openapi'
+  - name: 'auth-api'
+    type: 'api'
     path: 'docs/api/auth.yaml'
 ```
 
@@ -135,14 +138,17 @@ contracts:
 **Goal**: Author a per-feature spec and a test plan.
 
 ```bash
-# 1. Author the spec directly (v11 ships no spec generator)
+# 1. Create the spec via CLI — this is the canonical path
+caws specs create <id> --title "Feature title" --mode feature --risk-tier 2
+
+# 2. Edit the generated file to add scope, invariants, acceptance criteria
 $EDITOR .caws/specs/<id>.yaml
 
-# 2. Verify drift / structure
+# 3. Verify drift / structure
 caws doctor
 
-# 3. Review acceptance criteria — these are your targets
-cat .caws/specs/<id>.yaml | grep -A 20 "acceptance:"
+# 4. Review acceptance criteria — these are your targets
+caws specs show <id>
 ```
 
 **What to include in your plan:**
@@ -313,7 +319,7 @@ caws scope show <path>   # explain the scope decision
 caws scope check <path>  # enforce; exit 0 admit / 1 refuse
 ```
 
-(v11 does not ship `caws validate` / `caws scaffold`. Author specs in `.caws/specs/<id>.yaml` directly. Use `caws doctor` + `caws gates run` for validation.)
+(v11 does not ship `caws validate` or `caws scaffold`. Use `caws specs create` to author specs, then `caws doctor` + `caws gates run --spec <id>` for validation.)
 
 ### Quality gates
 
@@ -341,12 +347,44 @@ caws evidence record --type gate --spec <id> --data '{...}'
 
 All append hash-chained events through the store's `appendEvent`. There is no other writer.
 
+### Spec lifecycle
+
+```bash
+caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>
+                          # creates .caws/specs/<id>.yaml in lifecycle_state: active
+caws specs list           # list specs (excludes archived by default)
+caws specs show <id>      # read a spec (resolves through canonical control plane)
+caws specs close <id>     # close an active spec
+caws specs archive <id>   # archive a closed spec
+```
+
+### Worktree lifecycle
+
+```bash
+caws worktree create <name> --spec <id>
+                          # create a git worktree bound to an active spec
+                          # emits worktree_created + worktree_bound events
+caws worktree list        # list registered worktrees with branch, spec, owner
+caws worktree bind <name> # repair a one-sided worktree↔spec binding
+caws worktree destroy <name>
+                          # destroy a worktree (refuses foreign ownership)
+caws worktree merge <name>
+                          # merge the branch back to base; auto-closes the bound spec
+```
+
 ### Worktree ownership
 
 ```bash
 caws claim               # surface ownership of the current worktree
 caws claim --takeover    # acquire from a foreign session (writes prior_owners audit)
                           # use only with explicit user authorization
+```
+
+### Agent liveness
+
+```bash
+caws agents list          # list active/stale/stopped agents (read-only; operational cache)
+caws agents show <id>     # show one lease by session id
 ```
 
 (v11 does not ship `caws hooks install` or `caws provenance` commands. The hash-chained `events.jsonl` is the audit trail; record evidence with `caws evidence record`.)
@@ -677,24 +715,13 @@ scope:
 **Fix Option 2 - Split PR**:
 Split changes into separate PRs with different scopes.
 
-### Budget Exceeded
+### Change too large
 
-#### Error: `35 files changed, exceeds budget of 25`
+**Cause**: The change touches files or code well outside the stated blast_radius/scope, suggesting the slice should be broken up.
 
-**Cause**: Change is too large.
+**Fix - Split PR**: Break into smaller, focused PRs, each with its own spec and clearly bounded scope.
 
-**Fix Option 1 - Split PR**:
-Break into smaller, focused PRs.
-
-**Fix Option 2 - Increase budget**:
-
-```yaml
-change_budget:
-  max_files: 40 # Only if justified
-  max_loc: 1200
-```
-
-**Note**: Prefer splitting over increasing budget.
+Note: `change_budget` (max_files/max_loc) is not a valid v11 spec field. Scope enforcement is done by the scope guard via `scope.in` / `scope.out`. Use `caws waiver create` for bounded exceptions to policy gates.
 
 ### Test Coverage Failures
 
@@ -730,6 +757,11 @@ CAWS audit lives in `.caws/events.jsonl` — an append-only, hash-chained log wr
 
 | Event type | Writer |
 |---|---|
+| `spec_created` | `caws specs create <id>` |
+| `spec_closed` | `caws specs close <id>` |
+| `spec_archived` | `caws specs archive <id>` |
+| `worktree_created` | `caws worktree create <name> --spec <id>` |
+| `worktree_bound` | `caws worktree create` / `caws worktree bind <name>` |
 | `gate_evaluated` | `caws gates run --spec <id>` (one per declared gate) |
 | `evidence_recorded` | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
 | `worktree_takeover` | `caws claim --takeover` (records `prior_owners` audit) |
@@ -803,18 +835,15 @@ git commit --no-verify  # Allowed for commits
 
 ## Project archetypes (spec patterns)
 
-v11's `caws init` is no-arg and ships no project-template scaffolds. Below are recommended `risk_tier` and `change_budget` defaults to author into `.caws/specs/<id>.yaml` for common archetypes.
+v11's `caws init` is no-arg and ships no project-template scaffolds. `caws templates` is removed and is not planned to return. Use `caws specs create` to bootstrap a spec, then fill in project-specific fields. Below are recommended `risk_tier` and `non_functional` defaults for common archetypes.
 
 ### VS Code extension
 
 ```yaml
-risk_tier: T2          # high user impact
-change_budget:
-  max_files: 25
-  max_loc: 1000
+risk_tier: 2          # high user impact
 non_functional:
-  perf:
-    activation_ms: 1000
+  performance:
+    - 'extension activation < 1000ms on typical machine'
   security:
     - csp-enforcement       # webview security
 ```
@@ -822,25 +851,19 @@ non_functional:
 ### React library
 
 ```yaml
-risk_tier: T2          # API stability
-change_budget:
-  max_files: 20
-  max_loc: 800
+risk_tier: 2          # API stability
 non_functional:
-  perf:
-    bundle_kb: 50           # tree-shakeable
+  performance:
+    - 'tree-shakeable bundle < 50KB'
 ```
 
 ### API service
 
 ```yaml
-risk_tier: T1          # data integrity
-change_budget:
-  max_files: 40
-  max_loc: 1500
+risk_tier: 1          # data integrity
 non_functional:
-  perf:
-    api_p95_ms: 250
+  performance:
+    - 'api p95 < 250ms'
   security:
     - input-validation
     - rate-limiting
@@ -849,13 +872,8 @@ non_functional:
 ### CLI tool
 
 ```yaml
-risk_tier: T3          # low risk
-change_budget:
-  max_files: 15
-  max_loc: 600
+risk_tier: 3          # low risk
 ```
-
-(v11.1 may reintroduce project templates as a separate `caws templates` surface. For now, copy the snippets above into your spec.)
 
 ---
 
@@ -924,15 +942,15 @@ if (flags.newAuthFlow) {
 
 ### Performance Budgets
 
-Set budgets in working spec:
+Set budgets in working spec using `non_functional.performance` (string array):
 
 ```yaml
 non_functional:
-  perf:
-    api_p95_ms: 250 # API latency budget
-    lcp_ms: 2500 # Largest Contentful Paint
-    tti_ms: 3500 # Time to Interactive
-    bundle_kb: 50 # JavaScript bundle size
+  performance:
+    - 'api p95 < 250ms'
+    - 'LCP < 2500ms'
+    - 'TTI < 3500ms'
+    - 'JS bundle < 50KB'
 ```
 
 **Enforce in CI:**
@@ -970,21 +988,21 @@ du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
 
 **A: Create one.** Before any implementation:
 
-1. Create `.caws/specs/<id>.yaml` — author the YAML directly (v11 ships no spec generator)
-2. Fill in all required fields (see existing specs in `.caws/specs/` for shape)
+1. `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>` — this is the canonical creation path
+2. Edit `.caws/specs/<id>.yaml` to add scope, invariants, acceptance criteria, and non-functional requirements
 3. Run `caws doctor` to verify drift / structure
 4. Request human approval
 5. Then implement
 
 ### Q: Can I exceed the change budget if the task requires it?
 
-**A: Split the task.** If you need more than `max_files` or `max_loc`:
+**A: Split the task.** If the change is too large for a single focused slice:
 
 1. Break into multiple smaller PRs
 2. Each with its own working spec
-3. Each staying within budget
+3. Each with a clearly bounded scope
 
-Only increase budget with human approval and strong justification.
+`change_budget` (max_files/max_loc) is not a recognized spec field in v11. Scope and blast_radius govern the change boundary; use waivers (`caws waiver create`) for policy-driven gate exceptions.
 
 ### Q: What if lints fail but I think they're wrong?
 
@@ -1042,8 +1060,8 @@ Before starting any work:
 During implementation:
 
 - [ ] Write tests first (TDD)
-- [ ] Stay within scope.in boundaries
-- [ ] Keep under change budget
+- [ ] Stay within scope.in boundaries (`caws scope show <path>` before every write)
+- [ ] Keep changes focused within the spec's blast_radius
 - [ ] Use guard clauses and safe defaults
 - [ ] Inject dependencies for testability
 - [ ] No shadow files (no enhanced-_, new-_, v2-\*)

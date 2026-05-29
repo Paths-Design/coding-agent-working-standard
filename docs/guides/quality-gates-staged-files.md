@@ -2,14 +2,14 @@
 doc_id: quality-gates-staged-files
 authority: reference
 status: active
-title: CAWS Quality Gates — Staged Files Analysis (v11.0.0)
+title: CAWS Quality Gates — Staged Files Analysis (v11.1.6)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
 # CAWS Quality Gates — Staged Files Analysis
 
-> **v11 note.** The `caws scaffold` and `caws quality-gates` commands referenced below are removed in v11. Use `caws gates run --spec <id>` for v11 quality-gate evaluation, and set up git hooks externally (`husky`, `pre-commit`, hand-rolled). The conceptual content of this guide (staged-file analysis, god-object detection, TODO scanning, tier integration) still applies; the surface invocation has changed.
+> **Removed commands.** `caws quality-gates` and `caws scaffold` are removed in v11 and have no direct replacement command. The v11 quality-gate surface is `caws gates run --spec <id> [--context cli|commit|ci]`. Gate selection is policy-driven via `.caws/policy.yaml` (each gate has `mode: block|warn|skip`); there are no `--gates`, `--languages`, `--no-todos`, or `--no-god-objects` flags. Set up git hooks externally (`husky`, `pre-commit`, hand-rolled). The conceptual content of this guide (staged-file analysis, god-object detection, TODO scanning, tier integration) still applies; the surface invocation has changed.
 
 ## Overview
 
@@ -44,10 +44,10 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 - Tier 3: 70% coverage, 30% mutation, basic checks
 
 ### **Waiver System Integration**
-- Honors active waivers from `.caws/waivers.yml`
+- Honors active waivers from `.caws/waivers/<id>.yaml` (per-file, one waiver per file)
 - Supports waiver expiration and status validation
-- Gate-specific waiver matching
-- Audit trail for waived checks
+- Gate-specific waiver matching via `--gate` (repeat for multiple gates)
+- Audit trail for waived checks in `.caws/events.jsonl`
 
 ### **Crisis Response Mode**
 - Automatic detection from working spec, environment, or commit messages
@@ -60,12 +60,10 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 - Bypasses quality gates when human override is active
 - Audit trail for override decisions
 
-### **Provenance Tracking**
-- Automatic tracking of quality gate runs
-- Error statistics and classification
-- Agent type detection (Cursor IDE, VS Code, CLI)
-- Crisis mode and waiver tracking
-- JSONL journal format for analysis
+### **Audit Surface**
+- Gate run results are recorded as `gate_evaluated` events in `.caws/events.jsonl` (hash-chained)
+- Evidence records appended via `caws evidence record --type gate --spec <id> --data <json>`
+- There is no `.caws/provenance/` directory in v11; the events log is the sole audit surface
 
 ### **Comprehensive Error Taxonomy**
 - Structured error types with context and recovery strategies
@@ -78,18 +76,17 @@ CAWS Quality Gates provides comprehensive quality analysis focused on staged fil
 ### Command Line
 
 ```bash
-# Run quality gates on staged files
-caws quality-gates
+# Run quality gates for a spec (policy-driven; gate selection from .caws/policy.yaml)
+caws gates run --spec <id>
 
-# CI mode (exit with error code on violations)
-caws quality-gates --ci
+# Commit context (intended for pre-commit hooks)
+caws gates run --spec <id> --context commit
 
-# Check specific languages
-caws quality-gates --languages rust,typescript
-
-# Skip specific checks
-caws quality-gates --no-todos --no-god-objects
+# CI context
+caws gates run --spec <id> --context ci
 ```
+
+The only flags are `--spec`, `--context` (cli|commit|ci), and `--data` (structured diagnostics). There are no `--languages`, `--no-todos`, `--no-god-objects`, `--gates`, `--run-all`, `--ci`, or `--json` flags. Gate selection is entirely policy-driven via `.caws/policy.yaml`.
 
 ### Git Hooks (manual setup in v11)
 
@@ -105,14 +102,14 @@ caws gates run --spec "$(git config caws.activeSpec || echo current)"
 
 The hook should run quality gates on staged files, surface TODO/god-object findings via `caws doctor`, and block commits with blocking-gate violations.
 
-### Manual Script Execution
+### Manual Execution
 
 ```bash
-# Run quality gates script directly
-node scripts/quality-gates/run-quality-gates.js
+# Run gates directly (CLI context, policy-driven)
+caws gates run --spec <id>
 
-# Run god object detector
-node scripts/quality-gates/check-god-objects.js
+# Run gates and capture structured diagnostic output
+caws gates run --spec <id> --data
 ```
 
 ## Configuration
@@ -136,64 +133,42 @@ const CONFIG = {
 
 ### Waiver Configuration
 
-Create `.caws/waivers.yml` to define quality gate waivers:
+In v11, waivers are per-file at `.caws/waivers/<id>.yaml`. Create them via the CLI (never by hand-editing):
 
-```yaml
-waivers:
-  - id: "emergency-hotfix-001"
-    title: "Emergency hotfix for production issue"
-    reason: "emergency_hotfix"
-    description: "Critical production bug requiring immediate fix"
-    gates: ["god_objects", "hidden_todos"]
-    approved_by: "tech-lead@company.com"
-    impact_level: "high"
-    mitigation_plan: "Full refactoring scheduled for next sprint"
-    expires_at: "2024-01-15T23:59:59Z"
-    status: "active"
-    metadata:
-      jira_ticket: "PROD-1234"
-      incident_id: "INC-5678"
+```bash
+# Create a waiver covering one gate
+caws waiver create emergency-hotfix-001 \
+  --title "Emergency hotfix for production issue" \
+  --gate god_objects \
+  --reason "Critical production bug requiring immediate fix" \
+  --approved-by "tech-lead@company.com" \
+  --expires-at "2024-01-15T23:59:59Z"
+
+# Cover multiple gates: repeat --gate
+caws waiver create emergency-hotfix-001 \
+  --title "Emergency hotfix for production issue" \
+  --gate god_objects \
+  --gate hidden_todos \
+  --reason "Critical production bug requiring immediate fix" \
+  --approved-by "tech-lead@company.com" \
+  --expires-at "2024-01-15T23:59:59Z"
 ```
 
-### Provenance Tracking
+There is no `.caws/waivers.yml` in v11. The v10 fields `impact_level`, `mitigation_plan`, `description`, and `gates: [...]` array are gone. Use `caws waiver list` / `caws waiver show <id>` / `caws waiver revoke <id>` to manage waivers.
 
-Quality gates automatically track execution data in `.caws/provenance/`:
+### Audit Surface
 
-```json
-{
-  "id": "qg-1704067200000-a1b2c3d4",
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "commit_hash": "abc123def456",
-  "crisis_mode": false,
-  "staged_files": 5,
-  "results": {
-    "passed": true,
-    "violations": 0,
-    "warnings": 1,
-    "todos": 0,
-    "waived_checks": {
-      "god_objects": false,
-      "hidden_todos": false
-    }
-  },
-  "error_statistics": {
-    "total": 1,
-    "byCategory": {
-      "business_logic": 1
-    },
-    "bySeverity": {
-      "warning": 1
-    },
-    "retryable": 0,
-    "requiresHumanIntervention": 0,
-    "canAutoRecover": 1
-  },
-  "metadata": {
-    "caws_tier": 2,
-    "human_override": false,
-    "agent_type": "cursor-ide"
-  }
-}
+In v11 there is no `.caws/provenance/` directory. Gate run results are appended as `gate_evaluated` events to the hash-chained `.caws/events.jsonl` automatically when `caws gates run` executes. To record additional typed evidence (test results, AC closures) use:
+
+```bash
+# Record a gate evidence entry
+caws evidence record --type gate --spec <id> --data '{"gate":"god_objects","passed":true}'
+
+# Record a test evidence entry
+caws evidence record --type test --spec <id> --data '{"suite":"unit","passed":42,"failed":0}'
+
+# Record an acceptance-criteria closure
+caws evidence record --type ac --spec <id> --data '{"id":"A1","status":"satisfied"}'
 ```
 
 ### Error Taxonomy
@@ -300,12 +275,12 @@ Quality gates automatically read your CAWS working spec to determine:
 - Quality thresholds
 - Review requirements
 
-### Provenance Tracking
+### Audit Trail
 
-All quality gate runs are tracked in CAWS provenance:
-- Quality metrics
-- Violation counts
-- Resolution status
+All quality gate runs are automatically recorded in `.caws/events.jsonl` as `gate_evaluated` events:
+- One event per policy-declared gate per `caws gates run` invocation
+- Hash-chained for tamper evidence
+- Additional evidence appended via `caws evidence record`
 
 ### Scaffolding
 
@@ -362,7 +337,7 @@ Quality gates only analyze staged files. If you're seeing violations in files yo
 
 1. Check what's staged: `git diff --cached --name-only`
 2. Unstage unrelated files: `git reset HEAD <file>`
-3. Re-run quality gates: `caws quality-gates`
+3. Re-run quality gates: `caws gates run --spec <id>`
 
 ### TODO Analyzer Issues
 
@@ -383,7 +358,7 @@ python3 scripts/v3/analysis/todo_analyzer.py --staged-only --min-confidence 0.8
 2. **Fix Violations Before Committing**: Address quality gate violations in the same commit
 3. **Use Engineering-Grade TODOs**: Follow the template format for better dependency resolution
 4. **Configure Thresholds**: Adjust god object thresholds based on your project's needs
-5. **CI Integration**: Use `--ci` flag in CI/CD pipelines for proper exit codes
+5. **CI Integration**: Use `--context ci` in CI/CD pipelines (`caws gates run --spec <id> --context ci`) for proper exit codes
 
 ## Examples
 
