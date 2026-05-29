@@ -7,19 +7,108 @@ created_at: '2026-05-29T07:35:36.215Z'
 updated_at: '2026-05-29T07:35:36.215Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/events.ts
+    - packages/caws-cli/tests
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/events.ts
+    - packages/caws-cli/tests/shell/caller-session-pointer.test.js
+    - packages/caws-cli/tests/shell/session/resolve-session.test.js
+    - packages/caws-cli/tests/shell/specs-migrate-command.test.js
+    - packages/caws-cli/tests/shell/status-kernel-feature-detect.test.js
+    - packages/caws-cli/tests/shell/removed-command-diagnostics.test.js
+    - packages/caws-cli/tests/store/leases-store.test.js
+    - packages/caws-cli/tests/store/specs-migration.test.js
+    - .caws/specs/CAWS-LINT-DEBT-CLEANUP-001.yaml
+  out:
+    - packages/caws-cli/eslint.config.js
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Lint-only hygiene; zero behavior change. Every edit clears an eslint
+    error without altering runtime behavior, test assertions, or types. The
+    empty-interface fixes convert `export interface X extends Base {}` to the
+    eslint-recommended `export type X = Base;` (structurally identical — same
+    exported name, same supertype, same usage sites). The empty-catch fixes
+    add an explanatory comment inside an existing best-effort cleanup
+    `catch {}` (no control-flow change). The unused-var removals delete a
+    genuinely dead local/helper. The stale eslint-disable removals delete
+    directives referencing a rule the flat config does not load.
+  - >-
+    No eslint config change. packages/caws-cli/eslint.config.js is scope.out.
+    This slice satisfies the existing rule set; it does NOT relax, disable, or
+    reconfigure any rule. The `@typescript-eslint/no-require-imports`
+    directives are removed (not the rule re-added) because the flat config
+    never loaded that rule — the directive itself is the error (unused/unknown
+    disable), and the `require()` calls trigger no loaded rule once it is gone.
+  - >-
+    No new failures. After the edits, `npm run lint` exits 0 with 0 errors
+    (warnings may remain — they are not the target and are not gated), and the
+    full caws-cli jest suite is unchanged (no test logic touched; the
+    empty-catch and unused-var sites are test scaffolding/cleanup, not
+    assertions).
+  - >-
+    Scope-isolated from active siblings. CAWS-V11-NONDOC-SURFACE-DRIFT-001
+    (package.json + templates/CLAUDE.md) and any axe-init work are disjoint
+    from these 9 files. eslint.config.js, package.json, and CI are scope.out.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'src/shell/commands/agents.ts:488 and events.ts:487 (empty interface extending a base).'
+    when: lint runs.
+    then: >-
+      The `no-empty-object-type` error is gone. Each is rewritten as
+      `export type X = Base;` with identical exported name and supertype;
+      typecheck (`npm run typecheck`) stays clean and all consumers compile.
+  - id: A2
+    given: The seven empty `catch {}` cleanup blocks across 5 test files.
+    when: lint runs.
+    then: >-
+      The `no-empty` error is gone at each site (a brief explanatory comment
+      is added inside the existing catch). No test behavior changes — these are
+      best-effort fs cleanup blocks, not assertions.
+  - id: A3
+    given: tests/shell/status-kernel-feature-detect.test.js:96,104 stale
+      `eslint-disable-next-line @typescript-eslint/no-require-imports`.
+    when: lint runs.
+    then: >-
+      The "rule not found" errors are gone (the directives are removed; the
+      flat config does not load that rule, so the `require()` calls produce no
+      lint error without them). The test still loads the kernel/shell via
+      require and passes.
+  - id: A4
+    given: The unused `cawsDir` (status-kernel-feature-detect.test.js:123) and
+      unused `entryFor` helper (removed-command-diagnostics.test.js:29).
+    when: lint runs.
+    then: >-
+      The `no-unused-vars` errors are gone (the dead local and the unused
+      helper are removed). The tests still pass — neither symbol is referenced.
+  - id: A5
+    given: The full caws-cli package after all edits.
+    when: '`npm run lint` and `npm run typecheck` run.'
+    then: >-
+      Lint exits 0 with 0 errors; typecheck stays clean. The previously-red
+      PR lint gate (pr-checks.yml) is now green.
+  - id: A6
+    given: The touched test files.
+    when: the relevant jest suites run.
+    then: >-
+      They pass unchanged (removed-command-diagnostics, resolve-session,
+      caller-session-pointer, specs-migrate-command, status-kernel-feature-
+      detect, leases-store, specs-migration) — no assertion or fixture altered.
+non_functional:
+  reliability:
+    - >-
+      Restores a green PR lint gate so the next contributor does not inherit a
+      failing `npm run lint`. These 13 errors predate the v11.1.x release
+      campaign (present at merge-base c50ff92) and are not a release gate (the
+      tag-driven publish gates on build + smoke only), so this is hygiene, not
+      a release blocker — but a green gate is the correct steady state.
 contracts: []
