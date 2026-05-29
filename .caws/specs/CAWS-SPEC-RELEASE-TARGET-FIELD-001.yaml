@@ -3,23 +3,111 @@ title: 'Opt-in target_release field on spec YAML: when set, doctor/prepush/relea
 risk_tier: 3
 mode: feature
 lifecycle_state: active
-created_at: '2026-05-29T18:15:28.197Z'
-updated_at: '2026-05-29T18:15:28.197Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/schemas/spec.v1.json
+    - packages/caws-cli/src/shell/commands/doctor.ts
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - scripts/release-tag-publish.mjs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-SPEC-RELEASE-TARGET-FIELD-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-cli/src
+    - scripts
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    DESIGN SPEC ONLY — implementation deferred to 11.2 (kernel schema change).
+    This spec captures the agreed design for an opt-in spec-release-targeting
+    field; it does NOT implement it. scope.in is the spec file alone. When
+    activated for implementation (11.2 line), scope.in expands to the kernel
+    schema + CLI doctor/prepush + release-gate script and the spec is re-tiered
+    (kernel + CLI is cross-package → likely tier 2 with a declared contract).
+  - >-
+    PROBLEM. Drafts carry no machine-readable "must land before release X"
+    signal, so the obligation lives only in a human's head. This is the exact
+    failure that produced the orphan 11.1.7 publish: a release-train tag was cut
+    before the help-metadata campaign (which the maintainer intended for that
+    release) had landed on main. Nothing mechanically connected "campaign must
+    ship in 11.1.7" to the act of tagging 11.1.7.
+  - >-
+    FIELD. Add an OPTIONAL top-level spec field `target_release` (kernel
+    spec.v1.json — additionalProperties:false means this is a kernel schema
+    change, hence the 11.2 timing). Value is VALIDATED: either a semver-ish
+    `\d+\.\d+\.\d+` (e.g. "11.1.9") OR one of the sentinels `next` / `backlog` /
+    `deferred`. Validation catches the typo class (e.g. "v11.1.9" vs "11.1.9")
+    that would silently miss enforcement. The field is OPTIONAL — absence is the
+    default and means "no release targeting".
+  - >-
+    OPT-IN ENFORCEMENT — the load-bearing design decision. Enforcement fires
+    ONLY when the field is set. A project that never sets target_release sees NO
+    behavior change anywhere (doctor/prepush/release-gate ignore unset specs
+    entirely). This keeps unversioned / research projects (e.g. ../sterling — no
+    versioning, no release process, not a released product) completely
+    unaffected: they simply never set the field. The fallback rule: "if filled
+    in, track it, mention it, block and alert until the spec is amended (field
+    changed/removed) or closed."
+  - >-
+    THREE ENFORCEMENT POINTS (all gated on the field being set):
+    (1) RELEASE GATE (hard stop) — scripts/release-tag-publish.mjs refuses the
+    publish if any open or draft spec has target_release equal to the tag's
+    version (semver) or a sentinel that resolves to "this release". This is the
+    actual stop that would have caught orphan 11.1.7.
+    (2) prepush (warn) — caws prepush notes open specs targeting the release
+    range before the tag is pushed (advisory, not a hard refuse).
+    (3) caws doctor (finding) — surfaces "N specs target <release> and are still
+    open/draft" as a finding for ambient visibility.
+  - >-
+    AMEND-OR-CLOSE is the resolution path. A blocked release is unblocked by
+    either CLOSING the targeting spec (it landed) or AMENDING it (retarget to a
+    later release / sentinel, or remove the field if it was mis-set). No bypass
+    flag in v1 — the block is the point. (A waiver-style override may be
+    considered at implementation time but is NOT part of this design.)
+  - >-
+    SENTINEL SEMANTICS. `next` = the next release to be cut (resolved by the
+    release gate against the tag); `backlog` / `deferred` = explicitly NOT
+    targeting the imminent release (never blocks). Sentinels let a spec say
+    "must be in the next release whatever its number" without hard-coding a
+    version that drifts.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: This design spec.
+    when: it is read by whoever implements the 11.2 slice.
+    then: >-
+      It fully specifies the field name (target_release), its validated value
+      shape (semver-ish | next | backlog | deferred), its optionality, the
+      opt-in enforcement rule (fires only when set; unset = no-op everywhere),
+      the three enforcement points (release-gate hard stop, prepush warn, doctor
+      finding), and the amend-or-close resolution path — enough to implement
+      without re-deciding the design.
+  - id: A2
+    given: The implementation (deferred — 11.2).
+    when: a repo never sets target_release on any spec.
+    then: >-
+      doctor, prepush, and the release gate behave exactly as before this
+      feature — zero new findings, zero new refusals. (The opt-in invariant; the
+      acceptance test at implementation time must prove an unversioned project is
+      unaffected.)
+  - id: A3
+    given: The implementation (deferred — 11.2).
+    when: an open/draft spec sets target_release to the version being tagged.
+    then: >-
+      the release gate refuses the publish with a diagnostic naming the spec and
+      its target; prepush warns; doctor reports the finding. Closing or amending
+      the spec clears the block.
+non_functional:
+  reliability:
+    - >-
+      Converts a human-memory obligation ("this draft must land before release
+      X") into a machine-checked, opt-in invariant, closing the orphan-11.1.7
+      failure class at the release boundary. Opt-in by construction means the
+      safety net costs nothing for projects without a release process and
+      becomes a hard stop only where a maintainer has explicitly declared a
+      target — proportional enforcement, no false positives on unversioned work.
 contracts: []
