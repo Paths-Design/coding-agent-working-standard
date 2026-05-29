@@ -887,6 +887,31 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             if any(t in ("-f", "--force", "--discard-changes") for t in tokens):
                 return None
             return ("allow", "")
+        # Special-case `git worktree` — admit the read-only forms only.
+        # `git worktree list` and bare `git worktree` (prints usage) are
+        # read-only inspection. The MUTATING subcommands — add, remove,
+        # prune, move, repair, lock, unlock — change worktree/branch state
+        # and fall through to "ask"; several are additionally governed by
+        # worktree-guard.sh while worktrees are active. Mirrors the
+        # branch/config read-only-form pattern.
+        # (WORKTREE-LIST-CALIBRATION-001)
+        if sub == "worktree":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            # tokens: ["git", "worktree", <subcommand?>, ...]. Find the
+            # worktree subcommand (first token after "worktree").
+            wt_sub = ""
+            for i, t in enumerate(tokens):
+                if t == "worktree" and i + 1 < len(tokens):
+                    wt_sub = tokens[i + 1]
+                    break
+            # Bare `git worktree` (no subcommand) prints usage — read-only.
+            # `git worktree list` is read-only. Everything else mutates.
+            if wt_sub in ("", "list"):
+                return ("allow", "")
+            return None
         if sub in ALLOWED_GIT_SUBCOMMANDS:
             return ("allow", "")
         return None
