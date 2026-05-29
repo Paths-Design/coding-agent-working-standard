@@ -7,19 +7,143 @@ created_at: '2026-05-29T04:54:21.327Z'
 updated_at: '2026-05-29T04:54:21.327Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-kernel/src/schemas/events.v1.json
+    - CLAUDE.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-PRE-RELEASE-CLEANUP-001.yaml
+    - CLAUDE.md
+    - AGENTS.md
+    - README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/migration-v10-to-v11.md
+    - packages/caws-kernel/src/schemas/events.v1.json
+  out:
+    - .caws/events.jsonl
+    - .caws/worktrees.json
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-cli/templates
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/quality-gates
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Mechanical drift cleanup only — NO behavior change. This slice touches
+    only documentation prose and a non-validated event-vocabulary comment.
+    It does NOT change any A2 (push-range) or C (retire-draft) feature
+    code, any test, any runtime behavior, or any build output semantics.
+    The canonical kernel + CLI already build clean (verified pre-slice);
+    this slice does not alter that.
+  - >-
+    Command-surface prose matches the registered surface. The registered
+    v11 surface now includes `prepush` (A2) and `specs retire-draft` (C).
+    Prose that enumerates the command groups or the specs subcommands
+    (CLAUDE.md, AGENTS.md, the command-surface doctrine doc's CURRENT-state
+    sections) is corrected to include them. The authoritative registry is
+    REGISTERED_COMMAND_GROUPS (13 groups incl. prepush) and the
+    `caws <group> --help` banner — prose is reconciled to those, not the
+    reverse.
+  - >-
+    Historical/point-in-time records are NOT rewritten. docs/failure-
+    lineage.md entries, the command-surface doc's explicitly-historical
+    audit blocks ("captured at v11.0.0", the VALID_COMMANDS §424-967
+    historical audit), docs/reports/*, and any "as of v11.1.x" rehearsal
+    snapshots are point-in-time and remain as written. Only prose that
+    describes the CURRENT registered surface as authoritative is corrected.
+    This preserves the audit trail (the same discipline as the v10-residue
+    historical-vs-normative split).
+  - >-
+    Lifecycle prose is current. No normative prose may still say draft
+    retirement is raw `git rm`, that archive writes a `.archive/<id>.yaml`
+    body (it is a tombstone), or that specs only support
+    create/list/show/close/archive (retire-draft and recover/prune-archive
+    exist). The spec-lifecycle sections name the full exit set.
+  - >-
+    Event-vocabulary comment includes spec_retired. The non-validated
+    `$comment` in events.v1.json that enumerates the REQUIRES_SPEC_ID
+    class in prose currently omits `spec_retired` (the enum + the kernel
+    TypeScript Sets already include it — that is the validated authority).
+    The comment is reconciled to match the Sets, so the prose does not
+    contradict the enforced classification.
+  - >-
+    Scope-isolated from the active sibling. CAWS-V11-NONDOC-SURFACE-DRIFT-001
+    (active) owns `package.json` and `packages/caws-cli/templates/CLAUDE.md`
+    and excludes root `CLAUDE.md`. This slice excludes both of those
+    (scope.out) and the broad templates tree, so the two slices are
+    disjoint and can run concurrently. This slice does NOT edit
+    packages/caws-cli/src or tests (build/help parity is verified, not
+    re-coded); if a stale src comment is found it is recorded for a
+    follow-up, not edited here.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: The canonical kernel + CLI packages after this slice.
+    when: '`npm run build --prefix packages/caws-kernel` and `... caws-cli` run.'
+    then: >-
+      Both build clean (exit 0) — unchanged from pre-slice. This slice
+      introduces no build or typecheck regression. (Build parity is
+      verified; no src code is edited.)
+  - id: A2
+    given: CLAUDE.md, AGENTS.md, and the command-surface doctrine doc.
+    when: their command-group enumerations are read.
+    then: >-
+      They reflect the actual registered groups including `prepush`
+      (13 groups, not "twelve"), and the specs subcommand list includes
+      `retire-draft`. The command-surface table has rows for `prepush`
+      and `specs retire-draft`.
+  - id: A3
+    given: All normative (non-historical) prose across the scoped docs.
+    when: it is grepped for stale lifecycle claims.
+    then: >-
+      No normative prose says draft retirement is raw delete, that archive
+      writes a `.archive/` body, or that specs support only
+      create/list/show/close/archive. Historical/report snapshots are left
+      intact.
+  - id: A4
+    given: packages/caws-kernel/src/schemas/events.v1.json.
+    when: the REQUIRES_SPEC_ID `$comment` prose is read.
+    then: >-
+      It includes `spec_retired` (matching the validated enum + the kernel
+      Sets). The JSON remains valid; no schema behavior changes (the
+      comment is non-validated narrative).
+  - id: A5
+    given: The current registry (REGISTERED_COMMAND_GROUPS) and any stale
+      VALID_COMMANDS / legacy-surface narrative comments.
+    when: prose is reconciled.
+    then: >-
+      No CURRENT-state prose contradicts the 13-group registry. Explicitly-
+      historical VALID_COMMANDS audit blocks (captured at v11.0.0) are
+      left as historical records, clearly dated.
+  - id: A6
+    given: The local installed binary (symlinked dist).
+    when: '`caws --help`, `caws prepush --help`, `caws specs --help` run.'
+    then: >-
+      The help surfaces include `prepush` and `specs retire-draft`. (Both
+      already shipped in A2/C; this is a verification step, not a code
+      change.)
+  - id: A7
+    given: The focused doc/kernel-comment changes.
+    when: the caws-cli matrix + surface-lock suites and the kernel tests run.
+    then: >-
+      They pass. Any linked-worktree-only sparse-checkout artifact
+      (specs-load-overbroad-scope) is explicitly excluded from the release
+      claim — it passes on canonical. No new failures.
+  - id: A8
+    given: The A2 (push-range) and C (retire-draft) feature code.
+    when: this slice completes.
+    then: >-
+      None of it changed except documentation/comment hygiene. `git diff`
+      over packages/caws-cli/src and packages/caws-cli/tests shows no
+      edits from this slice.
+non_functional:
+  reliability:
+    - >-
+      Removes the risk that a v11.1.x release ships docs/comments that
+      contradict the actual registered surface (prepush, retire-draft) or
+      the lifecycle model (tombstone, not raw delete). Pure drift cleanup;
+      no behavior change to the shipped features.
 contracts: []
