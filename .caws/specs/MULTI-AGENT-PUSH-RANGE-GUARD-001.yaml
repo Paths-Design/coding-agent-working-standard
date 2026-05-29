@@ -307,7 +307,7 @@ non_functional:
       caching, the activation amends this clause.
 contracts:
   - name: push-range-guard-diagnose-decide-only
-    type: invariant
+    type: behavior
     description: >-
       A push-range guard classifies the exact outgoing commit range before
       publish. It may diagnose, refuse, and require explicit SHA-scoped
