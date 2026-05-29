@@ -7,19 +7,105 @@ created_at: '2026-05-29T01:35:07.155Z'
 updated_at: '2026-05-29T01:35:07.155Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/CAWS-AUTOCOMMIT-INTEGRITY-002.yaml
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/tests/shell/specs.test.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - CODEOWNERS
+    - packages/caws-cli/package.json
+    - packages/caws-kernel
+    - packages/caws-cli/src/store/git-autocommit.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Operation success is decoupled from audit-commit landing — in BOTH
+    directions. CAWS-AUTOCOMMIT-INTEGRITY-001 correctly made the handlers
+    surface a refused_dirty audit commit (no longer silent), but it ALSO
+    flipped the command's exit code to 1 on refused_dirty. That conflates
+    two distinct facts: (a) did the lifecycle OPERATION succeed (worktree
+    created/destroyed/bound/merged, spec closed/archived) and (b) did the
+    automatic audit COMMIT land. When (a) succeeded but (b) did not, the
+    command MUST exit 0 (the operation did what was asked) AND emit the
+    loud refused_dirty warning on stderr (the user is told to commit
+    manually). Flipping to exit 1 broke 16 tests across
+    worktree-destroy-session.test.js and worktree.test.js that correctly
+    encode "operation succeeded -> exit 0", and would break real callers
+    (CI scripts, the worktree-create loop) that legitimately run where the
+    repo cannot auto-commit.
+  - >-
+    The warning stays; only the exit code changes. surfaceAuditCommit
+    continues to emit the same stderr warning (file left uncommitted,
+    reason, manual remedy) — the non-silence guarantee from -001 is
+    preserved. The function is changed from returning a boolean used to
+    `return 1` into a void/ignored-return warning emitter, and every call
+    site stops returning 1 on its result. The success stdout line still
+    prints; the warning follows it on stderr.
+  - >-
+    git-autocommit.ts path-scoping is NOT touched. The -001 Bug-1 fix
+    (commit `git commit -m <msg> -- <paths>`, proven by A1 in
+    git-autocommit.test.js) is correct and stays. This slice only adjusts
+    the SHELL-HANDLER exit-code policy. git-autocommit.ts is scope.out.
+  - >-
+    Scope-bounded to the two shell handlers + the specs test. specs.ts and
+    worktree.ts lose the `return 1` on the surfaceAuditCommit branch;
+    specs.test.js A3 is corrected to assert warning + exit 0 (the -001 A3
+    asserted exit 1, which was the over-reach this slice corrects). No
+    kernel, policy, store, or event-schema change.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A spec close whose autoCommit returns refused_dirty (target dirty
+      before the close), exercised via runSpecsCloseCommand.
+    when: the command completes.
+    then: >-
+      The lifecycle YAML still flips to closed on disk; the command emits
+      the refused_dirty warning on stderr (file uncommitted + reason +
+      manual remedy); and the command EXITS 0 (not 1). Operation success
+      is reported; the un-landed audit commit is surfaced, not turned into
+      a failure exit.
+  - id: A2
+    given: >-
+      A worktree create/destroy/bind/merge whose autoCommit returns
+      refused_dirty (e.g. the test fixtures where the repo has uncommitted
+      state at commit time).
+    when: the command completes.
+    then: >-
+      The command exits 0 (the worktree operation succeeded) with the
+      warning on stderr. The previously-failing assertions in
+      worktree-destroy-session.test.js and worktree.test.js
+      (Expected: 0, Received: 1) pass again.
+  - id: A3
+    given: A clean close/create/worktree op with a landing audit commit.
+    when: the command completes.
+    then: >-
+      Behavior unchanged: success stdout line, exit 0, no warning, audit
+      commit landed. No regression to the happy path.
+  - id: A4
+    given: The full caws-cli shell + store test suites after this slice.
+    when: they run.
+    then: >-
+      worktree-destroy-session.test.js and worktree.test.js pass (the
+      16-failure regression from -001 is cleared); git-autocommit.test.js
+      A1 (path-scoped commit) still passes (Bug-1 fix intact);
+      specs.test.js A3 now asserts warning + exit 0. The two pre-existing
+      environmental failures (axe cli-accessibility "already initialized"
+      and install.test.js manifest count 9!=10 from the sibling pack-v10
+      work) are OUT OF SCOPE and remain as-is — they are unrelated to
+      autocommit and predate this slice.
+non_functional:
+  reliability:
+    - >-
+      Restores the correct contract that a CAWS lifecycle command's exit
+      code reflects whether the OPERATION succeeded, while still loudly
+      surfacing a non-landed audit commit. Closes the regression -001
+      introduced by over-broadly treating a refused audit commit as a
+      command failure.
 contracts: []
