@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_activated.v1.json",
+  "title": "spec_activated event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Envelope.spec_id is the spec being activated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["previous_lifecycle_state", "lifecycle_state"],
+  "properties": {
+    "previous_lifecycle_state": {
+      "type": "string",
+      "const": "draft"
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "const": "active"
+    }
+  }
+}
