@@ -1,25 +1,151 @@
 id: PREPUSH-FOREIGN-WORKTREE-WIRING-001
 title: 'Wire prepush command to reach A4 foreign-worktree ERROR refusal + A3/A7 command tests + prepush.ts cleanups'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-29T04:18:53.074Z'
 updated_at: '2026-05-29T04:18:53.074Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/push-range
   data_migration: false
-operational_rollback_slo: 5m
+operational_rollback_slo: 30m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/PREPUSH-FOREIGN-WORKTREE-WIRING-001.yaml
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - packages/caws-cli/src/shell/push-range/classify-range.ts
+    - packages/caws-cli/tests/shell/prepush-command.test.js
+    - packages/caws-cli/tests/shell/push-range-classifier.test.js
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Diagnose/decide, NOT repair. This slice extends the prepush guard's
+    fact-collection so the command can reach the foreign-worktree ERROR
+    decision the classifier already supports. It MUST NOT mutate repository
+    state, push, rewrite, drop, reorder, or amend commits. The only new
+    behavior is additional READ-ONLY git observation (branch --contains,
+    merge-base) feeding the existing pure classifier.
+  - >-
+    The classifier stays pure. All new git reads live in the thin command
+    (collectGitFacts and its helpers). classifyRange remains a deterministic
+    function of its inputs; any change to classify-range.ts is limited to
+    the foreign-worktree finding shape or comments, never to invoking git.
+  - >-
+    originWorktree attribution is best-effort and degrades silently. When
+    `git branch --contains <sha>` cannot resolve a worktree (detached,
+    ambiguous, or git read fails), the commit's originWorktree is left
+    undefined and the commit is classified exactly as it is today. A failed
+    attribution NEVER fabricates a foreign-worktree origin and NEVER
+    escalates severity on its own.
+  - >-
+    Full posture only escalates to ERROR on origin main. The unmerged /
+    unregistered / originates-commit conditions escalate to ERROR only when
+    the push target is origin main (the existing fullPosture gate). On a
+    feature-branch target the same conditions weaken to WARN, preserving the
+    A3-vs-A4 distinction already encoded in classifyForeignWorktree.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: |
+      A fixture git repo with an active spec FOO-001, a clean outgoing range
+      attributable to FOO-001, and a SECOND git worktree (git worktree add)
+      whose branch authored one of the commits reachable in origin/main..HEAD,
+      registered in .caws/worktrees.json under a different spec id.
+    when: |
+      The operator runs `caws prepush` from the main checkout with
+      --base <base> --spec FOO-001 against the origin main target.
+    then: |
+      collectGitFacts populates that commit's originWorktree from
+      `git branch --contains <sha>` matched against the registry, the
+      foreign-worktree finding is classified ERROR (reasons include
+      "commits in the outgoing range originate from it"), the report is
+      refused, and the command exits 1 naming the foreign worktree and the
+      originating SHA(s). This is the session-13 incident reproduced and
+      caught end-to-end, not just in the pure classifier.
+  - id: A2
+    given: |
+      A fixture git repo with an active spec FOO-001, a clean outgoing range,
+      and a foreign worktree whose branch is UNMERGED into the push base and
+      ABSENT from .caws/worktrees.json (unregistered), with no commit in the
+      outgoing range originating from it.
+    when: |
+      The operator runs `caws prepush` from the main checkout against origin
+      main.
+    then: |
+      collectGitFacts sets unmerged: true and unregistered: true for that
+      worktree; the finding is ERROR on the origin-main full posture; the
+      command refuses with exit 1. The same fixture pushed to a feature
+      branch (--branch feat-x) weakens the finding to WARN and exits 0.
+  - id: A3
+    given: |
+      A fixture git repo with an active spec FOO-001, a clean outgoing range,
+      and a foreign worktree present and registered, with a merged branch and
+      no originating commit (the benign A3 case).
+    when: |
+      The operator runs `caws prepush` from the main checkout against origin
+      main.
+    then: |
+      The foreign-worktree finding renders at WARN severity (escalated from
+      doctor INFO because an active slice is in play), the report is NOT
+      refused, and the command exits 0 with the WARN line visible in the
+      rendered output.
+  - id: A4
+    given: |
+      The prepush guard invoked with --base pointing at a ref, and a commit
+      in the outgoing range that `git branch --contains` cannot attribute to
+      any registered worktree (e.g. authored on main directly).
+    when: |
+      collectGitFacts runs its branch --contains attribution.
+    then: |
+      The commit's originWorktree is left undefined, the commit is classified
+      by its file-touch / subject provenance exactly as before this slice,
+      and no foreign-worktree finding is fabricated for it. Attribution
+      failure is silent and non-escalating (invariant 3).
+  - id: A5
+    given: |
+      The two prepush.ts cleanups bundled into this slice.
+    when: |
+      The reviewer reads the post-slice prepush.ts.
+    then: |
+      The dead `void path;` statement and its now-unused `node:path` import
+      are removed (or path is genuinely used), and dirty-working-tree path
+      parsing reads NUL-delimited porcelain (`git status --porcelain=v1 -z`)
+      so renamed and quoted paths parse correctly. The A8 dirty-tree test
+      still passes against the new parsing.
+  - id: A6
+    given: |
+      Any of the fixtures above.
+    when: |
+      The prepush guard runs to completion on any path (refuse or clean).
+    then: |
+      The fixture repository state is unchanged — no commits, no amends, no
+      file writes, no registry mutation, no events appended. `git status`
+      and the registry are byte-identical before and after.
+non_functional:
+  reliability:
+    - >-
+      All new git observation MUST be read-only and MUST NOT depend on
+      network access to origin. branch --contains and merge-base run against
+      local refs only; a git read failure degrades to undefined attribution
+      (invariant 3), never to a thrown error that aborts the report.
+    - >-
+      Classification remains deterministic: the same local commit set, the
+      same registry, and the same worktree configuration produce a
+      byte-identical report across re-invocations.
+contracts:
+  - name: prepush-foreign-worktree-attribution-read-only
+    type: behavior
+    description: >-
+      The prepush command's foreign-worktree fact collection attributes
+      outgoing commits to registered worktrees via read-only git observation
+      (branch --contains, merge-base) and feeds unmerged / unregistered /
+      originates-commit facts to the pure classifier. It must NOT push,
+      mutate, or write any repository or control-plane state. A failed
+      attribution degrades to undefined origin and is non-escalating; the
+      classifier alone decides severity, and ERROR (refusal) is reachable
+      only on the origin-main full posture.
