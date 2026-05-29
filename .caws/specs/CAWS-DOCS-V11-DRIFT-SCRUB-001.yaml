@@ -2,10 +2,11 @@ id: CAWS-DOCS-V11-DRIFT-SCRUB-001
 title: 'Scrub pre-v11 shapes from docs; rewrite to the shipped v11.1 surface'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: docs-v11-drift-scrub
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-v11-drift-scrub at 574c362a7ed19d046f6ea864b5f65b6fb3247f77'
 created_at: '2026-05-29T00:40:48.994Z'
-updated_at: '2026-05-29T00:42:00.000Z'
+updated_at: '2026-05-29T01:31:29.595Z'
 blast_radius:
   modules:
     - Documentation only (docs/, root *.md, package READMEs, template READMEs). No source, schema, policy, or CI change.
