@@ -652,4 +652,21 @@ describe('caws init — .gitignore ephemeral-state block', () => {
     expect(isIgnored(repo, '.caws/agents.json')).toBe(false);
     expect(r.stdout).toMatch(/adopt/i);
   });
+
+  // A3: non-git directory → init refuses at repo-root resolution (exit 2)
+  // BEFORE any .caws/ or .gitignore write. caws init structurally cannot run
+  // outside a git repo (resolveRepoRoot requires git), so the .gitignore step
+  // is never reached — and no .gitignore is written. The step's own
+  // isInsideGitWorkingTree gate is defense-in-depth for any future loosening
+  // of that precondition.
+  it('A3: a non-git directory is refused before any .gitignore is written', () => {
+    // A plain temp dir — deliberately NOT a git repo.
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-gi-nogit-'));
+    const r = capture(runInitCommand, { cwd: repo });
+    // Refused at repo-root resolution (not a git repo) — exit 2.
+    expect(r.code).toBe(2);
+    // No .gitignore (and no .caws/) was written.
+    expect(fs.existsSync(path.join(repo, '.gitignore'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, '.caws'))).toBe(false);
+  });
 });

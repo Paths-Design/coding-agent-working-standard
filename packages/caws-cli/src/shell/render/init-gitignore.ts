@@ -18,9 +18,8 @@ export function renderGitignore(result: GitignoreManageResult): string {
     case 'created':
       lines.push(
         '  Created .gitignore with the CAWS ephemeral-state block.',
-        '  Runtime state (worktrees, leases, agents.json, events.jsonl, caches)',
-        '  is now ignored; authority state (specs/, policy.yaml, waivers/) stays',
-        '  tracked.'
+        '  Runtime state (worktrees, leases, agents cache, event log, caches) is',
+        '  now ignored; authority state (specs, policy, waivers) stays tracked.'
       );
       break;
     case 'block_added':
@@ -59,4 +58,16 @@ export function renderGitignore(result: GitignoreManageResult): string {
   }
 
   return lines.join('\n');
+}
+
+/** Render the panel for the case where the .gitignore step is skipped because
+ * the cwd is not a git working tree. A .gitignore there is inert, so init does
+ * not write one (mirrors how the commit-hint step is git-gated). */
+export function renderGitignoreSkippedNotGit(): string {
+  return [
+    section('Step: .gitignore ephemeral-state block'),
+    '  Skipped — not a git working tree. A .gitignore here would be inert, so',
+    '  none was written. If this becomes a git repo later, re-run caws init to',
+    '  add the ephemeral-state block.',
+  ].join('\n');
 }
