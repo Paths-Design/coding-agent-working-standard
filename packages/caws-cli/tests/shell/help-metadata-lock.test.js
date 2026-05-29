@@ -26,6 +26,9 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const {
   COMMAND_SURFACE_METADATA,
 } = require('../../dist/shell/command-metadata');
@@ -85,31 +88,17 @@ describe('help-metadata lock (CAWS-CLI-HELP-METADATA-AUTHORITY-001)', () => {
     }
   });
 
-  // ── L1: metadata group set ⊆ REGISTERED_COMMAND_GROUPS ──────────────────
-  // ENFORCED FROM SLICE 2. While groups are populated incrementally (slices
-  // 2-3), the metadata set is a SUBSET of the 13 registered groups, and the
-  // groups populated so far MUST be present. Slice 3 tightens this to full
-  // set-equality once all 13 groups are in the metadata.
-  it('L1: metadata group names are a subset of REGISTERED_COMMAND_GROUPS', () => {
-    const metaGroups = COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'group').map(
-      (e) => e.name
-    );
-    const flatLeaves = COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'leaf').map(
-      (e) => e.name
-    );
-    const allNames = [...metaGroups, ...flatLeaves];
+  // ── L1: metadata top-level names == REGISTERED_COMMAND_GROUPS ────────────
+  // FULL SET-EQUALITY from slice 3. With all 13 surface entries populated (the
+  // five flat leaf commands + eight groups), the metadata top-level-name set
+  // must EQUAL REGISTERED_COMMAND_GROUPS exactly — a new registered group with
+  // no metadata entry (or a metadata entry naming a non-registered command)
+  // fails this lock. This was a subset check in slice 2 while groups populated
+  // incrementally.
+  it('L1: metadata top-level names equal REGISTERED_COMMAND_GROUPS', () => {
+    const metaNames = new Set(COMMAND_SURFACE_METADATA.map((e) => e.name));
     const registered = new Set(REGISTERED_COMMAND_GROUPS);
-    for (const name of allNames) {
-      expect(registered.has(name)).toBe(true);
-    }
-  });
-
-  it('L1: the slice-2 groups (specs, worktree) are present in the metadata', () => {
-    const groupNames = new Set(
-      COMMAND_SURFACE_METADATA.filter((e) => e.kind === 'group').map((e) => e.name)
-    );
-    expect(groupNames.has('specs')).toBe(true);
-    expect(groupNames.has('worktree')).toBe(true);
+    expect(metaNames).toEqual(registered);
   });
 
   // ── L3: enum-backed option values deep-equal their kernel enum ───────────
@@ -137,8 +126,40 @@ describe('help-metadata lock (CAWS-CLI-HELP-METADATA-AUTHORITY-001)', () => {
     expect(enumBackedOptions).toBeGreaterThanOrEqual(3);
   });
 
-  // L5 (no inline `.description('...')` / `.option('...')` string literals in
-  // register.ts) becomes a global lock in slice 3, once all 13 groups are
-  // metadata-driven. It is intentionally not asserted yet — the 11 unmigrated
-  // groups still carry inline literals.
+  // ── L5: register.ts carries no inline help-string literals ──────────────
+  // GLOBAL from slice 3. Every `.description(...)`, `.option(...)`, and
+  // `.requiredOption(...)` call in register.ts must take its help text from
+  // COMMAND_SURFACE_METADATA (via the defineLeaf/defineFlat/applyGroupMeta/
+  // applyOptionMeta helpers, which pass `leaf.description` / `opt.flag` /
+  // `description` variables) — NOT a bare string literal. A `.description('...')`
+  // or `.option('--flag', '...')` with a quoted first/second arg is inline help
+  // that bypasses the single-source authority, and fails this lock.
+  //
+  // The scan reads the register.ts SOURCE (not dist) and flags any
+  // .description( / .option( / .requiredOption( immediately followed by a
+  // string-literal argument (single, double, or template quote). The helper
+  // call sites use identifiers (leaf.description, opt.flag, description), so a
+  // clean metadata-driven register.ts has zero matches.
+  it('L5: register.ts has no inline .description()/.option() string literals', () => {
+    const registerSrc = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'shell', 'register.ts'),
+      'utf8'
+    );
+    // Match `.description(` / `.option(` / `.requiredOption(` where the very
+    // next non-whitespace char begins a string literal ( ' " or ` ).
+    const inlineHelp = /\.(?:description|option|requiredOption)\(\s*['"`]/g;
+    const offenders = [];
+    let m;
+    while ((m = inlineHelp.exec(registerSrc)) !== null) {
+      // Report the line number for a precise failure message.
+      const line = registerSrc.slice(0, m.index).split('\n').length;
+      offenders.push(`register.ts:${line} — ${m[0].trim()}`);
+    }
+    if (offenders.length > 0) {
+      throw new Error(
+        `inline help-string literals must flow through COMMAND_SURFACE_METADATA:\n  ${offenders.join('\n  ')}`
+      );
+    }
+    expect(offenders).toEqual([]);
+  });
 });

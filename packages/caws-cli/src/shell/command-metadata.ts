@@ -131,16 +131,22 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'create',
       argument: { name: 'id', required: true, description: 'Spec id to create' },
       description: 'Create a new spec in lifecycle_state: active.',
+      // W3: --title/--mode/--risk-tier are functionally required, but the
+      // handler (runSpecsCreateCommand) owns the missing-args check so it can
+      // emit rich guidance (usage block + --type hint) that Commander's
+      // .requiredOption() pre-validation would degrade. So we mark them
+      // "(required)" in prose and keep them .option() — help states the
+      // requirement; the handler enforces it.
       options: [
-        { flag: '--title <title>', description: 'Short spec title' },
+        { flag: '--title <title>', description: 'Short spec title (required)' },
         {
           flag: '--mode <mode>',
-          description: 'Spec mode',
+          description: 'Spec mode (required)',
           allowedValues: SPEC_MODES,
         },
         {
           flag: '--risk-tier <n>',
-          description: 'Risk tier',
+          description: 'Risk tier (required)',
           allowedValues: RISK_TIERS,
         },
         {
@@ -374,17 +380,426 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+// ─── flat top-level commands (init/doctor/status/claim/prepush) ───────────
+// These are registered directly on `program` (no subcommand layer); they are
+// LeafCommandMeta entries at the top of COMMAND_SURFACE_METADATA. register.ts
+// consumes them via the defineFlat helper.
+
+export const INIT_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'init',
+  description:
+    'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.',
+  options: [
+    DATA_OPTION,
+    {
+      flag: '--agent-surface <name>',
+      description:
+        'Install a hook pack for an agent harness (claude-code | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.',
+    },
+    {
+      flag: '--overwrite',
+      description:
+        'For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.',
+    },
+    {
+      flag: '--adopt',
+      description:
+        'For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.',
+    },
+  ],
+};
+
+export const DOCTOR_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'doctor',
+  description: 'Run drift detection against the current .caws/ state',
+  options: [{ flag: '--data', description: 'Show structured data block on findings/diagnostics' }],
+};
+
+export const STATUS_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'status',
+  description:
+    'Read-only dashboard: project, current context, claim, and doctor findings',
+  options: [{ flag: '--data', description: 'Show structured data block on rendered diagnostics' }],
+};
+
+export const CLAIM_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'claim',
+  description:
+    "Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).",
+  options: [
+    {
+      flag: '--takeover',
+      description:
+        'Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session.',
+    },
+    {
+      flag: '--paths <path>',
+      description:
+        'Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session.',
+      collect: true,
+    },
+    DATA_OPTION,
+  ],
+};
+
+export const PREPUSH_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'prepush',
+  description:
+    'Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.',
+  options: [
+    { flag: '--remote <remote>', description: 'Push remote', defaultValue: 'origin' },
+    { flag: '--branch <branch>', description: 'Push branch', defaultValue: 'main' },
+    { flag: '--base <ref>', description: 'Base ref override (default <remote>/<branch>)' },
+    { flag: '--spec <id>', description: 'Current session active spec id (for slice-match)' },
+    {
+      flag: '--ack <sha>',
+      description: 'Acknowledge an unexpected commit by SHA (repeatable)',
+      collect: true,
+      // Seed []: the prepush handler reads opts.ack as an array unconditionally.
+      defaultValue: [],
+    },
+    DATA_OPTION,
+  ],
+};
+
+// ─── scope group ──────────────────────────────────────────────────────────
+export const SCOPE_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'scope',
+  description: 'Evaluate file paths against the bound spec scope',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'show',
+      argument: { name: 'path', required: true, description: 'File path to evaluate' },
+      description: 'Explain the scope decision for <path>; always exits 0',
+      options: [{ flag: '--data', description: 'Show structured data block' }],
+    },
+    {
+      kind: 'leaf',
+      name: 'check',
+      argument: { name: 'path', required: true, description: 'File path to enforce' },
+      description: 'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise',
+      options: [{ flag: '--data', description: 'Show structured data block' }],
+    },
+  ],
+};
+
+// ─── gates group (W4: exit-code contract documented) ──────────────────────
+export const GATES_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'gates',
+  description: 'Run quality gates against the current changes (policy-driven)',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'run',
+      description:
+        'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / subprocess-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
+      options: [
+        { flag: '--spec <id>', required: true, description: 'Spec id this gate run is about' },
+        {
+          flag: '--context <ctx>',
+          description: 'Compatibility no-op retained from the former quality-gates subprocess path',
+          defaultValue: 'cli',
+        },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
+// ─── evidence group ───────────────────────────────────────────────────────
+export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'evidence',
+  description: 'Record typed evidence events into .caws/events.jsonl',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'record',
+      description: 'Append a typed evidence event (test|gate|ac)',
+      options: [
+        { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac' },
+        { flag: '--spec <id>', required: true, description: 'Spec id this evidence is about' },
+        { flag: '--data <json>', required: true, description: 'Event payload as a JSON object string' },
+        {
+          flag: '--actor-kind <kind>',
+          description: 'Actor kind: agent | human | system | automation',
+          defaultValue: 'agent',
+        },
+        { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
+      ],
+    },
+  ],
+};
+
+// ─── events group ─────────────────────────────────────────────────────────
+export const EVENTS_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'events',
+  description: 'Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'migrate',
+      description:
+        'Migrate a v10-shape events.jsonl to a v11 chain via chain_rotated rotation. Dry-run by default; --apply executes.',
+      options: [
+        {
+          flag: '--from <version>',
+          required: true,
+          description: 'Source schema version (only v10 supported in v11.2)',
+        },
+        { flag: '--apply', description: 'Execute the rotation (default is dry-run)' },
+        {
+          flag: '--reason <text>',
+          description:
+            'Operator reason recorded into the chain_rotated payload (required with --apply)',
+        },
+        {
+          flag: '--actor-kind <kind>',
+          description: 'Actor kind: agent | human | system | automation',
+          defaultValue: 'agent',
+        },
+        { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
+        {
+          flag: '--allow-partial-upgrade',
+          description:
+            'Allow rotation when v10 specs are still present (off by default; see CAWS-MIGRATE-V10-SPECS-001)',
+        },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'rotate',
+      description:
+        'Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.',
+      options: [
+        {
+          flag: '--reason <text>',
+          required: true,
+          description: 'Operator reason recorded into the chain_rotated payload',
+        },
+        {
+          flag: '--actor-kind <kind>',
+          description: 'Actor kind: agent | human | system | automation',
+          defaultValue: 'agent',
+        },
+        { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
+        { flag: '--allow-clean', description: 'Allow rotation of a clean v11 chain (friction flag)' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'verify-archive',
+      description:
+        'Verify that the archive file named in the most recent chain_rotated event byte-matches its committed digest + line count.',
+      options: [],
+    },
+  ],
+};
+
+// ─── waiver group ─────────────────────────────────────────────────────────
+export const WAIVER_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'waiver',
+  description:
+    'Manage CAWS waivers (bounded exception records that suppress matching gate violations)',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'create',
+      argument: { name: 'id', required: true, description: 'Waiver id to create' },
+      description: 'Create a new active waiver. Validates against the kernel before writing.',
+      options: [
+        { flag: '--title <title>', required: true, description: 'Short waiver title (≥5 chars)' },
+        {
+          flag: '--gate <gate>',
+          required: true,
+          description: 'Gate id this waiver covers; repeat for multiple gates',
+          collect: true,
+        },
+        { flag: '--reason <reason>', required: true, description: 'Justification for the waiver' },
+        { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
+        {
+          flag: '--expires-at <iso>',
+          required: true,
+          description: 'Expiry as an ISO-8601 datetime with timezone',
+        },
+        {
+          flag: '--spec <id>',
+          description: 'Optional spec id this waiver is scoped to (omit for project-wide)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'list',
+      description: 'List waivers. By default excludes revoked and expired records.',
+      options: [
+        { flag: '--include-revoked', description: 'Include revoked waivers' },
+        { flag: '--include-expired', description: 'Include expired waivers' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      argument: { name: 'id', required: true, description: 'Waiver id to show' },
+      description: 'Show a waiver, including its derived effectiveness at now.',
+      options: [DATA_OPTION],
+    },
+    {
+      kind: 'leaf',
+      name: 'revoke',
+      argument: { name: 'id', required: true, description: 'Waiver id to revoke' },
+      description: 'Revoke a waiver. Writes a revocation record; refuses double-revoke.',
+      options: [
+        { flag: '--revoked-by <id>', description: 'Identity recorded in revocation.revoked_by' },
+        {
+          flag: '--reason <reason>',
+          description: 'Reason recorded in revocation.reason (recommended for audit)',
+        },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
+// ─── agents group ─────────────────────────────────────────────────────────
+export const AGENTS_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'agents',
+  description:
+    'Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'register',
+      description: 'Register this session in .caws/leases/. Hook-invoked at SessionStart.',
+      options: [
+        {
+          flag: '--session-id <id>',
+          description: 'Explicit session id (required for hook-invoked usage; overrides resolveSession)',
+        },
+        { flag: '--platform <p>', description: 'Platform tag (e.g., claude-code, cursor, manual)' },
+        { flag: '--reason <r>', description: 'session_start | pre_tool_use | manual_register | claim | status' },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout (never hookSpecificOutput)' },
+        {
+          flag: '--include-active-summary',
+          description: 'Include active_agent_count + active_agents in JSON output',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'heartbeat',
+      description: "Refresh this session's lease. Hook-invoked at PreToolUse. Throttle-aware.",
+      options: [
+        { flag: '--session-id <id>', description: 'Explicit session id (required for hook-invoked usage)' },
+        { flag: '--platform <p>', description: 'Platform tag' },
+        { flag: '--reason <r>', description: 'pre_tool_use | claim | status | manual_register' },
+        {
+          flag: '--throttle <ms>',
+          description: 'Skip write if last_active within this many ms (default: 0 — no throttle)',
+        },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        {
+          flag: '--include-active-summary',
+          description: 'Include active_agent_count + active_agents in JSON output',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'stop',
+      description: "Mark this session's lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.",
+      options: [
+        { flag: '--session-id <id>', description: 'Explicit session id' },
+        { flag: '--platform <p>', description: 'Platform tag' },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'list',
+      description: 'List active / stale / stopped agents. Read-only.',
+      options: [
+        { flag: '--include-stale', description: 'Include stale (active-but-TTL-expired) records' },
+        { flag: '--include-stopped', description: 'Include stopped records' },
+        {
+          flag: '--active',
+          description: 'Active-only (overrides --include-* flags); TTL-classified active, not raw status field',
+        },
+        { flag: '--stale-ttl-ms <ms>', description: 'TTL for stale classification (default: 1800000 = 30m)' },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      argument: { name: 'id', required: true, description: 'Session id of the lease to show' },
+      description: 'Show one lease by session id. Read-only.',
+      options: [
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'prune',
+      description:
+        'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks.',
+      options: [
+        { flag: '--status <s>', required: true, description: 'stopped | stale' },
+        { flag: '--older-than-ms <ms>', required: true, description: 'Retention threshold in milliseconds' },
+        {
+          flag: '--stale-ttl-ms <ms>',
+          description: 'TTL for stale classification (used with --status stale; default 30m)',
+        },
+        { flag: '--apply', description: 'Actually delete (default: dry-run)' },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
 /**
  * The complete v11 command-surface metadata — the single authority for every
  * `.description()` / `.argument()` / `.option()` in register.ts.
  *
- * SLICE 2: the `specs` and `worktree` groups are populated and consumed by
- * register.ts; the remaining 11 groups (init/doctor/status/scope/claim/gates/
- * evidence/events/waiver/agents/prepush) are added in slice 3, at which point
- * the lock test enforces full group-set equality with REGISTERED_COMMAND_GROUPS
- * and the global no-inline-strings invariant.
+ * SLICE 3: all thirteen surface entries are populated and consumed by
+ * register.ts — the five flat top-level commands (init/doctor/status/claim/
+ * prepush) as LeafCommandMeta, and eight groups (scope/gates/evidence/events/
+ * waiver/agents/specs/worktree). The lock test enforces full set-equality with
+ * REGISTERED_COMMAND_GROUPS (L1), enum/value-list parity (L3), non-empty
+ * descriptions (L4), and the global no-inline-strings invariant on register.ts
+ * (L5).
  */
 export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
+  INIT_COMMAND_META,
+  DOCTOR_COMMAND_META,
+  STATUS_COMMAND_META,
+  SCOPE_COMMAND_META,
+  CLAIM_COMMAND_META,
+  GATES_COMMAND_META,
+  EVIDENCE_COMMAND_META,
+  EVENTS_COMMAND_META,
+  WAIVER_COMMAND_META,
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
+  AGENTS_COMMAND_META,
+  PREPUSH_COMMAND_META,
 ]);
