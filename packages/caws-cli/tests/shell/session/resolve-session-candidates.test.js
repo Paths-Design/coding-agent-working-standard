@@ -204,13 +204,16 @@ describe('resolveSessionCandidates: exhaustive multi-source resolution', () => {
       env: {},
     });
 
-    // Five sources are now consulted: the durable_hook_envelope source was
-    // added by CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001,
-    // mirroring resolveSession's step-2.5 between hook_env and capsule.
-    expect(r.trace).toHaveLength(5);
+    // Six sources are now consulted. durable_hook_envelope was added by
+    // CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001 (between
+    // hook_env and capsule); claude_code_env (tier 1.5) was added by
+    // CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001 (between claude_env and
+    // hook_env). Both mirror resolveSession's source chain.
+    expect(r.trace).toHaveLength(6);
     const sources = r.trace.map((t) => t.source);
     expect(sources).toEqual([
       'claude_env',
+      'claude_code_env',
       'hook_env',
       'durable_hook_envelope',
       'capsule',
@@ -444,10 +447,11 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
   it('renders one line per source PLUS one candidate line per admitted ID', () => {
     tmp = mkTempCaws();
-    // Two capsules + one env => 3 candidates; trace has 5 source lines
-    // (durable_hook_envelope added by CAWS-WORKTREE-DESTROY-GHOST-ENTRY-
-    // OWNER-UNRESOLVABLE-001 — absent here, so it contributes a source
-    // line but no candidate line).
+    // Two capsules + one env => 3 candidates; trace has 6 source lines.
+    // claude_code_env (CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001) and
+    // durable_hook_envelope (CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-
+    // UNRESOLVABLE-001) are both absent here, so each contributes a source
+    // line but no candidate line.
     writeCapsule(tmp.cawsDir, 'caws-cap1', '/wt-1');
     writeCapsule(tmp.cawsDir, 'caws-cap2', '/wt-2');
 
@@ -458,12 +462,12 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
     const text = describeCandidateTrace(candidates);
     const lines = text.split('\n');
-    // 5 source lines + 1 admitted-id line for claude_env + 2 admitted-id
-    // lines for capsule = 8 lines total.
-    expect(lines).toHaveLength(8);
+    // 6 source lines + 1 admitted-id line for claude_env + 2 admitted-id
+    // lines for capsule = 9 lines total.
+    expect(lines).toHaveLength(9);
   });
 
-  it('renders empty trace as five absent lines (no candidate lines)', () => {
+  it('renders empty trace as six absent lines (no candidate lines)', () => {
     tmp = mkTempCaws();
 
     const candidates = resolveSessionCandidates({
@@ -473,9 +477,10 @@ describe('describeCandidateTrace: human-readable diagnostic trace', () => {
 
     const text = describeCandidateTrace(candidates);
     const lines = text.split('\n');
-    // Five sources: claude_env, hook_env, durable_hook_envelope, capsule,
-    // cursor_env — all absent, no candidate lines.
-    expect(lines).toHaveLength(5);
+    // Six sources: claude_env, claude_code_env, hook_env,
+    // durable_hook_envelope, capsule, cursor_env — all absent, no
+    // candidate lines.
+    expect(lines).toHaveLength(6);
   });
 
   it('L2: refusal-diagnostic-grade trace includes admitted session_ids inline', () => {
@@ -666,6 +671,7 @@ describe('resolveSessionCandidates: durable_hook_envelope source', () => {
     const sources = candidates.trace.map((t) => t.source);
     expect(sources).toEqual([
       'claude_env',
+      'claude_code_env',
       'hook_env',
       'durable_hook_envelope',
       'capsule',
