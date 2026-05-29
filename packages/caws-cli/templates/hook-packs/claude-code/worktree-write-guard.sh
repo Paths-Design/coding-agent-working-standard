@@ -46,9 +46,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh"
 parse_hook_input
 # shellcheck source=lib/caws-state.sh
-# Provides $CAWS_NODE_ENTRIES_OF / $CAWS_NODE_ENTRY_SPEC_ID used by the
-# base-branch enforcement body below (dual-shape v10/v11 registry reads).
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# Provides $CAWS_NODE_ENTRIES_OF / $CAWS_NODE_ENTRY_SPEC_ID (registry
+# reads) and _realpath (path normalization) used throughout this guard.
+# The lib is a managed sibling shipped with this hook; if it is somehow
+# absent we cannot normalize paths safely, so fail OPEN (exit 0) rather
+# than enforce on un-normalized paths (HOOK-LIB-CONSOLIDATION-001 T2a).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || exit 0
+command -v _realpath >/dev/null 2>&1 || exit 0
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
@@ -65,21 +69,8 @@ esac
 WORKTREE_ROOT="${CLAUDE_PROJECT_DIR:-.}"
 WORKTREE_ROOT="$(cd "$WORKTREE_ROOT" 2>/dev/null && pwd -P || printf '%s\n' "$WORKTREE_ROOT")"
 
-# _realpath: best-effort realpath. macOS lacks `readlink -f` by default;
-# python3 is available on every supported runner (CI matrix verified).
-# Falls back to the original path if realpath cannot resolve.
-_realpath() {
-  local p="$1"
-  if [[ -z "$p" ]]; then
-    printf '%s\n' ""
-    return 0
-  fi
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p" 2>/dev/null || printf '%s\n' "$p"
-  else
-    printf '%s\n' "$p"
-  fi
-}
+# _realpath is provided by lib/caws-state.sh (sourced above) —
+# HOOK-LIB-CONSOLIDATION-001 T2a. The local copy was removed.
 
 # Linked-worktree detection via git as primary signal. CAWS registry
 # (.caws/worktrees.json) is consulted ONLY for diagnostic enrichment;
@@ -228,7 +219,7 @@ AGENT_DIR="${HOOK_CWD:-${CLAUDE_PROJECT_DIR:-.}}"
 # un-normalized AGENT_DIR like /tmp/... would never prefix-match a
 # /private/tmp/... WORKTREE_BASE on macOS).
 AGENT_DIR="$(_realpath "$AGENT_DIR")"
-CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 
 # If the agent is already operating inside a CAWS worktree, allow edits.

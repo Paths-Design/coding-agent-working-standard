@@ -22,17 +22,8 @@ source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 # Hook does not read stdin fields; only checks worktree registry state.
 # Sourcing parse-input.sh still wires up PATH for node (used below).
 
-# Resolve main repo root
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
-    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
-    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-      PROJECT_DIR="$CANDIDATE"
-    fi
-  fi
-fi
+# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
+PROJECT_DIR="$(resolve_canonical_dir "${CLAUDE_PROJECT_DIR:-.}")"
 
 # Check for active worktrees
 if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then

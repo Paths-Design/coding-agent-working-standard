@@ -48,6 +48,24 @@
     registry table (`entries_of_registry.test.js`). After consolidation no
     hook inlines a private copy of `entriesOf` or `globToRegExp` —
     `lib/caws-state.sh` is the only definition.
+  - **Tier 2 — shared worktree-state helpers.** Four inline copies of the
+    "resolve canonical (main) repo root from a possibly-worktree cwd"
+    block (`worktree-guard`, `quiet-merge`, `stop-worktree-check`, and
+    `session-caws-status`'s `CAWS_ROOT` variant) now call
+    `lib/caws-state.sh`'s pre-existing `resolve_canonical_dir` (it was in
+    the lib but unused). `_realpath` (was defined only in
+    `worktree-write-guard`) and a new `is_canonical_checkout` predicate
+    (git-dir == git-common-dir; extracted from `worktree-guard`'s
+    canonical-checkout guard) moved into the lib. The three base-branch
+    decision sites that computed the current branch
+    (`git rev-parse --abbrev-ref HEAD || unknown` in `worktree-guard`,
+    `worktree-write-guard`, `session-caws-status`) now call
+    `caws_current_branch`. `worktree-write-guard` now hard-requires the lib
+    (fails OPEN if it cannot source it, rather than enforcing on
+    un-normalized paths). `session-log`'s branch read was left inline — it
+    is one field of a tightly-coupled git-snapshot block (branch +
+    head_sha + dirty_count), not a standalone copy of the base-branch
+    decision concern.
 
 * **hook-pack (claude-code): reconciled the canonical pack into the union
   of three divergent forks** (`HOOK-PACK-DIVERGENCE-RECONCILE-001`). An

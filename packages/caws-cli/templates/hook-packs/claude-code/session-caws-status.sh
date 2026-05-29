@@ -53,7 +53,7 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 # --- Active-worktree warning (dual-shape registry compatible) ---
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_BRANCH=$(caws_current_branch)  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
   WT_INFO=$(node -e "

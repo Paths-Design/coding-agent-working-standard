@@ -33,17 +33,8 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-
-if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
-    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
-    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-      PROJECT_DIR="$CANDIDATE"
-    fi
-  fi
-fi
+# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
+PROJECT_DIR="$(resolve_canonical_dir "${CLAUDE_PROJECT_DIR:-.}")"
 
 # Block sparse checkout (runs before "only check git commands" early-exit)
 if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
@@ -109,19 +100,13 @@ canonical_guard_emit_block() {
 }
 
 # Determine whether the session's cwd is the canonical checkout.
-# git_dir == git_common_dir indicates canonical; a linked worktree has
-# git_dir under git_common_dir/worktrees/<name>/.
+# is_canonical_checkout (lib/caws-state.sh) returns 0 when git-dir ==
+# git-common-dir; a linked worktree has git-dir under
+# git-common-dir/worktrees/<name>/ (HOOK-LIB-CONSOLIDATION-001 T2a).
 CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
-if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
-  GIT_DIR_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-dir 2>/dev/null | head -1 || echo "")
-  GIT_COMMON_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-common-dir 2>/dev/null | head -1 || echo "")
-  if [[ -n "$GIT_DIR_RESOLVED" ]] && [[ -n "$GIT_COMMON_RESOLVED" ]]; then
-    # Normalize to absolute paths so equality is structural, not textual.
-    GIT_DIR_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_DIR_RESOLVED" 2>/dev/null && pwd || echo "$GIT_DIR_RESOLVED")
-    GIT_COMMON_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_COMMON_RESOLVED" 2>/dev/null && pwd || echo "$GIT_COMMON_RESOLVED")
-    if [[ "$GIT_DIR_ABS" == "$GIT_COMMON_ABS" ]]; then
-      # We are in the canonical checkout. Now check for active worktrees.
-      WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
+if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
+    # We are in the canonical checkout. Now check for active worktrees.
+    WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
       if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
         FIRST_ACTIVE_WT=$(node -e "
           $CAWS_NODE_ENTRIES_OF
@@ -169,8 +154,6 @@ if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
           fi
         fi
       fi
-    fi
-  fi
 fi
 # ─── /CANONICAL-CHECKOUT-WORKTREE-GUARD-001 ──────────────────────────
 
@@ -291,7 +274,7 @@ fi
 
 # --- Base branch protections ---
 AGENT_DIR="${HOOK_CWD:-${CLAUDE_PROJECT_DIR:-.}}"
-CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 BASE_BRANCH="$PARALLEL_BASE"
 if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then

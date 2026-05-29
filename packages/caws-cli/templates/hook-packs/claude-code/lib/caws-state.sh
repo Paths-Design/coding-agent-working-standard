@@ -40,6 +40,18 @@
 #       prints <name> on stdout and returns 0. Otherwise prints nothing
 #       and returns 1.
 #
+#   _realpath <path>
+#       Best-effort realpath (python3-backed, falls back to the input).
+#       Resolves the existing prefix even when the leaf does not exist.
+#
+#   caws_current_branch [dir]
+#       Prints the current branch of the checkout at [dir] (default cwd),
+#       or "unknown" if git is unavailable.
+#
+#   is_canonical_checkout [dir]
+#       Returns 0 if [dir] is the canonical (main) checkout (git-dir ==
+#       git-common-dir), 1 if it is a linked worktree or git is absent.
+#
 # Node-helper string constants:
 #   CAWS_NODE_ENTRIES_OF
 #       A JS function declaration string. Inline it into a node -e block
@@ -116,6 +128,58 @@ extract_worktree_name() {
     return 0
   fi
   return 1
+}
+
+# _realpath <path>
+#   Best-effort realpath. macOS lacks `readlink -f` by default; python3 is
+#   available on every supported runner (CI matrix verified). Falls back to
+#   the original path if realpath cannot resolve. os.path.realpath resolves
+#   the existing prefix even when the leaf does not exist (Write-tool case),
+#   which is required for prefix-match allowlist arms to survive the macOS
+#   /tmp -> /private/tmp symlink. Promoted from worktree-write-guard
+#   (HOOK-LIB-CONSOLIDATION-001 T2a) so other hooks normalize identically.
+_realpath() {
+  local p="${1:-}"
+  if [[ -z "$p" ]]; then
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p" 2>/dev/null || printf '%s\n' "$p"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
+# caws_current_branch [dir]
+#   Print the current branch name of the git checkout at [dir] (default
+#   cwd), or "unknown" if git is unavailable / not a repo. Single source
+#   for the `git rev-parse --abbrev-ref HEAD || unknown` idiom duplicated
+#   across worktree-guard, worktree-write-guard, session-caws-status,
+#   session-log (HOOK-LIB-CONSOLIDATION-001 T2b).
+caws_current_branch() {
+  local dir="${1:-.}"
+  ( cd "$dir" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null ) || echo "unknown"
+}
+
+# is_canonical_checkout [dir]
+#   Return 0 if [dir] (default cwd) is the canonical (main) checkout — i.e.
+#   git-dir == git-common-dir — and 1 if it is a linked worktree or git is
+#   unavailable. Equality is structural (both sides realpath-normalized),
+#   not textual. Promoted from worktree-guard's CANONICAL-CHECKOUT guard
+#   (HOOK-LIB-CONSOLIDATION-001 T2a). A non-zero return for "git absent"
+#   is intentional: callers gate canonical-only blocking behind a positive
+#   answer, so "can't tell" must not assert canonical.
+is_canonical_checkout() {
+  local dir="${1:-.}"
+  command -v git >/dev/null 2>&1 || return 1
+  [[ -d "$dir" ]] || return 1
+  local gd gc gda gca
+  gd=$(cd "$dir" 2>/dev/null && git rev-parse --git-dir 2>/dev/null | head -1) || return 1
+  gc=$(cd "$dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null | head -1) || return 1
+  [[ -n "$gd" ]] && [[ -n "$gc" ]] || return 1
+  gda=$(cd "$dir" 2>/dev/null && cd "$gd" 2>/dev/null && pwd || echo "$gd")
+  gca=$(cd "$dir" 2>/dev/null && cd "$gc" 2>/dev/null && pwd || echo "$gc")
+  [[ "$gda" == "$gca" ]]
 }
 
 # Shared node-helper strings. These are JS function declarations that
