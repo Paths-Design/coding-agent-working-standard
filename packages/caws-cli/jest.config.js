@@ -19,11 +19,10 @@ module.exports = {
   setupFiles: ['<rootDir>/tests/pre-setup.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   // Skip environmental tests in CI (browser-driven a11y, mutation, contract,
-  // perf budget gates, cursor IDE integration). Every path below must
+  // perf budget gates). Every path below must
   // resolve to an existing file on disk — stale entries are scrubbed.
   testPathIgnorePatterns: process.env.CI
     ? [
-        '<rootDir>/tests/integration/cursor-hooks.test.js',
         '<rootDir>/tests/perf-budgets.test.js',
         '<rootDir>/tests/axe/cli-accessibility.test.js',
         '<rootDir>/tests/contract/schema-contract.test.js',
