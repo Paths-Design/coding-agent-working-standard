@@ -2,9 +2,11 @@ id: DANGER-LATCH-WORKFLOW-CALIBRATION-001
 title: 'Admit everyday git workflow writes (add/commit/checkout -b/switch -c); stop latching the CAWS happy path'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Admitted everyday git workflow writes (add, commit w/o --amend, checkout -b, switch -c, switch) to classify_command.py; destructive variants unchanged. block-dangerous.sh sticky-latch replay now names the originating command + states human-only reset. templates/CLAUDE.md documents the admitted happy path. 22 new regression tests (101/101 calibration, 174/174 install+hook-pack). Latch-replay verified end-to-end against seeded latch. Pack stays v11 per release decision (fresh init gets fix; existing installs via --overwrite). NO ephemeral docs created. Targets 11.1.9 with the reset-danger-latch inline fix. Maintainer-local .claude/hooks/ classifier is a stale fork (1382 vs 1606 lines, no calibration) — deliberately left for the fast-follow Sterling/caws hook reconciliation slice.'
 created_at: '2026-05-29T19:11:39.719Z'
-updated_at: '2026-05-29T19:11:39.719Z'
+updated_at: '2026-05-29T19:19:46.522Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
