@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-kernel",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "CAWS Kernel (v1.0.0) — pure TypeScript governance primitives. Spec/policy/scope/evidence/worktree types, parsers, validators, and lifecycle transitions. No I/O. Stable surface for caws-cli@^11 and external consumers.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

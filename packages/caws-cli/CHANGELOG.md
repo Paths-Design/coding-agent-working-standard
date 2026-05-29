@@ -51,6 +51,61 @@ were removed in `CAWS-DEAD-TEST-CLEANUP-001`.
   together with their test surfaces and the two retained utilities
   above.
 
+## [11.1.7] (2026-05-29)
+
+v11.1.x stabilization release. Adds the `prepush` command group, the
+`specs retire-draft` lifecycle exit, and a four-hook advisory edit-time
+quality plane; reconciles surface/lifecycle/header drift; and pins the
+kernel dependency to the version that carries the `spec_retired` event
+schema. Also folds in the dead-source cleanup recorded under
+`[Unreleased]` above.
+
+### Added
+
+* **`caws prepush`** (MULTI-AGENT-PUSH-RANGE-GUARD-001): governed pre-push
+  range check. Classifies each outgoing commit's spec provenance and refuses
+  commits not attributable to the current slice unless `--ack`'d. Diagnose/
+  decide only — it does NOT run `git push`. v1 is opt-in (`prepush`-first; no
+  raw `git push` interception).
+* **`caws specs retire-draft <id>`** (CAWS-SPECS-RETIRE-DRAFT-001): governed
+  draft-only lifecycle exit via tombstone. Refuses active/closed/archived;
+  appends a recoverable `spec_retired` event (recover via
+  `caws specs show <id> --archived`). Closes the gap where a never-activated
+  draft had no sanctioned CLI exit other than raw `git rm`.
+* **Four advisory PostToolUse hooks** in the Claude Code pack
+  (QG-HOOKS-EXTRACT-001): `god-object-check`, `shortcut-language-check`
+  (progressive warn→ask→block), `duplicate-export-check`, `loc-delta-check`.
+  They reimplement the load-bearing quality-gates detection intent at edit
+  time with no runtime coupling to the quality-gates package and no change to
+  `caws gates run` (option-C boundary). See `docs/guides/hook-packs.md`.
+
+### Fixed
+
+* **Autocommit integrity** (CAWS-AUTOCOMMIT-INTEGRITY-001/002): lifecycle
+  audit commits are path-scoped (no longer sweep a sibling session's staged
+  files from the shared index), and a `refused_dirty` outcome is surfaced as a
+  warning rather than silently reported as success.
+* **Hook-pack header version drift** (CAWS-HOOK-PACK-HEADER-VERSION-RECONCILE-001):
+  all managed hook headers now match `CLAUDE_CODE_PACK_VERSION` (11), so the
+  install reporter no longer force-updates unchanged files or shadows the
+  managed-drift refusal.
+* **Pre-existing lint debt** (CAWS-LINT-DEBT-CLEANUP-001): cleared 13 eslint
+  errors so the PR lint gate is green.
+
+### Changed
+
+* **Kernel dependency pinned to `^1.1.4`** (CAWS-RELEASE-PREP-KERNEL-COUPLING-001):
+  `caws specs retire-draft` validates the `spec_retired` event against the
+  kernel's payload schemas at runtime; that schema is new in kernel 1.1.4.
+  The previous `^1.1.0` range could resolve a registry-stale 1.1.3 that
+  predates the schema and would reject the event. Publishing order is
+  kernel-first (see `docs/release-procedure.md`).
+* **Surface/lifecycle/doc reconciliation** (CAWS-PRE-RELEASE-CLEANUP-001,
+  CAWS-DOC-SURFACE-RECONCILE-001, CAWS-V11-NONDOC-SURFACE-DRIFT-001): command-
+  surface prose, `--help` descriptions, the `caws init` template CLAUDE.md, and
+  failure-lineage (entries 28–31) reconciled to the shipped 13-group surface;
+  dead npm-script targets removed.
+
 ## [11.1.6](https://github.com/Paths-Design/coding-agent-working-standard/compare/caws-cli-v11.1.5...caws-cli-v11.1.6) (2026-05-21)
 
 Calibrates the Claude Code hook pack's command classifier
