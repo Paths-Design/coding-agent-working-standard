@@ -640,3 +640,35 @@ describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A4: no destructive regression', 
     });
   });
 });
+
+describe('WORKTREE-LIST-CALIBRATION-001: git worktree read-only forms admitted', () => {
+  // git worktree list / bare git worktree are read-only inspection and
+  // must not engage the danger latch. The mutating subcommands stay 'ask'
+  // (and several are independently governed by worktree-guard.sh).
+  const mustAllow = [
+    'git worktree list',
+    'git worktree',
+    'git worktree list --porcelain',
+    'git worktree list -v',
+  ];
+  mustAllow.forEach((cmd) => {
+    it(`${cmd} → allow (read-only worktree inspection)`, () => {
+      expect(classify(cmd).decision).toBe('allow');
+    });
+  });
+
+  const mustNotAllow = [
+    'git worktree add /tmp/x -b foo',
+    'git worktree remove foo',
+    'git worktree prune',
+    'git worktree move a b',
+    'git worktree repair',
+    'git worktree lock foo',
+    'git worktree unlock foo',
+  ];
+  mustNotAllow.forEach((cmd) => {
+    it(`${cmd} → NOT allow (mutating worktree op stays governed)`, () => {
+      expect(classify(cmd).decision).not.toBe('allow');
+    });
+  });
+});

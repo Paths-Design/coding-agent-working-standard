@@ -2,6 +2,20 @@
 
 ### Changed
 
+* **hook-pack (classify_command.py): admit read-only `git worktree` forms**
+  (`WORKTREE-LIST-CALIBRATION-001`). `git worktree list` and bare
+  `git worktree` (prints usage) are read-only inspection but fell through
+  the danger-latch classifier to "ask" (worktree was not on the read-only
+  allow-list), engaging the sticky per-session latch on a harmless status
+  check. Added a `worktree` special-case mirroring the `branch`/`config`
+  read-only-form pattern: `list` and bare are admitted; the mutating
+  subcommands (`add`, `remove`, `prune`, `move`, `repair`, `lock`,
+  `unlock`) still fall through to "ask" and remain independently governed
+  by `worktree-guard.sh` while worktrees are active. Same calibration class
+  as the `add`/`commit`/`checkout -b` admissions
+  (`DANGER-LATCH-WORKFLOW-CALIBRATION-001`). +11 calibration tests
+  (4 admit, 7 stay-governed); 112/112 pass.
+
 * **hook-pack (claude-code): extracted duplicated hook logic into shared
   `lib/` and fixed two correctness drifts the duplication was hiding**
   (`HOOK-LIB-CONSOLIDATION-001`, Tier 1). The pack architecture (thin

@@ -12,7 +12,9 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
+    - packages/caws-cli/CHANGELOG.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
