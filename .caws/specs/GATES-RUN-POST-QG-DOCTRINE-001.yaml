@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: draft
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-05-29T09:40:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/gates.ts
@@ -113,3 +113,17 @@ contracts: []
 # This slice does not have to lock in the final option; it only requires
 # that ONE option be chosen, recorded, and implemented. The decision can be
 # revisited in a successor slice.
+#
+# --- Follow-up carried in from CAWS-DEAD-TEMPLATE-V10-RESIDUE-CLEANUP-001 ---
+# When quality-gates is retired under this spec, also remove the five
+# .caws config files that exist ONLY as inputs to packages/quality-gates
+# and have no other live reader:
+#   .caws/code-freeze.yaml          (check-code-freeze.mjs, run-quality-gates.mjs)
+#   .caws/quality-exceptions.json   (shared-exception-framework.mjs)
+#   .caws/duplication-exceptions.yaml (check-duplication.mjs, check-functional-duplication.mjs)
+#   .caws/refactor-baselines.yaml   (monitor-refactoring-progress.mjs)
+#   .caws/refactor-targets.yaml     (monitor-refactoring-progress.mjs)
+# They were deliberately excluded from the template-residue cleanup (and from
+# the earlier CAWS-DEAD-CAWS-CONFIG-CLEANUP-001) because they still have live
+# readers; their removal is coupled to the package-retirement decision here,
+# not to v10 residue cleanup.
