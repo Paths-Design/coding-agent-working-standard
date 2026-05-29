@@ -7,19 +7,127 @@ created_at: '2026-05-29T07:51:55.430Z'
 updated_at: '2026-05-29T07:51:55.430Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/failure-lineage.md
+    - docs/guides/hook-packs.md
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/src/shell/register.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs/failure-lineage.md
+    - docs/guides/hook-packs.md
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/removed-command-diagnostics.test.js
+    - .caws/specs/CAWS-DOC-SURFACE-RECONCILE-001.yaml
+  out:
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/quality-gates
+    - packages/caws-cli/package.json
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Documentation-only reconciliation of drift introduced by
+    QG-HOOKS-EXTRACT-001. It does NOT change hook detection logic, the
+    manifest, the dispatcher, the spec lifecycle, or any runtime behavior.
+    The only non-doc edit is the `caws specs` group DESCRIPTION STRING in
+    register.ts (a Commander `.description(...)` literal shown in `--help`) —
+    not command wiring, not a handler, not an option.
+  - >-
+    Dangling lineage references are resolved, not invented away. The four
+    advisory hooks (god-object-check, shortcut-language-check,
+    duplicate-export-check, loc-delta-check) and the manifest carry
+    `lineage_refs`/`lineageRefs` 28,29,30,31, but docs/failure-lineage.md
+    stopped at Entry 27. This slice ADDS entries 28-31 (one per hook, matching
+    the existing entry format: Severity/Era/Surface/Agent-class, What
+    happened, What we built, What it doesn't catch, single-line synthesis) so
+    every cited lineage ref resolves. The entries are point-in-time records of
+    the QG-HOOKS-EXTRACT-001 doctrine-to-hook closure, consistent with how
+    entries 22-27 document the Sterling-promoted hooks.
+  - >-
+    The hook-pack lineage table gains the four advisory hooks. The lineage
+    map table in templates/hook-packs/claude-code/CLAUDE.md (the per-pack
+    doctrine doc, NOT the top-level templates/CLAUDE.md owned by the active
+    sibling CAWS-V11-NONDOC-SURFACE-DRIFT-001) is extended with rows for the
+    four advisory hooks citing entries 28-31. The sibling's file
+    (templates/CLAUDE.md) is scope.out and untouched.
+  - >-
+    A user-facing hook-pack guide is created. docs/guides/hook-packs.md (the
+    path QG-HOOKS-EXTRACT-001 scoped but never created) documents the advisory
+    quality plane: what each of the four hooks flags, its mode (advisory vs
+    progressive-strike), its env knob, and the option-C boundary (these are
+    installed hook-pack utilities, independent of `caws gates run`). It does
+    not duplicate the lineage doc; it is operator-facing usage.
+  - >-
+    --help matches the registered subcommands. The `caws specs`
+    `.description()` in register.ts is updated from
+    "(create/list/show/close/archive)" to include retire-draft/recover/
+    prune-archive so the group banner matches the actually-registered
+    subcommands. If a test asserts the old description string, it is updated
+    in lockstep (removed-command-diagnostics.test.js is in scope for that
+    contingency).
+  - >-
+    Scope-isolated from the active sibling. CAWS-V11-NONDOC-SURFACE-DRIFT-001
+    owns packages/caws-cli/templates/CLAUDE.md (the "twelve→thirteen" + prepush
+    + retire-draft drift in the TOP-LEVEL template). That file is scope.out
+    here; this slice does not touch it. The two slices are disjoint.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: docs/failure-lineage.md after this slice.
+    when: it is read for entries 28-31.
+    then: >-
+      Entries 28 (god-object-check), 29 (shortcut-language-check), 30
+      (duplicate-export-check), 31 (loc-delta-check) exist, each in the
+      established entry format. Every `lineage_refs: 28|29|30|31` in the four
+      hook headers and `lineageRefs: [...,28,29,30,31]` in the manifest now
+      resolves to a real entry.
+  - id: A2
+    given: packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md lineage table.
+    when: it is read.
+    then: >-
+      It has rows for the four advisory hooks mapping each to its lineage
+      entry (28-31) and a one-line "what it flags" description, paralleling the
+      existing naming-check.sh / scope-guard.sh rows.
+  - id: A3
+    given: docs/guides/hook-packs.md (newly created).
+    when: an operator looks for how the advisory quality hooks behave.
+    then: >-
+      The guide documents all four hooks (trigger, advisory-vs-progressive
+      mode, env knob, skip-paths) and states the option-C boundary (edit-time
+      advisory plane, independent of `caws gates run`). Valid markdown; no
+      marketing language.
+  - id: A4
+    given: The installed binary after rebuild.
+    when: '`caws specs --help` runs.'
+    then: >-
+      The group description lists the full lifecycle surface (includes
+      retire-draft, recover, prune-archive), matching the registered
+      subcommands. The per-subcommand help is unchanged.
+  - id: A5
+    given: The caws-cli matrix + removed-command-diagnostics + surface-lock suites.
+    when: they run on the rebuilt canonical dist.
+    then: >-
+      They pass. If any asserted the old specs description string, it was
+      updated in lockstep. No new failures; no runtime behavior change.
+  - id: A6
+    given: The full doc set + the active sibling's file.
+    when: the diff is inspected.
+    then: >-
+      packages/caws-cli/templates/CLAUDE.md is NOT modified by this slice
+      (sibling-owned). Only failure-lineage, the new guide, the hook-pack
+      lineage table, register.ts (description string), and possibly the one
+      diagnostics test are touched.
+non_functional:
+  reliability:
+    - >-
+      Closes the doc-vs-surface drift that would otherwise ship in v11.1.x: a
+      hook pack whose files cite failure-lineage entries that do not exist, a
+      command-surface guide that omits the advisory quality plane entirely,
+      and a `--help` banner that under-reports the specs lifecycle. For a
+      project that presents itself as a working standard, dangling self-
+      references and an undocumented shipped surface are a credibility defect,
+      not merely cosmetic.
 contracts: []
