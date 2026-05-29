@@ -2,10 +2,11 @@ id: CAWS-DEAD-CAWS-CONFIG-CLEANUP-001
 title: 'Remove orphaned v10 root .caws config files (zero live readers)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: dead-caws-config-cleanup
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge dead-caws-config-cleanup at 3a288baeae939b621269ad5276ff2c0d0ae3b7be'
 created_at: '2026-05-29T00:10:21.131Z'
-updated_at: '2026-05-29T00:10:21.131Z'
+updated_at: '2026-05-29T00:20:12.433Z'
 blast_radius:
   modules:
     - root .caws config files (deletion-only; orphaned v10 artifacts with zero live readers)
