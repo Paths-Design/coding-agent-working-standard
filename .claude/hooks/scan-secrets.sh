@@ -1,7 +1,20 @@
 #!/bin/bash
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 24
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+#
 # CAWS Secret Scanner for Claude Code
-# Warns when reading files that may contain secrets
-# @author @darianrosebrook
+#
+# Advisory-only: emits a hookSpecificOutput warning when a tool call
+# touches files or directories that commonly contain secrets (.env*,
+# *.pem, *.key, SSH keys, cloud-provider config dirs, etc.).
+#
+# Does NOT block. The agent is responsible for redacting sensitive
+# values from its response. Promoted from Sterling per
+# CAWS-HOOK-PACK-PROMOTE-001.
 
 set -euo pipefail
 
@@ -58,7 +71,6 @@ SECRET_DIRS=(
 # Check if file matches secret patterns
 for pattern in "${SECRET_FILE_PATTERNS[@]}"; do
   if [[ "$FILENAME" == $pattern ]]; then
-    # Output JSON with warning for Claude
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",

@@ -1,7 +1,34 @@
 #!/bin/bash
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 25
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+#
 # CAWS Naming Convention Check Hook for Claude Code
-# Validates file naming against CAWS conventions
-# @author @darianrosebrook
+#
+# Advisory-only PostToolUse hook that fires on Write (new file creation
+# only). Flags filenames that violate the "no shadow files" doctrine
+# stated in CLAUDE.md:
+#
+#   - Banned modifier suffixes (enhanced, unified, simplified, new,
+#     next, final, copy, revamp, improved, alt, tmp, scratch, wip,
+#     temp, old, backup, plus test-variant equivalents)
+#   - Version suffixes (-v2., _v3., etc.) — git is the version
+#     control surface, not filenames
+#   - Date stamps (YYYY-MM-DD) — same reason
+#
+# Test files with canonical extensions (.test.js, .spec.ts, etc.)
+# are explicitly exempted from the test-related modifier checks.
+#
+# Promoted from Sterling per CAWS-HOOK-PACK-PROMOTE-001. The advisory
+# messages have been genericized: removed Sterling-era references to
+# the v10 `caws naming check` CLI command (which v11 does not ship)
+# and to `.caws/canonical-map.yaml` (a v10 artifact). The doctrine
+# the hook enforces remains: CLAUDE.md key rule "No shadow files —
+# edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`
+# copies".
 
 set -euo pipefail
 
@@ -68,7 +95,7 @@ for modifier in "${BANNED_MODIFIERS[@]}"; do
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PostToolUse",
-        "additionalContext": "Warning: The filename '\'''"$FILENAME"''\'' contains the modifier '\'''"$modifier"''\'' which may indicate temporary or non-canonical naming. Consider using a more descriptive, permanent name. See CAWS naming conventions in .caws/canonical-map.yaml or run '\''caws naming check'\''."
+        "additionalContext": "Warning: The filename '\'''"$FILENAME"''\'' contains the modifier '\'''"$modifier"''\'' which may indicate temporary or non-canonical naming. Per the CAWS doctrine (CLAUDE.md key rule \"No shadow files\"), edit existing files in place rather than creating *-enhanced.*, *-new.*, *-v2.* copies. Consider using a more descriptive, permanent name."
       }
     }'
     exit 0

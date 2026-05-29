@@ -87,7 +87,29 @@ fi
 # any thrown exception fall through to silent exit (fail-closed-non-
 # blocking). Node is already a hard CAWS dependency — the CLI binary
 # IS node — so this adds no new runtime surface vs. jq.
-printf '%s' "$CLI_OUT" | node -e '
+#
+# Change-detection guard: emit the MULTI-AGENT NOTICE only when the
+# active-peer set has actually changed since the last emission. The
+# previous behavior emitted the notice on every Bash/Read/Write/Edit
+# call when >=2 sessions were active, costing ~300 chars per tool
+# call -- ~12kB per turn in a typical multi-agent slice. The notice
+# is only decision-useful when the peer set changes (a sibling appears,
+# disappears, switches worktrees, or rebinds to a different spec). On
+# unchanged peer sets, emit silence.
+#
+# State file: .caws/leases/heartbeat-emit-state.json (gitignored, same
+# directory as session leases). Stores a SHA256 of the peer summary
+# JSON. On first emit (or peer-set change) we update the cache and
+# emit; on cache-hit we emit nothing.
+#
+# Failure mode: if the cache cannot be read/written, fall through to
+# unconditional emit (preserves pre-suppression behavior). Cache miss
+# is never silent — it's "emit anyway, write cache, next call may
+# suppress."
+PROJECT_DIR_FOR_CACHE="${CLAUDE_PROJECT_DIR:-.}"
+EMIT_STATE_FILE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-emit-state.json"
+
+printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
   let raw = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { raw += chunk; });
@@ -99,6 +121,104 @@ printf '%s' "$CLI_OUT" | node -e '
     const agents = Array.isArray(parsed.active_agents) ? parsed.active_agents : [];
     const peers = agents.filter((a) => a && a.is_self !== true);
     if (peers.length === 0) process.exit(0);
+
+    // Build a canonical peer summary that captures the change-relevant
+    // axes (session_id, worktree, spec, branch). last_active_age_ms is
+    // deliberately EXCLUDED — age changes every call by definition; we
+    // only want to fire on peer-set or peer-binding changes.
+    const canonical = peers
+      .map((a) => ({
+        session_id: a.session_id || "",
+        worktree: a.bound_worktree || "",
+        spec: a.bound_spec_id || "",
+        git_dir_kind: a.git_dir_kind || "",
+        branch: a.branch || "",
+      }))
+      .sort((x, y) => x.session_id.localeCompare(y.session_id));
+    const canonicalJSON = JSON.stringify({ count, peers: canonical });
+
+    // SHA256 the canonical JSON as the change-detection key.
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const path = require("path");
+    const currentHash = crypto.createHash("sha256").update(canonicalJSON).digest("hex");
+
+    // Try to read the cached hash. If unreadable, fall through to emit
+    // (preserves pre-suppression behavior on first call / corrupt cache).
+    const stateFile = process.env.EMIT_STATE_FILE;
+    let cachedHash = null;
+    try {
+      if (stateFile && fs.existsSync(stateFile)) {
+        const cached = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+        if (cached && typeof cached.peer_set_hash === "string") {
+          cachedHash = cached.peer_set_hash;
+        }
+      }
+    } catch (_) { /* fall through to emit */ }
+
+    if (cachedHash === currentHash) {
+      // Peer set unchanged since last emit. Stay silent.
+      process.exit(0);
+    }
+
+    // Hash differs from cache. Apply a hysteresis window before
+    // emitting: a real peer change (sibling registers a worktree,
+    // takes over a spec, moves to a new branch) should fire once,
+    // not on every tool call as their lease state flickers during
+    // active work. Suppress notices fired less than HEARTBEAT_EMIT_MIN_INTERVAL_MS
+    // since the last emission, even if the hash has changed.
+    // Default 60s; tunable via env var. Set to 0 to disable.
+    const minIntervalMs = (() => {
+      const raw = Number(process.env.HEARTBEAT_EMIT_MIN_INTERVAL_MS);
+      if (Number.isFinite(raw) && raw >= 0) return raw;
+      return 60000;
+    })();
+    let cachedTs = null;
+    try {
+      if (stateFile && fs.existsSync(stateFile)) {
+        const cached = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+        if (cached && typeof cached.last_emitted_ts_ms === "number") {
+          cachedTs = cached.last_emitted_ts_ms;
+        }
+      }
+    } catch (_) { /* fall through */ }
+    const now = Date.now();
+    if (
+      minIntervalMs > 0 &&
+      cachedTs !== null &&
+      now - cachedTs < minIntervalMs
+    ) {
+      // Hash changed but within hysteresis window. Update the cached
+      // hash so the next emission after the window correctly reflects
+      // the latest peer set, but do not emit now. Without the hash
+      // update, every subsequent call inside the window would also
+      // see a stale cached hash and queue another suppressed-emit.
+      try {
+        if (stateFile) {
+          fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+          fs.writeFileSync(stateFile, JSON.stringify({
+            peer_set_hash: currentHash,
+            peer_count: count,
+            last_emitted_ts_ms: cachedTs,
+          }) + "\n");
+        }
+      } catch (_) { /* non-fatal */ }
+      process.exit(0);
+    }
+
+    // Peer set changed AND outside hysteresis window (or first
+    // emission). Write new cache with refreshed timestamp, then emit.
+    try {
+      if (stateFile) {
+        fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+        fs.writeFileSync(stateFile, JSON.stringify({
+          peer_set_hash: currentHash,
+          peer_count: count,
+          last_emitted_ts_ms: now,
+        }) + "\n");
+      }
+    } catch (_) { /* non-fatal — proceed with emission */ }
+
     const bullets = peers.map((a) => {
       const worktree = a.bound_worktree || "no worktree";
       const spec = a.bound_spec_id ? " — spec " + a.bound_spec_id : "";
@@ -112,7 +232,7 @@ printf '%s' "$CLI_OUT" | node -e '
         " — branch=" + branch +
         " — last active " + ageSec + "s ago";
     }).join("\n");
-    const ctx = "MULTI-AGENT NOTICE: " + count +
+    const ctx = "MULTI-AGENT NOTICE (peer set changed): " + count +
       " agents active in this repo (including this session). Other active sessions:\n" +
       bullets + "\n\n" +
       "Coordinate via '\''caws agents list'\'' and '\''caws status'\'' before " +

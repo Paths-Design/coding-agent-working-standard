@@ -1,4 +1,11 @@
 #!/bin/bash
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 22,26
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+#
 # Quiet merge hook: suppress verbose output AND fix CWD safety
 #
 # Two problems solved:
@@ -11,9 +18,15 @@
 # This moves CWD to safety BEFORE the directory is destroyed, and suppresses
 # verbose output.
 #
-# IMPORTANT: This hook MUST be the last PreToolUse hook for Bash commands.
-# It emits updatedInput which replaces any prior hook's updatedInput.
-# @author @darianrosebrook
+# IMPORTANT: This hook MUST be the last PreToolUse hook for Bash commands
+# that intercepts input. It emits updatedInput which replaces any prior
+# hook's updatedInput. Order in dispatch/pre_tool_use.sh: after the
+# blocking guards (so a real refusal still fires), before scan-secrets
+# (which is advisory-only and emits additionalContext, not updatedInput).
+#
+# Promoted from Sterling per CAWS-HOOK-PACK-PROMOTE-001 and
+# docs/reports/sterling_hook_port_audit_001.md. Companion to cwd-guard.sh
+# (entry 22) for the worktree-destroyed-while-inside class.
 
 set -euo pipefail
 

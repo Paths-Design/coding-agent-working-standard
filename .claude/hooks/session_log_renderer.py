@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""Render lean session artifacts from a Claude transcript JSONL."""
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 10
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+"""Render lean session artifacts from a Claude transcript JSONL.
+
+This file is invoked by session-log.sh via `python3 <path>`. It is NOT
+executable on its own; the pack manifest registers it with
+`executable: false`. The CAWS-MANAGED-HOOK header above is parsed
+by `caws init` to recognize this file as managed.
+
+Bundled in v6 of the pack to fix CAWS-HOOK-PACK-RENDERER-MISSING-001:
+session-log.sh's `RENDERER` path used to point at a file that was
+not bundled, producing a crash on every invocation in fresh installs.
+"""
 
 from __future__ import annotations
 
@@ -40,11 +56,18 @@ NOTABLE_KW = (
     "typedrefusal",
 )
 
+#
+# MEANINGFUL_COMMAND_KW is a small, intentionally-generic baseline of
+# substrings that mark "interesting" bash commands worth surfacing in
+# session.txt. Consumers with project-specific toolchains (Rust:
+# `cargo test`, `cargo build`; Python lint/typecheck: `ruff`, `mypy`;
+# etc.) should NOT edit this file to add their entries — re-running
+# `caws init --agent-surface claude-code` would refuse the merge as
+# `unmanaged_collision`. Future work (CAWS-HOOK-PACK-RENDERER-CONFIG-001)
+# will admit a sidecar config (e.g. `.caws/session-log.yaml`) for
+# consumer extensions; until then the baseline is the only set.
 MEANINGFUL_COMMAND_KW = (
     "pytest",
-    "cargo test",
-    "ruff",
-    "mypy",
     "npm test",
     "pnpm test",
     "git log",
@@ -56,7 +79,6 @@ MEANINGFUL_COMMAND_KW = (
     "caws ",
     "pip install",
     "make",
-    "cargo build",
 )
 
 DECISION_PATTERNS = [
@@ -408,7 +430,9 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 )
                 if "git commit" in command and "-m" in command:
                     current["artifacts"].append({"type": "git_commit", "command": command, "ts": ts})
-                if any(keyword in command for keyword in ("pytest", "cargo test", "npm test", "pnpm test")):
+                # Test-runner detection: kept aligned with MEANINGFUL_COMMAND_KW.
+                # See the comment above that tuple for consumer-extension guidance.
+                if any(keyword in command for keyword in ("pytest", "npm test", "pnpm test")):
                     current["artifacts"].append({"type": "test_run", "command": command, "ts": ts})
 
             elif name in ("Agent", "Task"):

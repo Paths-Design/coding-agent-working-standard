@@ -1,6 +1,17 @@
 #!/bin/bash
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 8,13
+# do_not_edit_directly: update via `caws init --agent-surface claude-code`
 # CAWS Spec Validation Hook for Claude Code
-# Validates per-feature specs under .caws/specs/ when they're edited
+# Validates a .caws/specs/*.yaml file when it's edited (YAML syntax +
+# terminal-status AC coverage). OPT-IN: not wired into the default
+# post_tool_use HANDLERS array. Promoted from Sterling per
+# HOOK-PACK-DIVERGENCE-RECONCILE-001 — the v11-correct version that does
+# NOT call the removed `caws validate` command (the caws-local copy did,
+# producing misleading block output).
 # @author @darianrosebrook
 
 set -euo pipefail
@@ -12,6 +23,21 @@ parse_hook_input
 
 FILE_PATH="$HOOK_FILE_PATH"
 
+emit_post_context() {
+  local message="$1"
+  MESSAGE="$message" python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": os.environ.get("MESSAGE", ""),
+    }
+}, indent=2))
+PY
+}
+
 # Only validate CAWS YAML files
 if [[ "$FILE_PATH" != *".caws/"* ]] || ([[ "$FILE_PATH" != *.yaml ]] && [[ "$FILE_PATH" != *.yml ]]); then
   exit 0
@@ -21,11 +47,11 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 # First, validate YAML syntax using Node.js if available
 if command -v node >/dev/null 2>&1; then
-  YAML_CHECK=$(node -e "
+  if ! YAML_CHECK=$(node - "$FILE_PATH" <<'NODE' 2>&1
     try {
       const yaml = require('js-yaml');
       const fs = require('fs');
-      const content = fs.readFileSync('$FILE_PATH', 'utf8');
+      const content = fs.readFileSync(process.argv[2], 'utf8');
       yaml.load(content);
       console.log('valid');
     } catch (error) {
@@ -35,13 +61,13 @@ if command -v node >/dev/null 2>&1; then
       }
       process.exit(1);
     }
-  " 2>&1)
+NODE
+  ); then
+    emit_post_context "Spec validation failed for ${FILE_PATH}: YAML syntax error.
 
-  if [ $? -ne 0 ]; then
-    echo '{
-      "decision": "block",
-      "reason": "YAML syntax error in spec file:\n'"$YAML_CHECK"'\n\nPlease fix the syntax before continuing. Common issues:\n- Check indentation (YAML uses 2 spaces)\n- Ensure arrays use consistent format\n- Remove duplicate keys"
-    }'
+${YAML_CHECK}
+
+Please fix the syntax before relying on this spec. Common issues: indentation, inconsistent arrays, or duplicate keys."
     exit 0
   fi
 fi
@@ -49,10 +75,10 @@ fi
 # V2: Check test_nodeids coverage for terminal-status specs
 # Specs at proven/complete/completed should have test_nodeids on every AC
 if command -v node >/dev/null 2>&1; then
-  NODEIDS_CHECK=$(node -e "
+  if NODEIDS_CHECK=$(node - "$FILE_PATH" <<'NODE' 2>/dev/null
     const yaml = require('js-yaml');
     const fs = require('fs');
-    const doc = yaml.load(fs.readFileSync('$FILE_PATH', 'utf8'));
+    const doc = yaml.load(fs.readFileSync(process.argv[2], 'utf8'));
     const status = (doc.status || '').toLowerCase();
     const terminal = ['proven', 'complete', 'completed'];
     if (!terminal.includes(status)) process.exit(0);
@@ -71,39 +97,24 @@ if command -v node >/dev/null 2>&1; then
         }
       }));
     }
-  " 2>&1)
-
-  if [[ -n "$NODEIDS_CHECK" ]]; then
+NODE
+  ) && [[ -n "$NODEIDS_CHECK" ]]; then
     echo "$NODEIDS_CHECK"
   fi
 fi
 
-# Run CAWS CLI validation if available
-if command -v caws &> /dev/null; then
-  if VALIDATION=$(caws validate "$FILE_PATH" --quiet 2>&1); then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PostToolUse",
-        "additionalContext": "Spec validation passed. The specification is valid and complete."
-      }
-    }'
-  else
-    # Get suggestions
-    SUGGESTIONS=$(caws validate "$FILE_PATH" --suggestions 2>/dev/null | head -5 | tr '\n' ' ' || echo "Run 'caws validate --suggestions' for details")
-
-    echo '{
-      "decision": "block",
-      "reason": "Spec validation failed:\n'"$VALIDATION"'\n\nSuggestions:\n'"$SUGGESTIONS"'"
-    }'
-  fi
-else
-  # Basic validation without CAWS CLI
-  echo '{
-    "hookSpecificOutput": {
-      "hookEventName": "PostToolUse",
-      "additionalContext": "CAWS CLI not available for full spec validation. Install with: npm install -g @caws/cli"
-    }
-  }'
-fi
+# NOTE (CAWS-1117-COMPAT-BOOTSTRAP-01 A1):
+# `caws validate <file> --quiet --suggestions` was removed in v11. There
+# is no per-file v11 analog — `caws doctor` runs project-wide drift
+# detection and would noisily report unrelated state. Per A3, bootstrap
+# failures must not emit misleading "Spec validation failed" blocks
+# carrying unknown-command stderr.
+#
+# Decision: short-circuit cleanly. The local node YAML syntax check
+# (above) and the terminal-state test_nodeids check (above) cover the
+# per-file validations this hook previously offered on the v10 surface.
+# Project-wide schema drift is the user's responsibility to inspect via
+# `caws doctor` at session boundaries; the PostToolUse path is not the
+# right place to surface dozens of unrelated spec migrations.
 
 exit 0
