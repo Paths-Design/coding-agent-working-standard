@@ -4,22 +4,63 @@ risk_tier: 3
 mode: chore
 lifecycle_state: active
 created_at: '2026-05-29T00:40:48.994Z'
-updated_at: '2026-05-29T00:40:48.994Z'
+updated_at: '2026-05-29T00:42:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - Documentation only (docs/, root *.md, package READMEs, template READMEs). No source, schema, policy, or CI change.
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs
+    - README.md
+    - AGENTS.md
+    - CONTRIBUTING.md
+    - COMMIT_CONVENTIONS.md
+    - MANUAL_RELEASE.md
+    - packages/caws-cli/README.md
+    - packages/caws-kernel/README.md
+    - packages/caws-types/README.md
+    - packages/quality-gates/README.md
+    - packages/caws-cli/templates/docs/README.md
+    - packages/caws-cli/templates/.claude/README.md
+    - packages/caws-cli/templates/.caws/tools/README.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - CLAUDE.md
+    - packages/caws-kernel/src
+    - .github/workflows
+    - docs/release-procedure.md
+    - docs/failure-lineage.md
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every command, flag, and subcommand named in a doc as current usage exists in the shipped caws-cli@11.1.6 surface (verified against caws <group> --help); no removed v10 command (validate, scaffold, iterate, quality-gates, waivers-plural, provenance, etc.) is presented as a current step.'
+  - 'Every spec/schema example in docs validates against the kernel schema at packages/caws-kernel/src/schemas/spec.v1.json: non_functional uses accessibility/performance/reliability/security; no change_budget; contract type enum is api/schema/contract-test/behavior; lifecycle_state is present.'
+  - 'Release/ops docs describe only the tag-driven pipeline (CAWS-RELEASE-TAG-DRIVEN-001): branch pushes never publish, the canonical tag is caws-cli-vX.Y.Z, the publish script is release-tag-publish.mjs. No semantic-release or branch-push-publishes language remains.'
+  - 'The command-group count and the shipped/deferred buckets match reality (13 groups: init doctor scope status claim gates evidence events waiver specs worktree agents); events, agents (incl. list/show), specs recover/prune-archive/migrate, worktree bind/migrate-registry/repair-sparse, and claim --paths are documented as shipped, not deferred.'
+  - 'docs/release-procedure.md is the canonical release source and is not modified (it is already accurate); CLAUDE.md, the kernel, the policy, and CI workflows are out of scope and untouched.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: every `caws ...` invocation extracted from the in-scope docs after the scrub
+    when: each command/flag is checked against the live `caws <group> --help` surface
+    then: every invocation resolves to a real command and flag in caws-cli@11.1.6; zero references to removed v10 commands as current usage remain.
+  - id: A2
+    given: every spec/schema YAML example in the in-scope docs after the scrub
+    when: each example's fields are compared to packages/caws-kernel/src/schemas/spec.v1.json
+    then: every example uses only kernel-permitted fields and the correct non_functional/contract/id shapes; no change_budget or a11y/perf keys remain.
+  - id: A3
+    given: the release/ops docs (DEPLOYMENT, ROLLBACK, NPM_PUBLISHING_TEST, MANUAL_RELEASE, MONITORING, CONTRIBUTING, COMMIT_CONVENTIONS) after the scrub
+    when: their release-flow claims are compared to .github/workflows/release.yml
+    then: all describe the tag-driven flow; no semantic-release, branch-push-publishes, bare v* tag, or wrong-script references remain.
+  - id: A4
+    given: the four doctrine/surface docs (README, AGENTS, command-surface.md, api/cli.md) and the migration guide after the scrub
+    when: the documented command-group count and shipped/deferred buckets are compared to the live CLI
+    then: all report 13 groups and place events/agents/specs-recover/worktree-bind/claim--paths in the shipped bucket; no "eleven groups" or "deferred to v11.2" claims about shipped commands remain.
+  - id: A5
+    given: the template READMEs that ship via `caws init`
+    when: a fresh `caws init` is simulated/inspected for the generated docs
+    then: no "CAWS v1.0", literal $(date), or nonexistent `caws init --hooks=` flag remains; template stamps the v11 surface.
+non_functional:
+  reliability:
+    - Documentation-only change; reversible via git. No runtime state, schema, policy, or CI file is modified. docs/release-procedure.md (the accurate canonical release doc) is explicitly excluded.
 contracts: []
