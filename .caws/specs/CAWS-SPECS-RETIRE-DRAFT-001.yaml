@@ -2,10 +2,11 @@ id: CAWS-SPECS-RETIRE-DRAFT-001
 title: 'caws specs retire-draft: governed draft-only lifecycle retirement (tombstone + recoverable spec_retired event), not raw git rm'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: specs-retire-draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-retire-draft at 1e8cf20b76991519f3d741b9e5611c8b973d3e58'
 created_at: '2026-05-29T04:08:57.425Z'
-updated_at: '2026-05-29T04:40:00.000Z'
+updated_at: '2026-05-29T04:33:30.932Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
