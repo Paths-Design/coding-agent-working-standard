@@ -19,6 +19,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/caws-state.sh
+# Provides $CAWS_NODE_ENTRIES_OF — the single canonical dual-shape
+# (v10 envelope / v11 flat-map) registry reader. Replaces three inline
+# copies that had drifted (HOOK-LIB-CONSOLIDATION-001 T1b).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
@@ -119,32 +124,20 @@ if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
       WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
       if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
         FIRST_ACTIVE_WT=$(node -e "
+          $CAWS_NODE_ENTRIES_OF
           try {
             var reg = JSON.parse(require('fs').readFileSync('$WORKTREES_JSON', 'utf8'));
-            function entriesOf(r) {
-              if (!r || typeof r !== 'object') return [];
-              if (r.worktrees && typeof r.worktrees === 'object') {
-                return Object.entries(r.worktrees);
-              }
-              var out = [];
-              for (var k in r) {
-                if (Object.prototype.hasOwnProperty.call(r, k)) {
-                  var v = r[k];
-                  if (v && typeof v === 'object') out.push([k, v]);
-                }
-              }
-              return out;
-            }
-            var entries = entriesOf(reg);
-            // 'active' is the documented status; entries without an
-            // explicit status (legacy/in-flight registry shapes) are
-            // also treated as active because the CLI's createWorktree
-            // does not always emit a status field.
-            var active = entries.filter(function(e) {
-              var s = e[1] && e[1].status;
+            // entriesOf (lib/caws-state.sh) returns object-shape entries with
+            // .name synthesized from the flat-map key. 'active' is the
+            // documented status; entries without an explicit status
+            // (CLI-created registries — caws-cli 11.1.7+ persists no status
+            // field) are also treated as active, matching listWorktreesPretty's
+            // status:'active' default (HOOK-LIB-CONSOLIDATION-001 T1b).
+            var active = entriesOf(reg).filter(function(w) {
+              var s = w.status;
               return s === 'active' || s === undefined || s === null || s === '';
             });
-            if (active.length > 0) console.log(active[0][0]);
+            if (active.length > 0) console.log(active[0].name);
             else console.log('');
           } catch(e) { console.log(''); }
         " 2>/dev/null || echo "")
@@ -245,25 +238,16 @@ fi
 
 if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
   ACTIVE_COUNT=$(node -e "
+    $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      // Dual-shape: v10 nested vs v11 direct-key.
-      function entriesOf(r) {
-        if (!r || typeof r !== 'object') return [];
-        if (r.worktrees && typeof r.worktrees === 'object') return Object.values(r.worktrees);
-        // v11 direct-key: filter to objects with a 'status' field to avoid
-        // mistaking top-level metadata (e.g., 'version') for an entry.
-        var out = [];
-        for (var k in r) {
-          if (Object.prototype.hasOwnProperty.call(r, k)) {
-            var v = r[k];
-            if (v && typeof v === 'object' && typeof v.status === 'string') out.push(v);
-          }
-        }
-        return out;
-      }
-      var entries = entriesOf(reg);
-      var active = entries.filter(function(w) { return w.status === 'active'; });
+      // entriesOf (lib/caws-state.sh) handles both v10 envelope and v11
+      // flat-map. Status-less entries (CLI-created) count as active —
+      // see the FIRST_ACTIVE_WT note above (HOOK-LIB-CONSOLIDATION-001 T1b).
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
       console.log(active.length);
     } catch(e) { console.log('0'); }
   " 2>/dev/null || echo "0")
@@ -312,22 +296,13 @@ CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null 
 BASE_BRANCH="$PARALLEL_BASE"
 if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
   BASE_BRANCH=$(node -e "
+    $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      function entriesOf(r) {
-        if (!r || typeof r !== 'object') return [];
-        if (r.worktrees && typeof r.worktrees === 'object') return Object.values(r.worktrees);
-        var out = [];
-        for (var k in r) {
-          if (Object.prototype.hasOwnProperty.call(r, k)) {
-            var v = r[k];
-            if (v && typeof v === 'object' && typeof v.status === 'string') out.push(v);
-          }
-        }
-        return out;
-      }
-      var entries = entriesOf(reg);
-      var active = entries.filter(function(w) { return w.status === 'active'; });
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
       if (active.length > 0) console.log(active[0].baseBranch || '');
       else console.log('');
     } catch(e) { console.log(''); }

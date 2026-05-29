@@ -328,19 +328,7 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
 
     $CAWS_NODE_ENTRIES_OF
     $CAWS_NODE_ENTRY_SPEC_ID
-
-    function globToRegExp(pattern) {
-      // Escape regex metachars (except *, ?) so literal path chars like '.'
-      // are not treated as regex operators. Then expand glob wildcards:
-      //   **  -> .+       (cross-segment, matches nested dirs)
-      //   *   -> [^/]*    (single-segment, does NOT cross '/')
-      //   ?   -> .        (any single char)
-      // Finally anchor with ^ and \$ so the pattern must match the whole
-      // relative path rather than appear as a substring.
-      var escaped = String(pattern).replace(/[.+^\${}()|[\\]\\\\]/g, '\\\\\$&');
-      var body = escaped.replace(/\\*\\*/g, '.+').replace(/\\*/g, '[^/]*').replace(/\\?/g, '.');
-      return new RegExp('^' + body + '\$');
-    }
+    $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
 
     try {
       var projectDir = process.env.PROJECT_DIR;

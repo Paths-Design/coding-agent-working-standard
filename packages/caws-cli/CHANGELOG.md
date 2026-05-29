@@ -2,6 +2,53 @@
 
 ### Changed
 
+* **hook-pack (claude-code): extracted duplicated hook logic into shared
+  `lib/` and fixed two correctness drifts the duplication was hiding**
+  (`HOOK-LIB-CONSOLIDATION-001`, Tier 1). The pack architecture (thin
+  dispatchers → self-filtering handlers → `lib/`) was correct, but
+  shared logic had been copy-pasted into per-hook `node -e` blocks and
+  had drifted into *disagreement*:
+  - **Single canonical scope-glob matcher** (`$CAWS_NODE_GLOB_TO_SCOPE_REGEXP`
+    in `lib/caws-state.sh`). `scope-guard.sh` and `worktree-write-guard.sh`
+    previously carried two different glob→regexp algorithms: scope-guard
+    used an unanchored `*`→`.*` variant that crossed `/` and matched
+    substrings; worktree-write-guard used the correct anchored,
+    `**`-distinct-from-`*`, metachar-escaped algorithm. They could return
+    **opposite** answers for the same `(path, pattern)` pair (e.g.
+    `python/*` vs `python/a/b.py` — match in scope-guard, no-match in
+    write-guard). Both now inline the one shared helper (the correct
+    algorithm), so they can never disagree on a scope decision.
+    **Consumer-visible behavior change (A5):** `scope-guard.sh` now
+    matches `*` as single-segment (does not cross `/`) and anchors the
+    whole relative path. A `scope.in`/`scope.out` entry that relied on the
+    old substring/`/`-crossing behavior of a bare `*` should use `**` for
+    cross-directory matching. Pack version stays v11 (the new algorithm is
+    the one already used by the stricter of the two guards, so it tightens
+    rather than loosens enforcement); the change is called out here per the
+    spec's A5.
+  - **Single canonical dual-shape registry reader.** Three inline copies of
+    `entriesOf` (in `worktree-guard.sh` ×2 and `session-caws-status.sh`)
+    were replaced with `lib/caws-state.sh`'s `$CAWS_NODE_ENTRIES_OF`, and
+    one `[key,value]`-pair copy in `worktree-guard.sh` was rewired to the
+    object shape. **Correctness fix:** the lib's `entriesOf` gated v11
+    flat-map entries on `typeof v.status === 'string'`, but caws-cli
+    11.1.7+ `worktree create` persists `{ branch, baseBranch, path,
+    spec_id }` and never writes a `status` field (status is synthesized at
+    render time). So `entriesOf` returned `[]` for every CLI-created
+    registry — **silently disabling active-worktree detection in
+    `worktree-guard`, `session-caws-status`, `worktree-write-guard`, and
+    `stop-worktree-check`** (the same defect class
+    `CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01` fixed in `entryByName` but
+    missed in `entriesOf`). The discriminator now matches `entryByName`
+    (any v11/v10 marker field), and consumer active-filters treat
+    status-less entries as active. This **strengthens** the guards (they
+    now fire against current registries where they were previously off).
+  - New focused tests lock both fixes: a 16-case glob match table
+    (`glob_scope_regexp.test.js`) and a 9-case dual-shape/CLI-shape
+    registry table (`entries_of_registry.test.js`). After consolidation no
+    hook inlines a private copy of `entriesOf` or `globToRegExp` —
+    `lib/caws-state.sh` is the only definition.
+
 * **hook-pack (claude-code): reconciled the canonical pack into the union
   of three divergent forks** (`HOOK-PACK-DIVERGENCE-RECONCILE-001`). An
   audit of the shipped template against two consumer forks (a Sterling

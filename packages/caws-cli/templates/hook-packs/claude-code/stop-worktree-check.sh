@@ -40,7 +40,13 @@ if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>
     $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) { return w.status === 'active' || w.status === 'fresh'; });
+      // Status-less entries (CLI-created — caws-cli 11.1.7+ persists no
+      // status field) count as active alongside the explicit
+      // 'active'/'fresh' states (HOOK-LIB-CONSOLIDATION-001 T1b).
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === 'fresh' || s === undefined || s === null || s === '';
+      });
       if (active.length > 0) {
         console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(', '));
       } else {

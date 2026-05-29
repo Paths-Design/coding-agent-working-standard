@@ -28,6 +28,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=guard-strikes.sh
 source "$SCRIPT_DIR/guard-strikes.sh"
+# shellcheck source=lib/caws-state.sh
+# Provides $CAWS_NODE_GLOB_TO_SCOPE_REGEXP — the single canonical scope-glob
+# matcher shared with worktree-write-guard so the two guards can never
+# disagree on a (path, pattern) scope decision (HOOK-LIB-CONSOLIDATION-001 T1a).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 parse_hook_input
 
 # Back-compat aliases kept to minimize diff in the scope-resolution logic below.
@@ -214,6 +219,8 @@ if command -v node >/dev/null 2>&1; then
     var fs = require('fs');
     var path = require('path');
 
+    $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
+
     try {
       var filePath = '$REL_PATH';
       var projectDir = '$PROJECT_DIR';
@@ -339,7 +346,7 @@ if command -v node >/dev/null 2>&1; then
       for (var si = 0; si < specsToCheck.length; si++) {
         var outPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.out) || [];
         for (var pi = 0; pi < outPatterns.length; pi++) {
-          var regex = new RegExp(outPatterns[pi].replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          var regex = globToRegExp(outPatterns[pi]);
           if (regex.test(filePath)) {
             console.log('out_of_scope:' + mode + ':' + specsToCheck[si].source + ':' + outPatterns[pi]);
             process.exit(0);
@@ -358,7 +365,7 @@ if command -v node >/dev/null 2>&1; then
       if (allInScope.length > 0) {
         var found = false;
         for (var pi = 0; pi < allInScope.length; pi++) {
-          var regex = new RegExp(allInScope[pi].replace(/\\*/g, '.*').replace(/\\?/g, '.'));
+          var regex = globToRegExp(allInScope[pi]);
           if (regex.test(filePath)) {
             found = true;
             break;

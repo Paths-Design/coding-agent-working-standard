@@ -59,6 +59,25 @@
 #       A JS function declaration string for lifecycle(spec). Reads
 #       v11 spec.lifecycle_state first, falls back to v10 spec.status.
 #       Returns undefined when neither is present.
+#
+#   CAWS_NODE_GLOB_TO_SCOPE_REGEXP
+#       A JS function declaration string for globToRegExp(pattern). The
+#       single canonical "does this path match a scope.in/scope.out glob"
+#       algorithm. Metachar-escaped, `**`->`.+` (cross-segment),
+#       `*`->`[^/]*` (single-segment, does NOT cross '/'), `?`->`.`,
+#       anchored ^...$. scope-guard.sh and worktree-write-guard.sh BOTH
+#       inline this so they can never disagree on a scope decision
+#       (HOOK-LIB-CONSOLIDATION-001 T1a). Usage:
+#           node -e "
+#               $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
+#               if (globToRegExp(pattern).test(relPath)) { ... }
+#           "
+#
+#   IMPORTANT escaping note: these constants are single-quoted bash
+#   strings, so the JS source is LITERAL (single backslashes, bare $).
+#   When inlining into a double-quoted `node -e "..."` block, bash will
+#   NOT re-process them (they arrive via $VAR expansion, not re-parsing),
+#   so the literal JS reaches node intact. Do not double-escape here.
 
 # Guard against double-sourcing.
 if [[ -n "${_CAWS_STATE_SH_LOADED:-}" ]]; then
@@ -124,13 +143,29 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
     }
     return out0;
   }
-  // v11 flat-map: { <name>: {...} } at top level. Filter for entry-shaped
-  // values (objects with a status field) so we ignore stray top-level
-  // metadata like a future "version" sibling.
+  // v11 flat-map: { <name>: {...} } at top level. Admit entry-shaped
+  // values and ignore stray top-level metadata (e.g. a future "version"
+  // sibling). The discriminator MUST match entryByName below: caws-cli
+  // 11.1.7+ worktree-create persists { branch, baseBranch, path, spec_id }
+  // and does NOT emit a status field (see worktrees-writer.ts
+  // augmentRegistryEntry — status is synthesized at render time, never
+  // persisted). A status-only gate here returned [] for every
+  // CLI-created registry, silently disabling active-worktree detection
+  // in every hook on this contract (HOOK-LIB-CONSOLIDATION-001 T1b;
+  // same defect class as CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01, which
+  // fixed entryByName but missed entriesOf). Admit any object carrying
+  // at least one v11/v10 marker field.
   var out = [];
   for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
     var v2 = r[k2];
-    if (v2 && typeof v2 === "object" && typeof v2.status === "string") {
+    if (v2 && typeof v2 === "object" && !Array.isArray(v2) && (
+      typeof v2.status === "string" ||
+      typeof v2.spec_id === "string" ||
+      typeof v2.specId === "string" ||
+      typeof v2.path === "string" ||
+      typeof v2.branch === "string" ||
+      typeof v2.name === "string"
+    )) {
       if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
       out.push(v2);
     }
@@ -176,4 +211,30 @@ export CAWS_NODE_ENTRY_SPEC_ID='function entrySpecId(entry) {
 export CAWS_NODE_LIFECYCLE='function lifecycle(s) {
   if (!s || typeof s !== "object") return undefined;
   return s.lifecycle_state || s.status;
+}'
+
+# globToRegExp(pattern) — the single canonical scope-glob matcher. Adopted
+# from worktree-write-guard's algorithm (the correct one): metachars are
+# escaped so literal path chars like "." are not regex operators; then
+# glob wildcards expand with ** distinct from * and the whole thing is
+# anchored so a pattern must match the WHOLE relative path, not a
+# substring. scope-guard.sh previously used a weaker `*`->`.*` UNANCHORED
+# variant that crossed "/" boundaries and matched substrings, so the two
+# guards could return opposite answers for the same (path, pattern) pair
+# (HOOK-LIB-CONSOLIDATION-001 T1a). They now share this one.
+#
+# This is written as LITERAL JS (single backslashes, bare $) because it is
+# a single-quoted bash string. It is byte-for-byte the JS that node sees
+# when worktree-write-guard inlined it via a double-quoted `node -e`.
+export CAWS_NODE_GLOB_TO_SCOPE_REGEXP='function globToRegExp(pattern) {
+  // Escape regex metachars (except *, ?) so literal path chars like "."
+  // are not treated as regex operators. Then expand glob wildcards:
+  //   **  -> .+       (cross-segment, matches nested dirs)
+  //   *   -> [^/]*    (single-segment, does NOT cross "/")
+  //   ?   -> .        (any single char)
+  // Finally anchor with ^ and $ so the pattern must match the whole
+  // relative path rather than appear as a substring.
+  var escaped = String(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  var body = escaped.replace(/\*\*/g, ".+").replace(/\*/g, "[^/]*").replace(/\?/g, ".");
+  return new RegExp("^" + body + "$");
 }'
