@@ -2,10 +2,10 @@ id: AXE-CLI-INIT-CWD-ISOLATION-001
 title: 'Fix axe cli-accessibility init tests: cwd isolation + drop removed-v10 project-name premise'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: axe-init-isolation
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-29T07:13:11.959Z'
-updated_at: '2026-05-29T07:13:11.959Z'
+updated_at: '2026-05-29T07:18:26.758Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/axe
