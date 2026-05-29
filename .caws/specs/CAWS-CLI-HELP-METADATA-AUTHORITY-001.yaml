@@ -3,6 +3,7 @@ title: 'Help-metadata authority slice 0: export kernel spec enums as const array
 risk_tier: 3
 mode: refactor
 lifecycle_state: active
+worktree: help-metadata-s0-enums
 created_at: '2026-05-29T08:41:28.358Z'
 updated_at: '2026-05-29T08:41:28.358Z'
 blast_radius:
