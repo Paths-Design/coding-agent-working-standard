@@ -26,13 +26,13 @@ caws gates run --spec <SPEC-ID> --context commit
 
 ## CAWS Workflow
 
-v11.1+ ships twelve governed command groups:
+v11.1+ ships thirteen governed command groups:
 
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents
+init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents  prepush
 ```
 
-The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`.
+The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`. `prepush` is a governed pre-push range check — it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push` itself.
 
 ### Per-feature workflow
 
@@ -80,7 +80,7 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
 - `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
-- `caws specs create | list | show | close | archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag.
+- `caws specs create | list | show | close | archive | retire-draft | recover | prune-archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`).
 - `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse` — worktree lifecycle. `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
 - `caws agents register | heartbeat | stop | list | show | prune` — agent liveness substrate. `list/show` are read-only; ownership decisions still use `claim`/`worktree`.
 
@@ -99,7 +99,7 @@ Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level w
 - `scope.in` (non-empty array; `scope.out` cannot contain glob patterns — directory paths only)
 - `invariants` (non-empty array of strings)
 - `acceptance` (array of `{id: ^A\d+$, given, when, then}` — v10 `acceptance_criteria:` is rejected)
-- `non_functional` (object; only `reliability` and `performance` admitted)
+- `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per `packages/caws-kernel/src/schemas/spec.v1.json`)
 - `contracts` (array of `{name, type: api|schema|contract-test|behavior, path?, description?}`; tier-1/2 require non-empty)
 
 v10 fields **removed** from the schema: `type:`, `description:`, `notes:`, `non_goals:`, `bounded_claim:`, `dependencies:`, `status_rationale:`, `change_budget:`, `created:`. Migrate any v10 spec via the v10→v11 migration recipe (see `docs/migration-v10-to-v11.md` if you're on the upstream caws repo).
@@ -138,7 +138,7 @@ Each session gets registered in `.caws/agents.json` automatically (via the sessi
 
 ### Spec lifecycle
 
-Use `caws specs close <id>` to close an active spec, then `caws specs archive <id>` to move the YAML file to `.caws/specs/.archive/`. The directory is filesystem-authoritative — `caws specs list` reports any file under `.archive/` as `lifecycle_state: archived` regardless of the YAML literal. Manually-moved legacy specs (no registry entry) are correctly classified.
+Use `caws specs close <id>` to close an active spec, then `caws specs archive <id>` to archive it. Archive is a **tombstone**: it deletes the spec YAML from `.caws/specs/` and appends a hash-chained `spec_archived` event carrying the git `blob_sha`, so the body is recoverable via `caws specs recover <id>` (or `caws specs show <id> --archived`) from the event log + git history. (Legacy `.caws/specs/.archive/<id>.yaml` bodies from pre-tombstone runs are migrated by `caws specs prune-archive`.) A never-activated draft is retired with `caws specs retire-draft <id>` (also a tombstone, with a recoverable `spec_retired` event) — never raw `git rm`.
 
 If you try `caws specs create <id>` for an id that already exists in `.archive/`, the command refuses. Resurrect old ids only when you genuinely intend a continuation, and via spec authoring (not by deleting the archive entry).
 
