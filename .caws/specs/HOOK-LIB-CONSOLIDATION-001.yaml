@@ -2,7 +2,10 @@ id: HOOK-LIB-CONSOLIDATION-001
 title: 'Extract duplicated hook logic into shared lib/; consolidate same-concern-different-impl drift'
 risk_tier: 3
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+updated_at: '2026-05-29T21:48:02.202Z'
+resolution: completed
+closure_notes: 'Extracted duplicated hook logic into shared lib/ across 3 tiers; surfaced and fixed 2 real correctness bugs the duplication was hiding. T1a: single canonical glob-to-scope-regexp replacing scope-guard''s unanchored *->.* and worktree-write-guard''s anchored algorithm with the correct anchored one (they could disagree on the same path,pattern); scope-guard semantics change recorded in CHANGELOG per A5. T1b: single canonical entriesOf; FIXED a bug where the status-string gate returned [] for CLI-created (no-status) registries, silently disabling active-worktree detection in 4 hooks. T2a/b: promoted _realpath/is_canonical_checkout/caws_current_branch to lib, rewired 4 inline canonical-resolution copies + 3 branch sites. T3a: new lib/emit.sh (jq + printf fallback); migrated 11 hooks off 5+ bespoke emitter names; FIXED unescaped-interpolation invalid-JSON bug. T3b NARROWED/deferred: only 2 hooks genuinely load-spec-for-scope with different iteration; 2-line primitive has not drifted. No safety guard weakened. New tests: glob_scope_regexp(16)+entries_of_registry(9)+emit_envelopes(10); 236/236 hook-pack tests pass. Pack stays v11. Doc-lifecycle: no ephemeral docs created/archived/promoted; CHANGELOG updated; propagation grep run (all refs in-scope impl/test/CHANGELOG). Refresh consumers via caws init --overwrite as follow-step.'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
@@ -166,8 +169,16 @@ acceptance:
 non_functional: {}
 contracts:
   - name: hook-shared-lib-utilities-v1
-    invariant: >-
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/claude-code/lib/caws-state.sh
+    description: >-
       lib/caws-state.sh and lib/emit.sh expose the single canonical
-      implementation of registry reads, glob-to-scope matching, worktree
-      detection, and Claude Code JSON emission consumed by all claude-code
-      hooks; per-hook private copies are prohibited.
+      implementation of registry reads (entriesOf/entryByName/entrySpecId/
+      lifecycle), glob-to-scope matching (globToRegExp), worktree-state
+      detection (resolve_canonical_dir/_realpath/is_canonical_checkout/
+      caws_current_branch), and Claude Code JSON emission (emit_block/
+      emit_ask/emit_additional_context) consumed by all claude-code hooks;
+      per-hook private copies are prohibited. Drift is caught by
+      glob_scope_regexp.test.js, entries_of_registry.test.js, and
+      emit_envelopes.test.js plus a grep assertion that no hook inlines a
+      private copy.
