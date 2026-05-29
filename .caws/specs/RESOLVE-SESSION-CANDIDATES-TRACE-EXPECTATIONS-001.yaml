@@ -7,19 +7,103 @@ created_at: '2026-05-29T04:57:00.836Z'
 updated_at: '2026-05-29T04:57:00.836Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/shell/session
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/specs/RESOLVE-SESSION-CANDIDATES-TRACE-EXPECTATIONS-001.yaml
+    - packages/caws-cli/tests/shell/session/resolve-session-candidates.test.js
+  out:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Test-only reconciliation. This slice updates STALE TEST EXPECTATIONS to
+    match the authoritative trace that resolveSessionCandidates already
+    emits. It MUST NOT edit production source (resolve-session.ts,
+    types.ts). The behavior is correct; only the test's frozen expectations
+    are wrong because they predate the claude_code_env tier-1.5 source added
+    by CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001. If the first test run
+    proves the BEHAVIOR is wrong (not the expectation), stop and re-scope —
+    do not edit source under this spec.
+  - >-
+    The authoritative source order is the six entries
+    resolveSessionCandidates emits in resolve-session.ts, in this sequence:
+    claude_env, claude_code_env, hook_env, durable_hook_envelope, capsule,
+    cursor_env. The test is reconciled TO this order; the order is not
+    invented here.
+  - >-
+    durable_hook_envelope ordering is preserved. The envelope source stays
+    between hook_env and capsule in the trace; reconciling for the new
+    claude_code_env entry must not disturb that relative position (it is
+    the assertion CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001
+    relies on).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: |
+      resolve-session-candidates.test.js asserts the exhaustive trace
+      records exactly five absent sources, omitting claude_code_env.
+    when: |
+      The test is reconciled to the authoritative six-source trace.
+    then: |
+      The exhaustive-trace and absent-sources expectations include
+      claude_code_env in the order claude_env → claude_code_env → hook_env
+      → durable_hook_envelope → capsule → cursor_env. Length expectations
+      become six (trace entries) and six (rendered absent lines) rather
+      than five.
+  - id: A2
+    given: |
+      describeCandidateTrace test "renders one line per source PLUS one
+      candidate line per admitted ID" expects eight rendered lines.
+    when: |
+      The fixture has claude_env admitted (1 candidate) + capsule admitted
+      (2 candidates) + four absent sources under the six-source order.
+    then: |
+      The expected rendered-line count is updated to nine (6 source lines +
+      3 candidate lines), with the claude_code_env source line rendered as
+      absent in its position between claude_env and hook_env.
+  - id: A3
+    given: |
+      The "renders empty trace as five absent lines" test.
+    when: |
+      No source resolves any identity.
+    then: |
+      The test name and expectation are updated to six absent lines, one
+      per authoritative source, with no candidate lines.
+  - id: A4
+    given: |
+      The "orders the envelope source between hook_env and capsule" test.
+    when: |
+      The trace order is asserted.
+    then: |
+      durable_hook_envelope remains between hook_env and capsule; the
+      assertion is updated only as needed to accommodate the claude_code_env
+      entry earlier in the sequence, never to move the envelope source.
+  - id: A5
+    given: |
+      The reconciled test file on canonical main.
+    when: |
+      `npx jest tests/shell/session/resolve-session-candidates.test.js` runs.
+    then: |
+      The suite passes (0 failures). No production source file changed.
+  - id: A6
+    given: |
+      The prior slice's surface (prepush + classifier).
+    when: |
+      `npx jest tests/shell/prepush-command.test.js
+      tests/shell/push-range-classifier.test.js` runs after the
+      reconciliation.
+    then: |
+      All prepush + classifier tests still pass, proving this test-only
+      change did not disturb PREPUSH-FOREIGN-WORKTREE-WIRING-001.
+non_functional:
+  reliability:
+    - >-
+      The reconciled test must assert the trace order positionally (a deep
+      array equality or per-index source check), not by a loose "contains"
+      match, so a future source insertion fails loudly rather than passing
+      silently. The status-kernel-feature-detect linked-worktree failure is
+      out of scope and remains environmental; if encountered it is verified
+      on canonical only and documented, not fixed here.
 contracts: []
