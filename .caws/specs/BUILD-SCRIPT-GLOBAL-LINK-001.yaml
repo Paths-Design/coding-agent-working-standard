@@ -2,24 +2,39 @@ id: BUILD-SCRIPT-GLOBAL-LINK-001
 title: 'Globally link local CAWS build'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-build-global-link at 69ee5c7e3f920181edde050b2b8c42ee7859cfe8'
 created_at: '2026-05-29T21:39:41.692Z'
-updated_at: '2026-05-29T21:39:41.692Z'
+updated_at: '2026-05-29T21:42:37.639Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - scripts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - scripts/build-main-dist-link.mjs
+    - .caws/specs/BUILD-SCRIPT-GLOBAL-LINK-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - packages/quality-gates
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The helper globally links the built local CLI package so shell `caws` resolves to this checkout during pre-publish testing.'
+  - 'The helper keeps an opt-out for callers that only want dist/main symlinks.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The current checkout has been built by the helper.'
+    when: 'The global-link step completes.'
+    then: '`command -v caws` resolves to the active Node prefix and the shim resolves to packages/caws-cli/dist/index.js in this checkout.'
+  - id: A2
+    given: 'A caller only wants local dist/main symlinks.'
+    when: 'They pass --no-global-link.'
+    then: 'The helper skips npm link and still refreshes dist/main.'
+  - id: A3
+    given: 'The CLI package metadata or build output is missing.'
+    when: 'The helper reaches global-link validation.'
+    then: 'It exits non-zero with a clear diagnostic before claiming success.'
 non_functional: {}
 contracts: []
