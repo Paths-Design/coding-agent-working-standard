@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-22T22:30:00.000Z'
-updated_at: '2026-05-29T02:25:00.000Z'
+updated_at: '2026-05-29T02:35:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
@@ -19,10 +19,13 @@ scope:
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/index.ts
     - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-cli/src/shell/legacy-command-map.js
     - packages/caws-cli/src/shell/commands/prepush.ts
     - packages/caws-cli/src/shell/push-range
     - packages/caws-cli/tests/shell/prepush-command.test.js
     - packages/caws-cli/tests/shell/push-range-classifier.test.js
+    - packages/caws-cli/tests/shell/removed-command-diagnostics.test.js
+    - docs/v11-surface-matrix.yaml
   out:
     - .caws/code-freeze.yaml
     - .caws/policy.yaml
