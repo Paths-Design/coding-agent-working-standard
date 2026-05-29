@@ -7,19 +7,44 @@ created_at: '2026-05-29T00:10:21.131Z'
 updated_at: '2026-05-29T00:10:21.131Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - root .caws config files (deletion-only; orphaned v10 artifacts with zero live readers)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/parallel-cawsfix.yaml
+    - .caws/parallel-cawsfix-wave2.yaml
+    - .caws/v10-governance-refactor.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/policy.schema.json
+    - .caws/waiver.schema.json
+    - .caws/code-freeze.yaml
+    - .caws/quality-exceptions.json
+    - .caws/duplication-exceptions.yaml
+    - .caws/refactor-baselines.yaml
+    - .caws/refactor-targets.yaml
+    - .caws/agent-operating-spec.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - Only root .caws config files with zero references anywhere in the tracked tree (outside .caws itself) are removed; each removed file was confirmed unreferenced by git grep across src, scripts, CI workflows, and docs.
+  - policy.yaml and the two governed schemas are never touched; they are the live v11 governance surface.
+  - The quality-gates config files (code-freeze, quality-exceptions, duplication-exceptions, refactor-baselines, refactor-targets) are explicitly excluded; they are still referenced by packages/quality-gates and belong to a separate package-retirement decision.
+  - agent-operating-spec.yaml is excluded from this slice; it has one doc reference and is deferred pending a doctrine decision.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: the repo after removing the three zero-reference files
+    when: caws doctor runs
+    then: doctor reports no new load errors and the removal does not change any gate or command behavior.
+  - id: A2
+    given: a git grep across the tracked tree for the three removed filenames
+    when: searching outside .caws/ and node_modules
+    then: zero references existed before removal, proving nothing read these files.
+  - id: A3
+    given: the full caws-cli build and Jest suite on canonical after removal
+    when: tsc and jest run
+    then: build succeeds and the test pass count is unchanged from before the removal.
+non_functional:
+  reliability:
+    - Removal is deletion-only and reversible via git; no runtime state, schema, or policy file is modified.
 contracts: []
