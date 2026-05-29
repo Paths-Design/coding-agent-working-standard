@@ -2,8 +2,10 @@ id: CAWS-INIT-GITIGNORE-RENDER-PROSE-FIX-001
 title: 'Reword init .gitignore step renderer to not emit the literal ''policy.yaml'' (collides with partially-initialized test''s not-created assertion)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: init-gi-fix
+lifecycle_state: closed
+updated_at: '2026-05-29T17:38:08.980Z'
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-gi-fix at 1147f0974521544e5ad7f392ccd1d0ce54d0890b'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/render/init-gitignore.ts
