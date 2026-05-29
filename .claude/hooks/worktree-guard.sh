@@ -19,6 +19,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/caws-state.sh
+# Provides $CAWS_NODE_ENTRIES_OF — the single canonical dual-shape
+# (v10 envelope / v11 flat-map) registry reader. Replaces three inline
+# copies that had drifted (HOOK-LIB-CONSOLIDATION-001 T1b).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# shellcheck source=lib/emit.sh
+# Canonical Claude Code envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
@@ -28,17 +36,8 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-
-if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
-    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
-    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-      PROJECT_DIR="$CANDIDATE"
-    fi
-  fi
-fi
+# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
+PROJECT_DIR="$(resolve_canonical_dir "${CLAUDE_PROJECT_DIR:-.}")"
 
 # Block sparse checkout (runs before "only check git commands" early-exit)
 if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
@@ -104,47 +103,29 @@ canonical_guard_emit_block() {
 }
 
 # Determine whether the session's cwd is the canonical checkout.
-# git_dir == git_common_dir indicates canonical; a linked worktree has
-# git_dir under git_common_dir/worktrees/<name>/.
+# is_canonical_checkout (lib/caws-state.sh) returns 0 when git-dir ==
+# git-common-dir; a linked worktree has git-dir under
+# git-common-dir/worktrees/<name>/ (HOOK-LIB-CONSOLIDATION-001 T2a).
 CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
-if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
-  GIT_DIR_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-dir 2>/dev/null | head -1 || echo "")
-  GIT_COMMON_RESOLVED=$(cd "$CANONICAL_GUARD_CHECK_CWD" && git rev-parse --git-common-dir 2>/dev/null | head -1 || echo "")
-  if [[ -n "$GIT_DIR_RESOLVED" ]] && [[ -n "$GIT_COMMON_RESOLVED" ]]; then
-    # Normalize to absolute paths so equality is structural, not textual.
-    GIT_DIR_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_DIR_RESOLVED" 2>/dev/null && pwd || echo "$GIT_DIR_RESOLVED")
-    GIT_COMMON_ABS=$(cd "$CANONICAL_GUARD_CHECK_CWD" && cd "$GIT_COMMON_RESOLVED" 2>/dev/null && pwd || echo "$GIT_COMMON_RESOLVED")
-    if [[ "$GIT_DIR_ABS" == "$GIT_COMMON_ABS" ]]; then
-      # We are in the canonical checkout. Now check for active worktrees.
-      WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
+if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
+    # We are in the canonical checkout. Now check for active worktrees.
+    WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
       if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
         FIRST_ACTIVE_WT=$(node -e "
+          $CAWS_NODE_ENTRIES_OF
           try {
             var reg = JSON.parse(require('fs').readFileSync('$WORKTREES_JSON', 'utf8'));
-            function entriesOf(r) {
-              if (!r || typeof r !== 'object') return [];
-              if (r.worktrees && typeof r.worktrees === 'object') {
-                return Object.entries(r.worktrees);
-              }
-              var out = [];
-              for (var k in r) {
-                if (Object.prototype.hasOwnProperty.call(r, k)) {
-                  var v = r[k];
-                  if (v && typeof v === 'object') out.push([k, v]);
-                }
-              }
-              return out;
-            }
-            var entries = entriesOf(reg);
-            // 'active' is the documented status; entries without an
-            // explicit status (legacy/in-flight registry shapes) are
-            // also treated as active because the CLI's createWorktree
-            // does not always emit a status field.
-            var active = entries.filter(function(e) {
-              var s = e[1] && e[1].status;
+            // entriesOf (lib/caws-state.sh) returns object-shape entries with
+            // .name synthesized from the flat-map key. 'active' is the
+            // documented status; entries without an explicit status
+            // (CLI-created registries — caws-cli 11.1.7+ persists no status
+            // field) are also treated as active, matching listWorktreesPretty's
+            // status:'active' default (HOOK-LIB-CONSOLIDATION-001 T1b).
+            var active = entriesOf(reg).filter(function(w) {
+              var s = w.status;
               return s === 'active' || s === undefined || s === null || s === '';
             });
-            if (active.length > 0) console.log(active[0][0]);
+            if (active.length > 0) console.log(active[0].name);
             else console.log('');
           } catch(e) { console.log(''); }
         " 2>/dev/null || echo "")
@@ -176,8 +157,6 @@ if command -v git >/dev/null 2>&1 && [[ -d "$CANONICAL_GUARD_CHECK_CWD" ]]; then
           fi
         fi
       fi
-    fi
-  fi
 fi
 # ─── /CANONICAL-CHECKOUT-WORKTREE-GUARD-001 ──────────────────────────
 
@@ -245,25 +224,16 @@ fi
 
 if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
   ACTIVE_COUNT=$(node -e "
+    $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      // Dual-shape: v10 nested vs v11 direct-key.
-      function entriesOf(r) {
-        if (!r || typeof r !== 'object') return [];
-        if (r.worktrees && typeof r.worktrees === 'object') return Object.values(r.worktrees);
-        // v11 direct-key: filter to objects with a 'status' field to avoid
-        // mistaking top-level metadata (e.g., 'version') for an entry.
-        var out = [];
-        for (var k in r) {
-          if (Object.prototype.hasOwnProperty.call(r, k)) {
-            var v = r[k];
-            if (v && typeof v === 'object' && typeof v.status === 'string') out.push(v);
-          }
-        }
-        return out;
-      }
-      var entries = entriesOf(reg);
-      var active = entries.filter(function(w) { return w.status === 'active'; });
+      // entriesOf (lib/caws-state.sh) handles both v10 envelope and v11
+      // flat-map. Status-less entries (CLI-created) count as active —
+      // see the FIRST_ACTIVE_WT note above (HOOK-LIB-CONSOLIDATION-001 T1b).
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
       console.log(active.length);
     } catch(e) { console.log('0'); }
   " 2>/dev/null || echo "0")
@@ -307,27 +277,18 @@ fi
 
 # --- Base branch protections ---
 AGENT_DIR="${HOOK_CWD:-${CLAUDE_PROJECT_DIR:-.}}"
-CURRENT_BRANCH=$(cd "$AGENT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 BASE_BRANCH="$PARALLEL_BASE"
 if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
   BASE_BRANCH=$(node -e "
+    $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      function entriesOf(r) {
-        if (!r || typeof r !== 'object') return [];
-        if (r.worktrees && typeof r.worktrees === 'object') return Object.values(r.worktrees);
-        var out = [];
-        for (var k in r) {
-          if (Object.prototype.hasOwnProperty.call(r, k)) {
-            var v = r[k];
-            if (v && typeof v === 'object' && typeof v.status === 'string') out.push(v);
-          }
-        }
-        return out;
-      }
-      var entries = entriesOf(reg);
-      var active = entries.filter(function(w) { return w.status === 'active'; });
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
       if (active.length > 0) console.log(active[0].baseBranch || '');
       else console.log('');
     } catch(e) { console.log(''); }
@@ -343,22 +304,12 @@ if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
   fi
 
   if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "Merging into base branch ('"$BASE_BRANCH"') while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
-      }
-    }'
+    emit_additional_context "Merging into base branch ($BASE_BRANCH) while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
     exit 0
   fi
 
   if echo "$COMMAND" | grep -qE 'git\s+commit\b' && ! echo "$COMMAND" | grep -qE '--amend'; then
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": "NOTE: committing to the base branch ('"$BASE_BRANCH"') while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by Claude hooks. Avoid --amend and force-push while worktrees are active."
-      }
-    }'
+    emit_additional_context "NOTE: committing to the base branch ($BASE_BRANCH) while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by Claude hooks. Avoid --amend and force-push while worktrees are active."
     exit 0
   fi
 fi

@@ -35,6 +35,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/emit.sh
+# Canonical PostToolUse additionalContext emitter (HOOK-LIB-CONSOLIDATION-001
+# T3a) — replaces fragile inline `echo '{...}'` envelopes that did not
+# JSON-escape the interpolated filename.
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -92,35 +97,20 @@ for modifier in "${BANNED_MODIFIERS[@]}"; do
       fi
     fi
 
-    echo '{
-      "hookSpecificOutput": {
-        "hookEventName": "PostToolUse",
-        "additionalContext": "Warning: The filename '\'''"$FILENAME"''\'' contains the modifier '\'''"$modifier"''\'' which may indicate temporary or non-canonical naming. Per the CAWS doctrine (CLAUDE.md key rule \"No shadow files\"), edit existing files in place rather than creating *-enhanced.*, *-new.*, *-v2.* copies. Consider using a more descriptive, permanent name."
-      }
-    }'
+    emit_additional_context "Warning: The filename '$FILENAME' contains the modifier '$modifier' which may indicate temporary or non-canonical naming. Per the CAWS doctrine (CLAUDE.md key rule \"No shadow files\"), edit existing files in place rather than creating *-enhanced.*, *-new.*, *-v2.* copies. Consider using a more descriptive, permanent name." "PostToolUse"
     exit 0
   fi
 done
 
 # Check for version suffixes (e.g., file-v2.js, file_v3.ts)
 if [[ "$FILENAME_LOWER" =~ [-_]v[0-9]+\. ]]; then
-  echo '{
-    "hookSpecificOutput": {
-      "hookEventName": "PostToolUse",
-      "additionalContext": "Warning: The filename '\'''"$FILENAME"''\'' contains a version suffix. Version control should be handled by git, not file names. Consider removing the version suffix."
-    }
-  }'
+  emit_additional_context "Warning: The filename '$FILENAME' contains a version suffix. Version control should be handled by git, not file names. Consider removing the version suffix." "PostToolUse"
   exit 0
 fi
 
 # Check for date stamps (e.g., file-2024-01-15.js)
 if [[ "$FILENAME_LOWER" =~ [0-9]{4}[-_][0-9]{2}[-_][0-9]{2} ]]; then
-  echo '{
-    "hookSpecificOutput": {
-      "hookEventName": "PostToolUse",
-      "additionalContext": "Warning: The filename '\'''"$FILENAME"''\'' contains a date stamp. Version control should be handled by git, not file names. Consider removing the date."
-    }
-  }'
+  emit_additional_context "Warning: The filename '$FILENAME' contains a date stamp. Version control should be handled by git, not file names. Consider removing the date." "PostToolUse"
   exit 0
 fi
 

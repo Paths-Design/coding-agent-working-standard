@@ -19,6 +19,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -52,12 +54,7 @@ fi
 # Check if CAWS CLI is available
 if ! command -v caws &> /dev/null; then
   # Suggest installing CAWS
-  echo '{
-    "hookSpecificOutput": {
-      "hookEventName": "PostToolUse",
-      "additionalContext": "CAWS CLI not available. Consider installing with: npm install -g @caws/cli"
-    }
-  }'
+  emit_additional_context "CAWS CLI not available. Consider installing with: npm install -g @caws/cli" "PostToolUse"
   exit 0
 fi
 
@@ -129,16 +126,7 @@ fi
 if echo "$GATES_OUT" | grep -qE '(policy\.schema\.|store\.|no policy\.yaml loaded|unknown command|command not found)'; then
   # Bootstrap failure — non-blocking, prefixed advisory (verbatim diagnostic).
   MSG=$(printf '(hook bootstrap) caws gates run could not evaluate: rc=%s\n%s' "$GATES_RC" "$GATES_OUT")
-  MESSAGE="$MSG" python3 - <<'PY'
-import json
-import os
-print(json.dumps({
-    "hookSpecificOutput": {
-        "hookEventName": "PostToolUse",
-        "additionalContext": os.environ["MESSAGE"],
-    }
-}))
-PY
+  emit_additional_context "$MSG" "PostToolUse"
   exit 0
 fi
 
@@ -150,13 +138,6 @@ $GATES_OUT
 
 Run 'caws gates run --context commit' for full details."
 
-REASON="$REASON" python3 - <<'PY'
-import json
-import os
-print(json.dumps({
-    "decision": "block",
-    "reason": os.environ["REASON"],
-}))
-PY
+emit_block "$REASON"
 
 exit 0

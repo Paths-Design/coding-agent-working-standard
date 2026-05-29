@@ -22,17 +22,8 @@ source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 # Hook does not read stdin fields; only checks worktree registry state.
 # Sourcing parse-input.sh still wires up PATH for node (used below).
 
-# Resolve main repo root
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
-    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
-    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-      PROJECT_DIR="$CANDIDATE"
-    fi
-  fi
-fi
+# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
+PROJECT_DIR="$(resolve_canonical_dir "${CLAUDE_PROJECT_DIR:-.}")"
 
 # Check for active worktrees
 if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
@@ -40,7 +31,13 @@ if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>
     $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) { return w.status === 'active' || w.status === 'fresh'; });
+      // Status-less entries (CLI-created — caws-cli 11.1.7+ persists no
+      // status field) count as active alongside the explicit
+      // 'active'/'fresh' states (HOOK-LIB-CONSOLIDATION-001 T1b).
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === 'fresh' || s === undefined || s === null || s === '';
+      });
       if (active.length > 0) {
         console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(', '));
       } else {

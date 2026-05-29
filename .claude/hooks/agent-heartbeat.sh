@@ -52,6 +52,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input || exit 0
 
 if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
@@ -109,7 +111,7 @@ fi
 PROJECT_DIR_FOR_CACHE="${CLAUDE_PROJECT_DIR:-.}"
 EMIT_STATE_FILE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-emit-state.json"
 
-printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
+_HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
   let raw = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { raw += chunk; });
@@ -239,13 +241,10 @@ printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
       "mutating shared state. Authority remains in .caws/worktrees.json " +
       "(ownership) and .caws/specs/<id>.yaml (scope) — leases are " +
       "visibility only.";
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        additionalContext: ctx,
-      },
-    }));
+    process.stdout.write(ctx);
   });
-' 2>/dev/null || exit 0
+' 2>/dev/null)" || exit 0
+
+[[ -n "$_HEARTBEAT_CTX" ]] && emit_additional_context "$_HEARTBEAT_CTX"
 
 exit 0

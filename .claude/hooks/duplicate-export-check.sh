@@ -36,6 +36,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+# shellcheck source=lib/emit.sh
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input || exit 0
 
 FILE_PATH="$HOOK_FILE_PATH"
@@ -144,13 +146,6 @@ done <<< "$NAMES"
 MSG="Duplicate-export advisory: ${FILE_PATH} exports symbol name(s) that already exist elsewhere in this project:
 ${COLLISIONS}If this is an intentional re-export or distinct concept, ignore. Otherwise consider editing the existing module in place rather than creating a parallel implementation (CAWS \"No shadow files\" doctrine). (Advisory only — never blocks.)"
 
-if command -v jq >/dev/null 2>&1; then
-  jq -n --arg msg "$MSG" '{
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      additionalContext: $msg
-    }
-  }'
-fi
+emit_additional_context "$MSG" "PostToolUse"
 
 exit 0

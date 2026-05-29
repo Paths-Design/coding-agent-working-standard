@@ -18,6 +18,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/caws-state.sh
+# Provides $CAWS_NODE_ENTRIES_OF — the single canonical dual-shape
+# registry reader (HOOK-LIB-CONSOLIDATION-001 T1b).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 # Hook does not read stdin fields -- dispatches on a positional arg.
 # Sourcing parse-input.sh still wires up PATH (nvm/homebrew) for CAWS CLI.
 
@@ -49,32 +53,20 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 # --- Active-worktree warning (dual-shape registry compatible) ---
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_BRANCH=$(caws_current_branch)  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; then
   WT_INFO=$(node -e "
+    $CAWS_NODE_ENTRIES_OF
     try {
       var reg = JSON.parse(require('fs').readFileSync('$CAWS_ROOT/.caws/worktrees.json', 'utf8'));
-      function entriesOf(r) {
-        if (!r || typeof r !== 'object') return [];
-        if (r.worktrees && typeof r.worktrees === 'object') return Object.values(r.worktrees);
-        // v11 direct-key: filter to objects with a 'status' field.
-        var out = [];
-        for (var k in r) {
-          if (Object.prototype.hasOwnProperty.call(r, k)) {
-            var v = r[k];
-            if (v && typeof v === 'object' && typeof v.status === 'string') {
-              // For v11 direct-key, the worktree name is the outer key,
-              // not entry.name. Synthesize name from key when absent.
-              if (!v.name) v = Object.assign({}, v, { name: k });
-              out.push(v);
-            }
-          }
-        }
-        return out;
-      }
-      var entries = entriesOf(reg);
-      var active = entries.filter(function(w) { return w.status === 'active'; });
+      // entriesOf (lib/caws-state.sh) handles both registry shapes and
+      // synthesizes .name from the flat-map key. Status-less entries
+      // (CLI-created) count as active (HOOK-LIB-CONSOLIDATION-001 T1b).
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
       if (active.length > 0) {
         var names = active.map(function(w) { return (w.name || '<unknown>') + ' (' + (w.branch || '?') + ')'; });
         var bases = active.map(function(w) { return w.baseBranch || ''; }).filter(function(v,i,a) { return v && a.indexOf(v) === i; });

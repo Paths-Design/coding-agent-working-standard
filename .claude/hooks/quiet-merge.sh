@@ -33,6 +33,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/caws-state.sh
+# Provides resolve_canonical_dir (HOOK-LIB-CONSOLIDATION-001 T2a).
+source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
@@ -43,17 +46,9 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Resolve repo root (may differ from CLAUDE_PROJECT_DIR in worktrees)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-common-dir 2>/dev/null || echo "")
-  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != ".git" ]]; then
-    CANDIDATE=$(cd "$PROJECT_DIR" && cd "$GIT_COMMON_DIR/.." 2>/dev/null && pwd || echo "")
-    if [[ -n "$CANDIDATE" ]] && [[ -d "$CANDIDATE/.caws" ]]; then
-      PROJECT_DIR="$CANDIDATE"
-    fi
-  fi
-fi
+# Resolve repo root (may differ from CLAUDE_PROJECT_DIR in worktrees).
+# Shared helper — HOOK-LIB-CONSOLIDATION-001 T2a.
+PROJECT_DIR="$(resolve_canonical_dir "${CLAUDE_PROJECT_DIR:-.}")"
 
 # Match: caws worktree merge|destroy <name> [options]
 # Skip if already piped/redirected (user already handling output)

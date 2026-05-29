@@ -40,6 +40,18 @@
 #       prints <name> on stdout and returns 0. Otherwise prints nothing
 #       and returns 1.
 #
+#   _realpath <path>
+#       Best-effort realpath (python3-backed, falls back to the input).
+#       Resolves the existing prefix even when the leaf does not exist.
+#
+#   caws_current_branch [dir]
+#       Prints the current branch of the checkout at [dir] (default cwd),
+#       or "unknown" if git is unavailable.
+#
+#   is_canonical_checkout [dir]
+#       Returns 0 if [dir] is the canonical (main) checkout (git-dir ==
+#       git-common-dir), 1 if it is a linked worktree or git is absent.
+#
 # Node-helper string constants:
 #   CAWS_NODE_ENTRIES_OF
 #       A JS function declaration string. Inline it into a node -e block
@@ -59,6 +71,25 @@
 #       A JS function declaration string for lifecycle(spec). Reads
 #       v11 spec.lifecycle_state first, falls back to v10 spec.status.
 #       Returns undefined when neither is present.
+#
+#   CAWS_NODE_GLOB_TO_SCOPE_REGEXP
+#       A JS function declaration string for globToRegExp(pattern). The
+#       single canonical "does this path match a scope.in/scope.out glob"
+#       algorithm. Metachar-escaped, `**`->`.+` (cross-segment),
+#       `*`->`[^/]*` (single-segment, does NOT cross '/'), `?`->`.`,
+#       anchored ^...$. scope-guard.sh and worktree-write-guard.sh BOTH
+#       inline this so they can never disagree on a scope decision
+#       (HOOK-LIB-CONSOLIDATION-001 T1a). Usage:
+#           node -e "
+#               $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
+#               if (globToRegExp(pattern).test(relPath)) { ... }
+#           "
+#
+#   IMPORTANT escaping note: these constants are single-quoted bash
+#   strings, so the JS source is LITERAL (single backslashes, bare $).
+#   When inlining into a double-quoted `node -e "..."` block, bash will
+#   NOT re-process them (they arrive via $VAR expansion, not re-parsing),
+#   so the literal JS reaches node intact. Do not double-escape here.
 
 # Guard against double-sourcing.
 if [[ -n "${_CAWS_STATE_SH_LOADED:-}" ]]; then
@@ -99,6 +130,58 @@ extract_worktree_name() {
   return 1
 }
 
+# _realpath <path>
+#   Best-effort realpath. macOS lacks `readlink -f` by default; python3 is
+#   available on every supported runner (CI matrix verified). Falls back to
+#   the original path if realpath cannot resolve. os.path.realpath resolves
+#   the existing prefix even when the leaf does not exist (Write-tool case),
+#   which is required for prefix-match allowlist arms to survive the macOS
+#   /tmp -> /private/tmp symlink. Promoted from worktree-write-guard
+#   (HOOK-LIB-CONSOLIDATION-001 T2a) so other hooks normalize identically.
+_realpath() {
+  local p="${1:-}"
+  if [[ -z "$p" ]]; then
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p" 2>/dev/null || printf '%s\n' "$p"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
+# caws_current_branch [dir]
+#   Print the current branch name of the git checkout at [dir] (default
+#   cwd), or "unknown" if git is unavailable / not a repo. Single source
+#   for the `git rev-parse --abbrev-ref HEAD || unknown` idiom duplicated
+#   across worktree-guard, worktree-write-guard, session-caws-status,
+#   session-log (HOOK-LIB-CONSOLIDATION-001 T2b).
+caws_current_branch() {
+  local dir="${1:-.}"
+  ( cd "$dir" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null ) || echo "unknown"
+}
+
+# is_canonical_checkout [dir]
+#   Return 0 if [dir] (default cwd) is the canonical (main) checkout — i.e.
+#   git-dir == git-common-dir — and 1 if it is a linked worktree or git is
+#   unavailable. Equality is structural (both sides realpath-normalized),
+#   not textual. Promoted from worktree-guard's CANONICAL-CHECKOUT guard
+#   (HOOK-LIB-CONSOLIDATION-001 T2a). A non-zero return for "git absent"
+#   is intentional: callers gate canonical-only blocking behind a positive
+#   answer, so "can't tell" must not assert canonical.
+is_canonical_checkout() {
+  local dir="${1:-.}"
+  command -v git >/dev/null 2>&1 || return 1
+  [[ -d "$dir" ]] || return 1
+  local gd gc gda gca
+  gd=$(cd "$dir" 2>/dev/null && git rev-parse --git-dir 2>/dev/null | head -1) || return 1
+  gc=$(cd "$dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null | head -1) || return 1
+  [[ -n "$gd" ]] && [[ -n "$gc" ]] || return 1
+  gda=$(cd "$dir" 2>/dev/null && cd "$gd" 2>/dev/null && pwd || echo "$gd")
+  gca=$(cd "$dir" 2>/dev/null && cd "$gc" 2>/dev/null && pwd || echo "$gc")
+  [[ "$gda" == "$gca" ]]
+}
+
 # Shared node-helper strings. These are JS function declarations that
 # any hook can inline into a node -e block to get dual-shape readers.
 #
@@ -124,13 +207,29 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
     }
     return out0;
   }
-  // v11 flat-map: { <name>: {...} } at top level. Filter for entry-shaped
-  // values (objects with a status field) so we ignore stray top-level
-  // metadata like a future "version" sibling.
+  // v11 flat-map: { <name>: {...} } at top level. Admit entry-shaped
+  // values and ignore stray top-level metadata (e.g. a future "version"
+  // sibling). The discriminator MUST match entryByName below: caws-cli
+  // 11.1.7+ worktree-create persists { branch, baseBranch, path, spec_id }
+  // and does NOT emit a status field (see worktrees-writer.ts
+  // augmentRegistryEntry — status is synthesized at render time, never
+  // persisted). A status-only gate here returned [] for every
+  // CLI-created registry, silently disabling active-worktree detection
+  // in every hook on this contract (HOOK-LIB-CONSOLIDATION-001 T1b;
+  // same defect class as CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01, which
+  // fixed entryByName but missed entriesOf). Admit any object carrying
+  // at least one v11/v10 marker field.
   var out = [];
   for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
     var v2 = r[k2];
-    if (v2 && typeof v2 === "object" && typeof v2.status === "string") {
+    if (v2 && typeof v2 === "object" && !Array.isArray(v2) && (
+      typeof v2.status === "string" ||
+      typeof v2.spec_id === "string" ||
+      typeof v2.specId === "string" ||
+      typeof v2.path === "string" ||
+      typeof v2.branch === "string" ||
+      typeof v2.name === "string"
+    )) {
       if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
       out.push(v2);
     }
@@ -176,4 +275,30 @@ export CAWS_NODE_ENTRY_SPEC_ID='function entrySpecId(entry) {
 export CAWS_NODE_LIFECYCLE='function lifecycle(s) {
   if (!s || typeof s !== "object") return undefined;
   return s.lifecycle_state || s.status;
+}'
+
+# globToRegExp(pattern) — the single canonical scope-glob matcher. Adopted
+# from worktree-write-guard's algorithm (the correct one): metachars are
+# escaped so literal path chars like "." are not regex operators; then
+# glob wildcards expand with ** distinct from * and the whole thing is
+# anchored so a pattern must match the WHOLE relative path, not a
+# substring. scope-guard.sh previously used a weaker `*`->`.*` UNANCHORED
+# variant that crossed "/" boundaries and matched substrings, so the two
+# guards could return opposite answers for the same (path, pattern) pair
+# (HOOK-LIB-CONSOLIDATION-001 T1a). They now share this one.
+#
+# This is written as LITERAL JS (single backslashes, bare $) because it is
+# a single-quoted bash string. It is byte-for-byte the JS that node sees
+# when worktree-write-guard inlined it via a double-quoted `node -e`.
+export CAWS_NODE_GLOB_TO_SCOPE_REGEXP='function globToRegExp(pattern) {
+  // Escape regex metachars (except *, ?) so literal path chars like "."
+  // are not treated as regex operators. Then expand glob wildcards:
+  //   **  -> .+       (cross-segment, matches nested dirs)
+  //   *   -> [^/]*    (single-segment, does NOT cross "/")
+  //   ?   -> .        (any single char)
+  // Finally anchor with ^ and $ so the pattern must match the whole
+  // relative path rather than appear as a substring.
+  var escaped = String(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  var body = escaped.replace(/\*\*/g, ".+").replace(/\*/g, "[^/]*").replace(/\?/g, ".");
+  return new RegExp("^" + body + "$");
 }'
