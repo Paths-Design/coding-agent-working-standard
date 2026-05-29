@@ -51,6 +51,51 @@ were removed in `CAWS-DEAD-TEST-CLEANUP-001`.
   together with their test surfaces and the two retained utilities
   above.
 
+## [11.1.8] (2026-05-29)
+
+Durable `--help` authority. Every `.description()` / `.option()` help string in
+the CLI's command registration now flows from a single typed, lock-tested
+`COMMAND_SURFACE_METADATA` source instead of hand-authored inline literals, so
+help text can no longer silently drift from behavior. Fixes four confirmed-wrong
+or incomplete help strings discovered in the v11.1.7 surface audit. No registered-
+surface change — command names, argument arity, option flags, required-ness, and
+defaults are byte-for-byte identical (proven by the matrix/surface/register lock
+suites and 416 spawn-based tests passing unchanged).
+
+(Note: v11.1.7 was published from a release-train commit that predated this work,
+so the durable `--help` authority ships here in 11.1.8 rather than 11.1.7.)
+
+### Added
+
+* **`COMMAND_SURFACE_METADATA`** (`src/shell/command-metadata.ts`,
+  CAWS-CLI-HELP-METADATA-AUTHORITY-001 + slices): a typed single source for all
+  13 command groups' help — flat top-level commands (`init`/`doctor`/`status`/
+  `claim`/`prepush`) and groups (`scope`/`gates`/`evidence`/`events`/`waiver`/
+  `agents`/`specs`/`worktree`). `register.ts` consumes it via metadata helpers;
+  no inline help-string literal remains.
+* **Kernel spec enums exported as const arrays** (`SPEC_MODES`,
+  `SPEC_RESOLUTIONS`, `RISK_TIERS`, `SPEC_LIFECYCLE_STATES`, `CONTRACT_TYPES`):
+  `--mode` / `--resolution` / `--risk-tier` help value-lists are derived from
+  these and lock-tested for equality with the kernel/schema enums, eliminating
+  the prior duplicate `VALID_MODES`/`VALID_RESOLUTIONS` arrays.
+* **Help-metadata lock test** (`tests/shell/help-metadata-lock.test.js`): L1
+  (metadata names == registered groups), L3 (option `allowedValues` deep-equal
+  kernel enums), L4 (non-empty descriptions), L5 (register.ts carries no inline
+  help-string literals). Future help/behavior drift becomes a test failure.
+
+### Fixed
+
+* **`specs archive` help** said "Moves the YAML file to `.caws/specs/.archive/`"
+  — false since archive became a tombstone. Now states the tombstone semantics
+  (deletes the YAML, appends a recoverable `spec_archived` event with `blob_sha`).
+* **`worktree` group help** omitted `migrate-registry` and `repair-sparse` from
+  its subcommand list; now enumerates all seven subcommands.
+* **`gates run` help** was silent on exit codes 2 (hard composition error) and 3
+  (evidence-integrity failure); both are now documented alongside 0/1.
+* **`specs create` help** now marks `--title` / `--mode` / `--risk-tier` as
+  required (they were functionally required but presented as optional); the
+  handler retains its guidance-on-omission diagnostic.
+
 ## [11.1.7] (2026-05-29)
 
 v11.1.x stabilization release. Adds the `prepush` command group, the
