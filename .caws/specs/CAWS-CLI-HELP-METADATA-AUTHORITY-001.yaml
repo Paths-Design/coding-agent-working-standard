@@ -1,5 +1,5 @@
 id: CAWS-CLI-HELP-METADATA-AUTHORITY-001
-title: 'Durable --help metadata authority slice 0: export kernel spec enums (mode/resolution/risk_tier/lifecycle/contract-type) as const arrays, collapse the CLI VALID_MODES/VALID_RESOLUTIONS duplicates, amend kernel 1.1.4 changelog'
+title: 'Help-metadata authority slice 0: export kernel spec enums as const arrays, collapse the CLI VALID_MODES/VALID_RESOLUTIONS duplicates, amend kernel 1.1.4 changelog'
 risk_tier: 3
 mode: refactor
 lifecycle_state: active
