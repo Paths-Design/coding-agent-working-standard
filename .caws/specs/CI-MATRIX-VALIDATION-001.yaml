@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: ci-matrix
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-29T18:43:57.099Z'
+updated_at: '2026-05-29T18:45:00.000Z'
 blast_radius:
   modules:
     - .github/workflows/ci-matrix.yml
@@ -25,12 +25,12 @@ invariants:
   - 'The matrix runs against the published npm packages (or rc tarballs in a release-rehearsal job), not against the repo workspace. It is a true outside-in fresh-install test.'
   - 'The matrix runs on at least Ubuntu, macOS, and Windows. Each platform exercises caws init + a spec create + a worktree create + a gates run end-to-end.'
   - 'The matrix runs on at least the two most recent LTS Node versions.'
-  - 'A red matrix blocks the next publish — the matrix is the release gate, not just observability.'
+  - 'Post-publish verification, honestly framed. Because releases are tag-driven and immutable (CAWS-RELEASE-TAG-DRIVEN-001), the matrix installs the PUBLISHED package and therefore runs AFTER the publish it verifies — it cannot retroactively block a publish that already happened. A red cell is the signal that a PATCH release is required, and it gates the NEXT publish (the maintainer must not cut a new tag over a known-red matrix). The matrix triggers automatically after the Release workflow completes and on workflow_dispatch with an explicit version for pre-tag rehearsal. A true pre-publish hard gate would require restructuring the release flow to publish-then-verify-then-promote (e.g. a staging dist-tag) — that is a named follow-up, not v1.'
 acceptance:
   - id: A1
-    given: 'A new release rehearsal job in .github/workflows/.'
-    when: 'A release is cut (tag pushed or manual workflow_dispatch).'
-    then: 'The matrix installs the package(s) from npm (or local tarball for pre-publish rehearsal), runs the smoke sequence on each (OS × Node) cell, and fails the release if any cell fails.'
+    given: 'The ci-matrix.yml workflow in .github/workflows/.'
+    when: 'The Release workflow completes successfully, or a maintainer triggers workflow_dispatch with a version.'
+    then: 'The matrix installs the published @paths.design/caws-cli@<version> from the npm registry and runs the smoke sequence (init -> specs create -> worktree create -> gates run -> doctor) on each (OS × Node) cell; any cell failure marks the matrix run red. A red run is the documented signal that a patch release is required before the next tag is cut.'
   - id: A2
     given: 'A Windows runner in the matrix.'
     when: 'The smoke sequence runs.'
