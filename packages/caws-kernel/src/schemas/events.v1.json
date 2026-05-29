@@ -54,6 +54,7 @@
         "spec_closed",
         "spec_archived",
         "spec_archive_pruned",
+        "spec_retired",
         "spec_deleted",
         "spec_drift_detected",
         "worktree_created",
