@@ -2,10 +2,11 @@ id: CAWS-CLI-HELP-METADATA-AUTHORITY-001
 title: 'Help-metadata authority slice 0: export kernel spec enums as const arrays, collapse the CLI VALID_MODES/VALID_RESOLUTIONS duplicates, amend kernel 1.1.4 changelog'
 risk_tier: 3
 mode: refactor
-lifecycle_state: active
-worktree: help-metadata-s0-enums
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge help-metadata-s0-enums at 8238166ba23fc4917703105716274306d02f32e3'
 created_at: '2026-05-29T08:41:28.358Z'
-updated_at: '2026-05-29T08:41:28.358Z'
+updated_at: '2026-05-29T08:45:43.037Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/spec/types.ts
