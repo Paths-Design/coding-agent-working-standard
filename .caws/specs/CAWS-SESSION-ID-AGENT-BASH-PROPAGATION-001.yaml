@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: session-id-propagation
 created_at: '2026-05-29T01:48:21.123Z'
-updated_at: '2026-05-29T02:08:00.000Z'
+updated_at: '2026-05-29T02:18:00.000Z'
 blast_radius:
   modules:
     - Shell session resolver (packages/caws-cli/src/shell/session/resolve-session.ts) and the claude-code hook pack caller-identity substrate (.claude/hooks/lib/parse-input.sh + templates/hook-packs/claude-code/lib/parse-input.sh). Implementation is a fast-follow; this spec records the root cause and the proposed fix.
@@ -20,6 +20,7 @@ scope:
     - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
     - packages/caws-cli/tests/shell/resolve-session-primitive.test.js
     - packages/caws-cli/tests/shell/caller-session-pointer.test.js
+    - packages/caws-cli/tests/shell/worktree-destroy-session.test.js
   out:
     - .caws/policy.yaml
     - CODEOWNERS
