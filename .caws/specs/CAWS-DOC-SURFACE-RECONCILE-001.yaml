@@ -2,10 +2,11 @@ id: CAWS-DOC-SURFACE-RECONCILE-001
 title: 'Reconcile doc surface to shipped v11 hooks: failure-lineage entries 28-31, hook-pack guide + lineage table, specs --help description'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: doc-surface-reconcile
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge doc-surface-reconcile at 029c00207879f1e9bf39d49d7ff62b84b71721eb'
 created_at: '2026-05-29T07:51:55.430Z'
-updated_at: '2026-05-29T07:51:55.430Z'
+updated_at: '2026-05-29T07:56:33.490Z'
 blast_radius:
   modules:
     - docs/failure-lineage.md
