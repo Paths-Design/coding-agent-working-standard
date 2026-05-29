@@ -11,11 +11,11 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/render/init-gitignore.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/shell/init-command.test.js
     - .caws/specs/CAWS-INIT-GITIGNORE-RENDER-PROSE-FIX-001.yaml
   out:
     - packages/caws-cli/src/init/gitignore-manage.ts
-    - packages/caws-cli/src/shell/commands/init.ts
-    - packages/caws-cli/tests/shell/init-command.test.js
     - packages/caws-kernel/src
     - .caws/policy.yaml
     - CODEOWNERS
@@ -39,10 +39,19 @@ invariants:
     comment legitimately names .caws/policy.yaml inside .gitignore itself, which
     is correct and is NOT part of init's stdout (so it does not affect the test).
   - >-
-    Full init-command suite green on canonical. After the reword, the complete
-    tests/shell/init-command.test.js suite passes (26/26) on canonical where the
-    binary builds — including both the partially-initialized test and the five
-    A1-A5 gitignore tests.
+    The .gitignore step is SKIPPED outside a git working tree. A .gitignore in a
+    non-git directory is inert noise — `caws init` can run outside a git work
+    tree, and writing the block there serves no purpose. The step is gated on the
+    same isInsideGitWorkingTree(repoRoot) predicate init already uses for the
+    commit-hint (step 5): when not inside a git work tree, manageGitignore is not
+    called and a brief "skipped (not a git working tree)" panel is rendered
+    instead. Inside a git work tree, behavior is unchanged.
+  - >-
+    Full init-command suite green on canonical. After the reword + non-git gate,
+    the complete tests/shell/init-command.test.js suite passes on canonical where
+    the binary builds — including the partially-initialized test, the five A1-A5
+    gitignore tests, and a new case asserting the step is skipped (no .gitignore
+    written) when init runs in a non-git directory.
 acceptance:
   - id: A1
     given: packages/caws-cli/src/shell/render/init-gitignore.ts after the fix.
@@ -55,9 +64,15 @@ acceptance:
     given: The full tests/shell/init-command.test.js suite on canonical.
     when: it runs against the rebuilt binary.
     then: >-
-      All tests pass (26/26), including "partially-initialized state is filled in
-      additively" (its /policy\.yaml/ not-match guard is satisfied) and the five
+      All tests pass, including "partially-initialized state is filled in
+      additively" (its /policy\.yaml/ not-match guard is satisfied) and the
       A1-A5 .gitignore tests.
+  - id: A3
+    given: caws init run in a directory that is NOT a git working tree.
+    when: the .gitignore step would run.
+    then: >-
+      manageGitignore is not invoked; no .gitignore is written; the step renders
+      a "skipped — not a git working tree" panel; init still exits 0.
 non_functional:
   reliability:
     - >-
