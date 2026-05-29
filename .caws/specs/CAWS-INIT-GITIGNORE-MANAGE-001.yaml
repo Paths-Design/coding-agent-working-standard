@@ -2,10 +2,11 @@ id: CAWS-INIT-GITIGNORE-MANAGE-001
 title: 'caws init writes a marked, idempotent .gitignore block for ephemeral .caws/ runtime state (worktrees/agents/leases/events/caches), preserving authority state tracked'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: init-gitignore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-gitignore at 727e16bbb849847dec5bd2ac9d5c7716ca5681fd'
 created_at: '2026-05-29T17:25:01.732Z'
-updated_at: '2026-05-29T17:25:01.732Z'
+updated_at: '2026-05-29T17:31:40.795Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/gitignore-manage.ts
