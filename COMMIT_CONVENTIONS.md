@@ -64,23 +64,29 @@ fix(api): resolve endpoint timeout issue
 docs(cli): update installation instructions
 ```
 
-## Automated Publishing
+## Releases are tag-driven, not commit-driven
 
-Commits following these conventions will automatically:
+Commit types do **not** trigger releases or bump versions. Pushing to `main` never
+publishes. Releases are tag-driven (`CAWS-RELEASE-TAG-DRIVEN-001`): the maintainer
+manually bumps `packages/caws-cli/package.json`, authors the matching
+`packages/caws-cli/CHANGELOG.md` section, commits, and pushes a canonical
+`caws-cli-vX.Y.Z` tag. CI publishes that tagged content verbatim.
 
-1. **Trigger releases** when pushed to `main`
-2. **Generate changelogs** based on commit messages
-3. **Bump versions** according to semantic versioning:
-   - `fix:` → patch release (1.0.0 → 1.0.1)
-   - `feat:` → minor release (1.0.0 → 1.1.0)
-   - `feat!:` → major release (1.0.0 → 2.0.0)
+Commit types still matter — for changelog authoring, PR review, and the release
+guard's commit-scope check (e.g. `fix(cli):` / `feat(cli):` signal a publishable
+change) — but they are advisory inputs, not the publish trigger.
 
 ## CI/CD Integration
 
-The automated release process includes:
-- ✅ Linting and testing
-- ✅ Package building
-- ✅ NPM publishing with OIDC authentication
-- ✅ Changelog generation
-- ✅ Git tag creation
+The tag-driven release workflow (`.github/workflows/release.yml`):
+- Validates the tag matches `packages/caws-cli/package.json` version
+- Validates a `CHANGELOG.md` section exists for the version
+- Builds and runs the prepublish fresh-install smoke
+- Publishes to npm via `NPM_TOKEN` with `npm publish --provenance` (OIDC trusted
+  publishing is a planned follow-up, not the current mechanism)
+- Verifies the registry and creates a GitHub Release from the CHANGELOG section
+
+The maintainer authors the CHANGELOG and creates the tag manually. CI does not
+generate changelogs, bump versions, or modify any branch. See
+[`docs/release-procedure.md`](docs/release-procedure.md).
 - ✅ Release notes generation

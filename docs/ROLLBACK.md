@@ -4,18 +4,25 @@ authority: reference
 status: active
 title: CAWS Rollback & Incident Response
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-05-28
 ---
 
 # CAWS Rollback & Incident Response
 
 **Author**: @darianrosebrook  
-**Last Updated**: October 10, 2025  
+**Last Updated**: 2026-05-28  
 **Status**: Production Ready
 
 ## Overview
 
-This document provides procedures for rolling back bad releases and responding to production incidents for CAWS packages.
+This document provides procedures for rolling back bad releases and responding to production incidents for CAWS packages. For the canonical release procedure (how to publish a new version), see `docs/release-procedure.md`.
+
+**Key release facts:**
+- Releases are **tag-driven**. The Release workflow triggers ONLY on `push: tags: [caws-cli-v*, caws-kernel-v*, v*]`. Pushing to `main` NEVER triggers a publish.
+- Only `caws-cli-v*` tags are **accepted**. Bare `v*` and `caws-kernel-v*` tags are observed, refused, and deleted from origin.
+- The publish script is `scripts/release-tag-publish.mjs`. CI does NOT invoke `semantic-release`, does NOT bump versions, and does NOT generate changelogs.
+- Canonical tag format: `caws-cli-vX.Y.Z` (e.g. `caws-cli-v11.1.6`). GitHub Releases use this full tag name.
+- Asymmetric failure invariant: pre-publish failures DELETE the tag; post-publish ancillary failures PRESERVE it.
 
 ---
 
@@ -25,7 +32,7 @@ This document provides procedures for rolling back bad releases and responding t
 | -------------------------- | ------------------ | ------------------ |
 | **Broken npm package**     | Deprecate + hotfix | 15-30 minutes      |
 | **Security vulnerability** | Emergency patch    | 1-4 hours          |
-| **Failed CI/CD**           | Revert commit      | 5-10 minutes       |
+| **Failed CI/CD**           | Revert commit + re-tag | 5-10 minutes   |
 | **Breaking API change**    | Major version bump | N/A - by design    |
 
 ---
@@ -49,18 +56,24 @@ This document provides procedures for rolling back bad releases and responding t
 npm view @paths.design/caws-cli versions
 
 # 2. Deprecate the broken version
-npm deprecate @paths.design/caws-cli@3.4.1 "Known issue: validation fails on Windows. Use 3.4.0 or wait for 3.4.2"
+npm deprecate @paths.design/caws-cli@11.1.5 "Known issue: validation fails on Windows. Use 11.1.4 or wait for 11.1.6"
 
 # 3. Verify deprecation
 npm view @paths.design/caws-cli
 
-# 4. Notify users via GitHub Release notes
-gh release edit v3.4.1 --notes "⚠️ This release has been deprecated. Use 3.4.0 or wait for 3.4.2"
+# 4. Notify users via GitHub Release notes (use the full tag name)
+gh release edit caws-cli-v11.1.5 --notes "This release has been deprecated. Use 11.1.4 or wait for 11.1.6"
 
-# 5. Prepare hotfix
+# 5. Prepare and publish a hotfix
 git checkout main
 git revert <bad-commit>
-# semantic-release will auto-publish 3.4.2
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git commit -m "chore(release): caws-cli 11.1.6"
+# Push the commit (does NOT publish — a tag push is required)
+git push origin main
+# Tag and push to trigger CI publish
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+git push origin caws-cli-v11.1.6
 ```
 
 **User Impact**: Low - existing installations work, new users warned
@@ -80,41 +93,51 @@ git revert <bad-commit>
 **Procedure**:
 
 ```bash
-# 1. Create hotfix branch (optional, can work on main)
+# 1. Pull latest main
 git checkout main
 git pull origin main
 
 # 2. Fix the issue
 # ... make code changes ...
 
-# 3. Write fix commit with semantic-release format
+# 3. Commit the fix
 git add .
 git commit -m "fix: resolve critical validation bug
 
-This fixes the Windows path handling issue introduced in 3.4.1
+This fixes the Windows path handling issue introduced in 11.1.5
 
 Fixes #123"
 
-# 4. Push to main
+# 4. Bump version and update CHANGELOG
+# Edit packages/caws-cli/package.json: "version": "11.1.6"
+# Add section to packages/caws-cli/CHANGELOG.md for 11.1.6
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git commit -m "chore(release): caws-cli 11.1.6"
+
+# 5. Push the commit (does NOT trigger publish)
 git push origin main
 
-# 5. CI automatically:
-#    - Runs tests
-#    - Creates 3.4.2 release
-#    - Publishes to npm
-#    - Creates GitHub release
+# 6. Tag and push to trigger CI publish
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+git push origin caws-cli-v11.1.6
 
-# 6. Verify release
+# 7. Watch the workflow
+gh run watch
+
+# 8. Verify the release
 npm view @paths.design/caws-cli version
-# Should show 3.4.2
+# Should show 11.1.6
 
-# 7. Optional: Deprecate bad version
-npm deprecate @paths.design/caws-cli@3.4.1 "Fixed in 3.4.2"
+gh release view caws-cli-v11.1.6
+# Should show the GitHub Release
+
+# 9. Optional: Deprecate bad version
+npm deprecate @paths.design/caws-cli@11.1.5 "Fixed in 11.1.6"
 ```
 
 **User Impact**: Low - users update to fixed version
 
-**Timeline**: 15-30 minutes (including CI/CD)
+**Timeline**: 15-30 minutes (including CI)
 
 ---
 
@@ -135,21 +158,24 @@ npm deprecate @paths.design/caws-cli@3.4.1 "Fixed in 3.4.2"
 npm view @paths.design/caws-cli time
 
 # 2. Unpublish the version
-npm unpublish @paths.design/caws-cli@3.4.1
+npm unpublish @paths.design/caws-cli@11.1.5
 
 # 3. Verify removal
 npm view @paths.design/caws-cli versions
-# 3.4.1 should be missing
+# 11.1.5 should be missing
 
-# 4. Publish fixed version
+# 4. Prepare and publish a fixed version
 git revert <bad-commit>
-git commit -m "fix: security patch"
-git push
-# CI publishes 3.4.2
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git commit -m "chore(release): caws-cli 11.1.6"
+git push origin main
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+git push origin caws-cli-v11.1.6
+# CI publishes 11.1.6 when the tag push completes
 
 # 5. Notify users who may have installed
-gh issue create --title "SECURITY: Upgrade from 3.4.1 immediately" \
-  --body "Version 3.4.1 has been unpublished due to security issue. Upgrade to 3.4.2."
+gh issue create --title "SECURITY: Upgrade from 11.1.5 immediately" \
+  --body "Version 11.1.5 has been unpublished due to security issue. Upgrade to 11.1.6."
 ```
 
 **User Impact**: HIGH - breaks existing installations
@@ -160,25 +186,27 @@ gh issue create --title "SECURITY: Upgrade from 3.4.1 immediately" \
 
 ### Strategy 4: Major Version Rollback
 
-**When to use**: Breaking changes need to be reverted
+**When to use**: Breaking changes need to be reverted across a major version line
 
 **Procedure**:
 
 ```bash
-# If v4.0.0 introduced breaking changes that need rollback
+# If a major version introduced breaking changes that need rollback:
 
 # 1. Don't unpublish major versions
-# 2. Document why v4.x is problematic
-# 3. Continue supporting v3.x
+# 2. Document why the major version is problematic
+# 3. Continue supporting the prior stable line
 
-# 4. Publish clarification
-npm dist-tag add @paths.design/caws-cli@3.9.0 latest
+# 4. Move the latest dist-tag back to the last known-good version
+npm dist-tag add @paths.design/caws-cli@11.1.4 latest
 
-# This makes 3.9.0 the default install again
-# Users on v4.x can stay, but new installs get v3.x
+# This makes 11.1.4 the default install again.
+# Users on the broken version can stay pinned, but new installs get 11.1.4.
 
-# 5. Announce via GitHub
-gh release create v3.9.1 --notes "LTS release. v4.x is not recommended yet."
+# 5. Announce via GitHub (use the full canonical tag name)
+gh release create caws-cli-v11.1.4-lts \
+  --title "caws-cli v11.1.4 (LTS)" \
+  --notes "Pinned as LTS. See release notes for why later versions are not recommended."
 ```
 
 ---
@@ -216,10 +244,10 @@ gh release create v3.9.1 --notes "LTS release. v4.x is not recommended yet."
 
 # 2. If security issue: Disable if possible
 # Option A: Deprecate immediately
-npm deprecate @paths.design/caws-cli@3.4.1 "CRITICAL SECURITY ISSUE - DO NOT USE"
+npm deprecate @paths.design/caws-cli@11.1.5 "CRITICAL SECURITY ISSUE - DO NOT USE"
 
 # Option B: Unpublish (if <72h)
-npm unpublish @paths.design/caws-cli@3.4.1
+npm unpublish @paths.design/caws-cli@11.1.5
 
 # 3. Notify team
 # Post in #incidents channel
@@ -247,20 +275,29 @@ npm run test
 npm run lint
 npm audit --audit-level=high
 
-# 6. Merge and release
+# 6. Merge fix and bump version
 git checkout main
 git merge hotfix/security-patch
+# Edit packages/caws-cli/package.json: bump to 11.1.6
+# Add CHANGELOG.md section for 11.1.6
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git commit -m "chore(release): caws-cli 11.1.6"
 git push origin main
 
-# CI will auto-publish
+# 7. Tag and push to trigger CI publish (branch push alone does NOT publish)
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6 - critical security patch"
+git push origin caws-cli-v11.1.6
+
+# Watch CI
+gh run watch
 
 # === FOLLOW-UP (1-24 hours) ===
 
-# 7. Issue CVE if needed
+# 8. Issue CVE if needed
 # Contact GitHub Security Advisory
 # https://github.com/Paths-Design/coding-agent-working-standard/security/advisories/new
 
-# 8. Post-mortem
+# 9. Post-mortem
 # Write incident report
 # Update security procedures
 # Notify affected users
@@ -290,7 +327,7 @@ gh issue list --label "bug" --label "priority:high"
 
 # 3. Identify root cause
 git log --oneline -10
-git diff v3.4.0...v3.4.1
+git diff caws-cli-v11.1.4...caws-cli-v11.1.5
 
 # === FIX (30 minutes - 4 hours) ===
 
@@ -309,10 +346,19 @@ gh pr create --title "fix: resolve validation failure" \
 # Get approval from maintainer
 # Merge to main
 
-# === RELEASE (auto via CI) ===
+# === RELEASE (requires explicit tag push) ===
 
-# 7. CI publishes hotfix
-# Monitor release pipeline
+# 7. Bump version, update CHANGELOG, commit, tag, push
+# Edit packages/caws-cli/package.json: bump version
+# Add CHANGELOG.md section
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git commit -m "chore(release): caws-cli 11.1.6"
+git push origin main
+git tag caws-cli-v11.1.6 -m "Release caws-cli 11.1.6"
+git push origin caws-cli-v11.1.6
+
+# Monitor CI
+gh run watch
 
 # 8. Verify fix
 npm install -g @paths.design/caws-cli@latest
@@ -321,17 +367,17 @@ cd test-project && caws doctor
 # === COMMUNICATE ===
 
 # 9. Update GitHub issue
-gh issue comment 123 --body "Fixed in v3.4.2. Please upgrade: npm install -g @paths.design/caws-cli@latest"
+gh issue comment 123 --body "Fixed in 11.1.6. Please upgrade: npm install -g @paths.design/caws-cli@latest"
 
-# 10. Post release notes
-gh release edit v3.4.2 --notes "Hotfix for validation failure introduced in 3.4.1"
+# 10. Update release notes (use full tag name)
+gh release edit caws-cli-v11.1.6 --notes "Hotfix for validation failure introduced in 11.1.5"
 ```
 
 ---
 
 ### P2: Medium Severity
 
-**Response**: Standard development process + prioritization
+**Response**: Standard development process + prioritization  
 **Timeline**: Fix in next sprint (1-2 weeks)
 
 ---
@@ -372,7 +418,7 @@ gh issue list --label "bug"
 
 set -e
 
-echo "🔍 Verifying rollback..."
+echo "Verifying rollback..."
 
 # 1. Check npm package
 LATEST=$(npm view @paths.design/caws-cli version)
@@ -390,11 +436,11 @@ docker run --rm node:22-alpine sh -c "
 echo "Running smoke tests..."
 npm run test:e2e:smoke
 
-# 4. Check GitHub release
+# 4. Check GitHub release (GitHub Releases use the full caws-cli-vX.Y.Z tag name)
 echo "Verifying GitHub release..."
-gh release view v$LATEST
+gh release view "caws-cli-v$LATEST"
 
-echo "✅ Rollback verification complete"
+echo "Rollback verification complete"
 ```
 
 ---
@@ -404,15 +450,15 @@ echo "✅ Rollback verification complete"
 ### GitHub Issue: Security Patch
 
 ```markdown
-## Security Advisory: Upgrade to v3.4.2
+## Security Advisory: Upgrade to v11.1.6
 
 **Severity**: High  
-**Affected Versions**: 3.4.1  
-**Fixed Version**: 3.4.2
+**Affected Versions**: 11.1.5  
+**Fixed Version**: 11.1.6
 
 ### Issue
 
-Version 3.4.1 contains a vulnerability that could allow [description].
+Version 11.1.5 contains a vulnerability that could allow [description].
 
 ### Action Required
 
@@ -423,9 +469,9 @@ npm install -g @paths.design/caws-cli@latest
 
 ### Timeline
 
-- Discovered: 2025-10-10 14:00 UTC
-- Fixed: 2025-10-10 15:30 UTC
-- Published: 2025-10-10 16:00 UTC
+- Discovered: 2026-05-28 14:00 UTC
+- Fixed: 2026-05-28 15:30 UTC
+- Published: 2026-05-28 16:00 UTC
 
 ### Credits
 
@@ -437,9 +483,9 @@ For more information, contact security@paths.design
 ### GitHub Issue: Bug Hotfix
 
 ```markdown
-## Hotfix Released: v3.4.2
+## Hotfix Released: v11.1.6
 
-Fixes critical validation bug introduced in v3.4.1.
+Fixes critical validation bug introduced in v11.1.5.
 
 ### Issue
 
@@ -512,7 +558,7 @@ Closes #123
 ```markdown
 # Incident Post-Mortem: [Title]
 
-**Date**: 2025-10-10  
+**Date**: 2026-05-28  
 **Severity**: P1  
 **Duration**: 2 hours  
 **Impact**: 500 users affected
@@ -576,28 +622,29 @@ Closes #123
 - [ ] Lint checks pass
 - [ ] Bundle size acceptable
 - [ ] Documentation updated
-- [ ] CHANGELOG updated
+- [ ] CHANGELOG updated (packages/caws-cli/CHANGELOG.md)
+- [ ] packages/caws-cli/package.json version bumped to match tag
 - [ ] Breaking changes documented
 ```
 
 ### Canary Releases (Future)
 
 ```bash
-# Publish with "next" tag first
+# Publish with "next" tag first (requires a caws-cli-v*-next tag or manual publish)
 npm publish --tag next
 
 # Test with early adopters
 npm install -g @paths.design/caws-cli@next
 
 # Promote to latest after validation
-npm dist-tag add @paths.design/caws-cli@3.4.1 latest
+npm dist-tag add @paths.design/caws-cli@11.1.6 latest
 ```
 
 ---
 
 ## Resources
 
-- **Deployment Guide**: `docs/DEPLOYMENT.md`
+- **Release Procedure**: `docs/release-procedure.md` (canonical — read this first)
 - **Security Policy**: `SECURITY.md`
 - **Contributing**: `CONTRIBUTING.md`
 - **Support**: hello@paths.design
