@@ -255,6 +255,90 @@ describe('Claude Code pack manifest', () => {
       expect(jqInCode).toEqual([]);
     });
   });
+
+  // ─── QG-HOOKS-EXTRACT-001 (v11 bump) ─────────────────────────────────
+  describe('v11 advisory quality hooks (QG-HOOKS-EXTRACT-001)', () => {
+    const { CLAUDE_CODE_PACK_VERSION } = require(
+      '../../../dist/init/hook-packs/manifest-claude-code'
+    );
+
+    const ADVISORY_HOOKS = [
+      'god-object-check.sh',
+      'shortcut-language-check.sh',
+      'duplicate-export-check.sh',
+      'loc-delta-check.sh',
+    ];
+
+    it('CLAUDE_CODE_PACK_VERSION is at least 11', () => {
+      expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(11);
+    });
+
+    it('manifest lists all four advisory hooks as managed + executable', () => {
+      for (const name of ADVISORY_HOOKS) {
+        const destPath = `.claude/hooks/${name}`;
+        const entry = CLAUDE_CODE_PACK.installedFiles.find((f) => f.destPath === destPath);
+        expect(entry).toBeDefined();
+        expect(entry.sourcePath).toBe(name);
+        expect(entry.managed).toBe(true);
+        expect(entry.executable).toBe(true);
+      }
+    });
+
+    it('lineageRefs records the four advisory-quality entries (28-31)', () => {
+      const refs = new Set(CLAUDE_CODE_PACK.lineageRefs);
+      [28, 29, 30, 31].forEach((n) => expect(refs.has(n)).toBe(true));
+    });
+
+    it('every advisory-hook template exists, is executable, and carries a v11 header', () => {
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+      for (const name of ADVISORY_HOOKS) {
+        const src = path.join(packRoot, name);
+        expect(fs.existsSync(src)).toBe(true);
+        const content = fs.readFileSync(src, 'utf8');
+        expect(content).toContain('CAWS-MANAGED-HOOK');
+        expect(content).toContain('hook_pack: claude-code');
+        expect(content).toContain('hook_pack_version: 11');
+        const mode = fs.statSync(src).mode & 0o777;
+        expect(mode & 0o111).not.toBe(0);
+      }
+    });
+
+    it('post_tool_use dispatcher registers all four advisory handlers', () => {
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+      const postToolUse = fs.readFileSync(
+        path.join(packRoot, 'dispatch', 'post_tool_use.sh'), 'utf8'
+      );
+      expect(postToolUse).toContain('hook_pack_version: 11');
+      const handlersMatch = postToolUse.match(/HANDLERS=\(([^)]+)\)/s);
+      expect(handlersMatch).not.toBeNull();
+      const handlers = handlersMatch[1]
+        .split('\n')
+        .map((s) => s.trim().replace(/^"|"$/g, ''))
+        .filter((s) => s.length > 0 && !s.startsWith('#'));
+      for (const name of ADVISORY_HOOKS) {
+        expect(handlers).toContain(name);
+      }
+    });
+
+    it('advisory hooks do not couple to the quality-gates package at runtime', () => {
+      // Option-C boundary: the hooks reimplement detection intent in bash.
+      // They must not shell out to, require, or import any quality-gates
+      // module. (Reading source for design reference is fine; this asserts
+      // no RUNTIME coupling in the shipped script.)
+      const packRoot = path.resolve(
+        __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
+      );
+      for (const name of ADVISORY_HOOKS) {
+        const content = fs.readFileSync(path.join(packRoot, name), 'utf8');
+        expect(content).not.toMatch(/quality-gates/);
+        expect(content).not.toMatch(/\.mjs/);
+      }
+    });
+  });
 });
 
 // ============================================================

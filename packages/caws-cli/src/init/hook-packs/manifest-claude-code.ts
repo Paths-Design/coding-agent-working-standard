@@ -157,7 +157,37 @@ import type { HookPackV1 } from './types';
 // pointer still refuses. NEVER newest-wins. No new managed files (the
 // pointer is written by the already-shipped parse-input.sh); stateModel
 // gains the pointer write path.
-export const CLAUDE_CODE_PACK_VERSION = 10;
+//
+// Version 11: QG-HOOKS-EXTRACT-001. Adds four advisory PostToolUse hooks
+// that form the edit-time quality plane, the boundary analogue of the
+// load-bearing quality-gates signals (packages/quality-gates/*.mjs):
+//   - god-object-check.sh (lineage 28): SLOC-threshold advisory; warns
+//     when a written/edited file exceeds CAWS_GOD_OBJECT_LOC (default
+//     2000). Always exit 0. Edit-time analogue of the `god_object` gate.
+//   - shortcut-language-check.sh (lineage 29): flags TODO/FIXME/XXX/
+//     placeholder/"not implemented" language in NON-test committed-bound
+//     source. The only one of the four that can block — escalates via the
+//     existing guard_enforce_progressive_strikes (strike 1 warn, 2 ask,
+//     3 block). Edit-time analogue of the `todo_detection` gate.
+//   - duplicate-export-check.sh (lineage 30): on Write of a new JS/TS
+//     file, flags an exported symbol whose name already exists elsewhere
+//     in the enclosing package src tree (exact match, generic-name
+//     allowlist). Advisory; bounded ripgrep/grep, never node_modules.
+//   - loc-delta-check.sh (lineage 31): on Edit, warns when the
+//     new_string vs old_string newline delta exceeds
+//     CAWS_LOC_DELTA_WARN_THRESHOLD (default 300). Always advisory.
+//
+// These hooks reimplement detection INTENT in self-contained bash; they
+// do NOT import, require, or shell out to any packages/quality-gates
+// module, and they do NOT alter `caws gates run` (the governed policy-gate
+// runner). This is option-C doctrine: the edit-time advisory plane is an
+// installed hook-pack utility the repo tunes via env; the gates command
+// remains a separate governed surface. Dispatcher update: dispatch/
+// post_tool_use.sh registers the four new handlers in its HANDLERS array
+// (advisory-self-filtering; ordering preserved). No stateModel changes
+// (the hooks read only the file being checked + the existing guard-strikes
+// state path under .claude/, already declared).
+export const CLAUDE_CODE_PACK_VERSION = 11;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
@@ -188,7 +218,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       'tmp/.caller-session.json',
     ],
   },
-  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27],
+  lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
 
   // Installed files. Order is deterministic (used by tests and by the
   // install reporter). destPath is relative to repo root.
@@ -395,6 +425,47 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // Advisory-only. Genericized: no v10 CLI references.
       destPath: '.claude/hooks/naming-check.sh',
       sourcePath: 'naming-check.sh',
+      executable: true,
+      managed: true,
+    },
+
+    // -- QG-HOOKS-EXTRACT-001 (v11): edit-time advisory quality plane --
+    // Four PostToolUse hooks that reimplement the load-bearing
+    // quality-gates detection INTENT (god_object, todo_detection,
+    // functional-duplication name collision, LOC-delta) in self-contained
+    // bash. They do NOT import or invoke any packages/quality-gates module
+    // and do NOT change `caws gates run` (option-C doctrine). Three are
+    // always-advisory (exit 0); shortcut-language-check escalates via
+    // guard-strikes on the third session strike. See failure-lineage
+    // entries 28-31.
+    {
+      // PostToolUse Write/Edit: SLOC-threshold god-object advisory.
+      destPath: '.claude/hooks/god-object-check.sh',
+      sourcePath: 'god-object-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PostToolUse Write/Edit: shortcut/placeholder-language progressive
+      // check (the only blocking one — strike 3 via guard-strikes).
+      destPath: '.claude/hooks/shortcut-language-check.sh',
+      sourcePath: 'shortcut-language-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PostToolUse Write: duplicate-export advisory (exact symbol-name
+      // collision in the enclosing package src tree).
+      destPath: '.claude/hooks/duplicate-export-check.sh',
+      sourcePath: 'duplicate-export-check.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      // PostToolUse Edit: LOC-delta advisory (new_string vs old_string
+      // newline delta over CAWS_LOC_DELTA_WARN_THRESHOLD).
+      destPath: '.claude/hooks/loc-delta-check.sh',
+      sourcePath: 'loc-delta-check.sh',
       executable: true,
       managed: true,
     },
