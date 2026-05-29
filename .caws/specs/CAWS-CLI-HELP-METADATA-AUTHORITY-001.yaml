@@ -1,5 +1,5 @@
 id: CAWS-CLI-HELP-METADATA-AUTHORITY-001
-title: 'Durable --help metadata authority: kernel enum exports + typed COMMAND_SURFACE_METADATA consumed by register.ts + drift lock test (slice 0: kernel enums)'
+title: 'Durable --help metadata authority slice 0: export kernel spec enums (mode/resolution/risk_tier/lifecycle/contract-type) as const arrays, collapse the CLI VALID_MODES/VALID_RESOLUTIONS duplicates, amend kernel 1.1.4 changelog'
 risk_tier: 3
 mode: refactor
 lifecycle_state: active
@@ -7,19 +7,118 @@ created_at: '2026-05-29T08:41:28.358Z'
 updated_at: '2026-05-29T08:41:28.358Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/spec/types.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-kernel/CHANGELOG.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-kernel/src/spec/types.ts
+    - packages/caws-kernel/CHANGELOG.md
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - .caws/specs/CAWS-CLI-HELP-METADATA-AUTHORITY-001.yaml
+  out:
+    - packages/caws-kernel/src/spec/validate-shape.ts
+    - packages/caws-kernel/src/schemas
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Single runtime source for the spec enums. packages/caws-kernel/src/spec/types.ts
+    exports `const` value arrays — SPEC_MODES, SPEC_RESOLUTIONS, RISK_TIERS,
+    SPEC_LIFECYCLE_STATES, CONTRACT_TYPES — and the existing exported TYPES
+    (Mode, Resolution, RiskTier, LifecycleState, ContractType) are derived from
+    those arrays (`type Mode = (typeof SPEC_MODES)[number]`). The type surface
+    is byte-equivalent to today (same union members, same names), so no kernel
+    consumer breaks. These arrays are re-exported through the kernel public
+    surface (spec/index.ts already does `export *`).
+  - >-
+    The arrays MUST match the JSON schema enums they mirror
+    (packages/caws-kernel/src/schemas/spec.v1.json: mode.enum, resolution.enum,
+    risk_tier.enum, lifecycle_state.enum, and the contracts[].type enum). This
+    slice does NOT edit the schema (scope.out) — the schema remains the
+    validation authority (validate-shape.ts validates via Ajv against it,
+    unchanged). The const arrays are the RUNTIME/HELP-TEXT mirror; a later
+    slice's lock test asserts array == schema enum so they cannot diverge.
+  - >-
+    Collapse the CLI duplicate. packages/caws-cli/src/shell/commands/specs.ts
+    currently hard-codes `VALID_MODES` and `VALID_RESOLUTIONS` (lines ~46-50)
+    as its own const arrays for --mode/--resolution validation. These are
+    replaced by imports of SPEC_MODES / SPEC_RESOLUTIONS from
+    @paths.design/caws-kernel. The CLI's validation behavior is unchanged (same
+    values, same error messages built from the same arrays); the duplication —
+    one of the five enum-copy sites — is eliminated.
+  - >-
+    Kernel 1.1.4 changelog amended, version unchanged. The kernel version
+    stays 1.1.4 (unpublished; CAWS-RELEASE-PREP-KERNEL-COUPLING-001 prepared it
+    for spec_retired). This slice adds the enum-export addition to the existing
+    1.1.4 CHANGELOG section — both ship under one kernel publish. The CLI
+    kernel dep stays ^1.1.4 (unchanged; register.ts and package.json are
+    scope.out).
+  - >-
+    Build + tests green; no behavior change. Both packages build clean; kernel
+    tests and the caws-cli specs suite pass unchanged. This is a refactor to a
+    single enum source plus a changelog edit — no new command, no schema
+    change, no validation-behavior change.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: packages/caws-kernel/src/spec/types.ts after the slice.
+    when: it is read and the kernel is built.
+    then: >-
+      SPEC_MODES, SPEC_RESOLUTIONS, RISK_TIERS, SPEC_LIFECYCLE_STATES, and
+      CONTRACT_TYPES are exported `const` arrays; Mode/Resolution/RiskTier/
+      LifecycleState/ContractType are derived from them and remain the same
+      unions. The kernel package builds clean and the arrays are importable
+      from @paths.design/caws-kernel.
+  - id: A2
+    given: The exported arrays vs packages/caws-kernel/src/schemas/spec.v1.json.
+    when: each array is compared to its schema enum.
+    then: >-
+      SPEC_MODES == mode.enum, SPEC_RESOLUTIONS == resolution.enum, RISK_TIERS
+      == risk_tier.enum, SPEC_LIFECYCLE_STATES == lifecycle_state.enum,
+      CONTRACT_TYPES == the contracts[].type enum — value-for-value, same order.
+      (The schema is unchanged; this asserts the new arrays mirror it.)
+  - id: A3
+    given: packages/caws-cli/src/shell/commands/specs.ts after the slice.
+    when: it is read.
+    then: >-
+      The local VALID_MODES and VALID_RESOLUTIONS const arrays are removed;
+      --mode and --resolution validation imports SPEC_MODES / SPEC_RESOLUTIONS
+      from @paths.design/caws-kernel. The validation error messages still
+      enumerate the same values (now from the kernel arrays).
+  - id: A4
+    given: The caws-cli specs lifecycle suite.
+    when: it runs against the rebuilt dist.
+    then: >-
+      It passes unchanged — `caws specs create` still rejects an invalid --mode
+      and `caws specs close` still rejects an invalid --resolution with the
+      same diagnostics, now sourced from the kernel arrays.
+  - id: A5
+    given: packages/caws-kernel/CHANGELOG.md after the slice.
+    when: the 1.1.4 section is read.
+    then: >-
+      The 1.1.4 section documents the enum-array exports alongside the
+      spec_retired schema (both ship under the single unpublished 1.1.4). The
+      kernel package.json version is unchanged at 1.1.4.
+  - id: A6
+    given: The repo after the slice.
+    when: caws doctor + both package builds + kernel tests run.
+    then: >-
+      doctor reports no new load errors; both packages build clean; kernel
+      tests pass. No behavioral or test-count regression.
+non_functional:
+  reliability:
+    - >-
+      Eliminates one of the five spec-enum duplication sites (the CLI's
+      VALID_MODES/VALID_RESOLUTIONS) and creates the single runtime enum source
+      the help-metadata authority (later slices) will derive --mode/--resolution/
+      --risk-tier option values from. The schema stays the validation authority;
+      the const arrays are the importable mirror, lock-tested against it in a
+      later slice. This is the machine-derivable foundation for killing
+      --help/behavior drift.
 contracts: []
