@@ -93,7 +93,6 @@ function loadShellWithBrokenKernel() {
       'dist',
       'index.js'
     );
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const realKernel = require(kernelDistPath);
     const brokenKernel = { ...realKernel };
     // Strip the symbol the guard checks for.
@@ -101,7 +100,6 @@ function loadShellWithBrokenKernel() {
 
     jest.doMock('@paths.design/caws-kernel', () => brokenKernel);
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     shell = require('../../dist/shell');
   });
   return shell;
@@ -120,10 +118,9 @@ function captureRun(fn, opts) {
 
 describe('CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 — kernel feature-detect', () => {
   let repoRoot;
-  let cawsDir;
 
   beforeEach(() => {
-    ({ repoRoot, cawsDir } = setupRepo('caws-status-fd-'));
+    ({ repoRoot } = setupRepo('caws-status-fd-'));
   });
 
   afterEach(() => {

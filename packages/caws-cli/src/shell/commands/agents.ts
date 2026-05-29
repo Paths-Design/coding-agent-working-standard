@@ -485,7 +485,7 @@ export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
 
 // ─── caws agents stop ─────────────────────────────────────────────────────
 
-export interface StopOpts extends BaseAgentsOpts {}
+export type StopOpts = BaseAgentsOpts;
 
 export function runAgentsStopCommand(opts: StopOpts = {}): number {
   const { cwd, nowFn, env, out, err, showData, json } = setupIO(opts);

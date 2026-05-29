@@ -93,7 +93,7 @@ function writeSpec(repoRoot, name, content) {
 function cleanup(rootDir) {
   try {
     fs.rmSync(rootDir, { recursive: true, force: true });
-  } catch {}
+  } catch { /* best-effort cleanup */ }
 }
 
 function captureRun(opts) {

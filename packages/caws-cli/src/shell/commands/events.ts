@@ -484,11 +484,10 @@ export function runEventsRotateCommand(
 // caws events verify-archive
 // ---------------------------------------------------------------------------
 
-export interface EventsVerifyArchiveCommandOptions extends BaseCommandOptions {
-  // No operator-facing options. Reads the most recent chain_rotated
-  // event from .caws/events.jsonl, recomputes the archive file's
-  // sha256 + line count, asserts both match the committed payload.
-}
+// No operator-facing options. Reads the most recent chain_rotated event
+// from .caws/events.jsonl, recomputes the archive file's sha256 + line
+// count, asserts both match the committed payload.
+export type EventsVerifyArchiveCommandOptions = BaseCommandOptions;
 
 /**
  * Pipeline:
