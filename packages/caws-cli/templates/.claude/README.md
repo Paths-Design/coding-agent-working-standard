@@ -64,16 +64,18 @@ Run after Claude executes a tool:
 
 Edit `settings.json` to enable or disable specific hooks. Remove entries from the `hooks` object to disable them.
 
-### Hook Levels
+### Hook Pack Install
 
-The scaffold supports four hook levels:
+The hook pack is installed by `caws init --agent-surface claude-code`. It covers:
 
 - **safety**: Block dangerous commands, scan for secrets
 - **quality**: Run quality gates on file edits
 - **scope**: Validate edits against spec scope
 - **audit**: Log all agent actions
 
-Run `caws init --hooks=safety,quality` to enable specific levels.
+To (re)install or repair the pack, re-run `caws init --agent-surface claude-code`
+(`--overwrite` replaces drifted managed files; `--adopt` leaves them in place).
+There is no `--hooks=<levels>` flag; the pack is installed as a unit.
 
 ## Audit Logs
 
@@ -185,6 +187,6 @@ claude --debug
 
 ## Further Reading
 
-- [Claude Code Hooks Documentation](https://code.claude.com/docs/en/hooks)
-- [CAWS Quality Gates](../../docs/quality-gates.md)
-- [CAWS Scope Management](../../docs/scope-management.md)
+- [Claude Code Hooks Documentation](https://docs.claude.com/en/docs/claude-code/hooks)
+- Run `caws gates run --help` for the quality-gate surface
+- Run `caws scope show --help` / `caws scope check --help` for scope management
