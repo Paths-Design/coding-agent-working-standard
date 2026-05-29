@@ -7,19 +7,100 @@ created_at: '2026-05-29T08:54:12.126Z'
 updated_at: '2026-05-29T08:54:12.126Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/shell/help-metadata-lock.test.js
+    - .caws/specs/CAWS-HELP-METADATA-INTERFACE-001.yaml
+  out:
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Foundation only; NO register.ts change, NO behavior change. This slice
+    adds the typed metadata interface module and a lock-test skeleton. It does
+    NOT touch register.ts, any command handler, or the registered-command-groups
+    authority (all scope.out). The CLI's runtime surface, help output, and tests
+    are unchanged. COMMAND_SURFACE_METADATA is exported but EMPTY (frozen []) —
+    population happens in slices 2-3.
+  - >-
+    Typed metadata interface. command-metadata.ts exports the interfaces that
+    every later slice's per-group metadata object implements: CommandArgMeta
+    (name/required/description), CommandOptionMeta (flag/required?/description/
+    allowedValues?/defaultValue?/collect?), LeafCommandMeta (kind:'leaf'/name/
+    argument?/description/options[]), GroupCommandMeta (kind:'group'/name/
+    description/subcommands[]), the CommandMeta union, and the frozen
+    COMMAND_SURFACE_METADATA aggregate. Descriptions are typed `string`
+    (required) so a missing description fails compilation. The shapes are
+    stable so slices 2-3 only ADD entries, never change the interface.
+  - >-
+    Lock-test skeleton with correct staging. tests/shell/help-metadata-lock.test.js
+    establishes the lock harness. L4 (every metadata entry's description is
+    non-empty, length > 10) is enforced now and passes trivially over the empty
+    array. L1 (metadata group-name set == REGISTERED_COMMAND_GROUPS) is present
+    but EXPLICITLY pending/skipped with a comment that it activates in slice 2
+    when groups are first populated — because an empty array would otherwise
+    make L1 fail spuriously. L3 (allowedValues == kernel enum) and L5 (no inline
+    strings in register.ts) are documented as future (slice 2/3) but not yet
+    written. The skeleton is honest about what is and is not yet enforced.
+  - >-
+    The interface is exported from the shell public surface (index.ts) in the
+    same style as the existing exports (named type + value exports), so slices
+    2-3 and the lock test can import it. No other index.ts content changes.
+  - >-
+    Build + typecheck + existing suites green. The new module compiles under
+    tsconfig.vnext; the new test passes; the full caws-cli suite is unchanged
+    (the empty metadata array touches no runtime path). No regression.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: packages/caws-cli/src/shell/command-metadata.ts after the slice.
+    when: it is compiled and imported.
+    then: >-
+      It exports CommandArgMeta, CommandOptionMeta, LeafCommandMeta,
+      GroupCommandMeta, CommandMeta (the union), and a frozen
+      COMMAND_SURFACE_METADATA (currently []). `description` on the leaf/group
+      interfaces is a required string. tsc -p tsconfig.vnext.json is clean.
+  - id: A2
+    given: packages/caws-cli/src/shell/index.ts.
+    when: the shell public surface is imported.
+    then: >-
+      The new types and COMMAND_SURFACE_METADATA are re-exported (named), so the
+      lock test and later slices can import them from the shell barrel. No other
+      export changed.
+  - id: A3
+    given: tests/shell/help-metadata-lock.test.js.
+    when: it runs against the rebuilt dist.
+    then: >-
+      L4 (non-empty descriptions) passes over the current (empty) metadata. L1
+      (group-set == REGISTERED_COMMAND_GROUPS) is present as a pending/skipped
+      test annotated "enforced in slice 2 once groups populate" so it does not
+      fail on the empty array. The suite is green.
+  - id: A4
+    given: The full caws-cli build + test suite.
+    when: they run on canonical.
+    then: >-
+      Build + typecheck clean; the full suite passes with the new test added;
+      no existing test changes behavior (the empty metadata array is inert).
+      caws doctor reports no new load errors.
+non_functional:
+  reliability:
+    - >-
+      Establishes the typed single-source interface and the lock harness with
+      honest staging (L1 skipped-until-populated, L4 live, L3/L5 documented-as-
+      future) so slices 2-3 add per-group metadata and progressively tighten the
+      lock without an interface rewrite. Zero runtime risk: the aggregate is
+      empty and register.ts is untouched.
 contracts: []
