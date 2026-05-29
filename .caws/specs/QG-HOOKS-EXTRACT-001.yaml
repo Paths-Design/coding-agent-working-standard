@@ -7,19 +7,217 @@ created_at: '2026-05-29T05:43:11.574Z'
 updated_at: '2026-05-29T05:43:11.574Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/init/hook-packs
   data_migration: false
-operational_rollback_slo: 5m
+operational_rollback_slo: 30m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code/god-object-check.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/shortcut-language-check.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/duplicate-export-check.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/loc-delta-check.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch/post_tool_use.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/init/hook-packs/god-object-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/shortcut-language-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/duplicate-export-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/loc-delta-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - docs/guides/hook-packs.md
+    - .caws/specs/QG-HOOKS-EXTRACT-001.yaml
+  out:
+    - packages/quality-gates
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/gates
+    - packages/caws-cli/package.json
+    - packages/caws-cli/templates/CLAUDE.md
+    - CODEOWNERS
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    No file in packages/quality-gates is modified, removed, added, staged,
+    imported, or executed at runtime by this slice. Source reads for design
+    reference are permitted; mutation and runtime coupling are not. The four
+    new hooks reimplement the detection intent in self-contained bash; they
+    do NOT shell out to, require, or import any quality-gates .mjs module.
+  - >-
+    caws gates run, the gates adapter, and the quality-gates subprocess wiring
+    are unchanged by this slice. The hooks are an edit-time advisory plane
+    independent of the gates command (scope.out lists gates.ts + src/shell/gates).
+    This is option-C doctrine: edit-time advisory hooks are installed hook-pack
+    utilities; gates run remains the governed policy-gate runner.
+  - >-
+    Existing sterling-promoted hooks (naming-check.sh, scope-guard.sh,
+    worktree-guard.sh, etc.) are not duplicated and not modified except for the
+    single HANDLERS registration in dispatch/post_tool_use.sh that wires the
+    four new PostToolUse handlers into the existing dispatcher chain.
+  - >-
+    New hooks are single-file scoped: each receives the path being
+    written/edited and inspects at most that file plus a bounded local-tree
+    lookup (duplicate-export-check.sh only). They never run a whole-repo scan,
+    never mutate files, never invoke a CAWS lifecycle command, and never depend
+    on repo-global state beyond the checked working tree + their own
+    strike-state files under .claude/.
+  - >-
+    Hooks skip generated, vendored, dist, build, coverage, and node_modules
+    paths at the top of the script (exit 0 with no output). They only act on
+    real source files passed by the Write/Edit tool payload.
+  - >-
+    Advisory by default. god-object-check, duplicate-export-check, and
+    loc-delta-check ALWAYS exit 0 (warn-only, never block). shortcut-language-
+    check escalates via the existing guard_enforce_progressive_strikes
+    mechanism (strike 1 warn, strike 2 ask, strike 3 block) — the only one of
+    the four that can block, and only on the third strike in a session.
+  - >-
+    Manifest version bumps to 11 and the four hooks are declared as managed +
+    executable installedFiles entries with sourcePaths that exist in the pack
+    template dir (the install.test.js "every sourcePath exists" assertion must
+    pass). lineageRefs gains the new failure-lineage entries for the advisory
+    quality plane.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A repo with the Claude Code hook pack installed and a Write tool call on
+      a source file whose SLOC exceeds the god-object threshold.
+    when: PostToolUse fires god-object-check.sh.
+    then: >-
+      The hook emits an advisory warning naming the file and its SLOC against
+      the threshold; the hook exits 0 (advisory mode); no events are written to
+      .caws/events.jsonl. A file under the threshold produces no output.
+  - id: A2
+    given: >-
+      A Write/Edit tool call on a non-test source file whose content contains
+      TODO/FIXME/XXX, "not implemented", "implement later", "placeholder", or a
+      stub-return shape (return null with a TODO, throw new Error("not
+      implemented")).
+    when: PostToolUse fires shortcut-language-check.sh.
+    then: >-
+      The hook emits a progressive-strike warning naming the matched pattern;
+      on the third strike in a session it blocks via
+      guard_enforce_progressive_strikes. Clean prose and matching content in a
+      *.test.* / *.spec.* file produce no strike.
+  - id: A3
+    given: >-
+      A Write tool call that creates a new exported function/class/const whose
+      name collides with an existing export elsewhere in the local project
+      tree, where the name is not on the generic allowlist (main, init, setup,
+      run, handle, render, index, default).
+    when: PostToolUse fires duplicate-export-check.sh.
+    then: >-
+      The hook emits an advisory warning naming both files and the colliding
+      symbol; the hook exits 0 (advisory only); name matching is exact, not
+      heuristic. A unique export name produces no output.
+  - id: A4
+    given: An Edit tool call that adds more than the configured LOC delta to a single non-generated file.
+    when: PostToolUse fires loc-delta-check.sh.
+    then: >-
+      The hook emits an advisory warning naming the LOC delta and suggesting a
+      split; the hook never blocks; the threshold is configurable via
+      CAWS_LOC_DELTA_WARN_THRESHOLD. A bounded delta produces no output.
+  - id: A5
+    given: >-
+      A Write tool call on a file under node_modules/, dist/, build/,
+      coverage/, or matching common generated-file patterns.
+    when: Any of the four new hooks would otherwise fire.
+    then: Each hook exits 0 with no output (path skipped at the top of the hook).
+  - id: A6
+    given: The hook pack manifest at packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts.
+    when: The pack is loaded.
+    then: >-
+      The manifest declares all four new hooks with sourcePath, destPath,
+      managed: true, executable: true, paralleling the existing
+      naming-check.sh entry. CLAUDE_CODE_PACK_VERSION is bumped to 11 and
+      lineageRefs records the new advisory-quality entries.
+  - id: A7
+    given: A fresh install via caws init --agent-surface claude-code (exercised by install.test.js).
+    when: The hook pack materializes.
+    then: >-
+      All four new hook files are present, executable, and registered in
+      dispatch/post_tool_use.sh HANDLERS; the existing fresh-install smoke +
+      manifest tests pass (every sourcePath exists; all installedFiles managed).
+  - id: A8
+    given: The four new hooks.
+    when: Tests run via the existing jest harness in packages/caws-cli/tests/init/hook-packs/.
+    then: >-
+      Each hook has at least one positive test (the pattern triggers correctly,
+      exit code + advisory text asserted) and one negative test (a near-miss /
+      skipped path does not trigger). Tests invoke the hook scripts directly
+      with a synthesized Claude Code payload on stdin; they do not import or
+      execute any packages/quality-gates module.
+  - id: A9
+    given: Any acceptance scenario above.
+    when: It is evaluated.
+    then: >-
+      No file in packages/quality-gates is modified, staged, imported,
+      executed, or used as a runtime dependency by the new hooks. Reading
+      source for design reference is permitted and expected (this slice
+      intentionally lifts detection intent from the prior checker
+      implementations); the boundary is mutation and runtime coupling, not
+      inspection. gates.ts and src/shell/gates are untouched (option-C doctrine
+      recorded separately under GATES-RUN-POST-QG-DOCTRINE-001).
+non_functional:
+  reliability:
+    - >-
+      Each hook returns in well under 200ms on a single-file invocation (no
+      whole-repo scan). duplicate-export-check.sh bounds its lookup to the
+      enclosing package's src tree (or repo-root src) and never scans
+      node_modules.
+  security:
+    - >-
+      Hooks do not execute arbitrary content from the file being checked;
+      pattern matching only (grep/awk; ripgrep with grep fallback for the
+      duplicate-export lookup). Hooks write only to their own strike-state
+      paths under .claude/ and never outside the repo.
 contracts: []
+# --- New hooks (each ~50-150 LOC bash) -------------------------------------
+# god-object-check.sh
+#   trigger: PostToolUse Write/Edit
+#   mode: advisory (always exit 0)
+#   threshold: SLOC > 2000 default (mirrors quality-gates check-god-objects.mjs
+#     "critical" tier; warning=1750/critical=2000/severe=3000 in the source —
+#     the hook uses a single configurable warn threshold for advisory simplicity)
+#   env: CAWS_GOD_OBJECT_LOC (default 2000)
+#
+# shortcut-language-check.sh
+#   trigger: PostToolUse Write/Edit
+#   mode: progressive_warning (uses existing guard-strikes.sh)
+#   patterns (case-insensitive):
+#     - \bTODO\b | \bFIXME\b | \bXXX\b | \bHACK\b | \bTBD\b
+#     - "not implemented" | "implement later" | "coming soon" | "placeholder"
+#     - stub-return shapes in non-test files:
+#         return null;? +// *TODO
+#         throw new Error\("not implemented"\)
+#   exemptions: *.test.* / *.spec.* files are not strike-eligible
+#   env: CAWS_SHORTCUT_STRIKES guard name "shortcut_language"
+#
+# duplicate-export-check.sh
+#   trigger: PostToolUse Write (new-file creation is the common shadow-export
+#     incident; Edit-add-new-export is a documented v1 limitation)
+#   mode: advisory (always exit 0)
+#   logic:
+#     1. Extract new exported names from the written file
+#        (export function/class/const/default function <name>)
+#     2. Skip allowlist: main, init, setup, run, handle, render, index, default
+#     3. Bounded ripgrep (grep -r fallback) for the same export shape in the
+#        enclosing package src tree, excluding the file just written
+#     4. Exact name match in a different file -> advisory warning
+#
+# loc-delta-check.sh
+#   trigger: PostToolUse Edit
+#   mode: advisory (never blocks)
+#   threshold: 300 LOC added in one edit (env CAWS_LOC_DELTA_WARN_THRESHOLD)
+#   delta source (priority): Edit payload old_string vs new_string newline
+#     delta (exact, synchronous, works on untracked files); if the payload
+#     lacks old_string/new_string, exit 0 silently (advisory never false-
+#     positives from missing data)
+#
+# --- Doctrine boundary (option C) ------------------------------------------
+# These four hooks are the edit-time advisory quality plane. They are
+# INDEPENDENT of `caws gates run`: gates run is the governed policy-gate
+# runner (block/warn/skip from .caws/policy.yaml); these hooks are installed
+# hook-pack utilities the repo shapes locally (thresholds via env). The
+# resolution of `caws gates run`'s subprocess dependency is owned by the
+# sibling spec GATES-RUN-POST-QG-DOCTRINE-001, not this slice.
