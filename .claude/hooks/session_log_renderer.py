@@ -81,6 +81,22 @@ MEANINGFUL_COMMAND_KW = (
     "make",
 )
 
+
+def command_is_of_interest(entry: dict[str, Any]) -> bool:
+    """A command is worth surfacing in the handoff/log if it matches the
+    meaningful-keyword allowlist OR if it ERRORED. Errors are always
+    meaningful: a blocked/failed command is exactly what a continuing agent
+    needs to see, even when the command itself is not on the curated list
+    (e.g. a bare `git worktree list` that tripped a guard, or an `ls` into a
+    missing worktree dir). Without this, non-allowlisted failures vanish from
+    the handoff and first-contact debugging has to reconstruct them from raw
+    transcript JSONL (SESSION-LOG-ERROR-VISIBILITY-001).
+    """
+    command = entry.get("command") or ""
+    if entry.get("is_error"):
+        return True
+    return any(keyword in command for keyword in MEANINGFUL_COMMAND_KW)
+
 DECISION_PATTERNS = [
     re.compile(r"(?:^|\n)\s*(?:decision|decided|choosing|will use|going with)[:\s]+(.+?)(?:\n|$)", re.IGNORECASE),
     re.compile(r"(?:^|\n)\s*(?:approach|plan|strategy)[:\s]+(.+?)(?:\n|$)", re.IGNORECASE),
@@ -736,8 +752,11 @@ def write_session_txt(
     lines.extend(["", "## Commands", ""])
     for command in indexes["commands"]:
         text = command.get("command", "")
-        if any(keyword in text for keyword in MEANINGFUL_COMMAND_KW):
-            lines.append(f"- turn {command['turn']}: `{truncate(text, 120)}`")
+        if command_is_of_interest(command):
+            # Flag failures so a scanning reader spots them without parsing
+            # output (SESSION-LOG-ERROR-VISIBILITY-001).
+            marker = " ❌ FAILED" if command.get("is_error") else ""
+            lines.append(f"- turn {command['turn']}: `{truncate(text, 120)}`{marker}")
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -802,9 +821,11 @@ def build_handoff(
                     "turn": entry["turn"],
                     "command": entry.get("command"),
                     "output_preview": entry.get("output_preview"),
+                    "is_error": bool(entry.get("is_error")),
+                    "duration_s": entry.get("duration_s"),
                 }
                 for entry in indexes["commands"]
-                if any(keyword in (entry.get("command") or "") for keyword in MEANINGFUL_COMMAND_KW)
+                if command_is_of_interest(entry)
             ][-20:],
             "agent_reports": indexes["agents"][-20:],
             "session_events": session_events[-20:],

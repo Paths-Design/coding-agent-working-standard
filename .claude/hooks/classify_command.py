@@ -44,6 +44,23 @@ SAFE_DELETE_PREFIXES: list[str] = [
     "__pycache__/",
 ]
 
+# Absolute system scratch roots that are safe targets for recursive deletion
+# regardless of repo. Agents routinely create-and-tear-down fixtures under the
+# OS temp dir (e.g. `mktemp -d`, or `/tmp/<scratch>`), and latching that flow
+# as "catastrophic delete" is the over-trigger that DANGER-LATCH-UX-001 fixes.
+# A recursive delete whose resolved path is STRICTLY BELOW one of these roots
+# (not the root itself) is admitted; deletes of the temp root itself, or of
+# repo/home/filesystem paths, remain governed (see the hard-block checks in
+# classify_rm_target, which run first). $TMPDIR (macOS: /var/folders/.../T)
+# is added at runtime. Realpath-normalized so /tmp -> /private/tmp on macOS
+# both match.
+SYSTEM_TMP_PREFIXES: list[str] = [
+    "/tmp/",
+    "/private/tmp/",
+    "/private/var/folders/",
+    "/var/folders/",
+]
+
 # Pipeline-aware deny patterns: matched against the FULL raw command string
 # BEFORE segmentation.  These detect cross-pipeline dangers like curl|sh and
 # fork bombs whose syntax spans segment boundaries.
@@ -1232,6 +1249,24 @@ def classify_rm_target(
                 return "allow", ""
     except ValueError:
         pass  # Not inside repo root
+
+    # Allow: absolute system scratch roots (/tmp, $TMPDIR, macOS /var/folders).
+    # Strictly BELOW the root only — deleting the temp root itself stays "ask".
+    # The hard-block checks above (/, home, repo, ancestors) already ran, so
+    # this cannot admit anything catastrophic (DANGER-LATCH-UX-001).
+    tmp_roots = list(SYSTEM_TMP_PREFIXES)
+    tmpdir_env = os.environ.get("TMPDIR")
+    if tmpdir_env:
+        try:
+            tmpdir_real = str(Path(tmpdir_env).resolve(strict=False)).rstrip("/") + "/"
+            tmp_roots.append(tmpdir_real)
+        except (ValueError, OSError):
+            pass
+    for tmp_root in tmp_roots:
+        # Strictly below the root: resolved must start with "<root>/..." and
+        # not equal the root itself (rstrip the trailing slash to compare).
+        if resolved_str.startswith(tmp_root) and resolved_str.rstrip("/") != tmp_root.rstrip("/"):
+            return "allow", ""
 
     # Default: confirm
     return "ask", f"recursive delete: {raw}"
