@@ -214,7 +214,7 @@ describe('loadLeases strict on directory (A8)', () => {
     if (cawsDir) {
       try {
         fs.chmodSync(path.join(cawsDir, 'leases'), 0o755);
-      } catch {}
+      } catch { /* best-effort cleanup */ }
       fs.rmSync(cawsDir, { recursive: true, force: true });
     }
   });

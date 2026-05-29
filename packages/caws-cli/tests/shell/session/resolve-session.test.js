@@ -31,7 +31,7 @@ function mkTempCaws() {
 function cleanup(root) {
   try {
     fs.rmSync(root, { recursive: true, force: true });
-  } catch {}
+  } catch { /* best-effort cleanup */ }
 }
 
 function writeCapsule(cawsDir, id, worktreeRoot) {
@@ -205,7 +205,7 @@ describe('A4 / A5: mintCapsule cleanup of superseded matching capsules', () => {
       expect(cleanupWarning.data.capsulePath).toBe(stalePath);
     } finally {
       // Restore permissions for cleanup.
-      try { fs.chmodSync(stalePath, 0o644); } catch {}
+      try { fs.chmodSync(stalePath, 0o644); } catch { /* best-effort cleanup */ }
     }
   });
 
@@ -259,7 +259,7 @@ describe('A4 / A5: mintCapsule cleanup of superseded matching capsules', () => {
       const paths = cleanupWarnings.map((d) => d.data.capsulePath).sort();
       expect(paths).toEqual([stale1, stale2].sort());
     } finally {
-      try { fs.chmodSync(stale1, 0o644); fs.chmodSync(stale2, 0o644); } catch {}
+      try { fs.chmodSync(stale1, 0o644); fs.chmodSync(stale2, 0o644); } catch { /* best-effort cleanup */ }
     }
   });
 

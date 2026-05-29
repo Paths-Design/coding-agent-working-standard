@@ -26,10 +26,6 @@ const {
   REGISTERED_COMMAND_GROUPS,
 } = require('../../src/shell/registered-command-groups');
 
-function entryFor(command) {
-  return LEGACY_COMMAND_MAP.find((e) => e.command === command);
-}
-
 describe('CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: legacy command classifier', () => {
   // ── A5: replaced ──────────────────────────────────────────────────────
   test('replaced: "validate" classifies to the replaced entry with doctor+gates guidance', () => {

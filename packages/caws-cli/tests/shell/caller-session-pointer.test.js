@@ -44,7 +44,7 @@ function mkRepo() {
 function cleanup(root) {
   try {
     fs.rmSync(root, { recursive: true, force: true });
-  } catch {}
+  } catch { /* best-effort cleanup */ }
 }
 
 // Source the template, set the hook env, call the envelope/pointer writer,
