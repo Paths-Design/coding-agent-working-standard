@@ -2,10 +2,11 @@ id: CAWS-AUTOCOMMIT-INTEGRITY-001
 title: 'autoCommit must path-scope its commit and lifecycle handlers must surface refused_dirty (no silent uncommitted close)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: v11-autocommit-integrity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-autocommit-integrity at 8d41ca03fc673ecfb7eed5fcffce12882d2789dc'
 created_at: '2026-05-29T00:56:06.864Z'
-updated_at: '2026-05-29T00:56:06.864Z'
+updated_at: '2026-05-29T01:05:52.799Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/git-autocommit.ts
