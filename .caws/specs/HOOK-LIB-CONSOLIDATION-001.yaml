@@ -1,0 +1,25 @@
+id: HOOK-LIB-CONSOLIDATION-001
+title: 'Extract duplicated hook logic into shared lib/; consolidate same-concern-different-impl drift'
+risk_tier: 3
+mode: refactor
+lifecycle_state: active
+created_at: '2026-05-29T20:42:45.216Z'
+updated_at: '2026-05-29T20:42:45.216Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
