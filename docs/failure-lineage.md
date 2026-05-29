@@ -1268,3 +1268,111 @@ Both are idempotent and never block. They write to `<plan-path>.transcript.jsonl
 ### Single-line synthesis
 
 **Entry 27: durable artifacts produced by ephemeral conversations need an audit surface. A two-hook paired system (PostToolUse snapshot + Stop finalize) at ~80 lines total ships that surface as a pack default. The cost is one extra file next to every committed plan; the benefit is reproducible context for every committed decision.**
+
+---
+
+## Entry 28: God-Object Size Had No Edit-Time Signal (May 2026)
+
+**Severity:** Low (advisory observability gap; oversized modules accreted without an inline nudge)
+**Era:** v11.0 through v11.1
+**Surface that failed:** the boundary between "the `god_object` quality gate exists in `caws gates run`" and "the agent writes a 3,000-line file and gets no signal until a gate run it may never invoke"
+**Agent class involved:** any agent that accretes responsibility into one module across many edits without pausing to split it
+
+### What happened
+
+The canonical `god_object` gate (`packages/quality-gates/check-god-objects.mjs`) classifies a file by SLOC against warning/critical/severe thresholds (1750/2000/3000). It runs only when an operator invokes `caws gates run`. Nothing fired at edit time, so an agent writing or growing a large module received no feedback in the loop where the decision was being made. The signal existed; its timing was wrong for the agent's workflow.
+
+### What we built or changed because of it
+
+`QG-HOOKS-EXTRACT-001` ships `god-object-check.sh` as an advisory PostToolUse hook firing on Write/Edit. It counts SLOC (blank/comment lines stripped) of the single touched file and emits a `hookSpecificOutput.additionalContext` warning when the count meets a configurable threshold (`CAWS_GOD_OBJECT_LOC`, default 2000). It always exits 0 — advisory, never blocking — and reimplements the detection intent in self-contained bash. It does NOT import, shell out to, or runtime-couple with the quality-gates package, and it does NOT change `caws gates run` (option-C doctrine: the edit-time advisory plane is an installed hook-pack utility, separate from the governed gate runner).
+
+### What it doesn't catch
+
+- Multi-language SLOC nuance. The hook's counter strips blank lines and whole-line `//`/`#`/`*` comments; it is an advisory approximation, not the canonical gate's per-language engine.
+- Responsibility overload below the LOC threshold. A 500-line file doing ten unrelated things is a god object the SLOC heuristic won't flag.
+- Files grown via Bash (`cat >> file`) rather than the Write/Edit tools.
+
+### Single-line synthesis
+
+**Entry 28: a quality signal that only fires on an explicit gate run is invisible at the moment the agent is making the decision. The smallest fix is an advisory edit-time hook that reimplements the gate's intent — same signal, right timing, no runtime coupling.**
+
+---
+
+## Entry 29: Shortcut/Placeholder Language Shipped In Committed Code (May 2026)
+
+**Severity:** Medium (the "no fake implementations" rule had no edit-time enforcement; TODO/placeholder stubs reached commits)
+**Era:** v10.2 through v11.1
+**Surface that failed:** the boundary between "CLAUDE.md says no placeholder stubs / no TODO in committed code" and "the agent writes `throw new Error('not implemented')` or `// TODO implement` into a non-test source file"
+**Agent class involved:** any agent that stubs a function to make the types compile and intends to "come back to it," then doesn't
+
+### What happened
+
+The CAWS key rule "No fake implementations — no placeholder stubs, no TODO in committed code" lived in the doctrine docs. The `todo_detection` gate (`packages/quality-gates/todo-analyzer.mjs`) catches it at gate-run time, but — like the god-object gate — only when an operator runs `caws gates run`. At edit time, an agent could write a stub and the doctrine had no mechanism to push back in the loop.
+
+### What we built or changed because of it
+
+`QG-HOOKS-EXTRACT-001` ships `shortcut-language-check.sh` as a PostToolUse hook on Write/Edit. It scans the written content (payload-first) for the high-signal subset of the todo-analyzer's vocabulary — `TODO|FIXME|XXX|HACK|TBD` markers, `not implemented`/`implement later`/`coming soon`/`placeholder` phrases, and `throw new Error("not implemented")` stub shapes — in NON-test source (test files and markdown are exempt; placeholder language there is routine). It is the only one of the four advisory hooks that can block: it escalates through the existing `guard_enforce_progressive_strikes` mechanism (strike 1 warn → strike 2 ask → strike 3 block), matching how scope-guard treats repeated violations. No quality-gates runtime coupling; `caws gates run` unchanged.
+
+### What it doesn't catch
+
+- Semantically-empty implementations that contain no shortcut keywords (a function that returns a hardcoded value with no TODO comment).
+- Placeholder language outside the matched vocabulary subset (the canonical analyzer has ~35 patterns; the hook ships the high-signal core to stay single-file and fast).
+- Stubs introduced via Bash rather than Write/Edit.
+
+### Single-line synthesis
+
+**Entry 29: "no fake implementations" was doctrine with no edit-time hook. A progressive-strike PostToolUse check — warn, then ask, then block on the third offense in a session — is the smallest enforcement that meets the agent where the stub is being written.**
+
+---
+
+## Entry 30: Shadow Re-Exports Slipped Past The Filename-Only Naming Check (May 2026)
+
+**Severity:** Low (advisory; the symbol-collision case of the "no shadow files" rule had no signal)
+**Era:** v11.0 through v11.1
+**Surface that failed:** the boundary between "naming-check.sh catches shadow FILENAMES (`auth-v2.ts`)" and "the agent creates `auth-helpers.ts` that re-exports a symbol named identically to one in `auth.ts`"
+**Agent class involved:** any agent that, rather than editing an existing module, creates a new file exporting a same-named function/class/const — the symbol-level analogue of the shadow-file failure mode
+
+### What happened
+
+Entry 25's `naming-check.sh` closes the shadow-FILENAME gap (banned modifier suffixes, version suffixes, date stamps). It does not look inside the file. An agent could satisfy the filename check while still creating a parallel implementation: a new, sensibly-named file that exports `computeTotal` when `computeTotal` already exists elsewhere in the package. The canonical functional-duplication gate (`check-functional-duplication.mjs`) detects name/shape collisions, but only at gate-run time.
+
+### What we built or changed because of it
+
+`QG-HOOKS-EXTRACT-001` ships `duplicate-export-check.sh` as an advisory PostToolUse hook on Write (new-file creation — the common shadow-export incident). It extracts exported symbol names from the written JS/TS file, skips a generic-name allowlist (`main`, `init`, `setup`, `run`, `handle`, `render`, `index`, `default`), and does a bounded ripgrep (grep fallback) for the same export shape in the enclosing package's `src` tree (never node_modules). An exact name match in a different file produces an advisory warning naming both files and the symbol. Always exits 0; exact match, not heuristic similarity; no quality-gates runtime coupling.
+
+### What it doesn't catch
+
+- Edit-add-new-export. v1 fires on Write only; an Edit that adds a colliding export to an existing file is not caught (would require diffing the pre/post export set). The most common incident is the new-file create, which Write covers.
+- Near-name collisions (`computeTotal` vs `computeTotals`) — matching is exact by design, to avoid false positives.
+- Re-exports that are intentional (the warning is advisory; the operator judges intent).
+
+### Single-line synthesis
+
+**Entry 30: the filename-level "no shadow files" hook left the symbol-level case open. An advisory exact-name export-collision check on new files closes the practical 80% — the agent creating a parallel implementation under a clean filename — without a similarity engine.**
+
+---
+
+## Entry 31: Large Single Edits Had No Refactor-Budget Nudge (May 2026)
+
+**Severity:** Low (advisory; the "ask first for >300 LOC" rule had no edit-time signal)
+**Era:** v11.0 through v11.1
+**Surface that failed:** the boundary between "CLAUDE.md says changes >300 LOC require discussion first" and "the agent makes one Edit that adds 400 lines to a file with no prompt to reconsider"
+**Agent class involved:** any agent that lands a large feature as a single monolithic edit rather than splitting it into reviewable units
+
+### What happened
+
+The CAWS key rule "Ask first for risky changes — changes touching >10 files, >300 LOC ... require discussion first" had no mechanism at edit time. An agent could add hundreds of lines in one Edit; the rule lived in doctrine but nothing surfaced it in the loop. Large single edits are harder to review and often signal a change that should have been split or warranted a new module.
+
+### What we built or changed because of it
+
+`QG-HOOKS-EXTRACT-001` ships `loc-delta-check.sh` as an advisory PostToolUse hook on Edit. It computes the newline delta between the Edit payload's `new_string` and `old_string` (exact, synchronous, works on untracked files) and warns when the added-line delta exceeds a configurable threshold (`CAWS_LOC_DELTA_WARN_THRESHOLD`, default 300). When the payload lacks `old_string`/`new_string`, it exits 0 silently — an advisory hook must never false-positive from missing data. It never blocks; no quality-gates runtime coupling.
+
+### What it doesn't catch
+
+- Cumulative growth across many small edits. The hook sees one Edit's delta, not the running total for a file across a session.
+- Large additions via Write (new file) or Bash — the hook targets the Edit-grows-a-file case.
+- Net-zero churn that is nonetheless large (a 400-line rewrite that replaces 400 lines registers a small delta).
+
+### Single-line synthesis
+
+**Entry 31: the ">300 LOC, ask first" rule was advice with no trigger. A payload-diff Edit hook that warns past a configurable line-delta threshold is the smallest nudge that meets the agent at the moment the oversized edit lands — advisory only, so it informs without obstructing.**

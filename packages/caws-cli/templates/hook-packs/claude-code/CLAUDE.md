@@ -47,6 +47,12 @@ is wrong, stop and ask the user.
 | `session-log.sh` | 10 | per-turn narrative + structured transcripts |
 | `dispatch/*` | 8, 11, 17 | wires Claude Code's lifecycle to the registered handler list |
 | `lib/*` | 8, 16 | shared input parsing and handler runner |
+| `god-object-check.sh` | 28 | advisory: flags a written/edited file whose SLOC exceeds `CAWS_GOD_OBJECT_LOC` (default 2000). Edit-time analogue of the `god_object` gate. Always exit 0. |
+| `shortcut-language-check.sh` | 29 | progressive: flags TODO/FIXME/XXX/placeholder/"not implemented" stub language in NON-test source; escalates warn→ask→block via guard-strikes. Edit-time analogue of the `todo_detection` gate. |
+| `duplicate-export-check.sh` | 30 | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
+| `loc-delta-check.sh` | 31 | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
+
+The four `*-check.sh` hooks above are the **edit-time advisory quality plane** (QG-HOOKS-EXTRACT-001). They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (option-C doctrine). See `docs/guides/hook-packs.md` for operator usage.
 
 ## v11 state-model awareness
 
