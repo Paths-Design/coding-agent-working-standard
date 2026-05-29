@@ -2,9 +2,11 @@ id: SESSION-LOG-ERROR-VISIBILITY-001
 title: 'Surface errored/blocked commands in session-log handoff regardless of keyword filter; carry is_error+duration'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Added command_is_of_interest() to session_log_renderer.py: a command is surfaced in the handoff (commands_of_interest) and markdown ## Commands list if it is on the MEANINGFUL_COMMAND_KW allowlist OR if it errored (''errors are always meaningful''). Curation otherwise preserved (non-erroring non-allowlisted commands still drop; cap unchanged). Handoff projection now carries is_error + duration_s; markdown flags failures with a marker. Fixes the gap where a non-allowlisted errored command (latch-trip ''git worktree list'', ''ls'' into a missing worktree dir) vanished from the handoff, forcing reconstruction from raw transcript JSONL. +10 tests (predicate matrix incl. latch-trip case + curation-preservation guard); verified end-to-end against a synthetic transcript (errored non-allowlisted command appears with is_error:true). Doc-lifecycle: no ephemeral docs; CHANGELOG updated. Consumers refreshed as a follow-step (bundled with DANGER-LATCH-UX-001 refresh).'
 created_at: '2026-05-29T23:05:37.051Z'
-updated_at: '2026-05-29T23:05:37.051Z'
+updated_at: '2026-05-29T23:16:20.448Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
