@@ -2,8 +2,10 @@ id: CAWS-HELP-METADATA-REMAINING-GROUPS-001
 title: 'Help-metadata authority slice 3: wire remaining 11 groups, fix W3/W4 help prose, enable global L5 no-inline-strings lock + full L1 set-equality'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: help-metadata-s3
+lifecycle_state: closed
+updated_at: '2026-05-29T09:38:42.941Z'
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge help-metadata-s3 at c8b8eba826b4aadd046860c2903c69964a84abf3'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/command-metadata.ts
