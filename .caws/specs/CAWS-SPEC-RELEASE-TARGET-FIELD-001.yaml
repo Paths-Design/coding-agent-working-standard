@@ -2,7 +2,10 @@ id: CAWS-SPEC-RELEASE-TARGET-FIELD-001
 title: 'Opt-in target_release field on spec YAML: when set, doctor/prepush/release-gate track+block until the spec closes or amends; unset = no enforcement'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+updated_at: '2026-05-29T18:16:45.157Z'
+resolution: completed
+closure_notes: 'Design record complete: opt-in target_release field (validated semver-ish | next/backlog/deferred), enforcement at release-gate (hard stop) + prepush (warn) + doctor (finding), fires only when set so unversioned projects are unaffected. Implementation deferred to 11.2 (kernel spec.v1.json schema change) as a separate spec.'
 blast_radius:
   modules:
     - packages/caws-kernel/src/schemas/spec.v1.json
