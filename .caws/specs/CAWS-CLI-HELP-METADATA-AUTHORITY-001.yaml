@@ -1,0 +1,25 @@
+id: CAWS-CLI-HELP-METADATA-AUTHORITY-001
+title: 'Durable --help metadata authority: kernel enum exports + typed COMMAND_SURFACE_METADATA consumed by register.ts + drift lock test (slice 0: kernel enums)'
+risk_tier: 3
+mode: refactor
+lifecycle_state: active
+created_at: '2026-05-29T08:41:28.358Z'
+updated_at: '2026-05-29T08:41:28.358Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
