@@ -3,6 +3,7 @@ title: 'Wire prepush command to reach A4 foreign-worktree ERROR refusal + A3/A7 
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: prepush-fw-wiring
 created_at: '2026-05-29T04:18:53.074Z'
 updated_at: '2026-05-29T04:18:53.074Z'
 blast_radius:
