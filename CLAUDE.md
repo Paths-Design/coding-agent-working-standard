@@ -6,21 +6,21 @@ Project-specific guidance for Claude Code agents working on the CAWS repository.
 
 CAWS (Coding Agent Working Standard) is both the framework and a live user of it. The `.caws/` directory drives real quality gates on this codebase.
 
-The v11 cutover is complete. `main` runs the v11.1 surface, published to npm as `@paths.design/caws-cli` on the `latest` dist-tag. v11.2 is in planning — see `docs/architecture/caws-vnext-command-surface.md` §1 ("v11.2 plan") for the multi-agent authority and observability work. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (cutover posture and v11.2 plan) and §6 (architectural invariants — invariants 1–7 are v11 core; 8–13 are v11.2 additions) before making decisions.
+The v11 cutover is complete. `main` runs the v11.1 surface, published to npm as `@paths.design/caws-cli` on the `latest` dist-tag. **Doctrine source:** `docs/architecture/caws-vnext-command-surface.md`. Read §1 (cutover posture) and §6 (architectural invariants) before making decisions.
 
-**For teams migrating from v10.2:** read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is the canonical line for new work but is **not a drop-in replacement** for every v10.2 workflow — some commands (`sidecar`, `burnup`, `verify-acs`, `evaluate`, `test-analysis`) are removed without v11.1 replacements, and the multi-agent surface (`agents list/show`, `session`, `parallel`) is deferred to v11.2/v11.3+. The migration guide classifies every v10.2 command into one of four buckets (Replaced / Renamed / Removed-no-replacement / Deferred), documents the rollback one-liner, and includes CI migration recipes.
+**For teams migrating from v10.2:** read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is the canonical line for new work but is **not a drop-in replacement** for every v10.2 workflow — some commands (`sidecar`, `burnup`, `verify-acs`, `evaluate`, `test-analysis`) are removed without v11.1 replacements, while `agents list/show` now ships in the v11.1 surface. The migration guide classifies every v10.2 command into one of four buckets (Replaced / Renamed / Removed-no-replacement / Deferred), documents the rollback one-liner, and includes CI migration recipes.
 
-## v11.1 ships eleven command groups
+## v11.1 ships twelve command groups
 
 ```
-init  doctor  status  scope  claim  gates  evidence  waiver  specs  worktree
+init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents
 ```
 
-(The eight v11.0 governed-core groups, plus `specs` and `worktree` restored in v11.1.)
+(The governed-core groups plus lifecycle, event-maintenance, and agent-liveness surfaces.)
 
 Removed in v11.0 and not planned to return: `scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`, `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`. The hash-chained `.caws/events.jsonl` is the audit surface; users wire their own hooks against `caws gates run`.
 
-Currently absent and **planned for v11.2**: `caws agents list/show`, `caws claim --spec <id>` (bridge claims for non-worktree contexts), `caws worktree prune/repair/reconcile`. Until v11.2 ships, `caws status` + direct reads of `.caws/worktrees.json` and `.caws/agents.json` cover the agent-inspection use case.
+Currently absent: `caws claim --spec <id>` (bridge claims for non-worktree contexts) and `caws worktree prune/reconcile`. `caws agents list/show` ships in v11.1 for read-only agent lease inspection.
 
 **Deferred to v11.3+**: `caws session` and `caws parallel`. The `caws worktree create` loop replaces `parallel` for multi-agent setup.
 
@@ -28,7 +28,7 @@ Currently absent and **planned for v11.2**: `caws agents list/show`, `caws claim
 
 1. Run `caws status` and `caws doctor`. The `claim` panel surfaces worktree ownership; doctor surfaces drift.
 2. For multi-agent work: create your worktree with `caws worktree create <name> --spec <id>`. The command writes the bidirectional worktree↔spec binding, registers ownership, and emits the `worktree_created` + `worktree_bound` events. There is no `caws parallel setup` — loop `caws worktree create` per spec.
-3. `caws claim` surfaces or takes worktree ownership. `caws claim --takeover` acquires from a foreign session and writes a `prior_owners` audit entry. In v11.2, `--takeover` will additionally emit a `claim_taken_over.v1` event (currently missing — known audit gap).
+3. `caws claim` surfaces or takes worktree ownership. `caws claim --takeover` acquires from a foreign session and writes a `prior_owners` audit entry.
 
 ## v11 spec workflow
 
