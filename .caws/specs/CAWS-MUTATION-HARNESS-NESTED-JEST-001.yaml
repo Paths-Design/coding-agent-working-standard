@@ -7,19 +7,73 @@ created_at: '2026-05-30T09:12:11.604Z'
 updated_at: '2026-05-30T09:12:11.604Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/mutation
+    - packages/caws-cli/package.json
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/stryker.conf.js
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    DIAGNOSIS (the reason this spec exists). The mutation gate runs Stryker
+    via a jest harness: `MUTATION_TESTING=1 jest tests/mutation/
+    mutation-quality.test.js` whose beforeAll spawns `stryker run`, and
+    Stryker's jest-runner in turn spawns ITS OWN jest workers. This
+    jest-spawning-jest model deadlocks/starves: the harness timed out at its
+    own 30-minute ceiling (spawnSync ETIMEDOUT), while the IDENTICAL Stryker
+    config invoked DIRECTLY (`node node_modules/@stryker-mutator/core/bin/
+    stryker.js run stryker.conf.js`) completes in ~4 minutes with a real
+    report (77.08%, 37 killed / 11 survived). So the mutation surface IS
+    testable; only the jest wrapper is broken.
+    CAWS-MUTATION-HARNESS-RESOLVE-FIX-001 already fixed the SEPARATE
+    Stryker-resolution bug (require.resolve), so the precondition now passes
+    and Stryker launches — which is exactly what exposed this deeper
+    execution-model defect.
+  - >-
+    FIX DIRECTION (impl deferred — this spec is filed as diagnosis;
+    implement in a future session). Stop running Stryker from inside a jest
+    process. Options to evaluate: (a) make the mutation gate a standalone
+    npm script (`test:mutation` → `node <stryker bin> run` directly, NO jest
+    wrapper) and have CI call that script, keeping a thin jest test only to
+    ASSERT against an already-written report (read-only, no spawn); (b) run
+    Stryker with a non-jest test runner for the mutation pass; (c) raise the
+    concurrency/timeout knobs if a tractable nested-jest config exists
+    (least preferred — treats the symptom). The "no silent skip" +
+    surviving-mutant-reporting contracts must be preserved by whichever
+    shape ships.
+  - >-
+    NOT A RELEASE BLOCKER. Mutation is not a hard gate (stryker.conf.js
+    `thresholds.break = null`), the mutated surface (specs-writer tombstone
+    enforcement) is inherited from MUTATION-STRYKER-TS-COVERAGE-001 and was
+    not touched in the originating session, and the gate IS runnable via
+    direct invocation. This spec tracks restoring the jest-entrypoint
+    convenience, not unblocking a publish.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: The mutation gate after this slice.
+    when: It is invoked via the documented entrypoint (npm script or jest).
+    then: >-
+      It completes in a time comparable to a direct `stryker run` (~minutes,
+      not the 30-minute timeout), produces a real mutation report, and the
+      score/survivor assertions execute against it.
+  - id: A2
+    given: An environment where Stryker is genuinely absent.
+    when: The gate runs.
+    then: >-
+      It still fails loudly with the install instruction (no silent skip) —
+      the hard-precondition contract from MUTATION-STRYKER-TS-COVERAGE-001 is
+      preserved.
+non_functional:
+  reliability:
+    - >-
+      Restores the mutation gate as a runnable, time-bounded check from its
+      documented entrypoint. Today it is only runnable by hand via a direct
+      stryker invocation; the jest entrypoint times out, so CI/contributors
+      cannot use the gate as designed.
 contracts: []
