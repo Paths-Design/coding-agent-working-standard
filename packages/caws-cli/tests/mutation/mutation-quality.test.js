@@ -86,21 +86,21 @@ describeMutation('Mutation testing (Stryker)', () => {
     const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
     const { killed, survived, total, score } = summarize(report);
 
-    // eslint-disable-next-line no-console
+     
     console.log(
       `Mutation score: ${score}% (killed=${killed} survived=${survived} total=${total})`
     );
 
     if (survived > 0) {
       const survivors = listSurvivors(report);
-      // eslint-disable-next-line no-console
+       
       console.log(`Surviving mutants (${survivors.length}):`);
       survivors.slice(0, 20).forEach((s, i) => {
-        // eslint-disable-next-line no-console
+         
         console.log(`  ${i + 1}. ${s.file}:${s.line} — ${s.mutator} — ${s.replacement}`);
       });
       if (survivors.length > 20) {
-        // eslint-disable-next-line no-console
+         
         console.log(`  … and ${survivors.length - 20} more.`);
       }
     }

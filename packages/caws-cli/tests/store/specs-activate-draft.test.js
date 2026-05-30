@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { activateSpec, closeSpec, createSpec } = require('../../dist/store/specs-writer');
+const { activateSpec, createSpec } = require('../../dist/store/specs-writer');
 const { initProject } = require('../../dist/store');
 
 const ACTOR = { id: 'activate-test-actor', kind: 'human' };
