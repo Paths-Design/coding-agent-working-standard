@@ -1,22 +1,29 @@
 /**
- * @fileoverview Mutation testing harness — fails loudly if Stryker fails.
+ * @fileoverview Mutation testing assertions — READ-ONLY over the report.
  *
- * Per MUTATION-STRYKER-TS-COVERAGE-001, this harness:
- *   - asserts Stryker is installed (no silent skip on missing dep)
- *   - runs `npx stryker run` and fails the test on non-zero exit
- *   - reads the JSON report from the path Stryker actually writes
- *   - exposes kill rate and surviving-mutant detail as real assertions
+ * CAWS-MUTATION-HARNESS-NESTED-JEST-001: this harness no longer spawns
+ * Stryker. The prior shape ran Stryker from inside Jest's beforeAll, and
+ * Stryker's jest-runner spawned ITS OWN jest workers — a jest-spawning-jest
+ * model that deadlocked and hit the 30-minute timeout, while the identical
+ * Stryker config invoked directly finished in ~4 minutes. The fix splits the
+ * two concerns:
  *
- * Prior shape silently passed when Stryker was missing, the config was
- * stale, or the run errored — every code path swallowed the error in a
- * try/catch and only emitted console.warn. That meant "test green" was
- * indistinguishable from "test never ran." This file is the fix.
+ *   - `scripts/run-mutation.mjs` (a standalone top-level Node process, NOT a
+ *     Jest child) resolves + runs Stryker and writes the JSON report. The
+ *     "Stryker must be installed — no silent skip" precondition lives there.
+ *   - THIS file only reads that report and turns kill rate / surviving-mutant
+ *     detail into real assertions. It spawns nothing.
  *
- * Set MUTATION_TESTING=1 to run; default-skipped in unit-test pass so the
- * regular `npx jest` does not pay the multi-minute Stryker cost.
+ * The documented entrypoint `npm run test:mutation` chains the two:
+ * `run-mutation.mjs` then this read-only Jest pass. The earlier "test green
+ * was indistinguishable from test-never-ran" failure is still guarded: if
+ * MUTATION_TESTING=1 but no report exists, beforeAll throws loudly directing
+ * the operator to run the standalone runner first — a missing report is a hard
+ * failure, never a silent pass.
+ *
+ * Set MUTATION_TESTING=1 to run; default-skipped in the unit-test pass.
  */
 
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -27,90 +34,22 @@ describeMutation('Mutation testing (Stryker)', () => {
   const pkgRoot = path.resolve(__dirname, '..', '..');
   const reportPath = path.join(pkgRoot, 'reports', 'mutation', 'mutation-report.json');
 
-  // CAWS-MUTATION-HARNESS-RESOLVE-FIX-001: resolve Stryker via Node's module
-  // resolution rather than a package-relative node_modules path. In a hoisted
-  // npm-workspaces monorepo Stryker installs to the ROOT node_modules, so the
-  // old `fs.existsSync(pkgRoot/node_modules/@stryker-mutator/core)` check
-  // threw "Stryker is not installed" even when Stryker WAS installed and
-  // runnable. require.resolve finds it wherever it is hoisted; the derived bin
-  // is launched via `node <bin>` so we never depend on a package-local
-  // `node_modules/.bin/stryker` symlink (absent under hoisting).
-  function resolveStrykerBin() {
-    // Throws MODULE_NOT_FOUND when Stryker is genuinely absent (preserving the
-    // "no silent skip" contract). paths anchors resolution at this package.
-    const corePkgJson = require.resolve('@stryker-mutator/core/package.json', {
-      paths: [pkgRoot],
-    });
-    const coreDir = path.dirname(corePkgJson);
-    // package.json `bin` is either a string or { stryker: "./bin/stryker.js" }.
-    const pkg = require(corePkgJson);
-    const binRel =
-      typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin && pkg.bin.stryker);
-    if (!binRel) {
-      throw new Error(
-        `@stryker-mutator/core resolved at ${coreDir} but exposes no stryker bin.`
-      );
-    }
-    return path.join(coreDir, binRel);
-  }
-
   beforeAll(() => {
-    // Hard precondition: Stryker must be installed. No silent skip.
-    let strykerBin;
-    try {
-      strykerBin = resolveStrykerBin();
-    } catch (e) {
-      throw new Error(
-        'Stryker is not installed (or has no bin). Run `npm install --save-dev ' +
-          '@stryker-mutator/core @stryker-mutator/jest-runner ' +
-          `@stryker-mutator/typescript-checker\` and retry. (${e.message})`
-      );
-    }
-
-    // Stale report would lie about a fresh run; clear it.
-    if (fs.existsSync(reportPath)) {
-      fs.unlinkSync(reportPath);
-    }
-
-    // Launch the resolved bin via `node` (NOT `npx stryker`, which needs the
-    // stryker symlink in a package-local node_modules/.bin — absent under
-    // workspace hoisting).
-    const result = spawnSync(
-      process.execPath,
-      [strykerBin, 'run', '--logLevel', 'info'],
-      {
-        cwd: pkgRoot,
-        encoding: 'utf8',
-        // 30 min upper bound; the targeted config should finish in well under
-        // that. Longer than this is a regression worth investigating.
-        timeout: 30 * 60 * 1000,
-        stdio: 'pipe',
-      }
-    );
-
-    if (result.error) {
-      throw new Error(`Stryker spawn failed: ${result.error.message}`);
-    }
-
-    // Stryker exits 0 on success (threshold respected). Per the config,
-    // `thresholds.break = null` so a low score does not exit non-zero; only
-    // configuration/runtime errors do.
-    if (result.status !== 0) {
-      const stderr = result.stderr || '';
-      const stdoutTail = (result.stdout || '').split('\n').slice(-20).join('\n');
-      throw new Error(
-        `Stryker exited with status ${result.status}. ` +
-          `stderr:\n${stderr}\nstdout (last 20 lines):\n${stdoutTail}`
-      );
-    }
-
+    // No spawn. The report is produced out-of-process by scripts/run-mutation.mjs
+    // (invoked by `npm run test:mutation` before this Jest pass). A missing
+    // report is a hard, explicit failure — never a silent pass — preserving the
+    // "no silent skip" contract from MUTATION-STRYKER-TS-COVERAGE-001 at the
+    // assertion layer, while the runner owns it at the execution layer.
     if (!fs.existsSync(reportPath)) {
       throw new Error(
-        `Stryker exited 0 but no report at ${reportPath}. ` +
-          `Check stryker.conf.js jsonReporter.fileName.`
+        `No mutation report at ${reportPath}. The mutation run must execute ` +
+          `BEFORE these assertions. Run \`npm run test:mutation\` (which chains ` +
+          `\`node scripts/run-mutation.mjs\` then this read-only Jest pass), or ` +
+          `run \`node scripts/run-mutation.mjs\` directly first. This harness ` +
+          `does not spawn Stryker (CAWS-MUTATION-HARNESS-NESTED-JEST-001).`
       );
     }
-  }, 35 * 60 * 1000);
+  });
 
   test('produces a mutation report with at least one mutant', () => {
     const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
