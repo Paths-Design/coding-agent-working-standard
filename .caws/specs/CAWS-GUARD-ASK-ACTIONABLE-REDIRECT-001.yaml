@@ -2,10 +2,11 @@ id: CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001
 title: 'worktree-write-guard: ask/block reason names the worktree + cd path to switch to, so a misguided agent self-corrects instead of looping the human on an un-dismissable ask'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: guard-ask-actionable-redirect
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge guard-ask-actionable-redirect at 87513b2ff6c85da19049079683dce52ea6ed2e46'
 created_at: '2026-05-30T03:31:45.071Z'
-updated_at: '2026-05-30T03:31:45.071Z'
+updated_at: '2026-05-30T03:35:02.335Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
