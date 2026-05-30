@@ -148,14 +148,26 @@ _write_durable_session_envelope() {
     return 0
   fi
 
-  # Repo root via git. If HOOK_CWD is empty or git fails, skip — we
-  # can't write a repo-keyed envelope without one.
+  # CANONICAL repo root via git. CAWS-SESSION-LOG-RELOCATE-001: per-session
+  # state lives under <canonical>/.caws/sessions/, not repo-root tmp/. We
+  # resolve git-common-dir's parent (the canonical checkout) so a linked
+  # worktree writes to the canonical .caws/sessions/, and so the envelope's
+  # repo_root FIELD matches the resolver's canonical repoRoot
+  # (path.dirname(cawsDir)). If HOOK_CWD is empty or git fails, skip.
   local cwd="${HOOK_CWD:-$PWD}"
-  local repo_root
-  repo_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null) || return 0
+  local repo_root common
+  common=$(cd "$cwd" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) || return 0
+  [[ -z "$common" ]] && return 0
+  case "$common" in
+    /*) : ;;
+    *)  common="$cwd/$common" ;;
+  esac
+  repo_root=$(cd "$common/.." 2>/dev/null && pwd -P) || return 0
   [[ -z "$repo_root" ]] && return 0
+  # Only write where a .caws/ exists (a real CAWS project).
+  [[ -d "$repo_root/.caws" ]] || return 0
 
-  local envelope_dir="$repo_root/tmp/$sid"
+  local envelope_dir="$repo_root/.caws/sessions/$sid"
   local envelope_path="$envelope_dir/.session-envelope.json"
   mkdir -p "$envelope_dir" 2>/dev/null || return 0
 
@@ -207,7 +219,8 @@ with open(sys.argv[6], "w") as f:
   }
 
   # CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: also write/refresh the per-repo
-  # caller-session pointer at `<repo_root>/tmp/.caller-session.json`. In
+  # caller-session pointer at `<repo_root>/.caws/sessions/.caller-session.json`
+  # (CAWS-SESSION-LOG-RELOCATE-001 moved it out of repo-root tmp/). In
   # agent-Bash, HOOK_SESSION_ID is not in the env, so the resolver cannot
   # tell which of several fresh sibling envelopes is the caller's. This
   # pointer names the session that most recently fired a hook in this repo
@@ -215,7 +228,7 @@ with open(sys.argv[6], "w") as f:
   # >=2-fresh-envelope case to the caller's own envelope. Evidence only:
   # the resolver treats absent/stale/non-matching pointers as "refuse",
   # never as a guess. Reuses sid / repo_root / now from above.
-  local pointer_dir="$repo_root/tmp"
+  local pointer_dir="$repo_root/.caws/sessions"
   local pointer_path="$pointer_dir/.caller-session.json"
   local pointer_tmp="$pointer_dir/.caller-session.tmp.$$"
   mkdir -p "$pointer_dir" 2>/dev/null || return 0
