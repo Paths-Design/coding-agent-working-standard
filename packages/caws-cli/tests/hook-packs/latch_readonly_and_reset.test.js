@@ -91,13 +91,24 @@ function isBlocked(result) {
   }
 }
 
+/**
+ * Arm the sticky latch in ONE call. DANGER-LATCH-APPROVAL-AND-FEEDBACK-001
+ * made the FIRST flagged `ask` warn-only, so a single `rm -rf` no longer
+ * latches. A `deny`-class command (mkfs) latches IMMEDIATELY on the first
+ * occurrence (no warn grace), which is the right way to put a project into
+ * the latched state for the carve-out tests below.
+ */
+function armLatch(dir, sessionId) {
+  return block(dir, 'mkfs.ext4 /dev/sda', sessionId);
+}
+
 describe('CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 — latch carve-outs', () => {
   const SID = 'aa11bb22-cc33-dd44-ee55-ff6677889900';
 
   // ── A1: read-only Bash survives a sticky latch ─────────────────────
   it('A1: a read-only command runs while latched, and does not clear the latch', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID); // engage the latch
+    armLatch(dir, SID); // engage the latch (deny → immediate)
     expect(latchFiles(dir)).toHaveLength(1);
 
     const r = block(dir, 'git log --oneline -3', SID); // read-only
@@ -109,7 +120,7 @@ describe('CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 — latch carve-outs', 
   // ── A2: mutating Bash stays blocked while latched ──────────────────
   it('A2: a mutating command remains blocked while latched', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    armLatch(dir, SID); // latch armed (deny → immediate)
     const r = block(dir, 'rm -rf /another/real/path', SID);
     expect(isBlocked(r)).toBe(true);
   });
@@ -117,7 +128,7 @@ describe('CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 — latch carve-outs', 
   // ── A3: the reset escape hatch is not blocked by its own latch ─────
   it('A3: a reset-danger-latch.sh invocation is not blocked while latched', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    armLatch(dir, SID);
     const r = block(
       dir,
       `bash .claude/hooks/reset-danger-latch.sh --session ${SID} --reason "safe"`,
@@ -128,7 +139,7 @@ describe('CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 — latch carve-outs', 
 
   it('A3: a mutating command that merely NAMES the script as an operand is NOT exempted', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    armLatch(dir, SID);
     // `rm -rf /etc/reset-danger-latch.sh` deletes a file named like the script
     // — it is NOT an invocation of the escape hatch. The reset-exemption matcher
     // requires invocation position (first token, or after bash/sh/.), so this
@@ -139,7 +150,7 @@ describe('CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 — latch carve-outs', 
 
   it('A3: a trailing-comment mention does not exempt a mutating command', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    armLatch(dir, SID);
     // The string in a comment must not smuggle a mutating command past the latch.
     const r = block(dir, 'rm -rf /etc/foo # reset-danger-latch.sh', SID);
     expect(isBlocked(r)).toBe(true);
