@@ -245,6 +245,31 @@ describe('WORKTREE-GUARD-RISK-SURFACE-001: base-branch block→ask', () => {
     expect(r.stderr).toMatch(/ask-incapable harness/);
   });
 
+  // A7: the ask reason carries the composite risk signal (dir/spec/agents).
+  // The fixture has one active worktree+spec, so the risk line names an
+  // active spec; the target dir exists (packages/caws-cli/src created by
+  // makeRepo). We assert the structured risk token is present.
+  test('A7 ask reason carries the composite risk signal', () => {
+    dir = makeRepo();
+    const wtPath = path.join(dir, '.caws', 'worktrees', 'wt-a');
+    fs.mkdirSync(wtPath, { recursive: true });
+    writeRegistry(dir, {
+      'wt-a': { path: wtPath, branch: 'wt-a', baseBranch: 'main', spec_id: 'CLAIM-001' },
+    });
+    writeSpec(dir, 'CLAIM-001', { lifecycle: 'active', scopeIn: ['packages/caws-cli/src/other.ts'] });
+
+    // Edit an unclaimed but real-dir file → ask, reason should embed risk[...].
+    const r = guard(dir, 'packages/caws-cli/src/unclaimed.ts');
+    expect(r.status).toBe(0);
+    expect(isAsk(r.stdout)).toBe(true);
+    const reason = JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason;
+    expect(reason).toMatch(/risk\[/);
+    // The active bound spec is surfaced in the risk signal.
+    expect(reason).toMatch(/active-specs:1\(CLAIM-001\)/);
+    // The target dir exists (makeRepo created packages/caws-cli/src).
+    expect(reason).toMatch(/dir:exists/);
+  });
+
   // Happy path preserved: an allowlisted path (.caws/) is allowed (exit 0, no ask).
   test('allowlisted .caws/ path is allowed (exit 0, no envelope)', () => {
     dir = makeRepo();

@@ -460,9 +460,39 @@ fi
 # guarantee — an ask emitted to a harness that ignores it would let the write
 # through.
 
-# emit a short worktree-context line for the ask/block reason. The full
-# composite risk briefing (dir/spec/agents/lease) is layered in by the
-# risk-signal stage; here we carry the worktree-presence + contention state.
+# _guard_throttled_risk: the composite risk line (dir/spec/agents/lease) from
+# caws_compose_risk, THROTTLED via a short-TTL cache so it is not recomputed
+# in full (which shells `caws agents list --json`) on every Write/Edit.
+# Cache: .caws/cache/risk-<branch>.txt; recompute only when older than TTL.
+# CAWS_RISK_THROTTLE_SECS overrides the default 30s (0 disables the cache).
+_guard_throttled_risk() {
+  command -v caws_compose_risk >/dev/null 2>&1 || return 0
+  local ttl="${CAWS_RISK_THROTTLE_SECS:-30}"
+  local cache_dir="$PROJECT_DIR/.caws/cache"
+  local safe_branch
+  safe_branch="$(printf '%s' "${CURRENT_BRANCH:-_}" | tr -c 'A-Za-z0-9._-' '_')"
+  local cache_file="$cache_dir/risk-$safe_branch.txt"
+  if [[ "$ttl" != "0" ]] && [[ -f "$cache_file" ]]; then
+    local now mtime age
+    now=$(date +%s 2>/dev/null || echo 0)
+    mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+    age=$(( now - mtime ))
+    if [[ "$age" -ge 0 ]] && [[ "$age" -lt "$ttl" ]]; then
+      cat "$cache_file" 2>/dev/null
+      return 0
+    fi
+  fi
+  local line
+  line="$(caws_compose_risk "$PROJECT_DIR" "$CURRENT_BRANCH" "$REL_PATH" 2>/dev/null || echo "")"
+  if [[ -n "$line" ]] && [[ "$ttl" != "0" ]]; then
+    mkdir -p "$cache_dir" 2>/dev/null || true
+    printf '%s\n' "$line" > "$cache_file" 2>/dev/null || true
+  fi
+  printf '%s' "$line"
+}
+
+# emit a short worktree-context line for the ask/block reason, with the
+# throttled composite risk signal (dir/spec/agents/lease) appended.
 _guard_risk_reason() {
   local head="$1"
   local body=""
@@ -474,6 +504,11 @@ _guard_risk_reason() {
       clear)      body="$body No active worktree's scope.in claims this file." ;;
       unknown:*)  body="$body Scope contention undetermined (${SPEC_CONTENTION_CHECK}); a bound spec may be missing its id, file, or scope." ;;
     esac
+  fi
+  local risk
+  risk="$(_guard_throttled_risk)"
+  if [[ -n "$risk" ]]; then
+    body="$body $risk"
   fi
   printf '%s %s Approve to edit on the base branch, or cd into the owning worktree (caws worktree list) / create one (caws worktree create <name>).' "$head" "$body"
 }

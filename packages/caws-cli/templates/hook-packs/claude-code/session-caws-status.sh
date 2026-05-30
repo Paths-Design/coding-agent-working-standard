@@ -117,6 +117,19 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1; 
   fi
 fi
 
+# --- Composite risk briefing (WORKTREE-GUARD-RISK-SURFACE-001) ---
+# Surface the full risk signal once at SessionStart: target-dir (n/a here —
+# no specific file at session start), active bound specs claiming live
+# worktrees, active-agent count, and lease staleness. Same caws_compose_risk
+# the per-write guard ask uses, so the two never disagree. Advisory only.
+if command -v caws_compose_risk >/dev/null 2>&1; then
+  RISK_BRIEFING="$(caws_compose_risk "$CAWS_ROOT" "$CURRENT_BRANCH" "" --verbose 2>/dev/null || echo "")"
+  if [ -n "$RISK_BRIEFING" ]; then
+    echo "$RISK_BRIEFING"
+    echo ""
+  fi
+fi
+
 # --- Version-skew warning (advisory, never blocks) ---
 #
 # Hooks parse local CAWS state directly. The global `caws` binary may be a
