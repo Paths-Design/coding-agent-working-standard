@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: v11-scope-amend-command
 created_at: '2026-05-30T01:53:24.257Z'
-updated_at: '2026-05-30T01:53:24.257Z'
+updated_at: '2026-05-30T02:05:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
@@ -25,8 +25,11 @@ scope:
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/command-metadata.ts
     # --- kernel: the new additive event schema + its registration ---
+    # Event-type registry lives in evidence/ (EventType union + REQUIRES_SPEC_ID
+    # in types.ts; PAYLOAD_SCHEMAS map + schema imports in validate.ts).
     - packages/caws-kernel/src/schemas/events/spec_scope_amended.v1.json
-    - packages/caws-kernel/src/worktree/events.ts
+    - packages/caws-kernel/src/evidence/types.ts
+    - packages/caws-kernel/src/evidence/validate.ts
     - packages/caws-kernel/src/index.ts
     # --- hook-pack: the cherry-pick classifier carve-out (defense in depth) ---
     - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
