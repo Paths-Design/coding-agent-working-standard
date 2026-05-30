@@ -62,11 +62,15 @@ export {
   applyLeasePatch,
   applyLeasePatches,
   pruneLeasesByStatus,
+  pruneDeadLeases,
+  defaultIsPidAlive,
 } from './leases-store';
 export type {
   LoadLeasesResult,
   PruneOptions,
   PruneResult,
+  PruneDeadOptions,
+  PruneDeadResult,
 } from './leases-store';
 
 export { loadWaivers, writeWaiver, markRevoked } from './waivers-store';

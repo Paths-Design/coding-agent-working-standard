@@ -52,6 +52,7 @@ import {
 import {
   applyLeasePatch,
   loadLeases,
+  pruneDeadLeases,
   pruneLeasesByStatus,
   resolveRepoRoot,
   safeLeaseFilename,
@@ -675,9 +676,16 @@ export function runAgentsShowCommand(opts: ShowOpts): number {
 // ─── caws agents prune ────────────────────────────────────────────────────
 
 export interface PruneOpts extends BaseAgentsOpts {
-  readonly status: 'stopped' | 'stale';
-  readonly olderThanMs: number;
+  /** Retention mode: bucket by lease status + age. Omitted when dead=true. */
+  readonly status?: 'stopped' | 'stale';
+  readonly olderThanMs?: number;
   readonly staleTtlMs?: number;
+  /**
+   * PID-liveness mode (WORKTREE-GUARD-RISK-SURFACE-001): remove active/stopping
+   * leases on THIS host whose owning process is dead. Mutually exclusive with
+   * status/olderThanMs.
+   */
+  readonly dead?: boolean;
   readonly apply?: boolean; // default: dry-run
 }
 
@@ -690,13 +698,53 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
     return 2;
   }
   const { cawsDir } = repoRootResult.value;
+  const dryRun = !(opts.apply === true);
+
+  // ── PID-liveness mode ────────────────────────────────────────────────
+  if (opts.dead === true) {
+    const r = pruneDeadLeases(cawsDir, { now: nowFn(), dryRun });
+    if (!isOk(r)) {
+      err('caws agents prune --dead: failed.');
+      err(renderDiagnostics(r.errors, { showData }));
+      return 1;
+    }
+    if (json) {
+      emitJson(out, {
+        ok: true,
+        dry_run: dryRun,
+        mode: 'dead',
+        candidates: r.value.candidates,
+        deleted: r.value.deleted,
+        skipped_foreign_host: r.value.skippedForeignHost,
+        diagnostics: r.value.diagnostics,
+      });
+    } else {
+      out(
+        `prune --dead (${opts.apply === true ? 'apply' : 'dry-run'}): ${r.value.candidates.length} dead-process lease(s)`
+      );
+      for (const id of r.value.candidates) {
+        const tag = r.value.deleted.includes(id) ? 'DELETED' : 'would-delete';
+        out(`  ${tag} ${id}`);
+      }
+      if (r.value.skippedForeignHost.length > 0) {
+        out(`  (${r.value.skippedForeignHost.length} foreign-host lease(s) skipped — pid not checkable here)`);
+      }
+    }
+    return 0;
+  }
+
+  // ── Retention mode (status + age) ────────────────────────────────────
+  if (opts.status === undefined || opts.olderThanMs === undefined) {
+    err('caws agents prune: --status and --older-than-ms are required unless --dead is used.');
+    return 1;
+  }
 
   const r = pruneLeasesByStatus(cawsDir, {
     status: opts.status,
     retentionMs: opts.olderThanMs,
     ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
     now: nowFn(),
-    dryRun: !(opts.apply === true),
+    dryRun,
   });
   if (!isOk(r)) {
     err('caws agents prune: failed.');
@@ -707,7 +755,7 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
   if (json) {
     emitJson(out, {
       ok: true,
-      dry_run: !(opts.apply === true),
+      dry_run: dryRun,
       status: opts.status,
       candidates: r.value.candidates,
       deleted: r.value.deleted,
