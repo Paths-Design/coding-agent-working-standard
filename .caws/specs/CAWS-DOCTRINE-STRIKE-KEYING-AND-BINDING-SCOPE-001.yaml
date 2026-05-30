@@ -3,6 +3,7 @@ title: 'Doctrine accuracy: strikes are per-checkout-accumulative (not session-gl
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: wt-doctrine-keying
 created_at: '2026-05-30T23:14:56.964Z'
 updated_at: '2026-05-30T23:14:56.964Z'
 blast_radius:
