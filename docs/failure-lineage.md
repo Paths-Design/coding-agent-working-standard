@@ -1439,3 +1439,39 @@ The git-ignore status was a red herring: it suppressed local visibility but did 
 ### Single-line synthesis
 
 **Entry 33: CAWS put per-session state in the user's `tmp/`, which colonized a user-owned directory and — because npm's `files` glob ignores `.gitignore` — shipped 27 of the maintainer's local session transcripts in the published package. The fix relocates all session state to gitignored `.caws/sessions/` (with a bounded legacy read-both fallback so no in-flight session is orphaned) and adds an `.npmignore` + `npm pack` test that proves the tarball ships zero stray session content.**
+
+## Entry 34: One Honest Mistake Froze The Whole Session, And The Agent Couldn't Tell Until It Was Too Late (May 2026)
+
+**Severity:** Medium (a single flagged command froze every subsequent Bash call for the rest of the session; the agent typically discovered the freeze only AFTER firing more commands into it, and read-only "inspect before you mutate" commands armed the latch they were trying to diagnose)
+**Era:** v11.1
+**Surface that failed:** `block-dangerous.sh`'s latch policy (every `ask`-classified command armed the sticky session-wide latch on its FIRST occurrence) combined with thin flag-time feedback (the agent received a terse `ask` and did not realize a session-wide freeze was now in play) and `classify_command.py`'s allow-list (read-only git plumbing like `merge-tree`/`check-ignore` was `ask`, so inspecting state armed the latch)
+**Agent class involved:** any agent that hit one flagged command — including, repeatedly, THIS project's own maintainer-facing agent while building CAWS-SCOPE-AMEND-COMMAND-001 and CAWS-SESSION-LOG-RELOCATE-001
+
+### What happened
+
+The danger latch is a genuine tripwire — it must stop an agent that keeps retrying a dangerous command in different shapes. But the v11.1 policy armed it on the FIRST `ask`, which is too aggressive for the common case: one honest mistake. Three failure modes compounded:
+
+1. **First-strike freeze.** A single `ask`-class command (a `git rebase`, a protocol-mandated `git cherry-pick`, an exploratory command) wrote the sticky latch immediately. Every later mutating Bash call in the session then blocked until a HUMAN ran `reset-danger-latch.sh` — a freeze the agent could not clear itself, for what was often a single recoverable misstep. The maintainer repeatedly had to step in mid-slice to reset.
+
+2. **Discover-too-late.** The agent received a thin `ask` result and did not realize a session-wide latch was now armed. It would immediately fire the NEXT command, hit the latch, see a block attributed to the PRIOR command, and thrash through several blocked retries before a human intervened — the exact retry cascade the latch exists to prevent, induced by the latch's own poor feedback.
+
+3. **Read-only commands armed the latch.** `git merge-tree --write-tree`, `git cat-file`, `git rev-list`, and `git check-ignore` — all of which only INSPECT the object database / refs / gitignore rules — classified as "unknown git subcommand → ask", so running them to *diagnose before mutating* armed the very latch the agent was trying to reason around. Observed twice in one campaign: `git merge-tree --write-tree` and `git check-ignore`.
+
+### What we built or changed because of it
+
+`DANGER-LATCH-APPROVAL-AND-FEEDBACK-001` makes three coupled changes:
+
+- **Warn-then-latch.** The FIRST flagged `ask` in a session WARNS (writes a per-session `danger-warn-<safe_session>.json` marker) instead of latching. Claude Code's own approval pause already puts a human in the loop for that one command; if approved, the agent continues with NO sticky state to clear. The SECOND flagged `ask` (warn marker present) arms the latch — the agent is now thrashing, not making a single honest mistake. `deny` and classifier-unavailable/unknown still latch IMMEDIATELY (no safe single use). The warn marker is keyed by the SAME `sanitize_session` transform the latch uses, so warn and latch resolve to the same session by construction — a first strike can never warn under one id and latch under another.
+- **Explicit stop-now feedback at flag time.** Every flag-time message (warn / second-strike latch / deny / fail-closed) states PLAINLY, at the moment the command is flagged, that the agent must STOP and not run another Bash command, whether a latch is armed or imminent, that the next call will block, and that only the user can reset (with the exact `--session` reset command). The agent is told to stop BEFORE it fires the next command, not after.
+- **Read-only git plumbing joins the allow-list.** `classify_command.py` admits `merge-tree`, `cat-file`, `rev-list`, and `check-ignore` (object-db/ref/gitignore reads that mutate no ref, tree, or index). They neither block nor arm the latch. Mutating plumbing (`update-ref`, `commit-tree`, `hash-object -w`, `symbolic-ref`) stays governed.
+- **Reset clears both sentinels.** `reset-danger-latch.sh` removes the warn marker alongside the latch (`--current`/`--session` derive the sibling; `--all` sweeps every `danger-warn-*.json`), so a post-reset session starts with a fresh first-strike grace.
+
+### What it doesn't catch
+
+- A persistent agent that genuinely will not stop still gets latched — on the SECOND flagged command. The warn-first grace is one honest mistake, not a free pass; the tripwire is preserved by the second-strike escalation.
+- The warn-first grace is `ask`-only. `deny` (rm -rf /, force-push, mkfs) and an unverifiable command (classifier down) latch immediately, with no grace — fail-closed.
+- The read-only allow-list additions are narrow (four named verbs). Any other read-only plumbing an agent reaches for is still `ask`; widening is a deliberate, reviewed allow-list edit, never an inference.
+
+### Single-line synthesis
+
+**Entry 34: CAWS's own danger latch froze the whole session on one honest mistake and told the agent too late to stop, while read-only inspection commands armed the latch they were meant to diagnose. The fix is warn-then-latch (first ask warns, second latches; deny still latches immediately), explicit stop-now feedback at flag time, and a read-only git-plumbing allow-list — so the tripwire fires on persistence, not on a single recoverable step.**

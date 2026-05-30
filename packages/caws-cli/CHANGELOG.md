@@ -74,6 +74,32 @@
 
 ### Fixed
 
+* **Danger latch froze the whole session on one honest mistake; read-only
+  inspection commands armed the latch they were meant to diagnose**
+  (`DANGER-LATCH-APPROVAL-AND-FEEDBACK-001`). Three coupled hook-pack changes:
+  (1) **warn-then-latch** — the FIRST flagged `ask`-class command in a session
+  now WARNS (writes a per-session `danger-warn-<session>.json` marker) instead
+  of arming the sticky latch; Claude Code's approval pause already gates that
+  one command, so an approved first strike continues with no sticky state to
+  clear. The SECOND flagged `ask` arms the latch. `deny` and
+  classifier-unavailable/unknown still latch immediately (no grace). The warn
+  marker is keyed by the same `sanitize_session` transform as the latch, so
+  warn and latch resolve to the same session by construction.
+  (2) **Explicit stop-now feedback** — every flag-time message (warn /
+  second-strike latch / deny / fail-closed) states plainly, at flag time, that
+  the agent must STOP, whether a latch is armed or imminent, that the next Bash
+  call will block, and that only the user can reset (with the exact `--session`
+  command). Closes the cascade where a thin `ask` let the agent fire another
+  command before realizing a latch was in play.
+  (3) **Read-only git plumbing allow-list** — `classify_command.py` admits
+  `merge-tree`, `cat-file`, `rev-list`, and `check-ignore` (object-db / ref /
+  gitignore reads that mutate no ref, tree, or index); they neither block nor
+  arm the latch. Mutating plumbing (`update-ref`, `commit-tree`,
+  `hash-object -w`, `symbolic-ref`) stays governed. `reset-danger-latch.sh`
+  clears the warn marker alongside the latch (`--all` sweeps every
+  `danger-warn-*.json`), so a post-reset session gets a fresh first-strike
+  grace. (failure-lineage Entry 34.)
+
 * **Published package shipped stray local session transcripts**
   (`CAWS-SESSION-LOG-RELOCATE-001`, fixed by
   `CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001`). `package.json`'s `files:
