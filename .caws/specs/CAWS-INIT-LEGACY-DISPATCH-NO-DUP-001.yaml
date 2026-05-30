@@ -3,6 +3,7 @@ title: 'caws init settings-merge recognizes a legacy dispatch/ entry as already-
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-init-dispatch-dedup
 created_at: '2026-05-30T23:35:16.473Z'
 updated_at: '2026-05-30T23:35:16.473Z'
 blast_radius:
