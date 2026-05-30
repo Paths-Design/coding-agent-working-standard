@@ -3,6 +3,7 @@ title: 'Mutation harness times out at 30min because jest spawns Stryker which sp
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: v11-mutation-harness-nested-jest
 created_at: '2026-05-30T09:12:11.604Z'
 updated_at: '2026-05-30T15:54:52.834Z'
 blast_radius:
