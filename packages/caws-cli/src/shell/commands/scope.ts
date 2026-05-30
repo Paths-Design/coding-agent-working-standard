@@ -136,6 +136,33 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    consistent.
   out(renderDecision(decision, { boundContext: bound, showData }));
 
+  // 6a. Worktree-claim caveat (CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001).
+  //     When the binding was resolved because an active worktree's scope.in
+  //     CLAIMS the target path (source === 'target_scope_in_claim'), the kernel
+  //     admits — the path IS in that spec's scope.in. But the agent is NOT
+  //     inside that worktree (cwd-inside resolution wins at steps 1/2 and would
+  //     have produced a registry/porcelain source instead). A base-checkout
+  //     write to this path will then be HARD-BLOCKED by worktree-write-guard,
+  //     which treats a worktree's scope.in entry as a *claim* editable only
+  //     from inside that worktree. Without this caveat the green ADMIT silently
+  //     contradicts the guard that actually runs on the write — the friction
+  //     probe's Event 9. Name the worktree and the cd path so the ADMIT is
+  //     honest about where the edit must happen. Exit code is unchanged.
+  if (
+    decision.kind === 'admit' &&
+    bound.source === 'target_scope_in_claim' &&
+    typeof bound.worktreeName === 'string'
+  ) {
+    const wt = bound.worktreeName;
+    out(
+      `  claimed by worktree '${wt}' — edit it there: cd .caws/worktrees/${wt}`
+    );
+    out(
+      '  (a base-checkout write to this path is blocked by worktree-write-guard;'
+    );
+    out("   the path's scope.in entry is a worktree claim, not a free pass here.)");
+  }
+
   // 7. Exit per mode
   if (mode === 'show') {
     return 0;
