@@ -216,6 +216,20 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     },
     {
       kind: 'leaf',
+      name: 'amend-scope',
+      argument: { name: 'id', required: true, description: 'Active or draft spec id to amend' },
+      description:
+        'Amend a spec\'s scope.in/scope.out on the canonical control plane (active/draft only). The sanctioned way to add a path you need to edit — no git cherry-pick, no danger latch. Writes only canonical .caws/specs/<id>; scope check from a linked worktree admits the added path immediately. Comment-preserving; validate-before-write; appends spec_scope_amended.',
+      options: [
+        { flag: '--add <path>', description: 'Add a scope.in path (repeatable)', collect: true },
+        { flag: '--remove <path>', description: 'Remove a scope.in path (repeatable)', collect: true },
+        { flag: '--add-out <path>', description: 'Add a scope.out path (directory only, no glob; repeatable)', collect: true },
+        { flag: '--remove-out <path>', description: 'Remove a scope.out path (repeatable)', collect: true },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
       name: 'close',
       argument: { name: 'id', required: true, description: 'Active spec id to close' },
       description:
