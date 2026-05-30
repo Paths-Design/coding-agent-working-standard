@@ -1,0 +1,25 @@
+id: CAWS-SESSION-LOG-RELOCATE-001
+title: 'Relocate per-session state (turn logs + session-envelope + caller-pointer) from repo-root tmp/ to .caws/sessions/ (gitignored); read-both fallback; delete stray committed tree'
+risk_tier: 3
+mode: refactor
+lifecycle_state: active
+created_at: '2026-05-30T03:44:53.633Z'
+updated_at: '2026-05-30T03:44:53.633Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
