@@ -170,4 +170,93 @@ describe('shortcut-language-check.sh', () => {
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toBe('');
   });
+
+  // CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001
+  describe('descriptive-reference false positives (#1)', () => {
+    // A2: a comment that merely TALKS ABOUT the keyword (referenced noun,
+    // determiner-preceded) is not a stub and must not strike. These are the
+    // exact shapes that hard-blocked legitimate edits to specs.ts last session.
+    const descriptiveOnly = [
+      'const x = 1; // reword to avoid the TODO placeholder trigger',
+      '// we now populate scope.in instead of the TODO placeholder',
+      '// this replaces the placeholder line with real paths',
+      '// no FIXME marker is emitted for descriptive prose',
+    ];
+    descriptiveOnly.forEach((content, i) => {
+      it(`A2: descriptive reference #${i + 1} → no strike: ${content.slice(0, 48)}`, () => {
+        const r = runHook(
+          {
+            tool_name: 'Write',
+            tool_input: {
+              file_path: path.join(projectDir, `src/desc${i}.ts`),
+              content,
+            },
+            session_id: `sc-desc-${i}`,
+            cwd: projectDir,
+          },
+          projectDir
+        );
+        expect(r.code).toBe(0);
+        expect(r.stdout.trim()).toBe('');
+      });
+    });
+
+    // A3: a descriptive reference does NOT mask a genuine marker elsewhere in
+    // the same content — a real `// TODO` still strikes.
+    it('A3: descriptive reference + a real // TODO marker → still strikes', () => {
+      const r = runHook(
+        {
+          tool_name: 'Write',
+          tool_input: {
+            file_path: path.join(projectDir, 'src/mixed.ts'),
+            content:
+              '// this avoids the TODO placeholder wording\n' +
+              'function f() {\n  // TODO implement the real body\n  return null;\n}',
+          },
+          session_id: 'sc-mixed',
+          cwd: projectDir,
+        },
+        projectDir
+      );
+      expect(r.code).toBe(0);
+      expect(r.stdout).toMatch(/Shortcut-language advisory/);
+      expect(r.stdout).toMatch(/strike 1 of 3/);
+    });
+
+    // A4 (regression guard): the original active-marker positives still strike.
+    it('A4: active // TODO marker still strikes (no regression)', () => {
+      const r = runHook(
+        {
+          tool_name: 'Write',
+          tool_input: {
+            file_path: path.join(projectDir, 'src/active.ts'),
+            content: 'function x() {\n  // TODO implement this\n  return null;\n}',
+          },
+          session_id: 'sc-active',
+          cwd: projectDir,
+        },
+        projectDir
+      );
+      expect(r.code).toBe(0);
+      expect(r.stdout).toMatch(/Shortcut-language advisory/);
+    });
+
+    it('A4: bare "placeholder" as an active marker line still strikes', () => {
+      const r = runHook(
+        {
+          tool_name: 'Write',
+          tool_input: {
+            file_path: path.join(projectDir, 'src/ph.ts'),
+            // A line whose whole purpose IS the placeholder, not a description.
+            content: 'export const config = {}; // placeholder, fill in later',
+          },
+          session_id: 'sc-ph',
+          cwd: projectDir,
+        },
+        projectDir
+      );
+      expect(r.code).toBe(0);
+      expect(r.stdout).toMatch(/Shortcut-language advisory/);
+    });
+  });
 });

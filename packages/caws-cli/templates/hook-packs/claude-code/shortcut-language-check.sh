@@ -95,8 +95,35 @@ fi
 MATCH=""
 PATTERN_DESC=""
 
+# Determiner / preposition words that, immediately before a keyword, mark it as
+# a REFERENCED NOUN (a description of the concept) rather than an ACTIVE marker.
+# e.g. "the TODO placeholder", "avoid the placeholder language", "instead of a
+# FIXME" are descriptions; "// TODO implement", "// placeholder, fill later" are
+# markers. Suppressing determiner-preceded references kills the false positive
+# that hard-blocks comments which merely TALK ABOUT shortcut language, without
+# weakening detection of real stubs (CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001).
+# Discipline: we only SUPPRESS a category when EVERY one of its keyword hits is
+# determiner-preceded. A single active marker anywhere still strikes.
+# The keyword words themselves are included: in a phrase like "the TODO
+# placeholder" the word "placeholder" is part of a referenced compound noun
+# ("TODO-placeholder"), not an active marker — so a shortcut keyword directly
+# before "placeholder" also marks it as a reference.
+_REFERENCE_DETERMINERS='the|a|an|this|that|these|those|its|our|their|your|my|no|any|some|each|avoid|instead of|without|of|todo|fixme|xxx|hack|tbd'
+
+# active_keyword_hit PATTERN — echo the first content line that contains the
+# keyword PATTERN in ACTIVE (non-reference) position, or nothing. A hit is a
+# reference when the keyword is immediately preceded (same line) by one of the
+# determiner words above + whitespace; such lines are filtered out first.
+active_keyword_hit() {
+  local kw_pattern="$1"
+  printf '%s' "$CONTENT" \
+    | grep -niE "$kw_pattern" 2>/dev/null \
+    | grep -vniE "($_REFERENCE_DETERMINERS)[[:space:]]+($kw_pattern)" 2>/dev/null \
+    | head -1
+}
+
 # 1. Keyword markers (word-boundary).
-if hit=$(printf '%s' "$CONTENT" | grep -nE '\b(TODO|FIXME|XXX|HACK|TBD)\b' 2>/dev/null | head -1); then
+if hit=$(active_keyword_hit '\b(TODO|FIXME|XXX|HACK|TBD)\b'); then
   if [[ -n "$hit" ]]; then
     MATCH="$hit"
     PATTERN_DESC="incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)"
@@ -105,7 +132,7 @@ fi
 
 # 2. Placeholder / not-implemented phrases.
 if [[ -z "$MATCH" ]]; then
-  if hit=$(printf '%s' "$CONTENT" | grep -niE 'not implemented|implement later|coming soon|placeholder' 2>/dev/null | head -1); then
+  if hit=$(active_keyword_hit 'not implemented|implement later|coming soon|placeholder'); then
     if [[ -n "$hit" ]]; then
       MATCH="$hit"
       PATTERN_DESC="placeholder / not-implemented language"
