@@ -3,23 +3,114 @@ title: 'spec-create UX: honest scope-guard message on unbound main, surface tier
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: spec-create-firsttimer-ux
 created_at: '2026-05-30T03:23:58.283Z'
 updated_at: '2026-05-30T03:23:58.283Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - docs/guides/caws-contracts.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - docs/guides/caws-contracts.md
+    - packages/caws-cli/tests/store/
+    - packages/caws-cli/tests/shell/init-command.test.js
+    - .caws/specs/CAWS-SPEC-CREATE-FIRSTTIMER-UX-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/src/store/rules.ts
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    NARROWREPAIR SURVIVES INTO THE CREATE REJECTION. When `caws specs create`
+    fails kernel validation (e.g. "Tier 2 specs require at least one contract"),
+    the rendered diagnostic includes the kernel's `narrowRepair` text, which
+    already names the escape ("Add at least one contract or change risk_tier to
+    3 or mode to chore."). Currently specs-writer.ts maps the kernel diagnostic
+    into LIFECYCLE_PLAN_REJECTED copying only `d.message` and DROPPING
+    `d.narrowRepair`; the fix threads narrowRepair through the storeDiagnostic
+    call so the shell's renderDiagnostics prints the `repair:` line. This is the
+    root-cause fix for the tier-contract chicken-and-egg friction: the helpful
+    text exists in the kernel and is silently discarded in the create path. No
+    kernel change; no change to the tier-gate POLICY (tier 1/2 still require a
+    contract) — only the message plumbing. (probe Event 3)
+  - >-
+    HONEST POST-CREATE SCOPE-GUARD MESSAGE. The post-create hint in specs.ts no
+    longer over-promises enforcement that does not apply on an unbound main
+    checkout. Today it prints "Until then, scope-guard rejects every edit (no
+    path admitted)" unconditionally; but a fresh spec on the main checkout is
+    `binding: unbound`, and scope-guard FAILS OPEN when it cannot decide
+    authority (scope.no_authority.unbound) — so the edit is NOT rejected. The
+    message is corrected to state the truth: scope.in enforcement is
+    authoritative only inside the spec's bound worktree; on the main checkout
+    the worktree-write-guard (not scope-guard) governs base-branch writes. The
+    hint still directs the user to fill scope.in and work in a worktree. (probe
+    Event 4 — a false-negative the create message advertised as a guarantee)
+  - >-
+    CONTRACTS ARE DOCUMENTED. A new tracked guide (docs/guides/caws-contracts.md)
+    explains what a CAWS contract IS, why tiers gate on it, and how it is
+    consumed — grounded in the kernel's actual Contract type
+    (packages/caws-kernel/src/spec/types.ts): a contract has `name`, a `type`
+    from {api, schema, contract-test, behavior}, an optional `path`, and an
+    optional `description`. The doc states: tier 1 and tier 2 specs require >=1
+    contract (tier 3 and mode:chore permit `contracts: []`) because higher-risk
+    changes must declare an explicit, checkable interface promise; it shows a
+    concrete YAML example per contract type; and it notes the bootstrap path
+    (create at tier 3 with `contracts: []`, add contracts, raise the tier). The
+    create-rejection repair text and the post-create hint reference this guide
+    by path so a first-timer who hits the tier gate can learn what to add.
+  - >-
+    NO POLICY OR GATE CHANGE. This slice is messaging + documentation only. The
+    tier->contract requirement, the spec-id pattern, the --mode (not --type)
+    flag, and all kernel validation rules are UNCHANGED. Events 1 and 2 (`--type`
+    rejected; id-pattern rejected) were already rated low-friction with correct
+    error messages by the probe and are NOT modified. The worktree-write-guard
+    ask-loop UX (probe's stuck-prompt finding) is explicitly OUT of scope — it
+    is a separate slice (Slice B) against worktree-write-guard.sh.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A repo with caws initialized and no contract supplied.
+    when: '`caws specs create FOO-001 --title "x" --mode feature --risk-tier 2` runs.'
+    then: >-
+      The rejection output includes BOTH the message ("Tier 2 specs require at
+      least one contract.") AND a `repair:` line carrying the kernel's
+      narrowRepair ("Add at least one contract or change risk_tier to 3 or mode
+      to chore."). A store test asserts the LIFECYCLE_PLAN_REJECTED diagnostic
+      from createSpec carries a non-empty narrowRepair for the tier-2 / tier-1
+      contract case.
+  - id: A2
+    given: The kernel emits a tier-1 contract/observability/rollback/security rejection.
+    when: createSpec maps those kernel diagnostics into LIFECYCLE_PLAN_REJECTED.
+    then: >-
+      Each mapped diagnostic preserves the originating kernel diagnostic's
+      narrowRepair (not just its message). A test asserts narrowRepair is
+      threaded through for a tier-1 multi-violation create.
+  - id: A3
+    given: A fresh spec created at tier 3 on the main checkout (unbound).
+    when: The post-create hint is printed.
+    then: >-
+      The hint does NOT claim "scope-guard rejects every edit"; it states that
+      scope.in enforcement is authoritative inside the bound worktree and that
+      base-branch writes are governed by the worktree-write-guard, and points at
+      docs/guides/caws-contracts.md for the contract requirement. A shell test
+      (init-command.test.js) asserts the new message text and the absence of the
+      old over-promise string.
+  - id: A4
+    given: A first-timer who does not know what a CAWS contract is.
+    when: They read docs/guides/caws-contracts.md.
+    then: >-
+      The guide names the four contract types (api, schema, contract-test,
+      behavior), shows the YAML shape (name/type/path?/description?), states the
+      tier-1/2 requirement and the tier-3/chore exemption, and documents the
+      tier-3-bootstrap-then-raise path. A doc-presence assertion (or the doc's
+      own example validating against the kernel Contract shape) locks it.
 non_functional: {}
 contracts: []
