@@ -90,6 +90,20 @@ export interface ActivateSpecInput {
   readonly actor: EventBody['actor'];
 }
 
+export interface AmendScopeSpecInput {
+  readonly id: string;
+  /** scope.in paths to add (idempotent on already-present). */
+  readonly addIn?: readonly string[];
+  /** scope.in paths to remove (idempotent on absent). */
+  readonly removeIn?: readonly string[];
+  /** scope.out paths to add. */
+  readonly addOut?: readonly string[];
+  /** scope.out paths to remove. */
+  readonly removeOut?: readonly string[];
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
 export interface ArchiveSpecInput {
   readonly id: string;
   readonly reason?: string;
@@ -286,7 +300,7 @@ function gitLastCommitForPath(
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -313,7 +327,7 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -1193,6 +1207,281 @@ export function retireDraftSpec(
     path: fromPath,
     data: { audit_commit: audit },
   });
+}
+
+// ─── amendScopeSpec (CAWS-SCOPE-AMEND-COMMAND-001) ───────────────────────
+//
+// Governed scope.in/scope.out amendment without an agent-issued cherry-pick.
+// Mirrors activateSpec: load → parse+validate → lifecycle guard → patch →
+// reparse-validate (validate-before-write) → spec_scope_amended event →
+// lifecycle transaction → autoCommit. Writes ONLY canonical .caws/specs/<id>;
+// scope reads resolve through canonical so a linked worktree sees the change
+// immediately with no worktree-local copy.
+
+/**
+ * Line-surgical edit of a `scope.in:` / `scope.out:` YAML sequence. Operates on
+ * the raw bytes so comments and unrelated formatting are preserved — only
+ * list-item lines are inserted (append after the last existing item under the
+ * key) or removed (drop the exact matching `- <path>` line). `scope.out: []`
+ * inline-empty form is expanded to a block sequence on first add.
+ *
+ * Returns the new bytes, or null when the key block cannot be located.
+ */
+function patchScopeSequence(
+  source: string,
+  key: 'in' | 'out',
+  add: readonly string[],
+  remove: readonly string[]
+): string | null {
+  const lines = source.split('\n');
+  // Find the `scope:` top-level line.
+  const scopeIdx = lines.findIndex((l) => /^scope:\s*$/.test(l));
+  if (scopeIdx === -1) return null;
+
+  // Find the `  in:` / `  out:` line within the scope block (2-space indent).
+  const keyRe = new RegExp(`^  ${key}:\\s*(\\[\\s*\\])?\\s*$`);
+  let keyIdx = -1;
+  for (let i = scopeIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) break;
+    // Stop at the next top-level key (column 0, non-space).
+    if (/^\S/.test(line)) break;
+    if (keyRe.test(line)) {
+      keyIdx = i;
+      break;
+    }
+  }
+  if (keyIdx === -1) return null;
+
+  // Determine the item indent (4 spaces under a 2-space key) and collect the
+  // contiguous run of item lines (`    - <path>`), allowing interleaved
+  // comment lines at the same indent.
+  const itemRe = /^ {4}- (.*)$/;
+  let endIdx = keyIdx + 1;
+  const presentPaths = new Set<string>();
+  for (let i = keyIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) break;
+    if (/^\S/.test(line)) break; // next top-level key
+    // A 2-space key (e.g. `  out:`) ends the current key's block.
+    if (/^ {2}\S/.test(line) && !/^ {4}/.test(line)) break;
+    const m = itemRe.exec(line);
+    if (m && m[1] !== undefined) presentPaths.add(m[1].trim());
+    endIdx = i + 1;
+  }
+
+  // Remove matching item lines.
+  const removeSet = new Set(remove.map((p) => p.trim()));
+  let working = lines.filter((line, i) => {
+    if (i < keyIdx + 1 || i >= endIdx) return true;
+    const m = itemRe.exec(line);
+    if (m && m[1] !== undefined && removeSet.has(m[1].trim())) return false;
+    return true;
+  });
+
+  // Recompute the key index + insertion point after removals.
+  const newScopeIdx = working.findIndex((l) => /^scope:\s*$/.test(l));
+  let newKeyIdx = -1;
+  for (let i = newScopeIdx + 1; i < working.length; i++) {
+    const line = working[i];
+    if (line === undefined) break;
+    if (/^\S/.test(line)) break;
+    if (keyRe.test(line)) {
+      newKeyIdx = i;
+      break;
+    }
+  }
+  if (newKeyIdx === -1) return null;
+
+  // If the key was inline-empty (`out: []`), normalize to a block header.
+  const keyLine = working[newKeyIdx];
+  if (keyLine !== undefined && /\[\s*\]/.test(keyLine)) {
+    working[newKeyIdx] = `  ${key}:`;
+  }
+
+  // Find the insertion point: after the last item line in the block.
+  let insertAt = newKeyIdx + 1;
+  for (let i = newKeyIdx + 1; i < working.length; i++) {
+    const line = working[i];
+    if (line === undefined) break;
+    if (/^\S/.test(line)) break;
+    if (/^ {2}\S/.test(line) && !/^ {4}/.test(line)) break;
+    insertAt = i + 1;
+  }
+
+  // Append additions that are not already present (idempotent).
+  const toAdd = add.map((p) => p.trim()).filter((p) => p && !presentPaths.has(p));
+  if (toAdd.length > 0) {
+    const newItems = toAdd.map((p) => `    - ${p}`);
+    working = [...working.slice(0, insertAt), ...newItems, ...working.slice(insertAt)];
+  }
+
+  return working.join('\n');
+}
+
+export function amendScopeSpec(
+  cawsDir: string,
+  input: AmendScopeSpecInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+  const parsed = parseAndValidateSpec(originalBytes);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule },
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+
+  // Lifecycle guard: amend only an active or draft spec. A closed/archived
+  // spec's scope is frozen.
+  if (spec.lifecycle_state !== 'active' && spec.lifecycle_state !== 'draft') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is in lifecycle_state "${spec.lifecycle_state}"; amend-scope only amends active or draft specs (a closed/archived spec's scope is frozen).`,
+        { subject: input.id, data: { current_state: spec.lifecycle_state } }
+      )
+    );
+  }
+
+  const beforeIn = Array.isArray(spec.scope?.in) ? [...spec.scope.in] : [];
+  const beforeOut = Array.isArray(spec.scope?.out) ? [...spec.scope.out] : [];
+
+  const addIn = input.addIn ?? [];
+  const removeIn = input.removeIn ?? [];
+  const addOut = input.addOut ?? [];
+  const removeOut = input.removeOut ?? [];
+
+  if (addIn.length === 0 && removeIn.length === 0 && addOut.length === 0 && removeOut.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `amend-scope requires at least one of --add/--remove (in or out) for spec "${input.id}".`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  // Patch scope.in then scope.out on the raw bytes (comment-preserving).
+  let patched = originalBytes;
+  if (addIn.length > 0 || removeIn.length > 0) {
+    const r = patchScopeSequence(patched, 'in', addIn, removeIn);
+    if (r === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not locate the scope.in block in spec "${input.id}".`,
+          { subject: input.id }
+        )
+      );
+    }
+    patched = r;
+  }
+  if (addOut.length > 0 || removeOut.length > 0) {
+    const r = patchScopeSequence(patched, 'out', addOut, removeOut);
+    if (r === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not locate the scope.out block in spec "${input.id}".`,
+          { subject: input.id }
+        )
+      );
+    }
+    patched = r;
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  // Bump updated_at (present on every CLI-created spec; insert if absent).
+  if (/^updated_at:/m.test(patched)) {
+    const stepU = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!stepU.ok) return err(stepU.errors);
+    patched = stepU.value;
+  } else {
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const stepU = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!stepU.ok) return err(stepU.errors);
+    patched = stepU.value;
+  }
+
+  // VALIDATE BEFORE WRITE: the amended spec must still satisfy the schema
+  // (scope.in non-empty, scope.out no globs, etc.). Refuse with no write/event
+  // if the result would be invalid.
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'amended-scope validation failed' },
+        })
+      )
+    );
+  }
+  const after = reparsed.value;
+  const afterIn = Array.isArray(after.scope?.in) ? [...after.scope.in] : [];
+  const afterOut = Array.isArray(after.scope?.out) ? [...after.scope.out] : [];
+
+  // Compute the actual deltas (idempotent ops produce empty deltas).
+  const addedIn = afterIn.filter((p) => !beforeIn.includes(p));
+  const removedIn = beforeIn.filter((p) => !afterIn.includes(p));
+  const addedOut = afterOut.filter((p) => !beforeOut.includes(p));
+  const removedOut = beforeOut.filter((p) => !afterOut.includes(p));
+
+  const event: EventBody = {
+    event: 'spec_scope_amended',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: {
+      added_in: addedIn,
+      removed_in: removedIn,
+      added_out: addedOut,
+      removed_out: removedOut,
+      resulting_scope_in: afterIn,
+      resulting_scope_out: afterOut,
+    },
+  } as unknown as EventBody;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: patched }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'amend-scope', wasDirtyBeforeWrite);
 }
 
 // ─── Outcome mapper ──────────────────────────────────────────────────────

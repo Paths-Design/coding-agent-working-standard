@@ -29,6 +29,7 @@ import type {
 } from '../../store';
 import {
   activateSpec,
+  amendScopeSpec,
   archiveSpec,
   closeSpec,
   createSpec,
@@ -428,6 +429,52 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
     return 1;
   }
   out(`activated ${outcome.id}`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs amend-scope ──────────────────────────────────────────────
+
+export interface SpecsAmendScopeOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly addIn?: readonly string[];
+  readonly removeIn?: readonly string[];
+  readonly addOut?: readonly string[];
+  readonly removeOut?: readonly string[];
+}
+
+export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'amend-scope');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend-scope'
+  );
+  if (actor === null) return 2;
+
+  const result = amendScopeSpec(ctx.cawsDir, {
+    id: opts.id,
+    ...(opts.addIn !== undefined ? { addIn: opts.addIn } : {}),
+    ...(opts.removeIn !== undefined ? { removeIn: opts.removeIn } : {}),
+    ...(opts.addOut !== undefined ? { addOut: opts.addOut } : {}),
+    ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
+    now: nowFn,
+    actor,
+  });
+  if (!isOk(result)) {
+    err('caws specs amend-scope: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs amend-scope: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`amended scope for ${outcome.id}`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

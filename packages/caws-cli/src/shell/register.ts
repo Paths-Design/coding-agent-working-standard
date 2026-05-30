@@ -51,6 +51,7 @@ import {
   runPrepushCommand,
   runScopeCommand,
   runSpecsActivateCommand,
+  runSpecsAmendScopeCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
@@ -651,6 +652,30 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend-scope'))
+    .action(
+      (
+        id: string,
+        opts: {
+          add?: string[];
+          remove?: string[];
+          addOut?: string[];
+          removeOut?: string[];
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsAmendScopeCommand({
+          id,
+          ...(opts.add !== undefined ? { addIn: opts.add } : {}),
+          ...(opts.remove !== undefined ? { removeIn: opts.remove } : {}),
+          ...(opts.addOut !== undefined ? { addOut: opts.addOut } : {}),
+          ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'close'))
     .action(

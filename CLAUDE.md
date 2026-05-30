@@ -99,12 +99,13 @@ When mid-implementation you realize a file isn't in scope:
 
 - **Stop editing that file immediately.** A single edit on an out-of-scope path is strike 1. Three strikes hard-block until reset.
 - **Run `caws scope show <path>`** to confirm the refusal and capture the spec id + exact missing entry.
-- **Make the scope amendment as a separate small chore commit** on the canonical branch:
+- **Amend the scope with `caws specs amend-scope`** — the sanctioned path (CAWS-SCOPE-AMEND-COMMAND-001). It mutates the spec's `scope.in` on the canonical control plane, bumps `updated_at`, and appends a `spec_scope_amended` audit event — all in one governed transaction:
   ```
-  chore(caws): amend <SPEC-ID> scope for <what>
+  caws specs amend-scope <SPEC-ID> --add path/one --add path/two
   ```
-  Bump `updated_at`. Cherry-pick into your worktree branch. Then proceed with the original edit.
-- **Do not chain amendments**. If you need 3 files, amend once for all 3, not three commits.
+  Because scope resolves through canonical regardless of cwd, `caws scope check <path>` from your worktree ADMITs the added path **immediately** — there is **no `git cherry-pick` to run** (and therefore no danger latch to trip). Use `--remove`, `--add-out`, `--remove-out` as needed. Run it from anywhere (canonical or your linked worktree).
+- **Do not chain amendments**. If you need 3 files, `--add` all 3 in one `amend-scope` call, not three.
+- **Fallback (rare):** if `amend-scope` cannot cover the change (e.g. a non-scope spec field), hand-edit the canonical spec, commit it as `chore(caws): amend <SPEC-ID> scope for <what>` (bump `updated_at`), then `git cherry-pick` into your worktree branch. ⚠️ **Raw `git cherry-pick` engages the danger latch and requires a human reset** — prefer `amend-scope`, which avoids it entirely. (The classifier admits a cherry-pick that touches ONLY `.caws/specs/*.yaml` without latching, but `amend-scope` is still the first choice.)
 
 ### 3. Blast-radius and scope-collision review at draft time
 
@@ -122,7 +123,7 @@ If you accumulate strikes during a session:
 1. **Stop editing the hot file.** Don't retry on the same path — each retry is another strike.
 2. **Diagnose** with `caws scope show <path>` from inside the worktree. Capture the exact refusal message.
 3. **Decide**: is the path legitimately in scope (amend needed) or genuinely out (revert your edit, route through a different file)?
-4. **For "amend needed":** commit the scope amendment on canonical, cherry-pick to worktree, then ask the user to run `bash .claude/hooks/reset-strikes.sh --current`. The reset is required because fixing scope alone does NOT re-evaluate prior strikes — the file stays "hot" at its accumulated count.
+4. **For "amend needed":** run `caws specs amend-scope <SPEC-ID> --add <path>` (writes canonical, no cherry-pick), then ask the user to run `bash .claude/hooks/reset-strikes.sh --current`. The reset is required because fixing scope alone does NOT re-evaluate prior strikes — the file stays "hot" at its accumulated count.
 5. **For "genuinely out":** revert your edit, route the change through an in-scope file, and document the decision in the next commit message.
 
 ### Why this matters
@@ -165,10 +166,11 @@ Then run the `caws scope show` calls. Then — only if every target returns ADMI
 If any target returns REFUSE:
 
 1. Stop. Do not edit anything.
-2. Author **one** scope amendment commit on canonical that adds all missing paths in a single edit (per the existing "do not chain amendments" rule).
-3. Cherry-pick the amendment into the worktree branch.
-4. Rerun the scope-proof block. Every target must now return ADMIT.
-5. Begin editing.
+2. Run **one** `caws specs amend-scope <SPEC-ID> --add <path>...` adding all missing paths in a single call (the sanctioned path — CAWS-SCOPE-AMEND-COMMAND-001). It writes canonical, bumps `updated_at`, and appends `spec_scope_amended`. **No `git cherry-pick`** — scope resolves through canonical, so the worktree sees the change immediately.
+3. Rerun the scope-proof block. Every target must now return ADMIT.
+4. Begin editing.
+
+(Legacy fallback, only if `amend-scope` cannot express the change: hand-edit + commit the canonical spec, then `git cherry-pick` to the worktree — but that cherry-pick engages the danger latch and needs a human reset. Avoid it.)
 
 ### Post-edit verification (every commit)
 

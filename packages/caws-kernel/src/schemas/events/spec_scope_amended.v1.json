@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_scope_amended.v1.json",
+  "title": "spec_scope_amended event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed scope.in/scope.out amendment made via `caws specs amend-scope` (CAWS-SCOPE-AMEND-COMMAND-001). Replaces the prior chore-commit-only amendment path that rode in invisibly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resulting_scope_in"],
+  "properties": {
+    "added_in": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.in paths added by this amendment (may be empty)."
+    },
+    "removed_in": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.in paths removed by this amendment (may be empty)."
+    },
+    "added_out": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.out paths added by this amendment (may be empty)."
+    },
+    "removed_out": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.out paths removed by this amendment (may be empty)."
+    },
+    "resulting_scope_in": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "The full scope.in after the amendment (non-empty per the spec schema)."
+    },
+    "resulting_scope_out": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The full scope.out after the amendment."
+    }
+  }
+}

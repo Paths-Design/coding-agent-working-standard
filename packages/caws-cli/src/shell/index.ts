@@ -158,6 +158,7 @@ export {
   runSpecsListCommand,
   runSpecsShowCommand,
   runSpecsActivateCommand,
+  runSpecsAmendScopeCommand,
   runSpecsCloseCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,

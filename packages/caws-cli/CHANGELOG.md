@@ -2,6 +2,24 @@
 
 ### Added
 
+* **`caws specs amend-scope` — governed scope amendment without `git cherry-pick`**
+  (`CAWS-SCOPE-AMEND-COMMAND-001`). `caws specs amend-scope <id> --add <path>...`
+  (plus `--remove`, `--add-out`, `--remove-out`, all repeatable) mutates an
+  active/draft spec's `scope.in`/`scope.out` on the **canonical** control plane:
+  comment-preserving line-surgical YAML patch + `updated_at` bump + a
+  hash-chained `spec_scope_amended` event, in one validate-before-write
+  transaction (refuses closed/archived/unknown specs and any result that would
+  be schema-invalid — empty `scope.in`, glob in `scope.out`). Because scope
+  resolves through canonical regardless of cwd, `caws scope check <added-path>`
+  from a linked worktree admits the path **immediately** — there is no
+  `git cherry-pick` to run, so the scope-amendment protocol no longer trips the
+  danger latch (failure-lineage Entry 32). New kernel event type
+  `spec_scope_amended.v1`. Doctrine (root + consuming-repo `CLAUDE.md`) rewritten
+  to make `amend-scope` the sanctioned path; raw cherry-pick demoted to a
+  labeled fallback. As defense-in-depth, `classify_command.py` admits a
+  cherry-pick that provably touches only `.caws/specs/*.yaml` (fail-closed on any
+  uncertainty), so the residual fallback case also avoids the latch.
+
 * **`caws agents prune --dead` — PID-liveness ghost-lease cleanup**
   (`WORKTREE-GUARD-RISK-SURFACE-001`). Removes `active`/`stopping` leases on
   THIS host whose owning process is dead (`process.kill(pid, 0)`: `EPERM` =
