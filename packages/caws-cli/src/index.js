@@ -99,6 +99,25 @@ function reportUnknownCommand(commandName) {
   process.exit(1);
 }
 
+// Shared unknown-option handler (CAWS-CLI-UNKNOWN-OPTION-NEAREST-FLAG-001).
+// Commander itself already prints the unknown-option line AND a native
+// "(Did you mean --<flag>?)" suggestion drawn from the failing command's own
+// options before exitOverride/parse-catch fires. We therefore do NOT re-announce
+// the option (that was a redundant second "Unknown option:" block); we add only
+// the actionable --help + docs pointers, once. Both call sites delegate here so
+// the logic lives in exactly one place. Always exits 1.
+function reportUnknownOption(commandName) {
+  console.error(
+    chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`)
+  );
+  console.error(
+    chalk.blue(
+      '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
+    )
+  );
+  process.exit(1);
+}
+
 program.exitOverride((err) => {
   // Handle help and version requests gracefully
   if (
@@ -118,19 +137,7 @@ program.exitOverride((err) => {
 
   // Check for unknown option
   if (err.code === 'commander.unknownOption' || err.message.includes('unknown option')) {
-    const optionMatch = err.message.match(/unknown option ['"]([^'"]+)['"]/i);
-    const option = optionMatch ? optionMatch[1] : '';
-
-    console.error(chalk.red(`\nUnknown option: ${option}`));
-    console.error(chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`));
-
-    console.error(
-      chalk.blue(
-        '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
-      )
-    );
-
-    process.exit(1);
+    reportUnknownOption(commandName);
   }
 
   // Generic Commander error
@@ -179,21 +186,7 @@ if (require.main === module) {
 
     // Check for unknown option
     if (error.code === 'commander.unknownOption' || error.message.includes('unknown option')) {
-      const optionMatch = error.message.match(/unknown option ['"]([^'"]+)['"]/i);
-      const option = optionMatch ? optionMatch[1] : '';
-
-      console.error(chalk.red(`\nUnknown option: ${option}`));
-      console.error(
-        chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`)
-      );
-
-      console.error(
-        chalk.blue(
-          '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'
-        )
-      );
-
-      process.exit(1);
+      reportUnknownOption(commandName);
     }
 
     // Generic error with enhanced handling
