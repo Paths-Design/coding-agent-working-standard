@@ -1,25 +1,187 @@
 id: CAWS-SESSION-LOG-RELOCATE-001
 title: 'Relocate per-session state (turn logs + session-envelope + caller-pointer) from repo-root tmp/ to .caws/sessions/ (gitignored); read-both fallback; delete stray committed tree'
-risk_tier: 3
+risk_tier: 2
 mode: refactor
 lifecycle_state: active
 created_at: '2026-05-30T03:44:53.633Z'
-updated_at: '2026-05-30T03:44:53.633Z'
+updated_at: '2026-05-30T03:50:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/session-log.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    # WRITERS of per-session state.
+    - packages/caws-cli/templates/hook-packs/claude-code/session-log.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
+    # READER / resolution authority (scans the envelope + caller-pointer).
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    # Surfacing of the session-log pointer.
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/rules.ts
+    # Installed-files manifest / stateModel declaration.
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    # Doctrine that references tmp/<sessionId>/.
+    - CLAUDE.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - .claude/rules/worktree-isolation.md
+    - docs/failure-lineage.md
+    # The stray committed session-log tree to delete + gitignore guard.
+    - packages/caws-cli/templates/hook-packs/claude-code/tmp/
+    - .gitignore
+    # Tests.
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/tests/shell/
+    - packages/caws-cli/tests/init/
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    NEW HOME IS .caws/sessions/<sessionId>/. All per-session state moves out of
+    the repo-root tmp/ directory into .caws/sessions/<sessionId>/: the
+    human-readable turn logs (session.json, turn-*.json), the durable
+    .session-envelope.json (session-resolution authority), and the per-repo
+    .caller-session.json pointer (which moves to .caws/sessions/.caller-session.json).
+    Rationale: tmp/ is a conventional USER-owned scratch directory that other
+    projects use legitimately; CAWS silently colonizing + bloating it is hostile,
+    and tmp/ is not gitignored by default so session dirs get committed (already
+    happened — see the stray-tree invariant). Per-session state is provenance-
+    class and belongs with the other CAWS runtime state under .caws/.
+  - >-
+    GITIGNORED BY CONSTRUCTION. .caws/sessions/ is already in the managed
+    ephemeral-gitignore block (CAWS-INIT-GITIGNORE-MANAGE-001 EPHEMERAL_CAWS_
+    ENTRIES — .gitignore lines 453/587 in this repo). So the relocation inherits
+    gitignore coverage for free: relocated session state is never tracked. The
+    slice verifies this (a created .caws/sessions/<id>/ path is git-ignored).
+  - >-
+    WRITERS REPOINT. session-log.sh writes turn logs to
+    "$CAWS_ROOT/.caws/sessions/$SESSION_ID" (canonical-resolved root, not raw
+    CWD). parse-input.sh writes .session-envelope.json to
+    .caws/sessions/$sid/.session-envelope.json and .caller-session.json to
+    .caws/sessions/.caller-session.json. Both keep their atomic-write tmpfile
+    pattern (tmpfile + rename). The .caws/sessions/ dir is created (mkdir -p)
+    before write. Writers use the SAME canonical-root resolution the rest of the
+    pack uses so worktree and main-checkout writes land in the canonical
+    .caws/sessions/, not a per-worktree copy.
+  - >-
+    RESOLVER REPOINTS WITH A BOUNDED READ-BOTH FALLBACK. resolve-session.ts scans
+    .caws/sessions/<id>/.session-envelope.json (new) AND, as a bounded transition
+    fallback, the legacy <repoRoot>/tmp/<id>/.session-envelope.json — so an
+    in-flight session whose envelope was written to the old path before this
+    slice is NOT orphaned (no session-resolution regression). The caller-session
+    pointer read follows the same new-then-legacy order. New writes go ONLY to
+    .caws/sessions/. The legacy read is clearly marked as removable in a follow-up
+    once old tmp/ dirs age out (a labeled TODO + a failure-lineage note, NOT an
+    indefinite dual-read).
+  - >-
+    MANIFEST + STATEMODEL UPDATED. manifest-claude-code.ts stateModel declares
+    .caws/sessions/<session-id>/ and .caws/sessions/.caller-session.json instead
+    of tmp/<session-id>/ + tmp/.caller-session.json. The installed-files manifest
+    and any stateModel-completeness test agree with the new paths.
+  - >-
+    STRAY COMMITTED TREE DELETED + GUARDED. The stray session-log tree committed
+    into the template pack at
+    packages/caws-cli/templates/hook-packs/claude-code/tmp/<id>/ (a real
+    session's logs accidentally committed — the exact "tmp/ gets committed" bug
+    this slice fixes, already manifested) is removed via git rm. The pack's own
+    tmp/ is guarded against recurrence (gitignore entry and/or packaging
+    exclusion) so a future stray session-log under the template dir cannot be
+    committed again.
+  - >-
+    SURFACING + DOCTRINE UPDATED. agents.ts / rules.ts session-log pointer
+    surfacing references .caws/sessions/. CLAUDE.md (root + templates) and
+    .claude/rules/worktree-isolation.md update every "session-log pointer under
+    tmp/<sessionId>/" reference to .caws/sessions/<sessionId>/. failure-lineage
+    gains an entry: tmp/ was the wrong home (user-owned, bloats, gets committed);
+    .caws/sessions/ is provenance-adjacent + gitignored.
+  - >-
+    NO SESSION-RESOLUTION REGRESSION. The slice preserves the
+    CAWS-SESSION-ID-AGENT-BASH-PROPAGATION resolution behavior: the durable
+    envelope remains a session candidate source at its new path; the resolution
+    tier order and the trace-source labels are unchanged except for the path.
+    Existing resolve-session / caller-session-pointer / worktree-destroy-session
+    tests pass (updated for the new path), and the read-both fallback is proven
+    by a test that seeds a legacy tmp/<id>/ envelope and confirms it still
+    resolves.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: A session firing the SessionStart/log hooks in a git repo.
+    when: session-log.sh and parse-input.sh run.
+    then: >-
+      Turn logs land in .caws/sessions/<sessionId>/; the durable envelope lands
+      at .caws/sessions/<sessionId>/.session-envelope.json; the caller pointer
+      lands at .caws/sessions/.caller-session.json. NOTHING is written under
+      repo-root tmp/. The created .caws/sessions/<sessionId>/ path is git-ignored.
+  - id: A2
+    given: A session-envelope written at the NEW path .caws/sessions/<id>/.session-envelope.json.
+    when: resolve-session.ts resolves the session.
+    then: >-
+      The envelope is found and contributes a session candidate at the same
+      resolution tier as before, with the same trace-source label (path-only
+      change). Ownership resolution is unchanged from the pre-relocation behavior.
+  - id: A3
+    given: A LEGACY envelope at repo-root tmp/<id>/.session-envelope.json (written before this slice) and no new-path envelope.
+    when: resolve-session.ts resolves the session.
+    then: >-
+      The bounded read-both fallback finds the legacy envelope so the in-flight
+      session is NOT orphaned (no resolution regression). New writes still go only
+      to .caws/sessions/.
+  - id: A4
+    given: The template pack's stray committed session-log tree under templates/hook-packs/claude-code/tmp/.
+    when: The slice lands.
+    then: >-
+      The stray tree is removed (git rm) and a guard (gitignore / packaging
+      exclusion) prevents a future session-log under the template dir from being
+      committed. A test or packaging check confirms the pack ships no tmp/<id>/
+      session content.
+  - id: A5
+    given: The installed-files manifest + stateModel.
+    when: manifest-claude-code.ts is read / the stateModel-completeness test runs.
+    then: >-
+      The declared per-session state paths are .caws/sessions/<session-id>/ and
+      .caws/sessions/.caller-session.json (no tmp/ session paths remain). The
+      manifest test passes.
+  - id: A6
+    given: The full slice on canonical.
+    when: The hook-pack + shell-session + init/manifest suites + build run.
+    then: >-
+      Build/typecheck clean; resolve-session / caller-session-pointer /
+      worktree-destroy-session / session-log tests pass (updated for the new
+      path + a new read-both-fallback case); no regression to session-resolution
+      ownership behavior; doctrine references updated.
+non_functional:
+  reliability:
+    - >-
+      Stops CAWS from colonizing + bloating the user-owned repo-root tmp/ and
+      from committing session logs (already happened in the template pack).
+      The bounded read-both fallback prevents a session-resolution regression for
+      in-flight sessions during the transition, preserving the
+      CAWS-SESSION-ID-AGENT-BASH-PROPAGATION ownership-resolution correctness.
+  security:
+    - >-
+      Per-session provenance state moves under .caws/ (gitignored), reducing the
+      chance of accidentally committing session transcripts (which can contain
+      command history and working context) into a tracked location. The relocation
+      changes paths only, not the trust model: the durable envelope remains
+      operational cache / a resolution candidate, never authority.
+contracts:
+  - name: session-state-home-relocation-v1
+    type: behavior
+    path: packages/caws-cli/src/shell/session/resolve-session.ts
+    description: >-
+      Per-session state (turn logs, .session-envelope.json,
+      .caller-session.json) is written under .caws/sessions/ (canonical-resolved,
+      gitignored), never repo-root tmp/. resolve-session.ts reads the new path
+      with a bounded legacy-tmp read-both fallback so in-flight sessions are not
+      orphaned; new writes go only to .caws/sessions/. The session-resolution
+      tier order, trace-source labels, and ownership behavior are unchanged
+      except for the path. The stray committed template-pack tmp/ tree is removed
+      and guarded against recurrence. Manifest stateModel + doctrine reference the
+      new paths.
