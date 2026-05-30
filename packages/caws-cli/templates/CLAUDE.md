@@ -80,7 +80,7 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
 - `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
-- `caws specs create | list | show | close | archive | retire-draft | recover | prune-archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`).
+- `caws specs create | list | show | activate | amend-scope | close | archive | retire-draft | recover | prune-archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately).
 - `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse` — worktree lifecycle. `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
 - `caws agents register | heartbeat | stop | list | show | prune` — agent liveness substrate. `list/show` are read-only; ownership decisions still use `claim`/`worktree`.
 
@@ -123,7 +123,7 @@ The scope guard enforces file edit boundaries based on your spec's `scope.in` an
 
 1. Run `caws scope show <some-path-you-plan-to-edit>` — the positional `<path>` arg is required in v11. The output reports whether your binding is authoritative or union mode and surfaces the responsible spec.
 2. If union mode: bind your spec with `caws worktree bind <name> --spec <id>`
-3. If authoritative but still blocked: the file is genuinely outside your spec's scope. Update your spec's `scope.in` if the file should be in scope, or request a waiver via `caws waiver create`
+3. If authoritative but still blocked: the file is genuinely outside your spec's scope. If it should be in scope, run `caws specs amend-scope <id> --add <path>` (the sanctioned widening — canonical write, no cherry-pick, takes effect immediately). Otherwise request a waiver via `caws waiver create`.
 4. Do NOT modify another spec's `scope.out` to unblock yourself — that defeats the isolation
 
 ### Multi-Agent Coordination

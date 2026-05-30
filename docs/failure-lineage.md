@@ -1376,3 +1376,30 @@ The CAWS key rule "Ask first for risky changes — changes touching >10 files, >
 ### Single-line synthesis
 
 **Entry 31: the ">300 LOC, ask first" rule was advice with no trigger. A payload-diff Edit hook that warns past a configurable line-delta threshold is the smallest nudge that meets the agent at the moment the oversized edit lands — advisory only, so it informs without obstructing.**
+
+---
+
+## Entry 32: The Scope-Amendment Protocol Tripped Its Own Danger Latch (May 2026)
+
+**Severity:** Medium (a documented protocol pointed agents straight into a session-wide block they could not clear)
+**Era:** v11.1
+**Surface that failed:** the boundary between CLAUDE.md's scope-amendment recovery ("amend on canonical → `git cherry-pick` into the worktree branch") and `classify_command.py`'s cherry-pick detector, which classifies **every** `git cherry-pick` as `ask` — and an `ask` engages the sticky per-session danger latch
+**Agent class involved:** any agent (including a first-contact consuming-repo agent) that under-scoped a slice, hit a scope refusal mid-implementation, and followed the documented amendment protocol
+
+### What happened
+
+CAWS's own doctrine mandated `git cherry-pick` to sync a canonical scope amendment into a worktree branch. But the danger-latch classifier treats all cherry-picks as history-replay-dangerous, so the protocol-sanctioned cherry-pick engaged the sticky latch — blocking **every** subsequent Bash call (even `ls`/`grep`) until a human ran `reset-danger-latch.sh`. During WORKTREE-GUARD-RISK-SURFACE-001 this fired repeatedly; the agent only got through because it knew (a) the reset is human-only, and (b) canonical scope reads take effect immediately so the cherry-pick could be deferred. A less CAWS-literate agent would burn turns retrying wrapped/aliased cherry-pick forms (which the classifier also catches), reading "ask the user" as "try harder." The protocol and the guard actively contradicted each other.
+
+### What we built or changed because of it
+
+`CAWS-SCOPE-AMEND-COMMAND-001` ships **`caws specs amend-scope <id> --add/--remove [--add-out/--remove-out]`**: a governed store-layer mutation of `scope.in`/`scope.out` on the canonical control plane (comment-preserving raw-byte patch + `updated_at` bump + hash-chained `spec_scope_amended` event + validate-before-write + lifecycle guard). Because scope resolves through canonical regardless of cwd, `caws scope check` from a linked worktree admits the added path immediately — **the agent never issues `git cherry-pick`**, so the trap cannot occur. Doctrine in CLAUDE.md (root + consuming-repo template) was rewritten to make `amend-scope` the sanctioned path and demote raw cherry-pick to a labeled fallback carrying an explicit danger-latch + human-reset warning. As defense-in-depth, `classify_command.py` admits a cherry-pick that **provably touches only `.caws/specs/*.yaml`** (fail-closed: any source file, range, flag, unresolvable sha, or git error keeps the latch).
+
+### What it doesn't catch
+
+- A cherry-pick the agent runs for a non-scope reason (real branch integration) still latches — correctly; `amend-scope` only removes the *scope-amendment* cherry-pick.
+- The classifier carve-out runs one bounded `git show` per cherry-pick sha; if git is unreachable it fails closed (keeps the latch) rather than guessing.
+- `amend-scope` covers `scope.in`/`scope.out` only; other spec-field edits still go through hand-edit + (latching) cherry-pick or a future field-specific command.
+
+### Single-line synthesis
+
+**Entry 32: CAWS's own amendment protocol pointed agents into CAWS's own danger latch. The fix is a governed `caws specs amend-scope` that mutates canonical scope directly — eliminating the cherry-pick from the agent's hands — backed by a doctrine rewrite and a fail-closed classifier carve-out, so the sanctioned path no longer trips the guard.**
