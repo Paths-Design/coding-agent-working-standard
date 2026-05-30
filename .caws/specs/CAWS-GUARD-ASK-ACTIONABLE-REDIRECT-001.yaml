@@ -3,23 +3,92 @@ title: 'worktree-write-guard: ask/block reason names the worktree + cd path to s
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: guard-ask-actionable-redirect
 created_at: '2026-05-30T03:31:45.071Z'
 updated_at: '2026-05-30T03:31:45.071Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/caws-state.sh
+    - packages/caws-cli/src
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    THE ASK REASON NAMES A CONCRETE REDIRECT. On a base-branch Write/Edit that
+    the guard ASKs about (the non-claimed path, line ~548), when exactly one
+    active worktree is present the reason names that worktree and gives the
+    literal cd target — `cd .caws/worktrees/<name>` — instead of the generic
+    "cd into the owning worktree (caws worktree list)". This is the fix for the
+    un-dismissable-ask loop: a Claude Code PreToolUse `ask` cannot be
+    pre-approved by auto-mode and re-fires on every retry, so an agent writing
+    on main (e.g. because its worktree's scope.in still holds TODO placeholders)
+    retries the same on-main write and wedges the human into approving the same
+    prompt repeatedly. Naming the exact worktree + path lets the agent switch on
+    the FIRST ask instead of looping. When zero or multiple worktrees are
+    present, the message keeps the `caws worktree list` / `caws worktree create`
+    guidance (no single unambiguous redirect exists).
+  - >-
+    THE CLAIMED HARD-BLOCK NAMES THE CD PATH TOO. The claimed:* hard-block (exit
+    2, line ~526) already carries the claiming worktree name in
+    SPEC_CONTENTION_CHECK (`claimed:<wt>:<pattern>`). Its message gains the
+    literal `cd .caws/worktrees/<wt>` target so the redirect is copy-pasteable,
+    not just "Switch into that worktree (caws worktree list)". Parsing the
+    worktree name from the SPEC_CONTENTION_CHECK string; if parsing yields
+    nothing, fall back to the existing generic guidance.
+  - >-
+    NO DECISION-MODEL CHANGE. This slice only enriches the human-readable reason
+    STRINGS. The block-vs-ask decision is unchanged: claimed:* still hard-blocks
+    (exit 2); non-claimed base-branch writes still ask; CAWS_GUARD_NO_ASK / no
+    ask-capable harness still degrades ask->block (exit 2); writes from INSIDE a
+    worktree still exit 0; the .caws/.claude/docs allowlist is untouched; the
+    throttled composite-risk signal still appends. No exit code for any input
+    changes — only the text of the reason.
+  - >-
+    ROBUST PARSING, NO NEW FAILURE MODE. Extracting the worktree name (from
+    WT_NAMES for the ask path, from SPEC_CONTENTION_CHECK for the block path)
+    must never abort the guard or change its exit code if the value is empty or
+    malformed; on any parse miss the message degrades to the prior generic
+    guidance. The guard's fail-open/fail-closed posture is preserved exactly.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A base-branch Write to a non-claimed path with exactly one active worktree named <wt>.
+    when: The guard reaches the ASK decision and builds the reason.
+    then: >-
+      The emitted ask reason contains the worktree name <wt> and the literal
+      string `cd .caws/worktrees/<wt>`. A hook-pack test drives this state
+      (one registered worktree, a non-claimed base-branch write) and asserts the
+      reason names the worktree and the cd path.
+  - id: A2
+    given: A base-branch Write with zero active worktrees (or two or more).
+    when: The guard builds the ask reason.
+    then: >-
+      The reason keeps the generic `caws worktree list` / `caws worktree create`
+      guidance (no single unambiguous redirect). A test asserts the zero-worktree
+      and multi-worktree cases do NOT fabricate a specific cd path.
+  - id: A3
+    given: A base-branch Write to a file claimed by worktree <wt> (SPEC_CONTENTION_CHECK=claimed:<wt>:<pattern>).
+    when: The guard hits the claimed hard-block.
+    then: >-
+      It still exits 2, and the block message names <wt> and the literal
+      `cd .caws/worktrees/<wt>` redirect. A test asserts the claimed block exits
+      2 AND surfaces the cd path.
+  - id: A4
+    given: The full guard with the enriched messages.
+    when: The existing worktree-write-guard hook-pack suite runs, plus the in-worktree-exit-0 and allowlist paths.
+    then: >-
+      All pre-existing behaviors pass unchanged (in-worktree writes exit 0;
+      allowlisted paths exit 0; ask-incapable degrades to exit 2; non-claimed
+      ask exits 0 with an ask envelope). No exit-code regression for any input.
 non_functional: {}
 contracts: []
