@@ -130,7 +130,7 @@ The scope guard enforces file edit boundaries based on your spec's `scope.in` an
 
 Each session gets registered in `.caws/agents.json` automatically (via the session-log hook and on every CAWS lifecycle CLI invocation). Per-session lease files land in `.caws/leases/` — operational cache only, never authority. Worktree session ownership is tracked in `.caws/worktrees.json:owner` as a session id.
 
-**Foreign-claim soft-block.** `caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree owned by a different session id without explicit `--takeover`. The refusal prints a structured warning naming the claimer as `<sessionId>:<platform>`, the heartbeat age, and any matching `tmp/<sessionId>/` session-log path so you can read context before deciding.
+**Foreign-claim soft-block.** `caws worktree bind`, `merge`, and `claim` refuse to mutate a worktree owned by a different session id without explicit `--takeover`. The refusal prints a structured warning naming the claimer as `<sessionId>:<platform>`, the heartbeat age, and any matching `.caws/sessions/<sessionId>/` session-log path so you can read context before deciding.
 
 **Decision-gating uses session-id equality only.** TTL pruning of `agents.json` is registry hygiene; it does NOT authorize takeover. A stale heartbeat doesn't mean the prior session is dead — it may be paused. Stale lease is evidence, never authority.
 

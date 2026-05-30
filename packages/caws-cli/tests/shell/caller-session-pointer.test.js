@@ -3,14 +3,17 @@
 // CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001 — hook-side caller-session pointer (A1).
 //
 // Proves the hook template's _write_durable_session_envelope ALSO writes a
-// per-repo caller-session pointer at <repo_root>/tmp/.caller-session.json
-// from the authoritative hook-payload session id, and skips the write when
-// the session id is missing/unknown (consistent with the resolver refusing
-// the literal 'unknown').
+// per-repo caller-session pointer at
+// <repo_root>/.caws/sessions/.caller-session.json (CAWS-SESSION-LOG-
+// RELOCATE-001 moved it out of repo-root tmp/) from the authoritative
+// hook-payload session id, and skips the write when the session id is
+// missing/unknown (consistent with the resolver refusing the literal
+// 'unknown').
 //
 // The function is exercised by sourcing the template script in a bash
-// subshell against a real temp git repo (the function resolves repo_root
-// via `git rev-parse --show-toplevel`), then asserting the on-disk pointer.
+// subshell against a real temp git repo with a .caws/ dir (the writer
+// resolves repo_root via git-common-dir and only writes where .caws/
+// exists), then asserting the on-disk pointer.
 // This is the same shell-out style as tests/integration/cursor-hooks.test.js.
 //
 // The resolver-side consumption of this pointer (A2-A5) is proven in
@@ -36,8 +39,11 @@ const SCRIPT = path.join(
 
 function mkRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-pointer-test-'));
-  // Real git repo so `git rev-parse --show-toplevel` resolves.
+  // Real git repo so git-common-dir resolution works.
   execFileSync('git', ['init', '-q'], { cwd: root });
+  // CAWS-SESSION-LOG-RELOCATE-001: the writer only writes per-session state
+  // where a .caws/ directory exists (a real CAWS project).
+  fs.mkdirSync(path.join(root, '.caws'), { recursive: true });
   return root;
 }
 
@@ -65,7 +71,8 @@ exit 0
 }
 
 function readPointer(root) {
-  const p = path.join(root, 'tmp', '.caller-session.json');
+  // CAWS-SESSION-LOG-RELOCATE-001: pointer now lives under .caws/sessions/.
+  const p = path.join(root, '.caws', 'sessions', '.caller-session.json');
   if (!fs.existsSync(p)) return null;
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
@@ -75,7 +82,7 @@ describe('CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: hook writes caller-session poi
   afterEach(() => root && cleanup(root));
 
   // A1: hook writes the pointer from the hook-payload session id.
-  test('A1: writes tmp/.caller-session.json naming the hook session id', () => {
+  test('A1: writes .caws/sessions/.caller-session.json naming the hook session id', () => {
     root = mkRepo();
     runEnvelopeWrite(root, {
       HOOK_SESSION_ID: 'sess-A1',

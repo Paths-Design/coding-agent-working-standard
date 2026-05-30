@@ -1403,3 +1403,39 @@ CAWS's own doctrine mandated `git cherry-pick` to sync a canonical scope amendme
 ### Single-line synthesis
 
 **Entry 32: CAWS's own amendment protocol pointed agents into CAWS's own danger latch. The fix is a governed `caws specs amend-scope` that mutates canonical scope directly — eliminating the cherry-pick from the agent's hands — backed by a doctrine rewrite and a fail-closed classifier carve-out, so the sanctioned path no longer trips the guard.**
+
+## Entry 33: Per-Session State Colonized The User's `tmp/` And Leaked Into The Published Package (May 2026)
+
+**Severity:** Medium (CAWS silently wrote into a user-owned directory and shipped a developer's local session transcripts to every consumer of the published package)
+**Era:** v11.1
+**Surface that failed:** the claude-code hook pack's choice of `<repo_root>/tmp/<session-id>/` as the home for per-session state (turn logs, `.session-envelope.json`, `.caller-session.json`), combined with `package.json`'s `files: ["templates/hook-packs/**"]` — npm's `files` inclusion does **not** honor `.gitignore`
+**Agent class involved:** every CAWS install (the hook pack writes session state on every fire); every published release (the tarball shipped whatever local session dirs existed under the pack)
+
+### What happened
+
+The session-log hook and the durable-session-envelope writer both used repo-root `tmp/` as their state home. Two distinct failures stacked:
+
+1. **Colonization.** `tmp/` is a conventional **user-owned** scratch directory that other projects and developers use legitimately. CAWS silently created and grew `tmp/<session-id>/` dirs there — and because the repo's `.gitignore` covered `tmp/`, the dirs were invisible to `git status` while still bloating the user's working tree. A consumer who relied on their own `tmp/` would find it colonized by CAWS session transcripts.
+
+2. **Package leak.** The `caws-cli` `package.json` ships `templates/hook-packs/**`. npm's `files` glob includes matched paths **regardless of `.gitignore`** — so the maintainer's own local session dirs under `templates/hook-packs/claude-code/tmp/<session-id>/` were published. `npm pack --dry-run` showed **27 stray files** (real `session.json`, `turn-*.json`, `handoff.json`, `session.txt`) being shipped to every installer. Session transcripts can carry command history and working context; this was an inadvertent disclosure surface in the published artifact.
+
+The git-ignore status was a red herring: it suppressed local visibility but did nothing for the packaging layer, which is precisely where the leak lived.
+
+### What we built or changed because of it
+
+`CAWS-SESSION-LOG-RELOCATE-001` moves all per-session state to `<repo_root>/.caws/sessions/` — provenance-adjacent (it lives with the other CAWS runtime state) and gitignored by construction (already in the managed ephemeral-gitignore block). Concretely:
+
+- **Writers** (`session-log.sh`, `lib/parse-input.sh`) write turn logs + `.session-envelope.json` to `.caws/sessions/<session-id>/` and the per-repo caller-pointer to `.caws/sessions/.caller-session.json`, resolved via git-common-dir + `pwd -P` so a linked worktree writes to the canonical `.caws/sessions/`, not a per-worktree copy. Writers only fire where a `.caws/` directory exists (a real CAWS project).
+- **Reader** (`resolve-session.ts`) scans the new `.caws/sessions/` home first and the legacy `tmp/` home second — a **bounded read-both fallback** so an in-flight session whose envelope was written to the old path before the cutover is not orphaned (no session-resolution regression). Deduped by session_id, new home wins. New writes go only to `.caws/sessions/`; the legacy read is a labeled, removable transition aid.
+- **Packaging guard** (`.npmignore`) excludes `templates/hook-packs/claude-code/tmp/` from the tarball — verified to drop the 27 stray files to 0 while shipping all legitimate pack files. A packaging test (`tests/init/session-log-packaging-guard.test.js`) invokes `npm pack --dry-run --json` and asserts zero `tmp/` session files ship, locking the leak against recurrence at CI.
+- **Manifest stateModel** + **doctrine** (root + template CLAUDE.md/AGENTS.md, `.claude/rules/worktree-isolation.md`) updated to name `.caws/sessions/<sessionId>/` everywhere the old `tmp/<sessionId>/` pointer was referenced.
+
+### What it doesn't catch
+
+- The maintainer's own pre-existing `tmp/` dirs in the canonical checkout are left in place (they hold unrelated scratch the maintainer isn't ready to drop); the slice only stops CAWS from *writing new* session state there and stops the pack from *shipping* it. The dirs age out of the resolver's read window naturally.
+- The bounded legacy-`tmp/` read in `resolve-session.ts` is a transition aid; until it is removed in a follow-up (once pre-relocation `tmp/<id>/` dirs age past the 24h freshness window), a hostile or stale legacy envelope is still a read candidate (same trust model as before — operational cache, never authority).
+- The `.gitignore`-vs-npm-`files` divergence is fixed for this one pack path; any *other* `files`-included directory that accumulates gitignored local content could leak the same way. The packaging test only guards the hook-pack `tmp/` path.
+
+### Single-line synthesis
+
+**Entry 33: CAWS put per-session state in the user's `tmp/`, which colonized a user-owned directory and — because npm's `files` glob ignores `.gitignore` — shipped 27 of the maintainer's local session transcripts in the published package. The fix relocates all session state to gitignored `.caws/sessions/` (with a bounded legacy read-both fallback so no in-flight session is orphaned) and adds an `.npmignore` + `npm pack` test that proves the tarball ships zero stray session content.**

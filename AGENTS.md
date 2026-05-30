@@ -212,7 +212,7 @@ caws waiver revoke FEAT-1-w
 
 **Problem**: `caws claim` refused with a foreign-owner message.
 **Cause**: Another agent session owns the worktree.
-**Fix**: Read their session log under `tmp/<sessionId>/`; only `--takeover` with user authorization.
+**Fix**: Read their session log under `.caws/sessions/<sessionId>/`; only `--takeover` with user authorization.
 
 **Problem**: A gate keeps blocking and you want to bypass it.
 **Cause**: Hand-editing `change_budget` will be rejected by CI; the right escape is a waiver.

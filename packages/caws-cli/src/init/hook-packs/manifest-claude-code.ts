@@ -214,8 +214,13 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       '.claude/hooks/state/danger-latch-*.json',
       '.claude/hooks/state/guard-strikes-*.json',
       '.caws/leases/',
-      'tmp/<session-id>/',
-      'tmp/.caller-session.json',
+      // CAWS-SESSION-LOG-RELOCATE-001: per-session state moved out of the
+      // user-owned repo-root tmp/ into .caws/sessions/ (gitignored,
+      // provenance-adjacent). Turn logs + .session-envelope.json live under
+      // .caws/sessions/<session-id>/; the per-repo caller-session pointer
+      // lives at .caws/sessions/.caller-session.json.
+      '.caws/sessions/<session-id>/',
+      '.caws/sessions/.caller-session.json',
     ],
   },
   lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],

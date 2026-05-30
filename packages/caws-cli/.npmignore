@@ -1,0 +1,19 @@
+# CAWS-SESSION-LOG-RELOCATE-001 — packaging exclusion.
+#
+# The published tarball MUST NOT ship stray session-log / scratch content
+# from the hook pack's tmp/ scratch directory. Before this slice, the
+# claude-code hook pack wrote per-session turn logs + session-envelope
+# state into `templates/hook-packs/claude-code/tmp/<session-id>/`. The
+# package.json `files` field ships `templates/hook-packs/**`, and npm's
+# `files` inclusion does NOT honor .gitignore — so those local session
+# dirs leaked into the published package (27 files in one observed pack).
+#
+# Per-session state now lives in the CONSUMER's `.caws/sessions/` at
+# runtime; the hook pack itself ships no tmp/ content. This exclusion is
+# the durable packaging guard against the leak recurring if a developer's
+# local session writes into the (pre-relocation) pack tmp/ dir again.
+#
+# This file exists ONLY for this exclusion. npm applies it as a
+# subtraction from the package.json `files` globs.
+templates/hook-packs/claude-code/tmp/
+templates/hook-packs/claude-code/tmp/**
