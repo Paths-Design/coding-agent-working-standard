@@ -67,11 +67,18 @@ These patterns waste scope-strike budget and force unbinds/scope rewrites mid-im
 
 ## Scope-guard strike state (avoid stale lockouts)
 
-The scope-guard strike counter is **session-global and accumulative**, not per-file or per-spec. Two important behaviors:
+The scope-guard strike counter is **accumulative across all guards within a single (session, checkout-location) pair**, not per-file or per-spec. The keying is deliberately scoped to the checkout you are working in:
 
-1. **A file that earned strikes earlier in the session stays "hot."** Even after you correct the underlying scope (e.g., add the file to a spec's `scope.in`), the guard does NOT re-evaluate prior strikes — it adds the next strike on top of the cumulative count. If you've already burned strikes 1 and 2 on `path/X`, the next edit will hard-block at strike 3 regardless of whether the scope is now correct.
+- From the **canonical checkout**, strikes accumulate in `.claude/logs/guard-strikes-<session>.json` — one file per session.
+- From inside a **linked worktree**, strikes accumulate in that worktree's own gitdir-relative file (`<gitdir>/caws-guard-strikes/guard-strikes-<session>.json`, where `<gitdir>` is `<canonical>/.git/worktrees/<name>` — outside every working tree so `git add -A` can never commit it; see `CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001`).
 
-2. **The recovery path is the strike-reset script, not the scope edit alone.** When the guard says "ask the user to run: `bash .claude/hooks/reset-strikes.sh --current`" — that's not optional. After correcting the scope cause, you still need to clear the accumulated strike state for the file.
+**Strikes do NOT bleed across worktrees.** A strike earned in worktree A does not corner an edit in worktree B, and a strike earned in a worktree is *not* visible in the canonical `.claude/logs` file (and vice-versa). This per-checkout isolation is **intentional**, not a defect: cross-worktree strike accumulation was a high-severity multi-agent control-plane collapse in the failure lineage (an agent flagged a bogus authority violation because another worktree's strikes leaked in). If a block message says "strike 3" but the canonical `.claude/logs` file shows a lower count, you are reading the wrong file — the live count is in *your current checkout's* strike file (the worktree gitdir when you're inside a worktree).
+
+Two important behaviors within a given checkout:
+
+1. **A file that earned strikes earlier stays "hot."** Even after you correct the underlying scope (e.g., add the file to a spec's `scope.in`), the guard does NOT re-evaluate prior strikes — it adds the next strike on top of the cumulative count for that checkout. If you've already burned strikes 1 and 2 on `path/X`, the next edit will hard-block at strike 3 regardless of whether the scope is now correct.
+
+2. **The recovery path is the strike-reset script, not the scope edit alone.** When the guard says "ask the user to run: `bash .claude/hooks/reset-strikes.sh --current`" — that's not optional. After correcting the scope cause, you still need to clear the accumulated strike state. `reset-strikes.sh` collects strike files from the canonical `.claude/logs`, every worktree gitdir, and the legacy `.caws/worktrees/**/tmp` location, so `--current` clears the right one.
 
 The right discipline: don't speculatively edit a file before verifying it's in scope. Use `caws scope show <path>` first if uncertain. The check costs nothing and avoids burning a strike on a file you'll have to revisit.
 
@@ -244,6 +251,18 @@ Linked worktrees must NOT use worktree-local `.caws/specs/*` files as authority.
 **Doctrine boundary:**
 
 Sparse-checkout in this project is a **materialization/recovery invariant**, NOT the authority model and NOT the scope-enforcement model. Scope is enforced by `scope-guard.sh` reading the spec's `scope.in`/`scope.out` from canonical. The sparse-checkout exclusion of `.caws/specs/` exists to prevent the split-brain class; it does not encode or implement scope.
+
+**Binding scope is an agreement, and there is no sparse-checkout materialization gap.**
+
+Two things a first-timer conflates — kept separate here:
+
+1. **Being bound to a worktree means every file outside your spec's `scope.in` is out-of-scope — by design.** That `scope.in` set is the explicit surface you are agreeing to touch for this slice; everything else (READMEs, sibling source, meta/process files, the friction log itself) is out-of-scope *on purpose*, not by accident. This is the isolation CAWS exists to provide: the slice's blast radius is exactly what the spec declares and nothing more. If a legitimate edit falls outside that surface, the answer is never "bypass the guard" — it is to widen the agreement with `caws specs amend-scope <id> --add <path>` (auditable, attributed to a commit), or to do non-slice work from the canonical checkout under no binding.
+
+2. **The sparse checkout does NOT hide root-level or main-tree files.** The linked-worktree sparse pattern is `/*` plus `!/.caws/specs/` — it materializes **everything except `.caws/specs/`** (which resolves through canonical anyway). So `CLAUDE.md`, `.gitignore`, `package.json`, and every source file at the repo root and below **are present in your worktree** the moment it is created. There is no "the file wasn't checked out, so I can't bring it into scope" problem.
+
+   Consequently, bringing a root-level (or any in-tree) path into scope **after** the checkout is already done is purely a control-plane operation: `caws specs amend-scope <id> --add <path>`. It mutates canonical `scope.in`, bumps `updated_at`, appends `spec_scope_amended`, and — because scope resolves through canonical regardless of cwd — your worktree's `caws scope check <path>` ADMITs the path **immediately, with no re-checkout and no `git cherry-pick`**. The file was always materialized; the amendment just extends the agreement to cover it.
+
+   (The only thing sparse-checkout withholds is `.caws/specs/` — and you never edit those in a worktree anyway; read them via `caws specs show <id>`, which resolves through canonical.)
 
 See `.claude/rules/worktree-isolation.md` for the full list.
 
