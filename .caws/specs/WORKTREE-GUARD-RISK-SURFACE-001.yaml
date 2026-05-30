@@ -3,6 +3,7 @@ title: 'worktree-write-guard: block only on active-bound-spec scope claim, else 
 risk_tier: 3
 mode: refactor
 lifecycle_state: active
+worktree: v11-worktree-guard-risk-surface
 created_at: '2026-05-30T00:09:46.610Z'
 updated_at: '2026-05-30T00:09:46.610Z'
 blast_radius:
