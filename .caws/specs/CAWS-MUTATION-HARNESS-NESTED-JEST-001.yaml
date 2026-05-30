@@ -1,0 +1,25 @@
+id: CAWS-MUTATION-HARNESS-NESTED-JEST-001
+title: 'Mutation harness times out at 30min because jest spawns Stryker which spawns jest workers (nested jest); direct stryker run finishes in ~4min — run Stryker out-of-process or replace the jest wrapper'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-30T09:12:11.604Z'
+updated_at: '2026-05-30T09:12:11.604Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
