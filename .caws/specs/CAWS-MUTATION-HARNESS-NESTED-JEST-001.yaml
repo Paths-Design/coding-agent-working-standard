@@ -2,10 +2,11 @@ id: CAWS-MUTATION-HARNESS-NESTED-JEST-001
 title: 'Mutation harness times out at 30min because jest spawns Stryker which spawns jest workers (nested jest); direct stryker run finishes in ~4min — run Stryker out-of-process or replace the jest wrapper'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: v11-mutation-harness-nested-jest
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-mutation-harness-nested-jest at b555de65b425f31547af0e29be72117b37b9fdea'
 created_at: '2026-05-30T09:12:11.604Z'
-updated_at: '2026-05-30T15:54:52.834Z'
+updated_at: '2026-05-30T16:16:26.322Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/mutation
