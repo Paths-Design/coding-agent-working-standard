@@ -137,15 +137,15 @@ describe('CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 — kernel feature-detec
     // shows what the guard produced (runtime-artifact discipline).
     // Visible when jest runs with --verbose or when test output is
     // streamed.
-    // eslint-disable-next-line no-console
+     
     console.log('[A1 ARTIFACT] runStatusCommand exit code:', result.code);
-    // eslint-disable-next-line no-console
+     
     console.log('[A1 ARTIFACT] runStatusCommand stderr (first 500 chars):');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stderr.slice(0, 500));
-    // eslint-disable-next-line no-console
+     
     console.log('[A1 ARTIFACT] runStatusCommand stdout (first 300 chars):');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stdout.slice(0, 300));
 
     // Must not have crashed — exit code is a number (status returns
@@ -169,15 +169,15 @@ describe('CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 — kernel feature-detec
     const result = captureRun(shell.runAgentsListCommand, {
       cwd: repoRoot,
     });
-    // eslint-disable-next-line no-console
+     
     console.log('[A2 ARTIFACT] runAgentsListCommand exit code:', result.code);
-    // eslint-disable-next-line no-console
+     
     console.log('[A2 ARTIFACT] runAgentsListCommand stderr:');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stderr);
-    // eslint-disable-next-line no-console
+     
     console.log('[A2 ARTIFACT] runAgentsListCommand stdout:');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stdout || '(empty stdout)');
 
     expect(typeof result.code).toBe('number');
@@ -197,15 +197,15 @@ describe('CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 — kernel feature-detec
       cwd: repoRoot,
       json: true,
     });
-    // eslint-disable-next-line no-console
+     
     console.log('[A3 ARTIFACT] --json exit code:', result.code);
-    // eslint-disable-next-line no-console
+     
     console.log('[A3 ARTIFACT] --json stderr:');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stderr);
-    // eslint-disable-next-line no-console
+     
     console.log('[A3 ARTIFACT] --json stdout:');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stdout || '(empty)');
 
     expect(typeof result.code).toBe('number');
@@ -219,7 +219,7 @@ describe('CAWS-STATUS-AGENTS-SUMMARIZE-ACTIVE-AGENTS-01 — kernel feature-detec
       const jsonStart = result.stdout.indexOf('{');
       if (jsonStart >= 0) {
         const parsed = JSON.parse(result.stdout.slice(jsonStart));
-        // eslint-disable-next-line no-console
+         
         console.log('[A3 ARTIFACT] parsed JSON:', JSON.stringify(parsed, null, 2));
         expect(parsed).toHaveProperty('ok', true);
         // counts.active should be 0 in the fallback.

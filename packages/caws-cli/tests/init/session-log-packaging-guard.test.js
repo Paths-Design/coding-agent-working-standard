@@ -110,7 +110,7 @@ describe('CAWS-SESSION-LOG-RELOCATE-001 A4: pack ships no tmp/ session content',
 
   it('the hook-pack manifest stateModel declares no tmp/ write path (post-relocation)', () => {
     // Load the compiled manifest the installer actually uses.
-    // eslint-disable-next-line global-require
+     
     const mod = require('../../dist/init/hook-packs/manifest-claude-code.js');
     const manifest = mod.CLAUDE_CODE_PACK;
     expect(manifest).toBeDefined();

@@ -831,7 +831,7 @@ describe('SEAM A5: closeSpec readYamlSource fault-injection (EACCES)', () => {
     let stillReadable = false;
     try { fs.readFileSync(activePath, 'utf8'); stillReadable = true; } catch { /* expected */ }
     if (stillReadable) {
-      // eslint-disable-next-line no-console
+       
       console.warn('SEAM A5 skipped: 0o000 file still readable in this environment.');
       return;
     }

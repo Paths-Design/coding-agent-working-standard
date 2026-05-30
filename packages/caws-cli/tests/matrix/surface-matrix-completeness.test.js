@@ -65,7 +65,7 @@ function loadYaml() {
 
 function loadMirror() {
   // Use require so jest catches syntax errors loudly.
-  // eslint-disable-next-line global-require
+   
   const mod = require(MIRROR_PATH);
   expect(mod).toBeTruthy();
   expect(mod.SCHEMA_VERSION).toBe(1);

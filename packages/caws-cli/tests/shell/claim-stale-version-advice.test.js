@@ -76,11 +76,11 @@ describe('CAWS-STALE-VERSION-ADVICE-DIAGNOSTICS-01 — runClaimCommand diagnosti
     // the binding resolver cannot identify a worktree from this cwd.
     const result = captureRun({ cwd: repo });
 
-    // eslint-disable-next-line no-console
+     
     console.log('[claim-stale ARTIFACT] exit code:', result.code);
-    // eslint-disable-next-line no-console
+     
     console.log('[claim-stale ARTIFACT] stderr:');
-    // eslint-disable-next-line no-console
+     
     console.log(result.stderr);
 
     // The diagnostic MUST fire (exit non-zero from this composition).
