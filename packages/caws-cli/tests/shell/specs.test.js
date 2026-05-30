@@ -85,11 +85,12 @@ describe('A1: caws specs create', () => {
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/created FEAT-001/);
-    // CAWS-FIRST-CONTACT-UX-001 A4: post-create guidance names the spec path
-    // and tells the user to fill scope.in.
-    expect(r.stdout).toMatch(/Next: open the spec/);
-    expect(r.stdout).toMatch(/edit:.*FEAT-001\.yaml/);
-    expect(r.stdout).toMatch(/scope\.in must list/);
+    // CAWS-SPECS-CREATE-SCOPE-IN-001 A4: with no --scope-in, the post-create
+    // guidance must route scope-setting through the GOVERNED mutation
+    // (`caws specs amend-scope`), NOT a raw YAML hand-edit — the hand-edit
+    // instruction was the silent-failure surface this slice removes.
+    expect(r.stdout).toMatch(/caws specs amend-scope FEAT-001 --add/);
+    expect(r.stdout).not.toMatch(/open the spec and replace/);
     // CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A3: the guidance must NOT over-promise
     // that scope-guard rejects edits — on the unbound main checkout it fails
     // open. It must instead say scope.in is enforced inside the bound worktree,
@@ -178,7 +179,10 @@ describe('A2: create refusals', () => {
     );
     expect(r.stderr).toMatch(/--type is not supported in v11/);
     expect(r.stderr).toMatch(/Risk tier 3 is appropriate/);
-    expect(r.stderr).toMatch(/replace TODOs in scope\.in/);
+    // CAWS-SPECS-CREATE-SCOPE-IN-001: usage advertises the --scope-in flag and
+    // names amend-scope as the governed widening path (no YAML hand-edit).
+    expect(r.stderr).toMatch(/--scope-in \(repeatable\) writes scope\.in/);
+    expect(r.stderr).toMatch(/caws specs amend-scope <id> --add/);
   });
 
   it('refuses legacy --type with explicit --mode guidance', () => {

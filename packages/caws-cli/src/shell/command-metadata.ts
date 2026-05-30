@@ -150,6 +150,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           allowedValues: RISK_TIERS,
         },
         {
+          flag: '--scope-in <path>',
+          description:
+            'Populate scope.in at creation time (repeatable); avoids the YAML hand-edit. Widen later with `caws specs amend-scope`.',
+          collect: true,
+        },
+        {
           flag: '--type <type>',
           description:
             'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',
