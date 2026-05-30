@@ -2,10 +2,10 @@ id: CAWS-DOCTRINE-STRIKE-KEYING-AND-BINDING-SCOPE-001
 title: 'Doctrine accuracy: strikes are per-checkout-accumulative (not session-global); worktree binding excludes all non-scope files by design, no sparse-checkout gap (#2 + Event 6)'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-doctrine-keying
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-30T23:14:56.964Z'
-updated_at: '2026-05-30T23:14:56.964Z'
+updated_at: '2026-05-30T23:17:41.173Z'
 blast_radius:
   modules:
     - CLAUDE.md project doctrine
