@@ -95,10 +95,18 @@ done
 
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Collect strike files from both the main-repo log dir and every worktree's tmp/.
+# Collect strike files from every location guard-strikes.sh may write to:
+#   - the canonical main-repo log dir (.claude/logs)
+#   - the current out-of-tree per-worktree location under each linked
+#     worktree's gitdir (.git/worktrees/<name>/caws-guard-strikes/) — where
+#     guard-strikes.sh writes since CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001, so
+#     strike state never lands in a worktree working tree
+#   - the legacy in-tree location (.caws/worktrees/<name>/tmp/) for any strike
+#     files written by a pre-relocation hook still on disk
 collect_strike_files() {
   {
     find "$PROJECT_DIR/.claude/logs" -maxdepth 1 -name 'guard-strikes-*.json' 2>/dev/null || true
+    find "$PROJECT_DIR/.git/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true
     find "$PROJECT_DIR/.caws/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true
   } | sort -u
 }
