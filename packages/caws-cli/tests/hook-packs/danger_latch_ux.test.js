@@ -79,21 +79,31 @@ function latchFiles(dir) {
 describe('DANGER-LATCH-UX-001', () => {
   const SID = 'f2c023e5-c7f2-4cc3-8060-b000390c40c5';
 
+  // DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: the FIRST flagged `ask` now only
+  // WARNS (warn-then-latch). These UX-001 tests assert the latch FILENAME +
+  // RESET mechanics, not WHEN the latch arms — so they arm the latch directly
+  // with a `deny`-class command (mkfs), which latches IMMEDIATELY on the
+  // first occurrence (no warn grace). This keeps each test's intent intact
+  // under the new escalation model. (`rm -rf /...` classifies `ask` and would
+  // now only warn on a single call.)
+  const DENY = (p) => `mkfs.ext4 /dev/${p}`;
+
   it('writer keys the sentinel to the stdin session id', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    block(dir, DENY('sda'), SID);
     expect(latchFiles(dir)).toEqual([`danger-latch-${SID}.json`]);
   });
 
   it('replay message recommends --session <id>, not --current', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
-    // The second probe MUST be a mutating command. As of
-    // CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001, read-only commands
-    // (e.g. `git status`) pass through a sticky latch, so they no longer
-    // surface the replay message; a non-scratch `rm` classifies `ask` and
-    // still hits the sticky-latch branch.
+    block(dir, DENY('sda'), SID); // deny → latch armed immediately
+    // The second probe MUST be a mutating command. Read-only commands pass
+    // through a sticky latch (CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001),
+    // so they don't surface the replay message; a non-scratch `rm` classifies
+    // `ask` and hits the sticky-latch branch.
     const r = block(dir, 'rm -rf /some/other/real/path', SID);
+    // The sticky-latch replay branch emits emit_block's flat shape
+    // ({decision,reason}), NOT the nested permissionDecision envelope.
     const reason = JSON.parse(r.stdout).reason;
     expect(reason).toContain(`--session ${SID}`);
     expect(reason).toContain('not --current');
@@ -101,7 +111,7 @@ describe('DANGER-LATCH-UX-001', () => {
 
   it('--current from a session-less shell clears the SOLE latch (the deadlock fix)', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /some/real/path', SID);
+    block(dir, DENY('sda'), SID);
     expect(latchFiles(dir)).toHaveLength(1);
     const r = reset(dir, ['--current', '--reason', 'sole-latch fallback']);
     expect(r.stdout + r.stderr).toMatch(/exactly one latch exists/);
@@ -110,8 +120,8 @@ describe('DANGER-LATCH-UX-001', () => {
 
   it('--current REFUSES when 2+ latches exist (points at --session/--all)', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /a', 'sessA-1111');
-    block(dir, 'rm -rf /b', 'sessB-2222');
+    block(dir, DENY('sda'), 'sessA-1111');
+    block(dir, DENY('sdb'), 'sessB-2222');
     expect(latchFiles(dir)).toHaveLength(2);
     const r = reset(dir, ['--current', '--reason', 'ambiguous']);
     expect(r.stdout + r.stderr).toMatch(/cannot|--session|--all/i);
@@ -120,8 +130,8 @@ describe('DANGER-LATCH-UX-001', () => {
 
   it('--session targets one precisely; --all clears the rest', () => {
     const dir = makeProject();
-    block(dir, 'rm -rf /a', 'sessA-1111');
-    block(dir, 'rm -rf /b', 'sessB-2222');
+    block(dir, DENY('sda'), 'sessA-1111');
+    block(dir, DENY('sdb'), 'sessB-2222');
     reset(dir, ['--session', 'sessA-1111', '--reason', 'precise']);
     expect(latchFiles(dir)).toEqual(['danger-latch-sessB-2222.json']);
     reset(dir, ['--all', '--reason', 'clear rest']);
@@ -131,7 +141,7 @@ describe('DANGER-LATCH-UX-001', () => {
   it('writer and clearer agree on the sanitized filename for a tricky session id', () => {
     const dir = makeProject();
     const tricky = 'sess/with:weird*chars';
-    block(dir, 'rm -rf /a', tricky);
+    block(dir, DENY('sda'), tricky);
     const files = latchFiles(dir);
     expect(files).toHaveLength(1);
     // --session with the SAME raw id must resolve to the SAME file and clear it.

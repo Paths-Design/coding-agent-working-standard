@@ -83,11 +83,19 @@ fi
 
 # --- Resolve the set of latch files to clear --------------------------------
 declare -a LATCH_FILES=()
+# DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: the reset ALSO clears the per-session
+# WARN MARKER so a post-reset session starts with a fresh first-strike grace.
+# A warn marker with no latch is per-session advisory state, not authority — it
+# is cleared too (so clearing the grace is never a no-op when only a warn
+# exists). Populated alongside LATCH_FILES per mode.
+declare -a WARN_FILES=()
 
 case "$MODE" in
   current)
     SESSION_ID="${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}"
     CANDIDATE="$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ID").json"
+    # The warn sibling for this session (cleared even if no latch exists).
+    WARN_FILES+=("$STATE_DIR/danger-warn-$(sanitize_session "$SESSION_ID").json")
     if [[ -f "$CANDIDATE" ]]; then
       LATCH_FILES+=("$CANDIDATE")
     else
@@ -109,6 +117,8 @@ case "$MODE" in
         echo "reset-danger-latch.sh: no latch for resolved session '$SESSION_ID'," >&2
         echo "  but exactly one latch exists — clearing it: ${_found[0]}" >&2
         LATCH_FILES+=("${_found[0]}")
+        # Clear that latch's warn sibling too (danger-latch-X -> danger-warn-X).
+        WARN_FILES+=("${_found[0]/danger-latch-/danger-warn-}")
       else
         # Record the candidate so the not-found branch reports it; if 2+
         # latches exist, the guidance below tells the human to use --session.
@@ -124,17 +134,22 @@ case "$MODE" in
     ;;
   session)
     LATCH_FILES+=("$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ARG").json")
+    WARN_FILES+=("$STATE_DIR/danger-warn-$(sanitize_session "$SESSION_ARG").json")
     ;;
   all)
     if [[ -d "$STATE_DIR" ]]; then
       while IFS= read -r f; do
         [[ -n "$f" ]] && LATCH_FILES+=("$f")
       done < <(find "$STATE_DIR" -maxdepth 1 -type f -name 'danger-latch-*.json' 2>/dev/null)
+      # Sweep every warn marker too.
+      while IFS= read -r f; do
+        [[ -n "$f" ]] && WARN_FILES+=("$f")
+      done < <(find "$STATE_DIR" -maxdepth 1 -type f -name 'danger-warn-*.json' 2>/dev/null)
     fi
     ;;
 esac
 
-if [[ "${#LATCH_FILES[@]}" -eq 0 ]]; then
+if [[ "${#LATCH_FILES[@]}" -eq 0 && "${#WARN_FILES[@]}" -eq 0 ]]; then
   echo "No danger latches found to clear (state dir: $STATE_DIR)."
   exit 0
 fi
@@ -144,8 +159,12 @@ mkdir -p "$(dirname "$LOG_FILE")"
 RESET_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CLEARED=0
 MISSING=0
+WARNS_CLEARED=0
 
-for LATCH in "${LATCH_FILES[@]}"; do
+# Guard the array expansion: under `set -u`, "${arr[@]}" on an EMPTY array
+# is an unbound-variable error in older bash. An --all reset that finds only
+# warn markers (no latches) leaves LATCH_FILES empty — skip the loop then.
+for LATCH in ${LATCH_FILES[@]+"${LATCH_FILES[@]}"}; do
   if [[ ! -f "$LATCH" ]]; then
     MISSING=$((MISSING + 1))
     continue
@@ -173,10 +192,22 @@ for LATCH in "${LATCH_FILES[@]}"; do
   echo "Cleared danger latch: $LATCH"
 done
 
-if [[ "$MODE" != "all" && "$CLEARED" -eq 0 && "$MISSING" -gt 0 ]]; then
-  echo "No active latch for the requested session (nothing to clear)."
+# DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: clear the warn markers too, so the
+# next flagged ask in a post-reset session gets a fresh first-strike warning.
+# A warn marker is per-session advisory state (its absence resets the grace);
+# clearing it is not audit-critical, so it is removed quietly without a
+# per-file log line.
+for WARN in ${WARN_FILES[@]+"${WARN_FILES[@]}"}; do
+  if [[ -f "$WARN" ]]; then
+    rm -f "$WARN"
+    WARNS_CLEARED=$((WARNS_CLEARED + 1))
+  fi
+done
+
+if [[ "$MODE" != "all" && "$CLEARED" -eq 0 && "$WARNS_CLEARED" -eq 0 && "$MISSING" -gt 0 ]]; then
+  echo "No active latch or warn marker for the requested session (nothing to clear)."
   exit 0
 fi
 
-echo "Reset $CLEARED danger latch(es). Reason recorded to $LOG_FILE"
-echo "Bash tool calls may now resume in this session."
+echo "Reset $CLEARED danger latch(es) and $WARNS_CLEARED warn marker(s). Reason recorded to $LOG_FILE"
+echo "Bash tool calls may now resume in this session (first-strike warning grace reset)."
