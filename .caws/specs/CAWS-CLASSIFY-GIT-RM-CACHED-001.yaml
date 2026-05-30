@@ -5,9 +5,10 @@ mode: feature
 lifecycle_state: active
 created_at: '2026-05-30T09:16:10.601Z'
 updated_at: '2026-05-30T09:16:10.601Z'
+worktree: classify-git-rm-cached
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli claude-code hook pack — command classifier
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +17,36 @@ scope:
     - 'packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `git rm --cached <path>` and `git rm -n/--dry-run <path>` (index-only or
+    dry-run, non-destructive to the working tree) classify as `allow` — they no
+    longer fall through the governed-family fail-closed default to `ask`, so a
+    routine untrack-staging cleanup does not arm the session danger latch.
+  - >-
+    Working-tree-destructive `git rm <path>` (no --cached/-n), `git rm -r`, and
+    `git rm -rf` remain governed: they classify as `ask` (or a deny where a
+    higher-precedence pattern already matches). The widening admits ONLY the
+    index-only/dry-run forms.
+  - >-
+    The change is a suppress-only allow-list special-case (mirroring the
+    existing git commit/branch/config cases); it cannot itself escalate a
+    command, and the deny/confirm patterns evaluated earlier are unaffected.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a command `git rm --cached path/to/file`
+    when: classify_command.py classifies the segment
+    then: the decision is `allow` (index-only untrack is non-destructive)
+  - id: A2
+    given: a command `git rm -rf path` or plain `git rm path`
+    when: classify_command.py classifies the segment
+    then: the decision is `ask` (working-tree delete stays governed)
+  - id: A3
+    given: a command `git rm -n path` or `git rm --dry-run path`
+    when: classify_command.py classifies the segment
+    then: the decision is `allow` (dry-run mutates nothing)
+  - id: A4
+    given: a combined segment `git rm --cached f && git commit -m "untrack"`
+    when: classify_command.py classifies the full command
+    then: the decision is `allow` (both segments are non-destructive everyday workflow)
 non_functional: {}
 contracts: []
