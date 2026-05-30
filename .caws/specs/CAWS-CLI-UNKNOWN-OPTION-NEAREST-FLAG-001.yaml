@@ -2,10 +2,10 @@ id: CAWS-CLI-UNKNOWN-OPTION-NEAREST-FLAG-001
 title: 'Unknown-option errors suggest the nearest valid flag for that command (did you mean --X?) and the two copy-pasted handlers are de-duplicated into one helper (Event 1)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-unknown-option
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-30T23:22:45.255Z'
-updated_at: '2026-05-30T23:22:45.255Z'
+updated_at: '2026-05-30T23:31:19.563Z'
 blast_radius:
   modules:
     - caws-cli entrypoint — Commander error handling
@@ -38,9 +38,9 @@ invariants:
     option from an unrelated command.
 acceptance:
   - id: A1
-    given: 'a command `caws init --non-interactive` where --interactive is a real init option'
+    given: 'a command `caws init --agent-surfac` where --agent-surface is a real init option (one-char typo)'
     when: 'Commander rejects the unknown option'
-    then: "stderr contains 'Unknown option' AND a 'Did you mean: --interactive?' suggestion; exit code 1"
+    then: "stderr contains 'Unknown option' AND a 'Did you mean: --agent-surface?' suggestion; exit code 1"
   - id: A2
     given: 'a command with an unknown option whose spelling is far from every real flag (e.g. `caws status --zzzzzzzz`)'
     when: 'Commander rejects it'
