@@ -948,6 +948,26 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             if any(t in ("--get", "--get-all", "--get-regexp", "--list", "-l") for t in tokens):
                 return ("allow", "")
             return None
+        # Special-case `git rm` — admit ONLY the non-destructive forms
+        # (CAWS-CLASSIFY-GIT-RM-CACHED-001, friction-probe Event 7).
+        # `git rm --cached <path>` removes from the index only; the working-tree
+        # file is untouched. `git rm -n` / `git rm --dry-run` mutates nothing.
+        # Both are routine cleanups (untrack a wrongly-committed runtime file)
+        # that were previously swept into the governed-family fail-closed
+        # default → "ask", arming the sticky session danger latch on a safe op.
+        # WORKING-TREE-DESTRUCTIVE forms (plain `git rm <path>`, `-r`, `-rf`)
+        # return None so they fall through to "ask" and stay governed — the
+        # allow-list is suppress-only and cannot itself escalate.
+        if sub == "rm":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            index_only = any(t == "--cached" for t in tokens)
+            dry_run = any(t in ("-n", "--dry-run") for t in tokens)
+            if index_only or dry_run:
+                return ("allow", "")
+            return None
         # Special-case `git commit` — admit plain commit (creates a new
         # commit object; not destructive). REJECT --amend, which rewrites
         # the last commit and is the attribution-theft vector of
