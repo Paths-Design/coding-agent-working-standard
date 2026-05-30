@@ -5,7 +5,7 @@ mode: refactor
 lifecycle_state: active
 worktree: v11-session-log-relocate
 created_at: '2026-05-30T03:44:53.633Z'
-updated_at: '2026-05-30T06:41:38.440Z'
+updated_at: '2026-05-30T06:42:59.820Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/session-log.sh
@@ -42,6 +42,7 @@ scope:
     - packages/caws-cli/CHANGELOG.md
     - packages/caws-cli/.npmignore
     - packages/caws-cli/templates/agents.md
+    - AGENTS.md
   out:
     - .caws/policy.yaml
     - CODEOWNERS
