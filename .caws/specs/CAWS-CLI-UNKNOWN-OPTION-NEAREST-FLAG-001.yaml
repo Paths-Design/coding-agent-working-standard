@@ -1,0 +1,26 @@
+id: CAWS-CLI-UNKNOWN-OPTION-NEAREST-FLAG-001
+title: 'Unknown-option errors suggest the nearest valid flag for that command (did you mean --X?) and the two copy-pasted handlers are de-duplicated into one helper (Event 1)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-30T23:22:45.255Z'
+updated_at: '2026-05-30T23:22:45.255Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/index.js'
+    - 'packages/caws-cli/tests/cli-unknown-option-suggestion.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
