@@ -2,10 +2,11 @@ id: CAWS-INIT-SETTINGS-WIRING-001
 title: 'caws init wires .claude/settings.json (caws_dispatch namespace) + emits settings.json.example; idempotent merge, never clobber, leave-and-warn on old dispatch/ dir'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: init-settings-wiring
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-settings-wiring at a9d3f0bb60122a7a056547b986f7da313868c8cc'
 created_at: '2026-05-30T01:18:19.730Z'
-updated_at: '2026-05-30T01:18:19.730Z'
+updated_at: '2026-05-30T01:39:16.787Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-install.ts
