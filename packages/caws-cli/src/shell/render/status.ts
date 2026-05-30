@@ -141,14 +141,27 @@ function describeCwdRelation(binding: ResolvedBinding): string {
   return 'unknown';
 }
 
-function describeBindingState(state: BindingState): string {
+function describeBindingState(
+  state: BindingState,
+  activeSpecCount: number
+): string {
   switch (state.kind) {
     case 'bound':
       return `bound → ${state.spec.id} (worktree '${state.worktreeName}')`;
     case 'one_sided':
       return 'one_sided (corrupt asymmetric binding — see doctor)';
     case 'unbound':
-      return 'unbound';
+      // 'unbound' means no spec is bound to THIS checkout — it does NOT mean
+      // edits are unrestricted. When any spec is active, the scope guard falls
+      // back to union mode and enforces every active spec's scope.in/out, so a
+      // main-checkout edit is still governed. Surface that so a first-timer does
+      // not misread 'unbound' as 'free' (friction-probe Event 8). With zero
+      // active specs there is nothing to enforce, so the bare word is accurate.
+      return activeSpecCount > 0
+        ? `unbound (scope still enforced — union mode over ${activeSpecCount} active spec${
+            activeSpecCount === 1 ? '' : 's'
+          })`
+        : 'unbound';
   }
 }
 
@@ -191,7 +204,10 @@ export function renderStatus(input: StatusRenderInput): string {
   if (input.binding.worktreeName !== undefined) {
     lines.push(`  worktree:    ${input.binding.worktreeName}`);
   }
-  lines.push(`  binding:     ${describeBindingState(input.binding.binding)}`);
+  const activeSpecCount = lifecycle['active'] ?? 0;
+  lines.push(
+    `  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`
+  );
 
   if (input.session !== null) {
     lines.push(

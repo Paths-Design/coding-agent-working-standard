@@ -187,6 +187,86 @@ describe('runStatusCommand — exit 0 happy paths', () => {
   });
 });
 
+describe('CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001: unbound ≠ free (Event 8)', () => {
+  let repoRoot;
+  afterEach(() => rmrf(repoRoot));
+
+  // A1: unbound on the main checkout WITH an active spec → the binding line
+  // says scope is still enforced (union mode), so a first-timer does not read
+  // 'unbound' as 'unrestricted'.
+  it('A1: unbound + 1 active spec → binding line carries union-mode enforcement caveat', () => {
+    repoRoot = mkTempGitRepo('caws-status-caveat-active-');
+    fs.writeFileSync(
+      path.join(repoRoot, '.caws', 'specs', 'FOO-1.yaml'),
+      VALID_SPEC('FOO-1', 'active') // active, no worktree binding → unbound here
+    );
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    const r = captureRun({
+      cwd: repoRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me' },
+    });
+    expect(r.code).toBe(0);
+    // Still names 'unbound' but qualifies it with the enforcement reality.
+    expect(r.stdout).toMatch(
+      /binding:\s+unbound \(scope still enforced — union mode over 1 active spec\)/
+    );
+  });
+
+  // A2: unbound with ZERO active specs → a bare 'unbound', no caveat (nothing
+  // active to enforce, so the word is accurate as-is).
+  it('A2: unbound + 0 active specs → bare "unbound", no enforcement caveat', () => {
+    repoRoot = mkTempGitRepo('caws-status-caveat-none-');
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    // No specs written → 0 active.
+    const r = captureRun({
+      cwd: repoRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me' },
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/binding:\s+unbound(\s|$)/);
+    expect(r.stdout).not.toContain('scope still enforced');
+  });
+
+  // A2 (closed specs are not active): a closed spec must NOT trigger the
+  // caveat — only active specs participate in union-mode enforcement.
+  it('A2: unbound + only a CLOSED spec → no caveat (closed is terminal)', () => {
+    repoRoot = mkTempGitRepo('caws-status-caveat-closed-');
+    fs.writeFileSync(
+      path.join(repoRoot, '.caws', 'specs', 'OLD-1.yaml'),
+      VALID_SPEC('OLD-1', 'closed')
+    );
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    const r = captureRun({
+      cwd: repoRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me' },
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain('scope still enforced');
+  });
+
+  // A1 (plural): two active specs → the caveat pluralizes the count.
+  it('A1: unbound + 2 active specs → caveat names "2 active specs" (plural)', () => {
+    repoRoot = mkTempGitRepo('caws-status-caveat-two-');
+    fs.writeFileSync(
+      path.join(repoRoot, '.caws', 'specs', 'FOO-1.yaml'),
+      VALID_SPEC('FOO-1', 'active')
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, '.caws', 'specs', 'BAR-2.yaml'),
+      VALID_SPEC('BAR-2', 'active')
+    );
+    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    const r = captureRun({
+      cwd: repoRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me' },
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(
+      /binding:\s+unbound \(scope still enforced — union mode over 2 active specs\)/
+    );
+  });
+});
+
 describe('runStatusCommand — MUST NOT mutate state', () => {
   let repoRoot;
   afterEach(() => rmrf(repoRoot));
