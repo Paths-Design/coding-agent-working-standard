@@ -2,10 +2,11 @@ id: CAWS-LINT-BASELINE-HYGIENE-001
 title: 'Clear pre-existing lint baseline: remove unused closeSpec import + 26 stale eslint-disable no-console directives across 7 test files'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: v11-lint-hygiene
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-lint-hygiene at 6b96857bb4f0d241abae8fae8ce379c6e85d9b81'
 created_at: '2026-05-30T07:57:30.512Z'
-updated_at: '2026-05-30T07:57:30.512Z'
+updated_at: '2026-05-30T08:06:33.766Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests
