@@ -18,8 +18,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /** Bump when the managed entry set changes; the markers carry it so a stale
- * block (older version) is detected and replaced in place. */
-export const GITIGNORE_BLOCK_VERSION = 1;
+ * block (older version) is detected and replaced in place.
+ * v2: added `tmp/guard-strikes-*.json` (defense-in-depth for any legacy
+ * guard-strike file that lands in a tracked `tmp/`;
+ * CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001). */
+export const GITIGNORE_BLOCK_VERSION = 2;
 
 export const GITIGNORE_BEGIN_MARKER = `# >>> caws gitignore (managed, v${GITIGNORE_BLOCK_VERSION}) >>>`;
 export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
@@ -36,8 +39,16 @@ const BEGIN_MARKER_PREFIX = '# >>> caws gitignore (managed';
  *   - events.jsonl[.lock]          : append-only event log (runtime)
  *   - cache/ sessions/ state/      : runtime caches
  *   - duplication-cache.json       : god-object/duplication scan cache
+ *   - tmp/guard-strikes-*.json     : scope-guard strike-state (defense-in-depth)
  * AUTHORITY state (specs/, policy.yaml, waivers/) is intentionally ABSENT so it
  * stays tracked. Mirrors the canonical CAWS repo .gitignore classification.
+ *
+ * The `tmp/guard-strikes-*.json` entry is a backstop. Since
+ * CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001 the scope-guard writes per-worktree
+ * strike state under the worktree's gitdir (outside every working tree), so it
+ * can no longer leak via `git add -A`. This entry still ignores any strike file
+ * a pre-relocation hook left in a tracked `tmp/`, so an old repo that re-inits
+ * never re-commits one (friction-probe Event 5).
  */
 export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/worktrees/',
@@ -50,6 +61,7 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/duplication-cache.json',
   '.caws/events.jsonl',
   '.caws/events.jsonl.lock',
+  'tmp/guard-strikes-*.json',
 ];
 
 /** The full managed block text (markers + comment + entries), no trailing

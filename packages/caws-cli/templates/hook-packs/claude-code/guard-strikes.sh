@@ -40,12 +40,40 @@ guard_worktree_state_dir() {
     worktree_dir="${BASH_REMATCH[1]}"
   fi
 
-  if [[ -n "$worktree_dir" ]] && [[ -d "$worktree_dir" ]]; then
-    mkdir -p "$worktree_dir/tmp"
-    printf '%s\n' "$worktree_dir/tmp"
-    return 0
+  if [[ -z "$worktree_dir" ]] || [[ ! -d "$worktree_dir" ]]; then
+    return 1
   fi
 
+  # The strike file must NOT land in the worktree's WORKING TREE. A linked
+  # worktree is its own working tree with its own `git status`; a strike file
+  # written to `<worktree>/tmp/` shows up as `?? tmp/` and a routine
+  # `git add -A` from inside the worktree sweeps it into the feature commit
+  # (friction-probe Event 5, CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001).
+  #
+  # Resolve the worktree's GITDIR instead — a linked worktree's `.git` is a
+  # FILE whose single line is `gitdir: <canonical>/.git/worktrees/<name>`.
+  # Anything under that directory is structurally outside every working tree,
+  # so git can never track it. We parse the file directly (no `git` call:
+  # these hooks are pure-bash by design and must not shell out).
+  local git_pointer="$worktree_dir/.git"
+  if [[ -f "$git_pointer" ]]; then
+    local gitdir_line
+    gitdir_line=$(grep -m1 '^gitdir:' "$git_pointer" 2>/dev/null || true)
+    if [[ -n "$gitdir_line" ]]; then
+      local gitdir="${gitdir_line#gitdir:}"
+      # Trim leading whitespace from `gitdir: <path>`.
+      gitdir="${gitdir#"${gitdir%%[![:space:]]*}"}"
+      if [[ -n "$gitdir" ]] && [[ -d "$gitdir" ]]; then
+        mkdir -p "$gitdir/caws-guard-strikes"
+        printf '%s\n' "$gitdir/caws-guard-strikes"
+        return 0
+      fi
+    fi
+  fi
+
+  # Could not resolve a gitdir (no .git file, unreadable, or not a linked
+  # worktree). Signal the caller to fall back to the canonical .claude/logs
+  # location — never fail closed, and never re-introduce the in-tree leak.
   return 1
 }
 
