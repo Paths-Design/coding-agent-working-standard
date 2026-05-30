@@ -58,7 +58,7 @@ TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
 
 case "$TOOL_NAME" in
-  Read|Write|Edit) ;;
+  Write|Edit) ;;
   *) exit 0 ;;
 esac
 
