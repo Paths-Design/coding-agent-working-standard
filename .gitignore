@@ -574,7 +574,7 @@ __pycache__/
 
 .rehearsal-smoke/
 
-# >>> caws gitignore (managed, v1) >>>
+# >>> caws gitignore (managed, v2) >>>
 # Ephemeral CAWS runtime/local state — never tracked. Authority state
 # (.caws/specs/, .caws/policy.yaml, .caws/waivers/) is intentionally NOT
 # listed here so it stays versioned. Managed by `caws init`; edits inside
@@ -589,4 +589,5 @@ __pycache__/
 .caws/duplication-cache.json
 .caws/events.jsonl
 .caws/events.jsonl.lock
+tmp/guard-strikes-*.json
 # <<< caws gitignore <<<
