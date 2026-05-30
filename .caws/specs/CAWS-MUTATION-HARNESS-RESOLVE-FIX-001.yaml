@@ -7,19 +7,62 @@ created_at: '2026-05-30T08:24:54.816Z'
 updated_at: '2026-05-30T08:24:54.816Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/mutation
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    STRYKER PRESENCE IS RESOLVED VIA NODE RESOLUTION, NOT A PACKAGE-RELATIVE
+    PATH. The harness checks for Stryker with require.resolve(
+    '@stryker-mutator/core/package.json') instead of fs.existsSync(
+    pkgRoot/node_modules/@stryker-mutator/core). In a hoisted npm-workspaces
+    monorepo Stryker installs to the ROOT node_modules, so the old
+    package-relative existsSync check threw "Stryker is not installed" even
+    when Stryker WAS installed and runnable (confirmed: a direct
+    `node <root>/node_modules/@stryker-mutator/core/bin/stryker.js run`
+    produced a real 74.47% report while the jest precondition failed). The
+    new check honors Node's resolution and finds Stryker wherever it is
+    hoisted. The "no silent skip" contract is preserved — a genuinely absent
+    Stryker still throws the install instruction.
+  - >-
+    THE RUN INVOKES THE RESOLVED BIN, NOT A BARE `npx stryker`. The harness
+    derives the stryker bin from the resolved package
+    (path.join(dirname(corePkgJson), pkg.bin.stryker)) and spawns it via
+    `node <bin> run`, instead of `npx stryker run` which depends on the
+    stryker bin being symlinked into a package-local node_modules/.bin (it is
+    not, under hoisting). cwd stays pkgRoot so stryker.conf.js + the dist
+    target resolve as before.
+  - >-
+    BEHAVIOR-PRESERVING, GATED, NO SCORE CHANGE. The fix changes only HOW the
+    harness locates + launches Stryker; it does not change the mutation
+    config, the mutated surface, the thresholds (break stays null), or the
+    score. The suite remains MUTATION_TESTING=1-gated (default-skipped). The
+    surviving-mutant reporting + report-path checks are unchanged.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: A hoisted monorepo where Stryker is installed in the ROOT node_modules.
+    when: 'MUTATION_TESTING=1 jest runs tests/mutation/mutation-quality.test.js.'
+    then: >-
+      The precondition resolves Stryker (no false "not installed" throw),
+      runs it via the resolved bin, and the score/survivor assertions execute
+      against a real report.
+  - id: A2
+    given: An environment where Stryker is genuinely not installed.
+    when: The harness precondition runs.
+    then: >-
+      It still throws the explicit install-instruction error (no silent skip
+      — the "hard precondition" contract is preserved).
+non_functional:
+  reliability:
+    - >-
+      Restores the mutation gate as a runnable check: before this fix it was
+      un-runnable in the hoisted workspace (precondition always threw), so
+      "mutation testing" silently never executed via the jest entrypoint. The
+      fix makes MUTATION_TESTING=1 actually exercise Stryker.
 contracts: []
