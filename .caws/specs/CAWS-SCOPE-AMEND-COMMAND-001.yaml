@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: v11-scope-amend-command
 created_at: '2026-05-30T01:53:24.257Z'
-updated_at: '2026-05-30T02:18:00.000Z'
+updated_at: '2026-05-30T02:40:00.000Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
@@ -24,6 +24,7 @@ scope:
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
     # --- kernel: the new additive event schema + its registration ---
     # Event-type registry lives in evidence/ (EventType union + REQUIRES_SPEC_ID
     # in types.ts; PAYLOAD_SCHEMAS map + schema imports in validate.ts).
