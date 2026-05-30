@@ -55,7 +55,37 @@
   longer counts as an active worktree — killing the
   orphaned-registry-entry-walls-every-write bug.
 
+* **Per-session state relocated from repo-root `tmp/` to `.caws/sessions/`**
+  (`CAWS-SESSION-LOG-RELOCATE-001`). The claude-code hook pack's per-session
+  state — turn logs, the durable `.session-envelope.json`
+  (session-resolution authority), and the per-repo `.caller-session.json`
+  pointer — now lives under `<repo_root>/.caws/sessions/` (gitignored,
+  provenance-adjacent) instead of the user-owned `tmp/` scratch dir. Writers
+  resolve the **canonical** root (git-common-dir + `pwd -P`) so a linked
+  worktree writes to canonical `.caws/sessions/`, not a per-worktree copy.
+  `resolve-session.ts` scans the new home first with a **bounded read-both
+  fallback** to legacy `tmp/<id>/` so an in-flight session whose envelope was
+  written before the cutover is not orphaned (no session-resolution
+  regression); new writes go only to `.caws/sessions/`. Manifest stateModel
+  and doctrine (root + template `CLAUDE.md`/`AGENTS.md`,
+  `worktree-isolation.md`) reference the new paths. Rationale: `tmp/` is a
+  conventional user-owned directory CAWS shouldn't colonize or bloat
+  (failure-lineage Entry 33).
+
 ### Fixed
+
+* **Published package shipped stray local session transcripts**
+  (`CAWS-SESSION-LOG-RELOCATE-001`). `package.json`'s `files:
+  ["templates/hook-packs/**"]` ships matched paths regardless of
+  `.gitignore`, so the maintainer's local session-log dirs under
+  `templates/hook-packs/claude-code/tmp/<session-id>/` leaked into the
+  published tarball — `npm pack --dry-run` showed 27 stray files
+  (`session.json`, `turn-*.json`, `handoff.json`, `session.txt`) shipping
+  to every installer. A new `.npmignore` excludes the pack's `tmp/` from the
+  tarball (verified 27→0 stray files, all legitimate pack files retained); a
+  packaging test (`tests/init/session-log-packaging-guard.test.js`) runs
+  `npm pack --dry-run` and asserts zero `tmp/` session content ships, locking
+  the leak at CI. (failure-lineage Entry 33.)
 
 * **hook-pack (danger latch): `reset-danger-latch.sh --current` could not
   clear the latch a session actually wrote** (`DANGER-LATCH-UX-001`). The

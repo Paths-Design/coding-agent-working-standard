@@ -102,7 +102,7 @@ caws claim --takeover
 
 `caws agents list/show` ships in v11.1 for read-only lease inspection. Ownership decisions still use `caws claim` and the `worktree` registry; a stale heartbeat is display-only and is not authorization to take over.
 
-When a refusal fires, the warning includes the claimer's session id, heartbeat age, and a pointer to any `tmp/<sessionId>/` session-log directory — read that log for context before deciding to take over. A stale heartbeat does NOT mean the prior session is dead; it may be paused.
+When a refusal fires, the warning includes the claimer's session id, heartbeat age, and a pointer to any `.caws/sessions/<sessionId>/` session-log directory — read that log for context before deciding to take over. A stale heartbeat does NOT mean the prior session is dead; it may be paused.
 
 ## Spec Lifecycle
 
