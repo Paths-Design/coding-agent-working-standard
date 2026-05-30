@@ -784,3 +784,55 @@ describe('CAWS-CLASSIFY-GIT-RM-CACHED-001: destructive git rm stays governed', (
     expect(reason.toLowerCase()).toContain('caws specs');
   });
 });
+
+describe('CAWS-CLASSIFY-NEWLINE-SEGMENT-001: newline is a command separator', () => {
+  // A1: a safe `rm -rf /tmp/<scratch>` followed by a benign command on the next
+  // line must NOT absorb that command's tokens as phantom delete targets. Before
+  // the fix, segment_command did not split on '\n', so `rm -rf /tmp/scratch\necho
+  // done` produced targets=['/tmp/scratch','echo','done'] and the non-/tmp tokens
+  // tripped the safe-prefix check → governed → danger latch.
+  it('rm -rf /tmp/scratch then a trailing line → allow (target not polluted)', () => {
+    expect(classify('rm -rf /tmp/scopein-smoke\necho done').decision).toBe('allow');
+  });
+
+  // A2: the rm on a LATER line must still be segmented and classified — not
+  // skipped because an earlier line's first token (`echo`) is not `rm`.
+  it('a leading line then rm -rf /tmp/scratch → allow (later-line rm is seen)', () => {
+    expect(classify('echo hi\nrm -rf /tmp/scopein-smoke').decision).toBe('allow');
+  });
+
+  // A2 (realistic shape): a multi-step block ending in a /tmp scratch teardown.
+  // Uses only non-governed lines (echo/cd) so the assertion isolates the rm
+  // segmentation — `npm run …` would independently trigger the governed-family
+  // `ask` and mask what this test verifies (that the rm target stays clean).
+  it('cd then echo then rm -rf /tmp/scratch → allow (multi-step block)', () => {
+    expect(
+      classify('cd /Users/x/proj\necho building\nrm -rf /tmp/scopein-smoke').decision
+    ).toBe('allow');
+  });
+
+  // A3: segmentation must NOT weaken governance — a destructive target on its
+  // own line still classifies as not-allow (deny for /etc).
+  it('cd then build then rm -rf /etc → NOT allow (destructive target governed)', () => {
+    expect(
+      classify('cd /p\nnpm run build\nrm -rf /etc').decision
+    ).not.toBe('allow');
+  });
+
+  // A3 (repo-root): a destructive recursive delete of the repo root on a later
+  // line is still caught.
+  it('echo then rm -rf the repo root → NOT allow', () => {
+    // The harness passes --repo-root REPO_ROOT; deleting it must stay governed.
+    const repoRoot = require('path').resolve(__dirname, '..', '..', '..', '..');
+    expect(classify(`echo prep\nrm -rf ${repoRoot}`).decision).not.toBe('allow');
+  });
+
+  // A4: a newline INSIDE a double-quoted string is NOT a separator — the literal
+  // stays within its segment and `rm -rf /` inside the quotes is not executable.
+  it('quoted newline does not split into an executable rm', () => {
+    // echo of a two-line literal that happens to contain "rm -rf /" as text.
+    const cmd = 'echo "line1\nrm -rf /"';
+    // The quoted rm is inert text; the command is a plain echo → not deny.
+    expect(classify(cmd).decision).not.toBe('deny');
+  });
+});

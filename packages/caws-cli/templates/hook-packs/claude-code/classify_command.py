@@ -400,6 +400,22 @@ def segment_command(raw: str) -> list[str]:
                 current = []
                 i += 1
                 continue
+            # newline — a bash statement separator equivalent to ';'. Each line
+            # of a multi-line block is its own command, so splitting here keeps
+            # `rm -rf /tmp/x` on one line from absorbing the next line's tokens
+            # as phantom delete targets (CAWS-CLASSIFY-NEWLINE-SEGMENT-001). A
+            # line-continuation backslash before the newline was already consumed
+            # by the '\\' branch above (the '\n' is glued onto that token and
+            # never reaches here), so this only fires on real separators. Heredoc
+            # bodies are handled by the in_heredoc state machine above and never
+            # reach this branch.
+            if ch == '\n':
+                seg = ''.join(current).strip()
+                if seg:
+                    segments.append(seg)
+                current = []
+                i += 1
+                continue
             # | (but not ||, already handled above)
             if ch == '|':
                 seg = ''.join(current).strip()
