@@ -7,7 +7,7 @@ created_at: '2026-05-30T21:05:03.200Z'
 updated_at: '2026-05-30T21:05:03.200Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli status dashboard render
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,32 @@ scope:
     - 'packages/caws-cli/tests/shell/status-command.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When `caws status` renders an unbound binding AND at least one active spec
+    exists, the binding line carries a caveat stating that edits are still
+    governed in union mode (scope enforced against all active specs), so
+    'unbound' is not misread as 'unrestricted'. The caveat names that
+    union-mode enforcement is in effect.
+  - >-
+    When `caws status` renders an unbound binding and there are ZERO active
+    specs, no enforcement caveat is printed — with nothing active there is
+    nothing to enforce, so a bare 'unbound' is accurate.
+  - >-
+    The bound and one_sided binding states are unchanged; the caveat is added
+    only to the unbound branch and only when active specs exist. Status remains
+    read-only and its exit code is unchanged (0).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo with one active spec and the session unbound (cwd on the main checkout)'
+    when: '`caws status` renders'
+    then: "the binding line reads unbound WITH a caveat that scope is still enforced in union mode against active specs; exit code 0"
+  - id: A2
+    given: 'a repo with zero active specs and the session unbound'
+    when: '`caws status` renders'
+    then: "the binding line reads a bare 'unbound' with NO enforcement caveat (nothing active to enforce)"
+  - id: A3
+    given: 'a repo where the session is bound to a spec via its worktree'
+    when: '`caws status` renders'
+    then: "the binding line reads 'bound → <id>' unchanged (the caveat is unbound-only)"
 non_functional: {}
 contracts: []
