@@ -3,6 +3,7 @@ title: 'Fix ineffective session-log packaging guard: npm files-field negation dr
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: v11-pack-leak-hotfix
 created_at: '2026-05-30T06:49:53.730Z'
 updated_at: '2026-05-30T06:49:53.730Z'
 blast_radius:
