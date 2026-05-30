@@ -7,7 +7,8 @@ created_at: '2026-05-30T16:17:17.747Z'
 updated_at: '2026-05-30T16:17:17.747Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli claude-code hook pack — strike-state location + reset collector
+    - caws-cli init — managed .gitignore block
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +20,54 @@ scope:
     - 'packages/caws-cli/tests/init/gitignore-strike-entry.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When the strike-recording cwd is inside a linked worktree, guard-strikes.sh
+    writes the per-session strike file under that worktree's resolved gitdir
+    (parsed from the `gitdir:` line of `<worktree>/.git`), NOT under
+    `<worktree>/tmp/`. The resolved location is outside every git working tree,
+    so it never appears in `git status` and `git add -A` from inside the
+    worktree cannot stage or commit it.
+  - >-
+    Per-worktree strike isolation is preserved: the strike file is still keyed
+    by session id and distinct per worktree, so a strike earned in worktree A
+    does not corner an edit in worktree B. Only the on-disk LOCATION changes
+    (gitdir-relative instead of working-tree-relative), not the keying.
+  - >-
+    If the worktree gitdir cannot be resolved (no `.git` file, unreadable, or
+    not a linked worktree), the function falls back to the canonical
+    `$CLAUDE_PROJECT_DIR/.claude/logs` location it already uses for the main
+    checkout — the hook never fails closed and never blocks an edit because a
+    strike file could not be placed.
+  - >-
+    reset-strikes.sh's collect_strike_files finds strike files at the new
+    gitdir location in addition to the legacy `.claude/logs` and
+    `.caws/worktrees/**/tmp` paths, so `reset-strikes.sh --current` clears a
+    worktree's strikes after the relocation.
+  - >-
+    The managed .gitignore block written by `caws init` lists
+    `tmp/guard-strikes-*.json` (defense-in-depth for any legacy strike file
+    that still lands in a tracked `tmp/`), and the block version is bumped so a
+    stale block is replaced in place on re-init.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a strike recorded while cwd is inside a linked worktree (a .git file with a gitdir: line)'
+    when: guard-strikes.sh computes the strike-file path
+    then: 'the path is under the resolved gitdir, not under <worktree>/tmp, and is outside every working tree so git add -A in the worktree cannot stage it'
+  - id: A2
+    given: 'a strike recorded while cwd is the main checkout (no linked-worktree .git file)'
+    when: guard-strikes.sh computes the strike-file path
+    then: 'the path is the canonical .claude/logs location (unchanged fallback behavior)'
+  - id: A3
+    given: 'a worktree whose .git file is missing or unparseable'
+    when: guard-strikes.sh computes the strike-file path
+    then: 'it falls back to the canonical .claude/logs location and the hook still records the strike (never fails closed)'
+  - id: A4
+    given: 'strike files at the new gitdir location'
+    when: 'reset-strikes.sh collects strike files'
+    then: 'the gitdir-located files are found and cleared alongside the legacy locations'
+  - id: A5
+    given: 'a repo initialized with caws init'
+    when: 'the managed .gitignore block is rendered'
+    then: 'the block contains tmp/guard-strikes-*.json and the block version marker is current'
 non_functional: {}
 contracts: []
