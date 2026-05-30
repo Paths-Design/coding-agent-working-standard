@@ -2,10 +2,11 @@ id: CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001
 title: 'caws scope check/show ADMIT verdict reports worktree-claim caveat (edit from inside worktree X) so it stops contradicting worktree-write-guard'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shipped worktree-claim caveat on scope check/show ADMIT (Event 9). 13 scope-command tests + 32 scope/render/binding regression green. Gates pass.'
 created_at: '2026-05-30T08:50:43.843Z'
-updated_at: '2026-05-30T08:50:43.843Z'
-worktree: scope-claim-caveat
+updated_at: '2026-05-30T09:15:24.349Z'
 blast_radius:
   modules:
     - caws-cli scope command
