@@ -2,10 +2,11 @@ id: DANGER-LATCH-APPROVAL-AND-FEEDBACK-001
 title: 'danger latch: first flagged ask warns (no sticky latch), second strike latches; explicit stop-now feedback at flag time; add merge-tree/cat-file/rev-list to read-only allow-list'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: v11-latch-ux
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-latch-ux at f79713cf9132da655de7b8da8b5fc46241d87cfe'
 created_at: '2026-05-30T03:35:42.052Z'
-updated_at: '2026-05-30T03:45:00.000Z'
+updated_at: '2026-05-30T07:32:27.967Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
