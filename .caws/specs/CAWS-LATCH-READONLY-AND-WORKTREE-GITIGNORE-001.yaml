@@ -3,23 +3,131 @@ title: 'danger-latch: allow read-only Bash + exempt reset from its own latch; fi
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: latch-readonly-worktree-gitignore
 created_at: '2026-05-30T02:01:53.179Z'
 updated_at: '2026-05-30T02:01:53.179Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/src/store/git-autocommit.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/tests/store/
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    READ-ONLY BASH SURVIVES A STICKY LATCH. When a session's danger-latch
+    sentinel is present, block-dangerous.sh no longer flat-blocks EVERY Bash
+    call. Instead it first classifies the current command (via the existing
+    classify_command.py) and, if the decision is `allow` (read-only — e.g.
+    `git log`, `ls`, `cat`, `caws status`), lets it through. Only commands the
+    classifier rates `ask`/`deny` remain blocked by the sticky latch. Rationale:
+    the latch exists to stop further MUTATION pending human review; a read-only
+    command was never the danger and should not be collateral. The latch
+    sentinel is NOT cleared by an allowed read-only command (it remains sticky
+    for mutating commands until a human reset). If the classifier is unavailable,
+    the conservative pre-existing behavior (block while latched) is preserved —
+    fail-closed.
+  - >-
+    THE LATCH RESET IS NOT BLOCKED BY ITS OWN LATCH. A Bash command whose target
+    is the pack's own `reset-danger-latch.sh` (the documented escape hatch) is
+    not flat-blocked by the sticky-latch branch. block-dangerous.sh recognizes a
+    reset-danger-latch.sh invocation and lets it reach the shell. The human-gate
+    intent is preserved by the reset script's existing `--reason` audit and
+    session-id resolution — gating the reset behind the very latch it clears is
+    self-defeating (the agent is told to run a command the guard then blocks).
+    Detection is narrow: it matches an invocation of reset-danger-latch.sh, not
+    arbitrary commands mentioning the string.
+  - >-
+    LATCH-BRANCH MESSAGING IS HONEST ABOUT AGENT CAPABILITY. When a mutating
+    command is blocked by the sticky latch, the refusal states plainly that the
+    agent itself cannot run the reset in-band from within a latched session (the
+    reset must come from the user's shell with `--session <id>`), rather than
+    implying the agent might retry it. (Scoped to the message string in
+    block-dangerous.sh; the classify_command.py reason-attribution fix — the
+    `2>&1` mislabel — is OUT of scope here, owned by the classify_command.py
+    lane.)
+  - >-
+    WORKTREE-CREATE AUDIT COMMIT DOES NOT FAIL ON GITIGNORED REGISTRY STATE.
+    `.caws/worktrees.json` is intentionally gitignored ephemeral per-CLI state
+    (caws init's gitignore block lists it). The lifecycle audit commit
+    (git-autocommit.ts) must NOT hard-fail when an input path is gitignored: it
+    filters out paths that `git check-ignore` confirms are ignored before
+    `git add`, commits only the remaining TRACKED authority paths (e.g. the spec
+    binding `.caws/specs/<id>.yaml`), and treats an all-ignored path set as
+    'committed' with no sha (nothing tracked to commit) rather than
+    'refused_dirty'. It NEVER force-adds (`-f`) a gitignored path — doing so
+    would track a file the gitignore policy says must stay untracked. Result:
+    `caws worktree create` no longer reports "git add failed: paths are ignored"
+    for worktrees.json; the spec-binding audit commit lands cleanly.
+  - >-
+    NO REGRESSION TO EXISTING LATCH SAFETY. The deny/ask classifier path, the
+    protected-guard self-modification pre-checks (shell edit / redirect into
+    worktree-write-guard.sh), the sentinel format shared with
+    reset-danger-latch.sh, and the fail-closed classifier-unavailable behavior
+    are all unchanged. The autocommit's path-scoped commit (never `git add -A`;
+    commit only input paths) and its cross-session attribution protection
+    (CAWS-AUTOCOMMIT-INTEGRITY-001) are preserved.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A session with an engaged danger-latch sentinel.
+    when: A read-only Bash command (e.g. `git log --oneline`) the classifier rates `allow` is attempted.
+    then: >-
+      block-dangerous.sh lets it through (exit 0, no block emitted); the latch
+      sentinel still exists afterward (not cleared). A hook-pack test drives a
+      latched session and asserts a read-only command is permitted while the
+      latch persists.
+  - id: A2
+    given: A session with an engaged danger-latch sentinel.
+    when: A mutating Bash command the classifier rates `ask`/`deny` is attempted.
+    then: >-
+      It remains blocked by the sticky latch (the pre-existing behavior). A test
+      asserts a mutating command is still blocked while latched.
+  - id: A3
+    given: A session with an engaged danger-latch sentinel.
+    when: 'A `bash .claude/hooks/reset-danger-latch.sh --session <id> --reason "..."` command is attempted.'
+    then: >-
+      block-dangerous.sh does not flat-block it on the sticky-latch branch (it is
+      recognized as the reset escape hatch and allowed to reach the shell). A
+      test asserts the reset invocation is not blocked while latched, while an
+      arbitrary command merely mentioning the string IS still subject to normal
+      handling.
+  - id: A4
+    given: The classifier is unavailable (missing python3 or classifier file) in a latched session.
+    when: Any Bash command is attempted.
+    then: >-
+      The conservative fail-closed behavior holds (blocked while latched / ask),
+      never silently allowing a mutating command. A test simulates classifier
+      absence and asserts no read-only bypass occurs.
+  - id: A5
+    given: A consumer repo where caws init has gitignored `.caws/worktrees.json`, and a spec exists to bind.
+    when: '`caws worktree create <name> --spec <id>` runs (its lifecycle audit commit fires).'
+    then: >-
+      The audit commit does NOT fail with "git add failed: paths are ignored".
+      The tracked spec-binding file is committed; the gitignored worktrees.json
+      is excluded from staging (never force-added). A store test asserts the
+      autocommit succeeds with the spec path committed and the ignored registry
+      path skipped.
+  - id: A6
+    given: An autocommit whose input paths are ALL gitignored.
+    when: autoCommit runs.
+    then: >-
+      It returns kind 'committed' with an empty sha (nothing tracked to commit),
+      NOT 'refused_dirty'. A test asserts the all-ignored case is a clean no-op,
+      not a failure.
 non_functional: {}
 contracts: []
