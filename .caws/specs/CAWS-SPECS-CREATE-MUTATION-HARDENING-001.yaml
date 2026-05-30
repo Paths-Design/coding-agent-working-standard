@@ -7,20 +7,86 @@ created_at: '2026-05-30T16:27:53.505Z'
 updated_at: '2026-05-30T16:28:18.365Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/store
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/tests/store/specs-writer-archive-tombstone.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    TEST-ONLY mutation hardening. This slice adds NO production code change.
+    It adds assertions to the existing Stryker-scoped test set so that the
+    11 mutants currently surviving on dist/store/specs-writer.js (createSpec
+    surface) are killed. stryker.conf.js, the mutated line ranges, and the
+    specs-writer source are unchanged.
+  - >-
+    DUPLICATE-ID REFUSAL SHAPE (dist 320:9 ConditionalExpression, 320:28
+    BlockStatement, 321:117 StringLiteral, 321:170 + 321:197 ObjectLiteral /
+    source 447-453). createSpec refuses a duplicate id with a diagnostic whose
+    message contains "already exists at <path>", whose subject is the spec id,
+    and whose data.existing_path is the colliding path. A test asserts all
+    three AND asserts a fresh (non-colliding) id is NOT refused — killing the
+    if(existing!==null)→true mutant.
+  - >-
+    ID-VALIDATION GUARD (dist 316:9 ConditionalExpression / source 443). An
+    id that violates the v11 pattern returns Err from createSpec BEFORE any
+    filesystem write — killing the if(!idValidation.ok)→if(false) mutant. A
+    test drives a structurally-invalid id and asserts ok=false + no spec file
+    written.
+  - >-
+    out:[] RENDERER (dist 300:9 StringLiteral / source 423). The initial spec
+    YAML createSpec renders contains the literal `out: []` line. A test reads
+    a freshly-created spec body and asserts it — killing the StringLiteral→``
+    mutant on the renderer.
+  - >-
+    narrowRepair THREADING ON THE KERNEL-VALIDATION BRANCH (dist 350:17
+    Conditional/Equality, 351:19 ObjectLiteral / source 495-497). When
+    parseAndValidateSpec fails with a diagnostic carrying a narrowRepair
+    (e.g. the tier-contract gate's "Add at least one contract or change
+    risk_tier to 3 or mode to chore."), createSpec threads that narrowRepair
+    through to the returned diagnostic. A test drives a tier-2 contract-less
+    spec (which the kernel rejects WITH a narrowRepair) and asserts the
+    returned diagnostic carries the narrowRepair value — killing the spread
+    Conditional/Equality mutants and the {narrowRepair} ObjectLiteral→{}
+    mutant. SEAM A1 already drove the validation branch with risk_tier:7 but
+    that diagnostic has no narrowRepair, so 350/351 survived; this test uses
+    the tier-contract gate specifically because it DOES emit one.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A caws+git fixture with a spec already created at an id.
+    when: createSpec is called again with the same id.
+    then: >-
+      It returns Err whose errors[0].message contains "already exists at",
+      errors[0].subject equals the id, and errors[0].data.existing_path
+      equals the colliding spec path; and a separate fresh id is created
+      successfully (not refused).
+  - id: A2
+    given: A caws+git fixture.
+    when: createSpec is called with an id that violates the v11 id pattern.
+    then: >-
+      It returns Err before writing any file (no spec yaml on disk for the
+      bad id), and the diagnostic names the id-validation failure.
+  - id: A3
+    given: A caws+git fixture.
+    when: A spec is created and its rendered body is read back.
+    then: The body contains the literal `out: []` scope line.
+  - id: A4
+    given: A caws+git fixture.
+    when: >-
+      createSpec is called with risk_tier 2 and no contracts (which the
+      kernel rejects with a narrowRepair-bearing diagnostic).
+    then: >-
+      The returned errors[0] carries a non-empty narrowRepair string equal to
+      the kernel's repair guidance, proving the spread threaded it through.
+  - id: A5
+    given: The Stryker-scoped run after this slice (node scripts/run-mutation.mjs).
+    when: The mutation report is produced.
+    then: >-
+      The 11 previously-surviving createSpec mutants (dist 300, 316, 320×2,
+      321×3, 350×3, 351) are killed; the mutation score on
+      dist/store/specs-writer.js rises accordingly with no new survivors
+      introduced.
 non_functional: {}
 contracts: []
