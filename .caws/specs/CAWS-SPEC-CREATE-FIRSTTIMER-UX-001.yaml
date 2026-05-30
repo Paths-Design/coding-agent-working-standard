@@ -2,10 +2,11 @@ id: CAWS-SPEC-CREATE-FIRSTTIMER-UX-001
 title: 'spec-create UX: honest scope-guard message on unbound main, surface tier-contract escape + what a contract is, document contracts'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: spec-create-firsttimer-ux
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge spec-create-firsttimer-ux at 7d4ef2a302098e8f780977e06feced6c7eab6779'
 created_at: '2026-05-30T03:23:58.283Z'
-updated_at: '2026-05-30T03:23:58.283Z'
+updated_at: '2026-05-30T03:31:01.572Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
