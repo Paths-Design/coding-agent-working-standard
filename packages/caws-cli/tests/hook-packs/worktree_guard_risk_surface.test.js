@@ -206,7 +206,10 @@ describe('WORKTREE-GUARD-RISK-SURFACE-001: base-branch block→ask', () => {
   });
 
   // A3: an orphaned (dir-gone) registry entry claiming the file does NOT block.
-  test('A3 dir-gone ghost entry never counts active → ask, not block', () => {
+  // CAWS-GUARD-NO-WORKTREE-NO-BLOCK-001: a ghost entry counts as ZERO active
+  // worktrees, and with no active worktree there is nothing to isolate → the
+  // guard now ALLOWS (exit 0, no envelope) rather than asking. (Was: ask.)
+  test('A3 dir-gone ghost entry never counts active → allow (nothing to isolate)', () => {
     dir = makeRepo();
     // Registry references a worktree path that does not exist on disk.
     writeRegistry(dir, {
@@ -218,31 +221,59 @@ describe('WORKTREE-GUARD-RISK-SURFACE-001: base-branch block→ask', () => {
       },
     });
     // Even though the spec is active and its scope.in matches, the ghost dir is
-    // gone so it must not contribute a block.
+    // gone so it contributes no active worktree → no isolation to protect.
     writeSpec(dir, 'CLAIM-001', { lifecycle: 'active', scopeIn: ['packages/caws-cli/src/target.ts'] });
 
     const r = guard(dir, 'packages/caws-cli/src/target.ts');
     expect(r.status).toBe(0);
-    expect(isAsk(r.stdout)).toBe(true);
+    expect(isAsk(r.stdout)).toBe(false); // allow, not ask
+    expect(r.stdout.trim()).toBe('');
   });
 
-  // No worktree at all on main → ASK (not the old unconditional block).
-  test('no worktree present on main → ask, not block', () => {
+  // No worktree at all on main → ALLOW (CAWS-GUARD-NO-WORKTREE-NO-BLOCK-001).
+  // The guard protects worktree isolation; with zero worktrees there is nothing
+  // to isolate, so a base-branch write is allowed. (Was: ask — which wedged
+  // first-run setup behind an un-dismissable prompt.)
+  test('no worktree present on main → allow (nothing to isolate)', () => {
     dir = makeRepo();
     writeRegistry(dir, {});
     const r = guard(dir, 'packages/caws-cli/src/anything.ts');
     expect(r.status).toBe(0);
-    expect(isAsk(r.stdout)).toBe(true);
+    expect(isAsk(r.stdout)).toBe(false);
+    expect(r.stdout.trim()).toBe('');
   });
 
   // A4: CAWS_GUARD_NO_ASK=1 → degrade a would-be ask to a hard block (exit 2).
-  test('A4 CAWS_GUARD_NO_ASK=1 degrades ask → hard block', () => {
+  // The degrade only applies where the guard WOULD ask, which now requires an
+  // active worktree present (non-claimed file). With zero worktrees the guard
+  // allows regardless of CAWS_GUARD_NO_ASK (nothing to ask about).
+  test('A4 CAWS_GUARD_NO_ASK=1 degrades a worktree-present ask → hard block', () => {
     dir = makeRepo();
-    writeRegistry(dir, {});
+    // One active worktree that does NOT claim the file → the guard would ask;
+    // with NO_ASK it must degrade to a hard block.
+    writeRegistry(dir, {
+      'wt-a': {
+        path: path.join(dir, '.caws', 'worktrees', 'wt-a'),
+        branch: 'wt-a',
+        baseBranch: 'main',
+        spec_id: 'CLAIM-001',
+      },
+    });
+    fs.mkdirSync(path.join(dir, '.caws', 'worktrees', 'wt-a'), { recursive: true });
+    writeSpec(dir, 'CLAIM-001', { lifecycle: 'active', scopeIn: ['packages/caws-cli/src/other.ts'] });
     const r = guard(dir, 'packages/caws-cli/src/anything.ts', { CAWS_GUARD_NO_ASK: '1' });
     expect(r.status).toBe(2);
     expect(isAsk(r.stdout)).toBe(false);
     expect(r.stderr).toMatch(/ask-incapable harness/);
+  });
+
+  // A4b: CAWS_GUARD_NO_ASK=1 with ZERO worktrees still allows (no ask to degrade).
+  test('A4b CAWS_GUARD_NO_ASK=1 with zero worktrees → still allow (nothing to ask)', () => {
+    dir = makeRepo();
+    writeRegistry(dir, {});
+    const r = guard(dir, 'packages/caws-cli/src/anything.ts', { CAWS_GUARD_NO_ASK: '1' });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('');
   });
 
   // A7: the ask reason carries the composite risk signal (dir/spec/agents).

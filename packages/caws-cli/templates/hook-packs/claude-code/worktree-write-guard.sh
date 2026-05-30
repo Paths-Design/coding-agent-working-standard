@@ -314,6 +314,20 @@ if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null && command -v git >/dev/null 2>&1; then
   WT_NAMES=$(echo "$GIT_WT_INFO" | cut -d: -f2-)
 fi
 
+# Zero worktrees → nothing to isolate → allow (CAWS-GUARD-NO-WORKTREE-NO-BLOCK-001).
+# This guard exists to protect worktree ISOLATION: stopping a base-branch write
+# from colliding with a parallel agent's worktree (a claimed file) or shared
+# tree. With no active worktrees there is no sibling tree, no claimed file, and
+# no competing spec — there is nothing to isolate. Asking here (the prior
+# behavior) walled first-run setup: a PreToolUse `ask` cannot be pre-approved by
+# auto-mode and re-fires on every retry, so an agent editing on main during
+# orientation — before it has created its first spec/worktree — was wedged on an
+# un-dismissable prompt with no worktree to switch into. The guard re-engages the
+# moment a worktree exists (the WT_COUNT > 0 paths below are unchanged).
+if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null; then
+  exit 0
+fi
+
 if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
   # Derive REL_PATH from the realpath-normalized file path so it strips the
   # normalized PROJECT_DIR prefix correctly (see allowlist note above).
