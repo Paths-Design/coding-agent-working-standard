@@ -3,23 +3,90 @@ title: 'worktree-write-guard: with zero active worktrees there is nothing to iso
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: guard-no-worktree-no-block
 created_at: '2026-05-30T06:33:25.658Z'
 updated_at: '2026-05-30T06:33:25.658Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/CAWS-GUARD-NO-WORKTREE-NO-BLOCK-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/src
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ZERO WORKTREES → ALLOW. The worktree-write-guard protects worktree
+    ISOLATION: it exists to stop one agent's base-branch write from colliding
+    with a parallel agent's worktree (a claimed file) or shared tree. When there
+    are ZERO active worktrees, there is nothing to isolate — no sibling tree, no
+    claimed file, no competing spec. In that state a base-branch Write/Edit is
+    allowed (exit 0, no ask, no block). The check is added immediately after
+    WT_COUNT is fully resolved (after both the registry count and the
+    git-worktree-list fallback, ~line 315) and BEFORE the scope-contention check
+    and the ask/block decision tail.
+  - >-
+    FIXES THE FIRST-RUN SETUP WEDGE. Before this change, a base-branch edit with
+    zero worktrees returned permissionDecision:ask ("No active worktree is
+    present"). Because a PreToolUse `ask` cannot be pre-approved by auto-mode and
+    re-fires on every retry, an agent doing normal first-run orientation/setup
+    (editing on main before it has created any spec or worktree) was walled by an
+    un-dismissable prompt before it could create its first worktree. Allowing the
+    write when no worktree exists removes the wedge at its root: the guard only
+    engages once there is isolation to protect.
+  - >-
+    ONE-OR-MORE WORKTREES → UNCHANGED. When WT_COUNT >= 1 the existing decision
+    model is preserved exactly: a file claimed by an active bound spec's scope.in
+    hard-blocks (exit 2); every other base-branch write asks (with the
+    actionable cd-redirect from CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001); and the
+    ask degrades to a hard block on ask-incapable harnesses (CAWS_GUARD_NO_ASK=1
+    or emit_ask unavailable). No change to any path once a worktree is active.
+  - >-
+    OTHER EXITS UNCHANGED. The early fail-open guards (missing realpath /
+    caws-state lib / worktrees.json / node), the always-allowlisted paths
+    (.caws/, .claude/, docs/, tmp/, CLAUDE.md, .gitignore, .github/, etc.), the
+    in-worktree exit-0 (AGENT_DIR under .caws/worktrees/), the registered-branch
+    exit-0, and the MERGE_HEAD conflict-resolution exit-0 are all unchanged. The
+    new zero-worktree allow sits alongside these as one more legitimate exit-0,
+    not a replacement for any.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A repo with caws init done, zero registered worktrees, and the agent on the base branch.
+    when: A Write/Edit to a normal source file (not an allowlisted path) is attempted.
+    then: >-
+      The guard exits 0 with no ask and no block envelope (the write is
+      allowed). A hook-pack test drives a zero-worktree repo and asserts a
+      base-branch source write exits 0 and emits no permissionDecision.
+  - id: A2
+    given: A repo with one active worktree whose bound spec's scope.in claims the target file.
+    when: A base-branch Write/Edit to that claimed file is attempted.
+    then: >-
+      The guard still hard-blocks (exit 2) — the one-or-more-worktree path is
+      unchanged. A test asserts the claimed block still fires when a worktree is
+      present.
+  - id: A3
+    given: A repo with one active worktree that does NOT claim the target file.
+    when: A base-branch Write/Edit is attempted.
+    then: >-
+      The guard still asks (exit 0 with permissionDecision:ask) and names the
+      worktree + cd redirect. A test asserts the non-claimed ask still fires with
+      a worktree present.
+  - id: A4
+    given: The full guard with the zero-worktree allow added.
+    when: The existing worktree-write-guard hook-pack suites run.
+    then: >-
+      All pre-existing behaviors pass unchanged (in-worktree exit 0; allowlist
+      exit 0; claimed block exit 2; non-claimed ask; ask-incapable degrade to
+      exit 2). The only behavior change is zero-worktree base-branch writes:
+      ask -> allow.
 non_functional: {}
 contracts: []
