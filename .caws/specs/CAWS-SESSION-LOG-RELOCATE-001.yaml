@@ -3,6 +3,7 @@ title: 'Relocate per-session state (turn logs + session-envelope + caller-pointe
 risk_tier: 2
 mode: refactor
 lifecycle_state: active
+worktree: v11-session-log-relocate
 created_at: '2026-05-30T03:44:53.633Z'
 updated_at: '2026-05-30T03:50:00.000Z'
 blast_radius:
