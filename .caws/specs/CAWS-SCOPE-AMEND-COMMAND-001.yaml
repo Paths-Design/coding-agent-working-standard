@@ -1,25 +1,198 @@
 id: CAWS-SCOPE-AMEND-COMMAND-001
 title: 'caws specs amend-scope: governed scope.in amendment without agent cherry-pick; reconcile amendment protocol with the cherry-pick danger latch'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-30T01:53:24.257Z'
 updated_at: '2026-05-30T01:53:24.257Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-kernel/src/schemas/events/spec_scope_amended.v1.json
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    # --- store: the amendScopeSpec writer (mirrors createSpec/closeSpec) ---
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/index.ts
+    # --- shell: the command + its registration + help metadata ---
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    # --- kernel: the new additive event schema + its registration ---
+    - packages/caws-kernel/src/schemas/events/spec_scope_amended.v1.json
+    - packages/caws-kernel/src/worktree/events.ts
+    - packages/caws-kernel/src/index.ts
+    # --- hook-pack: the cherry-pick classifier carve-out (defense in depth) ---
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    # --- doctrine reconciliation ---
+    - CLAUDE.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - docs/failure-lineage.md
+    # --- tests ---
+    - packages/caws-cli/tests/store/
+    - packages/caws-cli/tests/shell/
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    NEW COMMAND eliminates the agent-issued cherry-pick. `caws specs amend-scope
+    <id> --add <path>...` (and `--remove <path>...`) mutates a spec's scope.in
+    (and scope.out) on the CANONICAL control plane via the specs-writer, the
+    same comment-preserving YAML-patch + updated_at bump + event-append pattern
+    as createSpec/activateSpec/closeSpec. The agent never issues `git
+    cherry-pick` to sync a scope amendment — the command IS the sanctioned path,
+    so the cherry-pick → danger-latch trap (failure-lineage: 4 resets in
+    WORKTREE-GUARD-RISK-SURFACE-001, two from protocol-mandated cherry-picks)
+    cannot occur for scope amendments.
+  - >-
+    CANONICAL AUTHORITY, NO WORKTREE COPY. The amendment writes ONLY the
+    canonical `.caws/specs/<id>.yaml`. Because scope is resolved through the
+    canonical control plane regardless of cwd (resolveRepoRoot walks
+    git-common-dir), `caws scope check` from a linked worktree ADMITs the newly
+    added path IMMEDIATELY after the canonical write — no worktree-local spec
+    copy is created or needed (consistent with
+    WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001: the worktree never materializes
+    .caws/specs/*). The command must work invoked from a linked worktree cwd and
+    still target canonical.
+  - >-
+    AUDIT EVENT. The amendment appends a `spec_scope_amended` event to the
+    hash-chained events.jsonl (via appendEvent — causal seq/prev_hash, never
+    timestamp, never hand-edited) carrying the spec id, the added paths, the
+    removed paths, and the resulting scope.in/scope.out (or a diff). A new
+    additive kernel schema packages/caws-kernel/src/schemas/events/
+    spec_scope_amended.v1.json (additionalProperties:false) plus its
+    registration in events.ts (KNOWN_EVENT_TYPES, REQUIRES_SPEC_ID,
+    PAYLOAD_SCHEMAS) and the kernel index export. Scope amendments are currently
+    invisible in the audit log (they ride in as a generic chore commit); this
+    makes them first-class and queryable.
+  - >-
+    LIFECYCLE GUARD. amend-scope operates on an ACTIVE (or draft) spec only —
+    it refuses a closed/archived spec (a terminal spec's scope is frozen; reopen
+    via the proper lifecycle, do not mutate a tombstoned scope). It refuses an
+    unknown spec id. It is idempotent on --add of an already-present path (no-op
+    + informational, not an error) and on --remove of an absent path.
+  - >-
+    SCHEMA-VALID RESULT. The amended scope must still satisfy the spec schema:
+    scope.in stays a non-empty array; scope.out rejects glob patterns (the
+    out_glob_forbidden rule — directory paths only, per CLAUDE.md trap #2). The
+    command validates the post-amendment spec through the same kernel spec
+    validator createSpec uses and refuses (no write, no event) if the result
+    would be schema-invalid, naming the offending entry.
+  - >-
+    CLASSIFIER CARVE-OUT (defense in depth, NOT the primary fix). classify_command.py
+    admits a `git cherry-pick <sha>` that the agent may still legitimately need
+    in OTHER protocol contexts, but ONLY narrows the danger-latch for the
+    specific sanctioned shape — a cherry-pick whose target commit touches ONLY
+    .caws/specs/*.yaml. Such a commit is the protocol-sanctioned scope amendment
+    (or spec lifecycle sync); it classifies as `ask`-with-richer-context rather
+    than engaging the STICKY session-wide latch. Catastrophic/ambiguous
+    cherry-picks (touching source, multiple files, or unresolvable commits) stay
+    fully governed. The carve-out is conservative: when the classifier cannot
+    cheaply prove the commit touches only spec YAML (e.g. git not reachable, sha
+    unresolvable), it falls back to the existing latch behavior — never relaxes
+    on uncertainty.
+  - >-
+    DOCTRINE RECONCILED. The amendment protocol in CLAUDE.md (root +
+    templates/) is rewritten so the SANCTIONED scope-amendment path is `caws
+    specs amend-scope`, NOT raw `git cherry-pick`. The cherry-pick instructions
+    are demoted to a fallback for the rare case the command cannot cover, with
+    an explicit note that cherry-pick engages the danger latch and requires a
+    human reset. failure-lineage.md gains an entry naming the
+    protocol-vs-latch collision (the 4 resets) and the resolution. The consuming
+    -repo template CLAUDE.md gets the same reconciliation so downstream agents
+    are not trapped.
+  - >-
+    CONSUMING-AGENT SAFETY is the point. The failure this closes is a
+    consuming-repo agent following CAWS's own documented amendment protocol,
+    tripping CAWS's own danger latch, and not knowing the reset is human-only —
+    burning turns retrying wrapped/aliased forms (which the classifier also
+    catches) while every Bash call is blocked. The new command removes the
+    cherry-pick from the agent's hands; the doctrine fix stops pointing agents
+    at the trap; the carve-out softens the residual case.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: An active spec with scope.in = [a/b.ts] and a linked worktree bound to it.
+    when: '`caws specs amend-scope <id> --add c/d.ts` runs (from the worktree cwd or canonical).'
+    then: >-
+      The canonical .caws/specs/<id>.yaml scope.in becomes [a/b.ts, c/d.ts] with
+      comments/ordering preserved and updated_at bumped; a spec_scope_amended
+      event is appended (chain verifies); `caws scope check c/d.ts` from the
+      worktree returns ADMIT immediately — with NO git cherry-pick issued and NO
+      worktree-local spec copy created.
+  - id: A2
+    given: A spec being amended such that the result would be schema-invalid (e.g. a glob in scope.out, or scope.in emptied).
+    when: amend-scope runs.
+    then: >-
+      The command refuses with a diagnostic naming the offending entry; the spec
+      file is NOT modified and NO event is appended (validate-before-write).
+  - id: A3
+    given: A closed or archived spec, or an unknown spec id.
+    when: '`caws specs amend-scope <id> --add x` runs.'
+    then: >-
+      The command refuses (closed/archived scope is frozen; unknown id is an
+      error). --add of an already-present path or --remove of an absent path on
+      an eligible spec is an idempotent no-op (exit 0, informational), not an
+      error.
+  - id: A4
+    given: The classify_command.py carve-out.
+    when: 'the agent issues `git cherry-pick <sha>` where <sha> touches ONLY .caws/specs/*.yaml.'
+    then: >-
+      The classifier does NOT engage the sticky session-wide danger latch for
+      that shape (it asks with context). A cherry-pick whose commit touches
+      source files, multiple non-spec files, or whose sha cannot be resolved
+      still falls through to the existing latch behavior — the carve-out never
+      relaxes on uncertainty.
+  - id: A5
+    given: The reconciled doctrine.
+    when: an agent (including a consuming-repo agent) reads CLAUDE.md / templates/CLAUDE.md for the scope-amendment procedure.
+    then: >-
+      The documented sanctioned path is `caws specs amend-scope`; raw git
+      cherry-pick is demoted to a labeled fallback with an explicit danger-latch
+      + human-reset warning. failure-lineage.md records the
+      protocol-vs-latch collision and its resolution.
+  - id: A6
+    given: The full slice on canonical.
+    when: the kernel build + caws-cli build + focused store/shell/hook-pack suites run.
+    then: >-
+      Build/typecheck clean across both packages; new specs-writer amend-scope
+      tests, specs command tests, and classify_command carve-out tests pass;
+      help-metadata locks (L1/L3/L4/L5) still pass with the new subcommand; no
+      regression to existing specs lifecycle or classifier calibration tests.
+non_functional:
+  reliability:
+    - >-
+      Removes a documented trap where CAWS's own amendment protocol triggers
+      CAWS's own danger latch. The event-audited, validate-before-write,
+      canonical-only amendment is auditable and reversible (events.jsonl records
+      every scope change); the classifier carve-out is fail-closed (relaxes only
+      on a cheaply-proven spec-only commit, never on uncertainty).
+  security:
+    - >-
+      The classifier carve-out MUST NOT widen the danger latch beyond the
+      proven-spec-only cherry-pick shape. A cherry-pick that touches any
+      non-.caws/specs path, or whose commit cannot be inspected, retains full
+      latch governance — the guard fails closed.
+contracts:
+  - name: specs-amend-scope-canonical-authority-v1
+    type: behavior
+    path: packages/caws-cli/src/store/specs-writer.ts
+    description: >-
+      caws specs amend-scope mutates a spec's scope.in/scope.out on the
+      canonical control plane via the specs-writer (comment-preserving YAML
+      patch + updated_at bump + hash-chained spec_scope_amended event), refusing
+      closed/archived/unknown specs and any amendment that would yield a
+      schema-invalid spec (validate-before-write, no partial write). It writes
+      only canonical .caws/specs/<id>.yaml — no worktree-local copy — so
+      `caws scope check <added-path>` from a linked worktree ADMITs immediately
+      with no git cherry-pick issued. This is the sanctioned scope-amendment
+      path; raw agent cherry-pick is demoted to a labeled fallback and the
+      classifier carve-out narrows (never widens) the danger latch for the
+      proven spec-only cherry-pick shape, failing closed on any uncertainty.
