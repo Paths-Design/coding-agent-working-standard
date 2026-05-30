@@ -415,12 +415,20 @@ describe('describeSessionSource handles hook_env variant', () => {
 //
 // Durable hook-session envelope bridges HOOK_SESSION_ID across agent-Bash
 // invocations where the env var doesn't propagate. The resolver scans
-// `<repo_root>/tmp/<id>/.session-envelope.json`, filters by repo_root +
-// freshness (last_seen_at within 24h), refuses ambiguity, accepts on
-// exactly-one-match. Priority is between hook_env (2) and capsule (3).
-
+// `<repo_root>/.caws/sessions/<id>/.session-envelope.json` (NEW home —
+// CAWS-SESSION-LOG-RELOCATE-001) with a bounded fallback to the legacy
+// `<repo_root>/tmp/<id>/`, filters by repo_root + freshness (last_seen_at
+// within 24h), refuses ambiguity, accepts on exactly-one-match. Priority
+// is between hook_env (2) and capsule (3).
+//
+// opts.home selects the on-disk home:
+//   'new' (default) → <repoRoot>/.caws/sessions/<id>/  (proves A2)
+//   'legacy'        → <repoRoot>/tmp/<id>/             (proves A3 read-both)
 function writeDurableEnvelope(repoRoot, sessionId, opts = {}) {
-  const envelopeDir = path.join(repoRoot, 'tmp', sessionId);
+  const envelopeDir =
+    opts.home === 'legacy'
+      ? path.join(repoRoot, 'tmp', sessionId)
+      : path.join(repoRoot, '.caws', 'sessions', sessionId);
   fs.mkdirSync(envelopeDir, { recursive: true });
   const envelopePath = path.join(envelopeDir, '.session-envelope.json');
   const payload = {
@@ -460,8 +468,42 @@ describe('CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: priority 2.5 bridge', () =>
     expect(r.value.identity.platform).toBe('claude-code');
     expect(r.value.source).toBe('durable_hook_envelope');
     expect(r.value.envelopePath).toMatch(/uuid-A\/\.session-envelope\.json$/);
+    // CAWS-SESSION-LOG-RELOCATE-001: the resolved envelope is at the NEW home.
+    expect(r.value.envelopePath).toContain(
+      path.join('.caws', 'sessions', 'uuid-A')
+    );
     // Capsule was NOT consulted.
     expect(r.value.capsulePath).toBeUndefined();
+  });
+
+  // CAWS-SESSION-LOG-RELOCATE-001 RELOCATE A3: a LEGACY tmp/<id>/ envelope
+  // (written before this slice landed) still resolves via the bounded
+  // read-both fallback — an in-flight session is not orphaned.
+  it('RELOCATE A3: a legacy tmp/<id>/ envelope still resolves (read-both fallback)', () => {
+    tmp = mkTempCaws();
+    writeDurableEnvelope(tmp.root, 'uuid-legacy', {
+      repoRoot: tmp.root,
+      lastSeenAt: '2026-05-27T06:55:00Z',
+      home: 'legacy',
+    });
+    // No new-home envelope exists.
+    expect(
+      fs.existsSync(path.join(tmp.root, '.caws', 'sessions', 'uuid-legacy'))
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(tmp.root, 'tmp', 'uuid-legacy', '.session-envelope.json'))
+    ).toBe(true);
+
+    const r = resolveSession({
+      cawsDir: tmp.cawsDir,
+      worktreeRoot: tmp.worktreeRoot,
+      env: {},
+      now: NOW,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.identity.session_id).toBe('uuid-legacy');
+    expect(r.value.source).toBe('durable_hook_envelope');
+    expect(r.value.envelopePath).toContain(path.join('tmp', 'uuid-legacy'));
   });
 
   // A3: two or more fresh repo-matching envelopes refuse with typed

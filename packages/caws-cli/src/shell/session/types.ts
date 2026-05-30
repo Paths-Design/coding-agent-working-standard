@@ -50,9 +50,11 @@ export interface ResolvedSession {
  * envelope written by hook scripts to bridge HOOK_SESSION_ID across
  * process boundaries (e.g., agent-issued Bash tool calls where the
  * env var doesn't propagate). One envelope file per session, written
- * at `<repo_root>/tmp/<session_id>/.session-envelope.json`. Refreshed
- * on every hook fire so long-lived sessions stay within the freshness
- * window.
+ * at `<repo_root>/.caws/sessions/<session_id>/.session-envelope.json`
+ * (CAWS-SESSION-LOG-RELOCATE-001; the legacy
+ * `<repo_root>/tmp/<session_id>/` path is read as a bounded transition
+ * fallback). Refreshed on every hook fire so long-lived sessions stay
+ * within the freshness window.
  */
 export interface DurableHookEnvelope {
   readonly session_id: string;

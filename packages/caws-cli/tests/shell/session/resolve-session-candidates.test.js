@@ -73,11 +73,17 @@ function listCapsules(cawsDir) {
 
 // Durable hook-session envelope fixture
 // (CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001). The scanner
-// looks under `<repoRoot>/tmp/<id>/.session-envelope.json` where repoRoot is
-// path.dirname(cawsDir) — i.e. the temp `root`. repo_root inside the envelope
-// is realpath-compared against the scan's repoRoot, so write the real path to
-// defeat macOS /tmp vs /private/tmp. lastSeenAt controls the freshness gate.
-function writeEnvelope(root, id, lastSeenAt, repoRootOverride) {
+// looks under `<repoRoot>/.caws/sessions/<id>/.session-envelope.json` (NEW
+// home — CAWS-SESSION-LOG-RELOCATE-001) with a bounded fallback to the
+// legacy `<repoRoot>/tmp/<id>/`. repoRoot is path.dirname(cawsDir) — i.e.
+// the temp `root`. repo_root inside the envelope is realpath-compared
+// against the scan's repoRoot, so write the real path to defeat macOS
+// /tmp vs /private/tmp. lastSeenAt controls the freshness gate.
+//
+// `home` selects which on-disk home to write to:
+//   'new' (default) → <root>/.caws/sessions/<id>/  (proves A2)
+//   'legacy'        → <root>/tmp/<id>/             (proves A3 read-both)
+function writeEnvelope(root, id, lastSeenAt, repoRootOverride, home = 'new') {
   const realRoot = (() => {
     try {
       return fs.realpathSync(root);
@@ -85,7 +91,10 @@ function writeEnvelope(root, id, lastSeenAt, repoRootOverride) {
       return root;
     }
   })();
-  const dir = path.join(root, 'tmp', id);
+  const dir =
+    home === 'legacy'
+      ? path.join(root, 'tmp', id)
+      : path.join(root, '.caws', 'sessions', id);
   fs.mkdirSync(dir, { recursive: true });
   const envelope = {
     session_id: id,
@@ -567,6 +576,86 @@ describe('resolveSessionCandidates: durable_hook_envelope source', () => {
     expect(t.outcome).toBe('admitted');
     expect(t.count).toBe(1);
     expect(t.admittedIds).toEqual([uuid]);
+  });
+
+  // CAWS-SESSION-LOG-RELOCATE-001
+  it('RELOCATE A2: resolves an envelope written at the NEW .caws/sessions/ home', () => {
+    tmp = mkTempCaws();
+    const uuid = 'new-home-1111-4111-8111-111111111111';
+    // Default home === 'new' → <root>/.caws/sessions/<id>/.session-envelope.json
+    writeEnvelope(tmp.root, uuid, FIXED_NOW_ISO);
+    // Prove the file really is under the new home, not legacy tmp/.
+    expect(
+      fs.existsSync(
+        path.join(tmp.root, '.caws', 'sessions', uuid, '.session-envelope.json')
+      )
+    ).toBe(true);
+    expect(fs.existsSync(path.join(tmp.root, 'tmp', uuid))).toBe(false);
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+    const envCand = candidates.candidates.find(
+      (c) => c.source === 'durable_hook_envelope'
+    );
+    expect(envCand).toBeDefined();
+    expect(envCand.identity.session_id).toBe(uuid);
+    // The envelopePath points at the new home.
+    expect(envCand.envelopePath).toContain(
+      path.join('.caws', 'sessions', uuid)
+    );
+  });
+
+  // CAWS-SESSION-LOG-RELOCATE-001 — bounded read-both fallback.
+  it('RELOCATE A3: resolves a LEGACY tmp/<id>/ envelope so in-flight sessions are not orphaned', () => {
+    tmp = mkTempCaws();
+    const uuid = 'legacy-home-2222-4222-8222-222222222222';
+    // Write ONLY to the legacy tmp/ home — no new-home envelope.
+    writeEnvelope(tmp.root, uuid, FIXED_NOW_ISO, undefined, 'legacy');
+    expect(
+      fs.existsSync(path.join(tmp.root, 'tmp', uuid, '.session-envelope.json'))
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmp.root, '.caws', 'sessions', uuid))
+    ).toBe(false);
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+    const envCand = candidates.candidates.find(
+      (c) => c.source === 'durable_hook_envelope'
+    );
+    expect(envCand).toBeDefined();
+    expect(envCand.identity.session_id).toBe(uuid);
+    expect(envCand.envelopePath).toContain(path.join('tmp', uuid));
+  });
+
+  // CAWS-SESSION-LOG-RELOCATE-001 — the new home shadows a stale legacy dup.
+  it('RELOCATE: dedups by session_id, new home wins over a legacy tmp/ duplicate', () => {
+    tmp = mkTempCaws();
+    const uuid = 'dup-3333-4333-8333-333333333333';
+    // Same session_id in BOTH homes; new should shadow legacy.
+    writeEnvelope(tmp.root, uuid, FIXED_NOW_ISO, undefined, 'legacy');
+    writeEnvelope(tmp.root, uuid, FIXED_NOW_ISO, undefined, 'new');
+
+    const candidates = resolveSessionCandidates({
+      cawsDir: tmp.cawsDir,
+      env: {},
+      now: fixedNow,
+    });
+    const envCands = candidates.candidates.filter(
+      (c) => c.source === 'durable_hook_envelope'
+    );
+    // Exactly ONE candidate for this session_id (deduped), from the new home.
+    expect(envCands).toHaveLength(1);
+    expect(envCands[0].identity.session_id).toBe(uuid);
+    expect(envCands[0].envelopePath).toContain(
+      path.join('.caws', 'sessions', uuid)
+    );
   });
 
   it('A3: admits ALL fresh envelopes (divergence from resolveSession >=2 refusal)', () => {

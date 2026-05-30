@@ -15,7 +15,10 @@
 //                                bridges HOOK_SESSION_ID across agent-Bash
 //                                invocations where the env var doesn't
 //                                propagate. Reads
-//                                <repo_root>/tmp/<id>/.session-envelope.json
+//                                <repo_root>/.caws/sessions/<id>/.session-envelope.json
+//                                (new home; legacy <repo_root>/tmp/<id>/ is
+//                                a bounded read-both fallback —
+//                                CAWS-SESSION-LOG-RELOCATE-001)
 //                                files written by hook scripts. Filters by
 //                                repo_root + 24h freshness on last_seen_at.
 //                                Refuses with typed ambiguity diagnostic
@@ -65,12 +68,31 @@ import type {
 const SESSIONS_DIRNAME = 'sessions';
 
 // CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
-const DURABLE_ENVELOPE_DIRNAME = 'tmp';
+// CAWS-SESSION-LOG-RELOCATE-001: per-session state moved out of repo-root
+// tmp/ to `<repoRoot>/.caws/sessions/`. The resolver scans the new home
+// first and, as a BOUNDED transition fallback, the legacy `tmp/` home so an
+// in-flight session whose envelope was written to the old path before this
+// slice landed is not orphaned. New writes go ONLY to .caws/sessions/.
+//
+// NOTE: the new envelope home is `<cawsDir>/sessions/`, the SAME directory
+// that holds capsules (`<id>.json`) and the caller-pointer
+// (`.caller-session.json`). Envelopes live in per-session SUBDIRS
+// (`<id>/.session-envelope.json`), so they don't collide with the flat
+// capsule files; capsule scanning skips dotfiles + non-`.json` entries so
+// the caller-pointer and session subdirs are not mis-parsed as capsules.
+const DURABLE_ENVELOPE_NEW_DIRNAME = SESSIONS_DIRNAME; // under .caws/
+// LEGACY-TMP-FALLBACK (CAWS-SESSION-LOG-RELOCATE-001): remove this legacy
+// read once pre-relocation tmp/<id>/ envelope dirs have aged out past the
+// freshness window (see docs/failure-lineage.md). Dual-read is a bounded
+// transition aid, NOT an indefinite contract.
+const DURABLE_ENVELOPE_LEGACY_DIRNAME = 'tmp'; // legacy repo-root tmp/
 const DURABLE_ENVELOPE_FILENAME = '.session-envelope.json';
 const DURABLE_ENVELOPE_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 
 // CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001
-// Per-repo caller-session pointer: `<repoRoot>/tmp/.caller-session.json`.
+// Per-repo caller-session pointer. CAWS-SESSION-LOG-RELOCATE-001 moved it
+// from `<repoRoot>/tmp/.caller-session.json` to
+// `<repoRoot>/.caws/sessions/.caller-session.json` (read new-then-legacy).
 // Written/refreshed by the hook (parse-input.sh) from the authoritative
 // hook-payload session_id. Consumed ONLY to disambiguate the
 // >=2-fresh-envelope case in agent-Bash where HOOK_SESSION_ID is absent.
@@ -98,19 +120,61 @@ function isCallerSessionPointerShape(
 }
 
 /**
- * Read the caller-session pointer at `<tmpDir>/.caller-session.json` and
- * return the named session_id IFF the pointer exists, parses, is
- * repo-matched, and is fresh (same freshness window as envelopes).
+ * Build the ordered list of session-state home directories to scan:
+ * the NEW `.caws/sessions/` home first, then the LEGACY repo-root `tmp/`
+ * home (CAWS-SESSION-LOG-RELOCATE-001 bounded read-both fallback).
+ *
+ * Derived from repoRoot (= `path.dirname(cawsDir)`). The new home is
+ * `<repoRoot>/.caws/sessions`; the legacy home is `<repoRoot>/tmp`.
+ */
+function sessionStateHomes(repoRoot: string): {
+  newDir: string;
+  legacyDir: string;
+  all: string[];
+} {
+  const newDir = path.join(
+    repoRoot,
+    '.caws',
+    DURABLE_ENVELOPE_NEW_DIRNAME
+  );
+  const legacyDir = path.join(repoRoot, DURABLE_ENVELOPE_LEGACY_DIRNAME);
+  return { newDir, legacyDir, all: [newDir, legacyDir] };
+}
+
+/**
+ * Read the caller-session pointer and return the named session_id IFF a
+ * pointer exists, parses, is repo-matched, and is fresh (same freshness
+ * window as envelopes). Scans the NEW `.caws/sessions/.caller-session.json`
+ * first, then the LEGACY `tmp/.caller-session.json` (read-both fallback,
+ * CAWS-SESSION-LOG-RELOCATE-001) — first positive hit wins.
  * Returns null on any miss — absent, unreadable, malformed, repo
- * mismatch, or stale. Total and non-throwing: a missing/bad pointer
- * MUST degrade to the existing ambiguity refusal, never to a guess.
+ * mismatch, or stale, in BOTH homes. Total and non-throwing: a
+ * missing/bad pointer MUST degrade to the existing ambiguity refusal,
+ * never to a guess.
  */
 function readCallerSessionPointer(args: {
   repoRootReal: string;
-  tmpDir: string;
+  dirs: string[];
   nowMs: number;
 }): string | null {
-  const pointerPath = path.join(args.tmpDir, CALLER_SESSION_POINTER_FILENAME);
+  for (const dir of args.dirs) {
+    const hit = readCallerSessionPointerFromDir({
+      repoRootReal: args.repoRootReal,
+      dir,
+      nowMs: args.nowMs,
+    });
+    if (hit !== null) return hit;
+  }
+  return null;
+}
+
+/** Single-directory caller-pointer read (see readCallerSessionPointer). */
+function readCallerSessionPointerFromDir(args: {
+  repoRootReal: string;
+  dir: string;
+  nowMs: number;
+}): string | null {
+  const pointerPath = path.join(args.dir, CALLER_SESSION_POINTER_FILENAME);
   let raw: string;
   try {
     raw = fs.readFileSync(pointerPath, 'utf8');
@@ -175,42 +239,39 @@ function isDurableEnvelopeShape(v: unknown): v is DurableEnvelopeShape {
 }
 
 /**
- * Scan `<repoRoot>/tmp/<id>/.session-envelope.json` for durable
- * hook-session envelopes matching the current call's repo_root and
- * within the freshness window.
+ * Scan one or more session-state home directories for durable
+ * hook-session envelopes (`<dir>/<id>/.session-envelope.json`) matching
+ * the current call's repo_root and within the freshness window.
+ *
+ * CAWS-SESSION-LOG-RELOCATE-001: `args.dirs` is the ordered home list
+ * (new `.caws/sessions/` first, legacy `tmp/` second). The scan visits
+ * every directory and DEDUPES by session_id — the FIRST directory that
+ * yields a given session_id wins, so a relocated envelope at the new
+ * path shadows a stale duplicate left behind in legacy `tmp/`.
  *
  * Returns:
- *   - { ok: true, candidates: [...] } where candidates is filtered
- *     and freshness-checked. Caller decides accept/refuse based on
- *     count.
+ *   - { candidates: [...] } filtered, freshness-checked, deduped.
+ *     Caller decides accept/refuse based on count.
  *   - Diagnostic warnings for any malformed envelopes encountered
  *     (non-fatal — the scan continues past malformed files).
  *
  * Per invariant 5: scan failures are non-fatal. A missing or
- * unreadable tmp/ directory returns an empty candidate set, not an
- * error. The durable-envelope path is operational cache; the
- * resolver falls through cleanly when nothing matches.
+ * unreadable directory contributes no candidates and no warnings.
+ * The durable-envelope path is operational cache; the resolver falls
+ * through cleanly when nothing matches.
  *
  * Per invariant 7: stale envelopes (last_seen_at > 24h ago) are
  * silently skipped — never deleted from the read path. Cleanup is
- * operator-driven via `rm -rf tmp/<id>/`.
+ * operator-driven (`rm -rf .caws/sessions/<id>/`).
  */
 function scanDurableEnvelopes(args: {
   repoRoot: string;
-  tmpDir: string;
+  dirs: string[];
   now: Date;
 }): { candidates: DurableEnvelopeCandidate[]; warnings: Diagnostic[] } {
   const warnings: Diagnostic[] = [];
   const candidates: DurableEnvelopeCandidate[] = [];
-
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(args.tmpDir);
-  } catch {
-    // No tmp directory or unreadable — no candidates, no warnings.
-    // This is the common case in repos that have never run a hook.
-    return { candidates, warnings };
-  }
+  const seenSessionIds = new Set<string>();
 
   let repoRootReal: string;
   try {
@@ -222,82 +283,101 @@ function scanDurableEnvelopes(args: {
   const nowMs = args.now.getTime();
   const freshnessFloorMs = nowMs - DURABLE_ENVELOPE_FRESHNESS_MS;
 
-  for (const name of entries) {
-    const envelopePath = path.join(args.tmpDir, name, DURABLE_ENVELOPE_FILENAME);
-    let stat: fs.Stats;
+  for (const dir of args.dirs) {
+    let entries: string[];
     try {
-      stat = fs.statSync(envelopePath);
+      entries = fs.readdirSync(dir);
     } catch {
-      // No envelope file in this tmp/<name>/ subdir (might be a
-      // session-log dir, an auto-reset-dispatch-test dir, or any
-      // other tmp content). Skip silently.
-      continue;
-    }
-    if (!stat.isFile()) continue;
-
-    let raw: string;
-    try {
-      raw = fs.readFileSync(envelopePath, 'utf8');
-    } catch (e) {
-      warnings.push(
-        diag(
-          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
-          `durable envelope read failed: ${(e as Error).message}`,
-          { envelopePath }
-        )
-      );
+      // No such directory or unreadable — no candidates, no warnings.
+      // Common for the legacy tmp/ home in repos that never wrote there.
       continue;
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      warnings.push(
-        diag(
-          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
-          `durable envelope JSON parse failed: ${(e as Error).message}`,
-          { envelopePath }
-        )
-      );
-      continue;
-    }
+    for (const name of entries) {
+      // Skip dotfiles (e.g. .caller-session.json now lives in the new
+      // home alongside the per-session subdirs) — only `<id>/` subdirs
+      // hold envelopes.
+      if (name.startsWith('.')) continue;
+      const envelopePath = path.join(dir, name, DURABLE_ENVELOPE_FILENAME);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(envelopePath);
+      } catch {
+        // No envelope file in this <name>/ subdir (might be a
+        // session-log dir, a test dir, capsule files, or any other
+        // content). Skip silently.
+        continue;
+      }
+      if (!stat.isFile()) continue;
 
-    if (!isDurableEnvelopeShape(parsed)) {
-      warnings.push(
-        diag(
-          SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
-          'durable envelope missing required fields (session_id, repo_root, last_seen_at)',
-          { envelopePath }
-        )
-      );
-      continue;
-    }
+      let raw: string;
+      try {
+        raw = fs.readFileSync(envelopePath, 'utf8');
+      } catch (e) {
+        warnings.push(
+          diag(
+            SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+            `durable envelope read failed: ${(e as Error).message}`,
+            { envelopePath }
+          )
+        );
+        continue;
+      }
 
-    // Repo-root filter: realpath both sides to defeat /tmp vs
-    // /private/tmp differences on macOS.
-    let envRepoRootReal: string;
-    try {
-      envRepoRootReal = fs.realpathSync(parsed.repo_root);
-    } catch {
-      envRepoRootReal = parsed.repo_root;
-    }
-    if (envRepoRootReal !== repoRootReal) {
-      // Envelope belongs to a different repo (e.g., another project's
-      // session that happened to leave a tmp/<id>/ here). Skip — NOT
-      // a warning; this is normal multi-repo developer state.
-      continue;
-    }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        warnings.push(
+          diag(
+            SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+            `durable envelope JSON parse failed: ${(e as Error).message}`,
+            { envelopePath }
+          )
+        );
+        continue;
+      }
 
-    // Freshness filter on last_seen_at (NOT created_at — long-lived
-    // active sessions stay fresh via per-hook refresh per invariant 2).
-    const lastSeenMs = Date.parse(parsed.last_seen_at);
-    if (!Number.isFinite(lastSeenMs) || lastSeenMs < freshnessFloorMs) {
-      // Stale. Skip silently — operator-driven cleanup, not auto-delete.
-      continue;
-    }
+      if (!isDurableEnvelopeShape(parsed)) {
+        warnings.push(
+          diag(
+            SHELL_RULES.SESSION_DURABLE_ENVELOPE_MALFORMED,
+            'durable envelope missing required fields (session_id, repo_root, last_seen_at)',
+            { envelopePath }
+          )
+        );
+        continue;
+      }
 
-    candidates.push({ envelope: parsed, envelopePath });
+      // Repo-root filter: realpath both sides to defeat /tmp vs
+      // /private/tmp differences on macOS.
+      let envRepoRootReal: string;
+      try {
+        envRepoRootReal = fs.realpathSync(parsed.repo_root);
+      } catch {
+        envRepoRootReal = parsed.repo_root;
+      }
+      if (envRepoRootReal !== repoRootReal) {
+        // Envelope belongs to a different repo. Skip — NOT a warning;
+        // this is normal multi-repo developer state.
+        continue;
+      }
+
+      // Freshness filter on last_seen_at (NOT created_at — long-lived
+      // active sessions stay fresh via per-hook refresh per invariant 2).
+      const lastSeenMs = Date.parse(parsed.last_seen_at);
+      if (!Number.isFinite(lastSeenMs) || lastSeenMs < freshnessFloorMs) {
+        // Stale. Skip silently — operator-driven cleanup, not auto-delete.
+        continue;
+      }
+
+      // Dedup by session_id. First home (new `.caws/sessions/`) wins:
+      // a relocated envelope shadows a stale duplicate in legacy tmp/.
+      if (seenSessionIds.has(parsed.session_id)) continue;
+      seenSessionIds.add(parsed.session_id);
+
+      candidates.push({ envelope: parsed, envelopePath });
+    }
   }
 
   return { candidates, warnings };
@@ -357,6 +437,10 @@ function readCapsule(
   }
   for (const name of entries) {
     if (!name.endsWith('.json')) continue;
+    // CAWS-SESSION-LOG-RELOCATE-001: the session-state relocation put
+    // `.caller-session.json` (a dotfile) in this same directory. Skip
+    // dotfiles so it is not mis-read as a malformed capsule.
+    if (name.startsWith('.')) continue;
     const capsulePath = path.join(sessionsDir, name);
     let raw: string;
     try {
@@ -441,6 +525,9 @@ function cleanupSupersededCapsules(
 
   for (const name of entries) {
     if (!name.endsWith('.json')) continue;
+    // CAWS-SESSION-LOG-RELOCATE-001: skip dotfiles (the relocated
+    // .caller-session.json shares this directory and is not a capsule).
+    if (name.startsWith('.')) continue;
     const capsulePath = path.join(sessionsDir, name);
     let raw: string;
     try {
@@ -607,8 +694,10 @@ export function resolveSession(
   //      CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: bridges
   //      HOOK_SESSION_ID across agent-Bash invocations where the env
   //      var doesn't propagate. The hook script writes/refreshes
-  //      `<repo_root>/tmp/<id>/.session-envelope.json` on every fire;
-  //      the resolver scans them filtered by repo_root + freshness.
+  //      `<repo_root>/.caws/sessions/<id>/.session-envelope.json` on every
+  //      fire (CAWS-SESSION-LOG-RELOCATE-001; legacy `<repo_root>/tmp/<id>/`
+  //      is read as a bounded transition fallback); the resolver scans them
+  //      filtered by repo_root + freshness.
   //
   //      Authority discipline:
   //        - Repo-root filter is mandatory (no blind tmp/* scan).
@@ -619,11 +708,15 @@ export function resolveSession(
   //        - Zero matches → fall through to capsule (priority 3).
   //
   //      Derive repoRoot from cawsDir (cawsDir is `<repoRoot>/.caws`).
+  //      CAWS-SESSION-LOG-RELOCATE-001: scan the NEW `.caws/sessions/`
+  //      home first, then the LEGACY repo-root `tmp/` home (bounded
+  //      read-both fallback so a pre-relocation in-flight session is not
+  //      orphaned).
   const repoRoot = path.dirname(opts.cawsDir);
-  const tmpDir = path.join(repoRoot, DURABLE_ENVELOPE_DIRNAME);
+  const homes = sessionStateHomes(repoRoot);
   const envScan = scanDurableEnvelopes({
     repoRoot,
-    tmpDir,
+    dirs: homes.all,
     now: opts.now ? opts.now() : new Date(),
   });
   if (envScan.candidates.length >= 2) {
@@ -643,7 +736,7 @@ export function resolveSession(
     }
     const callerId = readCallerSessionPointer({
       repoRootReal,
-      tmpDir,
+      dirs: homes.all,
       nowMs: (opts.now ? opts.now() : new Date()).getTime(),
     });
     if (callerId !== null) {
@@ -671,7 +764,7 @@ export function resolveSession(
     return err([
       diag(
         SHELL_RULES.SESSION_DURABLE_ENVELOPE_AMBIGUOUS,
-        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale tmp/<id>/ directories for sessions that have ended.`,
+        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale .caws/sessions/<id>/ directories (or legacy tmp/<id>/ dirs) for sessions that have ended.`,
         {
           repoRoot,
           candidateCount: envScan.candidates.length,
@@ -855,6 +948,9 @@ function readAllCapsules(
   const raceReasons: string[] = [];
   for (const name of entries) {
     if (!name.endsWith('.json')) continue;
+    // CAWS-SESSION-LOG-RELOCATE-001: skip dotfiles (the relocated
+    // .caller-session.json shares this directory and is not a capsule).
+    if (name.startsWith('.')) continue;
     const capsulePath = path.join(sessionsDir, name);
     let raw: string;
     try {
@@ -1046,7 +1142,9 @@ export function resolveSessionCandidates(
   //      CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001.
   //
   //      This source MIRRORS resolveSession's step 2.5 — the same
-  //      scanDurableEnvelopes() over `<repoRoot>/tmp/<id>/.session-envelope.json`,
+  //      scanDurableEnvelopes() over `<repoRoot>/.caws/sessions/<id>/.session-envelope.json`
+  //      (new home; legacy `<repoRoot>/tmp/<id>/` is the bounded read-both
+  //      fallback — CAWS-SESSION-LOG-RELOCATE-001),
   //      repo-root-filtered and freshness-checked — but with one
   //      deliberate divergence in the >=2 case.
   //
@@ -1069,10 +1167,10 @@ export function resolveSessionCandidates(
   //      resolved that same UUID as "self" via this exact envelope source;
   //      this aligns the comparison surface with the display surface.
   const repoRoot = path.dirname(opts.cawsDir);
-  const tmpDir = path.join(repoRoot, DURABLE_ENVELOPE_DIRNAME);
+  const homes = sessionStateHomes(repoRoot);
   const envScan = scanDurableEnvelopes({
     repoRoot,
-    tmpDir,
+    dirs: homes.all,
     now: opts.now ? opts.now() : new Date(),
   });
   if (envScan.candidates.length > 0) {
@@ -1096,7 +1194,7 @@ export function resolveSessionCandidates(
     trace.push({
       source: 'durable_hook_envelope',
       outcome: 'absent',
-      reason: `no fresh durable hook envelope under ${tmpDir} matched repo_root ${repoRoot}`,
+      reason: `no fresh durable hook envelope under ${homes.newDir} (or legacy ${homes.legacyDir}) matched repo_root ${repoRoot}`,
     });
   }
 
