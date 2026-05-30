@@ -998,8 +998,17 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
                     wt_sub = tokens[i + 1]
                     break
             # Bare `git worktree` (no subcommand) prints usage — read-only.
-            # `git worktree list` is read-only. Everything else mutates.
+            # `git worktree list` is read-only. `git worktree prune --dry-run`
+            # (or `-n`) only REPORTS what would be pruned and changes no state,
+            # so it is read-only too — admitting it closes a danger-latch false
+            # positive where a first-timer's orientation `prune --dry-run`
+            # (exit 0, no mutation) latched the whole session
+            # (CAWS-CLASSIFY-WORKTREE-PRUNE-AND-RM-REDIRECT-001 A1). Bare
+            # `git worktree prune` (no dry-run) DELETES worktree admin files, so
+            # it stays "ask"; likewise add/remove/move/repair/lock/unlock.
             if wt_sub in ("", "list"):
+                return ("allow", "")
+            if wt_sub == "prune" and ("--dry-run" in tokens or "-n" in tokens):
                 return ("allow", "")
             return None
         if sub in ALLOWED_GIT_SUBCOMMANDS:
@@ -1236,6 +1245,26 @@ def is_recursive_rm(segment: str) -> tuple[bool, list[str]]:
     if rm_idx < 0:
         return False, []
 
+    # Shell redirect operators are NOT delete targets. Before this fix the
+    # loop appended tokens like `2>&1` or `out.log` (after `>`) to `targets`,
+    # so `rm -rf <dir> 2>&1` produced the reason "recursive delete: 2>&1" —
+    # fingering the redirect instead of the deleted path
+    # (CAWS-CLASSIFY-WORKTREE-PRUNE-AND-RM-REDIRECT-001 A2/A3). Redirect
+    # operators bind a file descriptor to a target; neither the operator nor
+    # (for a bare `>`/`>>`/`2>`/`1>`) its following operand is a delete target.
+    # fd-combining/standalone forms (`2>&1`, `>&2`, `1>&2`, `&>`) carry their
+    # own target, so only the operator token is skipped.
+    _REDIRECT_STANDALONE = {'2>&1', '>&2', '1>&2', '&>', '&>>'}
+    _REDIRECT_TAKES_OPERAND = ('>', '>>', '2>', '1>', '2>>', '1>>', '<', '<<')
+
+    def _is_redirect_with_operand(t: str) -> bool:
+        # A redirect operator with the file glued on (e.g. `>out.log`,
+        # `2>err`) OR a bare operator whose operand is the next token.
+        return any(
+            t == op or (t.startswith(op) and len(t) > len(op))
+            for op in _REDIRECT_TAKES_OPERAND
+        )
+
     # Check for recursive flag
     is_recursive = False
     targets: list[str] = []
@@ -1243,10 +1272,19 @@ def is_recursive_rm(segment: str) -> tuple[bool, list[str]]:
     while i < len(tokens):
         tok = tokens[i]
         if tok == '--':
-            # Everything after -- is targets
+            # Everything after -- is literal filenames (POSIX); no redirects.
             targets.extend(tokens[i+1:])
             break
-        if tok.startswith('-') and not tok.startswith('--'):
+        if tok in _REDIRECT_STANDALONE:
+            # fd-combining redirect (e.g. 2>&1) — not a target, no operand.
+            pass
+        elif _is_redirect_with_operand(tok):
+            # A bare operator (`>`, `2>`, …) consumes the NEXT token as its
+            # file operand, which is also not a delete target.
+            if tok in _REDIRECT_TAKES_OPERAND:
+                i += 1  # skip the operand token too
+            # else: operator+file glued in one token — nothing extra to skip.
+        elif tok.startswith('-') and not tok.startswith('--'):
             if 'r' in tok or 'R' in tok:
                 is_recursive = True
         elif tok.startswith('--'):
