@@ -2,10 +2,11 @@ id: CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001
 title: 'Fix ineffective session-log packaging guard: npm files-field negation drops stray tmp/ from the tarball (.npmignore is overridden by files field)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: v11-pack-leak-hotfix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-pack-leak-hotfix at 030ade2f4515292c13b728972a3076938612355e'
 created_at: '2026-05-30T06:49:53.730Z'
-updated_at: '2026-05-30T06:49:53.730Z'
+updated_at: '2026-05-30T06:54:27.977Z'
 blast_radius:
   modules:
     - packages/caws-cli/package.json
