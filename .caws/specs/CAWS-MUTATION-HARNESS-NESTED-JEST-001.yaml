@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-30T09:12:11.604Z'
-updated_at: '2026-05-30T09:12:11.604Z'
+updated_at: '2026-05-30T15:54:52.834Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/mutation
@@ -16,6 +16,7 @@ scope:
     - packages/caws-cli/tests/mutation/mutation-quality.test.js
     - packages/caws-cli/package.json
     - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/scripts/run-mutation.mjs
   out:
     - .caws/policy.yaml
     - CODEOWNERS
