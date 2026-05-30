@@ -17,10 +17,27 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
 const CLI_PKG_DIR = path.resolve(__dirname, '..', '..');
+
+// CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001: a real probe stray file seeded
+// under the pack tmp/ BEFORE running npm pack. This is what makes the test
+// prove the EXCLUSION mechanism works rather than merely observing that no
+// stray content happened to exist. Without the probe, the test false-passes
+// on a clean checkout (which is exactly how the prior .npmignore-only guard
+// slipped through in a sparse worktree where the tmp/ dirs weren't present).
+const PROBE_DIR = path.join(
+  CLI_PKG_DIR,
+  'templates',
+  'hook-packs',
+  'claude-code',
+  'tmp',
+  'pack-guard-probe-0000'
+);
+const PROBE_FILE = path.join(PROBE_DIR, 'turn-001.json');
 
 /**
  * Run `npm pack --dry-run --json` in the caws-cli package and return the
@@ -47,15 +64,36 @@ describe('CAWS-SESSION-LOG-RELOCATE-001 A4: pack ships no tmp/ session content',
 
   let packed;
   beforeAll(() => {
-    packed = packedFilePaths();
+    // Seed a real stray session-log probe under the pack tmp/ so the
+    // exclusion is genuinely exercised (not a no-op on an empty dir).
+    fs.mkdirSync(PROBE_DIR, { recursive: true });
+    fs.writeFileSync(PROBE_FILE, '{"probe":"pack-guard"}\n');
+    try {
+      packed = packedFilePaths();
+    } finally {
+      // Always remove the probe, even if npm pack threw.
+      fs.rmSync(PROBE_DIR, { recursive: true, force: true });
+    }
   });
 
-  it('the published tarball contains ZERO files under templates/hook-packs/claude-code/tmp/', () => {
+  it('the seeded probe file is not silently absent (the guard test is meaningful)', () => {
+    // The probe was created on disk before npm pack ran. If this regex
+    // never matches anything in the unfiltered repo, the test would be
+    // vacuous — assert the probe path shape is the one we exclude.
+    expect(PROBE_FILE).toMatch(
+      /templates\/hook-packs\/claude-code\/tmp\/pack-guard-probe-0000\/turn-001\.json$/
+    );
+  });
+
+  it('the published tarball contains ZERO files under templates/hook-packs/claude-code/tmp/ (probe excluded)', () => {
     const strays = packed.filter((p) =>
       /templates\/hook-packs\/claude-code\/tmp\//.test(p)
     );
-    // If this fails, a local session-log dir leaked into the package.
-    // The guard is packages/caws-cli/.npmignore.
+    // The seeded probe MUST have been excluded. If this fails, the
+    // operative guard (package.json `files` negation) is broken — a local
+    // session-log dir would leak into the published package. NB: a
+    // .npmignore alone does NOT suffice when a `files` field is present
+    // (npm `files` precedence) — see CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001.
     expect(strays).toEqual([]);
   });
 
@@ -63,7 +101,7 @@ describe('CAWS-SESSION-LOG-RELOCATE-001 A4: pack ships no tmp/ session content',
     const packFiles = packed.filter((p) =>
       /templates\/hook-packs\/claude-code\//.test(p)
     );
-    // Sanity: the .npmignore tmp/ exclusion must not have nuked the pack.
+    // Sanity: the tmp/ exclusion must not have nuked the pack.
     expect(packFiles.length).toBeGreaterThan(10);
     // Spot-check a couple of load-bearing managed files are present.
     expect(packFiles.some((p) => p.endsWith('/session-log.sh'))).toBe(true);
