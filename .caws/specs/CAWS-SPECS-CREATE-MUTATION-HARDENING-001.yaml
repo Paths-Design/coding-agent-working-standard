@@ -85,9 +85,17 @@ acceptance:
     given: The Stryker-scoped run after this slice (node scripts/run-mutation.mjs).
     when: The mutation report is produced.
     then: >-
-      The 11 previously-surviving createSpec mutants (dist 300, 316, 320×2,
-      321×3, 350×3, 351) are killed; the mutation score on
-      dist/store/specs-writer.js rises accordingly with no new survivors
-      introduced.
+      10 of the 11 previously-surviving createSpec mutants (dist 300, 316,
+      320×2, 321×3, 350 EqualityOperator + 350 ConditionalExpression-false,
+      351) are killed, raising the dist/store/specs-writer.js mutation score
+      from 77.08% to 97.92% (37→47 killed, 11→1 survived) with no new
+      survivors introduced. The one remaining survivor — the 350:17
+      ConditionalExpression → true mutant on the call-site narrowRepair
+      spread — is an EQUIVALENT mutant: storeDiagnostic (repo-root.ts:168)
+      re-applies the identical narrowRepair guard, so a forwarded
+      `{ narrowRepair: undefined }` collapses to `{}` downstream and no test
+      input can distinguish the mutant from the original without changing
+      production code. Documented in the SEAM A12 test comment; accepted
+      rather than chased.
 non_functional: {}
 contracts: []
