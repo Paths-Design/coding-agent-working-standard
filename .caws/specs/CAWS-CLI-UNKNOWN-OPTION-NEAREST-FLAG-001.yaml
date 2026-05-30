@@ -7,7 +7,7 @@ created_at: '2026-05-30T23:22:45.255Z'
 updated_at: '2026-05-30T23:22:45.255Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli entrypoint — Commander error handling
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,41 @@ scope:
     - 'packages/caws-cli/tests/cli-unknown-option-suggestion.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When Commander rejects an unknown option for a known subcommand, the error
+    output includes a 'Did you mean: --<flag>?' suggestion naming the closest
+    real option of that subcommand (Levenshtein distance <= 2), in addition to
+    the existing 'Unknown option' line and the --help / docs pointers.
+  - >-
+    When no option is within the closest-match threshold (the typo is too far
+    from any real flag), no 'Did you mean' line is printed — the existing
+    'Unknown option' + --help guidance is shown unchanged. The suggestion is
+    additive and never replaces the existing error.
+  - >-
+    The unknown-option handling logic exists in exactly ONE place: the two
+    previously copy-pasted blocks (in the exitOverride handler and the
+    program.parse catch) both delegate to a single shared helper. Exit code
+    stays 1 for an unknown option.
+  - >-
+    The suggester only consults the failing subcommand's own declared options
+    (plus globally-available ones); it does not invent flags or suggest an
+    option from an unrelated command.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a command `caws init --non-interactive` where --interactive is a real init option'
+    when: 'Commander rejects the unknown option'
+    then: "stderr contains 'Unknown option' AND a 'Did you mean: --interactive?' suggestion; exit code 1"
+  - id: A2
+    given: 'a command with an unknown option whose spelling is far from every real flag (e.g. `caws status --zzzzzzzz`)'
+    when: 'Commander rejects it'
+    then: "stderr shows 'Unknown option' and the --help pointer but NO 'Did you mean' line; exit code 1"
+  - id: A3
+    given: 'the unknown-option handler'
+    when: 'the source is inspected'
+    then: 'both the exitOverride and parse-catch paths call one shared helper (no duplicated unknown-option block)'
+  - id: A4
+    given: 'a genuinely unknown option that resembles a real flag of a DIFFERENT command'
+    when: 'Commander rejects it for the current command'
+    then: 'the suggestion is drawn only from the current command’s options (no cross-command flag is suggested)'
 non_functional: {}
 contracts: []
