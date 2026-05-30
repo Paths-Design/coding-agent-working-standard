@@ -510,7 +510,22 @@ _guard_risk_reason() {
   if [[ -n "$risk" ]]; then
     body="$body $risk"
   fi
-  printf '%s %s Approve to edit on the base branch, or cd into the owning worktree (caws worktree list) / create one (caws worktree create <name>).' "$head" "$body"
+  # Actionable redirect (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A1/A2): a
+  # PreToolUse `ask` cannot be pre-approved by auto-mode and re-fires on every
+  # retry, so a generic "cd into the owning worktree (caws worktree list)" lets
+  # an agent loop the human on the same on-main write. When exactly ONE active
+  # worktree is present, name it and give the literal cd target so the agent
+  # switches on the first ask. With zero or 2+ worktrees there is no single
+  # unambiguous redirect, so keep the generic guidance.
+  local redirect="cd into the owning worktree (caws worktree list) / create one (caws worktree create <name>)"
+  if [[ "$WT_COUNT" -eq 1 ]] 2>/dev/null; then
+    # WT_NAMES is a single name here (it may be comma/space-joined for >1).
+    local _wt="${WT_NAMES%%[, ]*}"
+    if [[ -n "$_wt" ]] && [[ "$_wt" != "<unnamed>" ]]; then
+      redirect="cd .caws/worktrees/$_wt and make this edit there (it is the active worktree for branch '$CURRENT_BRANCH')"
+    fi
+  fi
+  printf '%s %s Approve to edit on the base branch, or %s.' "$head" "$body" "$redirect"
 }
 
 # _guard_no_ask: true when the harness cannot honor an ask, so we must block.
@@ -527,7 +542,15 @@ case "${SPEC_CONTENTION_CHECK:-}" in
     echo "[worktree-write-guard.sh] BLOCKED: '$REL_PATH' is claimed by an active worktree's scope.in." >&2
     echo "  $SPEC_CONTENTION_CHECK" >&2
     echo "  (format: claimed:<worktree-name>:<matching-pattern>)" >&2
-    echo "Switch into that worktree to make this edit (caws worktree list)." >&2
+    # Give the literal cd target (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A3).
+    # SPEC_CONTENTION_CHECK is "claimed:<wt>:<pattern>"; field 2 is the name.
+    # On any parse miss, fall back to the generic guidance.
+    _CLAIM_WT="$(printf '%s' "$SPEC_CONTENTION_CHECK" | cut -d: -f2)"
+    if [[ -n "$_CLAIM_WT" ]]; then
+      echo "Switch into that worktree to make this edit: cd .caws/worktrees/$_CLAIM_WT" >&2
+    else
+      echo "Switch into that worktree to make this edit (caws worktree list)." >&2
+    fi
     echo "Do NOT edit .claude/hooks/ or guard state to bypass this." >&2
     exit 2
     ;;
