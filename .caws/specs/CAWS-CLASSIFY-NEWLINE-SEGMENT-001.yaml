@@ -3,6 +3,7 @@ title: 'classify_command segments multi-line Bash blocks on newline so the rm ta
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-classify-newline
 created_at: '2026-05-30T15:55:57.057Z'
 updated_at: '2026-05-30T15:55:57.057Z'
 blast_radius:
