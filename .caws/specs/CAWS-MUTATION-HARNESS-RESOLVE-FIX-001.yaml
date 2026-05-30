@@ -2,10 +2,11 @@ id: CAWS-MUTATION-HARNESS-RESOLVE-FIX-001
 title: 'Fix mutation-quality harness: resolve Stryker via require.resolve (hoisted monorepo) instead of a package-relative node_modules path; invoke the resolved bin'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: v11-mutation-harness-fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge v11-mutation-harness-fix at a76ae01cfa71599799d0feb7ebde18b16a56d461'
 created_at: '2026-05-30T08:24:54.816Z'
-updated_at: '2026-05-30T08:24:54.816Z'
+updated_at: '2026-05-30T08:29:42.133Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/mutation
