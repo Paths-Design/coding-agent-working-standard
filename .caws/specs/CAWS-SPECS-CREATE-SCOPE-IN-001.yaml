@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-05-30T07:50:13.721Z'
-updated_at: '2026-05-30T08:03:53.548Z'
+updated_at: '2026-05-30T08:21:38.836Z'
 worktree: scope-in-create
 blast_radius:
   modules:
@@ -21,6 +21,7 @@ scope:
     - packages/caws-cli/tests/store/specs-create-scope-in.test.js
     - packages/caws-cli/tests/shell/specs-create-scope-in.test.js
     - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/specs.test.js
   out: []
 invariants:
   - >-
