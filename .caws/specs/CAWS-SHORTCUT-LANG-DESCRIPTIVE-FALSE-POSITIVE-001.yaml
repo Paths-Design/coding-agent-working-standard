@@ -3,6 +3,7 @@ title: 'shortcut-language-check: do not flag TODO/placeholder/FIXME when the key
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-shortcut-lang
 created_at: '2026-05-30T23:18:27.898Z'
 updated_at: '2026-05-30T23:18:27.898Z'
 blast_radius:
