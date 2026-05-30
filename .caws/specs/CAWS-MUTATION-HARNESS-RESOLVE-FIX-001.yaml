@@ -3,6 +3,7 @@ title: 'Fix mutation-quality harness: resolve Stryker via require.resolve (hoist
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: v11-mutation-harness-fix
 created_at: '2026-05-30T08:24:54.816Z'
 updated_at: '2026-05-30T08:24:54.816Z'
 blast_radius:
