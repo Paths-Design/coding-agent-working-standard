@@ -3,23 +3,93 @@ title: 'classify_command: admit read-only ''git worktree prune --dry-run''; stop
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: classify-worktree-prune-rm-redirect
 created_at: '2026-05-30T03:43:40.694Z'
 updated_at: '2026-05-30T03:43:40.694Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/CHANGELOG.md
+    - .caws/specs/CAWS-CLASSIFY-WORKTREE-PRUNE-AND-RM-REDIRECT-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/src
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    READ-ONLY `git worktree prune --dry-run` IS ADMITTED. The git-worktree
+    calibration (currently `wt_sub in ("", "list") -> allow`, line ~1002) also
+    admits `git worktree prune --dry-run` and `git worktree prune -n` as
+    read-only — `--dry-run`/`-n` only REPORT what would be pruned and change no
+    state (git exits 0, mutates nothing). Bare `git worktree prune` (no dry-run)
+    still falls through to `ask` (it deletes worktree administrative files), as
+    do all other mutating subcommands (add/remove/move/repair/lock/unlock). This
+    closes the probe's danger-latch FALSE-POSITIVE: a first-timer running
+    `git worktree prune --dry-run` during orientation got the whole session's
+    Bash latched on a command that visibly succeeded. (probe Event 10)
+  - >-
+    SHELL REDIRECTS ARE NOT rm DELETE-TARGETS. The rm-target extractor (the
+    parse loop ending ~line 1260) no longer collects shell redirect operators
+    or their operands as delete targets. Tokens that are redirects — `2>&1`,
+    `>&2`, `1>&2`, `&>`, `>`, `>>`, `<`, `2>`, `1>`, `2>>`, and a bare filename
+    immediately following a `>`/`>>`/`2>`/`1>` operator — are skipped, not
+    appended to `targets`. This fixes the mis-attribution where
+    `rm -rf <dir> 2>&1` produced the reason `recursive delete: 2>&1`, fingering
+    the redirect instead of the actual deleted path. The fix is in TARGET
+    EXTRACTION (so the wrong target never enters classification), not in the
+    reason string formatting. (probe Event #1, first run)
+  - >-
+    NO WEAKENING OF DELETE SAFETY. Stripping redirects from the target list must
+    not cause a dangerous delete to be missed. The recursion detection (`-r`/
+    `-R`/`--recursive`) is unchanged; every genuine path target is still
+    classified by classify_rm_target (root/home/repo/ancestor hard-blocks,
+    scratch-root allows, else ask). A redirect token never represented a path to
+    delete, so removing it from the target set removes a false reason, not a
+    real check. If stripping leaves ZERO targets on a recursive rm, the existing
+    `empty target on recursive delete` -> deny path still applies.
+  - >-
+    NO OTHER CLASSIFICATION CHANGE. Only the two calibrations above. The
+    ALLOWED_GIT_SUBCOMMANDS set, the npm-pack dry-run handling, nested-shell
+    re-classification, glob handling, and all deny/ask/allow decisions for
+    non-worktree-prune, non-redirect inputs are unchanged.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A command `git worktree prune --dry-run`.'
+    when: classify_command runs.
+    then: >-
+      The decision is `allow` (read-only). A test asserts `git worktree prune
+      --dry-run` and `git worktree prune -n` -> allow, while bare `git worktree
+      prune` -> ask (not allow) and `git worktree add foo` -> ask.
+  - id: A2
+    given: 'A command `rm -rf /some/real/dir 2>&1`.'
+    when: classify_command runs.
+    then: >-
+      The reason string references the actual target (`/some/real/dir`), NOT
+      `2>&1`. A test asserts the reason for `rm -rf <dir> 2>&1` matches the dir
+      and does NOT contain `2>&1`; likewise for `rm -rf <dir> > out.log` the
+      reason does not name `out.log` or `>`.
+  - id: A3
+    given: 'A recursive rm whose only non-flag tokens are redirects (e.g. `rm -rf 2>&1` with no path).'
+    when: classify_command runs.
+    then: >-
+      Stripping redirects leaves zero targets, so the existing empty-target
+      guard applies (deny "empty target on recursive delete"); the redirect is
+      never treated as a path. A test asserts this case denies on empty target,
+      not on a `2>&1` target.
+  - id: A4
+    given: The existing classify_command calibration + danger-latch suites.
+    when: They run after the change.
+    then: >-
+      All pre-existing classifications pass unchanged (worktree list/bare still
+      allow; catastrophic rm targets still deny; scratch-root rm still allow;
+      add/remove/move still ask). No regression in classify_command_calibration
+      or rm_scratch_path_calibration suites.
 non_functional: {}
 contracts: []
