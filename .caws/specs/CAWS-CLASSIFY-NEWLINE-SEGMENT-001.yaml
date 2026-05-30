@@ -7,7 +7,7 @@ created_at: '2026-05-30T15:55:57.057Z'
 updated_at: '2026-05-30T15:55:57.057Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli claude-code hook pack — command classifier (segmentation)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,40 @@ scope:
     - 'packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `segment_command` treats an unquoted, non-line-continuation newline as a
+    command separator equivalent to `;`, so each statement in a multi-line Bash
+    block becomes its own segment. A trailing command after `rm -rf <path>` on a
+    later line is never absorbed into the rm segment's token stream as a phantom
+    delete target.
+  - >-
+    A recursive delete strictly below a SAFE_DELETE_PREFIX or SYSTEM_TMP_PREFIX
+    (e.g. `rm -rf /tmp/<scratch>`) classifies `allow` whether it appears alone,
+    on the first line, or on a later line of a multi-line block — the
+    safe-prefix check sees the real, isolated target instead of a target list
+    polluted by the next line's tokens.
+  - >-
+    Newlines inside single/double quotes and inside heredoc bodies are NOT
+    treated as separators (the existing quote/heredoc state machine still
+    governs), and a backslash-newline line continuation is not a separator.
+    Pipeline-level deny patterns (curl|sh, fork bombs) that span lines are
+    matched on the raw string before segmentation and are unaffected.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a multi-line block rm -rf /tmp/scratch then echo done on the next line'
+    when: classify_command.py classifies the command
+    then: 'the rm segment targets exactly [/tmp/scratch] (not [echo, done]) and the decision is allow'
+  - id: A2
+    given: 'a multi-line block echo hi then rm -rf /tmp/scratch on the next line'
+    when: classify_command.py classifies the command
+    then: 'the rm on the later line is segmented and classified allow (safe /tmp prefix), not silently passed over'
+  - id: A3
+    given: 'a multi-line block cd /p then npm run build then rm -rf /etc on the next line'
+    when: classify_command.py classifies the command
+    then: 'the rm segment is isolated and the destructive /etc target classifies deny (segmentation does not weaken governance)'
+  - id: A4
+    given: 'a command with a quoted newline and a heredoc body containing rm -rf /'
+    when: classify_command.py segments the command
+    then: 'the quoted/heredoc newline is NOT a separator (the literal stays inside its segment and does not become an executable rm)'
 non_functional: {}
 contracts: []
