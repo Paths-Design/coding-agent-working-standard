@@ -2,10 +2,11 @@ id: CAWS-SPECS-CREATE-SCOPE-IN-001
 title: 'caws specs create accepts --scope-in <path> to populate scope.in in the same governed write; repoint Next-steps at amend-scope'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shipped --scope-in flag on caws specs create; scope.in populated at creation, guidance points at amend-scope. 38 slice tests green, gates pass.'
 created_at: '2026-05-30T07:50:13.721Z'
-updated_at: '2026-05-30T08:21:38.836Z'
-worktree: scope-in-create
+updated_at: '2026-05-30T08:42:59.982Z'
 blast_radius:
   modules:
     - caws-cli specs command
