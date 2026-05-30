@@ -727,3 +727,60 @@ describe('DANGER-LATCH-APPROVAL-AND-FEEDBACK-001 A5: read-only git plumbing allo
     });
   });
 });
+
+// ===========================================================================
+// CAWS-CLASSIFY-GIT-RM-CACHED-001 — admit non-destructive `git rm` forms
+//
+// Friction-probe Event 7: `git rm --cached <path>` (untrack a wrongly-committed
+// runtime file) is index-only and non-destructive, yet the prior classifier
+// swept ALL `git rm` into "unknown git subcommand -> ask", which arms the
+// sticky session danger latch on a safe cleanup. This slice admits the
+// index-only (--cached) and dry-run (-n/--dry-run) forms while keeping every
+// working-tree-destructive form governed. See failure-lineage Entry 17.
+// ===========================================================================
+describe('CAWS-CLASSIFY-GIT-RM-CACHED-001: git rm --cached / -n allowed', () => {
+  // A1: index-only untrack is non-destructive → allow.
+  it('git rm --cached path → allow', () => {
+    expect(classify('git rm --cached tmp/guard-strikes.json').decision).toBe('allow');
+  });
+
+  // A3: dry-run mutates nothing → allow (both spellings).
+  it('git rm -n path → allow', () => {
+    expect(classify('git rm -n src/foo.js').decision).toBe('allow');
+  });
+  it('git rm --dry-run path → allow', () => {
+    expect(classify('git rm --dry-run src/foo.js').decision).toBe('allow');
+  });
+
+  // A4: combined with a follow-on commit, the whole everyday cleanup is allowed.
+  it('git rm --cached f && git commit -m "untrack" → allow (full cleanup loop)', () => {
+    expect(
+      classify('git rm --cached f && git commit -m "untrack"').decision
+    ).toBe('allow');
+  });
+});
+
+describe('CAWS-CLASSIFY-GIT-RM-CACHED-001: destructive git rm stays governed', () => {
+  // A2: working-tree-destructive forms must NOT be admitted — they fall through
+  // to the governed-family default (ask), preserving the human-review boundary.
+  const mustNotAllow = [
+    'git rm src/foo.js', // plain rm deletes the working-tree file
+    'git rm -r src/dir', // recursive working-tree delete
+    'git rm -rf src/dir', // recursive force delete
+    'git rm -f src/foo.js', // forced working-tree delete
+  ];
+  mustNotAllow.forEach((cmd) => {
+    it(`${cmd} → NOT allow (working-tree delete stays governed)`, () => {
+      expect(classify(cmd).decision).not.toBe('allow');
+    });
+  });
+
+  // The naked-rm-on-.caws/specs deny pattern has HIGHER precedence than the
+  // safe-form admission: you cannot untrack a spec via `git rm --cached`; the
+  // governed lifecycle (caws specs close/archive) is the only path.
+  it('git rm --cached .caws/specs/FOO-1.yaml → deny (spec-protection precedence)', () => {
+    const { decision, reason } = classify('git rm --cached .caws/specs/FOO-1.yaml');
+    expect(decision).toBe('deny');
+    expect(reason.toLowerCase()).toContain('caws specs');
+  });
+});
