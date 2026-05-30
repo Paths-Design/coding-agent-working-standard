@@ -71,7 +71,7 @@ acceptance:
   - id: A3
     given: A caws+git fixture.
     when: A spec is created and its rendered body is read back.
-    then: The body contains the literal `out: []` scope line.
+    then: 'The body contains the literal `out: []` scope line.'
   - id: A4
     given: A caws+git fixture.
     when: >-
