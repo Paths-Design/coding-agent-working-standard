@@ -1,0 +1,27 @@
+id: CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001
+title: 'caws scope check/show ADMIT verdict reports worktree-claim caveat (edit from inside worktree X) so it stops contradicting worktree-write-guard'
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-30T08:50:43.843Z'
+updated_at: '2026-05-30T08:50:43.843Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/tests/shell/scope-command.test.js'
+    - 'packages/caws-cli/tests/shell/scope-check-cwd-binding.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
