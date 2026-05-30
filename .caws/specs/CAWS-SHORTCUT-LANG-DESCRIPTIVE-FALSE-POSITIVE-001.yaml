@@ -7,7 +7,7 @@ created_at: '2026-05-30T23:18:27.898Z'
 updated_at: '2026-05-30T23:18:27.898Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli claude-code hook pack — shortcut-language-check detection
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,39 @@ scope:
     - 'packages/caws-cli/tests/init/hook-packs/shortcut-language-check.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The hook still flags ACTIVE stub markers in non-test source: a keyword in
+    marker position — at a comment open (`// TODO`, `# FIXME`), or followed by a
+    colon (`TODO:`), or the existing not-implemented phrases and stub throws —
+    escalates warn->ask->block exactly as before. The load-bearing detection is
+    preserved; existing positive fixtures still strike.
+  - >-
+    The hook does NOT flag a keyword that appears only as a REFERENCED NOUN in
+    prose — immediately preceded by a determiner/preposition that marks it as a
+    description of the concept rather than an annotation (e.g. "the TODO
+    placeholder", "avoid the placeholder language", "instead of a FIXME"). A
+    comment that merely talks ABOUT shortcut language is not itself a stub.
+  - >-
+    Suppression is line-scoped and conservative: a file is only spared when
+    EVERY keyword occurrence is a referenced-noun form. A single genuine marker
+    anywhere in the content still strikes, so an agent cannot smuggle a real
+    `// TODO` past the guard by adding a descriptive sentence elsewhere.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a non-test source write containing `// TODO implement this`'
+    when: 'the hook scans it'
+    then: 'it flags the marker and emits strike 1 (active-marker detection preserved)'
+  - id: A2
+    given: 'a non-test source write whose only keyword use is descriptive — e.g. a comment "reword to avoid the TODO placeholder trigger"'
+    when: 'the hook scans it'
+    then: 'NO strike is emitted (the keyword is a referenced noun, not an active marker)'
+  - id: A3
+    given: 'content that has BOTH a descriptive reference AND a genuine `// TODO` marker on another line'
+    when: 'the hook scans it'
+    then: 'it still strikes (a real marker is present; the descriptive line does not mask it)'
+  - id: A4
+    given: 'the existing positive fixtures (not-implemented throw, FIXME: placeholder marker)'
+    when: 'the hook scans them'
+    then: 'they still strike exactly as before (no regression to load-bearing detection)'
 non_functional: {}
 contracts: []
