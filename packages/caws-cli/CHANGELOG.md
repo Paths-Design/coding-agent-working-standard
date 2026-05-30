@@ -75,17 +75,25 @@
 ### Fixed
 
 * **Published package shipped stray local session transcripts**
-  (`CAWS-SESSION-LOG-RELOCATE-001`). `package.json`'s `files:
+  (`CAWS-SESSION-LOG-RELOCATE-001`, fixed by
+  `CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001`). `package.json`'s `files:
   ["templates/hook-packs/**"]` ships matched paths regardless of
   `.gitignore`, so the maintainer's local session-log dirs under
   `templates/hook-packs/claude-code/tmp/<session-id>/` leaked into the
   published tarball — `npm pack --dry-run` showed 27 stray files
   (`session.json`, `turn-*.json`, `handoff.json`, `session.txt`) shipping
-  to every installer. A new `.npmignore` excludes the pack's `tmp/` from the
-  tarball (verified 27→0 stray files, all legitimate pack files retained); a
-  packaging test (`tests/init/session-log-packaging-guard.test.js`) runs
-  `npm pack --dry-run` and asserts zero `tmp/` session content ships, locking
-  the leak at CI. (failure-lineage Entry 33.)
+  to every installer. The OPERATIVE guard is a **negation in the
+  `package.json` `files` array** (`!templates/hook-packs/claude-code/tmp`
+  and `…/tmp/**`) — npm's `files` inclusion takes precedence over
+  `.npmignore`, so a `.npmignore` exclusion alone did NOT drop the files
+  (it false-passed in a sparse worktree where the dirs weren't materialized).
+  The `.npmignore` entry is retained as documented defense-in-depth.
+  Verified 27→0 stray files, all 41 legitimate pack files retained. The
+  packaging test (`tests/init/session-log-packaging-guard.test.js`) now
+  SEEDS a real stray probe under the pack `tmp/` before `npm pack --dry-run`
+  and asserts it is excluded — proven by mutation to fail when the
+  `files`-negation is removed, so it can no longer false-pass. (failure-
+  lineage Entry 33.)
 
 * **hook-pack (danger latch): `reset-danger-latch.sh --current` could not
   clear the latch a session actually wrote** (`DANGER-LATCH-UX-001`). The

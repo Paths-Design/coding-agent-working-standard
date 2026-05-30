@@ -10,7 +10,9 @@
   "files": [
     "dist",
     "README.md",
-    "templates/hook-packs/**"
+    "templates/hook-packs/**",
+    "!templates/hook-packs/claude-code/tmp",
+    "!templates/hook-packs/claude-code/tmp/**"
   ],
   "scripts": {
     "build": "node scripts/build-cli.js",

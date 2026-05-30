@@ -9,11 +9,18 @@
 # dirs leaked into the published package (27 files in one observed pack).
 #
 # Per-session state now lives in the CONSUMER's `.caws/sessions/` at
-# runtime; the hook pack itself ships no tmp/ content. This exclusion is
-# the durable packaging guard against the leak recurring if a developer's
-# local session writes into the (pre-relocation) pack tmp/ dir again.
+# runtime; the hook pack itself ships no tmp/ content.
 #
-# This file exists ONLY for this exclusion. npm applies it as a
-# subtraction from the package.json `files` globs.
+# IMPORTANT (CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001): this `.npmignore` is
+# DEFENSE-IN-DEPTH ONLY, not the operative guard. When a `files` field is
+# present in package.json, npm's `files` inclusion takes PRECEDENCE over
+# .npmignore for any path a `files` glob matches — so this exclusion alone
+# does NOT drop the tmp/ files from the tarball (verified: 27 stray files
+# still shipped with only this .npmignore). The OPERATIVE guard is the
+# negation entry in package.json `files`:
+#   "!templates/hook-packs/claude-code/tmp"
+#   "!templates/hook-packs/claude-code/tmp/**"
+# which npm honors. This file is kept for any future case where files-field
+# precedence does not apply (e.g. a non-files-matched path).
 templates/hook-packs/claude-code/tmp/
 templates/hook-packs/claude-code/tmp/**
