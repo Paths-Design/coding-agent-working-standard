@@ -7,19 +7,60 @@ created_at: '2026-05-30T07:57:30.512Z'
 updated_at: '2026-05-30T07:57:30.512Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/store/specs-activate-draft.test.js
+    - packages/caws-cli/tests/store/specs-writer-archive-tombstone.test.js
+    - packages/caws-cli/tests/init/session-log-packaging-guard.test.js
+    - packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+    - packages/caws-cli/tests/mutation/mutation-quality.test.js
+    - packages/caws-cli/tests/shell/claim-stale-version-advice.test.js
+    - packages/caws-cli/tests/shell/status-kernel-feature-detect.test.js
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    TEST-FILE LINT HYGIENE ONLY — NO BEHAVIOR CHANGE. This slice removes ONE
+    unused import (`closeSpec` in specs-activate-draft.test.js — verified
+    unused: it appears only on the destructuring import line, is never called,
+    and closeSpec retains 25 call sites across 6 OTHER test files incl. a
+    dedicated specs-writer-close.test.js, so no coverage is lost) and 26 stale
+    `eslint-disable` directives (no-console disables where eslint reports no
+    no-console problem). Every edit is a deletion of dead lint scaffolding; NO
+    assertion, fixture, import-that-is-used, or test behavior changes. The same
+    tests pass before and after.
+  - >-
+    LINT GATE GOES GREEN. After this slice `npm run lint` in packages/caws-cli
+    exits 0 with zero errors and zero warnings (eslint --fix clears the
+    auto-fixable warnings; the one unused-import error is removed by hand). No
+    new eslint-disable directives are ADDED to silence anything — the fix is
+    removal of dead directives, not suppression of live findings.
+  - >-
+    NO PRODUCTION SOURCE TOUCHED. scope.in is exclusively test files under
+    packages/caws-cli/tests/. No src/ file, no hook template, no kernel file is
+    in scope. The lint baseline being cleared is entirely in test scaffolding.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: The caws-cli package with a pre-existing lint baseline (1 error + 26 warnings).
+    when: '`npm run lint` runs in packages/caws-cli after this slice.'
+    then: >-
+      It exits 0 with zero errors and zero warnings. The unused `closeSpec`
+      import is gone; all 26 stale eslint-disable directives are removed.
+  - id: A2
+    given: The seven touched test files.
+    when: Their suites run (jest) before and after the slice.
+    then: >-
+      The same tests pass with the same assertions — the edits are dead-lint
+      removal only, so test behavior is unchanged.
+non_functional:
+  reliability:
+    - >-
+      Clears inherited lint-baseline breakage so the lint gate is a true
+      signal (a green lint run means clean, not "1 known pre-existing error we
+      ignore"). Prevents the pre-existing error from masking a NEW lint
+      regression in a future change.
 contracts: []
