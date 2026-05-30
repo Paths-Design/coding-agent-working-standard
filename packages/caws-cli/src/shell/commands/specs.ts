@@ -251,15 +251,34 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
   const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
   out(`created ${outcome.id} at ${relSpecPath} (lifecycle_state: active)`);
-  // CAWS-FIRST-CONTACT-UX-001 A4: the spec ships with TODO placeholders
-  // in scope.in. Until those are replaced with real file paths, scope-guard
-  // will reject every edit because no path is admitted. New users hit
-  // this immediately and conclude CAWS is broken.
+  // CAWS-FIRST-CONTACT-UX-001 A4: the spec ships with TODO placeholders in
+  // scope.in. Direct the user to fill them in.
+  //
+  // CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A3: do NOT over-promise enforcement.
+  // The previous hint claimed "scope-guard rejects every edit", but a fresh
+  // spec on the main checkout is `binding: unbound`, and scope-guard FAILS
+  // OPEN when it cannot decide authority (scope.no_authority.unbound) — so
+  // edits on main are NOT rejected by scope-guard. scope.in enforcement is
+  // authoritative inside the spec's bound worktree; base-branch writes are
+  // governed by the worktree-write-guard, not scope-guard. State that truth.
   out('');
   out('Next: open the spec and replace TODO placeholders before editing files.');
   out(`  edit: ${relSpecPath}`);
   out('  scope.in must list the file paths your slice will touch.');
-  out('  Until then, scope-guard rejects every edit (no path admitted).');
+  out(
+    '  scope.in is enforced when you work inside this spec\'s worktree (caws'
+  );
+  out(
+    '  worktree create <name> --spec ' +
+      outcome.id +
+      '); on the main checkout, base-branch'
+  );
+  out(
+    '  writes are governed by the worktree-write-guard, not scope.in.'
+  );
+  out(
+    '  Tier 1/2 specs also require a `contract` — see docs/guides/caws-contracts.md.'
+  );
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

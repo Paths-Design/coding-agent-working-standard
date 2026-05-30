@@ -85,12 +85,19 @@ describe('A1: caws specs create', () => {
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/created FEAT-001/);
-    // CAWS-FIRST-CONTACT-UX-001 A4: post-create guidance must explain
-    // that scope.in TODO placeholders block edits and name the spec path.
+    // CAWS-FIRST-CONTACT-UX-001 A4: post-create guidance names the spec path
+    // and tells the user to fill scope.in.
     expect(r.stdout).toMatch(/Next: open the spec/);
     expect(r.stdout).toMatch(/edit:.*FEAT-001\.yaml/);
     expect(r.stdout).toMatch(/scope\.in must list/);
-    expect(r.stdout).toMatch(/scope-guard rejects/);
+    // CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A3: the guidance must NOT over-promise
+    // that scope-guard rejects edits — on the unbound main checkout it fails
+    // open. It must instead say scope.in is enforced inside the bound worktree,
+    // that base-branch writes are governed by the worktree-write-guard, and
+    // point at the contracts guide.
+    expect(r.stdout).not.toMatch(/scope-guard rejects every edit/);
+    expect(r.stdout).toMatch(/worktree-write-guard/);
+    expect(r.stdout).toMatch(/caws-contracts\.md/);
 
     const filePath = path.join(cawsDir, 'specs/FEAT-001.yaml');
     expect(fs.existsSync(filePath)).toBe(true);
