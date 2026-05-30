@@ -162,19 +162,28 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly mode?: string;
   readonly riskTier?: number | string;
   readonly legacyType?: string;
+  /**
+   * Repeatable --scope-in <path>. When supplied, scope.in is written with the
+   * given paths at creation time, so the spec ships ready to enforce
+   * (CAWS-SPECS-CREATE-SCOPE-IN-001).
+   */
+  readonly scopeIn?: readonly string[];
 }
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]...',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
+  '  caws specs create FEAT-002 --title "Render slice" --mode feature --risk-tier 3 --scope-in src/render.js --scope-in tests/render.test.js',
   '',
   'Notes:',
   '  --type is not supported in v11. Use --mode instead.',
   '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
-  '  After creation, edit .caws/specs/<id>.yaml and replace TODOs in scope.in, invariants, and acceptance.',
+  '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
+  '  To widen scope later, use `caws specs amend-scope <id> --add <path>` (governed; no hand-edit).',
+  '  Invariants and acceptance still need filling in via the spec YAML before iteration.',
 ].join('\n');
 
 export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
@@ -238,6 +247,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     initialState: 'active',
     now: nowFn,
     actor,
+    ...(opts.scopeIn !== undefined && opts.scopeIn.length > 0
+      ? { scopeIn: opts.scopeIn }
+      : {}),
   });
   if (!isOk(result)) {
     err('caws specs create: failed.');
@@ -252,8 +264,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
   const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
   out(`created ${outcome.id} at ${relSpecPath} (lifecycle_state: active)`);
-  // CAWS-FIRST-CONTACT-UX-001 A4: the spec ships with TODO placeholders in
-  // scope.in. Direct the user to fill them in.
+  // CAWS-SPECS-CREATE-SCOPE-IN-001: when --scope-in was supplied, scope.in is
+  // already populated in the created spec, so the guidance must NOT tell the
+  // user to hand-edit the YAML to set it — that instruction is the very
+  // silent-failure surface this slice removes. Branch the guidance: confirm
+  // the populated scope and point at `caws specs amend-scope` for later
+  // widening (the governed mutation), instead of a raw YAML edit.
   //
   // CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A3: do NOT over-promise enforcement.
   // The previous hint claimed "scope-guard rejects every edit", but a fresh
@@ -262,21 +278,33 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // edits on main are NOT rejected by scope-guard. scope.in enforcement is
   // authoritative inside the spec's bound worktree; base-branch writes are
   // governed by the worktree-write-guard, not scope-guard. State that truth.
+  const scopeInWasPopulated =
+    opts.scopeIn !== undefined && opts.scopeIn.length > 0;
   out('');
-  out('Next: open the spec and replace TODO placeholders before editing files.');
-  out(`  edit: ${relSpecPath}`);
-  out('  scope.in must list the file paths your slice will touch.');
-  out(
-    '  scope.in is enforced when you work inside this spec\'s worktree (caws'
-  );
-  out(
-    '  worktree create <name> --spec ' +
-      outcome.id +
-      '); on the main checkout, base-branch'
-  );
-  out(
-    '  writes are governed by the worktree-write-guard, not scope.in.'
-  );
+  if (scopeInWasPopulated) {
+    out('Next: scope.in is set from --scope-in; fill in invariants + acceptance, then:');
+    out(
+      `  caws worktree create <name> --spec ${outcome.id}  (binds + enforces scope.in)`
+    );
+    out(
+      '  caws specs amend-scope ' +
+        outcome.id +
+        ' --add <path>   (the governed way to widen scope later — no hand-edit)'
+    );
+  } else {
+    out('Next: set scope.in via the governed mutation, not a raw YAML edit:');
+    out(
+      '  caws specs amend-scope ' +
+        outcome.id +
+        ' --add <path> --add <path>   (writes canonical, appends an audit event)'
+    );
+    out('  Then fill in invariants + acceptance and create the worktree:');
+    out(`  caws worktree create <name> --spec ${outcome.id}`);
+    out(
+      '  (scope.in is authoritative inside that worktree; base-branch writes are'
+    );
+    out('  governed by the worktree-write-guard, not scope.in.)');
+  }
   out(
     '  Tier 1/2 specs also require a `contract` — see docs/guides/caws-contracts.md.'
   );

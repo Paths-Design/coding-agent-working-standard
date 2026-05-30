@@ -589,6 +589,7 @@ export function registerShellCommands(
           title?: string;
           mode?: string;
           riskTier?: string;
+          scopeIn?: string[];
           type?: string;
           data?: boolean;
         }
@@ -598,6 +599,7 @@ export function registerShellCommands(
           ...(opts.title !== undefined ? { title: opts.title } : {}),
           ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
           ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
+          ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           showData: opts.data === true,
         });

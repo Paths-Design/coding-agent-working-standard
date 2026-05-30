@@ -68,6 +68,14 @@ export interface CreateSpecInput {
   readonly riskTier: 1 | 2 | 3;
   /** Initial state. v11.1 defaults to active. */
   readonly initialState?: 'active' | 'draft';
+  /**
+   * scope.in paths to populate at creation time (CAWS-SPECS-CREATE-SCOPE-IN-001).
+   * When non-empty, the rendered spec's scope.in lists exactly these paths
+   * (first-seen order, de-duplicated) instead of the unfilled scaffold line —
+   * set in the same createSpec write, so no hand-edit or follow-on amend is
+   * needed. When undefined/empty, the scaffold line is rendered (prior behavior).
+   */
+  readonly scopeIn?: readonly string[];
   /** Override the timestamp used for created_at + the event ts. Tests inject. */
   readonly now?: () => Date;
   /** The EventBody actor envelope (built by the shell layer). */
@@ -377,6 +385,20 @@ function validateSpecId(id: string): Result<true> {
 function renderInitialSpecYaml(input: CreateSpecInput): string {
   const now = (input.now ?? (() => new Date()))().toISOString();
   const state = input.initialState ?? 'active';
+  // CAWS-SPECS-CREATE-SCOPE-IN-001: when --scope-in paths were supplied,
+  // render them as the scope.in sequence (first-seen order, de-duplicated)
+  // in this same write — so a first-timer never has to hand-edit the YAML
+  // (the silent-failure surface that cornered the friction-probe). When no
+  // paths are supplied, fall back to the single scaffold line that
+  // preserves prior behavior.
+  const dedupedScopeIn =
+    input.scopeIn !== undefined && input.scopeIn.length > 0
+      ? [...new Set(input.scopeIn)]
+      : null;
+  const scopeInLines =
+    dedupedScopeIn !== null
+      ? dedupedScopeIn.map((p) => `    - '${p.replace(/'/g, "''")}'`)
+      : [`    - 'TODO: list the file(s) or directories this spec authorizes.'`];
   // Render a minimum-viable v11 spec. Plain-string fields are
   // single-quoted to be defensive against embedded colons. The body
   // is intentionally minimal but satisfies the kernel's structural
@@ -397,7 +419,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `operational_rollback_slo: 5m`,
     `scope:`,
     `  in:`,
-    `    - 'TODO: list the file(s) or directories this spec authorizes.'`,
+    ...scopeInLines,
     `  out: []`,
     `invariants:`,
     `  - 'TODO: describe one invariant this spec guarantees.'`,
