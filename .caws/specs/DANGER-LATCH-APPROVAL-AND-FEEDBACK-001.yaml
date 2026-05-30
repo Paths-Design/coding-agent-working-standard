@@ -1,25 +1,188 @@
 id: DANGER-LATCH-APPROVAL-AND-FEEDBACK-001
 title: 'danger latch: first flagged ask warns (no sticky latch), second strike latches; explicit stop-now feedback at flag time; add merge-tree/cat-file/rev-list to read-only allow-list'
-risk_tier: 3
+risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-30T03:35:42.052Z'
-updated_at: '2026-05-30T03:35:42.052Z'
+updated_at: '2026-05-30T03:45:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    # The latch writer + ask/deny dispatch + flag-time messaging.
+    - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    # The read-only git allow-list (ALLOWED_GIT_SUBCOMMANDS).
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    # The human-only reset must understand the new warn-marker too.
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    # Tests (real subprocess harness, mktemp projects).
+    - packages/caws-cli/tests/hook-packs/
+    # Doctrine + changelog.
+    - docs/failure-lineage.md
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    FIRST FLAGGED ASK WARNS, DOES NOT LATCH. The first `ask`-classified command
+    in a session does NOT write the sticky danger-latch sentinel. Instead it
+    writes a lightweight per-session WARN MARKER and emits the ask with explicit
+    guidance: a latch is NOT yet armed, but the NEXT flagged command WILL arm it
+    — stop and reconsider. Claude Code's own approval pause already puts a human
+    in the loop for this one command; if the user approves, the agent continues
+    with NO sticky state to clear. Rationale (maintainer): "we can do it this
+    time, but you do it again and we remove you from the project" — one honest
+    mistake gets a warning, not a session freeze.
+  - >-
+    WARN MARKER USES THE LATCH'S OWN SESSION-ID RESOLUTION. The warn marker is a
+    sibling sentinel in the SAME danger_state_dir, keyed by the SAME
+    sanitize_session(session_id) transform danger_latch_file uses
+    (danger-warn-<safe_session>.json next to danger-latch-<safe_session>.json).
+    It MUST NOT key off a separately-resolved session id (e.g. the session-log
+    tmp/<sessionId>/ directory): block-dangerous.sh runs in agent-Bash where
+    HOOK_SESSION_ID may be unset and the latch already falls back to "unknown"
+    (CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001). The warn and the latch must
+    resolve to the SAME session by construction, or a first-strike under
+    session-id "A" could latch under "unknown" (or vice versa) — defeating the
+    grace. Single resolution path = warn and latch always agree.
+  - >-
+    SECOND STRIKE LATCHES. When a flagged (`ask`) command is hit AND the
+    per-session warn marker already exists, block-dangerous.sh writes the
+    sticky latch sentinel (the existing record_danger_latch behavior) — the
+    agent is now thrashing, not making a single honest mistake, so the
+    session-wide freeze engages until a human reset. The escalation is
+    warn-then-latch, mirroring the existing progressive-strike model for
+    scope guards (strike 1 warn -> strike N block).
+  - >-
+    DENY STILL LATCHES IMMEDIATELY. A `deny`-classified command (the classifier
+    is certain it is dangerous — rm -rf /, force-push, etc.) writes the latch
+    sentinel on the FIRST occurrence, unchanged from today. deny is not subject
+    to the warn-first grace: there is no safe single use to grant. Only the
+    `ask` class gets the first-strike warning.
+  - >-
+    EXPLICIT STOP-NOW FEEDBACK AT FLAG TIME. Both the warn (first ask) and the
+    latch (second ask / any deny) messages state PLAINLY, at the moment the
+    command is flagged, that (a) a latch is armed or about-to-arm, (b) the agent
+    must STOP and not run another Bash command, (c) the next Bash call will
+    block, (d) the agent cannot self-reset — the user must. This closes the
+    failure where the agent receives a thin ask result, does NOT realize a
+    session-wide latch is in play, immediately runs another command, and only
+    THEN sees the latch message (attributed to the prior command) — inducing a
+    retry cascade the latch was meant to prevent. The message tells the agent to
+    stop BEFORE it fires the next command, not after.
+  - >-
+    READ-ONLY GIT PLUMBING JOINS THE ALLOW-LIST. classify_command.py
+    ALLOWED_GIT_SUBCOMMANDS gains the read-only plumbing verbs `merge-tree`,
+    `cat-file`, and `rev-list`. These compute/inspect against the object
+    database and refs WITHOUT mutating any ref, working tree, or index
+    (`git merge-tree --write-tree` writes only loose objects + prints a tree
+    sha; `cat-file` and `rev-list` are pure reads). They were classified `ask`
+    (unknown git subcommand), which both blocked them AND armed a latch —
+    defeating the CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 read-only
+    survival guarantee for exactly the "inspect before you mutate" commands an
+    agent should be encouraged to run. Narrow: only these read-only verbs are
+    added; mutating plumbing (update-ref, write-tree as a bare index write,
+    commit-tree) is NOT admitted.
+  - >-
+    RESET CLEARS BOTH SENTINELS. reset-danger-latch.sh, when clearing a
+    session's latch, ALSO clears that session's warn marker, so a fresh session
+    (or a post-reset session) starts with a clean first-strike grace again. The
+    reset remains human-only and audit-logged. (A warn marker with no latch is
+    also cleared — it is per-session advisory state, not authority.)
+  - >-
+    FAIL-CLOSED PRESERVED. When the classifier or python3 is unavailable,
+    block-dangerous.sh keeps its conservative pre-existing behavior (ask + latch
+    on the unverifiable command). The warn-first grace applies only to a
+    classifier-confirmed `ask`; an unverifiable command does not get the grace
+    (we cannot prove it is a benign first ask). The read-only allow-list
+    additions are pure-static (no new subprocess) so they cannot fail open.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: A session with no prior flagged command and no warn marker.
+    when: The first `ask`-classified command (e.g. `git merge-tree` before it was allow-listed, or `git rebase`) is run.
+    then: >-
+      No sticky latch sentinel is written; a warn marker
+      (danger-warn-<session>.json) IS written; the emitted ask message states a
+      latch is NOT yet armed but WILL arm on the next flagged command and the
+      agent should stop. A subsequent READ-ONLY command in the same session is
+      NOT blocked (no latch present).
+  - id: A2
+    given: A session whose warn marker already exists (one ask already warned).
+    when: A second `ask`-classified command is run.
+    then: >-
+      The sticky latch sentinel IS written (record_danger_latch); subsequent
+      mutating Bash calls are blocked by the sticky latch until a human reset,
+      per the existing behavior.
+  - id: A3
+    given: A session with no prior flagged command.
+    when: A `deny`-classified command (e.g. `rm -rf /`, force-push) is run.
+    then: >-
+      The latch sentinel is written immediately (no warn-first grace for deny);
+      the message states the latch is armed and the agent must stop.
+  - id: A4
+    given: The flag-time messages (warn, second-strike latch, deny).
+    when: Each is emitted.
+    then: >-
+      Each message explicitly tells the agent to STOP and not run another Bash
+      command, states that a latch is armed or imminent, and that only the user
+      can reset — at FLAG TIME, not only on the next blocked command.
+  - id: A5
+    given: classify_command.py with the allow-list additions.
+    when: '`git merge-tree --write-tree a b`, `git cat-file -p <sha>`, and `git rev-list HEAD` are classified.'
+    then: >-
+      Each classifies as `allow` (read-only); they neither block nor arm a
+      latch. A mutating plumbing command (`git update-ref`, `git commit-tree`)
+      still classifies `ask`.
+  - id: A6
+    given: A session with a latch sentinel + warn marker.
+    when: 'reset-danger-latch.sh --session <id> runs.'
+    then: >-
+      Both the latch sentinel and the warn marker for that session are removed;
+      the next flagged ask in a new session gets the first-strike warning again.
+  - id: A7
+    given: The full slice on canonical.
+    when: The hook-pack test suites run (danger_latch_ux, latch_readonly_and_reset, classify_command_calibration + new cases).
+    then: >-
+      Build/lint clean; new cases (first-ask-warns, second-ask-latches, deny-
+      latches-immediately, stop-now messaging present, read-only plumbing
+      allowed, reset clears both) pass; no regression to existing latch / reset
+      / read-only-survival / calibration tests.
+non_functional:
+  reliability:
+    - >-
+      Closes the latch-UX failure class observed repeatedly while building
+      CAWS-SCOPE-AMEND-COMMAND-001: an agent hits a single flagged command,
+      is not clearly told a session-wide latch is in play, runs another command,
+      hits the latch, and thrashes through several blocked retries before a human
+      intervenes. The warn-first grace + explicit stop-now feedback convert the
+      common "one honest mistake" into a single warned pause; the second-strike
+      latch preserves the tripwire against an agent that genuinely will not stop.
+  security:
+    - >-
+      The warn-first grace applies ONLY to a classifier-confirmed `ask`. `deny`
+      latches immediately (no grace), and an unverifiable command (classifier
+      down) latches immediately (fail-closed). The read-only allow-list
+      additions are restricted to verbs that provably do not mutate refs/tree/
+      index; mutating plumbing stays governed. The latch's core purpose
+      (stop a persistent agent's retry loop) is preserved by the second-strike
+      escalation.
+contracts:
+  - name: danger-latch-warn-then-latch-v1
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
+    description: >-
+      On the FIRST `ask`-classified command of a session, block-dangerous.sh
+      writes a per-session warn marker (not the sticky latch) and emits an ask
+      whose message tells the agent a latch is not-yet-armed-but-imminent and to
+      stop. On a SECOND `ask` (warn marker present) it writes the sticky latch.
+      `deny` latches immediately on first occurrence. All flag-time messages
+      state explicitly, at flag time, that the agent must stop and cannot
+      self-reset. reset-danger-latch.sh clears both the latch sentinel and the
+      warn marker. classify_command.py admits the read-only git plumbing verbs
+      merge-tree / cat-file / rev-list so they neither block nor arm a latch.
+      Fail-closed: classifier-unavailable commands get no warn grace.
