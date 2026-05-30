@@ -1,5 +1,42 @@
 ## [Unreleased]
 
+### Added
+
+* **`caws agents prune --dead` — PID-liveness ghost-lease cleanup**
+  (`WORKTREE-GUARD-RISK-SURFACE-001`). Removes `active`/`stopping` leases on
+  THIS host whose owning process is dead (`process.kill(pid, 0)`: `EPERM` =
+  alive, `ESRCH` = dead), collapsing the prior three-step verify-PID → stop →
+  `prune --status stale --older-than 0` dance into one command. Foreign-host
+  leases (recorded `hostname` ≠ current) are skipped — their pid is not
+  checkable here, so they are never assumed dead. A running lease with no
+  recorded pid is treated as dead (unverifiable). Mutually exclusive with
+  `--status`; respects `--dry-run`/`--apply`/`--json`. `stopped` leases are
+  out of scope (use `--status stopped --older-than-ms <ms>` for retention).
+* **Composite risk signal for the worktree write-guard**
+  (`WORKTREE-GUARD-RISK-SURFACE-001`). `caws_compose_risk` (hook lib) composes
+  four signals — target-dir existence, active bound specs claiming live
+  worktrees, active-agent count, lease staleness — surfaced as a full briefing
+  once at SessionStart and as a short throttled line in the per-write guard
+  ask (cache TTL `CAWS_RISK_THROTTLE_SECS`, default 30s). Single source so the
+  briefing and the ask never disagree.
+
+### Changed
+
+* **`worktree-write-guard.sh` blocks only on an active-bound-spec scope.in
+  claim; everything else asks** (`WORKTREE-GUARD-RISK-SURFACE-001`). On the
+  base branch the guard now HARD-BLOCKS (exit 2) ONLY when an **active** bound
+  spec's `scope.in` claims the target file — the spec→worktree authority
+  binding is the block authority. Draft/closed bindings and `scope.out`
+  matches no longer block (removing an over-broad-authority class: registry
+  presence + `scope.out` hostility, the same shape as the caws "scope.out from
+  any spec regardless of binding" bug). Every other base-branch case emits
+  `permissionDecision: ask` with the composite risk briefing;
+  `CAWS_GUARD_NO_ASK=1` (or an unavailable `emit_ask`) degrades to a hard block
+  so an ask-incapable harness never silently allows the write. A dir-gone
+  (orphaned/ghost) registry entry is filtered via `fs.existsSync(path)` and no
+  longer counts as an active worktree — killing the
+  orphaned-registry-entry-walls-every-write bug.
+
 ### Fixed
 
 * **hook-pack (danger latch): `reset-danger-latch.sh --current` could not

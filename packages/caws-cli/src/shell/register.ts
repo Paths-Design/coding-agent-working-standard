@@ -918,18 +918,39 @@ export function registerShellCommands(
   defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'prune'))
     .action(
       (opts: {
-        status: string;
-        olderThanMs: string;
+        dead?: boolean;
+        status?: string;
+        olderThanMs?: string;
         staleTtlMs?: string;
         apply?: boolean;
         json?: boolean;
         data?: boolean;
       }) => {
+        // PID-liveness mode: --dead is mutually exclusive with --status.
+        if (opts.dead === true) {
+          if (opts.status !== undefined || opts.olderThanMs !== undefined) {
+            process.stderr.write(
+              'caws agents prune: --dead cannot be combined with --status / --older-than-ms.\n'
+            );
+            exit(1);
+            return;
+          }
+          const code = runAgentsPruneCommand({
+            dead: true,
+            apply: opts.apply === true,
+            json: opts.json === true,
+            showData: opts.data === true,
+          });
+          exit(code);
+          return;
+        }
+
+        // Retention mode: --status + --older-than-ms required.
         const status = opts.status === 'stopped' || opts.status === 'stale' ? opts.status : null;
         const olderThanMs = Number(opts.olderThanMs);
         if (status === null || !Number.isFinite(olderThanMs)) {
           process.stderr.write(
-            'caws agents prune: --status must be stopped|stale and --older-than-ms must be a number.\n'
+            'caws agents prune: pass --dead, or --status <stopped|stale> with a numeric --older-than-ms.\n'
           );
           exit(1);
           return;

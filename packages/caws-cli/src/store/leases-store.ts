@@ -32,6 +32,7 @@
 //     evidence of a lifecycle mismatch, not a write opportunity.
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import {
@@ -545,4 +546,122 @@ export function pruneLeasesByStatus(
   }
 
   return ok({ candidates, deleted, diagnostics });
+}
+
+// ─── prune --dead (PID-liveness) ───────────────────────────────────────────
+
+/**
+ * Default PID-liveness probe: process.kill(pid, 0) sends no signal but
+ * performs the existence + permission check. Returns true when the process
+ * exists (or exists but we lack permission — ESRCH means gone, EPERM means
+ * alive-but-not-ours). A non-positive/NaN pid is treated as not-alive.
+ */
+export function defaultIsPidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    // EPERM → the process exists but is owned by another user: still alive.
+    // ESRCH → no such process: dead.
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+export interface PruneDeadOptions {
+  readonly now: Date;
+  readonly dryRun?: boolean;
+  /**
+   * Hostname of the machine running the prune. A lease whose recorded
+   * `hostname` differs is on another machine — its pid is NOT checkable
+   * here, so it is NEVER treated as dead (skipped). Defaults to os.hostname().
+   */
+  readonly currentHostname?: string;
+  /** Liveness probe (injectable for tests). Defaults to defaultIsPidAlive. */
+  readonly isPidAlive?: (pid: number) => boolean;
+}
+
+export interface PruneDeadResult {
+  /** session_ids selected (active/stopping lease, same host, dead pid). */
+  readonly candidates: ReadonlyArray<string>;
+  /** Actually deleted (empty when dryRun). */
+  readonly deleted: ReadonlyArray<string>;
+  /** session_ids skipped because their hostname differs (unverifiable). */
+  readonly skippedForeignHost: ReadonlyArray<string>;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
+/**
+ * Prune leases whose owning process is dead. Collapses the prior 3-step
+ * verify-PID → stop → prune --status stale --older-than 0 dance into one
+ * operation: an `active`/`stopping` lease on THIS host whose recorded pid is
+ * not alive is selected and (on apply) deleted directly — a dead process
+ * cannot cleanly self-stop, so deletion is the correct tombstone.
+ *
+ * Safety: a lease whose `hostname` differs from the current host is skipped
+ * (its pid is not checkable here) — never assumed dead. A lease with no pid
+ * recorded is treated as dead (it cannot be liveness-verified and an active
+ * lease that never recorded a pid predates the pid-stamping writer).
+ *
+ * `stopped` leases are out of scope for --dead (they are already terminal;
+ * use `prune --status stopped --older-than <ms>` for retention cleanup).
+ */
+export function pruneDeadLeases(
+  cawsDir: string,
+  opts: PruneDeadOptions
+): Result<PruneDeadResult> {
+  const dryRun = opts.dryRun ?? true;
+  const currentHostname = opts.currentHostname ?? os.hostname();
+  const isPidAlive = opts.isPidAlive ?? defaultIsPidAlive;
+
+  const loadRes = loadLeases(cawsDir);
+  if (loadRes.ok === false) return err(loadRes.errors);
+  const { leases, diagnostics: loadDiags } = loadRes.value;
+
+  const candidates: string[] = [];
+  const skippedForeignHost: string[] = [];
+  const diagnostics: Diagnostic[] = [...loadDiags];
+
+  for (const lease of Object.values(leases) as AgentLease[]) {
+    // Only running leases are candidates; stopped is terminal (retention
+    // cleanup is the status='stopped' path, not --dead).
+    if (lease.status !== 'active' && lease.status !== 'stopping') continue;
+
+    // Foreign host → pid not checkable here. NEVER assume dead.
+    if (
+      typeof lease.hostname === 'string' &&
+      lease.hostname.length > 0 &&
+      lease.hostname !== currentHostname
+    ) {
+      skippedForeignHost.push(lease.session_id);
+      continue;
+    }
+
+    // No pid recorded → cannot verify liveness; treat as dead (a running
+    // session stamps its pid via the registration/heartbeat writer).
+    const pid = typeof lease.pid === 'number' ? lease.pid : NaN;
+    if (!Number.isInteger(pid) || pid <= 0) {
+      candidates.push(lease.session_id);
+      continue;
+    }
+
+    if (!isPidAlive(pid)) {
+      candidates.push(lease.session_id);
+    }
+  }
+
+  const deleted: string[] = [];
+  if (!dryRun) {
+    for (const sessionId of candidates) {
+      const r = applyLeasePatch(cawsDir, { kind: 'delete_lease', session_id: sessionId });
+      if (r.ok === false) {
+        diagnostics.push(...r.errors);
+        continue;
+      }
+      deleted.push(sessionId);
+      diagnostics.push(...r.value.diagnostics);
+    }
+  }
+
+  return ok({ candidates, deleted, skippedForeignHost, diagnostics });
 }

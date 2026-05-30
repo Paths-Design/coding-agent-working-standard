@@ -53,6 +53,11 @@ parse_hook_input
 # than enforce on un-normalized paths (HOOK-LIB-CONSOLIDATION-001 T2a).
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || exit 0
 command -v _realpath >/dev/null 2>&1 || exit 0
+# emit.sh provides emit_ask / emit_block / emit_additional_context — the
+# canonical PreToolUse permission envelopes (WORKTREE-GUARD-RISK-SURFACE-001).
+# If absent we cannot emit an ask envelope, so the base-branch decision tail
+# degrades to the prior hard block (see emit_ask_or_block below).
+source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
@@ -249,10 +254,22 @@ fi
 
 WT_INFO=$(node -e "
   $CAWS_NODE_ENTRIES_OF
+  var fs = require('fs');
+  var path = require('path');
   try {
-    var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
+    var projectDir = '$PROJECT_DIR';
+    var reg = JSON.parse(fs.readFileSync(projectDir + '/.caws/worktrees.json', 'utf8'));
     var active = entriesOf(reg).filter(function(w) {
-      return w.status !== 'destroyed' && w.status !== 'missing' && w.baseBranch === '$CURRENT_BRANCH';
+      if (w.status === 'destroyed' || w.status === 'missing') return false;
+      if (w.baseBranch !== '$CURRENT_BRANCH') return false;
+      // WORKTREE-GUARD-RISK-SURFACE-001: a registry entry whose physical
+      // directory does not exist (orphaned/ghost) NEVER counts as an active
+      // worktree. Kills the orphaned-registry-entry-blocks-everything bug —
+      // registry presence alone must not confer hostility.
+      var wtPath = (typeof w.path === 'string' && w.path)
+        ? w.path
+        : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
+      return fs.existsSync(wtPath);
     });
     console.log(active.length + ':' + active.map(function(w) { return w.name; }).join(', '));
   } catch(e) { console.log('0:'); }
@@ -319,6 +336,7 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
 
     $CAWS_NODE_ENTRIES_OF
     $CAWS_NODE_ENTRY_SPEC_ID
+    $CAWS_NODE_LIFECYCLE
     $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
 
     try {
@@ -330,7 +348,14 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
       // entriesOf handles both v10 envelope and v11 flat-map shapes —
       // see lib/caws-state.sh.
       var worktrees = entriesOf(registry).filter(function(w) {
-        return w.status !== 'destroyed' && w.status !== 'missing' && w.baseBranch === currentBranch;
+        if (w.status === 'destroyed' || w.status === 'missing') return false;
+        if (w.baseBranch !== currentBranch) return false;
+        // WORKTREE-GUARD-RISK-SURFACE-001: a dir-gone (orphaned/ghost)
+        // registry entry never participates in the authority decision.
+        var wtPath = (typeof w.path === 'string' && w.path)
+          ? w.path
+          : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
+        return fs.existsSync(wtPath);
       });
 
       if (worktrees.length === 0) {
@@ -357,10 +382,22 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
         }
 
         var spec = yaml.load(fs.readFileSync(specPath, 'utf8')) || {};
+
+        // WORKTREE-GUARD-RISK-SURFACE-001: the HARD-BLOCK authority is an
+        // ACTIVE bound spec. A draft or closed/archived bound spec does NOT
+        // confer a block — only an active binding does. Non-active bindings
+        // fall through to the ask path (the worktree may still be live work,
+        // but it is not authority-claiming this file).
+        if (lifecycle(spec) !== 'active') {
+          continue;
+        }
+
         var scope = spec.scope || {};
-        var patterns = []
-          .concat(Array.isArray(scope.in) ? scope.in : [])
-          .concat(Array.isArray(scope.out) ? scope.out : []);
+        // scope.IN ONLY for the claim. A path appearing in some spec's
+        // scope.out must NOT make it 'claimed' — scope.out is exclusion
+        // documentation, not a hostility surface (CLAUDE.md trap #4). This
+        // is the same over-broad-authority class the slice removes.
+        var patterns = Array.isArray(scope.in) ? scope.in : [];
 
         if (patterns.length === 0) {
           console.log('unknown:missing-scope:' + wtSpecId);
@@ -390,76 +427,123 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
   :
 fi
 
-# Block writes on the base branch even when no matching worktrees are active.
-# Working directly on main is forbidden; the agent must first enter or create a
-# worktree before making edits.
-if [[ "$WT_COUNT" -eq 0 ]] 2>/dev/null; then
-  echo "[worktree-write-guard.sh] BLOCKED: Cannot write/edit files on '$CURRENT_BRANCH' without a worktree." >&2
-  echo "" >&2
-  echo "Worktrees are preferred for isolated feature work. If you are doing" >&2
-  echo "repo-coordination work (docs, .caws/, .claude/ config), the always-" >&2
-  echo "allowed allowlist above already let that through; this block is for" >&2
-  echo "application/source edits on the base branch." >&2
-  echo "  To use an existing worktree: cd $PROJECT_DIR/.caws/worktrees/<name>/" >&2
-  echo "  To create a new worktree:    caws worktree create <name>" >&2
-  echo "" >&2
-  echo "Do NOT edit .claude/hooks/, .claude/logs/guard-strikes-*.json, or other guard state to bypass this." >&2
-  echo "If you believe the base branch needs a direct edit, ask the user first." >&2
-  exit 2
+# Ensure REL_PATH is set for the decision reason even when WT_COUNT==0 (the
+# block above that derives REL_PATH only runs when worktrees are active).
+if [[ -z "${REL_PATH:-}" ]]; then
+  REL_PATH="${FILE_PATH_FOR_ALLOWLIST:-$FILE_PATH}"
+  if [[ -n "$REL_PATH" ]] && [[ "$REL_PATH" == "$PROJECT_DIR"/* ]]; then
+    REL_PATH="${REL_PATH#$PROJECT_DIR/}"
+  fi
 fi
 
 # Allow edits during an active merge (conflict resolution). The worktree-
 # isolation rules explicitly permit merge commits on the base branch; conflict
-# resolution requires Write/Edit on the conflicted files.
+# resolution requires Write/Edit on the conflicted files. Checked BEFORE the
+# block/ask decision so an in-progress merge is never walled or asked about.
 MERGE_HEAD_PATH=$(cd "$AGENT_DIR" && git rev-parse --git-dir 2>/dev/null || echo ".git")
 if [[ -f "$MERGE_HEAD_PATH/MERGE_HEAD" ]]; then
   exit 0
 fi
 
-# Block: we're on the base branch with active worktrees.
-echo "[worktree-write-guard.sh] BLOCKED: Cannot write/edit files on '$CURRENT_BRANCH' while $WT_COUNT worktree(s) are active: $WT_NAMES" >&2
-echo "" >&2
+# --- Base-branch block-vs-ask decision (WORKTREE-GUARD-RISK-SURFACE-001) ----
+#
+# The guard HARD-BLOCKS (exit 2) ONLY when an active bound spec's scope.in
+# claims this file (SPEC_CONTENTION_CHECK=claimed:*) — the spec→worktree
+# authority binding is the block authority. EVERY other base-branch case
+# (no worktree present, no spec claims the file, or the check couldn't
+# decide) emits permissionDecision:ask and surfaces the risk, letting the
+# user approve/deny/direct rather than walling the edit.
+#
+# ASK DEGRADES TO BLOCK when the harness cannot honor an ask: CAWS_GUARD_NO_ASK=1
+# (integrator opt-out for an ask-incapable harness) or emit_ask unavailable
+# (lib/emit.sh failed to source). Degradation preserves the no-silent-allow
+# guarantee — an ask emitted to a harness that ignores it would let the write
+# through.
 
-# Surface the scope-contention decision so the user knows WHY we blocked:
-# either a specific active worktree claimed this file, or the contention check
-# itself could not reach a decision (missing specId, missing spec, missing scope).
-if [[ -n "${SPEC_CONTENTION_CHECK:-}" ]]; then
-  case "$SPEC_CONTENTION_CHECK" in
-    claimed:*)
-      echo "File is claimed by an active worktree's scope:" >&2
-      echo "  $SPEC_CONTENTION_CHECK" >&2
-      echo "  (format: claimed:<worktree-name>:<matching-pattern>)" >&2
-      echo "Switch into that worktree to make this edit." >&2
-      echo "" >&2
-      ;;
-    clear)
-      echo "No active worktree's scope claims this file." >&2
-      echo "  Main remains blocked anyway — sibling agents routinely edit" >&2
-      echo "  outside their declared scope (rename refactors, test updates," >&2
-      echo "  cross-cutting fixes), and those unclaimed edits are exactly" >&2
-      echo "  what triggers cross-agent collisions on shared files." >&2
-      echo "  Create a new worktree + spec for this work, or extend an" >&2
-      echo "  existing spec's scope.in to cover this file." >&2
-      echo "" >&2
-      ;;
-    unknown:*)
-      echo "Scope contention could not be evaluated: $SPEC_CONTENTION_CHECK" >&2
-      echo "  Likely a spec is missing specId, spec file, or scope." >&2
-      echo "  Run 'caws scope show <path>' to diagnose; 'caws worktree bind <name> --spec <id>' to fix." >&2
-      echo "" >&2
-      ;;
-  esac
+# _guard_throttled_risk: the composite risk line (dir/spec/agents/lease) from
+# caws_compose_risk, THROTTLED via a short-TTL cache so it is not recomputed
+# in full (which shells `caws agents list --json`) on every Write/Edit.
+# Cache: .caws/cache/risk-<branch>.txt; recompute only when older than TTL.
+# CAWS_RISK_THROTTLE_SECS overrides the default 30s (0 disables the cache).
+_guard_throttled_risk() {
+  command -v caws_compose_risk >/dev/null 2>&1 || return 0
+  local ttl="${CAWS_RISK_THROTTLE_SECS:-30}"
+  local cache_dir="$PROJECT_DIR/.caws/cache"
+  local safe_branch
+  safe_branch="$(printf '%s' "${CURRENT_BRANCH:-_}" | tr -c 'A-Za-z0-9._-' '_')"
+  local cache_file="$cache_dir/risk-$safe_branch.txt"
+  if [[ "$ttl" != "0" ]] && [[ -f "$cache_file" ]]; then
+    local now mtime age
+    now=$(date +%s 2>/dev/null || echo 0)
+    mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+    age=$(( now - mtime ))
+    if [[ "$age" -ge 0 ]] && [[ "$age" -lt "$ttl" ]]; then
+      cat "$cache_file" 2>/dev/null
+      return 0
+    fi
+  fi
+  local line
+  line="$(caws_compose_risk "$PROJECT_DIR" "$CURRENT_BRANCH" "$REL_PATH" 2>/dev/null || echo "")"
+  if [[ -n "$line" ]] && [[ "$ttl" != "0" ]]; then
+    mkdir -p "$cache_dir" 2>/dev/null || true
+    printf '%s\n' "$line" > "$cache_file" 2>/dev/null || true
+  fi
+  printf '%s' "$line"
+}
+
+# emit a short worktree-context line for the ask/block reason, with the
+# throttled composite risk signal (dir/spec/agents/lease) appended.
+_guard_risk_reason() {
+  local head="$1"
+  local body=""
+  if [[ "$WT_COUNT" -eq 0 ]] 2>/dev/null; then
+    body="No active worktree is present for branch '$CURRENT_BRANCH'. Worktrees are preferred for isolated feature work; repo-coordination paths (.caws/, .claude/, docs/) are already allowlisted above."
+  else
+    body="$WT_COUNT active worktree(s) on '$CURRENT_BRANCH': ${WT_NAMES:-<unnamed>}."
+    case "${SPEC_CONTENTION_CHECK:-}" in
+      clear)      body="$body No active worktree's scope.in claims this file." ;;
+      unknown:*)  body="$body Scope contention undetermined (${SPEC_CONTENTION_CHECK}); a bound spec may be missing its id, file, or scope." ;;
+    esac
+  fi
+  local risk
+  risk="$(_guard_throttled_risk)"
+  if [[ -n "$risk" ]]; then
+    body="$body $risk"
+  fi
+  printf '%s %s Approve to edit on the base branch, or cd into the owning worktree (caws worktree list) / create one (caws worktree create <name>).' "$head" "$body"
+}
+
+# _guard_no_ask: true when the harness cannot honor an ask, so we must block.
+_guard_no_ask() {
+  [[ "${CAWS_GUARD_NO_ASK:-0}" == "1" ]] && return 0
+  command -v emit_ask >/dev/null 2>&1 || return 0
+  return 1
+}
+
+# CLAIMED → hard block. The genuine authority conflict: an active bound spec
+# owns this file via scope.in. This is the only base-branch hard block.
+case "${SPEC_CONTENTION_CHECK:-}" in
+  claimed:*)
+    echo "[worktree-write-guard.sh] BLOCKED: '$REL_PATH' is claimed by an active worktree's scope.in." >&2
+    echo "  $SPEC_CONTENTION_CHECK" >&2
+    echo "  (format: claimed:<worktree-name>:<matching-pattern>)" >&2
+    echo "Switch into that worktree to make this edit (caws worktree list)." >&2
+    echo "Do NOT edit .claude/hooks/ or guard state to bypass this." >&2
+    exit 2
+    ;;
+esac
+
+# Not a claimed conflict → ASK (or degrade to block on ask-incapable harnesses).
+_RISK_REASON="$(_guard_risk_reason "[worktree-write-guard.sh] base-branch write on '$CURRENT_BRANCH'.")"
+
+if _guard_no_ask; then
+  # Degrade to the prior hard block: emit unavailable or harness can't ask.
+  echo "[worktree-write-guard.sh] BLOCKED: $_RISK_REASON" >&2
+  echo "" >&2
+  echo "(ask-incapable harness: CAWS_GUARD_NO_ASK=$CAWS_GUARD_NO_ASK or emit_ask unavailable — falling back to a hard block so the write is not silently allowed.)" >&2
+  echo "Do NOT edit .claude/hooks/ or guard state to bypass this. Ask the user if a base-branch edit is genuinely needed." >&2
+  exit 2
 fi
 
-echo "You MUST work in a worktree, not on the base branch." >&2
-echo "  To use an existing worktree: cd $PROJECT_DIR/.caws/worktrees/<name>/" >&2
-echo "  To create a new worktree:    caws worktree create <name>" >&2
-echo "" >&2
-echo "Do NOT make changes on main and create a worktree retroactively." >&2
-echo "The worktree must exist BEFORE you start making changes." >&2
-echo "Do NOT edit .claude/hooks/, .claude/logs/guard-strikes-*.json, or other guard state to bypass this." >&2
-echo "If you believe the base branch needs a direct edit, ask the user first." >&2
-echo "" >&2
-echo "If you are merging a worktree branch, use: caws worktree merge <name>" >&2
-echo "Or start the merge first (git merge --no-ff <branch>), then resolve conflicts." >&2
-exit 2
+emit_ask "$_RISK_REASON"
+exit 0
