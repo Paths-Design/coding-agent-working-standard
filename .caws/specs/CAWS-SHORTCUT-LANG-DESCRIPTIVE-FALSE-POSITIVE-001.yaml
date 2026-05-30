@@ -2,10 +2,10 @@ id: CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001
 title: 'shortcut-language-check: do not flag TODO/placeholder/FIXME when the keyword is a referenced noun in prose (determiner-preceded), only when it is an active stub marker (#1)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-shortcut-lang
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-05-30T23:18:27.898Z'
-updated_at: '2026-05-30T23:18:27.898Z'
+updated_at: '2026-05-30T23:21:54.725Z'
 blast_radius:
   modules:
     - caws-cli claude-code hook pack — shortcut-language-check detection
