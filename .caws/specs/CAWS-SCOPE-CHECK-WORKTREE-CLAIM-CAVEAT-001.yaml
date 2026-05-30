@@ -5,9 +5,10 @@ mode: feature
 lifecycle_state: active
 created_at: '2026-05-30T08:50:43.843Z'
 updated_at: '2026-05-30T08:50:43.843Z'
+worktree: scope-claim-caveat
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli scope command
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,11 +18,31 @@ scope:
     - 'packages/caws-cli/tests/shell/scope-check-cwd-binding.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When `caws scope check`/`show` returns an ADMIT whose binding was resolved
+    via a worktree's scope.in claim on the target path (source ===
+    target_scope_in_claim) and a worktreeName is present, the output carries a
+    caveat naming that worktree and the cd path, so the ADMIT does not silently
+    contradict the worktree-write-guard that will block a base-checkout write.
+  - >-
+    The caveat is emitted ONLY for the target_scope_in_claim source. An ADMIT
+    resolved because cwd is inside the owning worktree (registry/porcelain
+    match) prints no caveat — that write will succeed where the agent is.
+  - >-
+    The check-mode exit code is unchanged: ADMIT still exits 0. The caveat is
+    advisory text only; it does not flip admit to reject.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a path claimed by an active worktree's scope.in, queried from the main checkout
+    when: '`caws scope check <path>` resolves the binding via target_scope_in_claim and admits'
+    then: 'stdout includes ADMIT AND a caveat naming the claiming worktree and the `cd .caws/worktrees/<name>` path; exit code is 0'
+  - id: A2
+    given: a path admitted because cwd is inside its owning worktree
+    when: '`caws scope check <path>` runs from inside that worktree'
+    then: 'stdout includes ADMIT with NO worktree-claim caveat (the edit will succeed in place)'
+  - id: A3
+    given: a path NOT claimed by any worktree (plain admit on main, unbound fail-open)
+    when: '`caws scope check <path>` admits'
+    then: 'no worktree-claim caveat is printed'
 non_functional: {}
 contracts: []
