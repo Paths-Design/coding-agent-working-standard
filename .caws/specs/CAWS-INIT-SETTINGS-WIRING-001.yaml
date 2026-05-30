@@ -3,23 +3,147 @@ title: 'caws init wires .claude/settings.json (caws_dispatch namespace) + emits 
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: init-settings-wiring
 created_at: '2026-05-30T01:18:19.730Z'
 updated_at: '2026-05-30T01:18:19.730Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/templates/hook-packs/claude-code/caws_dispatch
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/templates/hook-packs/claude-code/dispatch
+    - packages/caws-cli/templates/hook-packs/claude-code/caws_dispatch
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/tests/init
+    - packages/caws-cli/tests/shell/init-command.test.js
+    - .caws/specs/CAWS-INIT-SETTINGS-WIRING-001.yaml
+  out:
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/init/harness-detect.ts
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-kernel/src
+    - packages/caws-cli/package.json
+    - packages/quality-gates
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    DISPATCHER NAMESPACE. The four dispatch entry-point scripts move from
+    .claude/hooks/dispatch/ to .claude/hooks/caws_dispatch/ (pre_tool_use.sh,
+    post_tool_use.sh, session_start.sh, stop.sh). The rename is the namespace:
+    the path segment "caws_dispatch/" unambiguously marks a hook entry as
+    CAWS-owned, which is what the settings.json idempotent-merge keys on. The
+    dispatcher scripts source their lib/ siblings via a runtime-computed
+    HOOKS_DIR="$(dirname "$SCRIPT_DIR")" (not a hardcoded dir name), so the
+    rename requires NO edit to the script bodies — only the manifest destPath/
+    sourcePath pairs, the template directory name, and the CLAUDE.md lineage map.
+  - >-
+    INIT WRITES/MERGES settings.json (was: print-only). caws init
+    --agent-surface claude-code reaches a deterministic terminal state for the
+    .claude/settings.json wiring instead of only printing a snippet:
+      - ABSENT: write a fresh .claude/settings.json containing ONLY the four
+        CAWS caws_dispatch wiring entries (PreToolUse, PostToolUse, SessionStart,
+        Stop) — no other keys invented.
+      - PRESENT-BUT-UNWIRED: append the four caws_dispatch entries to the
+        existing PreToolUse/PostToolUse/SessionStart/Stop arrays, preserving all
+        existing user entries, permissions, env, and other keys byte-for-byte
+        outside the inserted entries.
+      - ALREADY-WIRED: no-op. Detection keys on the presence of a hook entry
+        whose command path contains "/.claude/hooks/caws_dispatch/<name>.sh".
+        Running init twice on a wired repo produces a byte-identical
+        settings.json.
+      - INVALID (unparseable JSON): refuse to merge; fall back to printing the
+        canonical snippet and naming the parse error. Never overwrite a file we
+        cannot parse.
+  - >-
+    NEVER CLOBBER. The merge only ever ADDS the four CAWS entries. It never
+    removes, reorders, or rewrites a non-CAWS hook entry, permission, env var, or
+    any key the user authored. A settings.json that already contains unrelated
+    PreToolUse hooks keeps them; the CAWS entry is appended alongside.
+  - >-
+    settings.json.example ALWAYS emitted. On every --agent-surface claude-code
+    init run, a .claude/settings.json.example is written (idempotently) carrying
+    the canonical four-entry caws_dispatch wiring. This is the reference artifact
+    for the "user has a complex settings.json they do not want touched" case and
+    for harnesses that decline the in-place merge.
+  - >-
+    LEAVE-AND-WARN on the old dispatch/ dir. On re-init of a consumer repo that
+    still has the pre-rename .claude/hooks/dispatch/ directory, init does NOT
+    delete or modify it (it may carry user customizations, and we cannot assume
+    version parity). It writes the new caws_dispatch/ scripts and emits a clear
+    one-time warning naming the orphaned .claude/hooks/dispatch/ dir, stating it
+    is no longer wired, and advising the user (or their agent) to port any
+    net-benefit customizations forward and then remove the old dir. No
+    destructive migration path ships in this slice.
+  - >-
+    ACTIVATION HONESTY preserved. The post-wiring panel still states that hooks
+    take effect only after the Claude Code session is restarted (an in-session
+    agent cannot self-restart). The fix closes the WRITE gap (init now produces a
+    wired settings.json), not the RESTART boundary, which remains a documented
+    human/orchestrator step. The panel text reflects the new write-or-merge
+    behavior rather than the old print-only instruction.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: A fresh repo with no .claude/settings.json and the claude-code hook pack installed.
+    when: '`caws init --agent-surface claude-code` runs.'
+    then: >-
+      .claude/settings.json is created containing exactly the four caws_dispatch
+      wiring entries (PreToolUse/PostToolUse/SessionStart/Stop pointing at
+      "$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/<name>.sh), and no other
+      keys. .claude/settings.json.example is also written with the same canonical
+      content. A unit test asserts the written JSON shape.
+  - id: A2
+    given: A repo whose .claude/settings.json already has an unrelated user PreToolUse hook and a permissions block.
+    when: '`caws init --agent-surface claude-code` runs.'
+    then: >-
+      The four caws_dispatch entries are appended to the matching arrays; the
+      user's existing PreToolUse hook, permissions block, and every other key are
+      preserved unchanged. A test diffs before/after and asserts only the four
+      CAWS entries were added.
+  - id: A3
+    given: A repo whose .claude/settings.json is already fully wired with the caws_dispatch entries.
+    when: '`caws init --agent-surface claude-code` runs twice.'
+    then: >-
+      Each run is a no-op for settings.json (idempotent); the file is
+      byte-identical after the second run. Detection keys on the
+      "/.claude/hooks/caws_dispatch/" path segment, not on entry contents. A test
+      asserts byte-equality across two runs.
+  - id: A4
+    given: A repo whose .claude/settings.json contains invalid (unparseable) JSON.
+    when: '`caws init --agent-surface claude-code` runs.'
+    then: >-
+      init refuses to merge, does not overwrite the file, and prints the
+      canonical snippet plus the parse error. A test asserts the file is
+      untouched and the snippet is surfaced.
+  - id: A5
+    given: A consumer repo still carrying the pre-rename .claude/hooks/dispatch/ directory with managed scripts.
+    when: '`caws init --agent-surface claude-code` re-runs (installing caws_dispatch/).'
+    then: >-
+      The old .claude/hooks/dispatch/ dir is left untouched (not deleted, not
+      modified) and a one-time warning names it as orphaned/unwired with guidance
+      to port customizations forward and remove it manually. The new
+      caws_dispatch/ scripts are present. A test asserts the old dir survives and
+      the warning is emitted.
+  - id: A6
+    given: The renamed template tree and manifest.
+    when: The dispatcher scripts run after the dir rename.
+    then: >-
+      The dispatchers still source lib/parse-input.sh and lib/run-handlers.sh
+      correctly via runtime HOOKS_DIR resolution (no hardcoded "dispatch"
+      string), and the existing hook-pack shell/unit suites pass. Manifest
+      destPath/sourcePath, CLAUDE.md lineage map, and hook-install snippet paths
+      all reference caws_dispatch/ consistently (no lingering "hooks/dispatch/"
+      string in src/ or templates/ except inside the leave-and-warn message).
 non_functional: {}
 contracts: []
