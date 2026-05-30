@@ -197,3 +197,99 @@ describe('CAWS-INIT-SETTINGS-WIRING-001 settings.json merge', () => {
     }
   });
 });
+
+// CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001 (finding C): a settings.json wired with
+// the PRE-RENAME `dispatch/` entrypoints must be recognized as already-wired so
+// the merge does not append a duplicate `caws_dispatch/` entry that double-fires
+// every hook.
+describe('CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001 legacy dispatch/ no-dup', () => {
+  let root;
+  beforeEach(() => {
+    root = mkRepo();
+  });
+  afterEach(() => rmRepo(root));
+
+  /** Seed a settings.json wired with the legacy dispatch/ entrypoints. */
+  function seedLegacyWired(events) {
+    const tail = {
+      PreToolUse: 'pre_tool_use.sh',
+      PostToolUse: 'post_tool_use.sh',
+      SessionStart: 'session_start.sh',
+      Stop: 'stop.sh',
+    };
+    const hooks = {};
+    for (const ev of events) {
+      hooks[ev] = [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/dispatch/${tail[ev]}`,
+            },
+          ],
+        },
+      ];
+    }
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(settingsPath(root), JSON.stringify({ hooks }, null, 2));
+  }
+
+  // A1: a single legacy PreToolUse entry → no caws_dispatch/ duplicate appended.
+  test('A1: legacy dispatch/ PreToolUse entry is not duplicated with caws_dispatch/', () => {
+    seedLegacyWired(['PreToolUse']);
+    mergeClaudeSettings(root);
+
+    const after = readJson(settingsPath(root));
+    const pre = after.hooks.PreToolUse;
+    // Exactly one entry remains — the legacy one — no caws_dispatch/ twin.
+    expect(pre).toHaveLength(1);
+    const cmds = allCommands(after);
+    expect(cmds.filter((c) => c.endsWith('pre_tool_use.sh'))).toHaveLength(1);
+    expect(cmds.some((c) => c.includes('/.claude/hooks/dispatch/pre_tool_use.sh'))).toBe(
+      true
+    );
+    expect(
+      cmds.some((c) => c.includes('/.claude/hooks/caws_dispatch/pre_tool_use.sh'))
+    ).toBe(false);
+  });
+
+  // A2: fully legacy-wired (all four) → overall no-op, no array grows.
+  test('A2: fully legacy-wired settings → unchanged, no event array grows', () => {
+    seedLegacyWired(['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop']);
+    const before = readJson(settingsPath(root));
+    const result = mergeClaudeSettings(root);
+
+    expect(result.kind).toBe('unchanged');
+    const after = readJson(settingsPath(root));
+    for (const ev of ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop']) {
+      expect(after.hooks[ev]).toHaveLength(before.hooks[ev].length);
+    }
+    // No caws_dispatch/ entry was introduced anywhere.
+    expect(
+      allCommands(after).some((c) => c.includes('/.claude/hooks/caws_dispatch/'))
+    ).toBe(false);
+  });
+
+  // A3 (regression): a repo with NO prior CAWS entry still gets fresh wiring.
+  test('A3: no prior CAWS entry → canonical caws_dispatch/ wiring is added', () => {
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(
+      settingsPath(root),
+      JSON.stringify({ permissions: { allow: [] } }, null, 2)
+    );
+    const result = mergeClaudeSettings(root);
+    expect(result.kind).toBe('merged');
+    expect(
+      allCommands(readJson(settingsPath(root))).every((c) =>
+        c.includes('/.claude/hooks/caws_dispatch/')
+      )
+    ).toBe(true);
+  });
+
+  // A4 (regression): already caws_dispatch/-wired → idempotent no-op.
+  test('A4: already caws_dispatch/-wired → unchanged (idempotent)', () => {
+    mergeClaudeSettings(root); // created with caws_dispatch/
+    const second = mergeClaudeSettings(root);
+    expect(second.kind).toBe('unchanged');
+  });
+});

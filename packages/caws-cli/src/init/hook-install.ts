@@ -503,18 +503,33 @@ export type SettingsMergeResult =
   /** settings.json existed but could not be parsed; left untouched. */
   | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
 
-/** Does this hook-event's entry array already contain a CAWS-owned entry
- *  (one whose command references the caws_dispatch entrypoint for `key`)? */
+/** Does this hook-event's entry array already contain a CAWS-owned entry for
+ *  `key`? Matches an entry whose command references EITHER the current
+ *  `caws_dispatch/<snake>.sh` entrypoint OR the pre-rename legacy
+ *  `dispatch/<snake>.sh` one. Recognizing the legacy path is load-bearing
+ *  (CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001): a settings.json wired before the
+ *  caws_dispatch/ rename is "already wired", so the merge must NOT append a
+ *  caws_dispatch/ twin that would double-fire the hook.
+ *
+ *  The two tails are anchored with a leading slash. `caws_dispatch/x.sh` ends
+ *  with `dispatch/x.sh`, but the char before `dispatch` there is `_`, not `/`,
+ *  so `/dispatch/<snake>.sh` matches ONLY the legacy path — no overlap. */
 function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
   if (!Array.isArray(entryArray)) return false;
   const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
-  const expectedTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
+  const currentTail = `/.claude/hooks/caws_dispatch/${snake}.sh`;
+  const legacyTail = `/.claude/hooks/dispatch/${snake}.sh`;
   for (const block of entryArray as unknown[]) {
     const hookList = (block as { hooks?: unknown }).hooks;
     if (!Array.isArray(hookList)) continue;
     for (const h of hookList as unknown[]) {
       const cmd = (h as { command?: unknown }).command;
-      if (typeof cmd === 'string' && cmd.includes(expectedTail)) return true;
+      if (
+        typeof cmd === 'string' &&
+        (cmd.includes(currentTail) || cmd.includes(legacyTail))
+      ) {
+        return true;
+      }
     }
   }
   return false;
