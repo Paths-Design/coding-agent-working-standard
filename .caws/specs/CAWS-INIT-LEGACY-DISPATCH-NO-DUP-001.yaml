@@ -7,7 +7,7 @@ created_at: '2026-05-30T23:35:16.473Z'
 updated_at: '2026-05-30T23:35:16.473Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli init — settings.json merge (hook-install)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,44 @@ scope:
     - 'packages/caws-cli/tests/init/settings-wiring.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    arrayHasCawsEntry recognizes a hook entry whose command references EITHER
+    the current `.claude/hooks/caws_dispatch/<snake>.sh` path OR the legacy
+    pre-rename `.claude/hooks/dispatch/<snake>.sh` path as an existing CAWS
+    entry for that hook event. A settings.json wired with the legacy dispatch/
+    path is therefore treated as already-wired.
+  - >-
+    Running the settings merge on a settings.json already wired with the legacy
+    dispatch/ entrypoints appends NO new entry for any event already covered by
+    a legacy entry — the result is `unchanged` and the per-event hook array does
+    not grow. The hook no longer double-fires (one dispatch/ + one duplicate
+    caws_dispatch/).
+  - >-
+    Fresh wiring and the existing namespace invariant are unchanged: a repo with
+    no prior CAWS entry still gets the canonical caws_dispatch/ wiring (the
+    canonical snippet references caws_dispatch/, never bare dispatch/), and a
+    repo already wired with caws_dispatch/ remains an idempotent no-op.
+  - >-
+    The legacy dispatch/ entry itself is NOT rewritten, renamed, or deleted by
+    this change — the merge simply declines to add a duplicate. Migrating a
+    legacy entry to the caws_dispatch/ namespace remains a separate, explicit
+    concern (the existing orphaned-dispatch-dir leave-and-warn is unaffected).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a settings.json whose PreToolUse entry references .claude/hooks/dispatch/pre_tool_use.sh (legacy path)'
+    when: 'mergeClaudeSettings runs'
+    then: 'no caws_dispatch/ duplicate is appended for PreToolUse; the array length is unchanged and the result kind is unchanged for that event'
+  - id: A2
+    given: 'a settings.json fully wired with legacy dispatch/ entries for all four events'
+    when: 'mergeClaudeSettings runs'
+    then: "the overall result is 'unchanged' and no event's hook array grows"
+  - id: A3
+    given: 'a settings.json with NO prior CAWS entry'
+    when: 'mergeClaudeSettings runs'
+    then: 'the canonical caws_dispatch/ wiring is added (existing fresh-wire behavior preserved)'
+  - id: A4
+    given: 'a settings.json already wired with caws_dispatch/ entries'
+    when: 'mergeClaudeSettings runs'
+    then: 'the result is an idempotent no-op (unchanged), as before'
 non_functional: {}
 contracts: []
