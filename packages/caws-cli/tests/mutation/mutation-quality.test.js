@@ -26,15 +26,44 @@ const describeMutation = SHOULD_RUN ? describe : describe.skip;
 describeMutation('Mutation testing (Stryker)', () => {
   const pkgRoot = path.resolve(__dirname, '..', '..');
   const reportPath = path.join(pkgRoot, 'reports', 'mutation', 'mutation-report.json');
-  const strykerCorePath = path.join(pkgRoot, 'node_modules', '@stryker-mutator', 'core');
+
+  // CAWS-MUTATION-HARNESS-RESOLVE-FIX-001: resolve Stryker via Node's module
+  // resolution rather than a package-relative node_modules path. In a hoisted
+  // npm-workspaces monorepo Stryker installs to the ROOT node_modules, so the
+  // old `fs.existsSync(pkgRoot/node_modules/@stryker-mutator/core)` check
+  // threw "Stryker is not installed" even when Stryker WAS installed and
+  // runnable. require.resolve finds it wherever it is hoisted; the derived bin
+  // is launched via `node <bin>` so we never depend on a package-local
+  // `node_modules/.bin/stryker` symlink (absent under hoisting).
+  function resolveStrykerBin() {
+    // Throws MODULE_NOT_FOUND when Stryker is genuinely absent (preserving the
+    // "no silent skip" contract). paths anchors resolution at this package.
+    const corePkgJson = require.resolve('@stryker-mutator/core/package.json', {
+      paths: [pkgRoot],
+    });
+    const coreDir = path.dirname(corePkgJson);
+    // package.json `bin` is either a string or { stryker: "./bin/stryker.js" }.
+    const pkg = require(corePkgJson);
+    const binRel =
+      typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin && pkg.bin.stryker);
+    if (!binRel) {
+      throw new Error(
+        `@stryker-mutator/core resolved at ${coreDir} but exposes no stryker bin.`
+      );
+    }
+    return path.join(coreDir, binRel);
+  }
 
   beforeAll(() => {
     // Hard precondition: Stryker must be installed. No silent skip.
-    if (!fs.existsSync(strykerCorePath)) {
+    let strykerBin;
+    try {
+      strykerBin = resolveStrykerBin();
+    } catch (e) {
       throw new Error(
-        'Stryker is not installed. Run `npm install --save-dev ' +
+        'Stryker is not installed (or has no bin). Run `npm install --save-dev ' +
           '@stryker-mutator/core @stryker-mutator/jest-runner ' +
-          '@stryker-mutator/typescript-checker` and retry.'
+          `@stryker-mutator/typescript-checker\` and retry. (${e.message})`
       );
     }
 
@@ -43,14 +72,21 @@ describeMutation('Mutation testing (Stryker)', () => {
       fs.unlinkSync(reportPath);
     }
 
-    const result = spawnSync('npx', ['stryker', 'run', '--logLevel', 'info'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      // 30 min upper bound; the targeted config should finish in well under
-      // that. Longer than this is a regression worth investigating.
-      timeout: 30 * 60 * 1000,
-      stdio: 'pipe',
-    });
+    // Launch the resolved bin via `node` (NOT `npx stryker`, which needs the
+    // stryker symlink in a package-local node_modules/.bin — absent under
+    // workspace hoisting).
+    const result = spawnSync(
+      process.execPath,
+      [strykerBin, 'run', '--logLevel', 'info'],
+      {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        // 30 min upper bound; the targeted config should finish in well under
+        // that. Longer than this is a regression worth investigating.
+        timeout: 30 * 60 * 1000,
+        stdio: 'pipe',
+      }
+    );
 
     if (result.error) {
       throw new Error(`Stryker spawn failed: ${result.error.message}`);
