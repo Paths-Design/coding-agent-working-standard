@@ -898,3 +898,273 @@ describe('SEAM A7: createSpec success path + autocommit action literal', () => {
     ).toBe(true);
   });
 });
+
+// ─── SEAM A8: createSpec duplicate-id refusal shape ────────────────────
+//
+// CAWS-SPECS-CREATE-MUTATION-HARDENING-001 A1.
+//
+// createSpec refuses a duplicate id (dist 320 ConditionalExpression +
+// BlockStatement / source 447-448) with a diagnostic whose message,
+// subject, and data.existing_path are all load-bearing (dist 321 — the
+// "already exists at <path>" StringLiteral and the two ObjectLiterals
+// { subject } and { existing_path }). The prior suite created ids but
+// never RE-created one, so all four mutants survived:
+//   - if (existing !== null) → if (true): every create would refuse —
+//     killed by the positive sub-case below (a fresh id must succeed).
+//   - if (existing !== null) → if (false): a duplicate would NOT refuse —
+//     killed by the duplicate sub-case (ok must be false).
+//   - block { return err(...) } → {}: duplicate falls through to the
+//     transaction — killed by ok=false on the duplicate.
+//   - message StringLiteral → ``: killed by the message substring assert.
+//   - { subject } ObjectLiteral → {}: killed by subject===id.
+//   - { existing_path } ObjectLiteral → {}: killed by data.existing_path.
+
+describe('SEAM A8: createSpec duplicate-id refusal shape', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a duplicate id is refused with message/subject/existing_path; a fresh id is NOT refused', () => {
+    fixture = mkCawsGitRepo('seam-a8-');
+
+    // First create succeeds and writes the active yaml.
+    const first = createSpec(fixture.cawsDir, {
+      id: 'DUP-ID-001', title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+    expect(first.ok).toBe(true);
+    const existingPath = path.join(fixture.cawsDir, 'specs', 'DUP-ID-001.yaml');
+    expect(fs.existsSync(existingPath)).toBe(true);
+
+    // Second create with the SAME id must refuse with the structured shape.
+    const dup = createSpec(fixture.cawsDir, {
+      id: 'DUP-ID-001', title: 'collision', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+    expect(dup.ok).toBe(false);
+    expect(dup.errors.length).toBeGreaterThanOrEqual(1);
+    const diag = dup.errors[0];
+    // Message names the collision (kills the StringLiteral → `` mutant).
+    expect(diag.message).toContain('already exists at');
+    expect(diag.message).toContain('DUP-ID-001');
+    // Subject is the id (kills the { subject } ObjectLiteral → {} mutant).
+    expect(diag.subject).toBe('DUP-ID-001');
+    // data.existing_path is the colliding path (kills the
+    // { existing_path } ObjectLiteral → {} mutant). The diagnostic reports
+    // the path createSpec resolved via findSpecPath; assert it points at
+    // the DUP-ID-001 active yaml regardless of absolute/relative form.
+    expect(diag.data).toBeDefined();
+    expect(diag.data.existing_path).toBeDefined();
+    expect(String(diag.data.existing_path)).toContain('DUP-ID-001.yaml');
+
+    // POSITIVE sub-case: a DIFFERENT, fresh id must NOT be refused —
+    // kills the if (existing !== null) → if (true) mutant, under which
+    // every create (even a brand-new id) would hit the refusal branch.
+    const fresh = createSpec(fixture.cawsDir, {
+      id: 'FRESH-ID-001', title: 'distinct', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+    expect(fresh.ok).toBe(true);
+    expect(fresh.value.kind).toBe('success');
+    expect(
+      fs.existsSync(path.join(fixture.cawsDir, 'specs', 'FRESH-ID-001.yaml'))
+    ).toBe(true);
+  });
+});
+
+// ─── SEAM A9: createSpec id-validation guard ───────────────────────────
+//
+// CAWS-SPECS-CREATE-MUTATION-HARDENING-001 A2.
+//
+// createSpec's first statement validates the id and returns Err before any
+// filesystem write (dist 316 ConditionalExpression / source 443-444). The
+// dist-316 if (!idValidation.ok) → if (false) mutant survived because no
+// test drove createSpec with a structurally invalid id. (SEAM A3 covers
+// the SAME guard on closeSpec, not createSpec.)
+
+describe('SEAM A9: createSpec id-validation guard', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('returns Err for a pattern-violating id before writing any file', () => {
+    fixture = mkCawsGitRepo('seam-a9-');
+
+    const result = createSpec(fixture.cawsDir, {
+      // Lowercase + spaces — fails the v11 id pattern.
+      id: 'not a valid id',
+      title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+    // The id-validation diagnostic names the v11 pattern.
+    expect(result.errors[0].message).toMatch(/v11 pattern/);
+    // No spec file was written under the bad id (the guard returns before
+    // any write). A sanitized form could not collide here; assert the
+    // specs dir gained no new yaml for this attempt.
+    const specsDir = path.join(fixture.cawsDir, 'specs');
+    const yamls = fs.existsSync(specsDir)
+      ? fs.readdirSync(specsDir).filter((f) => f.endsWith('.yaml'))
+      : [];
+    expect(yamls).toHaveLength(0);
+  });
+});
+
+// ─── SEAM A10: createSpec renders the `out: []` scope line ─────────────
+//
+// CAWS-SPECS-CREATE-MUTATION-HARDENING-001 A3.
+//
+// renderInitialSpecYaml emits a literal `  out: []` line (dist 300
+// StringLiteral / source 423). The StringLiteral → `` mutant survived
+// because no test read a freshly-created body and asserted the scope.out
+// shape. (The kernel would still accept an empty scope.out, so the parse
+// path alone does not catch the dropped line.)
+
+describe('SEAM A10: createSpec renders the out:[] scope line', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a freshly-created spec body contains the literal "out: []" line', () => {
+    fixture = mkCawsGitRepo('seam-a10-');
+
+    const result = createSpec(fixture.cawsDir, {
+      id: 'OUT-RENDER-001', title: 't', mode: 'chore', riskTier: 3,
+      now: NOW, actor: ACTOR,
+    });
+    expect(result.ok).toBe(true);
+
+    const body = fs.readFileSync(
+      path.join(fixture.cawsDir, 'specs', 'OUT-RENDER-001.yaml'),
+      'utf8'
+    );
+    // The renderer emits "  out: []" as its own line. A StringLiteral → ``
+    // mutant drops the line entirely; assert on the exact rendered token.
+    const lines = body.split('\n');
+    expect(lines).toContain('  out: []');
+  });
+});
+
+// ─── SEAM A11: createSpec threads narrowRepair on the validation branch ─
+//
+// CAWS-SPECS-CREATE-MUTATION-HARDENING-001 A4.
+//
+// When parseAndValidateSpec fails with a diagnostic that carries a
+// narrowRepair, createSpec threads it through via the conditional spread
+// `...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {})`
+// (dist 350-351 / source 495-497). SEAM A1 already drives the validation
+// branch (risk_tier 7) but that schema diagnostic has NO narrowRepair, so
+// the spread's "present" arm never ran and these survived:
+//   - 350 ConditionalExpression → true / false (spread always/never emits)
+//   - 350 EqualityOperator !== → === (inverts the presence test)
+//   - 351 { narrowRepair } ObjectLiteral → {} (drops the threaded value)
+//
+// The tier-2-contractless gate is the right lever: the kernel rejects it
+// with a SEMANTIC diagnostic that DOES carry a narrowRepair
+// ("Add at least one contract or change risk_tier to 3 or mode to chore."),
+// so the present-arm of the spread runs and the threaded value is
+// observable on the returned diagnostic.
+
+describe('SEAM A11: createSpec threads narrowRepair through the validation branch', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a tier-2 contractless spec returns Err whose diagnostic carries the kernel narrowRepair', () => {
+    fixture = mkCawsGitRepo('seam-a11-');
+
+    const result = createSpec(fixture.cawsDir, {
+      id: 'TIER2-NOCONTRACT-001',
+      title: 'tier 2, no contracts',
+      mode: 'feature',
+      riskTier: 2,
+      now: NOW,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+
+    // Find the tier-contract diagnostic among the errors (the one whose
+    // source_rule is the tier2 contracts requirement).
+    const diag = result.errors.find(
+      (d) => d.data && d.data.source_rule === 'spec.semantic.tier2.contracts_required'
+    );
+    expect(diag).toBeDefined();
+    // narrowRepair is THREADED THROUGH — present and equal to the kernel's
+    // repair guidance. This kills all three mutants:
+    //   - spread → true/false: a `false` arm drops narrowRepair (undefined);
+    //     a `true` arm would attempt { narrowRepair: undefined } but the
+    //     value here is defined, so the inverted/forced arms diverge from
+    //     the real value.
+    //   - !== → ===: with a DEFINED narrowRepair, `=== undefined` is false,
+    //     so the spread emits {} and narrowRepair is dropped → assertion
+    //     fails.
+    //   - { narrowRepair } → {}: drops the value → assertion fails.
+    expect(diag.narrowRepair).toBe(
+      'Add at least one contract or change risk_tier to 3 or mode to chore.'
+    );
+    // Defensive: the message is the kernel's tier-contract message, proving
+    // we threaded the RIGHT diagnostic (not some unrelated error).
+    expect(diag.message).toMatch(/Tier 2 specs require at least one contract/);
+  });
+});
+
+// ─── SEAM A12: createSpec does NOT surface a narrowRepair key when the ──
+//              kernel diagnostic has none (contract test; documents an
+//              EQUIVALENT mutant on the call-site spread)
+//
+// CAWS-SPECS-CREATE-MUTATION-HARDENING-001 A4 (absent-arm) + A5 note.
+//
+// This pins the behavioral contract: a validation failure whose kernel
+// diagnostic carries no narrowRepair must NOT surface a spurious
+// narrowRepair on the store Result. An empty title triggers a
+// `spec.schema.violation` that has no narrowRepair.
+//
+// IMPORTANT — the `350:17 ConditionalExpression → true` mutant on the
+// createSpec call-site spread (`...(d.narrowRepair !== undefined ? {...}
+// : {})`) is an EQUIVALENT MUTANT and cannot be killed by any test
+// WITHOUT changing production code. Reason: storeDiagnostic
+// (src/store/repo-root.ts:168) re-applies the SAME guard —
+//   ...(extra.narrowRepair !== undefined ? { narrowRepair } : {})
+// — so even when the call site forwards `{ narrowRepair: undefined }`
+// (what the `→ true` mutant produces), storeDiagnostic drops the key.
+// `{ narrowRepair: undefined }` and `{}` therefore yield byte-identical
+// diagnostics. The call-site conditional is redundant defense-in-depth in
+// front of storeDiagnostic's own filter; the redundancy is the source of
+// the equivalence. We keep this contract test (it locks the observable
+// "no spurious key" behavior) and accept the equivalent mutant rather than
+// contorting a test or weakening storeDiagnostic to chase a 100% score.
+
+describe('SEAM A12: createSpec omits narrowRepair when the kernel diagnostic has none', () => {
+  let fixture;
+  afterEach(() => fixture && rmrf(fixture.root));
+
+  it('a schema-violation diagnostic without narrowRepair yields a returned diagnostic with NO narrowRepair key', () => {
+    fixture = mkCawsGitRepo('seam-a12-');
+
+    // Empty title → spec.schema.violation, which carries no narrowRepair.
+    const result = createSpec(fixture.cawsDir, {
+      id: 'EMPTY-TITLE-001',
+      title: '',
+      mode: 'chore',
+      riskTier: 3,
+      now: NOW,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+
+    // The schema-violation diagnostic the kernel produced for the empty
+    // title carries no narrowRepair; find it explicitly.
+    const diag = result.errors.find(
+      (d) => d.data && d.data.source_rule === 'spec.schema.violation'
+    );
+    expect(diag).toBeDefined();
+    // The KEY must be absent. storeDiagnostic's own narrowRepair guard
+    // guarantees this regardless of the call-site spread, which is exactly
+    // why the call-site `→ true` mutant is equivalent. (`in` distinguishes
+    // {} from { narrowRepair: undefined }; a `.toBeUndefined()` value check
+    // would not.)
+    expect('narrowRepair' in diag).toBe(false);
+  });
+});
