@@ -2,10 +2,11 @@ id: CAWS-CLASSIFY-GIT-RM-CACHED-001
 title: 'classify_command admits non-destructive git rm --cached / -n (index-only/dry-run) so routine untrack-staging does not arm the danger latch; destructive git rm / rm -rf stays governed (Event 7)'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'git rm --cached/-n classified allow (Event 7); destructive forms + spec-path deny preserved. 135 calibration tests green.'
 created_at: '2026-05-30T09:16:10.601Z'
-updated_at: '2026-05-30T09:16:10.601Z'
-worktree: classify-git-rm-cached
+updated_at: '2026-05-30T09:19:20.336Z'
 blast_radius:
   modules:
     - caws-cli claude-code hook pack — command classifier
