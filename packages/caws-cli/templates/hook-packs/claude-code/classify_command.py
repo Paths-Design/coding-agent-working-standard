@@ -236,6 +236,24 @@ ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     "status", "log", "diff", "show", "branch", "tag",
     "remote", "config", "rev-parse", "ls-files", "blame",
     "add",
+    # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: read-only plumbing verbs that
+    # compute/inspect against the object database and refs WITHOUT mutating
+    # any ref, working tree, or index. They were previously classified
+    # "unknown git subcommand -> ask", which BOTH blocked them AND armed the
+    # session latch — defeating the read-only-survival guarantee for exactly
+    # the "inspect before you mutate" commands an agent should be encouraged
+    # to run (observed: `git merge-tree --write-tree` and `git check-ignore`
+    # each armed the latch mid-slice while only INSPECTING state).
+    #   - merge-tree: `--write-tree` writes only loose objects + prints a tree
+    #     sha; touches no ref/index/worktree. Plain merge-tree is a pure read.
+    #   - cat-file:   pure object-db read (-p / -t / -s / --batch).
+    #   - rev-list:   pure ref/commit-graph read.
+    #   - check-ignore: pure gitignore-rule inspection (reads .gitignore +
+    #     index; writes nothing).
+    # Narrow by design: mutating plumbing (update-ref, commit-tree, a bare
+    # write-tree index write, hash-object -w as an index mutation) is NOT
+    # admitted and still falls through to the governed-family "ask".
+    "merge-tree", "cat-file", "rev-list", "check-ignore",
 }
 
 # Allowed gh top-level groups + subcommands. Format: "group action".

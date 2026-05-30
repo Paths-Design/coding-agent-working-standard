@@ -678,3 +678,52 @@ describe('WORKTREE-LIST-CALIBRATION-001: git worktree read-only forms admitted',
     });
   });
 });
+
+// ===========================================================================
+// DANGER-LATCH-APPROVAL-AND-FEEDBACK-001 A5 — read-only git plumbing
+// (merge-tree / cat-file / rev-list / check-ignore) is admitted; mutating
+// plumbing stays governed. These verbs inspect/compute against the object
+// database WITHOUT mutating any ref, working tree, or index — they were
+// previously "unknown git subcommand → ask", which armed the session latch
+// for an inspect-before-you-mutate command (observed twice: `git merge-tree
+// --write-tree` and `git check-ignore`).
+// ===========================================================================
+
+describe('DANGER-LATCH-APPROVAL-AND-FEEDBACK-001 A5: read-only git plumbing allowed', () => {
+  const mustAllow = [
+    // merge-tree: --write-tree writes only loose objects + prints a tree sha;
+    // touches no ref/index/worktree. Plain merge-tree is a pure read.
+    'git merge-tree --write-tree main feature',
+    'git merge-tree main feature',
+    // cat-file: pure object-db read.
+    'git cat-file -p HEAD',
+    'git cat-file -t abc123',
+    'git cat-file -s abc123',
+    // rev-list: pure ref/commit-graph read.
+    'git rev-list HEAD',
+    'git rev-list --count HEAD',
+    'git rev-list main..feature',
+    // check-ignore: pure gitignore-rule inspection.
+    'git check-ignore -v tmp/foo',
+    'git check-ignore packages/caws-cli/templates/hook-packs/claude-code/tmp/x',
+  ];
+  mustAllow.forEach((cmd) => {
+    it(`${cmd} → allow (read-only plumbing, no latch)`, () => {
+      expect(classify(cmd).decision).toBe('allow');
+    });
+  });
+
+  // Mutating plumbing is NOT admitted — it must still fall through to the
+  // governed-family 'ask' (the narrow-by-design boundary).
+  const mustNotAllow = [
+    'git update-ref refs/heads/x HEAD',
+    'git commit-tree abc123 -m x',
+    'git hash-object -w --stdin',
+    'git symbolic-ref HEAD refs/heads/x',
+  ];
+  mustNotAllow.forEach((cmd) => {
+    it(`${cmd} → NOT allow (mutating plumbing stays governed)`, () => {
+      expect(classify(cmd).decision).not.toBe('allow');
+    });
+  });
+});
