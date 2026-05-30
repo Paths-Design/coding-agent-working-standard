@@ -222,3 +222,74 @@ describe('runScopeCommand — bound worktree admit / reject', () => {
     expect(r.stdout).toContain('INVALID');
   });
 });
+
+// ============================================================
+// CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001 (friction-probe Event 9):
+// when a path is admitted because an active worktree's scope.in CLAIMS it,
+// but the query runs from the MAIN checkout (cwd not inside that worktree),
+// the ADMIT must carry a caveat naming the worktree + cd path — otherwise the
+// green ADMIT contradicts the worktree-write-guard that will block the write.
+// ============================================================
+describe('scope ADMIT — worktree-claim caveat (CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001)', () => {
+  let mainRoot;
+  let worktreeRoot;
+
+  beforeAll(() => {
+    mainRoot = mkTempGitRepo('caws-scope-caveat-main-');
+    fs.writeFileSync(path.join(mainRoot, '.caws', 'policy.yaml'), VALID_POLICY);
+    // Spec CLAIM-1 (scope.in src/**) bound to worktree wt-claim.
+    fs.writeFileSync(
+      path.join(mainRoot, '.caws', 'specs', 'CLAIM-1.yaml'),
+      VALID_SPEC('CLAIM-1', 'wt-claim')
+    );
+    worktreeRoot = path.join(
+      os.tmpdir(),
+      `caws-scope-caveat-wt-${process.pid}-${Date.now()}`
+    );
+    execFileSync('git', [
+      '-C', mainRoot, 'worktree', 'add', '-b', 'scope-caveat-wt', worktreeRoot,
+    ]);
+    fs.writeFileSync(
+      path.join(mainRoot, '.caws', 'worktrees.json'),
+      JSON.stringify({ 'wt-claim': { specId: 'CLAIM-1', path: worktreeRoot } })
+    );
+  });
+
+  afterAll(() => {
+    try {
+      execFileSync('git', [
+        '-C', mainRoot, 'worktree', 'remove', '--force', worktreeRoot,
+      ]);
+    } catch { /* ignore */ }
+    rmrf(mainRoot);
+    rmrf(worktreeRoot);
+  });
+
+  // A1: claimed path queried from MAIN → ADMIT + caveat, still exit 0.
+  it('check from main on a worktree-claimed path → ADMIT + caveat, exit 0', () => {
+    const r = captureRun(mainRoot, 'src/foo.ts', 'check');
+    expect(r.code).toBe(0); // exit unchanged — caveat is advisory only
+    expect(r.stdout).toContain('ADMIT');
+    expect(r.stdout).toMatch(/claimed by worktree 'wt-claim'/);
+    expect(r.stdout).toMatch(/cd \.caws\/worktrees\/wt-claim/);
+    expect(r.stdout).toMatch(/worktree-write-guard/);
+  });
+
+  // A1 (show parity): the same caveat shows in `scope show` from main.
+  it('show from main on a worktree-claimed path → ADMIT + caveat, exit 0', () => {
+    const r = captureRun(mainRoot, 'src/foo.ts', 'show');
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('ADMIT');
+    expect(r.stdout).toMatch(/claimed by worktree 'wt-claim'/);
+  });
+
+  // A2: querying the SAME claimed path from INSIDE the worktree → ADMIT, NO
+  // caveat (the edit will succeed in place; source is registry/porcelain, not
+  // target_scope_in_claim).
+  it('check from inside the owning worktree → ADMIT, NO caveat', () => {
+    const r = captureRun(worktreeRoot, 'src/foo.ts', 'check');
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('ADMIT');
+    expect(r.stdout).not.toMatch(/claimed by worktree/);
+  });
+});
