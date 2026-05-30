@@ -182,7 +182,7 @@ import type { HookPackV1 } from './types';
 // module, and they do NOT alter `caws gates run` (the governed policy-gate
 // runner). This is option-C doctrine: the edit-time advisory plane is an
 // installed hook-pack utility the repo tunes via env; the gates command
-// remains a separate governed surface. Dispatcher update: dispatch/
+// remains a separate governed surface. Dispatcher update: caws_dispatch/
 // post_tool_use.sh registers the four new handlers in its HANDLERS array
 // (advisory-self-filtering; ordering preserved). No stateModel changes
 // (the hooks read only the file being checked + the existing guard-strikes
@@ -383,27 +383,32 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     },
 
     // -- Dispatch entrypoints invoked from .claude/settings.json --
+    // The caws_dispatch/ directory name is the namespace: a settings.json
+    // hook entry whose command path contains "/.claude/hooks/caws_dispatch/"
+    // is unambiguously CAWS-owned, which is how the idempotent settings.json
+    // merge identifies its own entries without colliding with a user's
+    // same-named hooks.
     {
-      destPath: '.claude/hooks/dispatch/pre_tool_use.sh',
-      sourcePath: 'dispatch/pre_tool_use.sh',
+      destPath: '.claude/hooks/caws_dispatch/pre_tool_use.sh',
+      sourcePath: 'caws_dispatch/pre_tool_use.sh',
       executable: true,
       managed: true,
     },
     {
-      destPath: '.claude/hooks/dispatch/post_tool_use.sh',
-      sourcePath: 'dispatch/post_tool_use.sh',
+      destPath: '.claude/hooks/caws_dispatch/post_tool_use.sh',
+      sourcePath: 'caws_dispatch/post_tool_use.sh',
       executable: true,
       managed: true,
     },
     {
-      destPath: '.claude/hooks/dispatch/session_start.sh',
-      sourcePath: 'dispatch/session_start.sh',
+      destPath: '.claude/hooks/caws_dispatch/session_start.sh',
+      sourcePath: 'caws_dispatch/session_start.sh',
       executable: true,
       managed: true,
     },
     {
-      destPath: '.claude/hooks/dispatch/stop.sh',
-      sourcePath: 'dispatch/stop.sh',
+      destPath: '.claude/hooks/caws_dispatch/stop.sh',
+      sourcePath: 'caws_dispatch/stop.sh',
       executable: true,
       managed: true,
     },
@@ -527,7 +532,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     {
       // PreToolUse (LAST): rewrites caws worktree merge|destroy
       // bash commands for CWD safety + output suppression.
-      // MUST be last in dispatch/pre_tool_use.sh because it emits
+      // MUST be last in caws_dispatch/pre_tool_use.sh because it emits
       // updatedInput which replaces any prior interceptor's
       // updatedInput. Companion to cwd-guard.sh (lineage entry 22)
       // for the worktree-destroyed-while-inside class. Lineage 26.
@@ -550,7 +555,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // Stop: drains $HOME/.claude/.pending-plan-snapshots and
       // overwrites each pending snapshot with the turn-end
       // transcript. Companion to plan-transcript-snapshot.sh.
-      // Already referenced in dispatch/stop.sh; this entry makes
+      // Already referenced in caws_dispatch/stop.sh; this entry makes
       // the pack manifest install it. Lineage 27.
       destPath: '.claude/hooks/plan-transcript-finalize.sh',
       sourcePath: 'plan-transcript-finalize.sh',

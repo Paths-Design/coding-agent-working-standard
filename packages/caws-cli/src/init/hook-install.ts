@@ -7,10 +7,19 @@
 //   - managed_drift      → refuse unless adopt/overwrite is passed.
 //   - unmanaged_collision → refuse unless adopt/overwrite is passed.
 //
-// settings.json is intentionally NOT in the pack manifest. If a user
-// already has .claude/settings.json, this module surfaces the canonical
-// wiring snippet for them to merge by hand. If they have no settings.json,
-// it emits the snippet to put into a new file.
+// settings.json is intentionally NOT in the pack manifest (it carries
+// user-authored permissions/env that the pack must not clobber). This
+// module instead MERGES the four CAWS caws_dispatch entrypoints into
+// settings.json non-destructively:
+//   - absent             → write a fresh settings.json (CAWS wiring only).
+//   - present-but-unwired → append the four entries to existing arrays,
+//                           preserving all other keys.
+//   - already-wired      → no-op (idempotent; byte-identical re-run).
+//   - invalid JSON       → refuse to merge; surface the snippet + error.
+// A .claude/settings.json.example carrying the canonical wiring is always
+// emitted as a reference for the "don't touch my settings.json" case.
+// CAWS-owned entries are identified by the "/.claude/hooks/caws_dispatch/"
+// path segment in the hook command.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -388,11 +397,11 @@ export function inspectClaudeSettings(
       continue;
     }
     // A canonical entry has a hook whose command path references
-    // .claude/hooks/dispatch/<key snake_case>.sh
+    // .claude/hooks/caws_dispatch/<key snake_case>.sh
     const snake = key
       .replace(/([a-z])([A-Z])/g, '$1_$2')
       .toLowerCase();
-    const expectedTail = `.claude/hooks/dispatch/${snake}.sh`;
+    const expectedTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
     let found = false;
     for (const block of entry as unknown[]) {
       const hookList = (block as { hooks?: unknown }).hooks;
@@ -412,63 +421,197 @@ export function inspectClaudeSettings(
   return { kind: 'partial', missing };
 }
 
+/** The canonical CAWS hook wiring as a structured object. This is the
+ *  single source of truth for both the printed snippet and the in-place
+ *  merge — each hook-event key maps to the one CAWS entry that wires the
+ *  corresponding caws_dispatch entrypoint. */
+export const CANONICAL_HOOK_ENTRIES: Readonly<
+  Record<string, Record<string, unknown>>
+> = {
+  PreToolUse: {
+    matcher: 'Bash|Read|Write|Edit|Glob|Grep|NotebookEdit',
+    hooks: [
+      {
+        type: 'command',
+        command:
+          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/pre_tool_use.sh',
+        timeout: 45,
+      },
+    ],
+  },
+  PostToolUse: {
+    matcher: 'Write|Edit|Bash|ExitPlanMode',
+    hooks: [
+      {
+        type: 'command',
+        command:
+          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/post_tool_use.sh',
+        timeout: 60,
+      },
+    ],
+  },
+  SessionStart: {
+    hooks: [
+      {
+        type: 'command',
+        command:
+          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/session_start.sh',
+        timeout: 30,
+      },
+    ],
+  },
+  Stop: {
+    hooks: [
+      {
+        type: 'command',
+        command:
+          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/stop.sh',
+        timeout: 30,
+      },
+    ],
+  },
+};
+
+/** A fresh settings.json containing ONLY the canonical CAWS wiring. */
+function canonicalSettingsObject(): { hooks: Record<string, unknown[]> } {
+  const hooks: Record<string, unknown[]> = {};
+  for (const [key, entry] of Object.entries(CANONICAL_HOOK_ENTRIES)) {
+    hooks[key] = [entry];
+  }
+  return { hooks };
+}
+
 /** Canonical settings.json wiring snippet, returned as a JSON string
  *  ready to print or copy. Mirrors the snippet in CLAUDE.md. */
 export const CANONICAL_SETTINGS_SNIPPET = JSON.stringify(
-  {
-    hooks: {
-      PreToolUse: [
-        {
-          matcher: 'Bash|Read|Write|Edit|Glob|Grep|NotebookEdit',
-          hooks: [
-            {
-              type: 'command',
-              command:
-                '"$CLAUDE_PROJECT_DIR"/.claude/hooks/dispatch/pre_tool_use.sh',
-              timeout: 45,
-            },
-          ],
-        },
-      ],
-      PostToolUse: [
-        {
-          matcher: 'Write|Edit|Bash|ExitPlanMode',
-          hooks: [
-            {
-              type: 'command',
-              command:
-                '"$CLAUDE_PROJECT_DIR"/.claude/hooks/dispatch/post_tool_use.sh',
-              timeout: 60,
-            },
-          ],
-        },
-      ],
-      SessionStart: [
-        {
-          hooks: [
-            {
-              type: 'command',
-              command:
-                '"$CLAUDE_PROJECT_DIR"/.claude/hooks/dispatch/session_start.sh',
-              timeout: 30,
-            },
-          ],
-        },
-      ],
-      Stop: [
-        {
-          hooks: [
-            {
-              type: 'command',
-              command:
-                '"$CLAUDE_PROJECT_DIR"/.claude/hooks/dispatch/stop.sh',
-              timeout: 30,
-            },
-          ],
-        },
-      ],
-    },
-  },
+  canonicalSettingsObject(),
   null,
   2
 );
+
+// ─── settings.json merge (write / append / idempotent / never-clobber) ───
+
+/** Outcome of a settings.json merge attempt. */
+export type SettingsMergeResult =
+  /** No settings.json existed; a fresh one was written with CAWS wiring. */
+  | { readonly kind: 'created'; readonly path: string }
+  /** settings.json existed and was missing CAWS entries; they were
+   *  appended. `added` lists the hook-event keys that gained an entry. */
+  | { readonly kind: 'merged'; readonly path: string; readonly added: readonly string[] }
+  /** settings.json already wired all four entries; nothing written. */
+  | { readonly kind: 'unchanged'; readonly path: string }
+  /** settings.json existed but could not be parsed; left untouched. */
+  | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
+
+/** Does this hook-event's entry array already contain a CAWS-owned entry
+ *  (one whose command references the caws_dispatch entrypoint for `key`)? */
+function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
+  if (!Array.isArray(entryArray)) return false;
+  const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  const expectedTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
+  for (const block of entryArray as unknown[]) {
+    const hookList = (block as { hooks?: unknown }).hooks;
+    if (!Array.isArray(hookList)) continue;
+    for (const h of hookList as unknown[]) {
+      const cmd = (h as { command?: unknown }).command;
+      if (typeof cmd === 'string' && cmd.includes(expectedTail)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Merge the canonical CAWS hook wiring into `.claude/settings.json`,
+ * non-destructively. The CAWS entry for each hook-event is appended only
+ * if an equivalent entry (matched by the caws_dispatch command path) is
+ * not already present. All other keys — permissions, env, user-authored
+ * hooks — are preserved byte-for-byte outside the appended entries.
+ *
+ * Never overwrites an unparseable file. Idempotent: a second run on a
+ * fully-wired settings.json is a no-op and leaves the file byte-identical.
+ */
+export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
+  const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
+
+  if (!fs.existsSync(settingsPath)) {
+    ensureDir(path.dirname(settingsPath));
+    fs.writeFileSync(
+      settingsPath,
+      `${JSON.stringify(canonicalSettingsObject(), null, 2)}\n`,
+      'utf8'
+    );
+    return { kind: 'created', path: settingsPath };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    return { kind: 'invalid', path: settingsPath, error: (e as Error).message };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: 'settings.json root is not an object',
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const hooks: Record<string, unknown> =
+    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
+      ? (root.hooks as Record<string, unknown>)
+      : {};
+
+  const added: string[] = [];
+  for (const [key, entry] of Object.entries(CANONICAL_HOOK_ENTRIES)) {
+    const existing = hooks[key];
+    if (arrayHasCawsEntry(existing, key)) continue; // already wired
+    if (Array.isArray(existing)) {
+      (existing as unknown[]).push(entry);
+    } else {
+      hooks[key] = [entry];
+    }
+    added.push(key);
+  }
+
+  if (added.length === 0) {
+    return { kind: 'unchanged', path: settingsPath };
+  }
+
+  root.hooks = hooks;
+  fs.writeFileSync(
+    settingsPath,
+    `${JSON.stringify(root, null, 2)}\n`,
+    'utf8'
+  );
+  return { kind: 'merged', path: settingsPath, added };
+}
+
+/** Write `.claude/settings.json.example` with the canonical CAWS wiring.
+ *  Idempotent (always writes the same bytes). This is the reference
+ *  artifact for users who decline the in-place merge. */
+export function writeSettingsExample(repoRoot: string): string {
+  const examplePath = path.join(
+    repoRoot,
+    '.claude',
+    'settings.json.example'
+  );
+  ensureDir(path.dirname(examplePath));
+  fs.writeFileSync(examplePath, `${CANONICAL_SETTINGS_SNIPPET}\n`, 'utf8');
+  return examplePath;
+}
+
+/** Detect a leftover pre-rename `.claude/hooks/dispatch/` directory from a
+ *  CAWS install that predates the caws_dispatch/ namespace. Returns the
+ *  absolute path when present, else null. The caller emits a leave-and-warn
+ *  message; init never deletes or modifies the old dir (it may carry user
+ *  customizations and we cannot assume version parity). */
+export function detectOrphanedDispatchDir(repoRoot: string): string | null {
+  const oldDir = path.join(repoRoot, '.claude', 'hooks', 'dispatch');
+  try {
+    return fs.statSync(oldDir).isDirectory() ? oldDir : null;
+  } catch {
+    return null;
+  }
+}
