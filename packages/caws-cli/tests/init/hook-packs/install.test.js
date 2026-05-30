@@ -122,7 +122,7 @@ describe('Claude Code pack manifest', () => {
     expect(ids).toContain('.claude/hooks/block-dangerous.sh');
     expect(ids).toContain('.claude/hooks/classify_command.py');
     expect(ids).toContain('.claude/hooks/CLAUDE.md');
-    expect(ids).toContain('.claude/hooks/dispatch/pre_tool_use.sh');
+    expect(ids).toContain('.claude/hooks/caws_dispatch/pre_tool_use.sh');
     expect(ids).toContain('.claude/hooks/lib/parse-input.sh');
     // HOOK-LIB-CONSOLIDATION-001: shared-utility libs are managed too.
     expect(ids).toContain('.claude/hooks/lib/caws-state.sh');
@@ -209,13 +209,13 @@ describe('Claude Code pack manifest', () => {
       );
 
       const sessionStart = fs.readFileSync(
-        path.join(packRoot, 'dispatch', 'session_start.sh'), 'utf8'
+        path.join(packRoot, 'caws_dispatch', 'session_start.sh'), 'utf8'
       );
       expect(sessionStart).toContain('hook_pack_version: 11');
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
-        path.join(packRoot, 'dispatch', 'pre_tool_use.sh'), 'utf8'
+        path.join(packRoot, 'caws_dispatch', 'pre_tool_use.sh'), 'utf8'
       );
       expect(preToolUse).toContain('hook_pack_version: 11');
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
@@ -230,7 +230,7 @@ describe('Claude Code pack manifest', () => {
       expect(handlers[0]).toBe('agent-heartbeat.sh');
 
       const stop = fs.readFileSync(
-        path.join(packRoot, 'dispatch', 'stop.sh'), 'utf8'
+        path.join(packRoot, 'caws_dispatch', 'stop.sh'), 'utf8'
       );
       expect(stop).toContain('hook_pack_version: 11');
       expect(stop).toContain('agent-stop.sh');
@@ -313,7 +313,7 @@ describe('Claude Code pack manifest', () => {
         __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
       );
       const postToolUse = fs.readFileSync(
-        path.join(packRoot, 'dispatch', 'post_tool_use.sh'), 'utf8'
+        path.join(packRoot, 'caws_dispatch', 'post_tool_use.sh'), 'utf8'
       );
       expect(postToolUse).toContain('hook_pack_version: 11');
       // Match the array body up to the closing paren on its own line.
@@ -441,7 +441,13 @@ describe('A1: fresh install', () => {
     });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/Created \(\d+\)/);
-    expect(r.stdout).toMatch(/RESTART REQUIRED/);
+    // CAWS-INIT-SETTINGS-WIRING-001: init now wires settings.json on a fresh
+    // install, so the activation panel reports "wired — restart to load" (the
+    // updated hooks need a session restart) rather than the old "RESTART
+    // REQUIRED / settings.json not wired" STOP-sign. The restart boundary
+    // remains; the unwired-STOP case no longer applies to a fresh install.
+    expect(r.stdout).toMatch(/[Ss]ettings\.json is wired/);
+    expect(r.stdout).toMatch(/[Rr]estart/);
 
     for (const f of CLAUDE_CODE_PACK.installedFiles) {
       const abs = path.join(repo, f.destPath);
@@ -454,18 +460,30 @@ describe('A1: fresh install', () => {
     }
   });
 
-  it('settings.json wiring step reports absent and prints canonical snippet', () => {
+  // CAWS-INIT-SETTINGS-WIRING-001 A1: init now WRITES a fresh settings.json
+  // when absent (was: print-only). Also writes settings.json.example.
+  it('writes a fresh settings.json with caws_dispatch wiring when absent', () => {
     repo = mkBareGitRepo('caws-pack-wiring-');
     const r = capture(runInitCommand, {
       cwd: repo,
       agentSurface: 'claude-code',
     });
-    expect(r.stdout).toMatch(/No \.claude\/settings\.json present/);
-    // The full snippet appears verbatim, indented.
-    expect(r.stdout).toContain('"PreToolUse"');
-    expect(r.stdout).toContain('"PostToolUse"');
-    expect(r.stdout).toContain('"SessionStart"');
-    expect(r.stdout).toContain('"Stop"');
+    expect(r.stdout).toMatch(/Created \.claude\/settings\.json/);
+
+    const settingsPath = path.join(repo, '.claude/settings.json');
+    expect(fs.existsSync(settingsPath)).toBe(true);
+    const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    for (const key of ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop']) {
+      expect(written.hooks[key]).toBeDefined();
+    }
+    // Wiring references the caws_dispatch namespace.
+    expect(fs.readFileSync(settingsPath, 'utf8')).toContain(
+      '/.claude/hooks/caws_dispatch/pre_tool_use.sh'
+    );
+    // A settings.json.example reference is also emitted.
+    expect(
+      fs.existsSync(path.join(repo, '.claude/settings.json.example'))
+    ).toBe(true);
   });
 });
 
@@ -698,17 +716,26 @@ describe('inspectClaudeSettings', () => {
     expect(r.error).toBeTruthy();
   });
 
-  it('preserves user settings.json — install does not modify it', () => {
+  // CAWS-INIT-SETTINGS-WIRING-001 A2: init MERGES into an existing
+  // settings.json non-destructively — user keys and hooks preserved, the
+  // four caws_dispatch entries appended.
+  it('merges caws_dispatch wiring into a user settings.json without clobbering', () => {
     repo = mkBareGitRepo('caws-wiring-preserve-');
     fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
     const userSettings = {
       env: { CUSTOM: 'foo' },
       permissions: { allow: ['Read'] },
-      hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [] }] },
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: '/my/own/hook.sh' }],
+          },
+        ],
+      },
     };
     const settingsPath = path.join(repo, '.claude/settings.json');
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2));
-    const before = fs.readFileSync(settingsPath, 'utf8');
 
     const r = capture(runInitCommand, {
       cwd: repo,
@@ -716,11 +743,21 @@ describe('inspectClaudeSettings', () => {
     });
     expect(r.code).toBe(0);
 
-    // settings.json byte-identical after install.
-    expect(fs.readFileSync(settingsPath, 'utf8')).toBe(before);
-    // Output told the user what to add.
-    expect(r.stdout).toMatch(/missing one or more canonical/);
-    expect(r.stdout).toContain('"PostToolUse"');
+    const after = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    // User keys preserved.
+    expect(after.env).toEqual({ CUSTOM: 'foo' });
+    expect(after.permissions).toEqual({ allow: ['Read'] });
+    // User's own PreToolUse hook survives.
+    const preCmds = after.hooks.PreToolUse.flatMap((b) =>
+      (b.hooks || []).map((h) => h.command)
+    );
+    expect(preCmds).toContain('/my/own/hook.sh');
+    // CAWS entry appended alongside it.
+    expect(
+      preCmds.some((c) => c.includes('/.claude/hooks/caws_dispatch/pre_tool_use.sh'))
+    ).toBe(true);
+    // Output reported the merge.
+    expect(r.stdout).toMatch(/Merged the CAWS caws_dispatch wiring/);
   });
 });
 
@@ -896,7 +933,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
 
   it('A2: PreToolUse dispatcher wires cwd-guard, protected-paths, scan-secrets, quiet-merge', () => {
     const preToolUse = fs.readFileSync(
-      path.join(packRoot, 'dispatch/pre_tool_use.sh'),
+      path.join(packRoot, 'caws_dispatch/pre_tool_use.sh'),
       'utf8'
     );
     expect(preToolUse).toContain('cwd-guard.sh');
@@ -923,7 +960,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
 
   it('A2: PostToolUse dispatcher wires naming-check and plan-transcript-snapshot', () => {
     const postToolUse = fs.readFileSync(
-      path.join(packRoot, 'dispatch/post_tool_use.sh'),
+      path.join(packRoot, 'caws_dispatch/post_tool_use.sh'),
       'utf8'
     );
     // Uncommented in HANDLERS array.
@@ -933,7 +970,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
 
   it('A2: Stop dispatcher wires plan-transcript-finalize', () => {
     const stopDispatch = fs.readFileSync(
-      path.join(packRoot, 'dispatch/stop.sh'),
+      path.join(packRoot, 'caws_dispatch/stop.sh'),
       'utf8'
     );
     expect(stopDispatch).toMatch(/^\s*"plan-transcript-finalize\.sh"/m);

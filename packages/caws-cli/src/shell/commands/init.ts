@@ -30,8 +30,11 @@ import {
   type HarnessDetectionResult,
 } from '../../init/harness-detect';
 import {
+  detectOrphanedDispatchDir,
   inspectClaudeSettings,
   installHookPack,
+  mergeClaudeSettings,
+  writeSettingsExample,
 } from '../../init/hook-install';
 import {
   isKnownSurface,
@@ -54,6 +57,9 @@ import {
   renderHookPackInstall,
   renderSettingsWiring,
 } from '../render/init-hook-pack';
+import type {
+  SettingsMergeResult,
+} from '../../init/hook-install';
 
 function isInsideGitWorkingTree(cwd: string): boolean {
   try {
@@ -251,13 +257,25 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
 
   out(renderHookPackInstall(hookPackResult));
 
-  // Step 3: inspect .claude/settings.json. Only meaningful when a pack
-  // was actually installed (claude-code in v11.1). For 'none' or
-  // 'skipped_ambiguous', skip this check.
+  // Step 3: wire .claude/settings.json. Only meaningful when a pack was
+  // actually installed (claude-code in v11.1). For 'none' or
+  // 'skipped_ambiguous', skip. Unlike pre-CAWS-INIT-SETTINGS-WIRING-001
+  // (which only printed a snippet), init now MERGES the four caws_dispatch
+  // entries into settings.json non-destructively, always emits a
+  // settings.json.example reference, and warns (but never deletes) on a
+  // leftover pre-rename .claude/hooks/dispatch/ directory.
   let wiringStatus: ReturnType<typeof inspectClaudeSettings> | undefined;
+  let mergeResult: SettingsMergeResult | undefined;
+  let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack !== null) {
+    mergeResult = mergeClaudeSettings(repoRoot);
+    writeSettingsExample(repoRoot);
+    orphanedDispatchDir = detectOrphanedDispatchDir(repoRoot);
+    // Re-inspect AFTER the merge so the activation panel reflects the
+    // now-wired state (a merge that created/merged leaves it 'wired';
+    // an invalid file leaves it 'invalid').
     wiringStatus = inspectClaudeSettings(repoRoot);
-    out(renderSettingsWiring(wiringStatus));
+    out(renderSettingsWiring(wiringStatus, mergeResult, orphanedDispatchDir));
   }
 
   // Step 4: activation contract. The contract message tailors to whether

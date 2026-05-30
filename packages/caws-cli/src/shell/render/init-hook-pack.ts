@@ -7,6 +7,7 @@
 
 import {
   CANONICAL_SETTINGS_SNIPPET,
+  type SettingsMergeResult,
   type SettingsWiringStatus,
 } from '../../init/hook-install';
 import type { HookPackInstallResult } from '../../init/hook-packs/types';
@@ -123,13 +124,89 @@ export function renderHookPackInstall(
   return lines.join('\n');
 }
 
-/** Render the settings.json wiring inspection result. */
+/** Render the settings.json wiring step. Reports what the in-place merge
+ *  actually did (created / merged / unchanged / invalid), notes that a
+ *  settings.json.example was written, and emits the leave-and-warn message
+ *  when a pre-rename dispatch/ dir is still present.
+ *
+ *  `mergeResult` and `orphanedDispatchDir` are optional so existing
+ *  callers/tests that only pass the inspection status keep working (they
+ *  fall back to advisory print-the-snippet output). */
 export function renderSettingsWiring(
-  status: SettingsWiringStatus
+  status: SettingsWiringStatus,
+  mergeResult?: SettingsMergeResult,
+  orphanedDispatchDir?: string | null
 ): string {
   const lines: string[] = [];
   lines.push(section('Step: .claude/settings.json wiring'));
 
+  if (mergeResult) {
+    switch (mergeResult.kind) {
+      case 'created':
+        lines.push(
+          '  Created .claude/settings.json wiring the four CAWS caws_dispatch'
+        );
+        lines.push('  entrypoints (PreToolUse/PostToolUse/SessionStart/Stop).');
+        break;
+      case 'merged':
+        lines.push(
+          `  Merged the CAWS caws_dispatch wiring into your existing`
+        );
+        lines.push(
+          `  .claude/settings.json (added: ${mergeResult.added.join(', ')}).`
+        );
+        lines.push(
+          '  Your other settings — permissions, env, and any existing hooks —'
+        );
+        lines.push('  were preserved unchanged.');
+        break;
+      case 'unchanged':
+        lines.push(
+          '  OK — .claude/settings.json already wires all four CAWS caws_dispatch'
+        );
+        lines.push('  entrypoints. No change.');
+        break;
+      case 'invalid':
+        lines.push(
+          `  ERROR — .claude/settings.json could not be parsed: ${mergeResult.error}`
+        );
+        lines.push(
+          '  init did NOT modify the file. Repair the JSON, then re-run init or'
+        );
+        lines.push('  merge the canonical wiring by hand:');
+        lines.push('');
+        for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
+          lines.push(`    ${line}`);
+        }
+        break;
+    }
+    lines.push('');
+    lines.push(
+      '  A .claude/settings.json.example with the canonical wiring was also'
+    );
+    lines.push('  written for reference.');
+
+    if (orphanedDispatchDir) {
+      lines.push('');
+      lines.push(
+        '  WARNING — a pre-rename hook dispatcher directory is still present:'
+      );
+      lines.push(`    ${orphanedDispatchDir}`);
+      lines.push(
+        '  The dispatcher moved to .claude/hooks/caws_dispatch/. The old dir is'
+      );
+      lines.push(
+        '  no longer wired and was left untouched (it may carry your edits).'
+      );
+      lines.push(
+        '  Port any net-benefit customizations into caws_dispatch/, then remove'
+      );
+      lines.push('  the old dispatch/ directory by hand.');
+    }
+    return lines.join('\n');
+  }
+
+  // ── Fallback: advisory inspection-only output (no merge performed) ──
   if (status.kind === 'wired') {
     lines.push(
       '  OK — .claude/settings.json already wires all four CAWS dispatch entrypoints.'
@@ -157,13 +234,6 @@ export function renderSettingsWiring(
       '  NOT fire until Claude Code reads a settings.json that wires them.'
     );
     lines.push('');
-    lines.push(
-      '  init does not write this file directly because merging with your'
-    );
-    lines.push(
-      '  existing permissions, env, and hook entries is your responsibility.'
-    );
-    lines.push('');
     lines.push('  Create .claude/settings.json with the following content:');
     lines.push('');
     for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
@@ -189,16 +259,6 @@ export function renderSettingsWiring(
   for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
     lines.push(`    ${line}`);
   }
-  lines.push('');
-  lines.push(
-    '  CAWS init does NOT modify settings.json automatically — it'
-  );
-  lines.push(
-    '  commonly carries user-authored `permissions` and `env` blocks that'
-  );
-  lines.push(
-    '  the pack should not overwrite. Merge the snippet by hand.'
-  );
   return lines.join('\n');
 }
 
