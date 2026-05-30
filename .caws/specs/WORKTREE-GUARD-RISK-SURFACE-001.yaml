@@ -7,19 +7,191 @@ created_at: '2026-05-30T00:09:46.610Z'
 updated_at: '2026-05-30T00:09:46.610Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-stop.sh
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/store/leases-store.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/session-caws-status.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-stop.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/caws-state.sh
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/tests/shell/
+    - packages/caws-cli/CHANGELOG.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    AUTHORITY-DRIVEN HARD BLOCK. On the base branch, worktree-write-guard
+    HARD-BLOCKS (exit 2) a Write/Edit ONLY when an ACTIVE bound spec's scope.in
+    claims the target file. "Active" means the bound spec's lifecycle_state is
+    `active` — a draft or closed bound spec does NOT confer a block. The
+    block authority is the spec→worktree binding, not mere registry presence.
+    This is the same over-broad-authority class as the caws "scope.out from any
+    spec makes matching paths hostile regardless of binding" bug that drove the
+    worktree↔spec authority binding model.
+  - >-
+    scope.in ONLY for the claim, not scope.out. The contention check currently
+    concatenates scope.in AND scope.out into the match set; a path appearing in
+    some sibling spec's scope.out must NOT make it "claimed". The hard-block
+    claim matches against the bound spec's scope.in exclusively. scope.out is
+    exclusion documentation, not a hostility surface (CLAUDE.md trap #4).
+  - >-
+    DIR-GONE WORKTREES NEVER COUNT ACTIVE. A registry entry whose physical
+    worktree directory does not exist on disk (orphaned/ghost entry) is filtered
+    out of the active-worktree set before any block or risk computation. This
+    kills the "orphaned-registry-entry-blocks-everything" bug: a worktree that
+    was destroyed-on-disk but left in the registry can no longer wall every
+    write on main. Existence is checked via the worktree's recorded path (or
+    `$PROJECT_DIR/.caws/worktrees/<name>`) with fs.existsSync.
+  - >-
+    EVERYTHING ELSE → ASK, NOT BLOCK. In every base-branch case that is NOT an
+    active-bound-spec scope.in claim — no spec claims the file (`clear`), the
+    contention check could not decide (`unknown:*`), or simply "a worktree
+    exists" / "no worktree exists" — the guard emits permissionDecision:ask
+    (via lib/emit.sh `emit_ask`) carrying a composite risk briefing, and exits
+    0 so the harness presents the ask. The user approves, denies, or directs the
+    agent. The hard wall is reserved for the genuine authority conflict.
+  - >-
+    ASK DEGRADES TO BLOCK FOR ASK-INCAPABLE HARNESSES. The guard is opt-in
+    capability-aware: when it can detect the harness cannot honor an ask
+    (CAWS_GUARD_NO_ASK=1 set by an integrator, or a non-Claude-Code harness that
+    does not consume permissionDecision), it falls back to the prior hard block
+    (exit 2) rather than emit an ask the harness silently ignores (which would
+    let the write through). Default Claude Code path emits ask. The degradation
+    preserves the "never silently allow on an ask-incapable harness" guarantee.
+  - >-
+    COMPOSITE RISK SIGNAL. The risk briefing composes four signals: (1) target
+    file's directory existence; (2) active bound specs (count + ids); (3)
+    active-agent count from the lease summary; (4) lease freshness (fresh vs
+    stale by the 30m TTL). It is surfaced in TWO places: a full briefing once at
+    SessionStart (session-caws-status.sh) and a short throttled line per-write
+    (worktree-write-guard.sh ask reason). Per-write gathering is throttled (a
+    short-TTL cache under .caws/leases/ or .caws/cache/) so it is not recomputed
+    in full on every Write/Edit. More signal ⇒ a clearer ask; orphaned dirs and
+    stale leases lower the apparent risk in the briefing text.
+  - >-
+    GHOST-LEASE PRUNE --dead. `caws agents prune --dead` verifies PID liveness
+    for each lease (process.kill(pid, 0) semantics; unknown/absent pid ⇒ treated
+    as dead), AUTO-STOPS any `active` lease whose owning PID is dead (transition
+    to stopped through the existing stopAgentSession path), then prunes the
+    now-stopped leases — collapsing the prior 3-step verify→stop→prune --status
+    stale --older-than 0 dance into one command. --dead respects --dry-run
+    (reports what it would stop+prune) and --json. Leases whose PID is still
+    alive are never touched by --dead.
+  - >-
+    SESSION-STOP UNREGISTERS. agent-stop.sh (the Stop/SessionEnd hook handler)
+    unregisters the current session's lease on session stop — transitioning it
+    to stopped via the CLI stop path — so a cleanly-ended session does not leave
+    an active lease behind for the next prune to chase. Best-effort: a failure
+    to unregister must not fail the stop hook (exit 0 regardless).
+  - >-
+    BEHAVIOR-NEUTRAL FOR THE HAPPY PATH. An agent working inside its own bound
+    worktree (cwd under .caws/worktrees/<name> or on a registered non-destroyed
+    worktree branch) is unaffected — the existing early-allow arms are preserved.
+    The always-allowed allowlist (.caws/, .claude/, docs/, tmp/, .github/, root
+    CLAUDE.md/.gitignore) is preserved unchanged. Only the base-branch
+    block-vs-ask decision and the dir-gone/lifecycle/scope.in filtering change.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: >-
+      On the base branch (main) with an active worktree whose bound spec is
+      lifecycle_state=active and whose scope.in claims the target file.
+    when: A Write/Edit to that file is attempted.
+    then: >-
+      The guard HARD-BLOCKS with exit 2 and a message naming the claiming
+      worktree + matching scope.in pattern (the existing claimed:* diagnosis).
+      A draft or closed bound spec claiming the same file does NOT block.
+  - id: A2
+    given: >-
+      On the base branch with an active worktree but the target file is claimed
+      only by some spec's scope.OUT (not any active spec's scope.in), or by no
+      spec at all (clear), or the contention check is unknown:*.
+    when: A Write/Edit is attempted (Claude Code harness, ask-capable).
+    then: >-
+      The guard emits permissionDecision:ask with the composite risk briefing
+      and exits 0 — it does NOT hard-block. scope.out membership alone never
+      produces a block.
+  - id: A3
+    given: >-
+      The worktrees registry contains an entry whose physical directory does not
+      exist on disk (orphaned ghost entry), and no other live worktree claims
+      the file.
+    when: A Write/Edit on main is attempted.
+    then: >-
+      The ghost entry is filtered out of the active set; it contributes neither
+      a block nor an inflated active-worktree count. If no live worktree remains,
+      the path falls to the ask branch (A2), not a block.
+  - id: A4
+    given: An integrator-set CAWS_GUARD_NO_ASK=1 (ask-incapable harness).
+    when: A base-branch case that would otherwise ask is hit.
+    then: >-
+      The guard falls back to the prior hard block (exit 2) rather than emitting
+      an ask the harness would ignore — preserving the no-silent-allow guarantee.
+  - id: A5
+    given: A lease whose status is `active` but whose recorded PID is not alive.
+    when: '`caws agents prune --dead` runs (apply).'
+    then: >-
+      The dead-PID active lease is auto-stopped then pruned in one command; a
+      lease whose PID is still alive is left untouched; --dry-run reports the
+      same candidate set without mutating; --json emits the structured summary.
+  - id: A6
+    given: A session with a registered active lease.
+    when: The Stop/SessionEnd hook (agent-stop.sh) fires.
+    then: >-
+      The session's lease is unregistered (transitioned to stopped) so it is not
+      left active; a unregister failure does not fail the stop hook (exit 0).
+  - id: A7
+    given: The composite risk signal.
+    when: A SessionStart fires and (separately) a per-write ask is produced.
+    then: >-
+      SessionStart surfaces the full briefing once (dir/spec/agents/lease); the
+      per-write ask reason carries a short risk line; the per-write gather is
+      throttled (cached), not recomputed in full on every Write/Edit.
+  - id: A8
+    given: The full slice on canonical.
+    when: The hook-pack + shell focused suites + tsc + build run.
+    then: >-
+      Build/typecheck clean; new hook-pack tests (block-on-active-claim,
+      ask-on-clear/scope.out, ghost-dir-filtered, no-ask degradation) and shell
+      tests (prune --dead auto-stop) pass; no regression to the happy-path
+      early-allow, the allowlist, or existing agents/leases tests.
+non_functional:
+  reliability:
+    - >-
+      Removes an over-broad-authority hard block (registry-presence and
+      scope.out hostility) that bit a first-contact agent: an orphaned worktree
+      entry walled every write on main regardless of live work. Replaces it with
+      an authority-driven block (active bound spec scope.in only) plus a
+      risk-surfacing ask, and gives operators a one-command ghost-lease cleanup
+      (`prune --dead`) plus automatic session-stop lease unregistration so the
+      active-lease set reflects live agents.
+  security:
+    - >-
+      The ask path must never silently ALLOW on an ask-incapable harness: the
+      CAWS_GUARD_NO_ASK degradation to a hard block is the load-bearing guard
+      against a permissionDecision:ask being emitted to a harness that ignores
+      it and lets the write through.
+contracts:
+  - name: worktree-guard-authority-driven-block-v1
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    description: >-
+      On the base branch, worktree-write-guard HARD-BLOCKS (exit 2) a
+      Write/Edit ONLY when an ACTIVE bound spec's scope.in claims the target
+      file (draft/closed specs do not count) — the spec-to-worktree authority
+      binding is the block authority, not mere registry presence. In every
+      other base-branch case (no spec claims the file, orphaned/dir-gone
+      worktree entries, stale leases, generic 'a worktree exists'), the guard
+      ASKS (permissionDecision: ask) and surfaces a composite risk briefing
+      (target-dir existence, active bound specs, active-agent count, lease
+      freshness) rather than walling the edit; ask degrades to block on
+      harnesses that cannot ask. A worktree whose physical directory does not
+      exist NEVER contributes to the active-worktree set (kills the
+      orphaned-registry-entry-blocks-everything bug).
