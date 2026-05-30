@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -235,6 +236,24 @@ ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     "status", "log", "diff", "show", "branch", "tag",
     "remote", "config", "rev-parse", "ls-files", "blame",
     "add",
+    # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: read-only plumbing verbs that
+    # compute/inspect against the object database and refs WITHOUT mutating
+    # any ref, working tree, or index. They were previously classified
+    # "unknown git subcommand -> ask", which BOTH blocked them AND armed the
+    # session latch — defeating the read-only-survival guarantee for exactly
+    # the "inspect before you mutate" commands an agent should be encouraged
+    # to run (observed: `git merge-tree --write-tree` and `git check-ignore`
+    # each armed the latch mid-slice while only INSPECTING state).
+    #   - merge-tree: `--write-tree` writes only loose objects + prints a tree
+    #     sha; touches no ref/index/worktree. Plain merge-tree is a pure read.
+    #   - cat-file:   pure object-db read (-p / -t / -s / --batch).
+    #   - rev-list:   pure ref/commit-graph read.
+    #   - check-ignore: pure gitignore-rule inspection (reads .gitignore +
+    #     index; writes nothing).
+    # Narrow by design: mutating plumbing (update-ref, commit-tree, a bare
+    # write-tree index write, hash-object -w as an index mutation) is NOT
+    # admitted and still falls through to the governed-family "ask".
+    "merge-tree", "cat-file", "rev-list", "check-ignore",
 }
 
 # Allowed gh top-level groups + subcommands. Format: "group action".
@@ -615,6 +634,69 @@ def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, 
     return classify_command(nested[0], repo_root, home, cwd, caws_worktree)
 
 
+_SPEC_PATH_RE = re.compile(r"^\.caws/specs/[^/]+\.(?:yaml|yml)$")
+
+
+def cherry_pick_touches_only_specs(segment: str, repo_root: Path | None) -> bool:
+    """Return True ONLY when a `git cherry-pick <sha>...` provably touches
+    nothing but `.caws/specs/*.yaml` files (the protocol-sanctioned scope-
+    amendment / spec-lifecycle sync — CAWS-SCOPE-AMEND-COMMAND-001).
+
+    Fail-closed: any uncertainty returns False so the caller keeps the
+    existing danger-latch behavior. We return False when:
+      - repo_root is unknown / not a dir;
+      - the segment carries flags (--continue/--abort/-n/etc.) or no sha;
+      - any sha cannot be resolved, has no files, or touches a non-spec path;
+      - git is unavailable or any git invocation fails/times out.
+
+    Note: the PREFERRED path is `caws specs amend-scope`, which removes the
+    cherry-pick entirely. This carve-out only narrows the latch for the
+    transition / fallback case; it never widens it.
+    """
+    if repo_root is None or not repo_root.is_dir():
+        return False
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return False
+    # Find the cherry-pick subcommand index, then collect trailing args.
+    try:
+        cp_idx = tokens.index("cherry-pick")
+    except ValueError:
+        return False
+    args = tokens[cp_idx + 1 :]
+    # Any flag/option disqualifies the cheap proof (e.g. --continue, --abort,
+    # -n, -x, --strategy, ranges with ..). Require plain sha/ref tokens only.
+    shas = []
+    for a in args:
+        if a.startswith("-"):
+            return False
+        if ".." in a:  # commit ranges are out of scope for the carve-out
+            return False
+        shas.append(a)
+    if not shas:
+        return False
+    for sha in shas:
+        try:
+            proc = subprocess.run(
+                ["git", "show", "--name-only", "--format=", sha],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if proc.returncode != 0:
+            return False
+        files = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+        if not files:
+            return False  # empty/merge commit → cannot prove; fail closed
+        if not all(_SPEC_PATH_RE.match(f) for f in files):
+            return False
+    return True
+
+
 def classify_git_semantics(
     segment: str,
     caws_worktree: bool,
@@ -649,6 +731,15 @@ def classify_git_semantics(
         return "ask", "git rebase rewrites branch history"
 
     if subcommand == "cherry-pick":
+        # CAWS-SCOPE-AMEND-COMMAND-001 carve-out: a cherry-pick that provably
+        # touches ONLY .caws/specs/*.yaml is the protocol-sanctioned scope-
+        # amendment / spec-lifecycle sync. Admit it so it does not engage the
+        # sticky session-wide danger latch. PREFER `caws specs amend-scope`,
+        # which avoids the cherry-pick entirely. Fail-closed: any other
+        # cherry-pick (source files, ranges, flags, unresolvable sha, git
+        # error) keeps the existing ask+latch.
+        if cherry_pick_touches_only_specs(segment, repo_root):
+            return "allow", ""
         return "ask", "git cherry-pick replays commits across branches"
 
     return None
@@ -925,8 +1016,17 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
                     wt_sub = tokens[i + 1]
                     break
             # Bare `git worktree` (no subcommand) prints usage — read-only.
-            # `git worktree list` is read-only. Everything else mutates.
+            # `git worktree list` is read-only. `git worktree prune --dry-run`
+            # (or `-n`) only REPORTS what would be pruned and changes no state,
+            # so it is read-only too — admitting it closes a danger-latch false
+            # positive where a first-timer's orientation `prune --dry-run`
+            # (exit 0, no mutation) latched the whole session
+            # (CAWS-CLASSIFY-WORKTREE-PRUNE-AND-RM-REDIRECT-001 A1). Bare
+            # `git worktree prune` (no dry-run) DELETES worktree admin files, so
+            # it stays "ask"; likewise add/remove/move/repair/lock/unlock.
             if wt_sub in ("", "list"):
+                return ("allow", "")
+            if wt_sub == "prune" and ("--dry-run" in tokens or "-n" in tokens):
                 return ("allow", "")
             return None
         if sub in ALLOWED_GIT_SUBCOMMANDS:
@@ -1163,6 +1263,26 @@ def is_recursive_rm(segment: str) -> tuple[bool, list[str]]:
     if rm_idx < 0:
         return False, []
 
+    # Shell redirect operators are NOT delete targets. Before this fix the
+    # loop appended tokens like `2>&1` or `out.log` (after `>`) to `targets`,
+    # so `rm -rf <dir> 2>&1` produced the reason "recursive delete: 2>&1" —
+    # fingering the redirect instead of the deleted path
+    # (CAWS-CLASSIFY-WORKTREE-PRUNE-AND-RM-REDIRECT-001 A2/A3). Redirect
+    # operators bind a file descriptor to a target; neither the operator nor
+    # (for a bare `>`/`>>`/`2>`/`1>`) its following operand is a delete target.
+    # fd-combining/standalone forms (`2>&1`, `>&2`, `1>&2`, `&>`) carry their
+    # own target, so only the operator token is skipped.
+    _REDIRECT_STANDALONE = {'2>&1', '>&2', '1>&2', '&>', '&>>'}
+    _REDIRECT_TAKES_OPERAND = ('>', '>>', '2>', '1>', '2>>', '1>>', '<', '<<')
+
+    def _is_redirect_with_operand(t: str) -> bool:
+        # A redirect operator with the file glued on (e.g. `>out.log`,
+        # `2>err`) OR a bare operator whose operand is the next token.
+        return any(
+            t == op or (t.startswith(op) and len(t) > len(op))
+            for op in _REDIRECT_TAKES_OPERAND
+        )
+
     # Check for recursive flag
     is_recursive = False
     targets: list[str] = []
@@ -1170,10 +1290,19 @@ def is_recursive_rm(segment: str) -> tuple[bool, list[str]]:
     while i < len(tokens):
         tok = tokens[i]
         if tok == '--':
-            # Everything after -- is targets
+            # Everything after -- is literal filenames (POSIX); no redirects.
             targets.extend(tokens[i+1:])
             break
-        if tok.startswith('-') and not tok.startswith('--'):
+        if tok in _REDIRECT_STANDALONE:
+            # fd-combining redirect (e.g. 2>&1) — not a target, no operand.
+            pass
+        elif _is_redirect_with_operand(tok):
+            # A bare operator (`>`, `2>`, …) consumes the NEXT token as its
+            # file operand, which is also not a delete target.
+            if tok in _REDIRECT_TAKES_OPERAND:
+                i += 1  # skip the operand token too
+            # else: operator+file glued in one token — nothing extra to skip.
+        elif tok.startswith('-') and not tok.startswith('--'):
             if 'r' in tok or 'R' in tok:
                 is_recursive = True
         elif tok.startswith('--'):
@@ -1574,6 +1703,14 @@ def classify_command(
             continue
 
         git_result = classify_git_semantics(segment, caws_worktree, repo_root)
+        # An explicit ("allow", _) from git semantics is an AUTHORITATIVE admit
+        # for this git segment (e.g. the CAWS-SCOPE-AMEND-COMMAND-001 spec-only
+        # cherry-pick carve-out, or a trusted git-init). It must suppress the
+        # CONFIRM regex patterns below that would otherwise re-escalate the same
+        # segment to "ask" (the line-level `git cherry-pick` / `git init`
+        # patterns). escalate() only raises severity, so without this skip the
+        # carve-out's allow would be overridden.
+        git_segment_allowed = bool(git_result and git_result[0] == "allow")
         if git_result:
             escalate(*git_result)
 
@@ -1593,6 +1730,11 @@ def classify_command(
             if re.search(pattern, segment_surface, re.IGNORECASE):
                 # Special case: git init in worktree context is allowed
                 if "git init" in desc and caws_worktree:
+                    continue
+                # An authoritative git-semantics allow for this segment
+                # (carve-out / trusted init) suppresses the confirm pattern
+                # that would re-flag the very same git op.
+                if git_segment_allowed:
                     continue
                 escalate("ask", desc)
 
@@ -1627,7 +1769,12 @@ def classify_command(
         # check. If it is NOT on the allow-list AND the segment is a
         # governed-family command, escalate to "ask".
         allow_result = classify_allow_list(segment)
-        if allow_result is None:
+        if allow_result is None and not git_segment_allowed:
+            # git_segment_allowed: an authoritative git-semantics allow for this
+            # segment (CAWS-SCOPE-AMEND-COMMAND-001 spec-only cherry-pick
+            # carve-out, or trusted init) must also suppress the
+            # governed-family "unknown git subcommand" default — otherwise that
+            # detector independently re-escalates the same git op to "ask".
             family_result = classify_governed_family_default(segment)
             if family_result is not None:
                 escalate(*family_result)
