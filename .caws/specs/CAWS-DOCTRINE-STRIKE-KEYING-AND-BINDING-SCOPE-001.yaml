@@ -7,7 +7,8 @@ created_at: '2026-05-30T23:14:56.964Z'
 updated_at: '2026-05-30T23:14:56.964Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - CLAUDE.md project doctrine
+    - caws-cli claude-code hook pack — guard-strikes comments
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +17,49 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/claude-code/guard-strikes.sh'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CLAUDE.md no longer claims the scope-guard strike counter is
+    'session-global and accumulative'. It accurately states the counter is
+    keyed by session id AND checkout location: the canonical checkout uses
+    .claude/logs/guard-strikes-<session>.json, and each linked worktree uses
+    its own gitdir-relative file, so strikes in one worktree do NOT corner an
+    edit in another. This per-checkout isolation is intentional (failure-lineage
+    Entry: cross-worktree strike bleed was a high-severity control-plane
+    collapse), not a defect.
+  - >-
+    The guard-strikes.sh header comment describes the same per-checkout keying,
+    so the hook source and CLAUDE.md agree. No code behavior changes — the
+    strike-recording and reset logic are untouched; only comments/doctrine text.
+  - >-
+    CLAUDE.md states that binding a worktree to a spec means every file outside
+    that spec's scope.in is out-of-scope BY DESIGN — it is the explicit set of
+    files the agent agrees to touch for that slice — and that this is the
+    intended isolation, not an accident.
+  - >-
+    CLAUDE.md documents that the linked-worktree sparse-checkout pattern is
+    `/*` plus `!/.caws/specs/`, which materializes ALL root-level and main-tree
+    files (only `.caws/specs/` is excluded, and that resolves through canonical).
+    There is therefore NO sparse-checkout materialization gap for scope: a
+    root-level file (CLAUDE.md, .gitignore, package.json, any source) is always
+    present in the worktree, and bringing it into scope after checkout is purely
+    `caws specs amend-scope <id> --add <path>` — which takes effect immediately
+    with no re-checkout because scope resolves through canonical.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a reader of CLAUDE.md looking up how strike state is keyed'
+    when: 'they read the scope-guard strike-state section'
+    then: "it says per-(session, checkout-location), names the canonical .claude/logs vs per-worktree gitdir files, and does NOT say 'session-global and accumulative'"
+  - id: A2
+    given: 'a reader cross-checking the guard-strikes.sh source against CLAUDE.md'
+    when: 'they read the guard-strikes.sh header comment'
+    then: 'it describes the same per-checkout keying as CLAUDE.md (source and doctrine agree)'
+  - id: A3
+    given: 'an agent unsure whether being bound to a worktree restricts non-slice files'
+    when: 'they read the binding-scope section of CLAUDE.md'
+    then: 'it states that all files outside scope.in are out-of-scope by design — the agreed slice surface — and this is intended isolation'
+  - id: A4
+    given: 'an agent who needs to edit a root-level file while bound to a worktree'
+    when: 'they read the sparse-checkout scope guidance in CLAUDE.md'
+    then: 'it explains root-level files ARE materialized (pattern /* + !/.caws/specs/), so there is no materialization gap, and the path is brought into scope via `caws specs amend-scope` with immediate effect (no re-checkout)'
 non_functional: {}
 contracts: []
