@@ -130,9 +130,30 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
     };
   }
 
-  // Stage exactly the writer's paths. Do NOT use `git add -A` —
+  // Drop intentionally-gitignored paths before staging. `caws init` ignores
+  // ephemeral per-CLI registry state (.caws/worktrees.json, agents.json) as
+  // a deliberate policy; a lifecycle transition that includes such a path in
+  // its audit-commit set must NOT hard-fail on "git add: paths are ignored",
+  // and must NEVER force-add (`-f`) — force-tracking a file the gitignore
+  // says to keep untracked would violate that policy. We commit only the
+  // remaining TRACKED authority paths (e.g. the spec binding). If every path
+  // is ignored, there is nothing tracked to commit — a clean no-op, not a
+  // failure. (CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 A5/A6)
+  const trackablePaths = input.paths.filter((p) => {
+    // `git check-ignore -q <path>` exits 0 when the path IS ignored.
+    const ignored = runGit(['check-ignore', '-q', '--', p], input.repoRoot);
+    return !ignored.ok;
+  });
+  if (trackablePaths.length === 0) {
+    // All input paths are gitignored ephemeral state — nothing tracked to
+    // commit. The writer's intended state is on disk; treat as committed
+    // with no sha rather than refusing.
+    return { kind: 'committed', sha: '' };
+  }
+
+  // Stage exactly the writer's TRACKED paths. Do NOT use `git add -A` —
   // that would silently stage unrelated dirty files.
-  const addResult = runGit(['add', '--', ...input.paths], input.repoRoot);
+  const addResult = runGit(['add', '--', ...trackablePaths], input.repoRoot);
   if (!addResult.ok) {
     return {
       kind: 'refused_dirty',
@@ -144,7 +165,7 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
   // write was a no-op (file already matched), there's nothing to
   // commit and we should NOT create an empty commit.
   const diffCached = runGit(
-    ['diff', '--cached', '--name-only', '--', ...input.paths],
+    ['diff', '--cached', '--name-only', '--', ...trackablePaths],
     input.repoRoot
   );
   if (!diffCached.ok) {
@@ -166,9 +187,9 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
   // CAWS lifecycle commit — the exact cross-session attribution failure
   // CAWS exists to prevent. Path-scoping the commit makes it total over
   // ambient index state: only `input.paths` are committed, whatever else
-  // is staged. (CAWS-AUTOCOMMIT-INTEGRITY-001)
+  // is staged: only the writer's TRACKED paths. (CAWS-AUTOCOMMIT-INTEGRITY-001)
   const commitResult = runGit(
-    ['commit', '-m', input.message, '--', ...input.paths],
+    ['commit', '-m', input.message, '--', ...trackablePaths],
     input.repoRoot
   );
   if (!commitResult.ok) {

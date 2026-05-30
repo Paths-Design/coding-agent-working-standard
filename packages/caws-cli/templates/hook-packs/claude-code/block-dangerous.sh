@@ -80,6 +80,48 @@ record_danger_latch() {
     }' > "$file"
 }
 
+# Classify a command via classify_command.py, echoing the decision
+# ("allow" | "ask" | "deny") on stdout. Echoes "unavailable" when the
+# classifier or python3 is missing so callers can fail closed. Used both
+# by the sticky-latch read-only carve-out and the main classification path.
+classify_decision() {
+  local cmd="$1"
+  local classifier="$SCRIPT_DIR/classify_command.py"
+  if [[ ! -f "$classifier" ]] || ! command -v python3 >/dev/null 2>&1; then
+    printf 'unavailable'
+    return 0
+  fi
+  local result
+  result=$(printf '%s' "$cmd" | python3 "$classifier" \
+    --repo-root "${CLAUDE_PROJECT_DIR:-.}" \
+    --home "$HOME" \
+    --cwd "$(pwd)" 2>/dev/null) || {
+    printf 'unavailable'
+    return 0
+  }
+  printf '%s' "$result" | jq -r '.decision // "ask"' 2>/dev/null || printf 'ask'
+}
+
+# Does this command INVOKE the pack's own reset-danger-latch.sh escape hatch?
+# Narrow match: the script must appear in invocation position — either as the
+# command's first token (an optionally-pathed `reset-danger-latch.sh ...`) or
+# immediately after a `bash`/`sh`/`.` launcher. It must NOT match the script
+# named as an operand of another command (`rm -rf .../reset-danger-latch.sh`)
+# or mentioned in a trailing comment (`git push --force # reset-danger-latch.sh`)
+# — those are mutating commands smuggling the string, not the escape hatch.
+# The leading-anchor is the whole command start (after optional whitespace),
+# not any `;|&` separator, so a compound like `rm x; reset-danger-latch.sh`
+# is judged by its FIRST (mutating) clause, not exempted by the trailing one.
+# The reset is the documented way out of a sticky latch; gating it behind the
+# very latch it clears is self-defeating.
+is_reset_latch_invocation() {
+  local cmd="$1"
+  # Strip a leading run of whitespace, then require either:
+  #   <optional dir/>reset-danger-latch.sh   at the very start, or
+  #   bash|sh|. <optional dir/>reset-danger-latch.sh   at the very start.
+  printf '%s' "$cmd" | grep -qE '^[[:space:]]*((bash|sh|\.)[[:space:]]+)?([^[:space:];|&]*/)?reset-danger-latch\.sh([[:space:]]|$)'
+}
+
 # Read JSON input from Claude Code
 INPUT=$(cat)
 
@@ -98,11 +140,34 @@ fi
 
 LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
 if [[ -f "$LATCH_FILE" ]]; then
+  # The latch exists to stop further MUTATION pending a human reset — not to
+  # wedge the entire session. Two carve-outs let a latched agent stay useful
+  # and reach its own escape hatch:
+  #
+  #   1. The reset escape hatch itself. A reset-danger-latch.sh invocation is
+  #      the documented way out; blocking it behind the very latch it clears
+  #      is self-defeating. Let it reach the shell (its --reason audit + the
+  #      human running it remain the gate).
+  #   2. Read-only commands. If classify_command.py rates the CURRENT command
+  #      `allow` (read-only — git log, ls, cat, caws status), let it through.
+  #      A read-only command was never the danger; collateral-blocking it
+  #      gives a latched agent no way to diagnose. The latch stays sticky for
+  #      mutating commands (not cleared here).
+  #
+  # Fail-closed: if the classifier is unavailable, we do NOT bypass — the
+  # command stays blocked by the latch (conservative pre-existing behavior).
+  if is_reset_latch_invocation "$COMMAND"; then
+    exit 0
+  fi
+  if [[ "$(classify_decision "$COMMAND")" == "allow" ]]; then
+    exit 0
+  fi
+
   # Surface which command FIRST engaged the latch so the agent stops
   # misattributing the block to the command it happens to be running now
-  # (the latch is sticky per-session; every later Bash call hits this
-  # branch regardless of what it is). Read the original command + reason
-  # from the latch file when jq is available.
+  # (the latch is sticky per-session; every later MUTATING Bash call hits
+  # this branch). Read the original command + reason from the latch file
+  # when jq is available.
   ORIG_CMD=""
   ORIG_WHY=""
   if command -v jq >/dev/null 2>&1; then
@@ -113,9 +178,9 @@ if [[ -f "$LATCH_FILE" ]]; then
   if [[ -n "$ORIG_CMD" ]]; then
     TRIGGER_NOTE="$TRIGGER_NOTE by this command: \`${ORIG_CMD%%$'\n'*}\`"
     [[ -n "$ORIG_WHY" ]] && TRIGGER_NOTE="$TRIGGER_NOTE (reason: $ORIG_WHY)"
-    TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for the whole session, so every Bash call blocks until it is cleared."
+    TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for mutating commands, so they block until it is cleared (read-only commands and the reset itself are exempt)."
   fi
-  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You CANNOT clear this yourself — the reset is human-only by design. Ask the user to run (use --session with THIS session id, not --current, because --current cannot resolve the session from a human shell): bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
+  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You, the agent, CANNOT clear this in-band: the reset is human-only by design AND a reset run from a latched session resolves no human shell session-id. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   exit 0
 fi

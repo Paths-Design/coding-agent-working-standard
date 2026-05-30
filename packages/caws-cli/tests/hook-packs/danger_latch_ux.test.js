@@ -88,7 +88,12 @@ describe('DANGER-LATCH-UX-001', () => {
   it('replay message recommends --session <id>, not --current', () => {
     const dir = makeProject();
     block(dir, 'rm -rf /some/real/path', SID);
-    const r = block(dir, 'git status', SID); // second cmd hits the sticky latch
+    // The second probe MUST be a mutating command. As of
+    // CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001, read-only commands
+    // (e.g. `git status`) pass through a sticky latch, so they no longer
+    // surface the replay message; a non-scratch `rm` classifies `ask` and
+    // still hits the sticky-latch branch.
+    const r = block(dir, 'rm -rf /some/other/real/path', SID);
     const reason = JSON.parse(r.stdout).reason;
     expect(reason).toContain(`--session ${SID}`);
     expect(reason).toContain('not --current');
