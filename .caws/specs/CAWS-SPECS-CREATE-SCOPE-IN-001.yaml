@@ -5,21 +5,52 @@ mode: feature
 lifecycle_state: active
 created_at: '2026-05-30T07:50:13.721Z'
 updated_at: '2026-05-30T07:50:13.721Z'
+worktree: scope-in-create
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli specs command
+    - caws-cli specs-writer store
+    - caws-cli shell command-metadata
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/store/specs-create-scope-in.test.js
+    - packages/caws-cli/tests/shell/specs-create-scope-in.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When --scope-in is supplied one or more times, the created spec's scope.in
+    contains exactly those paths (in order, de-duplicated) and never the TODO
+    placeholder; the paths are written in the same createSpec transaction, not a
+    follow-on amend.
+  - >-
+    When --scope-in is omitted, behavior is unchanged: scope.in retains the
+    single TODO placeholder line and the command output is byte-compatible with
+    the prior create flow except for the amend-scope guidance line.
+  - >-
+    The create command's Next-steps guidance names `caws specs amend-scope` as
+    the governed way to widen scope later, instead of instructing a raw YAML
+    hand-edit as the only path.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a fresh .caws with no spec of the target id
+    when: '`caws specs create ID --title T --mode feature --risk-tier 3 --scope-in a.ts --scope-in b.ts` runs'
+    then: 'the written spec has scope.in == [a.ts, b.ts] with no TODO placeholder, lifecycle_state active, and exit 0'
+  - id: A2
+    given: a fresh .caws with no spec of the target id
+    when: '`caws specs create ID ...` runs WITHOUT --scope-in'
+    then: 'the written spec scope.in is the single TODO placeholder line, identical to prior behavior'
+  - id: A3
+    given: the same --scope-in path is supplied twice
+    when: 'create runs'
+    then: 'scope.in contains that path once (de-duplicated), preserving first-seen order'
+  - id: A4
+    given: a successful create (with or without --scope-in)
+    when: 'the Next-steps guidance is printed'
+    then: 'the guidance references `caws specs amend-scope` as the sanctioned way to add scope later'
 non_functional: {}
 contracts: []
