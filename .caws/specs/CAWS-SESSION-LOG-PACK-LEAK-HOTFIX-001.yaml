@@ -7,19 +7,72 @@ created_at: '2026-05-30T06:49:53.730Z'
 updated_at: '2026-05-30T06:49:53.730Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/package.json
+    - packages/caws-cli/.npmignore
+    - packages/caws-cli/tests/init/session-log-packaging-guard.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/package.json
+    - packages/caws-cli/.npmignore
+    - packages/caws-cli/tests/init/session-log-packaging-guard.test.js
+    - packages/caws-cli/CHANGELOG.md
+    - docs/failure-lineage.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    THE GUARD MUST OPERATE AT THE npm files-FIELD LAYER, NOT .npmignore.
+    package.json declares files: ["...","templates/hook-packs/**"]. npm's
+    files-field inclusion takes precedence over .npmignore for paths matched
+    by a files glob — so a .npmignore exclusion of
+    templates/hook-packs/claude-code/tmp/ does NOT drop those files from the
+    tarball. CAWS-SESSION-LOG-RELOCATE-001 shipped a .npmignore guard that
+    false-passed in the sparse worktree (the stray tmp/ dirs were not
+    materialized there) but does nothing on canonical, where npm pack still
+    ships 27 stray session files. The fix adds a NEGATION to the files array
+    itself (!templates/hook-packs/claude-code/tmp and
+    !templates/hook-packs/claude-code/tmp/**), which npm honors. Verified:
+    npm pack drops 27→0 stray tmp files while retaining all 41 legitimate
+    pack files.
+  - >-
+    THE TEST MUST NOT FALSE-PASS WHEN THE STRAY DIR IS ABSENT. The packaging
+    guard test seeds a real stray file under
+    templates/hook-packs/claude-code/tmp/<probe-id>/ BEFORE running
+    npm pack --dry-run, then asserts the tarball contains zero files under
+    that tmp/ path, then removes the probe. This makes the test prove the
+    EXCLUSION mechanism works rather than merely observing that no stray
+    files happened to exist (the false-green that let the .npmignore version
+    pass in the sparse worktree). The probe file is created and removed by
+    the test; it never persists.
+  - >-
+    .npmignore IS KEPT AS DEFENSE-IN-DEPTH, NOT THE PRIMARY GUARD. The
+    .npmignore tmp/ exclusion remains (it is correct for any future case
+    where files-field precedence does not apply, e.g. a non-files-matched
+    path), but its comment is updated to state that the files-field negation
+    in package.json is the operative guard.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: The caws-cli package on canonical with real stray tmp/ session dirs on disk.
+    when: npm pack --dry-run runs after the files-field negation is added.
+    then: >-
+      Zero files under templates/hook-packs/claude-code/tmp/ appear in the
+      tarball; all legitimate hook-pack files are still shipped.
+  - id: A2
+    given: The packaging-guard test.
+    when: It runs in a clean checkout where no stray tmp/ dir exists.
+    then: >-
+      The test SEEDS a probe stray file under the pack tmp/ first, so it
+      still exercises (and would fail on) a broken exclusion; it does not
+      false-pass on the mere absence of stray content. The probe is removed
+      after the assertion.
+non_functional:
+  security:
+    - >-
+      Closes the disclosure surface where local session transcripts (command
+      history + working context) shipped in the published package. The
+      RELOCATE slice's .npmignore did not actually close it on canonical;
+      this hotfix does.
 contracts: []
