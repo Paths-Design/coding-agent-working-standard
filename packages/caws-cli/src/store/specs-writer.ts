@@ -463,6 +463,16 @@ export function createSpec(
       parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
+          // Thread the kernel diagnostic's narrowRepair through so the shell's
+          // renderDiagnostics prints the `repair:` line. The kernel already
+          // names the escape for the tier-contract gate ("Add at least one
+          // contract or change risk_tier to 3 or mode to chore."); copying
+          // only d.message silently discarded it, leaving a first-timer with a
+          // bare "requires a contract" and no way forward.
+          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -540,6 +550,16 @@ export function activateSpec(
       parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
+          // Thread the kernel diagnostic's narrowRepair through so the shell's
+          // renderDiagnostics prints the `repair:` line. The kernel already
+          // names the escape for the tier-contract gate ("Add at least one
+          // contract or change risk_tier to 3 or mode to chore."); copying
+          // only d.message silently discarded it, leaving a first-timer with a
+          // bare "requires a contract" and no way forward.
+          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -677,6 +697,16 @@ export function closeSpec(
       parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
+          // Thread the kernel diagnostic's narrowRepair through so the shell's
+          // renderDiagnostics prints the `repair:` line. The kernel already
+          // names the escape for the tier-contract gate ("Add at least one
+          // contract or change risk_tier to 3 or mode to chore."); copying
+          // only d.message silently discarded it, leaving a first-timer with a
+          // bare "requires a contract" and no way forward.
+          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -887,6 +917,16 @@ export function archiveSpec(
       parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
+          // Thread the kernel diagnostic's narrowRepair through so the shell's
+          // renderDiagnostics prints the `repair:` line. The kernel already
+          // names the escape for the tier-contract gate ("Add at least one
+          // contract or change risk_tier to 3 or mode to chore."); copying
+          // only d.message silently discarded it, leaving a first-timer with a
+          // bare "requires a contract" and no way forward.
+          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -1086,6 +1126,16 @@ export function retireDraftSpec(
       parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
+          // Thread the kernel diagnostic's narrowRepair through so the shell's
+          // renderDiagnostics prints the `repair:` line. The kernel already
+          // names the escape for the tier-contract gate ("Add at least one
+          // contract or change risk_tier to 3 or mode to chore."); copying
+          // only d.message silently discarded it, leaving a first-timer with a
+          // bare "requires a contract" and no way forward.
+          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
           data: { source_rule: d.rule },
         })
       )
