@@ -7,20 +7,30 @@ created_at: '2026-05-31T15:36:20.049Z'
 updated_at: '2026-05-31T15:36:45.890Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli jest coverage configuration (collectCoverageFrom)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/jest.config.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'collectCoverageFrom targets the compiled vNext surface (dist/store/**/*.js + dist/shell/**/*.js) plus the legacy JS files that runtime actually loads (src/index.js, src/config/index.js, src/error-handler.js, src/utils/detection.js, src/utils/error-categories.js) — NOT the prior src/**/*.js glob that never intersected the store/shell code the 1450 tests exercise.'
+  - 'The coverage report remaps dist/store/*.js and dist/shell/*.js line hits back to their src/**/*.ts sources via the existing .js.map sidecars (tsconfig.vnext.json sets sourceMap: true). The report lists .ts rows, not raw dist/*.js rows.'
+  - 'No test files are rewritten and the Stryker mutation contract is intact: tests still require("../../dist/store/...") and Stryker still mutates dist/. Only the coverage glob changes.'
+  - 'No coverageThreshold is added in this slice. Establishing the honest baseline number is the deliverable; the floor is a follow-on once the real gaps are visible.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'jest.config.js with collectCoverageFrom repointed at dist/store + dist/shell + the five legacy src JS files'
+    when: 'npx jest --coverage runs after a fresh dist build'
+    then: 'the text coverage table lists src/store/*.ts and src/shell/*.ts rows with real percentages (source-map remapped), not a flat dist/*.js listing'
+  - id: A2
+    given: 'the repointed coverage config'
+    when: 'the full CLI suite runs (npx jest)'
+    then: 'it still reports 1450 pass / 11 skipped / 0 fail — the coverage-glob change does not alter test selection or behavior'
+  - id: A3
+    given: 'the repointed coverage config'
+    when: 'npm run typecheck and the Stryker import paths are checked'
+    then: 'typecheck is unaffected (no .ts or tsconfig touched) and tests still resolve ../../dist/store/... (SUT not moved)'
 non_functional: {}
 contracts: []
