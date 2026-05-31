@@ -257,25 +257,29 @@ describe('DANGER-LATCH-CALIBRATION-001 A5: gh api mutating verbs NOT allow', () 
 // ===========================================================================
 
 describe('DANGER-LATCH-CALIBRATION-001 A6: destructive denies preserved', () => {
-  it('git push --force origin main → ask (existing behavior NOT weakened)', () => {
+  // CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: force-push and reset --hard were
+  // promoted from ask → deny. Since ask-class is now allowed without latching,
+  // these catastrophic ops must be DENY to stay hard-blocked. rebase and
+  // cherry-pick are recoverable (reflog) and remain ask (→ now advisory-only).
+  it('git push --force origin main → deny (catastrophic, hard-blocked)', () => {
     const { decision, reason } = classify('git push --force origin main');
-    expect(decision).not.toBe('allow');
+    expect(decision).toBe('deny');
     expect(reason.toLowerCase()).toContain('force');
   });
 
-  it('git reset --hard HEAD → ask (existing)', () => {
+  it('git reset --hard HEAD → deny (catastrophic, hard-blocked)', () => {
     const { decision } = classify('git reset --hard HEAD');
-    expect(decision).not.toBe('allow');
+    expect(decision).toBe('deny');
   });
 
-  it('git rebase main → ask (existing)', () => {
+  it('git rebase main → ask (recoverable; now advisory-only, not latched)', () => {
     const { decision } = classify('git rebase main');
-    expect(decision).not.toBe('allow');
+    expect(decision).toBe('ask');
   });
 
-  it('git cherry-pick abc1234 → ask (existing)', () => {
+  it('git cherry-pick abc1234 → ask (recoverable; now advisory-only, not latched)', () => {
     const { decision } = classify('git cherry-pick abc1234');
-    expect(decision).not.toBe('allow');
+    expect(decision).toBe('ask');
   });
 
   it('read-only git is still allow: git status → allow', () => {
@@ -613,8 +617,11 @@ describe('DANGER-LATCH-WORKFLOW-CALIBRATION-001 A3: branch-create allowed, disca
     expect(classify('git switch main').decision).toBe('allow');
   });
 
-  it('git checkout . → ask (discards all changes)', () => {
-    expect(classify('git checkout .').decision).not.toBe('allow');
+  it('git checkout . → deny (discards all changes; promoted from ask)', () => {
+    // CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: bulk discard is catastrophic
+    // (unrecoverable working-tree loss) → deny. A bare `git checkout main`
+    // (ref switch) stays ask below.
+    expect(classify('git checkout .').decision).toBe('deny');
   });
 
   it('git checkout main → ask (bare checkout to existing ref not auto-admitted)', () => {

@@ -99,9 +99,26 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r">\s*/dev/sd", "raw device write"),
     # Permission escalation
     (r"\bchmod\b.*\+s\b", "setuid/setgid bit"),
+    (r"\bchmod\b.*\b777\b", "chmod 777"),
     # System control
     (r"\b(shutdown|reboot)\b", "system shutdown/reboot"),
     (r"\binit\s+[06]\b", "system runlevel change"),
+    # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: catastrophic git/shell ops
+    # promoted here from CONFIRM (ask) so they HARD-BLOCK. These are the
+    # irreversible / history-rewriting / credential-exposing operations that
+    # the failure lineage (Entry 1 force-push origin, Entry 17, Entry 34)
+    # treats as deny-class. Previously they were "ask" and relied on the
+    # warn-then-latch path for enforcement; now that ask-class is allowed
+    # without latching, they must be deny to stay enforced.
+    (r"\bgit\s+reset\s+--hard\b", "git reset --hard"),
+    (r"\bgit\s+push\s+(-f\b|--force\b|--force-with-lease\b)", "git force push"),
+    (r"\bgit\s+clean\s+-[a-zA-Z]*f", "git clean with force"),
+    (r"\bgit\s+checkout\s+\.\s*$", "git checkout . (discard all changes)"),
+    (r"\bgit\s+restore\s+\.\s*$", "git restore . (discard all changes)"),
+    (r"^sudo\s+(?!npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)", "sudo command"),
+    (r"\bcat\b.*\.(env|ssh/|aws/)", "credential file read"),
+    (r"\bcat\b.*/etc/(passwd|shadow)\b", "system credential read"),
+    (r"\bcat\b.*(id_rsa|credentials)\b", "credential file read"),
     # CAWS spec/policy/waiver protection (RC defect #8).
     # Naked rm/mv on .caws/specs/, .caws/policy.yaml, or .caws/waivers/ bypasses
     # the audit trail. Use `caws specs close|archive`, `caws waiver revoke`,
@@ -114,30 +131,26 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
      "naked rm/mv on .caws/waivers/*.yaml — use `caws waiver revoke <id>`"),
 ]
 
-# Segment-level regex patterns that require user confirmation.
+# Segment-level regex patterns that require user confirmation (ask).
+#
+# CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: ask-class commands are now ALLOWED
+# without latching (see block-dangerous.sh `ask` arm). What remains here is the
+# RECOVERABLE / non-catastrophic set — history-rewriting-but-reversible git
+# ops and environment sprawl. The catastrophic members (force-push,
+# reset --hard, clean -f, checkout./restore. discard, chmod 777, sudo,
+# credential reads) were PROMOTED to DENY_SEGMENT_PATTERNS so they still
+# hard-block. Anything left in this list is flagged with a non-blocking
+# advisory and allowed to run.
 CONFIRM_SEGMENT_PATTERNS: list[tuple[str, str]] = [
-    # Git destructive operations
-    (r"\bgit\s+reset\s+--hard\b", "git reset --hard"),
-    (r"\bgit\s+push\s+(-f\b|--force\b|--force-with-lease\b)", "git force push"),
-    (r"\bgit\s+clean\s+-[a-zA-Z]*f", "git clean with force"),
-    (r"\bgit\s+checkout\s+\.\s*$", "git checkout . (discard all changes)"),
-    (r"\bgit\s+restore\s+\.\s*$", "git restore . (discard all changes)"),
+    # Git history replay — recoverable (reflog), not catastrophic.
     (r"\bgit\s+rebase\b", "git rebase (rewrites branch history)"),
     (r"\bgit\s+cherry-pick\b", "git cherry-pick (replays commits across branches)"),
-    # chmod 777
-    (r"\bchmod\b.*\b777\b", "chmod 777"),
-    # History manipulation
+    # History manipulation (shell history clear — recoverable annoyance).
     (r"\bhistory\s+-c\b", "history clear"),
-    # sudo (not in allowed list)
-    (r"^sudo\s+(?!npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)", "sudo command"),
-    # venv creation (sprawl prevention)
+    # venv creation (sprawl prevention — advisory only).
     (r"\bpython3?\s+-m\s+venv\b", "virtual environment creation"),
     (r"\bvirtualenv\s", "virtual environment creation"),
     (r"\bconda\s+create\b", "conda environment creation"),
-    # Credential file reads
-    (r"\bcat\b.*\.(env|ssh/|aws/)", "credential file read"),
-    (r"\bcat\b.*/etc/(passwd|shadow)\b", "system credential read"),
-    (r"\bcat\b.*(id_rsa|credentials)\b", "credential file read"),
 ]
 
 GIT_GLOBAL_OPTIONS_WITH_VALUE: set[str] = {

@@ -57,20 +57,6 @@ danger_latch_file() {
   printf '%s/danger-latch-%s.json\n' "$(danger_state_dir)" "$safe_session"
 }
 
-# DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: the per-session WARN MARKER. A
-# sibling sentinel in the SAME danger_state_dir, keyed by the SAME
-# sanitize_session transform danger_latch_file uses — so the warn and the
-# latch ALWAYS resolve to the same session by construction (the first ask
-# warns under session X, the second ask latches under the SAME X; a
-# separately-resolved id could warn under X but latch under "unknown",
-# defeating the grace). The marker presence is the only state that matters;
-# its body is advisory.
-danger_warn_file() {
-  local safe_session
-  safe_session=$(_danger_safe_session "$1")
-  printf '%s/danger-warn-%s.json\n' "$(danger_state_dir)" "$safe_session"
-}
-
 # Thin adapters over the canonical lib/emit.sh primitives. Kept as named
 # wrappers so the 8 call-sites below stay unchanged; the envelope JSON
 # lives only in lib/emit.sh (HOOK-LIB-CONSOLIDATION-001 T3a).
@@ -98,34 +84,6 @@ record_danger_latch() {
       command: $command,
       message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
     }' > "$file"
-}
-
-# DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: write the per-session warn marker
-# on the FIRST flagged `ask`. Its presence (not its body) is what the next
-# ask consults to decide warn-vs-latch. Records the command/reason for
-# diagnostics + for the reset's audit. Best-effort: a failed write simply
-# means the next ask will also warn (fail toward the grace, not the freeze —
-# acceptable because `deny` and classifier-unavailable still latch on first
-# occurrence regardless).
-record_danger_warn() {
-  local file="$1"
-  local reason="$2"
-  local command="$3"
-
-  mkdir -p "$(dirname "$file")"
-  jq -n \
-    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg hook "block-dangerous.sh" \
-    --arg reason "$reason" \
-    --arg command "$command" \
-    '{
-      ts: $ts,
-      hook: $hook,
-      kind: "warn",
-      reason: $reason,
-      command: $command,
-      message: "First flagged command warned (no sticky latch yet). The NEXT flagged command WILL arm the session latch."
-    }' > "$file" 2>/dev/null || true
 }
 
 # Classify a command via classify_command.py, echoing the decision
@@ -187,7 +145,6 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
 fi
 
 LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
-WARN_FILE="$(danger_warn_file "$SESSION_ID")"
 if [[ -f "$LATCH_FILE" ]]; then
   # The latch exists to stop further MUTATION pending a human reset — not to
   # wedge the entire session. Two carve-outs let a latched agent stay useful
@@ -301,24 +258,26 @@ case "$DECISION" in
     exit 0
     ;;
   ask)
-    # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001 — warn-then-latch.
-    # FIRST flagged ask in this session (no warn marker yet): WARN, do NOT
-    # latch. Claude Code's own approval pause already puts a human in the
-    # loop for this one command; if approved, the agent continues with NO
-    # sticky state to clear. SECOND flagged ask (warn marker present): the
-    # agent is thrashing, not making a single honest mistake — arm the
-    # sticky latch (the session-wide freeze) until a human reset.
-    if [[ -f "$WARN_FILE" ]]; then
-      # Second strike → latch.
-      record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
-      FULL_REASON="$REASON. SECOND flagged command this session — the session danger latch is NOW ARMED. STOP: do not run another Bash command. Every subsequent Bash call will be blocked until a human resets the latch. You, the agent, CANNOT clear it — ask the USER to run, from their own shell: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Do not rephrase, wrap, reorder, or alias this command to retry. Command was: $COMMAND"
-      emit_ask_json "$FULL_REASON"
-      exit 0
-    fi
-    # First strike → warn only (no latch).
-    record_danger_warn "$WARN_FILE" "$REASON" "$COMMAND"
-    FULL_REASON="$REASON. Claude Code will PAUSE and ask the user to approve before running. NOTE: a latch is NOT yet armed — this is your ONE warning. The NEXT flagged command WILL arm the session-wide danger latch, which blocks every later Bash call until a human reset you cannot perform. STOP and reconsider before running another flagged command: do not rephrase, wrap, reorder, or alias to bypass this. If approval is not granted, stop and ask the user for the next step. Command was: $COMMAND"
-    emit_ask_json "$FULL_REASON"
+    # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001 — ask-class is allowed without
+    # latching. The prior warn-then-latch protocol (DANGER-LATCH-APPROVAL-AND-
+    # FEEDBACK-001) armed a session-wide freeze on the SECOND flagged ask,
+    # which over-governed everyday commands the classifier cannot prove
+    # read-only — `npm run <script>` (eslint/jest/tsc), `git rebase`,
+    # `git cherry-pick`, `git commit --amend`, unknown git/gh/npm
+    # subcommands. None of those are catastrophic; latching the whole
+    # session on them is friction without safety payoff.
+    #
+    # The relaxation is scoped to the *ask verdict only*. The catastrophic
+    # `deny` class (rm -rf /, force-push, reset --hard, clean -f, deleted-tag
+    # push, pipe-to-shell, git init) still hard-blocks and latches immediately
+    # below, and the fail-closed paths (malformed classifier decision, and the
+    # classifier-unavailable early-exit near the top of this script) still
+    # latch. Only this arm changed.
+    #
+    # Surface the classifier's reason on stderr as a non-blocking advisory so
+    # the operator still sees why a command was flagged, then allow. No warn
+    # marker, no latch file, no block.
+    printf 'caws advisory (non-blocking): %s\n' "$REASON" >&2
     exit 0
     ;;
   *)
