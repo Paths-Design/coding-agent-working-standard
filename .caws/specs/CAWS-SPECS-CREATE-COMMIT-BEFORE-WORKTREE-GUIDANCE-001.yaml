@@ -2,9 +2,11 @@ id: CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001
 title: 'specs create guidance: commit the spec before caws worktree create so the happy path avoids the ''applied but NOT committed'' warning; also point at how to validate'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Both guidance branches now number the steps and put ''git add + commit the spec'' BEFORE the worktree-create line, and name caws specs show / caws doctor as the inspect path (no specs validate verb in v11). 32/32 specs.test.js green; additive stdout only — spec_created event + audit-commit surfacing unchanged.'
 created_at: '2026-05-31T14:23:45.378Z'
-updated_at: '2026-05-31T14:23:45.378Z'
+updated_at: '2026-05-31T14:31:50.185Z'
 blast_radius:
   modules:
     - caws-cli specs create — post-create guidance text
