@@ -3,6 +3,7 @@ title: 'Enforce a CLI coverage floor above baseline via targeted backfill + cove
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: wt-coverage-floor
 created_at: '2026-05-31T18:20:22.051Z'
 updated_at: '2026-05-31T18:21:41.031Z'
 blast_radius:
