@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: capability-engine-s0
 created_at: '2026-05-31T18:34:36.728Z'
-updated_at: '2026-05-31T18:34:36.728Z'
+updated_at: '2026-05-31T18:38:31.049Z'
 blast_radius:
   modules:
     - 'caws-cli hook-pack: command-safety classifier template + its calibration harness'
@@ -19,6 +19,7 @@ scope:
     - '.caws/command-adapters.schema.json'
     - '.caws/command-adapters.example.yaml'
     - 'docs/architecture/command-capability-taxonomy.md'
+    - .caws/command-adapters.example.json
   out:
     - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
 invariants:
