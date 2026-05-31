@@ -226,7 +226,7 @@ When git worktrees are active for parallel agent work:
 - Use the main repo's venv (`source <main-repo>/.venv/bin/activate`), not a per-worktree one.
 - Commits to the base branch during active worktrees should use the `merge(worktree):` format.
 - `caws claim` shows worktree ownership; `caws claim --takeover` acquires it from a foreign session and writes a durable `prior_owners` audit.
-- v11 does not ship orchestration commands for worktree create/destroy/merge — use `git worktree` directly. Lifecycle helpers return in v11.1.
+- v11.1 **does** ship the worktree lifecycle commands: `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse`. Use them — do not fall back to raw `git worktree` / `git merge` by default. In particular, **`caws worktree merge <name>` is the governed merge path**: it runs `git checkout <base>` + `git merge --no-ff` + auto-closes the bound spec (`spec_closed`) + appends `worktree_merged`, all as one transaction over the v11 flat-map `worktrees.json`. Prefer it over a manual `git checkout main && git merge --no-ff` — the manual base checkout is a bare `git checkout <existing-branch>`, which the danger-latch classifier flags as potentially discarding work (it auto-admits only `checkout -b`), so doing the merge by hand can trip the latch and require a human reset. The governed command does the base checkout *inside* the transaction and avoids that trap. (The old `WORKTREE-MERGE-V11-SHAPE-001` registry-shape crash that once forced the raw-git fallback is fixed — `caws worktree merge` reads the flat-map registry natively.)
 
 See `.claude/rules/worktree-isolation.md` for the full list.
 
