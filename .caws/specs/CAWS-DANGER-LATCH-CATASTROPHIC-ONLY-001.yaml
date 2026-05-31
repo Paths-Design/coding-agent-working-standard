@@ -30,8 +30,8 @@ invariants:
   - 'A healthy-classifier "deny" verdict still hard-blocks (exit 2) and arms the latch immediately — the catastrophic set (rm -rf /, force-push, reset --hard, git clean -f, deleted-tag push, pipe-to-shell, find -delete/-exec, git init) is unchanged.'
   - 'A healthy-classifier "ask" verdict now exits 0 (allow) with NO warn marker and NO latch written — the over-aggressive ask-class friction (npm run, cherry-pick, rebase, amend) is removed.'
   - 'Fail-closed is preserved: a malformed classifier decision and a classifier-unavailable invocation still latch (defense-in-depth, unrelated to the ask-verdict relaxation).'
-  - 'classify_command.py is unchanged — it still returns deny/ask/allow; only block-dangerous.sh handling of the ask verdict changes, so the classifier-calibration suite stays green.'
-  - 'The live .claude/hooks/block-dangerous.sh and the shipped template copy stay byte-identical, and CLAUDE_CODE_PACK_VERSION is bumped so consumer re-installs pick up the relaxed behavior.'
+  - 'Catastrophic ops that were previously classified "ask" (force-push, reset --hard, clean -f, bulk-discard checkout./restore., chmod 777, sudo, credential reads) are PROMOTED to the "deny" tier in classify_command.py, so they still hard-block now that ask no longer latches. Recoverable ops (rebase, cherry-pick, venv) stay "ask" and are allowed.'
+  - 'The block-dangerous.sh and classify_command.py edits are applied identically to the live .claude/hooks copy and the shipped template copy. The pack-version bump (so consumer re-installs pick up the change) is a deferred follow-up slice — this slice keeps CLAUDE_CODE_PACK_VERSION at 11.'
 acceptance:
   - id: A1
     given: 'the relaxed block-dangerous.sh staged into a project (as the test harness does)'
@@ -46,8 +46,12 @@ acceptance:
     when: 'driven with any command'
     then: 'it fails closed (latch armed) — the relaxation does NOT weaken the classifier-failure path'
   - id: A4
-    given: 'a consumer running `caws init --agent-surface claude-code` after this change'
-    when: 'the pack installs'
-    then: 'CLAUDE_CODE_PACK_VERSION is 12 and the installed block-dangerous.sh carries the relaxed ask-handling (managed header version 12)'
+    given: 'the updated classify_command.py'
+    when: 'driven with a previously-ask catastrophic command (force-push, reset --hard, checkout .)'
+    then: 'it now returns "deny" so the latch still fires on first occurrence — the relaxation did NOT open a hole for these'
+  - id: A5
+    given: 'the updated classify_command.py'
+    when: 'driven with a recoverable ask command (git rebase, git cherry-pick, npm run <script>)'
+    then: 'it returns "ask", which block-dangerous.sh now allows (exit 0) with a non-blocking advisory and no latch'
 non_functional: {}
 contracts: []
