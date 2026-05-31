@@ -281,25 +281,44 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const scopeInWasPopulated =
     opts.scopeIn !== undefined && opts.scopeIn.length > 0;
   out('');
+  // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
+  // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
+  // `caws worktree create`. The body fields (invariants/acceptance) have no CLI
+  // setter and are hand-edited, which leaves the spec YAML dirty; walking that
+  // dirty tree straight into `worktree create` produces the confusing "the
+  // transition was applied but NOT committed" warning. Committing first keeps
+  // the audit commit clean. We also name how to inspect the filled-in spec —
+  // there is intentionally no `caws specs validate` verb in v11.
   if (scopeInWasPopulated) {
-    out('Next: scope.in is set from --scope-in; fill in invariants + acceptance, then:');
+    out('Next: scope.in is set from --scope-in. Fill in invariants + acceptance, then:');
     out(
-      `  caws worktree create <name> --spec ${outcome.id}  (binds + enforces scope.in)`
+      `  1. caws specs show ${outcome.id}   (re-read the spec; or run \`caws doctor\` to check for drift)`
     );
     out(
-      '  caws specs amend-scope ' +
+      `  2. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
+    );
+    out(
+      `  3. caws worktree create <name> --spec ${outcome.id}   (binds + enforces scope.in)`
+    );
+    out(
+      '  Later: caws specs amend-scope ' +
         outcome.id +
-        ' --add <path>   (the governed way to widen scope later — no hand-edit)'
+        ' --add <path>   (the governed way to widen scope — no hand-edit)'
     );
   } else {
     out('Next: set scope.in via the governed mutation, not a raw YAML edit:');
     out(
-      '  caws specs amend-scope ' +
+      '  1. caws specs amend-scope ' +
         outcome.id +
         ' --add <path> --add <path>   (writes canonical, appends an audit event)'
     );
-    out('  Then fill in invariants + acceptance and create the worktree:');
-    out(`  caws worktree create <name> --spec ${outcome.id}`);
+    out('  2. Fill in invariants + acceptance, then inspect with `caws specs show ' +
+        outcome.id +
+        '` (or `caws doctor`).');
+    out(
+      `  3. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
+    );
+    out(`  4. caws worktree create <name> --spec ${outcome.id}`);
     out(
       '  (scope.in is authoritative inside that worktree; base-branch writes are'
     );

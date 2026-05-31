@@ -100,6 +100,22 @@ describe('A1: caws specs create', () => {
     expect(r.stdout).toMatch(/worktree-write-guard/);
     expect(r.stdout).toMatch(/caws-contracts\.md/);
 
+    // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001 A2: the no-scope-in
+    // guidance must tell the first-timer to COMMIT the spec before
+    // `caws worktree create`, so the guided happy path does not walk a dirty
+    // (hand-edited) spec into worktree create and hit the confusing "the
+    // transition was applied but NOT committed" warning observed in the probe.
+    // The commit instruction must precede the worktree-create line.
+    expect(r.stdout).toMatch(/git add[\s\S]*commit/i);
+    const commitIdx = r.stdout.search(/git add/i);
+    const wtIdx = r.stdout.search(/caws worktree create/);
+    expect(commitIdx).toBeGreaterThanOrEqual(0);
+    expect(wtIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeLessThan(wtIdx);
+    // A3: it names a way to inspect/validate the filled-in spec before
+    // proceeding (there is intentionally no `caws specs validate` verb in v11).
+    expect(r.stdout).toMatch(/caws specs show FEAT-001|caws doctor/);
+
     const filePath = path.join(cawsDir, 'specs/FEAT-001.yaml');
     expect(fs.existsSync(filePath)).toBe(true);
     const content = fs.readFileSync(filePath, 'utf8');
@@ -107,6 +123,35 @@ describe('A1: caws specs create', () => {
     expect(content).toMatch(/^lifecycle_state: active/m);
     expect(content).toMatch(/^mode: feature/m);
     expect(content).toMatch(/^risk_tier: 3/m);
+  });
+
+  // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001 A1: the --scope-in
+  // branch of the guidance must ALSO instruct committing the spec before
+  // worktree create (and naming a validate path), not only the no-scope-in
+  // branch. The probe used --scope-in, so this is the branch it actually hit.
+  it('A1: --scope-in guidance commits the spec before worktree create + names a validate path', () => {
+    const r = capture(runSpecsCreateCommand, {
+      cwd: repoRoot,
+      id: 'FEAT-009',
+      title: 'scope-in feature',
+      mode: 'feature',
+      riskTier: 3,
+      scopeIn: ['src/'],
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/created FEAT-009/);
+    // The commit instruction precedes the worktree-create line.
+    expect(r.stdout).toMatch(/git add[\s\S]*commit/i);
+    const commitIdx = r.stdout.search(/git add/i);
+    const wtIdx = r.stdout.search(/caws worktree create/);
+    expect(commitIdx).toBeGreaterThanOrEqual(0);
+    expect(wtIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeLessThan(wtIdx);
+    // Names a way to inspect/validate the spec.
+    expect(r.stdout).toMatch(/caws specs show FEAT-009|caws doctor/);
+    // The existing scope-in-branch guidance is preserved.
+    expect(r.stdout).toMatch(/caws specs amend-scope FEAT-009 --add/);
+    expect(r.stdout).toMatch(/caws-contracts\.md/);
   });
 
   it('appends a spec_created event with correct shape', () => {
