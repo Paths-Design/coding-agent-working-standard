@@ -35,6 +35,23 @@ module.exports = {
   ],
   coverageReporters: ['text', 'lcov', 'html'],
   coverageDirectory: 'coverage',
+  // Enforced floor on the vNext store/shell surface (CAWS-CLI-COVERAGE-FLOOR-001).
+  // Set ABOVE the pre-backfill honest baseline (76.84 stmt / 63.98 branch /
+  // 75.61 func / 79.20 lines) after a targeted backfill of the worst gap files
+  // (local gate evaluators, register option-parsing, git-sparse-checkout,
+  // init-hook-pack render, the legacy JS glue, json/yaml-store, scope-match,
+  // gate-result-contract). CI already runs `turbo run test -- --coverage`, so a
+  // miss here surfaces as a red PR check with no extra wiring. Tuned to sit just
+  // under the measured post-backfill numbers so the gate bites on regression
+  // without being flaky; raise it in a follow-on as more gaps are filled.
+  coverageThreshold: {
+    global: {
+      statements: 78,
+      branches: 67,
+      functions: 77,
+      lines: 80,
+    },
+  },
   verbose: true,
   transformIgnorePatterns: ['node_modules/(?!(inquirer)/)'],
   moduleNameMapper: {
