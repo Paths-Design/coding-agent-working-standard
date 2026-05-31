@@ -3,7 +3,6 @@ title: 'caws specs create --help hides the removed v10 --type alias (still parse
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: hide-legacy-type
 created_at: '2026-05-31T14:10:16.421Z'
 updated_at: '2026-05-31T14:10:16.421Z'
 blast_radius:
