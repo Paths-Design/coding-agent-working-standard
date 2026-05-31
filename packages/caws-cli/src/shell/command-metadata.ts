@@ -77,6 +77,16 @@ export interface CommandOptionMeta {
    * intent so the metadata is self-describing.
    */
   readonly collect?: boolean;
+  /**
+   * True for an option that must stay REGISTERED (Commander parses it) but must
+   * NOT appear in `--help`. register.ts registers it via
+   * `new Option(flag, desc).hideHelp()`. Used for removed-but-still-accepted
+   * legacy aliases (e.g. `specs create --type`) whose only purpose is to route a
+   * v10 muscle-memory invocation to a helpful "use --mode instead" migration
+   * error rather than Commander's generic "unknown option" — while keeping the
+   * help options list free of flags a first-timer would misread as current.
+   */
+  readonly hidden?: boolean;
 }
 
 /** A leaf command (one that has an `.action()` handler). */
@@ -159,6 +169,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--type <type>',
           description:
             'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',
+          // CAWS-SPECS-CREATE-HIDE-LEGACY-TYPE-001: keep --type parseable (so a v10
+          // `--type` invocation hits the handler's "use --mode" migration error,
+          // not Commander's generic "unknown option"), but hide it from --help so
+          // first-timers don't read a removed alias as a current option.
+          hidden: true,
         },
         DATA_OPTION,
       ],
