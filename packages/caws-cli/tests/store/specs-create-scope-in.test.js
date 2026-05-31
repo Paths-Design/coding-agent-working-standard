@@ -48,9 +48,9 @@ function extractScopeIn(yaml) {
   let inList = false;
   for (const line of lines) {
     if (line === 'scope:') { inScope = true; continue; }
-    if (inScope && /^  in:\s*$/.test(line)) { inList = true; continue; }
+    if (inScope && /^ {2}in:\s*$/.test(line)) { inList = true; continue; }
     if (inList) {
-      const m = line.match(/^    - '?(.*?)'?\s*$/);
+      const m = line.match(/^ {4}- '?(.*?)'?\s*$/);
       if (m) { out.push(m[1].replace(/''/g, "'")); continue; }
       break; // first non-list line (e.g. `  out:`) ends the in: list
     }

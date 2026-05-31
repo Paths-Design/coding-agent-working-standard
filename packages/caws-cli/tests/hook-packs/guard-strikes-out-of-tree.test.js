@@ -111,7 +111,6 @@ const maybe = CAPABLE_BASH ? describe : describe.skip;
 if (!CAPABLE_BASH) {
   // Never silently pass: announce why the suite is skipped so a CI without a
   // bash 4+ is visibly degraded rather than falsely green.
-  // eslint-disable-next-line no-console
   console.warn(
     '[guard-strikes-out-of-tree] SKIPPED: no bash whose BASH_REMATCH populates ' +
       'the worktree-path capture (macOS /bin/bash is 3.2). Install a bash 4+ to run.'
