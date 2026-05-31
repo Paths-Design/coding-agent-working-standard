@@ -27,6 +27,7 @@ import re
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -308,6 +309,187 @@ ALLOWED_NPM_SUBCOMMANDS: set[str] = {
 # "ask", not the default "allow". Outside this set, the classifier's
 # global default applies.
 GOVERNED_FAMILIES: set[str] = {"git", "gh", "npm"}
+
+
+# ===========================================================================
+# CAPABILITY ENGINE — Slice 0 scaffolding (HOOK-CAPABILITY-ENGINE-000)
+# ---------------------------------------------------------------------------
+# This block adds the capability-classification scaffolding: a typed
+# CommandFact, the abstract facet model, the facet->decision lattice, a
+# shared recursion budget, and the user-extensible adapter sidecar loader.
+#
+# ZERO RUNTIME DECISION CHANGE IN SLICE 0: the capability pass
+# (classify_capability_pass) is a stub that always returns None, so every
+# command receives the identical decision it did before this block existed.
+# The facet model + lattice are DATA here; Slices 2-3 activate them.
+#
+# Doctrine: docs/architecture/command-capability-taxonomy.md is the governed
+# source of truth. The lattice reads ABSTRACT FACETS, never concrete tool
+# tokens. Concrete labels are trace/debug only.
+# ===========================================================================
+
+# Shared recursion budget. One budget bounds total re-entry depth across
+# segmentation, nested-shell unwrap, command substitution, and (future)
+# opaque-exec recursion. Exhaustion yields a conservative "ask", never an
+# unbounded recursion / stack overflow in the hook.
+MAX_RECURSION_DEPTH: int = 8
+
+# Closed facet enums (mirror of command-adapters.schema.json + the doctrine
+# doc). The lattice is defined over these abstract values only.
+FACET_KINDS: set[str] = {
+    "READ", "MUTATE", "DESTROY", "EXEC", "PRIV_ESC", "SECRETS_READ", "NONE",
+}
+FACET_DOMAINS: set[str] = {
+    "local", "remote_orchestrator", "cloud", "container", "iac", "http",
+    "process", "filesystem", "unknown",
+}
+FACET_SCOPES: set[str] = {"narrow", "broad", "prod", "unknown"}
+FACET_REVERSIBILITY: set[str] = {"reversible", "partial", "irreversible", "unknown"}
+FACET_OPACITY: set[str] = {"literal", "opaque", "none"}
+FACET_BLAST: set[str] = {"single", "multi", "host", "cluster", "unknown"}
+
+# Mutation-amplifier flags. These raise scope/reversibility, but ONLY in the
+# presence of a mutation/destroy kind — a bare amplifier on a READ does not
+# escalate (avoids the routine-dev-loop overblock the regex proposal caused).
+MUTATION_AMPLIFIER_FLAGS: set[str] = {
+    "--force", "-f", "--recursive", "-r", "-R", "--all", "--auto-approve",
+    "-y", "--yes", "--prune", "--delete", "--destroy", "--volumes",
+}
+
+# Scope indicators that raise scope to broad/prod.
+BROAD_SCOPE_INDICATORS: set[str] = {"--all", "-A", "--all-namespaces"}
+PROD_SCOPE_INDICATORS: set[str] = {"prod", "production", "staging", "live"}
+
+
+@dataclass
+class CommandFact:
+    """Typed facts about one command segment.
+
+    Abstract facets (kind/domain/scope/reversibility/opacity/blast_radius)
+    are what the policy lattice reads. The concrete `trace_label` is for
+    debug output only and is never consulted by a decision branch.
+    """
+
+    executable: str = ""
+    executable_path: str = ""
+    argv: list[str] = field(default_factory=list)
+    wrappers: list[str] = field(default_factory=list)
+    subcommand_path: list[str] = field(default_factory=list)
+    flags: set[str] = field(default_factory=set)
+    targets: list[str] = field(default_factory=list)
+    payload: str = ""
+    parse_confidence: str = "high"  # high | partial | low
+    # abstract facets
+    kind: str = "NONE"
+    domain: str = "unknown"
+    scope: str = "narrow"
+    reversibility: str = "unknown"
+    opacity: str = "none"
+    blast_radius: str = "single"
+    trace_label: str = ""  # non-authoritative
+
+    def facets(self) -> dict[str, str]:
+        return {
+            "kind": self.kind,
+            "domain": self.domain,
+            "scope": self.scope,
+            "reversibility": self.reversibility,
+            "opacity": self.opacity,
+            "blast_radius": self.blast_radius,
+        }
+
+
+# Facet -> decision lattice. GOVERNED CORE: this table is authoritative and
+# reads abstract facets only. Slice 0 ships it as data; classify_capability_pass
+# is a stub, so this governs nothing yet (Slices 2-3 activate it).
+def lattice_decision(fact: CommandFact) -> tuple[str, str] | None:
+    """Map abstract facets -> (decision, reason), or None for no opinion.
+
+    Evaluated top-down, first match wins. Not called by the Slice 0 stub.
+    """
+    k, scope, rev, blast = fact.kind, fact.scope, fact.reversibility, fact.blast_radius
+    label = fact.trace_label or k
+    if k == "PRIV_ESC":
+        return "deny", f"privilege escalation ({label})"
+    if k == "SECRETS_READ":
+        return "deny", f"secret/credential read ({label})"
+    if k == "DESTROY" and rev == "irreversible":
+        return "deny", f"irreversible destruction ({label})"
+    if k == "DESTROY" and (scope in {"prod", "broad"} or blast in {"cluster", "host", "multi"}):
+        return "deny", f"broad/prod destruction ({label})"
+    if k == "EXEC" and fact.opacity == "opaque":
+        return "ask", f"opaque execution — cannot prove payload ({label})"
+    if k == "DESTROY":
+        return "ask", f"destructive operation ({label})"
+    if k == "MUTATE" and scope in {"prod", "broad"}:
+        return "deny", f"broad/prod mutation ({label})"
+    if k == "MUTATE":
+        return "ask", f"state mutation ({label})"
+    return None  # READ / NONE -> no escalation
+
+
+def load_command_adapters(repo_root: Path) -> dict:
+    """Load the user-extensible adapter sidecar, FAIL CLOSED.
+
+    Reads `.caws/command-adapters.json` (JSON — PyYAML is unavailable in the
+    hook runtime). Returns a validated adapter map, or {} if the sidecar is
+    absent, malformed, version-mismatched, or attempts to exceed its
+    authority (a decision/policy key, an unknown facet value, an unknown
+    capability kind). A bad sidecar is IGNORED — it never weakens the gate.
+
+    Authority boundary (mirrors command-adapters.schema.json):
+      - rows map tool + subcommand-path -> abstract facet assignment only
+      - no decision/allow/deny/policy key may appear
+      - facet values must come from the closed enums above
+    """
+    path = repo_root / ".caws" / "command-adapters.json"
+    try:
+        if not path.is_file():
+            return {}
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}  # unreadable / invalid JSON -> fail closed
+    if not isinstance(raw, dict) or raw.get("version") != 1:
+        return {}
+    adapters = raw.get("adapters")
+    if not isinstance(adapters, dict):
+        return {}
+    clean: dict = {}
+    for tool, spec in adapters.items():
+        if not isinstance(spec, dict):
+            return {}  # malformed -> fail closed entirely
+        rows = spec.get("subcommands")
+        if not isinstance(rows, list):
+            return {}
+        validated_rows = []
+        for row in rows:
+            if not isinstance(row, dict) or set(row) - {"path", "facets"}:
+                return {}
+            facets = row.get("facets")
+            path_tokens = row.get("path")
+            if not isinstance(facets, dict) or not isinstance(path_tokens, list):
+                return {}
+            # AUTHORITY BOUNDARY: no decision/policy key, valid facet values only.
+            if {"decision", "allow", "deny", "ask", "policy", "outcome"} & set(facets):
+                return {}
+            if facets.get("kind") not in FACET_KINDS:
+                return {}
+            if "domain" in facets and facets["domain"] not in FACET_DOMAINS:
+                return {}
+            if "reversibility" in facets and facets["reversibility"] not in FACET_REVERSIBILITY:
+                return {}
+            if "blast_radius" in facets and facets["blast_radius"] not in FACET_BLAST:
+                return {}
+            validated_rows.append(row)
+        unknown = spec.get("unknown_subcommand", "no_escalation")
+        if unknown not in {"no_escalation", "intent_fallback"}:
+            return {}
+        clean[tool] = {
+            "subcommands": validated_rows,
+            "resource_aliases": spec.get("resource_aliases", {}),
+            "unknown_subcommand": unknown,
+        }
+    return clean
 
 
 # ---------------------------------------------------------------------------
@@ -649,8 +831,16 @@ def has_git_init_alias_config(segment: str) -> bool:
     return False
 
 
-def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool) -> tuple[str, str] | None:
-    """Recursively classify sh/bash/zsh -c strings."""
+def classify_nested_shell(
+    segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool,
+    *, _depth: int = 0, _adapters: dict | None = None,
+) -> tuple[str, str] | None:
+    """Recursively classify sh/bash/zsh -c strings.
+
+    Threads the shared recursion budget (`_depth`) and the cached adapter
+    sidecar (`_adapters`) into the recursive classify_command call so nested
+    shells share one budget with substitution + opaque-exec recursion.
+    """
     try:
         tokens = shlex.split(segment)
     except ValueError:
@@ -660,7 +850,10 @@ def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, 
     if not nested:
         return None
 
-    return classify_command(nested[0], repo_root, home, cwd, caws_worktree)
+    return classify_command(
+        nested[0], repo_root, home, cwd, caws_worktree,
+        _depth=_depth + 1, _adapters=_adapters,
+    )
 
 
 _SPEC_PATH_RE = re.compile(r"^\.caws/specs/[^/]+\.(?:yaml|yml)$")
@@ -1700,20 +1893,121 @@ def strip_quoted_regions(raw: str) -> str:
 # Main classifier
 # ---------------------------------------------------------------------------
 
+def build_command_fact(segment: str, adapters: dict | None = None) -> CommandFact:
+    """Parse one command segment into a typed CommandFact.
+
+    Slice 0 populates the structural fields (executable, basename-resolved,
+    wrappers peeled, flags, targets) so the fact builder is demonstrably live
+    (CAWS_CLASSIFY_FACTS_DUMP). Facet ASSIGNMENT from adapters + engine rules
+    is deliberately minimal here (kind stays NONE unless a wrapper marks
+    PRIV_ESC) — full facet derivation is Slice 2 work. Never raises; on a
+    parse failure it returns a low-confidence fact.
+    """
+    fact = CommandFact()
+    try:
+        tokens = shlex.split(segment, comments=False, posix=True)
+    except ValueError:
+        fact.parse_confidence = "low"
+        return fact
+    if not tokens:
+        fact.parse_confidence = "low"
+        return fact
+
+    # Peel env assignments + known wrappers, recording them. Reuses the
+    # existing normalization intent without rebuilding tokenization.
+    i = 0
+    wrappers: list[str] = []
+    while i < len(tokens):
+        tok = tokens[i]
+        if "=" in tok and not tok.startswith("-") and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tok):
+            wrappers.append(tok)
+            i += 1
+            continue
+        base = command_basename(tok)
+        if base in {"env", "command", "nohup", "builtin", "time", "sudo", "doas"}:
+            wrappers.append(base)
+            i += 1
+            # skip env/time option flags conservatively
+            while i < len(tokens) and tokens[i].startswith("-"):
+                i += 1
+            continue
+        break
+
+    if i >= len(tokens):
+        fact.wrappers = wrappers
+        fact.parse_confidence = "partial"
+        return fact
+
+    fact.wrappers = wrappers
+    fact.executable_path = tokens[i]
+    fact.executable = command_basename(tokens[i])
+    fact.argv = tokens[i + 1:]
+    fact.flags = {t for t in fact.argv if t.startswith("-")}
+    positional = [t for t in fact.argv if not t.startswith("-")]
+    fact.subcommand_path = positional[:2]
+    fact.targets = positional
+
+    # Engine rule (always-on, tool-agnostic): sudo/su/doas => privilege escalation.
+    if "sudo" in wrappers or "doas" in wrappers or fact.executable in {"su", "sudo", "doas"}:
+        fact.kind = "PRIV_ESC"
+        fact.domain = "local"
+        fact.trace_label = "PRIV_ESC"
+
+    # Scope inference from flags/targets (data for the lattice; not acted on in Slice 0).
+    if BROAD_SCOPE_INDICATORS & fact.flags:
+        fact.scope = "broad"
+    if any(p in PROD_SCOPE_INDICATORS for p in positional):
+        fact.scope = "prod"
+    return fact
+
+
+def classify_capability_pass(
+    segment: str,
+    repo_root: Path,
+    home: Path,
+    cwd: Path,
+    adapters: dict | None = None,
+    already_decided: bool = False,
+    _depth: int = 0,
+) -> tuple[str, str] | None:
+    """Capability-based classification of one segment.
+
+    SLICE 0 STUB: always returns None (no decision change). The fact is built
+    so the fact builder is exercised and can be dumped under
+    CAWS_CLASSIFY_FACTS_DUMP, but no escalation is emitted. Slices 2-3 replace
+    this body with adapter lookup + lattice_decision + opaque-exec recursion
+    (bounded by MAX_RECURSION_DEPTH).
+    """
+    return None
+
+
 def classify_command(
     raw_command: str,
     repo_root: Path,
     home: Path,
     cwd: Path,
     caws_worktree: bool = False,
+    *,
+    _depth: int = 0,
+    _adapters: dict | None = None,
 ) -> tuple[str, str]:
     """Classify a full command string.
 
     Returns the most restrictive (decision, reason) across all segments.
     Priority: deny > ask > allow.
+
+    `_depth` threads the shared recursion budget through every re-entry path
+    (substitution, nested-shell, future opaque-exec). At the budget the
+    classifier returns a conservative "ask" rather than recursing further.
+    `_adapters` caches the loaded sidecar across recursive calls.
     """
+    if _depth > MAX_RECURSION_DEPTH:
+        return "ask", "recursion budget exceeded — cannot fully analyze nested command"
     worst_decision = "allow"
     worst_reason = ""
+
+    # Load the user adapter sidecar once and thread it through recursion.
+    adapters = _adapters if _adapters is not None else load_command_adapters(repo_root)
 
     def escalate(decision: str, reason: str) -> None:
         nonlocal worst_decision, worst_reason
@@ -1739,6 +2033,7 @@ def classify_command(
             continue
         sub_decision, sub_reason = classify_command(
             body, repo_root, home, cwd, caws_worktree,
+            _depth=_depth + 1, _adapters=adapters,
         )
         if sub_decision != "allow":
             escalate(sub_decision, f"command substitution: {sub_reason}")
@@ -1746,7 +2041,9 @@ def classify_command(
     segments = segment_command(raw_command)
 
     for segment in segments:
-        nested_result = classify_nested_shell(segment, repo_root, home, cwd, caws_worktree)
+        nested_result = classify_nested_shell(
+            segment, repo_root, home, cwd, caws_worktree, _depth=_depth + 1, _adapters=adapters,
+        )
         if nested_result:
             escalate(*nested_result)
             continue
@@ -1818,6 +2115,39 @@ def classify_command(
         # check. If it is NOT on the allow-list AND the segment is a
         # governed-family command, escalate to "ask".
         allow_result = classify_allow_list(segment)
+
+        # --- Capability pass (HOOK-CAPABILITY-ENGINE) ---
+        # Slice 0: build the fact (so the fact builder is live + dumpable) and
+        # call the capability pass, which is a STUB returning None. No decision
+        # change. Slices 2-3 make this pass emit lattice decisions. Gated on the
+        # same condition as the governed-family default so git/gh/npm — handled
+        # by their own stack — are untouched.
+        if allow_result is None and not git_segment_allowed:
+            fact = build_command_fact(segment, adapters)
+            if os.environ.get("CAWS_CLASSIFY_FACTS_DUMP") == "1":
+                # Shadow-mode diagnostics go to STDERR only; the stdout
+                # {"decision","reason"} contract is unchanged.
+                sys.stderr.write(json.dumps({
+                    "caws_command_fact": {
+                        "segment": segment,
+                        "executable": fact.executable,
+                        "wrappers": fact.wrappers,
+                        "subcommand_path": fact.subcommand_path,
+                        "flags": sorted(fact.flags),
+                        "facets": fact.facets(),
+                        "trace_label": fact.trace_label,
+                        "parse_confidence": fact.parse_confidence,
+                    },
+                }) + "\n")
+            cap_result = classify_capability_pass(
+                segment, repo_root, home, cwd,
+                adapters=adapters,
+                already_decided=(worst_decision != "allow"),
+                _depth=_depth + 1,
+            )
+            if cap_result is not None:
+                escalate(*cap_result)
+
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this
             # segment (CAWS-SCOPE-AMEND-COMMAND-001 spec-only cherry-pick

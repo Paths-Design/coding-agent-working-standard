@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://caws.dev/schemas/command-adapters.v1.json",
+  "title": "CAWS Command-Safety Adapter Sidecar",
+  "description": "User-extensible tool->facet adapter table for the command-safety classifier hook. STRICTLY BOUNDED: a row maps a tool executable + subcommand/resource-alias to an ABSTRACT FACET assignment only. It CANNOT define policy outcomes (allow/ask/deny), override the lattice, or introduce new capability kinds or facet values -- those are governed by docs/architecture/command-capability-taxonomy.md + the template, and require a CAWS spec to change. A document that violates this schema FAILS CLOSED in the loader (sidecar ignored, diagnostic ask surfaced); it is never silently trusted. additionalProperties:false throughout is the structural enforcement of the authority boundary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "adapters"],
+  "properties": {
+    "version": {
+      "description": "Sidecar schema version. Only 1 is recognized; any other value fails closed.",
+      "const": 1
+    },
+    "adapters": {
+      "description": "Map of tool executable basename -> adapter spec. The executable is matched after wrapper-peel and absolute-path basename resolution (so '/usr/bin/kubectl' matches the 'kubectl' key).",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-zA-Z0-9._-]+$": { "$ref": "#/definitions/adapter" }
+      }
+    }
+  },
+  "definitions": {
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subcommands"],
+      "properties": {
+        "resource_aliases": {
+          "description": "Resource short-name -> canonical name, expanded before subcommand-path matching (e.g. {\"po\":\"pod\",\"ns\":\"namespace\"}). Aliases ONLY; cannot carry facets.",
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-zA-Z0-9._-]+$": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" }
+          }
+        },
+        "unknown_subcommand": {
+          "description": "Facet behavior for a subcommand not listed below. Default 'no_escalation' = engine intent-fallback + amplifier flags still apply, but tool identity adds nothing. This is the ONLY two-value knob and neither value is a decision outcome.",
+          "enum": ["no_escalation", "intent_fallback"],
+          "default": "no_escalation"
+        },
+        "subcommands": {
+          "description": "List of subcommand-path -> facet-assignment rows. First matching path wins; '*' is a single-token wildcard.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/subcommand_row" }
+        }
+      }
+    },
+    "subcommand_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "facets"],
+      "properties": {
+        "path": {
+          "description": "Subcommand path as a list of positional tokens, e.g. [\"delete\"], [\"system\",\"prune\"], [\"delete\",\"*\"]. '*' matches any single token.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-zA-Z0-9._*-]+$" }
+        },
+        "facets": { "$ref": "#/definitions/facet_assignment" }
+      }
+    },
+    "facet_assignment": {
+      "description": "Abstract facet assignment. ALL values are closed enums from the governed taxonomy. There is deliberately NO 'decision'/'allow'/'deny'/'policy' key -- the lattice owns the decision; the sidecar only describes WHAT the command does, never WHAT TO DO about it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": ["READ", "MUTATE", "DESTROY", "EXEC", "PRIV_ESC", "SECRETS_READ", "NONE"]
+        },
+        "domain": {
+          "enum": ["local", "remote_orchestrator", "cloud", "container", "iac", "http", "process", "filesystem", "unknown"]
+        },
+        "reversibility": {
+          "enum": ["reversible", "partial", "irreversible", "unknown"]
+        },
+        "blast_radius": {
+          "enum": ["single", "multi", "host", "cluster", "unknown"]
+        },
+        "trace_label": {
+          "description": "Optional non-authoritative concrete label for debug output only (e.g. \"K8S_DELETE_BROAD\"). Never consulted by any decision branch.",
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        }
+      }
+    }
+  }
+}
