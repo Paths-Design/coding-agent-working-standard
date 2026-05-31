@@ -3,6 +3,7 @@ title: 'Repoint CLI coverage at the compiled store/shell surface so the number i
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: wt-coverage-honesty
 created_at: '2026-05-31T15:36:20.049Z'
 updated_at: '2026-05-31T15:36:45.890Z'
 blast_radius:
