@@ -1,0 +1,26 @@
+id: CAWS-DOCTRINE-WORKTREE-MERGE-GOVERNED-PATH-001
+title: 'Doctrine: worktree create/destroy/merge DO ship in v11.1; caws worktree merge is the governed merge path and raw git merge --no-ff is the fallback (correct stale ''use git worktree directly'' lines)'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-05-31T14:35:37.593Z'
+updated_at: '2026-05-31T14:35:37.593Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'CLAUDE.md'
+    - '.claude/rules/worktree-isolation.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
