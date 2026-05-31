@@ -19,10 +19,20 @@ if (build.status !== 0) {
 }
 
 const jest = run('npx', ['jest', ...extraArgs]);
+// Capture the jest status BEFORE cleanup so a coverageThreshold miss (or any
+// jest failure) always surfaces, even if the post-run temp-scrub itself exits
+// non-zero. The cleanup is best-effort housekeeping; jest's result is the
+// build verdict and must take precedence. [CAWS-CLI-COVERAGE-FLOOR-001]
+const jestStatus = jest.status || 0;
 
 const cleanup = run('npm', ['run', 'test:cleanup']);
 if (cleanup.status !== 0) {
-  process.exit(cleanup.status || 1);
+  // Surface the cleanup failure on stderr but do NOT let it mask a jest
+  // failure. Only when jest passed does a cleanup failure decide the exit.
+  process.stderr.write(
+    `run-tests: test:cleanup exited ${cleanup.status}; ` +
+      `jest status (${jestStatus}) takes precedence.\n`
+  );
 }
 
-process.exit(jest.status || 0);
+process.exit(jestStatus !== 0 ? jestStatus : cleanup.status || 0);
