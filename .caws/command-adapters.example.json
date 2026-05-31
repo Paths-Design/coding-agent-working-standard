@@ -1,0 +1,57 @@
+{
+  "//": "CAWS Command-Safety Adapter Sidecar — EXAMPLE. Copy to .caws/command-adapters.json to extend the command-safety classifier with adapter rows for tools the shipped defaults (kubectl/docker/terraform/aws/curl/kill/shred) don't cover. Validated against .caws/command-adapters.schema.json. See docs/architecture/command-capability-taxonomy.md. JSON (not YAML) because the hook parses it with the python stdlib `json` module only — PyYAML is not available in the hook runtime.",
+  "//authority": "A row maps tool + subcommand-path (+ resource aliases) -> ABSTRACT FACETS only. You CANNOT set a decision (allow/ask/deny), override the lattice, or invent a new kind/facet value. The lattice decides; you only describe WHAT a command does. A malformed or authority-exceeding sidecar is IGNORED and the hook surfaces a diagnostic `ask` — a bad config never weakens the gate.",
+  "version": 1,
+  "adapters": {
+    "doctl": {
+      "unknown_subcommand": "no_escalation",
+      "subcommands": [
+        {
+          "path": ["compute", "droplet", "delete"],
+          "facets": {
+            "kind": "DESTROY",
+            "domain": "cloud",
+            "reversibility": "irreversible",
+            "blast_radius": "single",
+            "trace_label": "CLOUD_DELETE"
+          }
+        },
+        {
+          "path": ["kubernetes", "cluster", "delete"],
+          "facets": {
+            "kind": "DESTROY",
+            "domain": "cloud",
+            "reversibility": "irreversible",
+            "blast_radius": "cluster",
+            "trace_label": "CLOUD_DELETE"
+          }
+        }
+      ]
+    },
+    "heroku": {
+      "unknown_subcommand": "no_escalation",
+      "subcommands": [
+        {
+          "path": ["apps", "destroy"],
+          "facets": {
+            "kind": "DESTROY",
+            "domain": "cloud",
+            "reversibility": "irreversible",
+            "blast_radius": "single",
+            "trace_label": "CLOUD_DELETE"
+          }
+        },
+        {
+          "path": ["pg", "reset"],
+          "facets": {
+            "kind": "DESTROY",
+            "domain": "cloud",
+            "reversibility": "irreversible",
+            "blast_radius": "single",
+            "trace_label": "CLOUD_DELETE"
+          }
+        }
+      ]
+    }
+  }
+}

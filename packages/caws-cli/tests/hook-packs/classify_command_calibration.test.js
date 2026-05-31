@@ -24,6 +24,7 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const { spawnSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -36,6 +37,29 @@ const CLASSIFIER = path.join(
   'claude-code',
   'classify_command.py'
 );
+
+// HOOK-CAPABILITY-ENGINE-000: explicit environment diagnostics.
+// Without this, a missing python3 or a moved classifier surfaces as an opaque
+// ENOENT thrown from inside every `it()` body — ~140 indistinguishable
+// failures with no root-cause signal. Probe once, up front, and fail with an
+// actionable message that names the real problem.
+beforeAll(() => {
+  const probe = spawnSync('python3', ['--version'], { encoding: 'utf8' });
+  if (probe.error) {
+    throw new Error(
+      'classify_command_calibration: `python3` is not available on PATH. ' +
+        'This suite shells out to the classifier template via python3; install ' +
+        'Python 3 (or expose it as `python3`) to run these tests. ' +
+        `Underlying error: ${probe.error.message}`
+    );
+  }
+  if (!fs.existsSync(CLASSIFIER)) {
+    throw new Error(
+      `classify_command_calibration: classifier template not found at ${CLASSIFIER}. ` +
+        'The harness tests the shipped template, not the installed .claude/hooks copy.'
+    );
+  }
+});
 
 /**
  * Pipe a command string through the classifier and return parsed JSON.
