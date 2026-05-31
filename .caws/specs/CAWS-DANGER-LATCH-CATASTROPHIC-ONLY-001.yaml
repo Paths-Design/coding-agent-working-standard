@@ -1,0 +1,32 @@
+id: CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001
+title: 'Latch only on catastrophic deny; allow ask-class without latching (down-payment on catastrophic-only classifier)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-31T14:48:48.435Z'
+updated_at: '2026-05-31T14:48:48.435Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
+    - '.claude/hooks/block-dangerous.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts'
+    - 'docs/failure-lineage.md'
+    - '.claude/hooks/CLAUDE.md'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md'
+    - 'packages/caws-cli/tests/hook-packs/danger_latch_warn_then_latch.test.js'
+    - 'packages/caws-cli/tests/hook-packs/latch_readonly_and_reset.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
