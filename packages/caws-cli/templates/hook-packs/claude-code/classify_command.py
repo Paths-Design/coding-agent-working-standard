@@ -360,6 +360,15 @@ MUTATION_AMPLIFIER_FLAGS: set[str] = {
 BROAD_SCOPE_INDICATORS: set[str] = {"--all", "-A", "--all-namespaces"}
 PROD_SCOPE_INDICATORS: set[str] = {"prod", "production", "staging", "live"}
 
+# Exec-family executables whose argument is further code to run. For these,
+# build_command_fact records a structural payload + opacity fact (literal vs
+# opaque expansion). Slice 1 only POPULATES these facts (shadow); Slice 2/3
+# wire the opaque-exec recursion that acts on them.
+OPAQUE_EXEC_EXECUTABLES: set[str] = {
+    "sh", "bash", "zsh", "dash", "eval", "exec", "xargs",
+    "python", "python3", "node", "ruby", "perl",
+}
+
 
 @dataclass
 class CommandFact:
@@ -1958,6 +1967,36 @@ def build_command_fact(segment: str, adapters: dict | None = None) -> CommandFac
         fact.scope = "broad"
     if any(p in PROD_SCOPE_INDICATORS for p in positional):
         fact.scope = "prod"
+
+    # Opaque-exec STRUCTURAL fact (shadow-only — Slice 1). For exec-family
+    # executables, record the payload and whether it is a literal we could
+    # recurse-classify or an opaque expansion we cannot inspect. This populates
+    # CommandFact.payload/opacity so Slice 2's opaque-exec recursion has its
+    # inputs; it assigns NO kind and drives NO decision here (zero change).
+    if fact.executable in OPAQUE_EXEC_EXECUTABLES:
+        # the payload is the first positional after the executable (e.g. the
+        # string after `eval`, or the `-c`/`-e` argument for sh/python/node).
+        payload = ""
+        if fact.executable in {"sh", "bash", "zsh", "dash"}:
+            # take the token following a -c flag, if present
+            for idx, tok in enumerate(fact.argv):
+                if tok == "-c" and idx + 1 < len(fact.argv):
+                    payload = fact.argv[idx + 1]
+                    break
+        elif fact.executable in {"python", "python3", "node", "ruby", "perl"}:
+            for idx, tok in enumerate(fact.argv):
+                if tok in {"-c", "-e"} and idx + 1 < len(fact.argv):
+                    payload = fact.argv[idx + 1]
+                    break
+        else:  # eval / exec / xargs — payload is the joined positional remainder
+            payload = " ".join(positional)
+        fact.payload = payload
+        if not payload:
+            fact.opacity = "none"
+        elif re.search(r"\$\(|\$\{|\$[A-Za-z_]|`", payload):
+            fact.opacity = "opaque"   # $VAR / $(...) / ${...} / backtick — cannot inspect
+        else:
+            fact.opacity = "literal"  # recurse-classifiable in Slice 2
     return fact
 
 
@@ -2134,6 +2173,8 @@ def classify_command(
                         "wrappers": fact.wrappers,
                         "subcommand_path": fact.subcommand_path,
                         "flags": sorted(fact.flags),
+                        "targets": fact.targets,
+                        "payload": fact.payload,
                         "facets": fact.facets(),
                         "trace_label": fact.trace_label,
                         "parse_confidence": fact.parse_confidence,
