@@ -387,7 +387,7 @@ Observed anti-pattern to avoid: turning a stale local assertion into a three-opt
 
 - CLI tests (vNext shell + store): `cd packages/caws-cli && npx jest`
 - Kernel tests: `cd packages/caws-kernel && npm test`
-- Per `/Users/darianrosebrook/.claude/CLAUDE.md` session protocol: interpret pass counts critically, cite specific assertion evidence, call out false-confidence risks.
+- Per `/Users/darianrosebrook/.claude/CLAUDE.md` and `/Users/darianrosebrook/Desktop/Projects/CLAUDE.md`: interpret pass counts critically, print the concrete runtime artifacts produced by the scenario, cite specific evidence from those artifacts, call out false-confidence risks, and state what artifact, instrumentation, test, log, or manual check is still missing if proof is insufficient.
 
 ## References
 
