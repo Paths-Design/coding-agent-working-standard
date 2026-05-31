@@ -2,10 +2,11 @@ id: CAWS-CLI-LINT-CLEAN-TESTFILES-001
 title: 'Clear 3 CLI test-file lint errors to make lint gate green'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: wt-lint-clean
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-lint-clean at 8242572a0df9d88b97c8875aea8e393cbb83ad3a'
 created_at: '2026-05-31T14:33:30.490Z'
-updated_at: '2026-05-31T14:33:30.490Z'
+updated_at: '2026-05-31T14:47:34.884Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
