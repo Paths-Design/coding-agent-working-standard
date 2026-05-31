@@ -397,6 +397,22 @@ DEFAULT_ADAPTERS: dict[str, list[tuple[tuple[str, ...], dict]]] = {
     "kubectl": [
         (("delete",), {"kind": "DESTROY", "domain": "remote_orchestrator",
                        "reversibility": "partial", "blast": "single", "trace": "K8S_DELETE"}),
+        # Cluster-scoped resource deletes cascade and are not pod-recreatable:
+        # namespace/crd/pv/pvc/secret => cluster blast + irreversible => deny
+        # (doc: "delete namespace|crd|pv|secret -> deny K8S_DELETE_BROAD").
+        # Longest-prefix match wins over the bare ("delete",) row above.
+        (("delete", "namespace"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                                   "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "ns"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                            "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "crd"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                             "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "pv"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                            "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "pvc"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                             "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "secret"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                                "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
         (("apply",), {"kind": "MUTATE", "domain": "remote_orchestrator",
                       "reversibility": "partial", "blast": "single", "trace": "K8S_MUTATE"}),
         (("scale",), {"kind": "MUTATE", "domain": "remote_orchestrator",
@@ -441,8 +457,14 @@ DEFAULT_ADAPTERS: dict[str, list[tuple[tuple[str, ...], dict]]] = {
               "reversibility": "irreversible", "blast": "single", "trace": "FS_SHRED"}),
     ],
     "truncate": [
+        # truncate -s 0 zeroes a file's contents but the inode/path survive and
+        # the file is rewritable. Doc lines 122/170: "ask/deny outside scratch."
+        # Base = partial (ask); the deny-OUTSIDE-scratch refinement needs scratch
+        # vs non-scratch path detection, which is Slice 3. Until then, ask-class
+        # matches both the corpus (expected ask) and the conservative-but-not-
+        # catastrophic posture. shred (true unrecoverable wipe) stays irreversible.
         ((), {"kind": "DESTROY", "domain": "filesystem",
-              "reversibility": "irreversible", "blast": "single", "trace": "FS_ZERO_FILE"}),
+              "reversibility": "partial", "blast": "single", "trace": "FS_ZERO_FILE"}),
     ],
     "chown": [
         ((), {"kind": "MUTATE", "domain": "filesystem",
@@ -524,7 +546,13 @@ def lattice_decision(fact: CommandFact) -> tuple[str, str] | None:
         return "deny", f"secret/credential read ({label})"
     if k == "DESTROY" and rev == "irreversible":
         return "deny", f"irreversible destruction ({label})"
-    if k == "DESTROY" and (scope in {"prod", "broad"} or blast in {"cluster", "host", "multi"}):
+    # Broad/prod DESTROY denies on prod/broad SCOPE or CLUSTER blast only. A
+    # merely `multi`/`host` blast with reversible/partial effect (docker prune,
+    # pkill/killall, helm uninstall) is ask-class per the architecture doc's
+    # lattice (deny = irreversible | prod-scope | governance-bypass; broad blast
+    # alone is NOT a deny trigger). The irreversibility AMPLIFIER (--volumes,
+    # --force, --recursive) tightens reversibility -> the rule above fires.
+    if k == "DESTROY" and (scope in {"prod", "broad"} or blast == "cluster"):
         return "deny", f"broad/prod destruction ({label})"
     if k == "EXEC" and fact.opacity == "opaque":
         return "ask", f"opaque execution — cannot prove payload ({label})"
@@ -2191,11 +2219,35 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
 
     # Amplifier tightening — only with a mutation/destroy kind present.
     if fact.kind in {"MUTATE", "DESTROY"}:
+        # A destroy-INTENT flag promotes a mutation to a destruction. `terraform
+        # apply -destroy` (and `apply --destroy`) is destruction, not mutation —
+        # doc: "destroy / apply -destroy -> deny". The flag changes the KIND, not
+        # just reversibility, so this must run before the reversibility tightening.
+        destroy_intent = {"--destroy", "-destroy"} & fact.flags
+        if fact.kind == "MUTATE" and destroy_intent:
+            fact.kind = "DESTROY"
+            fact.reversibility = "irreversible"
+            fact.trace_label = (fact.trace_label or "") + "_DESTROY" if fact.trace_label else "DESTROY"
         amp = MUTATION_AMPLIFIER_FLAGS & fact.flags
         if amp:
-            # irreversibility amplifiers push reversibility down a notch.
-            if {"--recursive", "-r", "-R", "--volumes", "--prune", "--delete",
-                "--destroy", "--force", "-f"} & amp:
+            # Irreversibility amplifiers push reversibility down a notch — but
+            # only the UNAMBIGUOUS long forms the architecture doc names
+            # (--force/--recursive/--volumes/--prune/--delete/--destroy). Bare
+            # short flags (-f/-r/-R) are NOT included: -f is --full-cmdline for
+            # pkill, --follow for logs, --file elsewhere — treating it as a
+            # universal force flag manufactured false denies (pkill -f -> deny).
+            # The amplifier must never manufacture a deny from an ambiguous flag.
+            irreversibility_amp = {"--recursive", "--volumes", "--prune",
+                                   "--delete", "--destroy", "--force"} & amp
+            # Domain guard: --force removes recovery for filesystem/container/
+            # cloud/iac destruction and for kubectl pod force-delete (skips
+            # graceful termination = data loss; doc names it a deny trigger). It
+            # does NOT deepen irreversibility for the PROCESS domain (kill
+            # reversibility is intrinsic to the signal, not the flag) nor for
+            # helm uninstall (a single release removal; --force only ignores
+            # hook/resource errors — doc + corpus keep helm uninstall ask-class).
+            force_exempt = (fact.domain == "process") or (fact.executable == "helm")
+            if irreversibility_amp and not force_exempt:
                 fact.reversibility = "irreversible"
             if {"--all", "-A"} & amp:
                 fact.scope = "broad"
