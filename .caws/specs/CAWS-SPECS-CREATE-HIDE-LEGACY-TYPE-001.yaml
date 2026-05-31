@@ -7,7 +7,7 @@ created_at: '2026-05-31T14:10:16.421Z'
 updated_at: '2026-05-31T14:10:16.421Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli shell — command-metadata + register (help rendering)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,11 +18,45 @@ scope:
     - 'packages/caws-cli/tests/shell/help-metadata-lock.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The removed-v10 `--type` alias no longer appears in the
+    `caws specs create --help` options list. CommandOptionMeta gains a
+    `hidden?: boolean` field; the `--type` option metadata sets it; and
+    register.ts honors it by registering the option via Commander's
+    `new Option(flag, desc).hideHelp()` so the flag is parsed but not displayed.
+  - >-
+    The `--type` option remains REGISTERED on the create command (Commander still
+    parses `--type <value>`), so the handler's v10→v11 migration affordance is
+    preserved: `caws specs create FOO --type feature` still emits the helpful
+    "caws specs create: --type is not supported in v11. Use --mode instead."
+    error (exit 1), NOT Commander's generic "unknown option".
+  - >-
+    Only `--type` is hidden. Every other create option (`--title`, `--mode`,
+    `--risk-tier`, `--scope-in`, `--data`) still renders in `--help`. The
+    `hidden` field defaults to absent/false, so no other command's help output
+    changes.
+  - >-
+    The help-metadata lock invariants are preserved: the metadata array stays
+    frozen, every visible description stays a non-empty string, enum-backed
+    options still deep-equal their kernel enum (L3), and register.ts still
+    carries no inline help-string literals (L5) — the hidden option's flag and
+    description still come from metadata, not an inline literal.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the registered `caws specs create` command'
+    when: 'its --help output (or the visibleOptions list) is inspected'
+    then: 'the --type option is NOT listed (it is hidden), while --title/--mode/--risk-tier/--scope-in remain listed'
+  - id: A2
+    given: 'a user who runs `caws specs create FOO --type feature` (a v10 muscle-memory invocation)'
+    when: 'the command parses'
+    then: 'Commander accepts the --type option (no "unknown option") and the handler emits "--type is not supported in v11. Use --mode instead." with exit 1'
+  - id: A3
+    given: 'the create command options after the change'
+    when: 'createCmd.options is inspected for the --type long flag'
+    then: 'the --type option is still defined on the command (registered, parseable) — preserving the existing specs.test.js assertion that --type is present and non-mandatory'
+  - id: A4
+    given: 'the help-metadata lock test'
+    when: 'it runs against the modified metadata + register'
+    then: 'L1/L3/L4/L5 all still pass (frozen array, enum deep-equality, non-empty descriptions, no inline literals) — the hidden flag does not break any lock'
 non_functional: {}
 contracts: []
