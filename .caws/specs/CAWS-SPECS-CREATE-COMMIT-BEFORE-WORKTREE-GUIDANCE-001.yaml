@@ -7,7 +7,7 @@ created_at: '2026-05-31T14:23:45.378Z'
 updated_at: '2026-05-31T14:23:45.378Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli specs create — post-create guidance text
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,47 @@ scope:
     - 'packages/caws-cli/tests/shell/specs.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The post-create "Next:" guidance (both branches: --scope-in populated and
+    not) instructs the user to COMMIT the spec after filling in invariants +
+    acceptance and BEFORE `caws worktree create`. The guidance names the commit
+    step explicitly (e.g. "git add + commit the spec") so a first-timer does not
+    walk straight from a hand-edited (dirty) spec into worktree create — which is
+    what produces the confusing "the transition was applied but NOT committed"
+    warning observed in the probe.
+  - >-
+    The guidance points the first-timer at how to inspect/validate the filled-in
+    spec before proceeding — naming `caws specs show <id>` (round-trips the spec)
+    and/or `caws doctor` (drift over .caws state), since there is intentionally
+    no `caws specs validate` verb in v11.
+  - >-
+    The change is to the create command's stdout guidance ONLY. Spec creation
+    behavior, the spec_created event, the audit-commit surfacing, and the
+    existing amend-scope / worktree-write-guard / contracts-guide guidance lines
+    are all preserved — the new lines are additive and ordered before the
+    worktree-create line.
+  - >-
+    The existing create-guidance assertions still hold: the no-scope-in branch
+    still names `caws specs amend-scope <id> --add` and `worktree-write-guard`
+    and `caws-contracts.md`, and never re-introduces the removed "open the spec
+    and replace" hand-edit instruction or the over-promise "scope-guard rejects
+    every edit".
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a `caws specs create` with --scope-in populated'
+    when: 'the command prints its post-create guidance'
+    then: 'the guidance instructs committing the spec before `caws worktree create` (a commit step precedes the worktree-create line)'
+  - id: A2
+    given: 'a `caws specs create` with NO --scope-in'
+    when: 'the command prints its post-create guidance'
+    then: 'the guidance still routes scope via amend-scope, still names worktree-write-guard + caws-contracts.md, AND now also instructs committing the spec before worktree create'
+  - id: A3
+    given: 'either guidance branch'
+    when: 'the command prints its post-create guidance'
+    then: 'it names a way to inspect/validate the filled-in spec (`caws specs show <id>` or `caws doctor`) before proceeding'
+  - id: A4
+    given: 'the existing create behavior + event + audit-commit assertions'
+    when: 'the suite runs after the guidance change'
+    then: 'they all still pass (the change is additive to stdout text only; no behavior, event, or file-shape regression)'
 non_functional: {}
 contracts: []
