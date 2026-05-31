@@ -7,7 +7,8 @@ created_at: '2026-05-31T20:14:23.741Z'
 updated_at: '2026-05-31T20:14:32.060Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook-pack: command-safety classifier DECISION surface (the capability pass becomes decision-bearing)'
+    - 'caws-cli hook-pack: committed verification corpus (80-FN closure + portability-negative + adjudication)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,13 +22,82 @@ scope:
     - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/zero_change_harness.py'
     - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/README.md'
     - packages/caws-cli/tests/hook-packs/fixtures/capability-engine/fact_probes.json
-  out: []
+  out:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'THE LATTICE IS AUTHORITY. classify_capability_pass returns lattice_decision(fact); the decision
+    is derived from ABSTRACT FACETS (kind/domain/scope/reversibility/blast_radius), never from a
+    concrete tool token or the human reason prose. The 80-FN corpus is an admission fixture +
+    regression witness, NOT policy authority: expected_final_decision is surgery-ward''s PROPOSED
+    decision and is reconciled TO the lattice (never the reverse). No facet is retuned to preserve a
+    corpus label.'
+  - 'NO SILENT ALLOW on the admitted corpus. All 80 known false-negatives resolve to the lattice
+    decision (ask or deny); any genuine non-closure is annotated policy-deferred/parser-limit with a
+    named reason. Closure means the decision came from the capability path (facet-attributed), proven
+    by asserting the emitted facets, not by a reason-substring match.'
+  - 'Amplifier flags compose, never fire alone. --recursive/--volumes/--force/--all/--auto-approve/
+    -y/--prune/--delete/--destroy and prod scope raise reversibility/scope ONLY in the presence of a
+    mutation/destroy kind; a bare amplifier on a READ never escalates (no routine-dev-loop overblock).'
+  - 'Every corpus/lattice disagreement is adjudicated EXPLICITLY in a governed artifact
+    (adjudication.md): {detector_capability, corpus_proposed_decision, lattice_decision,
+    resolution, rationale, impact}. Two distinct causes are separated: (a) honest lattice tightenings
+    (e.g. cloud rm --recursive -> deny) vs (b) Slice-1 facet miscalibrations corrected against the
+    architecture doc''s stated lattice (e.g. kill -9 is ask-class: reversibility partial, not
+    irreversible). Fixture expectations are updated to the lattice result and cited.'
+  - 'The user adapter sidecar fails CLOSED THROUGH THE ACTIVE PASS: the loader surfaces an error
+    state (not a bare empty map), classify_capability_pass consumes it, and a malformed
+    .caws/command-adapters.json plus an extension-dependent command yields ask, never allow — proven
+    through the real CLI path. Adapters map alias->facet only; nested policy-shaped keys are rejected.'
+  - 'NON-REGRESSION: calibration stays 141/141; the full 4,882-command stress shows zero unintended
+    loosenings (every tightened row intentional + facet-attributed) with total escalations <= 150
+    unless a documented adjudication justifies a changed bound; portability-negative dev-loop commands
+    stay 100% allow.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'the 80-FN admission corpus with derived facets'
+    when: 'classify_capability_pass is activated and each command is classified'
+    then: 'all 80 resolve to the lattice decision with NO silent allow; the decision is facet-attributed
+      (asserted via emitted facets, not reason prose); any non-closure is annotated with a named reason'
+  - id: A2
+    given: 'rows where the lattice decision disagrees with the corpus proposed_decision'
+    when: 'the disagreement is adjudicated'
+    then: 'adjudication.md records each with resolution + rationale + impact, distinguishing honest
+      tightenings from Slice-1 facet miscalibrations corrected against the architecture doc, and the
+      fixture expected_final_decision is updated to the lattice result'
+  - id: A3
+    given: 'the portability-negative corpus (Tier-1 dev-loop suspects + representative benign rows)'
+    when: 'each is classified by the activated pass'
+    then: 'every row stays allow (zero overblock of routine dev-loop commands)'
+  - id: A4
+    given: 'the full 4,882-command real-agent corpus'
+    when: 'the stress harness compares activated template vs pre-engine baseline'
+    then: 'zero unintended loosenings; every tightened row is intentional and facet-attributed; total
+      escalations <= 150 unless a documented adjudication changes the bound'
+  - id: A5
+    given: 'a malformed .caws/command-adapters.json and an extension-dependent command'
+    when: 'the classifier runs through the real CLI path'
+    then: 'the decision is ask (fail closed), never allow; and the schema rejects nested policy-shaped
+      keys (decision/allow/deny/ask/policy/severity/override)'
+  - id: A6
+    given: 'Slice 2 closure'
+    when: 'the 80-FN corpus rows are activated'
+    then: 'they run in the default suite (active:true) or a CI-wired test:classifier:admission target —
+      not behind CAWS_CLASSIFIER_SLICE env state'
+non_functional:
+  security:
+    - 'The command-safety gate becomes decision-bearing via the governed facet lattice; the
+      user-extensible sidecar cannot widen its own authority (alias->facet only) and fails closed on
+      malformed input, surfaced as ask through the active classification path.'
+  reliability:
+    - 'Closure is measured against the full real-agent corpus with a zero-unintended-loosening
+      contract; the lattice decision is reproducible and facet-attributed, not regex-coincidental.'
+contracts:
+  - type: behavior
+    name: classifier-stdout-contract
+    description: 'stdout stays {"decision":"allow"|"ask"|"deny","reason":string}, exit 0. The pass now
+      changes decisions for the admitted families, but the wire contract and stderr-only facts dump are
+      unchanged. ask remains advisory in block-dangerous.sh (enforcement is the separate release-blocker slice).'
+  - type: schema
+    name: command-adapters-sidecar
+    description: '.caws/command-adapters.schema.json governs the adapter sidecar consumed by the now-active
+      pass: alias->facet rows only, no policy override at any nesting level, fail-closed on invalid.'
