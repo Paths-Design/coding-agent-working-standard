@@ -16,6 +16,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
@@ -33,7 +34,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
@@ -50,6 +52,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -67,6 +70,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
@@ -84,8 +88,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
-        "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "scope": "broad",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
@@ -96,9 +101,19 @@
       "command": "kubectl delete pod pod-production-example-1",
       "source_row": 7,
       "current_decision": "allow",
-      "expected_final_decision": "deny",
+      "expected_final_decision": "ask",
+      "adjudication": "lattice_wins",
+      "adjudication_note": "Corpus proposed deny via an accidental prod-substring regex on the resource NAME. The lattice derives prod scope from namespace/context only (exact-token PROD_SCOPE match), so a pod merely NAMED '...production...' in the default namespace is an ordinary single-pod delete -> ask. Doc backs the lattice ('accidental correctness, fixed in Slice 2'). See adjudication.md.",
+      "corpus_proposed_decision": "deny",
       "detector_capability": "K8S_DELETE_BROAD",
       "expected_facets": {
+        "kind": "DESTROY",
+        "domain": "remote_orchestrator",
+        "scope": "narrow",
+        "reversibility": "partial",
+        "blast_radius": "single"
+      },
+      "corpus_proposed_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
         "reversibility": "irreversible",
@@ -118,8 +133,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
-        "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "scope": "prod",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
@@ -135,6 +151,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -152,6 +169,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -169,6 +187,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -186,6 +205,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -203,6 +223,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -220,6 +241,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -237,6 +259,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -254,6 +277,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -271,6 +295,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -288,7 +313,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -305,7 +331,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -322,6 +349,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -339,6 +367,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -356,6 +385,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -373,7 +403,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -390,7 +421,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -405,15 +437,18 @@
       "expected_final_decision": "ask",
       "detector_capability": "PROC_FORCE_KILL",
       "expected_facets": {
-        "kind": "DESTROY",
-        "domain": "process",
-        "reversibility": "irreversible",
+        "kind": "NONE",
+        "domain": "unknown",
+        "scope": "narrow",
+        "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": false,
+      "decision_path": "substitution_or_pipeline_recursion",
+      "decision_path_note": "Top-level segment fact is kind=NONE because the dangerous operand is inside a $()/pipeline; the decision is facet-attributed via the recursed inner segment (reason carries the capability trace)."
     },
     {
       "command": "kill -9 3000",
@@ -424,7 +459,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -441,8 +477,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
@@ -458,8 +495,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
@@ -475,6 +513,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -492,6 +531,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -509,8 +549,9 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
@@ -526,8 +567,9 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
@@ -543,8 +585,9 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
@@ -560,6 +603,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -577,6 +621,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -594,6 +639,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -611,7 +657,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -628,7 +675,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -645,6 +693,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -662,8 +711,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
-        "blast_radius": "multi"
+        "scope": "narrow",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "pipeline-inherit",
@@ -679,7 +729,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
@@ -696,6 +747,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "single"
       },
@@ -713,6 +765,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "prod",
         "reversibility": "irreversible",
         "blast_radius": "cluster"
       },
@@ -730,6 +783,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "cluster"
       },
@@ -747,6 +801,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
@@ -764,7 +819,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -781,7 +837,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -798,7 +855,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -815,7 +873,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -832,7 +891,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -849,7 +909,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -866,7 +927,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -883,7 +945,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -900,6 +963,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -917,6 +981,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -934,6 +999,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -951,6 +1017,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -968,6 +1035,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -985,6 +1053,7 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
@@ -1002,6 +1071,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -1019,6 +1089,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -1036,6 +1107,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -1053,6 +1125,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -1070,6 +1143,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
@@ -1087,7 +1161,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1104,7 +1179,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1121,7 +1197,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1138,7 +1215,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1155,7 +1233,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1172,7 +1251,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1189,6 +1269,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -1206,6 +1287,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -1223,6 +1305,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -1240,6 +1323,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
@@ -1257,7 +1341,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1274,7 +1359,8 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
@@ -1291,6 +1377,7 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "single"
       },
@@ -1308,8 +1395,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
@@ -1325,8 +1413,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
@@ -1342,8 +1431,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
@@ -1359,8 +1449,9 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
