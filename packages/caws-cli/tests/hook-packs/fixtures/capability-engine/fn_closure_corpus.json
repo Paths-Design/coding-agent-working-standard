@@ -707,6 +707,8 @@
       "source_row": 40,
       "current_decision": "allow",
       "expected_final_decision": "ask",
+      "decision_path": "substitution_or_pipeline_recursion",
+      "decision_path_note": "Pipeline: the primary (first) token is `ps` (kind=NONE); the destructive operand is the last segment `xargs kill -9`. The decision is facet-attributed via that recursed segment (xargs literal payload -> kill -> PROC_KILL DESTROY -> ask). expected_facets below describe the attributing kill segment, not the ps head.",
       "detector_capability": "XARGS->PROC_FORCE_KILL",
       "expected_facets": {
         "kind": "DESTROY",
