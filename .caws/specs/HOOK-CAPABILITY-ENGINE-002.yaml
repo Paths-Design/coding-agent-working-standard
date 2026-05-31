@@ -3,6 +3,7 @@ title: 'Capability classifier Slice 2: family-detector closure for the admitted 
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: capability-engine-s2
 created_at: '2026-05-31T20:14:23.741Z'
 updated_at: '2026-05-31T20:14:32.060Z'
 blast_radius:
