@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-latch-relax
 created_at: '2026-05-31T14:48:48.435Z'
-updated_at: '2026-05-31T14:50:08.345Z'
+updated_at: '2026-05-31T14:58:07.468Z'
 blast_radius:
   modules:
     - 'claude-code hook pack: block-dangerous.sh (live + template)'
@@ -22,6 +22,9 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md'
     - 'packages/caws-cli/tests/hook-packs/danger_latch_warn_then_latch.test.js'
     - 'packages/caws-cli/tests/hook-packs/latch_readonly_and_reset.test.js'
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - .claude/hooks/classify_command.py
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
   out: []
 invariants:
   - 'A healthy-classifier "deny" verdict still hard-blocks (exit 2) and arms the latch immediately — the catastrophic set (rm -rf /, force-push, reset --hard, git clean -f, deleted-tag push, pipe-to-shell, find -delete/-exec, git init) is unchanged.'
