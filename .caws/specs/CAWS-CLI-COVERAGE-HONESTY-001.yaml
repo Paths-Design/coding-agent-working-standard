@@ -2,10 +2,11 @@ id: CAWS-CLI-COVERAGE-HONESTY-001
 title: 'Repoint CLI coverage at the compiled store/shell surface so the number is honest'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: wt-coverage-honesty
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-coverage-honesty at d339e687340ceadeaae7093169af6fbc81a87f2b'
 created_at: '2026-05-31T15:36:20.049Z'
-updated_at: '2026-05-31T15:36:45.890Z'
+updated_at: '2026-05-31T16:35:42.599Z'
 blast_radius:
   modules:
     - 'caws-cli jest coverage configuration (collectCoverageFrom)'
