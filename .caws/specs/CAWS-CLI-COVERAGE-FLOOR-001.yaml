@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: wt-coverage-floor
 created_at: '2026-05-31T18:20:22.051Z'
-updated_at: '2026-05-31T18:21:41.031Z'
+updated_at: '2026-05-31T18:51:04.955Z'
 blast_radius:
   modules:
     - 'caws-cli jest coverageThreshold (enforcement)'
@@ -25,6 +25,8 @@ scope:
     - packages/caws-cli/tests/shell/prepush-command.test.js
     - packages/caws-cli/tests/shell/events-verify-archive.test.js
     - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/store/json-yaml-store.test.js
+    - packages/caws-cli/tests/shell/scope-match-gate-contract.test.js
   out: []
 invariants:
   - 'jest.config.js gains a coverageThreshold.global floor set ABOVE the honest baseline (76.84 stmt / 63.98 branch / 75.61 func / 79.20 lines). The exact numbers are tuned to sit just under the post-backfill measured coverage so the gate is real but not flaky.'
