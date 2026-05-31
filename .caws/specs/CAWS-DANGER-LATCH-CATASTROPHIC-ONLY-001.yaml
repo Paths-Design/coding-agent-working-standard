@@ -2,10 +2,11 @@ id: CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001
 title: 'Latch only on catastrophic deny; allow ask-class without latching (down-payment on catastrophic-only classifier)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-latch-relax
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-latch-relax at 7b2bbbde472947474b5ab7f8cbb19f25171e9e5a'
 created_at: '2026-05-31T14:48:48.435Z'
-updated_at: '2026-05-31T14:58:07.468Z'
+updated_at: '2026-05-31T15:19:04.782Z'
 blast_radius:
   modules:
     - 'claude-code hook pack: block-dangerous.sh (live + template)'
