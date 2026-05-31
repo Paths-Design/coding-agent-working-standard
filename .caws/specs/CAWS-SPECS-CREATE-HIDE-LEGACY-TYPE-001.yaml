@@ -1,0 +1,28 @@
+id: CAWS-SPECS-CREATE-HIDE-LEGACY-TYPE-001
+title: 'caws specs create --help hides the removed v10 --type alias (still parseable for the migration error, but absent from the options list so first-timers do not read it as a current flag)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-05-31T14:10:16.421Z'
+updated_at: '2026-05-31T14:10:16.421Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/shell/specs.test.js'
+    - 'packages/caws-cli/tests/shell/help-metadata-lock.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
