@@ -7,7 +7,7 @@ created_at: '2026-05-31T14:35:37.593Z'
 updated_at: '2026-05-31T14:35:37.593Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - CLAUDE.md + worktree-isolation.md doctrine (worktree merge guidance)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,45 @@ scope:
     - '.claude/rules/worktree-isolation.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CLAUDE.md no longer claims "v11 does not ship orchestration commands for
+    worktree create/destroy/merge — use git worktree directly. Lifecycle helpers
+    return in v11.1." That line is stale: v11.1 ships
+    create/destroy/merge/migrate-registry/repair-sparse under the `worktree`
+    group. The doctrine states they DO ship and names `caws worktree merge` as
+    the governed merge path.
+  - >-
+    The worktree-isolation.md "Merging worktree branches back to base" section
+    names `caws worktree merge <name>` as the PRIMARY, governed merge path
+    (it runs git checkout base + git merge --no-ff + auto-closes the bound spec
+    + appends worktree_merged, all as one transaction over the v11 flat-map
+    worktrees.json), with raw `git merge --no-ff <branch>` documented as the
+    manual FALLBACK — not the default. The merge-commit message format
+    requirement (`merge(worktree): <description>`) is preserved.
+  - >-
+    The doctrine notes the operational reason to prefer the governed command:
+    raw `git checkout main` between worktrees can trip the danger latch (the
+    classifier flags bare checkout of an existing branch as potentially
+    discarding work), whereas `caws worktree merge` performs the base checkout
+    inside the governed transaction. This explains WHY the governed path is
+    preferred, not just THAT it exists.
+  - >-
+    No claim is made that the `WORKTREE-MERGE-V11-SHAPE-001` registry-shape
+    crash still exists — it was fixed by the flat-map-native reader +
+    migrate-registry work. The doctrine does not instruct agents to skip the
+    dry-run or hand-massage worktrees.json.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an agent reading CLAUDE.md for how to merge a worktree'
+    when: 'they read the worktree-discipline section'
+    then: 'it does NOT say "v11 does not ship orchestration commands ... use git worktree directly" and instead states create/destroy/merge ship in v11.1 with `caws worktree merge` as the governed path'
+  - id: A2
+    given: 'an agent reading worktree-isolation.md "Merging worktree branches back to base"'
+    when: 'they read the steps'
+    then: '`caws worktree merge <name>` is presented as the primary governed path (auto-closes the bound spec) and raw `git merge --no-ff` as the manual fallback, with the merge(worktree): message format preserved'
+  - id: A3
+    given: 'an agent deciding between the governed command and raw git'
+    when: 'they read the doctrine'
+    then: 'it explains the governed command does the base checkout inside the transaction, avoiding the bare `git checkout main` danger-latch trap'
 non_functional: {}
 contracts: []
