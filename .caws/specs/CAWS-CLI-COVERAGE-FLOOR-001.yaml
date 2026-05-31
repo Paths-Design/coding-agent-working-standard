@@ -7,12 +7,13 @@ created_at: '2026-05-31T18:20:22.051Z'
 updated_at: '2026-05-31T18:21:41.031Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli jest coverageThreshold (enforcement)'
+    - 'caws-cli test suite (backfill: local gate evaluators, git-sparse-checkout, register, init-hook-pack render, legacy JS)'
+    - 'caws-cli scripts/run-tests.js (jest-exit-status precedence)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/jest.config.js
     - packages/caws-cli/scripts/run-tests.js
     - packages/caws-cli/tests/shell/gates-command.test.js
@@ -25,11 +26,27 @@ scope:
     - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'jest.config.js gains a coverageThreshold.global floor set ABOVE the honest baseline (76.84 stmt / 63.98 branch / 75.61 func / 79.20 lines). The exact numbers are tuned to sit just under the post-backfill measured coverage so the gate is real but not flaky.'
+  - 'The floor is reached by ADDING tests only — no production source is modified except the src/shell/index.ts barrel if a render formatter must be exported for direct testing. Every new test is additive require("../../dist/...") so the Stryker mutation contract is untouched.'
+  - 'The highest-leverage backfill targets CAWS''s own local gate evaluators (budget-limit, scope-boundary, spec-completeness, diff-helpers) via their pure-function injection seams — the same logic that governs every consumer repo.'
+  - 'scripts/run-tests.js is reordered so the jest exit status always takes precedence over the post-jest cleanup status, so a coverageThreshold miss can never be masked by a temp-scrub failure and always surfaces as a red CI check.'
+  - 'Coverage is measured ONLY on the canonical checkout; a linked worktree breaks coverage (chalk@5 ESM artifact). Source edits happen in the bound worktree, measurement runs on canonical.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the backfilled suite and the wired coverageThreshold.global'
+    when: 'the full CLI suite runs with --coverage on canonical'
+    then: 'it reports 0 failures and all four global thresholds pass (stmt/branch/func/lines each at or above the floor)'
+  - id: A2
+    given: 'the wired coverageThreshold'
+    when: 'a single newly-covered test is artificially removed (lowering one dimension below the floor)'
+    then: 'jest exits non-zero with a coverageThreshold error, and npx turbo run test -- --coverage surfaces it as a non-zero (red) result'
+  - id: A3
+    given: 'the reordered scripts/run-tests.js'
+    when: 'jest exits non-zero (e.g. threshold miss) while test:cleanup exits zero or non-zero'
+    then: 'the process exit code reflects the jest status, never the cleanup status — a jest failure is never masked'
+  - id: A4
+    given: 'the new and extended test files'
+    when: 'the full suite runs (with and without --coverage)'
+    then: 'the pre-existing pass count is preserved or increased with 0 new failures, and the Stryker import paths (../../dist/store/...) are unchanged'
 non_functional: {}
 contracts: []
