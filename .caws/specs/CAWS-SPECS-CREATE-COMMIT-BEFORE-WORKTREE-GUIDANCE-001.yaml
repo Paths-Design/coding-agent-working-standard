@@ -3,6 +3,7 @@ title: 'specs create guidance: commit the spec before caws worktree create so th
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: commit-before-wt
 created_at: '2026-05-31T14:23:45.378Z'
 updated_at: '2026-05-31T14:23:45.378Z'
 blast_radius:
