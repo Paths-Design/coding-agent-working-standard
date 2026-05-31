@@ -14,6 +14,10 @@
 //     etc.) UNTOUCHED.
 
 import type { Command } from 'commander';
+// Runtime import (not type-only): the `Option` class is needed to register a
+// hidden option via `new Option(flag, desc).hideHelp()` — Commander's
+// `.option(...)` convenience method has no hide-from-help variant.
+import { Option } from 'commander';
 
 import {
   INIT_COMMAND_META,
@@ -142,6 +146,16 @@ function collectOption(
  * and passing a default value when declared. */
 function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
   const description = renderOptionDescription(opt);
+  if (opt.hidden === true) {
+    // Registered-but-hidden option (e.g. the removed-v10 `--type` alias): keep
+    // it parseable so the handler can emit a migration error, but exclude it
+    // from `--help` via Commander's Option.hideHelp(). The flag + description
+    // still come from metadata (no inline literal), so the L5 help-string lock
+    // is unaffected.
+    const hiddenOption = new Option(opt.flag, description).hideHelp();
+    cmd.addOption(hiddenOption);
+    return;
+  }
   if (opt.collect === true) {
     // Repeatable option: Commander needs the collector fn. Whether to seed an
     // initial [] is preserved from the prior hand-written behavior and encoded

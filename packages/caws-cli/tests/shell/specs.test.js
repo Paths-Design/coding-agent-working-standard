@@ -616,6 +616,51 @@ describe('CAWS-SPECS-CLOSE-DEFAULT-RESOLUTION-001: --resolution defaults to comp
     expect(typeOpt.mandatory).toBe(false);
   });
 
+  // CAWS-SPECS-CREATE-HIDE-LEGACY-TYPE-001: the removed-v10 `--type` alias must
+  // stay REGISTERED (so `caws specs create --type feature` still routes to the
+  // handler's helpful "use --mode" migration error rather than Commander's
+  // generic "unknown option"), but it must NOT appear in `--help` — a first-timer
+  // scanning the options list should not read a removed alias as a current flag.
+  it('A1: --type is hidden from create --help but the live flags remain visible', () => {
+    const { Help } = require('commander');
+    const program = new Command();
+    program.exitOverride();
+    program.name('caws').version('test');
+    registerShellCommands(program, { exit: () => {} });
+    const specsCmd = program.commands.find((c) => c.name() === 'specs');
+    const createCmd = specsCmd.commands.find((c) => c.name() === 'create');
+
+    // Commander renders --help via Help.visibleOptions(); a hideHelp()'d option
+    // is excluded there. Assert on the same surface the help text is built from.
+    const visibleLongs = new Help().visibleOptions(createCmd).map((o) => o.long);
+    expect(visibleLongs).not.toContain('--type');
+
+    // ...while every current option still renders in help.
+    for (const long of ['--title', '--mode', '--risk-tier', '--scope-in']) {
+      expect(visibleLongs).toContain(long);
+    }
+
+    // And the rendered help text itself omits --type but keeps --mode.
+    const helpText = createCmd.helpInformation();
+    expect(helpText).not.toMatch(/--type/);
+    expect(helpText).toMatch(/--mode/);
+  });
+
+  it('A3: --type is still REGISTERED (parseable) so the migration error path is preserved', () => {
+    const program = new Command();
+    program.exitOverride();
+    program.name('caws').version('test');
+    registerShellCommands(program, { exit: () => {} });
+    const specsCmd = program.commands.find((c) => c.name() === 'specs');
+    const createCmd = specsCmd.commands.find((c) => c.name() === 'create');
+
+    // Present on the command (Commander parses --type <value>) and marked hidden.
+    const typeOpt = createCmd.options.find((o) => o.long === '--type');
+    expect(typeOpt).toBeDefined();
+    expect(typeOpt.mandatory).toBe(false);
+    expect(typeOpt.hidden).toBe(true);
+  });
+
   it('Commander populates opts.resolution with "completed" when --resolution is omitted', () => {
     const closeCmd = getSpecsCloseSubcommand();
     // Parse argv that omits --resolution. The action handler in
