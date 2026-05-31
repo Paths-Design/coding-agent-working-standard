@@ -3,6 +3,7 @@ title: 'Latch only on catastrophic deny; allow ask-class without latching (down-
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-latch-relax
 created_at: '2026-05-31T14:48:48.435Z'
 updated_at: '2026-05-31T14:50:08.345Z'
 blast_radius:
