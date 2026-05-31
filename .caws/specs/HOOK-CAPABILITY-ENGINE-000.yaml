@@ -7,7 +7,8 @@ created_at: '2026-05-31T18:34:36.728Z'
 updated_at: '2026-05-31T18:34:36.728Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook-pack: command-safety classifier template + its calibration harness'
+    - '.caws command-adapter sidecar config + schema (new governed config surface)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,13 +18,58 @@ scope:
     - '.caws/command-adapters.schema.json'
     - '.caws/command-adapters.example.yaml'
     - 'docs/architecture/command-capability-taxonomy.md'
-  out: []
+  out:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'ZERO runtime decision change. Slice 0 adds the capability-engine scaffolding (typed
+    CommandFact, abstract facet model, recursion budget, adapter sidecar loader, python
+    diagnostic) but the capability pass is a stub returning None — every command receives the
+    identical allow/ask/deny decision it did at baseline HEAD 89730c5 (calibration 141/141).'
+  - 'The stdout contract is unchanged: {"decision","reason"} on stdout, exit 0. Any CommandFact /
+    facet emission goes to stderr only, gated behind CAWS_CLASSIFY_FACTS_DUMP=1, so the
+    block-dangerous.sh consumer (jq -r .decision) is unaffected.'
+  - 'The policy lattice reads ABSTRACT FACETS (kind, domain, scope, reversibility, opacity,
+    blast_radius), never concrete tool tokens. Concrete capability labels (K8S_DELETE_BROAD, etc.)
+    are retained for trace/debug only and do not drive any decision.'
+  - 'The .caws/command-adapters sidecar has STRICT authority bounds: it maps only tool executable +
+    subcommand/resource-alias -> abstract facet assignment. It cannot define policy outcomes,
+    override deny/ask/allow, or introduce new capability kinds. A malformed/invalid sidecar FAILS
+    CLOSED (ignored + a diagnostic ask), never silently trusted.'
+  - 'A single recursion budget is threaded through classify_command, classify_nested_shell, command
+    substitution recursion, and the (stubbed) opaque-exec recursion; exceeding it yields ask, not a
+    crash or unbounded recursion.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'the classifier at baseline HEAD (calibration 141/141 green)'
+    when: 'Slice 0 scaffolding is added and the full calibration suite is re-run'
+    then: 'all 141 existing tests still pass with no modification to their expectations, proving
+      zero decision change'
+  - id: A2
+    given: 'a command run with CAWS_CLASSIFY_FACTS_DUMP=1'
+    when: 'the classifier processes it'
+    then: 'a structured CommandFact/facet JSON line is emitted on STDERR while STDOUT remains the
+      unchanged {"decision","reason"} object — proving the fact builder is live (not dead code) and
+      the consumer contract is untouched'
+  - id: A3
+    given: 'a .caws/command-adapters.yaml that is malformed, or attempts to override a decision
+      outcome / declare a new capability kind'
+    when: 'the sidecar loader reads it'
+    then: 'the loader rejects it (fails closed: sidecar ignored, a diagnostic ask surfaced), and a
+      well-formed alias->facet sidecar validates against .caws/command-adapters.schema.json'
+  - id: A4
+    given: 'a deeply nested wrapper/substitution command (e.g. sh -c "sh -c ... eval ...")'
+    when: 'classify_command recurses'
+    then: 'the shared recursion budget bounds the depth and returns ask on exhaustion rather than
+      recursing without limit'
+non_functional:
+  security:
+    - 'The adapter sidecar is a governed input boundary: it cannot escalate its own authority
+      (no policy-outcome definition, no new capability kinds) and fails closed on malformed input.'
+  reliability:
+    - 'Recursion is bounded by a shared budget across all re-entry paths; no input can drive
+      unbounded recursion or a stack-overflow crash in the hook.'
+contracts:
+  - type: schema
+    name: command-adapters-sidecar
+    description: '.caws/command-adapters.schema.json governs the user-extensible adapter sidecar:
+      alias->facet rows only, no policy override, no new capability kinds. Fail-closed on invalid.'
