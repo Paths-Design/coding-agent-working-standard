@@ -1,10 +1,10 @@
 {
-  "$comment": "CAWS-owned committed 80-FN regression corpus. Converted from surgery-ward terminal-use.commandfact-fn-closure.csv via Python csv.DictReader (RFC-4180; commands contain commas/quoted JSON). target_slice:2/active:false => inactive until Slice 2. Slice 2 asserts expected_facets + expected_final_decision, NEVER reason prose. detector_capability is a trace label only and does not drive the lattice.",
+  "$comment": "CAWS-owned committed 80-FN regression corpus. Converted from surgery-ward terminal-use.commandfact-fn-closure.csv via Python csv.DictReader (RFC-4180; commands contain commas/quoted JSON). DE-GATED at Slice-2 closure: active:true and the rows run in the DEFAULT jest suite via capability_engine_closure.test.js (which iterates all entries unconditionally \u2014 no CAWS_CLASSIFIER_SLICE env gate). expected_final_decision + expected_facets are reconciled to the capability LATTICE (authority); detector_capability is a trace label only and does not drive the lattice. Slice 2 asserts decision + facets, NEVER reason prose.",
   "generated_from": "surgery-ward/surgery_ward_training_bundle/terminal-use.commandfact-fn-closure.csv",
   "count": 80,
   "slice_activation": {
     "1": "shadow_liveness_only",
-    "2": "adapter_activation_and_closure"
+    "2": "adapter_activation_and_closure (ACTIVE \u2014 rows run in default jest via capability_engine_closure.test.js)"
   },
   "entries": [
     {
@@ -23,7 +23,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune",
@@ -41,7 +41,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker volume rm my_volume1 my_volume2",
@@ -59,7 +59,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune --volumes",
@@ -77,7 +77,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pods --all -n production",
@@ -95,7 +95,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-production-example-1",
@@ -122,7 +122,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod app-service-1 -n production",
@@ -140,7 +140,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply tfplan",
@@ -158,7 +158,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply -auto-approve tfplan",
@@ -176,7 +176,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply",
@@ -194,7 +194,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"test\"}'",
@@ -212,7 +212,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"NewUser\"}'",
@@ -230,7 +230,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"newUser\"}'",
@@ -248,7 +248,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"newUser\", \"email\":\"newuser@example.com\"}'",
@@ -266,7 +266,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/123",
@@ -284,7 +284,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/456",
@@ -302,7 +302,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 12345",
@@ -320,7 +320,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <process_id>",
@@ -338,7 +338,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users",
@@ -356,7 +356,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/*",
@@ -374,7 +374,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/1",
@@ -392,7 +392,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 $(lsof -t -i:3000)",
@@ -410,7 +410,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9",
@@ -428,7 +428,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 $(netstat -tunap | grep '3000' | awk '{print $5}')",
@@ -446,7 +446,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false,
+      "active": true,
       "decision_path": "substitution_or_pipeline_recursion",
       "decision_path_note": "Top-level segment fact is kind=NONE because the dangerous operand is inside a $()/pipeline; the decision is facet-attributed via the recursed inner segment (reason carries the capability trace)."
     },
@@ -466,7 +466,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-name -n namespace --force --grace-period=0",
@@ -484,7 +484,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-name -n namespace --force",
@@ -502,7 +502,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f process-name",
@@ -520,7 +520,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill process-name",
@@ -538,7 +538,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group dir/",
@@ -556,7 +556,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group /path/to/directory",
@@ -574,7 +574,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group /path/to/directory/",
@@ -592,7 +592,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d '{\"key\":\"value\"}' url",
@@ -610,7 +610,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d '{\"key\":\"value\"}' https://example.com/api/data",
@@ -628,7 +628,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d @data.json http://example.com",
@@ -646,7 +646,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 PID",
@@ -664,7 +664,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID>",
@@ -682,7 +682,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'process name'",
@@ -700,7 +700,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "ps aux | grep process_name | awk '{print $2}' | xargs kill -9",
@@ -720,7 +720,7 @@
       "csv_reversibility": "no",
       "layer": "pipeline-inherit",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune -a",
@@ -738,7 +738,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod mypod",
@@ -756,7 +756,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete namespace prod",
@@ -774,7 +774,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete namespace my-namespace",
@@ -792,7 +792,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply -destroy",
@@ -810,7 +810,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://bucket/key",
@@ -828,7 +828,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://my-bucket/my-object",
@@ -846,7 +846,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://bucket/key-to-delete",
@@ -864,7 +864,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://my-bucket/non-existent-object",
@@ -882,7 +882,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete",
@@ -900,7 +900,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete --resource-group <group_name> --name <vm_name>",
@@ -918,7 +918,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete --resource-group my-resource-group --name my-vm",
@@ -936,7 +936,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az group delete --name my-resource-group --subscription my-subscription",
@@ -954,7 +954,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -d '{}' https://api",
@@ -972,7 +972,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -d '{}' https://api.example.com/resource",
@@ -990,7 +990,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api/resource",
@@ -1008,7 +1008,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/resource/123",
@@ -1026,7 +1026,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/resource",
@@ -1044,7 +1044,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE \"https://api.example.com/v1/resource\"",
@@ -1062,7 +1062,7 @@
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u filename",
@@ -1080,7 +1080,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u sensitive_file",
@@ -1098,7 +1098,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/sensitive_file",
@@ -1116,7 +1116,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/sensitive_file & disown $!",
@@ -1134,7 +1134,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/nonexistent_file",
@@ -1152,7 +1152,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 file",
@@ -1170,7 +1170,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 log_file",
@@ -1188,7 +1188,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 <(pwd)/log_file",
@@ -1206,7 +1206,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 $(pwd)/log_file",
@@ -1224,7 +1224,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 /path/to/log/original_file.log",
@@ -1242,7 +1242,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID_from_previous_output>",
@@ -1260,7 +1260,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'python script'",
@@ -1278,7 +1278,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'python script.*'",
@@ -1296,7 +1296,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "killall nginx",
@@ -1314,7 +1314,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "killall -HUP nginx",
@@ -1332,7 +1332,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID of nginx master process>",
@@ -1350,7 +1350,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 915",
@@ -1368,7 +1368,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod nginx-abc123",
@@ -1386,7 +1386,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod --force",
@@ -1404,7 +1404,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall myapp",
@@ -1422,7 +1422,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall my-app",
@@ -1440,7 +1440,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall myapp --force",
@@ -1458,7 +1458,7 @@
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     }
   ]
 }

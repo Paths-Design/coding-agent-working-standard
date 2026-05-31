@@ -139,6 +139,16 @@ describe('HOOK-CAPABILITY-ENGINE-002: 80-FN closure (no silent allow, facet-attr
     });
   });
 
+  it('de-gate: every corpus row is active (runs in the default suite, no env gate)', () => {
+    // The closure assertions above iterate ALL entries unconditionally — there
+    // is no `active`/CAWS_CLASSIFIER_SLICE filter, so the rows already run in the
+    // default jest. This guards the fixture's self-description against drift: at
+    // Slice-2 closure no row may be left active:false (which would falsely imply
+    // it is still gated out of the default suite).
+    const inactive = fnCorpus.entries.filter((e) => e.active !== true);
+    expect(inactive.map((e) => e.source_row)).toEqual([]);
+  });
+
   it('corpus closure summary: 80 rows, 0 silent allows, distribution recorded', () => {
     let allow = 0;
     const dist = { allow: 0, ask: 0, deny: 0 };
