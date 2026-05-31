@@ -35,11 +35,23 @@ When multiple agents are working on this project, each agent MUST work in its ow
 
 Merge commits ARE allowed on the base branch while other worktrees are active. This lets you incrementally merge completed work without waiting for all agents to finish.
 
-1. Destroy the worktree first: `caws worktree destroy <name>`
-2. Switch to the base branch: `git checkout main`
-3. Merge with: `git merge --no-ff <worktree-branch>`
-4. The commit-msg hook enforces the `merge(worktree): <description>` format for non-FF merges
-5. For manual merge commits: `git commit -m "merge(worktree): integrate scenarios work"`
+**Governed path (preferred): `caws worktree merge <name>`.** From the canonical checkout, after committing all work on the worktree branch, run:
+
+```bash
+caws worktree merge <name>            # readiness check first: caws worktree merge <name> --dry-run
+```
+
+This is one governed transaction: it checks ownership + clean-tree + binding prerequisites, runs `git checkout <base>` + `git merge --no-ff` with a `merge(worktree): <name>` message, **auto-closes the bound spec** (`spec_closed`), and appends `worktree_merged` — over the v11 flat-map `worktrees.json`. You then `caws worktree destroy <name>` to remove the now-merged worktree. Prefer this over hand-running git: the governed command performs the base checkout *inside* the transaction, whereas a manual `git checkout main` is a bare checkout of an existing branch, which the danger-latch classifier flags as potentially discarding work (only `checkout -b` is auto-admitted) and can require a human latch reset.
+
+**Manual fallback (only if the governed command genuinely cannot be used):**
+
+1. Switch to the base branch: `git checkout main` (be aware this bare checkout can trip the danger latch).
+2. Merge with: `git merge --no-ff <worktree-branch>`
+3. The commit-msg hook enforces the `merge(worktree): <description>` format for non-FF merges.
+4. For manual merge commits: `git commit -m "merge(worktree): integrate scenarios work"`
+5. Then destroy the now-merged worktree: `caws worktree destroy <name>`.
+
+(The `WORKTREE-MERGE-V11-SHAPE-001` registry-shape crash that once forced this fallback is fixed; the governed command reads the flat-map registry natively.)
 
 ## Virtual environment in worktrees
 
@@ -55,6 +67,8 @@ If your project uses `.caws/scope.json`, the `designatedVenvPath` field specifie
 
 1. Commit all changes to your worktree branch
 2. Run tests in your worktree to verify
-3. Destroy your worktree with `caws worktree destroy <name>`
-4. Merge your branch to base: `git merge --no-ff <branch>` (uses `merge(worktree):` format)
+3. Merge with the governed path: `caws worktree merge <name>` (checks prerequisites, `git merge --no-ff`, auto-closes the bound spec, appends `worktree_merged`). Use `--dry-run` first to confirm readiness.
+4. Destroy the now-merged worktree: `caws worktree destroy <name>`
 5. Delete the branch if no longer needed: `git branch -d <branch>`
+
+(Manual fallback only if the governed command cannot be used: `git checkout main && git merge --no-ff <branch>` in the `merge(worktree):` format, then `caws worktree destroy <name>` — but be aware the bare `git checkout main` can trip the danger latch.)
