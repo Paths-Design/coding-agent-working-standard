@@ -3,6 +3,7 @@ title: 'Doctrine: worktree create/destroy/merge DO ship in v11.1; caws worktree 
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: doctrine-wt-merge
 created_at: '2026-05-31T14:35:37.593Z'
 updated_at: '2026-05-31T14:35:37.593Z'
 blast_radius:
