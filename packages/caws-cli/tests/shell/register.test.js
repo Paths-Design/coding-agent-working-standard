@@ -158,3 +158,129 @@ describe('registerShellCommands — does not touch legacy commands', () => {
     expect(names).toContain('worktree');
   });
 });
+
+// ---------------------------------------------------------------------------
+// CAWS-CLI-COVERAGE-FLOOR-001 — applyOptionMeta / leafCommandName / collect
+// coverage via the registered surface.
+//
+// register.ts's parsing helpers are not exported, so they are driven through
+// the real registered Commander tree (which applies them at registration
+// time) plus actual flag parsing for the collector branches. No run*Command
+// action is invoked — every assertion reads Commander metadata or parsed
+// option values, not command side effects.
+// ---------------------------------------------------------------------------
+
+function findGroup(program, name) {
+  return program.commands.find((c) => c.name() === name);
+}
+function findLeaf(program, groupName, leafName) {
+  const g = findGroup(program, groupName);
+  return g.commands.find((c) => c.name() === leafName);
+}
+function optByLong(cmd, long) {
+  return cmd.options.find((o) => o.long === long);
+}
+
+describe('registerShellCommands — applyOptionMeta branch shapes', () => {
+  it('hidden option (specs create --type) is registered but hidden from help', () => {
+    const program = mkProgramWithShellOnly([]);
+    const create = findLeaf(program, 'specs', 'create');
+    const typeOpt = optByLong(create, '--type');
+    expect(typeOpt).toBeDefined();
+    // applyOptionMeta calls Option.hideHelp() → Commander sets `hidden: true`.
+    expect(typeOpt.hidden).toBe(true);
+  });
+
+  it('required (mandatory) option (gates run --spec) is marked mandatory, no default', () => {
+    const program = mkProgramWithShellOnly([]);
+    const run = findLeaf(program, 'gates', 'run');
+    const spec = optByLong(run, '--spec');
+    expect(spec).toBeDefined();
+    expect(spec.mandatory).toBe(true);
+    expect(spec.defaultValue).toBeUndefined();
+  });
+
+  it('default-value option (gates run --context) carries its default', () => {
+    const program = mkProgramWithShellOnly([]);
+    const run = findLeaf(program, 'gates', 'run');
+    const ctx = optByLong(run, '--context');
+    expect(ctx).toBeDefined();
+    expect(ctx.defaultValue).toBe('cli');
+    expect(ctx.mandatory).toBe(false);
+  });
+
+  it('collect + required + seed (waiver create --gate) is mandatory with an [] seed default', () => {
+    const program = mkProgramWithShellOnly([]);
+    const create = findLeaf(program, 'waiver', 'create');
+    const gate = optByLong(create, '--gate');
+    expect(gate).toBeDefined();
+    expect(gate.mandatory).toBe(true);
+    expect(gate.defaultValue).toEqual([]);
+    expect(typeof gate.parseArg).toBe('function'); // the collector
+  });
+
+  it('collect + seed, not required (prepush --ack) has an [] default and a collector', () => {
+    const program = mkProgramWithShellOnly([]);
+    const prepush = findGroup(program, 'prepush');
+    const ack = optByLong(prepush, '--ack');
+    expect(ack).toBeDefined();
+    expect(ack.mandatory).toBe(false);
+    expect(ack.defaultValue).toEqual([]);
+    expect(typeof ack.parseArg).toBe('function');
+  });
+
+  it('collect, no seed (claim --paths) leaves an unsupplied option undefined', () => {
+    const program = mkProgramWithShellOnly([]);
+    const claim = findGroup(program, 'claim');
+    const paths = optByLong(claim, '--paths');
+    expect(paths).toBeDefined();
+    // No seed → default is undefined (so an unsupplied --paths stays undefined).
+    expect(paths.defaultValue).toBeUndefined();
+    expect(typeof paths.parseArg).toBe('function');
+  });
+});
+
+describe('registerShellCommands — collectOption accumulates repeated flags', () => {
+  it('a repeatable collect option gathers every occurrence in caller order', () => {
+    const program = mkProgramWithShellOnly([]);
+    const amend = findLeaf(program, 'specs', 'amend-scope');
+    // Replace the action so parsing does not invoke the real command.
+    amend._actionHandler = undefined;
+    amend.action(() => {});
+    program.parse(
+      ['node', 'caws', 'specs', 'amend-scope', 'FOO-1', '--add', 'a.ts', '--add', 'b.ts'],
+      { from: 'node' }
+    );
+    expect(amend.opts().add).toEqual(['a.ts', 'b.ts']);
+  });
+
+  it('a collect option supplied once yields a single-element array', () => {
+    const program = mkProgramWithShellOnly([]);
+    const amend = findLeaf(program, 'specs', 'amend-scope');
+    amend._actionHandler = undefined;
+    amend.action(() => {});
+    program.parse(
+      ['node', 'caws', 'specs', 'amend-scope', 'FOO-1', '--add', 'only.ts'],
+      { from: 'node' }
+    );
+    expect(amend.opts().add).toEqual(['only.ts']);
+  });
+});
+
+describe('registerShellCommands — leafCommandName argument suffix', () => {
+  it('a leaf with a required argument registers with a <arg> positional', () => {
+    const program = mkProgramWithShellOnly([]);
+    // specs create <id> — required argument.
+    const create = findLeaf(program, 'specs', 'create');
+    const args = create.registeredArguments ?? create._args ?? [];
+    expect(args).toHaveLength(1);
+    expect(args[0].required).toBe(true);
+  });
+
+  it('a flat leaf with no argument registers with zero positionals (doctor)', () => {
+    const program = mkProgramWithShellOnly([]);
+    const doctor = findGroup(program, 'doctor');
+    const args = doctor.registeredArguments ?? doctor._args ?? [];
+    expect(args).toHaveLength(0);
+  });
+});
