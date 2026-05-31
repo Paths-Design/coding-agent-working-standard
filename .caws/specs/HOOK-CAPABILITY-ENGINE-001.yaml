@@ -7,7 +7,7 @@ created_at: '2026-05-31T19:20:13.016Z'
 updated_at: '2026-05-31T19:20:13.016Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook-pack: command-safety classifier verification surface (committed corpus + harness)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,13 +18,51 @@ scope:
     - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/fact_probes.json'
     - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/zero_change_harness.py'
     - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/README.md'
-  out: []
+  out:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'ZERO runtime decision change. Slice 1 adds NO production lines to classify_command.py beyond
+    Slice 0 (the capability pass stays a stub returning None). The decisive artifact is an empty
+    stress_changed.tsv across the full 4,882-command real-agent corpus: current template decisions
+    are identical to the pre-capability-engine baseline blob (205800c) for every command.'
+  - 'The shadow-fact layer is observably LIVE and operationally sufficient for Slice 2: under
+    CAWS_CLASSIFY_FACTS_DUMP=1, every 80-FN row emits a non-trivial parsed fact (executable resolved
+    + subcommand_path|flags populated), and named fact-probes prove the exact structural fields Slice
+    2 will map (basename resolution, wrapper peel, scope, amplifier flags, payload opacity,
+    substitution extraction, parse_confidence). kind stays NONE in Slice 1 (correct boundary).'
+  - 'The zero-change harness is hostile to false success: in AC mode (--require-corpus
+    --expected-count 4882) it exits nonzero unless it ran exactly 4,882 rows with changed=0/errors=0;
+    a missing corpus is a distinct SKIP that can never be recorded as passed=4882. It self-validates
+    the baseline (markers absent in 205800c, present at HEAD) so a wrong SHA cannot pass silently.'
+  - 'stdout contract unchanged: {"decision","reason"}, exit 0. Facts are stderr-only under the env
+    flag. The 80-FN curated corpus is a CAWS-owned committed fixture (target_slice:2, active:false),
+    not surgery-ward scratch; semantic assertions read expected_facets, never reason prose.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'the calibration baseline at 141/141'
+    when: 'the Slice 1 shadow test file + fixtures + harness are added (no classify_command.py change)'
+    then: 'classify_command_calibration.test.js still passes 141/141 with no expectation edits'
+  - id: A2
+    given: 'the committed 80-FN corpus + the named fact-probes, run under CAWS_CLASSIFY_FACTS_DUMP=1'
+    when: 'capability_engine_shadow.test.js executes each row/probe'
+    then: 'every 80-FN row emits a non-trivial fact (executable + subcommand_path|flags) with NO
+      decision change, and every named probe matches its expected facet fields — proving the fact
+      builder is live and operationally sufficient for Slice 2'
+  - id: A3
+    given: 'the 4,882-command real-agent corpus and the pre-engine baseline blob 205800c'
+    when: 'zero_change_harness.py runs in AC mode (--require-corpus --expected-count 4882)'
+    then: 'it reports result=PASS with total=4882, changed=0, errors=0, baseline_markers_absent=true,
+      current_markers_present=true; stress_changed.tsv is header-only'
+non_functional:
+  reliability:
+    - 'The zero-change proof covers the full real-agent corpus, not a sample; the harness refuses to
+      report success on a short or absent corpus (AC mode fails closed).'
+  security:
+    - 'No decision-surface change: the command-safety gate behaves identically to baseline; the
+      capability fact layer is shadow-only (stderr, env-gated) and cannot alter an allow/ask/deny.'
+contracts:
+  - type: behavior
+    name: classifier-stdout-contract
+    description: 'classify_command.py stdout is exactly {"decision":"allow"|"ask"|"deny","reason":
+      string}, exit 0; no fact/trace/stderr content on stdout. CAWS_CLASSIFY_FACTS_DUMP=1 emits
+      CommandFacts on STDERR only. Unchanged from pre-capability-engine baseline 205800c.'
