@@ -839,3 +839,256 @@ describe('CAWS-GATES-POLICY-DISPOSITION-DRIFT-001: policy-driven disposition der
     expect(r.anyBlocks).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CAWS-CLI-COVERAGE-FLOOR-001 — local gate evaluator unit coverage.
+//
+// The evaluators are pure functions with explicit `stagedChanges` / `nowIso`
+// injection seams, so every branch is reachable without a real git repo.
+// These tests exercise the failure branches that the integration-style
+// `runGatesRunCommand` tests above leave uncovered (they only hit the
+// empty-diff happy path). Required directly from the compiled subpath; the
+// evaluators are NOT re-exported through the top `dist/shell` barrel.
+// ---------------------------------------------------------------------------
+
+const {
+  evaluateBudgetLimit,
+  evaluateScopeBoundary,
+  evaluateSpecCompleteness,
+} = require('../../dist/shell/gates/local-evaluators');
+const {
+  totalInsertions,
+} = require('../../dist/shell/gates/local-evaluators/diff-helpers');
+
+// Minimal policy object with the three risk-tier budgets the evaluators read.
+const EVAL_POLICY = {
+  version: 1,
+  risk_tiers: {
+    '1': { max_files: 5, max_loc: 200 },
+    '2': { max_files: 15, max_loc: 600 },
+    '3': { max_files: 30, max_loc: 1500 },
+  },
+  gates: {},
+};
+
+// A schema-shaped active spec; individual tests clone + mutate the fields
+// they care about. scope.in: ['src/**'] drives scope-boundary classification.
+function makeSpec(overrides = {}) {
+  return {
+    id: 'EVAL-1',
+    title: 'local-evaluator fixture',
+    risk_tier: 3,
+    mode: 'feature',
+    lifecycle_state: 'active',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    blast_radius: { modules: ['src'] },
+    operational_rollback_slo: '30m',
+    scope: { in: ['src/**'], out: [] },
+    invariants: ['inv'],
+    acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
+    non_functional: {},
+    contracts: [],
+    ...overrides,
+  };
+}
+
+function staged(path, insertions = 1, deletions = 0) {
+  return { path, insertions, deletions };
+}
+
+describe('local-evaluators — budget_limit unit coverage', () => {
+  it('tier-undefined: a spec risk_tier outside 1/2/3 yields no violations and zero budget', () => {
+    const res = evaluateBudgetLimit({
+      spec: makeSpec({ risk_tier: 99 }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [staged('src/a.ts', 5)],
+    });
+    expect(res.violations).toHaveLength(0);
+    expect(res.observed).toEqual({
+      files_changed: 1,
+      loc_changed: 5,
+      max_files: 0,
+      max_loc: 0,
+    });
+  });
+
+  it('max_files only: more files than tier budget allows fires exactly one max_files_exceeded', () => {
+    // tier 1 → max_files 5; 6 files, each tiny so loc stays under 200.
+    const changes = Array.from({ length: 6 }, (_, i) => staged(`src/f${i}.ts`, 1));
+    const res = evaluateBudgetLimit({
+      spec: makeSpec({ risk_tier: 1 }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: changes,
+    });
+    expect(res.violations).toHaveLength(1);
+    expect(res.violations[0].type).toBe('max_files_exceeded');
+    expect(res.violations[0].gate).toBe('budget_limit');
+  });
+
+  it('max_loc only: more inserted lines than tier budget allows fires exactly one max_loc_exceeded', () => {
+    // tier 1 → max_loc 200; 2 files (under max_files 5) but 201 lines total.
+    const res = evaluateBudgetLimit({
+      spec: makeSpec({ risk_tier: 1 }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [staged('src/a.ts', 200), staged('src/b.ts', 1)],
+    });
+    expect(res.violations).toHaveLength(1);
+    expect(res.violations[0].type).toBe('max_loc_exceeded');
+  });
+
+  it('both thresholds breached: two violations (max_files + max_loc)', () => {
+    const changes = Array.from({ length: 6 }, (_, i) => staged(`src/f${i}.ts`, 40));
+    const res = evaluateBudgetLimit({
+      spec: makeSpec({ risk_tier: 1 }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: changes,
+    });
+    const types = res.violations.map((v) => v.type).sort();
+    expect(types).toEqual(['max_files_exceeded', 'max_loc_exceeded']);
+  });
+
+  it('within budget: empty staged changes yields no violations and observed zeros', () => {
+    const res = evaluateBudgetLimit({
+      spec: makeSpec({ risk_tier: 3 }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [],
+    });
+    expect(res.violations).toHaveLength(0);
+    expect(res.observed.files_changed).toBe(0);
+    expect(res.observed.loc_changed).toBe(0);
+    expect(res.observed.max_files).toBe(30);
+  });
+});
+
+describe('local-evaluators — scope_boundary unit coverage', () => {
+  it('reject: a staged path outside scope.in becomes one scope_boundary violation', () => {
+    const res = evaluateScopeBoundary({
+      spec: makeSpec({ scope: { in: ['src/**'], out: [] } }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [staged('docs/readme.md')],
+    });
+    expect(res.observed.rejected).toBe(1);
+    expect(res.observed.invalid).toBe(0);
+    expect(res.violations).toHaveLength(1);
+    expect(res.violations[0].gate).toBe('scope_boundary');
+    expect(res.violations[0].file).toBe('docs/readme.md');
+  });
+
+  it('invalid_path: parent-traversal and empty paths each become one violation', () => {
+    const res = evaluateScopeBoundary({
+      spec: makeSpec({ scope: { in: ['src/**'], out: [] } }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [staged('../escape.ts'), staged('')],
+    });
+    expect(res.observed.invalid).toBe(2);
+    expect(res.violations).toHaveLength(2);
+  });
+
+  it('admit: a path inside scope.in produces no violation (pass-through)', () => {
+    const res = evaluateScopeBoundary({
+      spec: makeSpec({ scope: { in: ['src/**'], out: [] } }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      worktreeName: 'explicit-name',
+      stagedChanges: [staged('src/a.ts')],
+    });
+    expect(res.violations).toHaveLength(0);
+    expect(res.observed).toEqual({ files_evaluated: 1, rejected: 0, invalid: 0 });
+  });
+
+  it('mixed: admit + reject + invalid counted independently', () => {
+    const res = evaluateScopeBoundary({
+      spec: makeSpec({ scope: { in: ['src/**'], out: [] } }),
+      policy: EVAL_POLICY,
+      repoRoot: '/nonexistent',
+      stagedChanges: [staged('src/a.ts'), staged('docs/x.md'), staged('../y.ts')],
+    });
+    expect(res.observed).toEqual({ files_evaluated: 3, rejected: 1, invalid: 1 });
+    expect(res.violations).toHaveLength(2);
+  });
+});
+
+describe('local-evaluators — spec_completeness unit coverage', () => {
+  const NOW_ISO = '2026-05-14T22:00:00.000Z';
+
+  it('lifecycle_state !== active fires spec_not_active', () => {
+    const res = evaluateSpecCompleteness({
+      spec: makeSpec({ lifecycle_state: 'closed' }),
+      nowIso: NOW_ISO,
+    });
+    expect(res.violations.some((v) => v.type === 'spec_not_active')).toBe(true);
+  });
+
+  it('empty blast_radius.modules fires blast_radius_empty', () => {
+    const res = evaluateSpecCompleteness({
+      spec: makeSpec({ blast_radius: { modules: [] } }),
+      nowIso: NOW_ISO,
+    });
+    expect(res.violations.some((v) => v.type === 'blast_radius_empty')).toBe(true);
+  });
+
+  it('undefined blast_radius fires blast_radius_empty', () => {
+    const spec = makeSpec();
+    delete spec.blast_radius;
+    const res = evaluateSpecCompleteness({ spec, nowIso: NOW_ISO });
+    expect(res.violations.some((v) => v.type === 'blast_radius_empty')).toBe(true);
+  });
+
+  it('experimental_mode enabled + expires_at in the past fires experimental_mode_expired', () => {
+    const res = evaluateSpecCompleteness({
+      spec: makeSpec({
+        experimental_mode: { enabled: true, expires_at: '2026-05-14T21:59:59.000Z' },
+      }),
+      nowIso: NOW_ISO,
+    });
+    expect(res.violations.some((v) => v.type === 'experimental_mode_expired')).toBe(true);
+  });
+
+  it('experimental_mode enabled + expires_at in the future does NOT fire', () => {
+    const res = evaluateSpecCompleteness({
+      spec: makeSpec({
+        experimental_mode: { enabled: true, expires_at: '2026-05-14T22:00:01.000Z' },
+      }),
+      nowIso: NOW_ISO,
+    });
+    expect(res.violations.some((v) => v.type === 'experimental_mode_expired')).toBe(false);
+  });
+
+  it('experimental_mode disabled does NOT fire even with a past expiry', () => {
+    const res = evaluateSpecCompleteness({
+      spec: makeSpec({
+        experimental_mode: { enabled: false, expires_at: '2020-01-01T00:00:00.000Z' },
+      }),
+      nowIso: NOW_ISO,
+    });
+    expect(res.violations.some((v) => v.type === 'experimental_mode_expired')).toBe(false);
+  });
+
+  it('a fully-healthy active spec yields zero violations', () => {
+    const res = evaluateSpecCompleteness({ spec: makeSpec(), nowIso: NOW_ISO });
+    expect(res.violations).toHaveLength(0);
+  });
+});
+
+describe('local-evaluators — diff-helpers unit coverage', () => {
+  it('totalInsertions sums numeric insertions and skips binary (null) entries', () => {
+    const changes = [
+      { path: 'a.ts', insertions: 10, deletions: 0 },
+      { path: 'bin.png', insertions: null, deletions: null },
+      { path: 'b.ts', insertions: 5, deletions: 2 },
+    ];
+    expect(totalInsertions(changes)).toBe(15);
+  });
+
+  it('totalInsertions of an empty list is 0', () => {
+    expect(totalInsertions([])).toBe(0);
+  });
+});
