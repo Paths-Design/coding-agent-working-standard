@@ -2,9 +2,11 @@ id: CAWS-WORKTREE-MERGE-PROBE-001
 title: 'throwaway probe to reproduce worktree merge v11-shape behavior'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Diagnostic probe only — used to verify whether WORKTREE-MERGE-V11-SHAPE-001 still reproduces. CONCLUSION: it does NOT. caws worktree merge --dry-run reads the live v11 flat-map worktrees.json cleanly (typed ''not found'' for a bogus name, no schema-violation crash); loadWorktrees returns ok:true on the flat-map; mergeWorktree accesses registry.value[name] direct-key (flat-map native). The regression was fixed by the migrate-registry + flat-map-native reader work. No code change needed.'
 created_at: '2026-05-31T14:33:57.029Z'
-updated_at: '2026-05-31T14:33:57.029Z'
+updated_at: '2026-05-31T14:35:09.652Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
