@@ -2249,7 +2249,13 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
             force_exempt = (fact.domain == "process") or (fact.executable == "helm")
             if irreversibility_amp and not force_exempt:
                 fact.reversibility = "irreversible"
-            if {"--all", "-A"} & amp:
+            # --all/-A raise scope to broad, but must NOT downgrade an already
+            # prod scope (prod is the more severe/specific scope set from a
+            # `production`/`staging`/`live` token in build_command_fact). Both
+            # deny under the lattice, but the FACET must stay prod for honest
+            # attribution (kubectl delete pods --all -n production is prod-scoped,
+            # not merely broad).
+            if ({"--all", "-A"} & amp) and fact.scope != "prod":
                 fact.scope = "broad"
         # prod/broad scope already set on fact.scope by build_command_fact.
 
