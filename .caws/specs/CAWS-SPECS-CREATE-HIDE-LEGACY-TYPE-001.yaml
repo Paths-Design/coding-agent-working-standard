@@ -2,9 +2,11 @@ id: CAWS-SPECS-CREATE-HIDE-LEGACY-TYPE-001
 title: 'caws specs create --help hides the removed v10 --type alias (still parseable for the migration error, but absent from the options list so first-timers do not read it as a current flag)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Hidden the removed-v10 --type alias from specs create --help via Option.hideHelp() while keeping it parseable for the migration error. Verified end-to-end at canonical: --help omits --type and keeps --title/--mode/--risk-tier/--scope-in; `specs create FOO --type feature` still emits ''use --mode instead'' (exit 1). 36/36 tests (specs + help-metadata-lock) green; L1/L3/L4/L5 locks unaffected.'
 created_at: '2026-05-31T14:10:16.421Z'
-updated_at: '2026-05-31T14:10:16.421Z'
+updated_at: '2026-05-31T14:22:20.977Z'
 blast_radius:
   modules:
     - caws-cli shell — command-metadata + register (help rendering)
