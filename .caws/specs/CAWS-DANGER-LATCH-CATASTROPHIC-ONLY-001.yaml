@@ -4,10 +4,12 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-05-31T14:48:48.435Z'
-updated_at: '2026-05-31T14:48:48.435Z'
+updated_at: '2026-05-31T14:50:08.345Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'claude-code hook pack: block-dangerous.sh (live + template)'
+    - 'hook-pack manifest (CLAUDE_CODE_PACK_VERSION)'
+    - 'danger-latch test suite'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -15,18 +17,33 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
     - '.claude/hooks/block-dangerous.sh'
     - 'packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts'
-    - 'docs/failure-lineage.md'
     - '.claude/hooks/CLAUDE.md'
     - 'packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md'
     - 'packages/caws-cli/tests/hook-packs/danger_latch_warn_then_latch.test.js'
     - 'packages/caws-cli/tests/hook-packs/latch_readonly_and_reset.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A healthy-classifier "deny" verdict still hard-blocks (exit 2) and arms the latch immediately — the catastrophic set (rm -rf /, force-push, reset --hard, git clean -f, deleted-tag push, pipe-to-shell, find -delete/-exec, git init) is unchanged.'
+  - 'A healthy-classifier "ask" verdict now exits 0 (allow) with NO warn marker and NO latch written — the over-aggressive ask-class friction (npm run, cherry-pick, rebase, amend) is removed.'
+  - 'Fail-closed is preserved: a malformed classifier decision and a classifier-unavailable invocation still latch (defense-in-depth, unrelated to the ask-verdict relaxation).'
+  - 'classify_command.py is unchanged — it still returns deny/ask/allow; only block-dangerous.sh handling of the ask verdict changes, so the classifier-calibration suite stays green.'
+  - 'The live .claude/hooks/block-dangerous.sh and the shipped template copy stay byte-identical, and CLAUDE_CODE_PACK_VERSION is bumped so consumer re-installs pick up the relaxed behavior.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the relaxed block-dangerous.sh staged into a project (as the test harness does)'
+    when: 'driven with an ask-class command (e.g. `npm run lint`)'
+    then: 'it exits 0 (allow), writes no danger-warn or danger-latch file, and a second ask-class command also does not latch'
+  - id: A2
+    given: 'the relaxed block-dangerous.sh'
+    when: 'driven with a deny-class command (e.g. `git push --force origin main`)'
+    then: 'it blocks (emit_block) and arms the latch immediately — unchanged from prior behavior'
+  - id: A3
+    given: 'the relaxed block-dangerous.sh with the classifier made unavailable or returning a malformed decision'
+    when: 'driven with any command'
+    then: 'it fails closed (latch armed) — the relaxation does NOT weaken the classifier-failure path'
+  - id: A4
+    given: 'a consumer running `caws init --agent-surface claude-code` after this change'
+    when: 'the pack installs'
+    then: 'CLAUDE_CODE_PACK_VERSION is 12 and the installed block-dangerous.sh carries the relaxed ask-handling (managed header version 12)'
 non_functional: {}
 contracts: []
