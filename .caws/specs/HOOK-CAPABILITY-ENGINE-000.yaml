@@ -1,0 +1,29 @@
+id: HOOK-CAPABILITY-ENGINE-000
+title: 'Capability classifier Slice 0: contract + config authority'
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-05-31T18:34:36.728Z'
+updated_at: '2026-05-31T18:34:36.728Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/classify_command.py'
+    - 'packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js'
+    - '.caws/command-adapters.schema.json'
+    - '.caws/command-adapters.example.yaml'
+    - 'docs/architecture/command-capability-taxonomy.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
