@@ -3,7 +3,6 @@ title: 'Throwaway probe spec for exit-code recon'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
-worktree: probe-wt-a
 created_at: '2026-06-01T08:03:37.004Z'
 updated_at: '2026-06-01T08:03:37.004Z'
 blast_radius:
