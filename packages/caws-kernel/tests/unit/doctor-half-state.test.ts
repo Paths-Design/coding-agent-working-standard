@@ -220,7 +220,15 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H1 — ghost registry entry', () => {
     ).toBeUndefined();
   });
 
-  test('silently SKIPS H1 when gitWorktrees is unavailable (non-fatal git observation)', () => {
+  // AGENT-LIVENESS-DOCTOR-001 (D10): the H1 ghost rule was LOOSENED. It no
+  // longer REQUIRES git observation — the canonical-dir filesystem fact
+  // (worktreeDirByName) is sufficient to flag a registry entry whose dir is
+  // gone. The prior "silently skip when git is unavailable" behavior WAS the
+  // D10 defect: doctor reported clean on a drifted repo because git happened to
+  // be unobservable. git porcelain is now a refinement (it can prevent a false
+  // ghost for a worktree at a non-canonical path), not a precondition. When git
+  // observation is absent the finding still fires, with git_worktree_listed:null.
+  test('H1 FIRES on worktreeDirByName alone when gitWorktrees is unavailable (D10 loosening)', () => {
     const spec = makeSpec({ id: 'NOGIT-1' });
     const registry = makeRegistry({
       'wt-nogit': { specId: 'NOGIT-1' },
@@ -244,11 +252,13 @@ describe('WORKTREE-DOCTOR-HALF-STATE-001 H1 — ghost registry entry', () => {
 
     const report = inspectProjectState(input);
 
-    expect(
-      report.findings.find(
-        (f) => f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY
-      )
-    ).toBeUndefined();
+    const ghost = report.findings.find(
+      (f) => f.rule === DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY
+    );
+    expect(ghost).toBeDefined();
+    expect(ghost!.subject).toBe('wt-nogit');
+    // git refinement could not run → the listed flag is null, not false.
+    expect(ghost!.data?.git_worktree_listed).toBeNull();
   });
 
   // FOLLOWUP-001 A3: defensive filter regression. The prior slice (commit
