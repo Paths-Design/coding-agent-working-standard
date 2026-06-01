@@ -59,6 +59,44 @@ invariants:
     committed tmp/<sid>/ session-log dir inside the hook-pack template tree) nor
     the worktree-guard.sh read-only text-mention false-positive. Both are
     separately tracked, non-blocking, and orthogonal to lease identity.
+  - >-
+    A1 DETERMINATION (recon complete 2026-06-01; ac evidence seq=1187,
+    hash 73d546a4). CLASSIFICATION = category 5 PROBE-LOG ATTRIBUTION ERROR
+    (equivalently category 1, genuine top-level session). CONFIDENCE HIGH.
+    ea12659d is a genuine TOP-LEVEL Claude Code session, not a subagent lease.
+    PROOF: (1) it has its OWN top-level transcript at
+    ~/.claude/projects/-Users-...-caws-opera-mul-pro/ea12659d-...jsonl (269KB);
+    all FOUR probe sessions (03a455fe, 3b0f98ab, 948c00c1, ea12659d) have one,
+    and a subagent gets no top-level transcript. (2) its session-log .meta.json
+    records source=startup, model=claude-sonnet-4-6, and its own transcript_path.
+    (3) its turn-001 user message IS the probe task prompt and turn-002 user is
+    an operator approval — inputs a subagent never receives. (4) identical
+    session-dir footprint to the three confirmed top-level peers. (5) the lease
+    last_seen_reason=session_stop + status=stopped + stopped_at are written by
+    the Stop-transition writer (leases-store.ts lines 332-334) fired by
+    agent-stop.sh, a top-level session-lifecycle event; cwd/branch=worktree-b
+    reflects that the session had cd-ed into worktree-b for its cd-phantom claim
+    (Event 8), NOT subagent origin.
+  - >-
+    A1 ADJUDICATION. CLASH-LOG line 4 (ea12659d is the top-level probe runner,
+    main checkout, unbound) is CORRECT; line 266 (a subagent session_start lease)
+    is the attribution ERROR. The 948c00c1 A1-addendum author conflated its OWN
+    concurrently-spawned subagents — which genuinely DID share the 948c00c1 parent
+    id, matching the live re-probe — with the peer TOP-LEVEL session ea12659d. The
+    phantom-lease-from-subagent causal story does NOT survive evidence.
+  - >-
+    A1 IMPLICATION (carried into A4, not yet auto-decided). No subagent-specific
+    lease defect is proven by this evidence: all four observed leases map 1:1 to
+    four top-level transcripts. The remaining real fact from run-002 — that a
+    subagent's CLI/tool subprocess resolves to the PARENT id via claude_code_env
+    (confirmed by live re-probe) — means a subagent does NOT mint a distinct lease
+    via the CLI path either. SessionStart does not fire on subagent spawn (docs),
+    so agent-register.sh never runs for a subagent. The slice therefore trends
+    toward a DOCUMENTED NO-OP: register-layer reconciliation and SubagentStart-
+    tagging are not-applicable to the proven evidence. A4/A5 remain a maintainer
+    gate — if the maintainer wants belt-and-suspenders subagent observability, A3
+    (probe whether SubagentStart is wirable here) is the only remaining live lever;
+    otherwise close as no-op with this evidence.
 acceptance:
   - id: A1
     given: the ea12659d phantom lease observed in run-002 and its on-disk + log artifacts
