@@ -7,21 +7,74 @@ created_at: '2026-06-01T16:49:50.263Z'
 updated_at: '2026-06-01T16:49:51.118Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/claim.ts
     - packages/caws-cli/tests/shell/claim-command.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    caws claim --takeover refuses (exit non-zero) when the invoking session's
+    stable root does not resolve to the target worktree. A transient shell cd
+    into a worktree dir, while the session itself remains rooted at the
+    canonical main checkout, must NOT mint or imply ownership the write-guard
+    will not honor. This closes the run-002 cd-phantom seam.
+  - >-
+    The session-stable root is read from the CLAUDE_PROJECT_DIR env (the same
+    root the worktree-write-guard keys on, which always points at the canonical
+    main checkout even after a one-off cd). When CLAUDE_PROJECT_DIR is present
+    and resolves to a path that is not the target worktree, a takeover is a
+    phantom and is refused.
+  - >-
+    The check is scoped to the takeover-apply path only. A same-session claim,
+    a foreign-owner refusal without takeover, and the unowned soft-block keep
+    their existing exit codes and wording. No bind, destroy, or merge ownership
+    semantics change.
+  - >-
+    A legitimate takeover still succeeds: when CLAUDE_PROJECT_DIR is absent (no
+    contradicting session root is asserted) or resolves to the target worktree
+    itself, the existing assertOwnership takeover path runs unchanged and still
+    requires the explicit --takeover intent from Campaign 1.
+  - >-
+    Silent foreign-owner seizure remains impossible. Refusal exits non-zero and
+    names the contradiction plus the actionable remediation.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a worktree owned by a foreign session, with the invoking process cwd set to the worktree dir but CLAUDE_PROJECT_DIR set to the canonical main checkout
+    when: the operator runs caws claim <worktree> --takeover
+    then: >-
+      the command refuses with a non-zero exit, does NOT write a takeover patch
+      to worktrees.json, leaves the foreign owner intact, and prints an
+      actionable message explaining the session is not rooted in the worktree.
+  - id: A2
+    given: the same foreign-owned worktree, with cwd set to the worktree dir and CLAUDE_PROJECT_DIR ABSENT
+    when: the operator runs caws claim <worktree> --takeover
+    then: >-
+      the takeover succeeds (exit 0), worktrees.json owner becomes the invoking
+      session, and prior_owners records the displaced owner — the existing
+      Campaign-1 takeover contract, unchanged when no contradicting session root
+      is asserted.
+  - id: A3
+    given: the same foreign-owned worktree, with cwd AND CLAUDE_PROJECT_DIR both set to the worktree dir
+    when: the operator runs caws claim <worktree> --takeover
+    then: >-
+      the takeover succeeds (exit 0) — the session is genuinely rooted in the
+      worktree, so this is a real takeover, not a phantom.
+  - id: A4
+    given: a same-session (already-owned) claim from inside the worktree with CLAUDE_PROJECT_DIR set to the canonical main checkout
+    when: the operator runs caws claim <worktree> (no --takeover)
+    then: >-
+      behavior is unchanged (exit 0, no patch) — the phantom-root check gates
+      only the takeover-apply path and must not regress the non-takeover claim.
+  - id: A5
+    given: the targeted claim/worktree command tests plus the full canonical CLI suite
+    when: the gate runs on canonical post-build
+    then: >-
+      the new phantom-root cases pass, existing claim/bind/destroy/merge
+      ownership tests are unchanged, and the full suite is no worse than baseline
+      (any unrelated environmental failures isolated and documented).
 non_functional: {}
 contracts: []
