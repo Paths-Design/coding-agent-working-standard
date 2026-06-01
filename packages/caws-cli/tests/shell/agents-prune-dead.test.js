@@ -29,7 +29,12 @@ const path = require('path');
 const { pruneDeadLeases, defaultIsPidAlive } = require('../../dist/store');
 
 const HOST = 'test-host';
-const NOW = new Date('2026-05-30T10:00:00.000Z');
+// AGENT-LIVENESS-DOCTOR-001 (D4): prune --dead is now recency-primary — a lease
+// fresh within the 30m TTL is never pruned regardless of pid. The default
+// fixtures' last_active is 2026-05-30T09:30:00Z; NOW is set 90m later so those
+// default leases are STALE and the dead-pid selection paths below still fire.
+// Fresh-lease cases set their own recent last_active explicitly.
+const NOW = new Date('2026-05-30T11:00:00.000Z');
 
 function mkCaws() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-prune-dead-'));
@@ -176,5 +181,104 @@ describe('caws agents prune --dead (WORKTREE-GUARD-RISK-SURFACE-001 A5)', () => 
     expect(defaultIsPidAlive(Number.NaN)).toBe(false);
     // The test runner's own pid is necessarily alive.
     expect(defaultIsPidAlive(process.pid)).toBe(true);
+  });
+
+  // ─── AGENT-LIVENESS-DOCTOR-001 (D4): recency is primary ──────────────────
+  describe('D4: recency-primary selection (fresh heartbeat protects regardless of pid)', () => {
+    it('A1: a FRESH lease with a DEAD pid is NOT pruned (the ephemeral-pid case)', () => {
+      cawsDir = mkCaws();
+      // last_active 5m before NOW (11:00) → well within the 30m TTL → fresh.
+      writeLease(cawsDir, {
+        session_id: 'fresh-deadpid',
+        status: 'active',
+        pid: 4242, // the probe will call this dead
+        last_active: '2026-05-30T10:55:00.000Z',
+      });
+
+      const r = pruneDeadLeases(cawsDir, {
+        now: NOW,
+        dryRun: false,
+        currentHostname: HOST,
+        isPidAlive: aliveSet(), // pid 4242 is "dead"
+      });
+      expect(r.ok).toBe(true);
+      // The defect this closes: a recently-heartbeating lease must NEVER be
+      // pruned solely because its recorded (ephemeral) pid is gone.
+      expect(r.value.candidates).not.toContain('fresh-deadpid');
+      expect(r.value.skippedFresh).toEqual(['fresh-deadpid']);
+      expect(r.value.deleted).toEqual([]);
+      expect(fs.existsSync(path.join(cawsDir, 'leases', 'fresh-deadpid.json'))).toBe(true);
+    });
+
+    it('A1b: a FRESH lease with NO pid is NOT pruned (recency beats unverifiable-pid)', () => {
+      cawsDir = mkCaws();
+      const lease = {
+        lease_version: 1,
+        session_id: 'fresh-nopid',
+        platform: 'claude-code',
+        status: 'active',
+        started_at: '2026-05-30T10:50:00.000Z',
+        last_active: '2026-05-30T10:58:00.000Z', // 2m old → fresh
+        repo_root: '/repo',
+        cwd: '/repo',
+        git_common_dir: '/repo/.git',
+        git_dir: '/repo/.git',
+        last_seen_reason: 'pre_tool_use',
+        hostname: HOST,
+        // no pid
+      };
+      fs.writeFileSync(path.join(cawsDir, 'leases', 'fresh-nopid.json'), JSON.stringify(lease, null, 2));
+
+      const r = pruneDeadLeases(cawsDir, { now: NOW, dryRun: true, currentHostname: HOST, isPidAlive: aliveSet() });
+      expect(r.ok).toBe(true);
+      expect(r.value.candidates).not.toContain('fresh-nopid');
+      expect(r.value.skippedFresh).toEqual(['fresh-nopid']);
+    });
+
+    it('A2: a STALE lease with a DEAD pid IS still pruneable (the fix does not disable --dead)', () => {
+      cawsDir = mkCaws();
+      writeLease(cawsDir, {
+        session_id: 'stale-deadpid',
+        status: 'active',
+        pid: 4242,
+        last_active: '2026-05-30T09:00:00.000Z', // 2h old → stale
+      });
+
+      const r = pruneDeadLeases(cawsDir, { now: NOW, dryRun: false, currentHostname: HOST, isPidAlive: aliveSet() });
+      expect(r.ok).toBe(true);
+      expect(r.value.candidates).toEqual(['stale-deadpid']);
+      expect(r.value.deleted).toEqual(['stale-deadpid']);
+      expect(r.value.skippedFresh).toEqual([]);
+    });
+
+    it('A1c: a FRESH lease with a LIVE pid is also left alone (skippedFresh, not via pid path)', () => {
+      cawsDir = mkCaws();
+      writeLease(cawsDir, {
+        session_id: 'fresh-alivepid',
+        status: 'active',
+        pid: 1001,
+        last_active: '2026-05-30T10:59:00.000Z', // 1m old → fresh
+      });
+      const r = pruneDeadLeases(cawsDir, { now: NOW, dryRun: true, currentHostname: HOST, isPidAlive: aliveSet(1001) });
+      expect(r.ok).toBe(true);
+      expect(r.value.candidates).toEqual([]);
+      expect(r.value.skippedFresh).toEqual(['fresh-alivepid']);
+    });
+
+    it('custom staleTtlMs is honored (a lease just past a 1m TTL with dead pid is pruneable)', () => {
+      cawsDir = mkCaws();
+      writeLease(cawsDir, {
+        session_id: 'edge',
+        status: 'active',
+        pid: 4242,
+        last_active: '2026-05-30T10:55:00.000Z', // 5m before NOW
+      });
+      // TTL = 1m, so a 5m-old lease is stale → dead pid selects it.
+      const r = pruneDeadLeases(cawsDir, {
+        now: NOW, dryRun: true, currentHostname: HOST, isPidAlive: aliveSet(), staleTtlMs: 60 * 1000,
+      });
+      expect(r.ok).toBe(true);
+      expect(r.value.candidates).toEqual(['edge']);
+    });
   });
 });

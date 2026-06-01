@@ -579,15 +579,31 @@ export interface PruneDeadOptions {
   readonly currentHostname?: string;
   /** Liveness probe (injectable for tests). Defaults to defaultIsPidAlive. */
   readonly isPidAlive?: (pid: number) => boolean;
+  /**
+   * AGENT-LIVENESS-DOCTOR-001 (D4): recency window. A lease whose
+   * `last_active` is within this window (age <= staleTtlMs) is FRESH and is
+   * NEVER pruned as dead, regardless of its recorded pid. Recency is primary;
+   * pid is advisory and may only escalate confidence on an ALREADY-stale lease.
+   * Defaults to the same 30m window pruneLeasesByStatus uses, so prune /
+   * status / agents list / doctor agree on which leases are live.
+   */
+  readonly staleTtlMs?: number;
 }
 
 export interface PruneDeadResult {
-  /** session_ids selected (active/stopping lease, same host, dead pid). */
+  /** session_ids selected (active/stopping lease, same host, STALE, dead pid). */
   readonly candidates: ReadonlyArray<string>;
   /** Actually deleted (empty when dryRun). */
   readonly deleted: ReadonlyArray<string>;
   /** session_ids skipped because their hostname differs (unverifiable). */
   readonly skippedForeignHost: ReadonlyArray<string>;
+  /**
+   * AGENT-LIVENESS-DOCTOR-001 (D4): session_ids skipped because their
+   * `last_active` is within the recency window (fresh heartbeat) — protected
+   * from --dead regardless of pid. Surfaced so the operator can see WHY a
+   * dead-pid lease was not reaped (the ephemeral-per-invocation-pid case).
+   */
+  readonly skippedFresh: ReadonlyArray<string>;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
@@ -598,10 +614,20 @@ export interface PruneDeadResult {
  * not alive is selected and (on apply) deleted directly — a dead process
  * cannot cleanly self-stop, so deletion is the correct tombstone.
  *
+ * AGENT-LIVENESS-DOCTOR-001 (D4): RECENCY IS PRIMARY. A lease that heartbeated
+ * within the active TTL window (`staleTtlMs`, default 30m) is FRESH and is
+ * NEVER selected, regardless of its recorded pid. The recorded pid is
+ * process.pid of the ephemeral per-CLI-invocation subshell (dead the instant
+ * that invocation exits), so a PID-only oracle reaped 100% of healthy sessions.
+ * Pid liveness is consulted ONLY for an already-stale lease (advisory: it may
+ * confirm death, never override a fresh heartbeat). Freshness gates cleanup —
+ * it is NOT promoted into ownership authority (takeover/destroy/merge/bind
+ * still consult worktrees.json owner, lease-blind).
+ *
  * Safety: a lease whose `hostname` differs from the current host is skipped
- * (its pid is not checkable here) — never assumed dead. A lease with no pid
- * recorded is treated as dead (it cannot be liveness-verified and an active
- * lease that never recorded a pid predates the pid-stamping writer).
+ * (its pid is not checkable here) — never assumed dead. A STALE lease with no
+ * pid recorded is treated as dead (it cannot be liveness-verified and a stale
+ * active lease that never recorded a pid predates the pid-stamping writer).
  *
  * `stopped` leases are out of scope for --dead (they are already terminal;
  * use `prune --status stopped --older-than <ms>` for retention cleanup).
@@ -613,6 +639,10 @@ export function pruneDeadLeases(
   const dryRun = opts.dryRun ?? true;
   const currentHostname = opts.currentHostname ?? os.hostname();
   const isPidAlive = opts.isPidAlive ?? defaultIsPidAlive;
+  // AGENT-LIVENESS-DOCTOR-001 (D4): same 30m window pruneLeasesByStatus uses,
+  // so prune / status / agents list / doctor agree on which leases are live.
+  const staleTtlMs = opts.staleTtlMs ?? 30 * 60 * 1000;
+  const nowMs = opts.now.getTime();
 
   const loadRes = loadLeases(cawsDir);
   if (loadRes.ok === false) return err(loadRes.errors);
@@ -620,6 +650,7 @@ export function pruneDeadLeases(
 
   const candidates: string[] = [];
   const skippedForeignHost: string[] = [];
+  const skippedFresh: string[] = [];
   const diagnostics: Diagnostic[] = [...loadDiags];
 
   for (const lease of Object.values(leases) as AgentLease[]) {
@@ -637,8 +668,27 @@ export function pruneDeadLeases(
       continue;
     }
 
-    // No pid recorded → cannot verify liveness; treat as dead (a running
-    // session stamps its pid via the registration/heartbeat writer).
+    // AGENT-LIVENESS-DOCTOR-001 (D4): RECENCY IS PRIMARY. A lease that
+    // heartbeated within the active TTL window is FRESH and must NEVER be
+    // pruned as dead, regardless of its recorded pid. The recorded pid is
+    // process.pid of the ephemeral per-CLI-invocation subshell — dead the
+    // instant that invocation exits — so a PID-only oracle reaped 100% of
+    // healthy sessions. Recency gates cleanup; pid is advisory below and may
+    // only confirm death on an ALREADY-stale lease. An unparseable last_active
+    // is treated as NOT fresh (falls through to the pid path), fail-closed
+    // toward "cannot confirm fresh" — but note that path still requires a dead
+    // pid to select, so a fresh-but-corrupt-timestamp lease with a live pid is
+    // still safe.
+    const lastActiveMs = Date.parse(lease.last_active);
+    if (Number.isFinite(lastActiveMs) && nowMs - lastActiveMs <= staleTtlMs) {
+      skippedFresh.push(lease.session_id);
+      continue;
+    }
+
+    // From here the lease is STALE (or has an unparseable last_active). Only
+    // now does pid liveness decide. No pid recorded → cannot verify; treat as
+    // dead (a running session stamps its pid via the heartbeat writer, and the
+    // lease is already stale).
     const pid = typeof lease.pid === 'number' ? lease.pid : NaN;
     if (!Number.isInteger(pid) || pid <= 0) {
       candidates.push(lease.session_id);
@@ -663,5 +713,5 @@ export function pruneDeadLeases(
     }
   }
 
-  return ok({ candidates, deleted, skippedForeignHost, diagnostics });
+  return ok({ candidates, deleted, skippedForeignHost, skippedFresh, diagnostics });
 }
