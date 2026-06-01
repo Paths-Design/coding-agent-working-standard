@@ -7,12 +7,14 @@ created_at: '2026-06-01T03:10:39.497Z'
 updated_at: '2026-06-01T03:10:47.736Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook-pack: lib/guard-message.sh — new shared message-prefix helper (guard identity + remediation)'
+    - 'caws-cli hook-pack: scope-guard.sh — strike messages name the guard + print literal caws specs amend-scope remediation'
+    - 'caws-cli hook-pack: worktree-write-guard.sh — claimed/ask messages name SESSION context, not a bare shell cd'
+    - 'caws-cli hook-pack: block-dangerous.sh — latch copy scoped to mutating/capability-risk, not "every Bash call"'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/lib/guard-message.sh
     - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
@@ -21,11 +23,78 @@ scope:
     - packages/caws-cli/tests/hook-packs/guard_legibility.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'LEGIBILITY, NOT ENFORCEMENT CHANGE. This slice changes only the human/agent-facing REASON strings
+    and stderr diagnostics of three guards (scope-guard, worktree-write-guard, block-dangerous). It does
+    NOT change any decision (allow/ask/block), any exit code, any latch/strike state transition, or any
+    scope/contention computation. The probe (caws-firsttime-probe run-003) proved all three guard layers
+    are reachable and correct; the failure was that correct governance was not legible at the moment it
+    fired, so a first-timer (agent or human) mis-attributes the prompt to the harness and dismisses it.'
+  - 'GUARDS NAME THEMSELVES. Every ask/block reason a guard emits begins with a stable, greppable guard
+    identity token ("CAWS scope-guard", "CAWS worktree-write-guard", "CAWS command-safety") so the reader
+    can tell it is CAWS governance and WHICH guard fired — never a generic confirm indistinguishable from
+    a Claude Code harness prompt. The identity is the FIRST thing in the message, not buried mid-sentence.'
+  - 'SCOPE-GUARD PRINTS THE LITERAL REMEDIATION. When scope-guard refuses an out-of-scope.in write, the
+    message includes the literal, copy-pasteable widening command for the bound spec:
+    "caws specs amend-scope <spec-id> --add <path>" (with the actual spec id and path substituted when
+    known; a clear placeholder when the bound spec id is not resolvable). The existing strike progression
+    (1 warn / 2 ask / 3 hard-block) and reset-strikes guidance are preserved unchanged.'
+  - 'WORKTREE-WRITE-GUARD NAMES SESSION CONTEXT, NOT A BARE cd. The claimed-path hard block and the
+    base-branch ask must state that the edit requires a SESSION rooted in the owning worktree — a one-off
+    Bash `cd` does NOT move the Edit/Write tool context. The concrete worktree path is still surfaced
+    (it tells the reader WHICH worktree), but it is framed as "operate from a session rooted there",
+    correcting the misleading "cd into the worktree" advice that run-003 proved leads an agent to loop.
+    The A1/A2/A3 exit-code behavior of CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 is preserved.'
+  - 'DANGER-LATCH COPY IS SCOPED TO MUTATING/CAPABILITY-RISK, NOT "EVERY BASH CALL". The latch messages
+    (deny hard-block, capability-confirm, fail-closed) must NOT claim that "every subsequent Bash call
+    will be blocked" — the sticky-latch carve-out exempts read-only commands and the reset invocation.
+    The copy states that subsequent MUTATING / capability-risk commands block while read-only commands
+    and the reset still run. The capability-confirm vs catastrophic-deny distinction from
+    HOOK-ASK-ENFORCEMENT-001 is preserved verbatim in intent.'
+  - 'NON-REGRESSION. The existing hook-pack suites (worktree_guard_ask_redirect, worktree_guard_risk_surface,
+    danger_latch_ux, ask_enforcement, latch_readonly_and_reset, glob_scope_regexp) stay green. Any
+    assertion that pinned the OLD wording ("cd .caws/worktrees/<wt>" as the sole redirect) is updated to
+    assert the NEW session-context wording while still asserting the worktree name + path are present and
+    the exit code is unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'scope-guard refuses an out-of-scope.in Write/Edit (strike 2 or 3) with a bound spec whose id is resolvable'
+    when: 'the guard emits its ask/block reason'
+    then: 'the reason begins with "CAWS scope-guard" and contains the literal string
+      "caws specs amend-scope" plus the bound spec id, so the reader has a copy-pasteable widening command'
+  - id: A2
+    given: 'worktree-write-guard hard-blocks a base-branch write to a path claimed by an active worktree (claimed:* arm)'
+    when: 'the guard emits its block diagnostic'
+    then: 'the diagnostic names the guard ("CAWS worktree-write-guard"), names the owning worktree + path,
+      and frames the fix as operating from a SESSION rooted in that worktree (states a bare shell cd does
+      not move the tool context); exit code remains 2 (decision model unchanged)'
+  - id: A3
+    given: 'worktree-write-guard asks on a non-claimed base-branch write with exactly one active worktree'
+    when: 'the guard emits its ask reason'
+    then: 'the reason names the worktree + path and the session-context framing; exit code remains 0
+      (ask), preserving CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A1'
+  - id: A4
+    given: 'block-dangerous.sh latches on a catastrophic deny OR a capability-confirm OR a fail-closed path'
+    when: 'the guard emits its latch reason'
+    then: 'the reason begins with a "CAWS command-safety" identity, states that subsequent MUTATING /
+      capability-risk Bash commands block while read-only commands and the reset still run (it does NOT
+      claim every Bash call blocks), and preserves the capability-confirm-vs-catastrophic-deny distinction'
+  - id: A5
+    given: 'the full set of decisions a guard can return (allow, ask, deny, in-scope writes, latched read-only carve-out)'
+    when: 'the guards run under the existing hook-pack test suites'
+    then: 'every decision, exit code, and latch/strike transition is unchanged from baseline — only the
+      reason/diagnostic text differs; all pre-existing suites pass'
+non_functional:
+  reliability:
+    - 'No decision, exit code, or latch/strike state transition changes; the change is confined to
+      message text. The shared guard-message helper degrades gracefully (plain prefix) if sourced
+      stand-alone, and double-sourcing is guarded.'
+  security:
+    - 'Self-identifying, actionable refusal messages reduce the chance a real first-timer (agent or human)
+      dismisses correct governance as harness noise and routes around it — the dismissal failure mode the
+      probe named. Legibility hardens enforcement adherence without weakening any guard.'
+contracts:
+  - name: guard-message-identity-v1
+    type: behavior
+    description: 'Every CAWS guard ask/block reason carries a stable, greppable guard-identity prefix
+      ("CAWS scope-guard" | "CAWS worktree-write-guard" | "CAWS command-safety") and, where applicable,
+      a literal copy-pasteable remediation command. Decisions and exit codes are unchanged from baseline.'
