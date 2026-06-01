@@ -39,17 +39,19 @@ function readEvents(cawsDir) {
 const NOW = () => new Date('2026-05-30T02:30:00.000Z');
 const ACTOR = { kind: 'agent', id: 'test-agent', session_id: 'sess-amend-test' };
 
-function specYaml(id, { state = 'active', scopeIn = ['a/b.ts'], scopeOut = '[]', extra = '' } = {}) {
+function specYaml(id, { state = 'active', scopeIn = ['a/b.ts'], scopeOut = '[]', extra = '', worktree = null } = {}) {
   const inLines = scopeIn.map((p) => `    - ${p}`).join('\n');
   const outBlock = scopeOut === '[]' ? '  out: []' : `  out:\n${scopeOut.map((p) => `    - ${p}`).join('\n')}`;
   // A closed spec must record a resolution to be schema-valid.
   const resolutionLine = state === 'closed' ? "resolution: completed\n" : '';
+  // A worktree-bound spec carries a worktree: field (WORKTREE-CLAIM-COMPOSE-WARN-001).
+  const worktreeLine = worktree ? `worktree: ${worktree}\n` : '';
   return `id: ${id}
 title: '${id} amend-scope fixture'
 risk_tier: 3
 mode: refactor
 lifecycle_state: ${state}
-${resolutionLine}created_at: '2026-05-01T00:00:00.000Z'
+${worktreeLine}${resolutionLine}created_at: '2026-05-01T00:00:00.000Z'
 updated_at: '2026-05-15T12:00:00.000Z'
 blast_radius:
   modules:
@@ -257,5 +259,67 @@ describe('CAWS-SCOPE-AMEND-COMMAND-001: amendScopeSpec', () => {
     const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
     expect(ev[0].data.removed_support).toEqual(['drop.md']);
     expect(ev[0].data.resulting_scope_support).toEqual(['keep.md']);
+  });
+
+  // ── compose-trap warning (WORKTREE-CLAIM-COMPOSE-WARN-001) ──────────────
+
+  // B-A1: --add a repo-root deliverable to a WORKTREE-BOUND spec → warns,
+  // but the amendment still succeeds.
+  it('B-A1 warns when --add pulls a root deliverable into a worktree-bound spec', () => {
+    writeSpec(env.cawsDir, 'WARN-1', { scopeIn: ['src/**'], worktree: 'wt-warn-1' });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'WARN-1', addIn: ['FRICTION-LOG.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    // The amendment STILL happened.
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'WARN-1.yaml'), 'utf8');
+    expect(yaml).toMatch(/^ {4}- FRICTION-LOG\.md$/m);
+    // ...and a compose-trap warning is attached.
+    expect(r.value.kind).toBe('success');
+    expect(r.value.warnings).toBeDefined();
+    expect(r.value.warnings.length).toBe(1);
+    expect(r.value.warnings[0]).toMatch(/WORKTREE-CLAIMED/);
+    expect(r.value.warnings[0]).toMatch(/--add-support FRICTION-LOG\.md/);
+  });
+
+  // B-A2: an in-tree (non-root) --add on a worktree-bound spec → NO warning.
+  it('B-A2 does NOT warn for an in-tree (non-root) --add on a worktree-bound spec', () => {
+    writeSpec(env.cawsDir, 'WARN-2', { scopeIn: ['src/**'], worktree: 'wt-warn-2' });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'WARN-2', addIn: ['src/new/file.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.warnings).toBeUndefined();
+  });
+
+  // B-A3: a root --add on an UNBOUND spec (no worktree:) → NO warning.
+  it('B-A3 does NOT warn for a root --add on an unbound spec', () => {
+    writeSpec(env.cawsDir, 'WARN-3', { scopeIn: ['src/**'] }); // no worktree
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'WARN-3', addIn: ['ROOT-FILE.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.warnings).toBeUndefined();
+  });
+
+  // B-A4: --add-support of a root deliverable on a worktree-bound spec → NO warning
+  // (support is the recommended class; it never claims).
+  it('B-A4 does NOT warn for --add-support of a root deliverable', () => {
+    writeSpec(env.cawsDir, 'WARN-4', { scopeIn: ['src/**'], worktree: 'wt-warn-4' });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'WARN-4', addSupport: ['FRICTION-LOG.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.warnings).toBeUndefined();
+  });
+
+  // B: idempotent re-add (already present) produces no delta → no warning.
+  it('B does NOT warn on an idempotent re-add (no added_in delta)', () => {
+    writeSpec(env.cawsDir, 'WARN-5', { scopeIn: ['src/**', 'FRICTION-LOG.md'], worktree: 'wt-warn-5' });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'WARN-5', addIn: ['FRICTION-LOG.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.warnings).toBeUndefined();
   });
 });
