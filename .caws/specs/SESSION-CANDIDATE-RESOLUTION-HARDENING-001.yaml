@@ -1,0 +1,98 @@
+id: SESSION-CANDIDATE-RESOLUTION-HARDENING-001
+title: 'Stop resolveSessionCandidates over-matching distinct same-repo sessions (D3 successor); a capsule must not admit a foreign session as a candidate'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-05-31T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/tests/shell/
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - >-
+    THE DEFECT (split out of WORKTREE-ISOLATION-HARDENING-001 D3, root-caused
+    from the clash-probe events.jsonl seq 16-18): resolveSessionCandidates'
+    capsule source (readAllCapsules) contributes EVERY well-formed capsule under
+    .caws/sessions/*.json REGARDLESS of worktree_root or invoking identity. When
+    two DISTINCT real sessions both leave a capsule in the same repo's
+    .caws/sessions/, session B's candidate set includes session A's identity, so
+    admitsOwner(B-candidates, A-owned-worktree) wrongly returns a match and B is
+    admitted to destroy/merge/bind A's worktree. The diagnostic fixture
+    tests/shell/session-candidate-overmatch-d3.test.js reproduces this and
+    currently ASSERTS the over-match; this spec's fix FLIPS that expectation.
+  - >-
+    THE CONSTRAINT (why this is its own spec, not folded into the isolation
+    campaign): the identity-blind capsule scan was a DELIBERATE fix for
+    CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 — a cwd-sensitivity bug where a
+    destroy issued from the canonical checkout after a `claim --takeover` from
+    inside the worktree refused its own owner. Tightening readAllCapsules must
+    NOT regress that legitimate takeover-from-canonical path. The fix must
+    distinguish "a capsule the invoking process can legitimately speak for"
+    (its own session, or a worktree it has taken over) from "some other live
+    session's capsule that merely shares the repo's sessions dir". This likely
+    means correlating the capsule's worktree_root / session lineage with the
+    invoking context rather than admitting every capsule unconditionally —
+    designed so both the over-match fixture AND the existing
+    CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 tests pass.
+  - >-
+    NO SILENT FALLBACK. The candidate trace must continue to record every source
+    consulted and why each candidate was admitted or rejected (the existing
+    non_functional.reliability invariant). A capsule rejected by the new
+    correlation rule appears in the trace as rejected-with-reason, so a refused
+    destroy/merge/bind still explains itself.
+acceptance:
+  - id: A1
+    given: Two distinct real sessions A and B each left a capsule in the same repo's .caws/sessions/, and a worktree is owned by A.
+    when: session B (no env identity) resolves candidates and admitsOwner is checked against the A-owned worktree.
+    then: >-
+      B's candidate set does NOT admit A's identity for a worktree B has no
+      legitimate claim to; admitsOwner(B-candidates, A-owned) returns null; the
+      D3 over-match fixture's expectation is updated to assert the no-match.
+  - id: A2
+    given: The CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 scenario (destroy from canonical after a claim --takeover from inside the worktree).
+    when: the owner destroys its own (taken-over) worktree from canonical.
+    then: >-
+      The destroy still SUCCEEDS — the legitimate takeover-from-canonical path
+      is not regressed by the candidate-resolution tightening. The existing
+      CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 tests stay green.
+  - id: A3
+    given: A refused comparison under the new rule.
+    when: the candidate trace is rendered.
+    then: >-
+      Every consulted source and every rejected capsule appears in the trace
+      with a reason; no candidate is silently dropped.
+non_functional:
+  reliability:
+    - >-
+      Closes the multi-agent control-plane breach where a foreign session could
+      destroy/merge/bind another session's worktree via candidate over-match.
+      The fix is reversible (candidate-resolution logic, no migration) and must
+      preserve the audited-trace, no-silent-fallback guarantee.
+  security:
+    - >-
+      The tightened candidate resolution must FAIL CLOSED: when it cannot prove
+      the invoking process legitimately speaks for a capsule's session, it must
+      NOT admit that candidate (an over-admit is the breach; an under-admit
+      degrades to a refusal the operator can resolve with explicit --takeover).
+contracts:
+  - name: session-candidate-resolution-identity-correlation-v1
+    type: behavior
+    path: packages/caws-cli/src/shell/session/resolve-session.ts
+    description: >-
+      resolveSessionCandidates admits a .caws/sessions capsule as a candidate
+      for the invoking process ONLY when the process can legitimately speak for
+      that capsule's session (its own identity, or a worktree it has taken
+      over), NOT merely because the capsule shares the repo's sessions dir. The
+      change preserves the CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001
+      takeover-from-canonical path (no regression) and the audited-trace
+      no-silent-fallback guarantee, and fails closed (under-admit -> refusal,
+      never over-admit) when legitimacy cannot be proven.
