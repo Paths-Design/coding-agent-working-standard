@@ -7,12 +7,14 @@ created_at: '2026-06-01T03:44:22.699Z'
 updated_at: '2026-06-01T03:44:39.295Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-kernel: spec schema + Scope type + scope evaluator + rules + spec_scope_amended event schema'
+    - 'caws-cli store: specs-writer amendScopeSpec gains addSupport/removeSupport'
+    - 'caws-cli shell: specs amend-scope --add-support/--remove-support wiring (command-metadata, register)'
+    - 'caws-cli hook-pack: scope-guard.sh admits scope.support; worktree-write-guard.sh confirms support is NOT a claim'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel/src/schemas/spec.v1.json
     - packages/caws-kernel/src/spec/types.ts
     - packages/caws-kernel/src/scope/evaluate.ts
@@ -33,11 +35,80 @@ scope:
     - packages/caws-cli/tests/init/hook-packs/scope-guard.fixture.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'SUPPORT IS ADMITTED, NEVER CLAIMED. A path in scope.support is ADMITTED for Write/Edit exactly like
+    a scope.in path (scope-guard exit 0, kernel evaluatePath -> admit), BUT it NEVER establishes a
+    worktree claim: worktree-write-guard must NOT hard-block a base-branch write to a scope.support path,
+    and findScopeInClaimants / push-range attribution must NOT count it as a claim. This is the entire
+    point of the class — it breaks the compose-trap where a repo-root deliverable (e.g. a friction log)
+    pulled into scope.in via amend-scope becomes worktree-claimed and converts a soft scope-ask into a
+    hard worktree-write-guard block from the main checkout.'
+  - 'ADDITIVE SCHEMA, NO MIGRATION. scope.support is a new OPTIONAL array on the scope object
+    (additionalProperties stays false; support joins in + out in properties). Existing specs with no
+    support key are unchanged and still load. scope.in stays required + non-empty. No spec on disk needs
+    rewriting; data_migration is false.'
+  - 'SCOPE.OUT STILL SHADOWS SUPPORT. scope.out is the upstream exclusion gate and applies to support
+    exactly as it applies to scope.in: a path matched by scope.out is REFUSED even if it also appears in
+    scope.support. The overbroad-out semantic check is extended to scan support so a support path
+    shadowed by out is caught early with a clear error rather than a silent never-admit.'
+  - 'CLAIM EXCLUSION IS LOAD-BEARING, NOT INCIDENTAL. The worktree claim oracle today reads scope.in
+    ONLY (worktree-write-guard SPEC_CONTENTION_CHECK + resolve-binding findScopeInClaimants). support is
+    naturally excluded because those sites do not read it — but this slice adds an explicit comment at
+    each claim site stating support is intentionally excluded, so a future maintainer cannot quietly add
+    it to the claim surface and silently reintroduce the trap.'
+  - 'NEW AMEND-SCOPE FLAGS ARE SYMMETRIC. caws specs amend-scope gains --add-support and --remove-support
+    mirroring --add/--remove and --add-out/--remove-out: same canonical write, same updated_at bump, same
+    spec_scope_amended event (extended with added_support / removed_support / resulting_scope_support).
+    A support-only amendment (no in/out change) is NOT refused by the at-least-one-change guard.'
+  - 'STABLE OUTPUT/EVENT CONTRACT. The new admit rule (scope.admit.scope_support) and the new event
+    fields are additive. An existing consumer reading only the prior fields is unaffected. resulting_scope_in
+    remains required on the event; the support fields are optional (a support-only amend still emits the
+    unchanged resulting_scope_in).'
+  - 'NON-REGRESSION. Existing kernel scope/spec suites, the specs-writer amend-scope suite, and the
+    scope-guard fixture suite stay green. No existing decision (admit/refuse/claim), exit code, or event
+    field changes for specs that do not use support.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'a spec with scope.in [src] and scope.support [FRICTION-LOG.md], bound to a worktree, evaluated from the main checkout'
+    when: 'a Write to FRICTION-LOG.md is evaluated by the kernel (evaluatePath) and by worktree-write-guard'
+    then: 'the kernel returns admit (rule scope.admit.scope_support) and worktree-write-guard does NOT
+      hard-block (no claimed:* for the support path) — the compose-trap is broken'
+  - id: A2
+    given: 'the spec schema and Scope type'
+    when: 'a spec declares scope.support as an array of path strings'
+    then: 'it validates (additionalProperties:false still holds; support is a known optional property);
+      a spec with no support key still validates unchanged (no migration)'
+  - id: A3
+    given: 'a path listed in BOTH scope.support and scope.out'
+    when: 'the path is evaluated and the spec is semantically validated'
+    then: 'evaluatePath REFUSES (scope.out is the upstream gate); validate-semantics surfaces the
+      overbroad-out shadow against support with a clear diagnostic'
+  - id: A4
+    given: 'caws specs amend-scope <id> --add-support <path> (and --remove-support <path>)'
+    when: 'the command runs against an active/draft spec'
+    then: 'scope.support is patched on canonical, updated_at bumps, and spec_scope_amended carries
+      added_support/removed_support/resulting_scope_support; a support-only amend is not refused'
+  - id: A5
+    given: 'scope-guard.sh evaluating a Write to a scope.support path inside the bound worktree'
+    when: 'the guard runs (inline node fallback path and the kernel-delegated fast path)'
+    then: 'the write is ADMITTED (exit 0, no strike) exactly as a scope.in path would be'
+  - id: A6
+    given: 'an existing spec that uses only scope.in / scope.out (no support)'
+    when: 'all of the above changes are in place'
+    then: 'every existing decision, exit code, and event field is unchanged (non-regression);
+      the kernel + amend-scope + scope-guard fixture suites stay green'
+non_functional:
+  reliability:
+    - 'Additive optional schema field + additive event fields + additive admit rule. No data migration;
+      existing specs and consumers are unaffected. The claim-exclusion invariant is enforced by the
+      existing scope.in-only claim oracle plus explicit comments guarding against future regression.'
+  security:
+    - 'scope.support cannot widen a worktree claim or override scope.out — it only ADMITS edits the agent
+      could already be granted via scope.in, minus the worktree-ownership side effect. It cannot be used
+      to bypass scope.out exclusion or to claim a sibling worktree''s file.'
+contracts:
+  - name: scope-support-class-v1
+    type: schema
+    description: 'The spec scope object gains an optional scope.support string array: ADMITTED for edits
+      like scope.in, EXCLUDED from worktree-claim derivation, still shadowed by scope.out. amendScopeSpec
+      gains addSupport/removeSupport and the spec_scope_amended event gains added_support/removed_support/
+      resulting_scope_support. Additive: prior fields and consumers are unchanged.'
