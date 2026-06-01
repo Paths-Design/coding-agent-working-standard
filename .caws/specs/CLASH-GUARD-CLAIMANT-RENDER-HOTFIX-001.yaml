@@ -3,6 +3,7 @@ title: 'Fix claimant-list rendering regression: pipe-while emits nothing in the 
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-claimant-render
 created_at: '2026-06-01T18:33:59.284Z'
 updated_at: '2026-06-01T18:34:00.205Z'
 blast_radius:
