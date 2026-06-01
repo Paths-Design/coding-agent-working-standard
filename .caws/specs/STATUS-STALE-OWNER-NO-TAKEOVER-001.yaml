@@ -3,6 +3,7 @@ title: 'Status must not imply --takeover for a stale-but-not-abandoned foreign w
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-status-takeover
 created_at: '2026-06-01T07:38:58.867Z'
 updated_at: '2026-06-01T07:39:07.528Z'
 blast_radius:
