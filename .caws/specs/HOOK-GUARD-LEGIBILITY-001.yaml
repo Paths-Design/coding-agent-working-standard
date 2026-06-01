@@ -3,6 +3,7 @@ title: 'Guards self-identify: name the mechanism + print literal remediation in 
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: wt-guard-legibility
 created_at: '2026-06-01T03:10:39.497Z'
 updated_at: '2026-06-01T03:10:47.736Z'
 blast_radius:
