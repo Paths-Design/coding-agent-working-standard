@@ -85,18 +85,32 @@ invariants:
     id, matching the live re-probe — with the peer TOP-LEVEL session ea12659d. The
     phantom-lease-from-subagent causal story does NOT survive evidence.
   - >-
-    A1 IMPLICATION (carried into A4, not yet auto-decided). No subagent-specific
-    lease defect is proven by this evidence: all four observed leases map 1:1 to
-    four top-level transcripts. The remaining real fact from run-002 — that a
-    subagent's CLI/tool subprocess resolves to the PARENT id via claude_code_env
-    (confirmed by live re-probe) — means a subagent does NOT mint a distinct lease
-    via the CLI path either. SessionStart does not fire on subagent spawn (docs),
-    so agent-register.sh never runs for a subagent. The slice therefore trends
-    toward a DOCUMENTED NO-OP: register-layer reconciliation and SubagentStart-
-    tagging are not-applicable to the proven evidence. A4/A5 remain a maintainer
-    gate — if the maintainer wants belt-and-suspenders subagent observability, A3
-    (probe whether SubagentStart is wirable here) is the only remaining live lever;
-    otherwise close as no-op with this evidence.
+    A1 IMPLICATION (carried into A4). No subagent-specific lease defect is proven
+    by this evidence: all four observed leases map 1:1 to four top-level
+    transcripts. The remaining real fact from run-002 — that a subagent's CLI/tool
+    subprocess resolves to the PARENT id via claude_code_env (confirmed by live
+    re-probe) — means a subagent does NOT mint a distinct lease via the CLI path
+    either. SessionStart does not fire on subagent spawn (docs), so
+    agent-register.sh never runs for a subagent.
+  - >-
+    A4 DETERMINATION MATRIX (ac evidence seq=1191). register-layer reconciliation
+    = NOT-APPLICABLE (no distinct subagent lease exists; subagent CLI subprocesses
+    resolve to parent id; no writer defect proven). SubagentStart agent_id tagging
+    = NOT-APPLICABLE for this defect (optional future observability only; not
+    needed to close the false phantom-lease claim). prune/doctor-only hygiene =
+    NOT-APPLICABLE / INSUFFICIENT as a fix (no stale or phantom subagent lease to
+    clean; leases are operational cache only). no-op because run-002 attribution
+    was wrong = PROVEN (A1 seq=1187: CLASH-LOG line 4 correct, line 266 erroneous).
+  - >-
+    A5 CLOSURE = DOCUMENTED NO-OP (ac evidence seq=1192). A1 resolved the only
+    defect-bearing question high-confidence; A4 found every candidate fix surface
+    not-applicable. No implementation shipped; no production behavior changed;
+    scope.in stayed the spec file only (no amend-scope to any code surface). No
+    edits to agent-register.sh, resolve-session.ts, the lease store, ownership,
+    takeover, prune, doctor, hook dispatch, settings generation, or SubagentStart
+    wiring. Resolution = completed (real recon done, claim resolved, closed with
+    evidence), NOT abandoned. Any future SubagentStart observability must be a
+    SEPARATE recon/spec and must NOT be framed as fixing this slice.
 acceptance:
   - id: A1
     given: the ea12659d phantom lease observed in run-002 and its on-disk + log artifacts
