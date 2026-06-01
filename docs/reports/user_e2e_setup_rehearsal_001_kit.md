@@ -127,15 +127,45 @@ testable state, doing each step as a real first-timer would and recording any fr
    > If you run a command the classifier reads as a real capability risk — a destructive or
    > mutating operation against an external/system resource (e.g. `kubectl delete …`,
    > `aws s3 rm …`, `docker system prune`, `kill -9 …`, a `curl -X POST/DELETE …`) — the hook
-   > emits a **block envelope** that says *"requires USER CONFIRMATION … NOT denied as
-   > catastrophic"* and arms the session danger latch. This is **intended new behavior**, not
-   > a bug: record whether the confirmation message is clear, whether you could tell it apart
-   > from a catastrophic hard-`deny`, and whether the latch/reset path made sense. By contrast,
-   > everyday *legacy* asks (`git rebase`, `git commit --amend`, `npm run <script>`, unknown
-   > git/npm subcommands) stay **advisory** — they print a `caws advisory (non-blocking)` note
-   > on stderr and do NOT block or latch. The probe goal below (read commits → markdown) is
-   > mostly read-only (`git log`) and likely won't trip the capability path; if it does, that's
-   > a useful event to record, not a reason to stop.
+   > emits a **block envelope** that leads with `CAWS command-safety:`, says *"requires USER
+   > CONFIRMATION … NOT denied as catastrophic"*, scopes the latch to *"subsequent MUTATING /
+   > capability-risk Bash commands"* (read-only commands and the reset still run), and arms the
+   > session danger latch. This is **intended new behavior**, not a bug: record whether the
+   > confirmation message is clear, whether you could tell it apart from a catastrophic
+   > hard-`deny`, and whether the latch/reset path made sense. By contrast, everyday *legacy*
+   > asks (`git rebase`, `git commit --amend`, `npm run <script>`, unknown git/npm subcommands)
+   > stay **advisory** — `caws advisory (non-blocking)` on stderr, no block, no latch. The probe
+   > goal below (read commits → markdown) is mostly read-only (`git log`) and likely won't trip
+   > the capability path; if it does, that's a useful event to record, not a reason to stop.
+
+   > **Heads-up on guard legibility (new — evaluate it).** Every CAWS guard refusal now
+   > *self-identifies* and prints its own remediation: scope refusals lead with
+   > `CAWS scope-guard` and print the literal `caws specs amend-scope <spec-id> --add <path>`
+   > command; worktree-write refusals lead with `CAWS worktree-write-guard` and say your
+   > **session** must be rooted in the owning worktree (a one-off Bash `cd` does NOT move your
+   > Edit/Write tool context); and each carries *"This is a CAWS governance decision, not a
+   > Claude Code harness prompt."* When a guard fires, **record whether you could tell it was
+   > CAWS (not the harness) and whether the printed remediation was correct and sufficient** —
+   > a prior run of this probe mis-attributed scope-asks to the harness three times, which is
+   > the exact failure this wording is meant to end.
+
+   > **Heads-up on the deliverable-at-repo-root case (the `FRICTION-LOG.md` itself).** Your
+   > deliverable below is `FRICTION-LOG.md` at the repo root. If you are working inside a
+   > worktree bound to a spec, writing it will draw a `CAWS scope-guard` refusal (it is not in
+   > your spec's `scope.in`). There are now **two** ways to widen scope, and they are NOT
+   > equivalent — this is the specific thing to exercise and report:
+   > - `caws specs amend-scope <id> --add FRICTION-LOG.md` puts it in `scope.in`, which on a
+   >   worktree-bound spec makes the path **worktree-claimed** — editing it from the main
+   >   checkout would then hard-block. The CLI now prints a `caws advisory (non-blocking)`
+   >   *warning* at this step suggesting the alternative below. **Record whether that warning
+   >   appeared and whether it steered you correctly.**
+   > - `caws specs amend-scope <id> --add-support FRICTION-LOG.md` puts it in the new
+   >   `scope.support` class: **editable but never worktree-claimed** — the right home for a
+   >   repo-root deliverable. **Record whether `--add-support` let you write the log cleanly
+   >   from wherever your session is rooted, with no hard block.**
+   > Try the `--add` path first if it's the one the tooling points you to, note the warning,
+   > then follow the suggested `--add-support` and report whether the whole loop felt legible
+   > or still confusing to a first-timer.
 
 6. **Stop condition.** End when **either**: (a) you complete the spec → worktree →
    first-implementation-commit cycle, **or** (b) you hit something you genuinely cannot
@@ -165,6 +195,19 @@ you got genuinely stuck. **Include an explicit "governance reachability" line:**
 your env captures, were your tool calls actually passing through the hook chain at each
 location you worked (main checkout vs. worktree)? If you can't tell, say so and cite the
 env values — do not guess.
+
+**Also include an explicit "legibility verdict" line.** Three things changed since the
+last run of this probe specifically to make governance *legible* to a first-timer; judge
+whether they worked *for you*:
+1. **Guard self-identification** — when a guard fired, could you immediately tell it was
+   CAWS (not the harness), which guard, and what to do? (Quote the line.)
+2. **The `FRICTION-LOG.md` scope path** — did `--add` warn you about the worktree-claim
+   trap, and did `--add-support` give you a clean home for the deliverable? Or did you
+   still end up confused / hard-blocked?
+3. **Latch wording** — if you tripped the danger latch, did the message correctly tell you
+   that read-only commands and the reset still work (vs. reading as a total freeze)?
+State plainly whether each fix landed, partially landed, or missed — that judgment is the
+highest-value output of this run.
 
 Do not pad the log. If the run was mostly clean, say so plainly and report the few real
 events. An honest short log beats a padded long one.

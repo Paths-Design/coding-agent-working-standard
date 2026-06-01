@@ -83,7 +83,17 @@ does.
 
 - **Overlapping scope.** Two agents create specs whose `scope.in` overlaps the same files,
   each in its own worktree, and both edit the shared file. What does each agent's guard
-  do? Does the right owner get named?
+  do? Does the right owner get named? When a guard names the owner, note that the refusal
+  now leads with `CAWS worktree-write-guard` and tells you your **session** (not just a
+  shell `cd`) must be rooted in the owning worktree — record whether that wording is clear.
+  - **`scope.support` is a deliberate NON-claiming surface (new — exercise the distinction).**
+    A path in a spec's `scope.support` is editable like `scope.in` but **never establishes a
+    worktree claim**. So two agents both listing the same file in `scope.support` is *not* a
+    claim-clash (the worktree-write-guard will not hard-block on it), whereas a `scope.in`
+    overlap is. Stage both and record the difference: a `scope.in` overlap should produce a
+    `claimed:*` hard block from the non-owning checkout; a `scope.support` overlap should not.
+    If `scope.support` ever produces a claim/hard-block, that is a high-value defect — the
+    whole point of the class is that it does not claim.
 - **Lease / registry race.** Two agents create or bind worktrees near-simultaneously. Does
   `caws agents list` / the registry stay consistent, or do entries duplicate / go missing
   / half-write?
