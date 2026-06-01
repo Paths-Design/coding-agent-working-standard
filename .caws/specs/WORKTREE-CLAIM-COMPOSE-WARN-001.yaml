@@ -3,6 +3,7 @@ title: 'amend-scope --add of a root deliverable to a worktree-bound spec warns +
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: wt-compose-warn
 created_at: '2026-06-01T04:06:19.889Z'
 updated_at: '2026-06-01T04:07:03.021Z'
 blast_radius:
