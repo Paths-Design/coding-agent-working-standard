@@ -30,6 +30,21 @@ source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 # reset-danger-latch.sh so the latch WRITER and CLEARER agree on the sentinel
 # filename (DANGER-LATCH-UX-001).
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# shellcheck source=lib/guard-message.sh
+# guard_identity (HOOK-GUARD-LEGIBILITY-001) — so latch reasons self-identify
+# as "CAWS command-safety". Non-fatal if absent (reasons already name the
+# classifier inline). Guard with a file-existence test: under `set -euo
+# pipefail`, `source <missing>` is a fatal builtin error `|| true` won't catch.
+[[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
+
+# The sticky-latch carve-out (see the latch-armed branch below) exempts
+# read-only commands AND the reset invocation: a latched session can still run
+# `git status`, `ls`, `cat`, etc. and the reset itself. So a latch does NOT
+# freeze "every Bash call" — only MUTATING / capability-risk commands re-block.
+# This phrase is shared by every latch reason so the copy stays accurate and
+# does not overstate the blast radius (run-003: the old "every subsequent Bash
+# call will be blocked" wording read as a full freeze and misled the agent).
+_LATCH_SCOPE_NOTE="subsequent MUTATING / capability-risk Bash commands will block until a human resets the latch; read-only commands (git status, ls, cat, …) and the reset itself still run"
 
 danger_state_dir() {
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
@@ -186,7 +201,7 @@ if [[ -f "$LATCH_FILE" ]]; then
     [[ -n "$ORIG_WHY" ]] && TRIGGER_NOTE="$TRIGGER_NOTE (reason: $ORIG_WHY)"
     TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for mutating commands, so they block until it is cleared (read-only commands and the reset itself are exempt)."
   fi
-  REASON="A dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You, the agent, CANNOT clear this in-band: the reset is human-only by design AND a reset run from a latched session resolves no human shell session-id. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
+  REASON="CAWS command-safety: a dangerous command was previously blocked or sent for approval in this Claude session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You, the agent, CANNOT clear this in-band: the reset is human-only by design AND a reset run from a latched session resolves no human shell session-id. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   exit 0
 fi
@@ -224,7 +239,7 @@ if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
   # Fail-closed: an unverifiable command does NOT get the warn-first grace
   # (we cannot prove it is a benign first ask). Latch immediately.
   record_danger_latch "$LATCH_FILE" "ask" "classifier unavailable" "$COMMAND"
-  REASON="command classifier unavailable; dangerous-command safety cannot verify Bash semantics. The session danger latch is NOW ARMED (fail-closed). STOP: do not run another Bash command — every subsequent call blocks until a human resets the latch, which you cannot do yourself. Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
+  REASON="CAWS command-safety: command classifier unavailable; dangerous-command safety cannot verify Bash semantics. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
   emit_ask_json "$REASON"
   exit 0
 fi
@@ -268,7 +283,7 @@ case "$DECISION" in
     # first occurrence — there is no safe single use of a deny-class command
     # (rm -rf /, force-push), so the warn-first grace does NOT apply.
     record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
-    FULL_REASON="$REASON. This is a HARD BLOCK and the session danger latch is NOW ARMED. STOP: do not run another Bash command — every subsequent Bash call will be blocked until a human resets the latch, which you CANNOT do yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command (e.g. via 'command git ...', 'env ... git ...', 'bash -lc \"...\"', or 'git --bare init'). Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\", then ask for the next step. Command was: $COMMAND"
+    FULL_REASON="CAWS command-safety: $REASON. This is a HARD BLOCK (catastrophic deny) and the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command (e.g. via 'command git ...', 'env ... git ...', 'bash -lc \"...\"', or 'git --bare init'). Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\", then ask for the next step. Command was: $COMMAND"
     emit_block_json "$FULL_REASON"
     exit 0
     ;;
@@ -297,7 +312,7 @@ case "$DECISION" in
     # over-governance CATASTROPHIC-ONLY-001 correctly removed.
     if [[ "$ENFORCEMENT" == "confirm" ]]; then
       record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
-      FULL_REASON="$REASON. This requires USER CONFIRMATION before it runs — it is NOT denied as catastrophic, but the command-safety classifier flagged a real capability risk (e.g. a destructive or mutating operation against an external/system resource) that a human should approve. The session danger latch is NOW ARMED: do not run another Bash command — subsequent calls block until a human resets the latch, which you CANNOT do yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe / approved>\", then proceed. Command was: $COMMAND"
+      FULL_REASON="CAWS command-safety: $REASON. This requires USER CONFIRMATION before it runs — it is NOT denied as catastrophic, but the command-safety classifier flagged a real capability risk (e.g. a destructive or mutating operation against an external/system resource) that a human should approve. The session danger latch is NOW ARMED: $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe / approved>\", then proceed. Command was: $COMMAND"
       emit_block_json "$FULL_REASON"
       exit 0
     fi
@@ -311,7 +326,7 @@ case "$DECISION" in
     # corrupted classifier cannot silently downgrade safety.
     # Fail-closed: malformed classifier output does NOT get the warn grace.
     record_danger_latch "$LATCH_FILE" "ask" "classifier unknown decision: $DECISION" "$COMMAND"
-    FULL_REASON="command classifier returned an unrecognized decision '$DECISION'. The session danger latch is NOW ARMED (fail-closed). STOP: do not run another Bash command — every subsequent call blocks until a human resets the latch, which you cannot do yourself. Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
+    FULL_REASON="CAWS command-safety: command classifier returned an unrecognized decision '$DECISION'. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
     emit_ask_json "$FULL_REASON"
     exit 0
     ;;

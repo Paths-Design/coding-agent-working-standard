@@ -182,12 +182,20 @@ describe('CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: catastrophic-only latch', () 
     expect(fs.existsSync(latchPath(dir, SID))).toBe(true);
   });
 
-  // --- A5: deny message still names the reset path -----------------------
-  it('A5: deny message tells the agent to STOP and names the reset command', () => {
+  // --- A5: deny message self-identifies + names the reset path -----------
+  // HOOK-GUARD-LEGIBILITY-001 dropped the bare "STOP / do not run another Bash
+  // command" overstatement (it implied a full freeze; the latch actually
+  // exempts read-only commands + the reset). The deny reason now leads with
+  // "CAWS command-safety", marks the HARD BLOCK as a catastrophic deny, and
+  // still names the reset command.
+  it('A5: deny message self-identifies as CAWS command-safety, scopes the latch, and names the reset command', () => {
     dir = makeProject();
     const r = block(dir, DENY_MKFS, SID);
     const reason = reasonOf(r);
-    expect(reason).toMatch(/STOP/);
+    expect(reason).toContain('CAWS command-safety');
+    expect(reason).toMatch(/HARD BLOCK \(catastrophic deny\)/i);
+    expect(reason).toMatch(/MUTATING \/ capability-risk Bash commands will block/i);
+    expect(reason).not.toMatch(/every subsequent Bash call will be blocked/i);
     expect(reason).toContain('reset-danger-latch.sh');
   });
 

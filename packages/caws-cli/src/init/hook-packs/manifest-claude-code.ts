@@ -386,6 +386,19 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: false,
       managed: true,
     },
+    {
+      // Shared guard-message legibility helpers (guard_identity /
+      // guard_amend_scope_hint / guard_not_harness_note). Sourced by
+      // scope-guard, worktree-write-guard, and block-dangerous so every guard
+      // refusal self-identifies ("CAWS scope-guard" / "CAWS
+      // worktree-write-guard" / "CAWS command-safety") and prints a literal
+      // copy-pasteable remediation, instead of reading as a generic harness
+      // prompt that a first-timer dismisses (HOOK-GUARD-LEGIBILITY-001).
+      destPath: '.claude/hooks/lib/guard-message.sh',
+      sourcePath: 'lib/guard-message.sh',
+      executable: false,
+      managed: true,
+    },
 
     // -- Dispatch entrypoints invoked from .claude/settings.json --
     // The caws_dispatch/ directory name is the namespace: a settings.json
