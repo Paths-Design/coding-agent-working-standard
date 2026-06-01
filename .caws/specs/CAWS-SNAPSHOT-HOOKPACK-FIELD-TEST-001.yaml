@@ -7,20 +7,33 @@ created_at: '2026-06-01T23:47:22.923Z'
 updated_at: '2026-06-01T23:47:23.757Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/store
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/tests/store/snapshot-vnext-facts.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Test-only fix, zero product change — a RELEASE BLOCKER caught by the full CLI
+    jest run (not by lint/typecheck/smoke). CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001
+    (merged df5e4c6/3682f51) added a hookPackInstalled boolean to
+    composeStoreSnapshot().filesystem (doctor-snapshot.ts:211, types.ts:158) but
+    did not update two exact-match toEqual assertions in snapshot-vnext-facts.test.js
+    (the uninitialized-repo case ~line 128 and the full-bootstrap case ~line 162).
+    toEqual is a deep-equality match, so the unexpected extra key fails both. The
+    field is INTENDED; the fix adds hookPackInstalled: false to both expectations
+    (neither test installs a hook pack). No source, no snapshot behavior changes.
+  - >-
+    After the fix the full CLI jest suite is green (was 2 failed / 1953 passed),
+    so the 11.1.9 release tag is not cut over a red test gate.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the two failing toEqual assertions on composeStoreSnapshot().filesystem
+    when: hookPackInstalled is added to each expected object (value false, as no pack is installed in either fixture)
+    then: >-
+      `npx jest tests/store/snapshot-vnext-facts.test.js` passes and the full
+      `npx jest` CLI suite reports 0 failed.
 non_functional: {}
 contracts: []
