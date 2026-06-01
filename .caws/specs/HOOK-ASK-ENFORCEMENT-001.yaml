@@ -1,25 +1,111 @@
 id: HOOK-ASK-ENFORCEMENT-001
 title: 'Capability-aware ask enforcement: blocking-confirmation for capability-derived ask, advisory for legacy/default ask'
-risk_tier: 3
+risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-06-01T00:59:47.676Z'
 updated_at: '2026-06-01T00:59:47.676Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook-pack: classify_command.py stdout contract (additive ask_enforcement field)'
+    - 'caws-cli hook-pack: block-dangerous.sh ask-arm enforcement (blocking-confirmation vs advisory)'
+    - 'command-safety completion bar: capability-derived ask now stops current-command execution'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - 'packages/caws-cli/templates/hook-packs/claude-code/classify_command.py'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh'
+    - 'packages/caws-cli/tests/hook-packs/ask_enforcement.test.js'
+    - 'packages/caws-cli/tests/hook-packs/capability_engine_closure.test.js'
+    - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/fn_closure_corpus.json'
+    - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/fact_probes.json'
+    - 'packages/caws-cli/tests/hook-packs/fixtures/capability-engine/adjudication.md'
+  out:
+    - 'packages/caws-cli/templates/hook-packs/claude-code/lib/emit.sh'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'CAPABILITY-DERIVED ASK BLOCKS, LEGACY/DEFAULT ASK STAYS ADVISORY. The classifier stamps an
+    additive stdout field ask_enforcement, derived from the structured capability/facet
+    classification (the decision came from classify_capability_pass: the lattice or opaque-exec
+    path), NEVER from reason prose. A capability-path ask emits ask_enforcement=blocking_confirmation;
+    every other ask (git/gh detectors, governed-family default, CONFIRM regex patterns, fail-closed
+    paths) emits ask_enforcement=advisory.'
+  - 'BLOCKING-CONFIRMATION IS A CURRENT-COMMAND APPROVAL BOUNDARY, NOT A SESSION FREEZE. block-dangerous.sh
+    routes ask + ask_enforcement=blocking_confirmation to the Claude Code permission-ask envelope
+    (emit_ask: permissionDecision=ask) so the current command requires human approval and does NOT
+    auto-execute — but it does NOT arm the sticky danger latch and does NOT record_danger_latch. The
+    catastrophic deny class remains the only sticky-latch trigger.'
+  - 'ADVISORY ASK PRESERVES CATASTROPHIC-ONLY-001. ask + ask_enforcement=advisory (or a missing field)
+    keeps the current CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001 behavior verbatim: stderr advisory
+    (caws advisory non-blocking) + exit 0, no latch, no block. This preserves the corrective patch
+    that removed over-governance of git rebase / npm run / unknown subcommands.'
+  - 'DENY IS UNCHANGED. The deny arm still hard-blocks (emit_block) and arms the sticky danger latch
+    immediately on first occurrence. ask enforcement does NOT reclassify reviewable capability risk
+    as deny — kubectl delete pod mypod is an approval boundary (ask/blocking_confirmation), not a
+    catastrophic deny.'
+  - 'THE HOOK DOES NOT INSPECT REASON PROSE TO CHOOSE ENFORCEMENT. block-dangerous.sh reads the
+    structured ask_enforcement field via jq; it never greps the reason string to decide blocking vs
+    advisory. Reason prose remains human-facing only.'
+  - 'BACKWARD-COMPATIBLE ADDITIVE FIELD. ask_enforcement is additive to the {decision, reason} stdout
+    contract; a missing field defaults to advisory (an older classifier or a non-capability decision
+    degrades safely to the pre-existing exit-0 advisory path). But every capability-path ask in the
+    CURRENT classifier MUST emit blocking_confirmation — the default is for compat, not for the
+    capability surface.'
+  - 'MIGRATION SEAM, NOT FINAL MODEL. Legacy advisory ask is documented as a TEMPORARY compatibility
+    seam while tool families are remapped into governed capability space. command-safety-complete
+    requires capability-risk asks to stop current-command execution; legacy advisory ask is
+    compatibility for commands not yet remapped, not a permanent two-tier policy.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'capability-derived ask commands (kubectl delete pod mypod, docker system prune, aws s3 rm
+      s3://b/k, kill -9 1234, curl -X POST, opaque eval "$VAR")'
+    when: 'classified and passed through block-dangerous.sh'
+    then: 'each emits decision=ask + ask_enforcement=blocking_confirmation and the hook routes them to
+      a current-command permission-ask (blocking confirmation, no auto-execute), WITHOUT arming the
+      sticky danger latch'
+  - id: A2
+    given: 'legacy/default ask commands (git rebase -i, unknown npm/git subcommand defaults, npm
+      publish --force, the known dev-loop friction cases)'
+    when: 'classified and passed through block-dangerous.sh'
+    then: 'each emits ask_enforcement=advisory and the hook preserves CATASTROPHIC-ONLY-001 behavior:
+      stderr advisory + exit 0, no latch, no block'
+  - id: A3
+    given: 'deny-class commands (rm -rf /, force-push, terraform destroy, shred -u, kubectl delete
+      namespace prod)'
+    when: 'classified and passed through block-dangerous.sh'
+    then: 'each still hard-blocks (emit_block) and arms the sticky danger latch immediately, unchanged
+      from current behavior'
+  - id: A4
+    given: 'the block-dangerous.sh ask arm'
+    when: 'choosing blocking_confirmation vs advisory'
+    then: 'the choice is made by reading the structured ask_enforcement field (jq), never by grepping
+      the reason prose; a test asserts a capability reason with an advisory enforcement is treated
+      advisory and a benign reason with blocking_confirmation is treated blocking'
+  - id: A5
+    given: 'a classifier decision with no ask_enforcement field (older classifier / non-capability)'
+    when: 'block-dangerous.sh processes it'
+    then: 'it defaults to advisory (backward compatible); AND every capability-path ask in the current
+      classifier is asserted to emit blocking_confirmation (the default never masks a capability ask)'
+  - id: A6
+    given: 'the closure documentation (adjudication.md + the two-bar language)'
+    when: 'command-safety completion is described'
+    then: 'it explicitly states legacy advisory ask is a temporary compatibility seam while capability
+      remapping expands, and that command-safety-complete requires capability-risk asks to stop
+      current-command execution'
+non_functional:
+  reliability:
+    - 'The additive ask_enforcement field must not break jq consumers that read only .decision/.reason;
+      a malformed/absent field fails closed to advisory, never to a silent allow or an unguarded block.'
+  security:
+    - 'Capability-derived risk (DESTROY/MUTATE/PRIV_ESC/SECRETS_READ/opaque-exec) cannot execute
+      without human approval at the hook boundary; the gap where ask was recognized-but-not-stopped is
+      closed for the capability surface.'
+contracts:
+  - name: 'ask-enforcement-stdout-field-v1'
+    type: behavior
+    description: 'classify_command.py stdout is {decision, reason, ask_enforcement}. ask_enforcement is
+      one of blocking_confirmation | advisory, derived from whether classify_capability_pass produced
+      the winning ask (facet-derived, not prose). block-dangerous.sh: ask+blocking_confirmation ->
+      emit_ask (current-command approval, no sticky latch); ask+advisory|missing -> stderr advisory +
+      exit 0; deny -> emit_block + latch (unchanged); allow -> exit 0.'
