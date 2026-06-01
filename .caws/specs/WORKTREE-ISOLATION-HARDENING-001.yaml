@@ -3,6 +3,7 @@ title: 'Enforce worktree ownership at every mutation surface (Bash, .caws/worktr
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-isolation-hardening
 created_at: '2026-05-31T00:00:00.000Z'
 updated_at: '2026-06-01T06:01:20.461Z'
 blast_radius:
