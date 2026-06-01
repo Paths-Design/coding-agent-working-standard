@@ -7,19 +7,90 @@ created_at: '2026-06-01T17:04:21.456Z'
 updated_at: '2026-06-01T17:04:21.456Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    # PROVISIONAL — this is a RECON-FIRST spec. The scope.in below is the
+    # LIKELY implementation surface IF the hook-env probe (A1) proves a safe
+    # discriminator. It must be re-confirmed (and possibly narrowed/widened via
+    # amend-scope) at implementation time. Do NOT begin editing until A1 passes.
+    - packages/caws-cli/templates/hook-packs/claude-code/agent-register.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/parse-input.sh
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    RECON CONCLUSION (run-002, evidence below). The phantom-lease defect is a
+    SESSION-IDENTITY DISAGREEMENT between two CAWS surfaces, not a multi-session
+    artifact. agent-register.sh (the SessionStart handler) keys the lease on the
+    HOOK PAYLOAD session_id (HOOK_SESSION_ID, from data.session_id in
+    parse-input.sh). Every normal CLI call resolves identity through
+    resolve-session.ts, where tier 1.5 CLAUDE_CODE_SESSION_ID wins ABOVE
+    HOOK_SESSION_ID. For a SUBAGENT these two sources DISAGREE, so SessionStart
+    mints a lease under an id no later CLI call will ever resolve to — a phantom
+    that inflates agents list, emits misleading peer NOTICEs, and is takeover-
+    eligible (it raced and briefly won worktree-b in the probe, Event 11).
+  - >-
+    EVIDENCE (live, this session). A subagent spawned via the Agent tool reports
+    CLAUDE_CODE_SESSION_ID equal to the PARENT session id (probed directly), and
+    CLAUDE_SESSION_ID unset. So inside a subagent tool subprocess the resolver
+    tier 1.5 yields the parent, which is why caws status inside a subagent shows
+    the parent. The four probe leases were cleanly session_stop-ped with distinct
+    pids and staggered starts, consistent with each subagent SessionStart firing
+    its own hook lifecycle under a distinct hook-payload id.
+  - >-
+    IMPLEMENTATION BLOCKER (must be proven before any code). The candidate fix is
+    to make agent-register.sh prefer CLAUDE_CODE_SESSION_ID over the hook-payload
+    session_id, so a subagent registers under the parent id (idempotent refresh,
+    no phantom). This is feasible ONLY IF CLAUDE_CODE_SESSION_ID is present in the
+    SessionStart HOOK SHELL. It is CONFIRMED present in tool/Bash subprocesses
+    (including subagent Bash) but NOT yet confirmed in the SessionStart hook
+    environment, which is a distinct invocation surface. If it is absent there,
+    there is no in-hook discriminator between a subagent and an independent
+    session, and the fix must move elsewhere (resolver/register reconciliation at
+    takeover-eligibility time, or a post-hoc kind=subagent tag). No registration
+    behavior changes until A1 resolves this.
+  - >-
+    SAFETY (carried from Campaign 2 doctrine). Whatever the discriminator, lease
+    freshness/identity must never silently authorize ownership. Suppressing or
+    tagging a subagent lease is an OBSERVABILITY/HYGIENE change; it must not relax
+    the foreign-claim refusal or the worktrees.json owner authority. A subagent
+    that genuinely needs to own a worktree still goes through explicit takeover.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a real subagent spawned via the Agent tool whose SessionStart hook fires
+    when: the SessionStart hook shell (the agent-register.sh process, not a later Bash tool call) inspects its environment
+    then: >-
+      it is recorded whether CLAUDE_CODE_SESSION_ID is present in that hook shell
+      and, if present, whether it equals the parent session id or a subagent-
+      distinct id. This probe is the GATE — implementation does not begin until
+      this fact is captured, because it determines whether an in-hook
+      discriminator exists at all.
+  - id: A2
+    given: A1 proves CLAUDE_CODE_SESSION_ID is present in the SessionStart hook shell and carries the parent id
+    when: agent-register.sh is changed to prefer it over the hook-payload session_id
+    then: >-
+      a subagent SessionStart refreshes the PARENT lease (idempotent) instead of
+      minting a new one; agents list shows one lease for a parent-plus-subagents
+      group, not one-per-subagent; and no subagent-distinct lease becomes
+      takeover-eligible.
+  - id: A3
+    given: A1 proves CLAUDE_CODE_SESSION_ID is ABSENT (or unreliable) in the SessionStart hook shell
+    when: the implementer re-plans
+    then: >-
+      this spec is re-scoped (or superseded) toward a non-hook discriminator —
+      the in-hook fix is abandoned with the evidence recorded, and no
+      register-behavior change ships under the false assumption that the hook can
+      see the parent id.
+  - id: A4
+    given: any implementation path chosen
+    when: the change is gated
+    then: >-
+      the dist-dependent hook-pack install/fixture suite passes on canonical
+      (node-heredoc + managed-header integrity), a real subagent no longer
+      produces a phantom lease in a live reproduction, and foreign-claim refusal
+      plus worktrees.json owner authority are unchanged (no ownership authority
+      derived from the lease-identity change).
 non_functional: {}
 contracts: []
