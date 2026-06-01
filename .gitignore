@@ -32,6 +32,7 @@ out/
 # Test coverage
 # =============
 coverage/
+reports/
 .nyc_output/
 *.lcov
 *.clover

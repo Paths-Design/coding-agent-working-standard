@@ -1,6 +1,120 @@
 ## [Unreleased]
 
+## [11.1.9] (2026-06-01)
+
+Multi-agent worktree-isolation hardening, agent-liveness correctness, and a
+batch of hook-pack guard-legibility / danger-latch / scope-authority fixes
+surfaced by two end-to-end multi-agent clash probes. No breaking changes;
+governed command surface unchanged (the thirteen v11.1 groups).
+
 ### Added
+
+* **Worktree-ownership oracle enforced at every mutation surface**
+  (`WORKTREE-ISOLATION-HARDENING-001`). A single copied hook helper
+  `lib/worktree-claim-oracle.js` (standalone node, lazy `js-yaml`, fail-closed)
+  is shelled out to by both `worktree-write-guard.sh` (Write/Edit) and a new
+  `bash-write-guard.sh` (Bash), so a foreign session's mutation of another
+  worktree's payload blocks at the same boundary regardless of tool. Closes the
+  proven side doors: `.caws/worktrees/<name>/` writes are routed through the
+  oracle *before* the broad `.caws/*` allowlist; Bash mutation forms
+  (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`,
+  `cp`, `dd of=`, git path-restore) extract targets and check ownership;
+  `caws worktree bind` refuses a foreign-owner steal without explicit
+  `--steal --reason` (emits `worktree_ownership_seized`); the `git restore` /
+  `git checkout -- <path>` / `git clean` path-restore synonym gap is closed in
+  `worktree-guard.sh`, worded by the actual op.
+* **`caws specs create --scope-in <path>`** (`CAWS-SPECS-CREATE-SCOPE-IN-001`)
+  populates `scope.in` at creation time so a new spec is editable without a
+  follow-up `amend-scope`.
+* **`scope.support` paths** (`WORKTREE-SUPPORT-SCOPE-001`): admitted like
+  `scope.in` but never worktree-claimed; `caws specs amend-scope --add-support`
+  manages them, and `amend-scope --add` of a root deliverable into a bound spec
+  warns on the compose-trap and suggests `--add-support`
+  (`WORKTREE-CLAIM-COMPOSE-WARN-001`).
+* **Capability-classifier engine** (`HOOK-CAPABILITY-ENGINE-002`): facts/facets/
+  budget scaffolding proven shadow-equivalent across the full corpus (zero
+  decision change), calibrated to the command-capability taxonomy doc.
+* **Guard legibility** (`HOOK-GUARD-LEGIBILITY-001`): guards self-identify and
+  print literal remediation; the claimant block names **all** scope.in
+  claimants when multiple worktrees contest a path
+  (`CLASH-GUARD-CLAIMANT-LABELING-001`).
+* **`caws doctor` warns when the CAWS hook pack is installed but `.caws/` is
+  absent** (`CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001`).
+
+### Changed
+
+* **`caws agents prune --dead` is recency-primary; doctor learns the drift
+  classes** (`AGENT-LIVENESS-DOCTOR-001`). A lease that heartbeated within the
+  active TTL window is never pruned as dead on a stale PID alone (the prior PID
+  oracle flagged 100% of healthy Claude Code sessions, whose per-call Bash PIDs
+  are not durable handles); PID is demoted to advisory. `doctor` now reads
+  `.caws/leases/`, cross-references `worktrees.json` owners, and surfaces
+  orphaned-active-spec / missing-worktree / stale-owner drift. Doctrine:
+  freshness gates cleanup, never authorizes ownership.
+* **Danger latch discriminates protected-state destination mutation from
+  source-only reference** (`DANGER-LATCH-TRIGGER-DISCRIMINATION-001`). Latches on
+  a redirect/in-place-mutator/`cp`/`mv` that writes *into* a protected guard
+  (citing the exact predicate), but no longer latches when a guard is only a
+  read/copy **source** into a non-protected fixture. Pipe-to-shell and the rest
+  of the catastrophic-deny corpus are byte-identical (unchanged). Reset remains
+  human-only. Earlier in the line the latch was relaxed to catastrophic-only
+  (`CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001`) and everyday git workflow
+  (`git add`/`commit`/`checkout -b`/`switch`) was admitted.
+* **`caws status` no longer implies `--takeover` for a stale-but-not-abandoned
+  foreign owner** (`STATUS-STALE-OWNER-NO-TAKEOVER-001`); the inline doctor
+  section suppresses takeover hints at the status call site (doctor itself
+  unchanged). `status` also qualifies `unbound` with the union-mode enforcement
+  caveat when active specs exist (`CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001`).
+* **`block-dangerous.sh` enforces the capability-derived ask**
+  (`HOOK-ASK-ENFORCEMENT-001`): the classifier emits additive `source` +
+  `enforcement` fields; capability-ask becomes a blocking confirmation while
+  legacy-ask stays advisory.
+
+### Fixed
+
+* **`caws specs migrate --apply --partial` exits non-zero on an incomplete
+  migration** (`CAWS-CLI-EXIT-CODES-001`) — an `isOk`-but-bad-outcome (post-write
+  validation failed, or partial+refused) no longer returns 0.
+* **`caws claim --takeover` refuses a cd-phantom claim** when the invoking
+  session root is not the target worktree (`CLAIM-TAKEOVER-CD-PHANTOM-001`),
+  closing the dual-ownership window the registry would otherwise record.
+* **Subshell-free claimant rendering** restores the `claimed:` token under the
+  guard runtime (hook JSON on stdin + `set -euo pipefail`) where a
+  `printf | tr | while read` pipeline emitted nothing
+  (`CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001`).
+* **Hook-pack classifier-spawn timeout parameterized** to eliminate false
+  full-suite failures under Jest worker contention; the timeout still fails loud
+  (`HOOK-PACK-SUBPROCESS-TIMEOUT-RELIABILITY-001`).
+* **`shortcut-language-check` no longer flags TODO/FIXME/placeholder when the
+  keyword is a referenced noun in prose**
+  (`CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001`).
+* **Per-worktree strike state written under the gitdir, not `<wt>/tmp`**
+  (`CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001`), so `git add -A` can never commit
+  it and strikes never bleed across worktrees.
+* **Classifier calibration**: `git rm --cached`/`-n` classified as allow
+  (`CAWS-CLASSIFY-GIT-RM-CACHED-001`); multi-line Bash segmented on newline so an
+  `rm` target is not lost (`CAWS-CLASSIFY-NEWLINE-SEGMENT-001`); read-only git
+  plumbing (`merge-tree`/`cat-file`/`rev-list`/`check-ignore`) and
+  `git worktree prune --dry-run` admitted.
+* **`caws init` recognizes legacy `dispatch/` wiring** and does not append a
+  duplicate (`CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001`).
+* **Coverage repointed at the compiled store/shell surface**
+  (`CAWS-CLI-COVERAGE-HONESTY-001`) with a real floor + threshold gate
+  (`CAWS-CLI-COVERAGE-FLOOR-001`); Stryker runs out-of-process to break the
+  nested-jest deadlock.
+* **Two unused-var lint errors removed** from hook-pack test files
+  (`CAWS-CLI-LINT-UNUSED-VARS-001`); workspace lint exits 0.
+
+### Recon-only (no behavior change, recorded for provenance)
+
+* **`SUBAGENT-PHANTOM-LEASE-001` / `SUBAGENT-LEASE-IDENTITY-RECONCILE-001`** — the
+  run-002 "subagent phantom lease" finding was investigated and resolved as a
+  **probe-log attribution error**: the suspected lease was a genuine top-level
+  session (all four probe leases map 1:1 to four top-level transcripts; a
+  subagent shares the parent session id via `claude_code_env` and `SessionStart`
+  does not fire on subagent spawn). No lease-identity code change shipped.
+
+### Added (continued)
 
 * **`caws specs amend-scope` — governed scope amendment without `git cherry-pick`**
   (`CAWS-SCOPE-AMEND-COMMAND-001`). `caws specs amend-scope <id> --add <path>...`
