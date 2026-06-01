@@ -7,12 +7,11 @@ created_at: '2026-06-01T18:18:26.652Z'
 updated_at: '2026-06-01T18:18:27.547Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/tests/hook-packs/lib/classify-timeout.js
     - packages/caws-cli/tests/hook-packs/classify-timeout.test.js
     - packages/caws-cli/tests/hook-packs/capability_engine_shadow.test.js
@@ -23,11 +22,67 @@ scope:
     - packages/caws-cli/tests/hook-packs/session_log_error_visibility.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The classifier-spawn (python3 classify_command.py) inner timeout in the
+    hook-pack test path is parameterized through one shared helper and defaults
+    to a contention-safe value (15000 ms, matching the bash/guard spawns the
+    suite already uses), so transient process/disk contention under Jest worker
+    parallelism no longer aborts a classifier call mid-flight and reports it as a
+    false failure.
+  - >-
+    A timeout still FAILS LOUDLY. The helper only sets the spawn timeout value;
+    the existing r.error / non-zero-status throws are preserved verbatim. A
+    timeout is never converted into allow, ask, or silent success — a genuinely
+    hung classifier still aborts and throws.
+  - >-
+    Classifier SEMANTICS are untouched. No change to classify_command.py, to the
+    command-safety lattice, or to any ask/deny/admit verdict. The before/after
+    classifier verdict for the existing hook-pack corpus is byte-equivalent; only
+    the test-harness spawn timeout value changes.
+  - >-
+    The default is bounded and deterministic, and overridable via a single env
+    var (CAWS_TEST_CLASSIFY_TIMEOUT_MS) for diagnostic stress runs. A malformed or
+    absent override falls back to the 15000 ms default — never to unbounded.
+  - >-
+    Scope is the classifier-spawn path only. The bash-guard 5000 ms spawns
+    (danger_latch_ux, guard_legibility) are NOT in the proven false-failure path
+    and are left unchanged; widening to them would be suite-speed creep, out of
+    scope for this reliability slice.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the six hook-pack test files that spawn python3 classify_command.py with a 5000 ms timeout
+    when: each is repointed at the shared classifyTimeoutMs helper
+    then: >-
+      every classifier spawn uses the helper value (default 15000 ms) instead of
+      a hard-coded 5000 ms, and no classifier-spawn 5000 ms literal remains in the
+      classify path.
+  - id: A2
+    given: the shared helper lib/classify-timeout.js
+    when: CAWS_TEST_CLASSIFY_TIMEOUT_MS is set, unset, empty, or non-numeric
+    then: >-
+      a numeric override is honored, and unset/empty/non-numeric falls back to the
+      15000 ms default — proven by a dedicated propagation unit test
+      (classify-timeout.test.js).
+  - id: A3
+    given: the isolated capability_engine_shadow suite
+    when: it runs alone on canonical
+    then: >-
+      it still passes 95/95 — the timeout change does not alter any classification
+      outcome.
+  - id: A4
+    given: a before/after classifier verdict comparison over the existing hook-pack
+      command corpus
+    when: the same commands are classified pre- and post-change
+    then: >-
+      the verdicts are identical (semantics unchanged), proven by the calibration
+      suites passing unchanged — not merely by green Jest.
+  - id: A5
+    given: the full hook-pack run under the same worker-contention shape that
+      produced the eight spurious timeout failures
+    when: it runs on canonical post-build
+    then: >-
+      the classifier-timeout false failures no longer appear, or any residual
+      failure is proven unrelated (e.g. a non-classifier suite) and documented.
+      Timing caveat recorded honestly: this improves RELIABILITY, not suite speed.
 non_functional: {}
 contracts: []
