@@ -7,12 +7,11 @@ created_at: '2026-06-01T14:11:20.947Z'
 updated_at: '2026-06-01T14:11:28.256Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/lib/worktree-claim-oracle.js
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
     - packages/caws-cli/templates/hook-packs/claude-code/bash-write-guard.sh
@@ -21,11 +20,53 @@ scope:
     - packages/caws-cli/tests/hook-packs/worktree_write_guard_payload_arm.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When a contested path is claimed via scope.in by MORE THAN ONE active-bound
+    worktree, a guard block names EVERY claimant worktree, not just the first
+    one the resolver happened to match. An agent reading the refusal must be
+    able to see all owners of the contested path.
+  - >-
+    The single-claimant case is unchanged: one claimant → the message names
+    exactly that one worktree (no trailing delimiter, no behavioral change to
+    the common path).
+  - >-
+    Only legibility changes. The block/pass/ask DECISION is identical to before
+    (a claimed path still blocks; an unclaimed path still passes). The oracle
+    still fails closed on no-yaml. The worktree-PAYLOAD branch
+    (block_foreign_worktree, single owning worktree by construction) is
+    untouched — multi-claimant labeling applies only to the canonical-root
+    scope.in claim branch (block_claimed).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: two active-bound worktrees (worktree-a, worktree-b) whose specs both list the same path in scope.in
+    when: a foreign/canonical-root Bash mutation or Write targets that contested path
+    then: >-
+      the block message names BOTH worktree-a and worktree-b as claimants (with
+      their matched scope.in pattern), via worktree-claim-oracle's block_claimed
+      detail carrying all claimants and both guards rendering the full list.
+  - id: A2
+    given: a single active-bound worktree claiming a path via scope.in
+    when: a foreign/canonical-root mutation targets that path
+    then: >-
+      the block message names exactly that one worktree — byte-compatible with
+      the prior single-claimant wording (no list delimiter artifacts).
+  - id: A3
+    given: the oracle's block_claimed detail now encodes a claimant LIST
+    when: each guard parses the oracle detail (previously `cut -d: -f1` on a single name:pattern)
+    then: >-
+      both bash-write-guard.sh and worktree-write-guard.sh parse the multi-
+      claimant detail correctly (the chosen list delimiter does not collide with
+      the existing name:pattern `:` separator), and the inline canonical-claim
+      node block inside worktree-write-guard.sh (the legacy claimed-check that
+      also returned on first match) is reconciled to the same multi-claimant
+      output.
+  - id: A4
+    given: the Campaign-1 oracle/guard golden-fixture suites
+    when: the dist-dependent hook-pack fixture suite runs on canonical post-build
+    then: >-
+      worktree_claim_oracle.test.js, bash_write_guard.test.js, and
+      worktree_write_guard_payload_arm.test.js pass with updated multi-claimant
+      expectations, and the node-heredoc integrity check (no backticks / no
+      double-quotes in inline-node JS comments) still passes.
 non_functional: {}
 contracts: []
