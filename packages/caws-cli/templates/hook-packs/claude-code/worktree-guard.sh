@@ -3,7 +3,7 @@
 # hook_pack: claude-code
 # hook_pack_version: 11
 # caws_min_major: 11
-# lineage_refs: 4,6,11,19
+# lineage_refs: 4,6,11,19,32
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
 #
 # CAWS Worktree Safety Guard for Claude Code (v11-shape).
@@ -266,6 +266,39 @@ fi
 if echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
   echo "BLOCKED: git reset --hard is not allowed while worktrees are active." >&2
   echo "This could discard work that other agents depend on." >&2
+  exit 2
+fi
+
+# WORKTREE-ISOLATION-HARDENING-001 (Fix 5): the git restore synonym gap.
+# `git restore <path>`, `git checkout -- <path>`, and `git clean` all DISCARD
+# working-tree content by path — the same hazard class as `git reset --hard`,
+# but they were matched nowhere (only a bare `git restore .` was a classifier
+# deny). They are blocked here while worktrees are active and worded by the
+# ACTUAL operation (a path/working-tree restore is NOT a branch switch).
+# `git restore --staged <path>` (unstage only, no working-tree discard) and
+# `git restore --source=... ` to a path are still working-tree mutations, so the
+# block is intentionally broad for the path-restore family; un-discarding
+# operations (status/diff) are unaffected.
+if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+restore\b'; then
+  echo "BLOCKED: git restore (working-tree/path restore) is not allowed while worktrees are active." >&2
+  echo "git restore DISCARDS uncommitted changes by path — the same work-loss hazard as git reset --hard." >&2
+  echo "This is a path/working-tree restore, NOT a branch switch." >&2
+  echo "Commit the work you want to keep first; to intentionally drop a specific file's changes," >&2
+  echo "do it from a session rooted in the owning worktree, not from a shared/foreign checkout." >&2
+  exit 2
+fi
+
+if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+checkout\s+--\s'; then
+  echo "BLOCKED: git checkout -- <path> (working-tree discard) is not allowed while worktrees are active." >&2
+  echo "This discards uncommitted changes to the named path(s) — a work-loss hazard while parallel work exists." >&2
+  echo "Commit first, or operate from the owning worktree's session." >&2
+  exit 2
+fi
+
+if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+clean\b'; then
+  echo "BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active." >&2
+  echo "git clean can delete another agent's untracked files across the shared tree." >&2
+  echo "Remove specific files you own explicitly instead." >&2
   exit 2
 fi
 
