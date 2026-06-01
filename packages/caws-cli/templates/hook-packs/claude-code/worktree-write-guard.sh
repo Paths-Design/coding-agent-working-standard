@@ -237,11 +237,13 @@ if [[ -n "$FILE_PATH" ]]; then
             _WG_ID="CAWS worktree-write-guard"
             command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
             echo "[$_WG_ID] BLOCKED: '$FILE_PATH_FOR_ALLOWLIST' is claimed by an active worktree's scope.in." >&2
-            _CLAIMANT_COUNT="$(printf '%s' "$_ORACLE_DETAIL" | tr ',' '\n' | grep -c .)"
-            printf '%s' "$_ORACLE_DETAIL" | tr ',' '\n' | while IFS= read -r _pair; do
+            # CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001: array split (no pipe-while).
+            IFS=',' read -ra _CLAIM_PAIRS <<< "$_ORACLE_DETAIL"
+            _CLAIMANT_COUNT=${#_CLAIM_PAIRS[@]}
+            for _pair in "${_CLAIM_PAIRS[@]}"; do
               [[ -z "$_pair" ]] && continue
-              _cw="$(printf '%s' "$_pair" | cut -d: -f1)"
-              _cp="$(printf '%s' "$_pair" | cut -d: -f2-)"
+              _cw="${_pair%%:*}"
+              _cp="${_pair#*:}"
               echo "  claimed:$_cw:$_cp — worktree '$_cw' via scope.in '$_cp'" >&2
             done
             [[ "$_CLAIMANT_COUNT" -gt 1 ]] && echo "  $_CLAIMANT_COUNT worktrees claim this path; route the edit through whichever single worktree should own it." >&2
@@ -672,9 +674,16 @@ case "${SPEC_CONTENTION_CHECK:-}" in
     # (CLASH-GUARD-CLAIMANT-LABELING-001). List EVERY claimant so the agent sees
     # all owners of a contested path, not just the first.
     _CLAIM_LIST="${SPEC_CONTENTION_CHECK#claimed:}"
-    _CLAIM_COUNT="$(printf '%s' "$_CLAIM_LIST" | tr ',' '\n' | grep -c .)"
+    # CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001: split on comma into an array via
+    # `IFS=',' read -ra` (NO pipe, NO `while read` subshell). The prior
+    # `printf | tr | while read` form emitted nothing under the guard's actual
+    # runtime (hook JSON on stdin + `set -euo pipefail`), dropping the
+    # `claimed:<wt>:<pattern>` token the risk-surface test asserts. A `for` over
+    # an array is robust to that runtime.
+    IFS=',' read -ra _CLAIM_PAIRS <<< "$_CLAIM_LIST"
+    _CLAIM_COUNT=${#_CLAIM_PAIRS[@]}
     echo "  (format: claimed:<worktree-name>:<matching-pattern>)" >&2
-    printf '%s' "$_CLAIM_LIST" | tr ',' '\n' | while IFS= read -r _pair; do
+    for _pair in "${_CLAIM_PAIRS[@]}"; do
       [[ -z "$_pair" ]] && continue
       echo "  claimed:$_pair" >&2
     done
