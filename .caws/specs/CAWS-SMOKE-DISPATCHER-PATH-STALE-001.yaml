@@ -7,20 +7,33 @@ created_at: '2026-06-01T23:13:21.763Z'
 updated_at: '2026-06-01T23:13:22.594Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/scripts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Test-only path correction, zero product change. The fresh-install smoke
+    references the dispatcher at .claude/hooks/dispatch/<name>.sh at four call
+    sites (session_start, two pre_tool_use, stop). The dispatcher namespace was
+    renamed to caws_dispatch/ by CAWS-INIT-SETTINGS-WIRING-001 (ac17ebb); the
+    shipped pack and `caws init` are correct (all 42 hook files including
+    caws_dispatch/*.sh materialize). Only the smoke assertions are stale — they
+    invoked a non-existent dispatch/ dir (exit 127). This corrects the four paths
+    to caws_dispatch/. No template, init, or hook behavior changes.
+  - >-
+    The smoke gate must pass against the v11.1.9 packed CLI after the fix,
+    proving the regression was in the test path only, not in packaging.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the four dispatch/ references in fresh-install-smoke.mjs
+    when: they are corrected to caws_dispatch/ (the post-CAWS-INIT-SETTINGS-WIRING-001 dir)
+    then: >-
+      `npm run smoke:fresh-install -w @paths.design/caws-cli` reaches and passes
+      the SessionStart-lease, pre_tool_use, and stop dispatcher assertions
+      against the packed v11.1.9 CLI.
 non_functional: {}
 contracts: []
