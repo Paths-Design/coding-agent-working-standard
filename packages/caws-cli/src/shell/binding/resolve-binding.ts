@@ -183,6 +183,9 @@ function findScopeInClaimants(
     const spec = input.specs.find((s) => s.id === specId);
     if (spec === undefined) continue;
     if (spec.lifecycle_state !== 'active') continue;
+    // scope.in ONLY — scope.support is INTENTIONALLY EXCLUDED from the claim
+    // oracle (WORKTREE-SUPPORT-SCOPE-001). A support path is editable but never
+    // worktree-claimed; counting it here would re-create the compose-trap.
     const scopeIn = spec.scope?.in ?? [];
     const matched = scopeIn.find((entry) => scopeEntryMatches(entry, targetPath));
     if (matched !== undefined) {

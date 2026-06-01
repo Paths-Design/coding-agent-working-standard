@@ -29,6 +29,8 @@ import {
   SPEC_ACTIVE_WITH_RESOLUTION,
   SPEC_CLOSED_NO_RESOLUTION,
   SPEC_SUPERSEDES_SELF,
+  SPEC_WITH_SCOPE_SUPPORT,
+  SPEC_WITH_OUT_SHADOWING_SUPPORT,
 } from '../fixtures/spec-fixtures';
 
 const CORPUS_DIR = path.resolve(__dirname, '../../../../docs/rewrite/corpus/negative-fixtures');
@@ -121,6 +123,18 @@ describe('validateSpecShape (schema layer)', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(rules(r.errors)).toContain(SPEC_RULES.FORBIDDEN_FIELD_SCOPE_EXCLUDE);
+    }
+  });
+
+  it('accepts scope.support (WORKTREE-SUPPORT-SCOPE-001 — additive optional array)', () => {
+    const parsed = parseSpecYaml(SPEC_WITH_SCOPE_SUPPORT);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      const r = validateSpecShape(parsed.value);
+      expect(r.ok).toBe(true);
+      // The parsed scope carries the support array through.
+      const scope = (parsed.value as { scope?: { support?: string[] } }).scope;
+      expect(scope?.support).toEqual(['FRICTION-LOG.md', 'docs/**']);
     }
   });
 
@@ -491,6 +505,24 @@ describe('SCOPE_OVERBROAD_OUT — A1: detect basic shadow', () => {
       });
       expect(overbroad[0].authority).toBe('kernel/spec');
       expect(overbroad[0].location).toMatchObject({ pointer: '/scope/out' });
+    }
+  });
+});
+
+describe('SCOPE_OVERBROAD_OUT — scope.support shadow (WORKTREE-SUPPORT-SCOPE-001)', () => {
+  it('fires when scope.out shadows a scope.support entry, tagging the support surface', () => {
+    const r = parseAndValidateSpec(SPEC_WITH_OUT_SHADOWING_SUPPORT);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const overbroad = r.errors.filter((e) => e.rule === SPEC_RULES.SCOPE_OVERBROAD_OUT);
+      expect(overbroad).toHaveLength(1);
+      expect(overbroad[0].subject).toBe('docs/secret/notes.md');
+      expect(overbroad[0].data).toMatchObject({
+        scope_out_prefix: 'docs/secret',
+        scope_in_shadowed: 'docs/secret/notes.md',
+        shadowed_surface: 'scope.support',
+      });
+      expect(overbroad[0].message).toMatch(/scope\.support/);
     }
   });
 });

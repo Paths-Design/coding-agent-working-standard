@@ -678,6 +678,8 @@ export function registerShellCommands(
           remove?: string[];
           addOut?: string[];
           removeOut?: string[];
+          addSupport?: string[];
+          removeSupport?: string[];
           data?: boolean;
         }
       ) => {
@@ -687,6 +689,8 @@ export function registerShellCommands(
           ...(opts.remove !== undefined ? { removeIn: opts.remove } : {}),
           ...(opts.addOut !== undefined ? { addOut: opts.addOut } : {}),
           ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
+          ...(opts.addSupport !== undefined ? { addSupport: opts.addSupport } : {}),
+          ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
           showData: opts.data === true,
         });
         exit(code);

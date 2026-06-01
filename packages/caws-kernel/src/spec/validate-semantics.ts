@@ -172,28 +172,42 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
   // group by scope_out_prefix if it wants a single-row UX.
   const scopeIn = spec.scope?.in ?? [];
   const scopeOut = spec.scope?.out ?? [];
+  // WORKTREE-SUPPORT-SCOPE-001: scope.support is admitted like scope.in, so a
+  // scope.out entry that shadows a support entry is the same author error — the
+  // broad out would refuse the explicitly-admitted support path at decision
+  // time. Scan both admit surfaces, tagging which one was shadowed so the
+  // diagnostic points at the right field.
+  const scopeSupport = spec.scope?.support ?? [];
+  const admitSurfaces: ReadonlyArray<{ key: 'scope.in' | 'scope.support'; entries: readonly string[] }> = [
+    { key: 'scope.in', entries: scopeIn },
+    { key: 'scope.support', entries: scopeSupport },
+  ];
   for (const outEntry of scopeOut) {
     const outNormalized = normalizeScopePath(outEntry);
-    for (const inEntry of scopeIn) {
-      const inNormalized = normalizeScopePath(inEntry);
-      if (isPathSegmentPrefix(outNormalized, inNormalized)) {
-        errors.push(
-          diagnostic({
-            rule: SPEC_RULES.SCOPE_OVERBROAD_OUT,
-            authority: 'kernel/spec',
-            message: `scope.out entry "${outEntry}" shadows scope.in entry "${inEntry}" within the same spec — the broad scope.out would refuse the explicitly-admitted scope.in path at decision time.`,
-            subject: inEntry,
-            location: { pointer: '/scope/out' },
-            narrowRepair:
-              'Either (1) remove or narrow the broad scope.out entry so it no longer covers the scope.in path, OR (2) move the documentary exclusion to a future non_goals field (documentation-only, not consulted by the scope kernel).',
-            data: {
-              scope_out_prefix: outEntry,
-              scope_in_shadowed: inEntry,
-              scope_out: scopeOut,
-              scope_in: scopeIn,
-            },
-          }),
-        );
+    for (const surface of admitSurfaces) {
+      for (const inEntry of surface.entries) {
+        const inNormalized = normalizeScopePath(inEntry);
+        if (isPathSegmentPrefix(outNormalized, inNormalized)) {
+          errors.push(
+            diagnostic({
+              rule: SPEC_RULES.SCOPE_OVERBROAD_OUT,
+              authority: 'kernel/spec',
+              message: `scope.out entry "${outEntry}" shadows ${surface.key} entry "${inEntry}" within the same spec — the broad scope.out would refuse the explicitly-admitted ${surface.key} path at decision time.`,
+              subject: inEntry,
+              location: { pointer: '/scope/out' },
+              narrowRepair:
+                'Either (1) remove or narrow the broad scope.out entry so it no longer covers the admitted path, OR (2) move the documentary exclusion to a future non_goals field (documentation-only, not consulted by the scope kernel).',
+              data: {
+                scope_out_prefix: outEntry,
+                scope_in_shadowed: inEntry,
+                shadowed_surface: surface.key,
+                scope_out: scopeOut,
+                scope_in: scopeIn,
+                scope_support: scopeSupport,
+              },
+            }),
+          );
+        }
       }
     }
   }

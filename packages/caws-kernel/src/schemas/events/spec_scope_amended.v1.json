@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events/spec_scope_amended.v1.json",
   "title": "spec_scope_amended event payload",
-  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed scope.in/scope.out amendment made via `caws specs amend-scope` (CAWS-SCOPE-AMEND-COMMAND-001). Replaces the prior chore-commit-only amendment path that rode in invisibly.",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed scope.in/scope.out/scope.support amendment made via `caws specs amend-scope` (CAWS-SCOPE-AMEND-COMMAND-001; support added by WORKTREE-SUPPORT-SCOPE-001). Replaces the prior chore-commit-only amendment path that rode in invisibly.",
   "type": "object",
   "additionalProperties": false,
   "required": ["resulting_scope_in"],
@@ -27,6 +27,16 @@
       "items": { "type": "string" },
       "description": "scope.out paths removed by this amendment (may be empty)."
     },
+    "added_support": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.support paths added by this amendment (may be empty)."
+    },
+    "removed_support": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "scope.support paths removed by this amendment (may be empty)."
+    },
     "resulting_scope_in": {
       "type": "array",
       "items": { "type": "string" },
@@ -37,6 +47,11 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "The full scope.out after the amendment."
+    },
+    "resulting_scope_support": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The full scope.support after the amendment (admitted-but-not-claimed paths)."
     }
   }
 }

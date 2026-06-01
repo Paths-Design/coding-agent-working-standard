@@ -206,4 +206,56 @@ describe('CAWS-SCOPE-AMEND-COMMAND-001: amendScopeSpec', () => {
     const r = amendScopeSpec(env.cawsDir, { id: 'AMEND-NOOP-1', now: NOW, actor: ACTOR });
     expect(r.ok).toBe(false);
   });
+
+  // ── scope.support (WORKTREE-SUPPORT-SCOPE-001) ──────────────────────────
+
+  // First --add-support on a spec WITHOUT a support: block creates the block
+  // under scope: and appends the item; event carries the support fields.
+  it('A4 --add-support creates the support block on a spec that lacks it', () => {
+    writeSpec(env.cawsDir, 'AMEND-SUP-1', { scopeIn: ['a/b.ts'] });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'AMEND-SUP-1', addSupport: ['FRICTION-LOG.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'AMEND-SUP-1.yaml'), 'utf8');
+    expect(yaml).toMatch(/^ {2}support:$/m);
+    expect(yaml).toMatch(/^ {4}- FRICTION-LOG\.md$/m);
+    // scope.in is untouched.
+    expect(yaml).toMatch(/^ {4}- a\/b\.ts$/m);
+
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev).toHaveLength(1);
+    expect(ev[0].data.added_support).toEqual(['FRICTION-LOG.md']);
+    expect(ev[0].data.resulting_scope_support).toEqual(['FRICTION-LOG.md']);
+    // scope.in delta is empty (support-only amend).
+    expect(ev[0].data.added_in).toEqual([]);
+    expect(ev[0].data.resulting_scope_in).toEqual(['a/b.ts']);
+  });
+
+  // A support-only amendment is NOT refused by the at-least-one-change guard.
+  it('A4 a support-only amend is accepted (not refused as no-op)', () => {
+    writeSpec(env.cawsDir, 'AMEND-SUP-2', { scopeIn: ['a/b.ts'] });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'AMEND-SUP-2', addSupport: ['docs/x.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  // --remove-support drops a support item; event records removed_support.
+  it('A4 --remove-support drops a support path', () => {
+    writeSpec(env.cawsDir, 'AMEND-SUP-3', {
+      scopeIn: ['a/b.ts'],
+      extra: '  support:\n    - keep.md\n    - drop.md\n',
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'AMEND-SUP-3', removeSupport: ['drop.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'AMEND-SUP-3.yaml'), 'utf8');
+    expect(yaml).toMatch(/^ {4}- keep\.md$/m);
+    expect(yaml).not.toMatch(/^ {4}- drop\.md$/m);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.removed_support).toEqual(['drop.md']);
+    expect(ev[0].data.resulting_scope_support).toEqual(['keep.md']);
+  });
 });

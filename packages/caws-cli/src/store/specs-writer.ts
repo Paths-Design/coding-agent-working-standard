@@ -108,6 +108,10 @@ export interface AmendScopeSpecInput {
   readonly addOut?: readonly string[];
   /** scope.out paths to remove. */
   readonly removeOut?: readonly string[];
+  /** scope.support paths to add (admitted for edits, NOT worktree-claimed). */
+  readonly addSupport?: readonly string[];
+  /** scope.support paths to remove. */
+  readonly removeSupport?: readonly string[];
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -1291,17 +1295,46 @@ export function retireDraftSpec(
 // immediately with no worktree-local copy.
 
 /**
- * Line-surgical edit of a `scope.in:` / `scope.out:` YAML sequence. Operates on
- * the raw bytes so comments and unrelated formatting are preserved — only
- * list-item lines are inserted (append after the last existing item under the
- * key) or removed (drop the exact matching `- <path>` line). `scope.out: []`
- * inline-empty form is expanded to a block sequence on first add.
+ * Ensure a `  <key>:` block header exists under the top-level `scope:` block,
+ * inserting an empty one after the scope block's existing content if absent.
+ * Used for `support`, which (unlike `in`/`out`) is never written by the spec
+ * scaffold — so a first `--add-support` on a spec with no support key would
+ * otherwise hit patchScopeSequence's null (key-not-found) path. Comment- and
+ * formatting-preserving: only one header line is inserted. Returns the source
+ * unchanged when the key already exists; null when `scope:` cannot be located.
+ */
+function ensureScopeKeyBlock(source: string, key: 'support'): string | null {
+  const lines = source.split('\n');
+  const scopeIdx = lines.findIndex((l) => /^scope:\s*$/.test(l));
+  if (scopeIdx === -1) return null;
+
+  // Already present? (2-space key under scope:, block or inline-empty form.)
+  const keyRe = new RegExp(`^  ${key}:\\s*(\\[\\s*\\])?\\s*$`);
+  let insertAt = scopeIdx + 1;
+  for (let i = scopeIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) break;
+    if (/^\S/.test(line)) break; // next top-level key ends the scope block
+    if (keyRe.test(line)) return source; // already present
+    insertAt = i + 1; // track the end of the scope block
+  }
+
+  const next = [...lines.slice(0, insertAt), `  ${key}:`, ...lines.slice(insertAt)];
+  return next.join('\n');
+}
+
+/**
+ * Line-surgical edit of a `scope.in:` / `scope.out:` / `scope.support:` YAML
+ * sequence. Operates on the raw bytes so comments and unrelated formatting are
+ * preserved — only list-item lines are inserted (append after the last existing
+ * item under the key) or removed (drop the exact matching `- <path>` line).
+ * `scope.out: []` inline-empty form is expanded to a block sequence on first add.
  *
  * Returns the new bytes, or null when the key block cannot be located.
  */
 function patchScopeSequence(
   source: string,
-  key: 'in' | 'out',
+  key: 'in' | 'out' | 'support',
   add: readonly string[],
   remove: readonly string[]
 ): string | null {
@@ -1439,17 +1472,27 @@ export function amendScopeSpec(
 
   const beforeIn = Array.isArray(spec.scope?.in) ? [...spec.scope.in] : [];
   const beforeOut = Array.isArray(spec.scope?.out) ? [...spec.scope.out] : [];
+  const beforeSupport = Array.isArray(spec.scope?.support) ? [...spec.scope.support] : [];
 
   const addIn = input.addIn ?? [];
   const removeIn = input.removeIn ?? [];
   const addOut = input.addOut ?? [];
   const removeOut = input.removeOut ?? [];
+  const addSupport = input.addSupport ?? [];
+  const removeSupport = input.removeSupport ?? [];
 
-  if (addIn.length === 0 && removeIn.length === 0 && addOut.length === 0 && removeOut.length === 0) {
+  if (
+    addIn.length === 0 &&
+    removeIn.length === 0 &&
+    addOut.length === 0 &&
+    removeOut.length === 0 &&
+    addSupport.length === 0 &&
+    removeSupport.length === 0
+  ) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `amend-scope requires at least one of --add/--remove (in or out) for spec "${input.id}".`,
+        `amend-scope requires at least one of --add/--remove (in, out, or support) for spec "${input.id}".`,
         { subject: input.id }
       )
     );
@@ -1477,6 +1520,32 @@ export function amendScopeSpec(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
           `Could not locate the scope.out block in spec "${input.id}".`,
+          { subject: input.id }
+        )
+      );
+    }
+    patched = r;
+  }
+  if (addSupport.length > 0 || removeSupport.length > 0) {
+    // support is never written by the scaffold; ensure the block exists before
+    // patching so a first --add-support on a spec without it does not hit the
+    // key-not-found null path (WORKTREE-SUPPORT-SCOPE-001).
+    const ensured = ensureScopeKeyBlock(patched, 'support');
+    if (ensured === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not locate the scope block to add scope.support in spec "${input.id}".`,
+          { subject: input.id }
+        )
+      );
+    }
+    const r = patchScopeSequence(ensured, 'support', addSupport, removeSupport);
+    if (r === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not locate the scope.support block in spec "${input.id}".`,
           { subject: input.id }
         )
       );
@@ -1514,12 +1583,15 @@ export function amendScopeSpec(
   const after = reparsed.value;
   const afterIn = Array.isArray(after.scope?.in) ? [...after.scope.in] : [];
   const afterOut = Array.isArray(after.scope?.out) ? [...after.scope.out] : [];
+  const afterSupport = Array.isArray(after.scope?.support) ? [...after.scope.support] : [];
 
   // Compute the actual deltas (idempotent ops produce empty deltas).
   const addedIn = afterIn.filter((p) => !beforeIn.includes(p));
   const removedIn = beforeIn.filter((p) => !afterIn.includes(p));
   const addedOut = afterOut.filter((p) => !beforeOut.includes(p));
   const removedOut = beforeOut.filter((p) => !afterOut.includes(p));
+  const addedSupport = afterSupport.filter((p) => !beforeSupport.includes(p));
+  const removedSupport = beforeSupport.filter((p) => !afterSupport.includes(p));
 
   const event: EventBody = {
     event: 'spec_scope_amended',
@@ -1531,8 +1603,11 @@ export function amendScopeSpec(
       removed_in: removedIn,
       added_out: addedOut,
       removed_out: removedOut,
+      added_support: addedSupport,
+      removed_support: removedSupport,
       resulting_scope_in: afterIn,
       resulting_scope_out: afterOut,
+      resulting_scope_support: afterSupport,
     },
   } as unknown as EventBody;
 

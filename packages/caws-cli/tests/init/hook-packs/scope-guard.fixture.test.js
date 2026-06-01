@@ -197,7 +197,7 @@ describe('scope-guard.sh: v11 lifecycle resolution', () => {
     // on stdout. The first strike is `additionalContext` (warn-allow).
     expect(r.code).toBe(0);
     const combined = r.stdout + r.stderr;
-    expect(combined).toMatch(/Scope guard strike/);
+    expect(combined).toMatch(/scope-guard strike/i);
     expect(combined).toMatch(/out-of-scope/);
   });
 
@@ -232,6 +232,56 @@ describe('scope-guard.sh: v11 lifecycle resolution', () => {
     });
     // Active spec admits packages/**; draft is ignored in union mode.
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toMatch(/Scope guard strike/);
+    expect(r.stderr).not.toMatch(/scope-guard strike/i);
+  });
+
+  // WORKTREE-SUPPORT-SCOPE-001: scope.support is ADMITTED for edits exactly
+  // like scope.in — a write to a support-only path draws no strike.
+  it('v11 active spec ADMITS a scope.support path (no strike)', () => {
+    writeSpec(repo, 'SUP-001', [
+      'id: SUP-001',
+      'title: support spec',
+      'lifecycle_state: active',
+      'mode: feature',
+      'risk_tier: 3',
+      'scope: { in: [src/foo/**], support: [FRICTION-LOG.md, docs/**] }',
+      '',
+    ].join('\n'));
+
+    // A path only in scope.support — must be admitted (no out-of-scope strike).
+    const r = runScopeGuard(repo, {
+      tool_name: 'Write',
+      tool_input: { file_path: path.join(repo, 'docs/notes.md') },
+      session_id: 'test',
+      cwd: repo,
+    });
+    expect(r.code).toBe(0);
+    const combined = r.stdout + r.stderr;
+    expect(combined).not.toMatch(/scope-guard strike/i);
+    expect(combined).not.toMatch(/out-of-scope/);
+  });
+
+  // A path in NEITHER scope.in nor scope.support still draws an out-of-scope
+  // strike — support does not widen admission beyond its own entries.
+  it('v11 active spec still flags a path outside both scope.in and scope.support', () => {
+    writeSpec(repo, 'SUP-002', [
+      'id: SUP-002',
+      'title: support spec 2',
+      'lifecycle_state: active',
+      'mode: feature',
+      'risk_tier: 3',
+      'scope: { in: [src/foo/**], support: [docs/**] }',
+      '',
+    ].join('\n'));
+
+    const r = runScopeGuard(repo, {
+      tool_name: 'Write',
+      tool_input: { file_path: path.join(repo, 'lib/elsewhere.ts') },
+      session_id: 'test',
+      cwd: repo,
+    });
+    expect(r.code).toBe(0); // strike 1 warns, exits 0
+    const combined = r.stdout + r.stderr;
+    expect(combined).toMatch(/scope-guard strike/i);
   });
 });

@@ -57,6 +57,13 @@ export interface BlastRadius {
 export interface Scope {
   in: string[];
   out?: string[];
+  /**
+   * Paths ADMITTED for Write/Edit like `in`, but which NEVER establish a
+   * worktree claim (WORKTREE-SUPPORT-SCOPE-001). Use for repo-root deliverables
+   * and shared artifacts a slice must touch without owning them. Still shadowed
+   * by `out`. Optional; absence is unchanged behavior.
+   */
+  support?: string[];
 }
 
 export interface Blocker {

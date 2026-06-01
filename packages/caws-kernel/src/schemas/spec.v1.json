@@ -99,7 +99,7 @@
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Authoritative scope. 'in' is required and non-empty. 'out' rejects glob patterns. 'include'/'exclude' aliases are NOT accepted.",
+      "description": "Authoritative scope. 'in' is required and non-empty. 'out' rejects glob patterns. 'support' is admitted for edits like 'in' but never establishes a worktree claim. 'include'/'exclude' aliases are NOT accepted.",
       "required": ["in"],
       "properties": {
         "in": {
@@ -115,6 +115,11 @@
             "not": { "pattern": "[*?]" },
             "description": "Directory paths only. Glob patterns (*, ?) rejected."
           }
+        },
+        "support": {
+          "type": "array",
+          "description": "Optional. Paths ADMITTED for Write/Edit exactly like scope.in, but which NEVER establish a worktree claim (the worktree-write-guard will not hard-block a base-branch write to a support path). Use for repo-root deliverables and shared artifacts a slice must touch without owning. Still shadowed by scope.out.",
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     },

@@ -418,6 +418,14 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
         // scope.out must NOT make it 'claimed' — scope.out is exclusion
         // documentation, not a hostility surface (CLAUDE.md trap #4). This
         // is the same over-broad-authority class the slice removes.
+        //
+        // scope.support is INTENTIONALLY EXCLUDED from the claim surface
+        // (WORKTREE-SUPPORT-SCOPE-001): a support path is editable like scope.in
+        // but must NEVER establish a worktree claim — that is the entire point
+        // of the class (it breaks the compose-trap where a repo-root deliverable
+        // pulled into scope.in becomes worktree-claimed and hard-blocks the main
+        // checkout). Do NOT add scope.support here; doing so silently
+        // reintroduces the trap.
         var patterns = Array.isArray(scope.in) ? scope.in : [];
 
         if (patterns.length === 0) {
