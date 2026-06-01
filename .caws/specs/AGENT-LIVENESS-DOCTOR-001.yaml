@@ -2,9 +2,9 @@ id: AGENT-LIVENESS-DOCTOR-001
 title: 'Make prune --dead recency-primary (D4) and teach doctor the lease/worktree drift classes (D10); freshness prevents unsafe cleanup, never authorizes ownership'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-31T00:00:00.000Z'
-updated_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-06-01T06:52:12.679Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/leases-store.ts
