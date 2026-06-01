@@ -36,6 +36,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { classifyTimeoutMs } = require('./lib/classify-timeout');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const CLASSIFIER = path.join(
@@ -79,7 +80,7 @@ function classify(cmd, repoRoot = REPO_ROOT, home = '/tmp/fake-home-closure') {
     {
       input: cmd,
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: classifyTimeoutMs(),
       env: { ...process.env, CAWS_CLASSIFY_FACTS_DUMP: '1' },
     }
   );

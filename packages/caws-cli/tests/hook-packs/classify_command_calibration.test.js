@@ -26,6 +26,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { classifyTimeoutMs } = require('./lib/classify-timeout');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const CLASSIFIER = path.join(
@@ -73,7 +74,7 @@ function classify(cmd) {
     {
       input: cmd,
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: classifyTimeoutMs(),
     }
   );
   if (r.error) {

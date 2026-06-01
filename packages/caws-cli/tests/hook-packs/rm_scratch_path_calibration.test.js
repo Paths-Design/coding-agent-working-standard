@@ -25,6 +25,7 @@
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { classifyTimeoutMs } = require('./lib/classify-timeout');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const CLASSIFIER = path.join(
@@ -38,7 +39,7 @@ function decision(command) {
   const r = spawnSync(
     'python3',
     [CLASSIFIER, '--repo-root', REPO_ROOT, '--home', os.homedir(), '--cwd', REPO_ROOT],
-    { input: command, encoding: 'utf8', timeout: 5000 }
+    { input: command, encoding: 'utf8', timeout: classifyTimeoutMs() }
   );
   if (r.error) throw r.error;
   return JSON.parse(r.stdout).decision;
