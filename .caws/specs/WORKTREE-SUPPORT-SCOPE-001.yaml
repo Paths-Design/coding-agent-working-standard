@@ -3,6 +3,7 @@ title: 'scope.support: a scope class admitted for edits but never worktree-claim
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: wt-support-scope
 created_at: '2026-06-01T03:44:22.699Z'
 updated_at: '2026-06-01T03:44:39.295Z'
 blast_radius:
