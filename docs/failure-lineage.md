@@ -1475,3 +1475,45 @@ The danger latch is a genuine tripwire — it must stop an agent that keeps retr
 ### Single-line synthesis
 
 **Entry 34: CAWS's own danger latch froze the whole session on one honest mistake and told the agent too late to stop, while read-only inspection commands armed the latch they were meant to diagnose. The fix is warn-then-latch (first ask warns, second latches; deny still latches immediately), explicit stop-now feedback at flag time, and a read-only git-plumbing allow-list — so the tripwire fires on persistence, not on a single recoverable step.**
+
+## Entry 35: Worktree Isolation Was Enforced At The Polite Tool Surface, Not At Every Mutation Surface (June 2026)
+
+**Severity:** High (the hard-block messaging advertised a worktree-ownership boundary that was softer in practice than it claimed; a foreign session could mutate another session's worktree-owned files through several unguarded side doors)
+**Era:** v11.1
+**Surface that failed:** `worktree-write-guard.sh` (Write/Edit only, plus a `.caws/*` allowlist arm that exempted worktree payload), the absence of any Bash mutation-target guard, `worktree-guard.sh` (no `git restore` synonym), and `bindWorktreeRepair` (stamped owner unconditionally — no foreign-owner guard)
+**Agent class involved:** any multi-agent session; surfaced deterministically by the 4-session clash probe (`caws-opera/caws-firsttime-probe/CLASH-LOG.md`), with audit-chain proof in the probe's `events.jsonl`
+
+### What happened
+
+The worktree-write-guard correctly hard-blocked a foreign Write/Edit to a claimed scope.in path — but it was the *only* surface that enforced ownership, and even it had a hole. Four side doors let a foreign session reach worktree-owned content:
+
+1. **The `.caws/*` allowlist exempted worktree payload.** `worktree-write-guard.sh` exited 0 for every file under `.caws/worktrees/<name>/`. Worktree files physically live at `<canonical>/.caws/worktrees/<name>/`, so a foreign Write into another worktree's payload sailed straight through the control-plane allowlist.
+2. **Bash mutations were entirely unguarded.** The write-guard self-filtered to Write/Edit. `echo >> <claimed>`, `sed -i`, `rm`, `mv`, `cp`, `dd of=`, `git restore <path>` — none reached any ownership check.
+3. **`git restore` had no synonym coverage.** `worktree-guard.sh` blocked branch switches and `git reset --hard`, but `git restore <path>` / `git checkout -- <path>` / `git clean` (all working-tree-discarding) were matched nowhere.
+4. **`bind` stamped owner unconditionally (D2).** `bindWorktreeRepair` never checked the existing owner, so a foreign session could silently re-own a worktree by re-binding it.
+
+A fifth finding (D3) — a foreign session destroying another's live worktree at exit 0 — looked like a missing `destroy` guard, but the guard EXISTS. The clash-probe `events.jsonl` (seq 16 created `clash-c` owned by `6f0f7d7a`; seq 18 destroyed by foreign `366eb2f8` while recording `owner_session_id: 6f0f7d7a`) proved the owner WAS stamped and `admitsOwner` over-matched. Root cause: `resolveSessionCandidates`' capsule scan admits every `.caws/sessions/*.json` capsule regardless of invoking identity (a deliberate cwd-sensitivity fix), so two distinct same-repo sessions share candidates and B is admitted against A's worktree.
+
+### What we built or changed because of it
+
+`WORKTREE-ISOLATION-HARDENING-001` introduces **one ownership oracle, many callers** — not one physical module, but one *contract* (`lib/worktree-claim-oracle.js`, a standalone `node --check`-able helper, NOT an inline `node -e` heredoc) shelled out to by every mutation surface, kept in agreement with the CLI-side `admitsOwner`/`resolveSessionCandidates` by golden fixtures:
+
+- **Fix 1+2:** the `.caws/worktrees/*` arm now precedes the broad `.caws/*` allowlist and routes through the oracle — physical-root-aware: a foreign worktree-payload write hard-blocks, an owner's own payload write passes, and the canonical-root claimed-path block stays **session-independent** (no "owner may write canonical root" relaxation). `js-yaml` is required lazily so the foreign-payload block works even where `js-yaml` is unresolvable in an installed `.claude/hooks/lib/`.
+- **Fix 3:** new `bash-write-guard.sh` extracts targets for a deliberately NARROW mutation-form set (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`, `cp`, `dd of=`, the git path-restore family) and routes each through the SAME oracle — no arbitrary shell parsing; read-only commands pass; uncertain → ask (degrade to block, never silent allow).
+- **Fix 4:** `bindWorktreeRepair` runs the same `admitsOwner` guard `destroy`/`merge` use; a foreign owner refuses unless `--steal --reason "<non-empty>"`, and a forced steal appends a first-class `worktree_ownership_seized` audit event. Decoupled from owner liveness (keys only on "owner exists and does not admit").
+- **Fix 5:** `worktree-guard.sh` now blocks the path-restore family when worktrees are active, worded by the actual operation (a path restore is NOT a branch switch).
+- **Fix 6 (D3):** split, not fixed here. A diagnostic fixture reproduces the candidate over-match and `SESSION-CANDIDATE-RESOLUTION-HARDENING-001` carries the delicate candidate-resolution fix (which must not regress the takeover-from-canonical path the capsule scan was built for).
+
+### What it doesn't catch
+
+- `git clean`'s victims can't be cheaply enumerated; `bash-write-guard.sh` routes a cwd sentinel through the oracle rather than blocking unconditionally, so a `git clean` whose cwd is not itself worktree payload passes. `worktree-guard.sh` Fix 5 blocks `git clean` outright when worktrees are active, covering the common case.
+- The Bash target extractor is narrow by design; an exotic mutation form (a wrapper script, a here-doc heredoc that writes a claimed path) is not recognized. The form set covers what the probe reproduced; widening is a reviewed allow-list edit, not an inference.
+- D3's candidate over-match is documented and split, not closed — until `SESSION-CANDIDATE-RESOLUTION-HARDENING-001` lands, a foreign same-repo session can still over-match on destroy/merge/bind. D1/D2 (the direct code defects) are closed independently.
+
+### The doctrine
+
+> A guard that protects only the polite tool surface is not an isolation boundary. Worktree ownership must be enforced at every mutation surface — Write/Edit, Bash, direct `.caws/worktrees/` paths, and CAWS lifecycle commands. Control-plane allowlists must not accidentally exempt worktree payloads. `.caws/worktrees/**` is not CAWS metadata; it contains mutable project work and must be governed as worktree-owned payload, not allowlisted as coordination state.
+
+### Single-line synthesis
+
+**Entry 35: worktree ownership was enforced only on Write/Edit (and even there a `.caws/*` allowlist exempted worktree payload), leaving Bash mutations, `.caws/worktrees/` writes, `git restore`, and `bind` as unguarded side doors a foreign session could walk. The fix is one ownership oracle behind every mutation surface — a standalone node helper both the write-guard and a new bash-write-guard shell out to, a foreign-owner guard on `bind` with an audited `--steal`, and a `git restore` block — with the candidate-resolution over-match (D3) split to its own successor spec because tightening it risks regressing the takeover-from-canonical path.**

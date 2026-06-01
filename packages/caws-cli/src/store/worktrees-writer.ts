@@ -82,8 +82,26 @@ export interface BindWorktreeInput {
   readonly name: string;
   readonly specId: string;
   readonly session: SessionIdentity;
+  /**
+   * The exhaustive set of session identities the invoking process can speak
+   * for, used for the foreign-owner admission check (WORKTREE-ISOLATION-
+   * HARDENING-001 Fix 4). Same semantic as DestroyWorktreeInput.sessionCandidates
+   * — admission is set membership against entry.owner.session_id, not cwd-keyed
+   * equality. Construct via the shell layer's resolveSessionCandidates().
+   */
+  readonly sessionCandidates: SessionCandidates;
   readonly actor: EventBody['actor'];
   readonly now?: () => Date;
+  /**
+   * Forced ownership steal. When the target worktree is owned by a session NOT
+   * admitted by sessionCandidates, the bind refuses UNLESS steal is true AND a
+   * non-empty stealReason is supplied. A successful steal appends a
+   * worktree_ownership_seized audit event. This is decoupled from owner
+   * liveness (the PID/liveness split is a separate campaign): the guard keys
+   * only on "owner exists and does not admit the caller".
+   */
+  readonly steal?: boolean;
+  readonly stealReason?: string;
 }
 
 export interface DestroyWorktreeInput {
@@ -707,6 +725,37 @@ export function bindWorktreeRepair(
     );
   }
 
+  // WORKTREE-ISOLATION-HARDENING-001 Fix 4: foreign-owner guard (decoupled from
+  // liveness). bind previously stamped owner unconditionally — D2: a foreign
+  // session could silently steal a worktree by re-binding it. Now, if the entry
+  // has an owner that does NOT admit the caller (admitsOwner over
+  // sessionCandidates, exactly as destroy/merge do), the bind REFUSES unless an
+  // explicit --steal --reason "<non-empty>" is supplied. This keys ONLY on
+  // "owner exists and does not admit the caller" — it does NOT consult owner
+  // freshness/liveness (the PID/liveness split is a separate campaign).
+  let didSteal = false;
+  const priorOwner = existingEntry.owner;
+  if (priorOwner !== undefined) {
+    const matched = admitsOwner(input.sessionCandidates, priorOwner.session_id);
+    if (matched === null) {
+      // Foreign owner. Only an explicit, reasoned steal proceeds.
+      const reason = (input.stealReason ?? '').trim();
+      if (input.steal !== true || reason.length === 0) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Worktree "${input.name}" is owned by a different session (${priorOwner.session_id}). ` +
+              `bind refuses to silently re-own it. To take ownership deliberately, re-run with ` +
+              `--steal --reason "<why>" (a non-empty reason is required and is recorded in the audit log).\n\n` +
+              `Session-resolution trace (no candidate matched the registered owner):\n${describeCandidateTrace(input.sessionCandidates)}`,
+            { subject: input.name }
+          )
+        );
+      }
+      didSteal = true;
+    }
+  }
+
   // Patch the spec YAML to set worktree: <name>.
   const newSpecBytes = patchSpecSetWorktree(specInfo.value.source, input.name);
   if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
@@ -742,10 +791,36 @@ export function bindWorktreeRepair(
       data: eventData,
     } as unknown as EventBody;
 
+    const events: EventBody[] = [event];
+
+    // WORKTREE-ISOLATION-HARDENING-001 Fix 4: a forced steal appends a
+    // first-class, queryable audit event recording the forced ownership
+    // transfer (prior owner, new owner, reason). This is the auditability the
+    // functional requirement asks for — distinct from claim --takeover's
+    // prior_owners registry array.
+    if (didSteal && priorOwner !== undefined) {
+      const seizeData: Record<string, unknown> = {
+        worktree_name: input.name,
+        prior_owner_session_id: priorOwner.session_id,
+        new_owner_session_id: input.session.session_id,
+        reason: (input.stealReason ?? '').trim(),
+      };
+      if (priorOwner.platform !== undefined) {
+        seizeData.prior_owner_platform = priorOwner.platform;
+      }
+      events.push({
+        event: 'worktree_ownership_seized',
+        ts: now,
+        actor: input.actor,
+        spec_id: input.specId,
+        data: seizeData,
+      } as unknown as EventBody);
+    }
+
     return runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: specInfo.value.path, contents: newSpecBytes.value }],
-      events: [event],
+      events,
     });
   });
 

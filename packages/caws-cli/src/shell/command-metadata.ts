@@ -368,9 +368,20 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'bind',
       argument: { name: 'name', required: true, description: 'Worktree name' },
-      description: 'Repair bidirectional binding between a worktree and a spec (one-sided → bound).',
+      description:
+        'Repair bidirectional binding between a worktree and a spec (one-sided → bound). Refuses a foreign-owned worktree unless --steal --reason is given.',
       options: [
         { flag: '--spec <id>', required: true, description: 'Spec id to bind the worktree to' },
+        {
+          flag: '--steal',
+          description:
+            'Forcibly take ownership of a worktree owned by a different session. Requires --reason. Appends a worktree_ownership_seized audit event.',
+        },
+        {
+          flag: '--reason <text>',
+          description:
+            'Justification for --steal (required when stealing; recorded in the audit log).',
+        },
         DATA_OPTION,
       ],
     },

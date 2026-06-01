@@ -119,6 +119,8 @@ describe('Claude Code pack manifest', () => {
     expect(ids).toContain('.claude/hooks/scope-guard.sh');
     expect(ids).toContain('.claude/hooks/worktree-guard.sh');
     expect(ids).toContain('.claude/hooks/worktree-write-guard.sh');
+    // WORKTREE-ISOLATION-HARDENING-001 Fix 3: Bash mutation target guard.
+    expect(ids).toContain('.claude/hooks/bash-write-guard.sh');
     expect(ids).toContain('.claude/hooks/block-dangerous.sh');
     expect(ids).toContain('.claude/hooks/classify_command.py');
     expect(ids).toContain('.claude/hooks/CLAUDE.md');
@@ -127,6 +129,10 @@ describe('Claude Code pack manifest', () => {
     // HOOK-LIB-CONSOLIDATION-001: shared-utility libs are managed too.
     expect(ids).toContain('.claude/hooks/lib/caws-state.sh');
     expect(ids).toContain('.claude/hooks/lib/emit.sh');
+    // WORKTREE-ISOLATION-HARDENING-001: the shared ownership oracle must ship
+    // so worktree-write-guard / bash-write-guard can shell out to it at the
+    // installed surface (otherwise the .caws/worktrees payload arm fails open).
+    expect(ids).toContain('.claude/hooks/lib/worktree-claim-oracle.js');
 
     for (const f of CLAUDE_CODE_PACK.installedFiles) {
       expect(f.managed).toBe(true);

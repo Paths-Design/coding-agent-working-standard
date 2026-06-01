@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_ownership_seized.v1.json",
+  "title": "worktree_ownership_seized event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. Records a FORCED ownership transfer of a worktree from a foreign owner to the invoking session via `caws worktree bind <name> --steal --reason <...>` (WORKTREE-ISOLATION-HARDENING-001 Fix 4). Distinct from claim --takeover (which writes a prior_owners audit array on the registry entry); this event makes a forced bind-steal first-class and queryable in the hash-chained log. Auditability of the forced transfer is the functional requirement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "prior_owner_session_id", "new_owner_session_id", "reason"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Name of the worktree whose ownership was seized."
+    },
+    "prior_owner_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session id that owned the worktree before the forced steal."
+    },
+    "prior_owner_platform": {
+      "type": "string",
+      "description": "Optional: platform of the prior owner (e.g. claude-code)."
+    },
+    "new_owner_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session id that seized ownership (the invoking session)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator-supplied justification for the forced steal (required, non-empty)."
+    }
+  }
+}

@@ -53,6 +53,7 @@ import worktreeBoundSchema from '../schemas/events/worktree_bound.v1.json';
 import worktreeCreatedSchema from '../schemas/events/worktree_created.v1.json';
 import worktreeDestroyedSchema from '../schemas/events/worktree_destroyed.v1.json';
 import worktreeMergedSchema from '../schemas/events/worktree_merged.v1.json';
+import worktreeOwnershipSeizedSchema from '../schemas/events/worktree_ownership_seized.v1.json';
 
 // v10 read-side compatibility (KERNEL-EVENT-V10-COMPAT-ALIAS-001). Used
 // ONLY by validateChainedEvent's legacy-detection pre-pass for events with
@@ -110,6 +111,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   worktree_created: worktreeCreatedSchema,
   worktree_destroyed: worktreeDestroyedSchema,
   worktree_merged: worktreeMergedSchema,
+  worktree_ownership_seized: worktreeOwnershipSeizedSchema,
 } as const;
 
 function getAjv(): Ajv2020 {
@@ -603,6 +605,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'worktree_bound',
   'worktree_merged',
   'worktree_destroyed',
+  'worktree_ownership_seized',
   'claim_taken_over',
   'evidence_recorded',
   'ac_recorded',

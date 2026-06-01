@@ -234,6 +234,9 @@ export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
 export interface WorktreeBindOptions extends BaseCommandOptions {
   readonly name: string;
   readonly specId: string;
+  /** Forced ownership steal (WORKTREE-ISOLATION-HARDENING-001 Fix 4). */
+  readonly steal?: boolean;
+  readonly reason?: string;
 }
 
 export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
@@ -243,12 +246,20 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'bind');
   if (id === null) return 2;
 
+  // Ownership-comparison surface for the foreign-owner guard (Fix 4) — the same
+  // exhaustive candidate set destroy/merge build. Distinct from id.session
+  // (single-identity event actor).
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+
   const result = bindWorktreeRepair(ctx.cawsDir, {
     name: opts.name,
     specId: opts.specId,
     session: id.session,
+    sessionCandidates,
     actor: id.actor,
     now: nowFn,
+    ...(opts.steal === true ? { steal: true } : {}),
+    ...(opts.reason !== undefined ? { stealReason: opts.reason } : {}),
   });
   if (!isOk(result)) {
     err('caws worktree bind: failed.');
@@ -265,7 +276,11 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
     err('caws worktree bind: unexpected dry_run outcome.');
     return 2;
   }
-  out(`bound ${outcome.name} → ${opts.specId}`);
+  if (opts.steal === true) {
+    out(`bound ${outcome.name} → ${opts.specId} (ownership SEIZED — worktree_ownership_seized event appended)`);
+  } else {
+    out(`bound ${outcome.name} → ${opts.specId}`);
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

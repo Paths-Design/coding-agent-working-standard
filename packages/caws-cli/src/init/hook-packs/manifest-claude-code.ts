@@ -249,6 +249,20 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      // WORKTREE-ISOLATION-HARDENING-001 (Fix 3): Bash mutation target guard.
+      // worktree-write-guard only sees Write/Edit; Bash mutations (echo >>,
+      // sed -i, rm, mv, git restore, ...) into worktree-owned payload were an
+      // unguarded side door. This hook self-filters to Bash, extracts targets
+      // for a narrow mutation-form set, and routes each through the shared
+      // lib/worktree-claim-oracle.js — same owner-vs-session answer as a
+      // Write/Edit of the same path. Wired into caws_dispatch/pre_tool_use.sh
+      // after worktree-write-guard.
+      destPath: '.claude/hooks/bash-write-guard.sh',
+      sourcePath: 'bash-write-guard.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Entry 17 dangerous-command hardening (preserved verbatim) --
     {
@@ -396,6 +410,23 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // prompt that a first-timer dismisses (HOOK-GUARD-LEGIBILITY-001).
       destPath: '.claude/hooks/lib/guard-message.sh',
       sourcePath: 'lib/guard-message.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // The shared worktree-ownership oracle (WORKTREE-ISOLATION-HARDENING-001).
+      // A standalone node helper (NOT an inline node -e heredoc — that form
+      // corrupted hooks twice via JS-comment backtick/double-quote inside a
+      // bash double-quoted string) shelled out to by BOTH worktree-write-guard
+      // (Write/Edit) and bash-write-guard (Bash mutation target), so a write and
+      // a Bash mutation of the same .caws/worktrees/<name>/<rest> payload path
+      // get the SAME owner-vs-session answer. js-yaml is required lazily so the
+      // foreign-worktree-payload block works even where js-yaml is unresolvable
+      // in an installed .claude/hooks/lib/. Plain JS (no TS build artifact
+      // dependency); the CLI-side admitsOwner/resolveSessionCandidates stays in
+      // agreement via golden fixtures, not code sharing.
+      destPath: '.claude/hooks/lib/worktree-claim-oracle.js',
+      sourcePath: 'lib/worktree-claim-oracle.js',
       executable: false,
       managed: true,
     },

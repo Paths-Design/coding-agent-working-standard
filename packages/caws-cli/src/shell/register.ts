@@ -810,14 +810,21 @@ export function registerShellCommands(
     });
 
   defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'bind'))
-    .action((name: string, opts: { spec: string; data?: boolean }) => {
-      const code = runWorktreeBindCommand({
-        name,
-        specId: opts.spec,
-        showData: opts.data === true,
-      });
-      exit(code);
-    });
+    .action(
+      (
+        name: string,
+        opts: { spec: string; steal?: boolean; reason?: string; data?: boolean }
+      ) => {
+        const code = runWorktreeBindCommand({
+          name,
+          specId: opts.spec,
+          ...(opts.steal === true ? { steal: true } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 
   defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'destroy'))
     .action(

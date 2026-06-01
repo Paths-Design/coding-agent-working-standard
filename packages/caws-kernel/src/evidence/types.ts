@@ -71,6 +71,7 @@ export type EventType =
   | 'worktree_bound'
   | 'worktree_merged'
   | 'worktree_destroyed'
+  | 'worktree_ownership_seized'
   | 'claim_taken_over'
   | 'evidence_recorded'
   | 'ac_recorded'
@@ -111,6 +112,10 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'waiver_applied',
   'waiver_revoked',
   'worktree_bound',
+  // WORKTREE-ISOLATION-HARDENING-001 Fix 4: a forced bind-steal always binds
+  // to a spec, so the seizure event carries the bound spec_id like
+  // worktree_bound.
+  'worktree_ownership_seized',
 ]);
 
 /**
