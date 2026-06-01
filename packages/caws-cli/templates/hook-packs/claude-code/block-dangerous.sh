@@ -237,12 +237,27 @@ RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
   --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
   DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
   rm -f "$CLASSIFIER_STDERR"
-  RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\"}"
+  # Fail-closed: a classifier crash is a confirm-class ask (cannot prove safe).
+  RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\",\"source\":\"classifier_error\",\"enforcement\":\"confirm\"}"
 }
 rm -f "$CLASSIFIER_STDERR"
 
 DECISION=$(printf '%s' "$RESULT" | jq -r '.decision // "ask"')
 REASON=$(printf '%s' "$RESULT" | jq -r '.reason // "unknown"')
+# HOOK-ASK-ENFORCEMENT-001: enforcement is the wrapper contract; source is
+# diagnostic provenance. enforcement is ALWAYS present from a healthy classifier;
+# when ABSENT (an older classifier, or a hand-built RESULT), default conservatively
+# by decision so this slice never weakens an existing consumer: deny->block,
+# allow->pass, ask->advisory (preserves CATASTROPHIC-ONLY-001 for un-tagged asks).
+SOURCE=$(printf '%s' "$RESULT" | jq -r '.source // "unknown"')
+ENFORCEMENT=$(printf '%s' "$RESULT" | jq -r '.enforcement // ""')
+if [[ -z "$ENFORCEMENT" ]]; then
+  case "$DECISION" in
+    deny) ENFORCEMENT="block" ;;
+    allow) ENFORCEMENT="pass" ;;
+    *) ENFORCEMENT="advisory" ;;
+  esac
+fi
 
 case "$DECISION" in
   allow)
@@ -258,25 +273,35 @@ case "$DECISION" in
     exit 0
     ;;
   ask)
-    # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001 — ask-class is allowed without
-    # latching. The prior warn-then-latch protocol (DANGER-LATCH-APPROVAL-AND-
-    # FEEDBACK-001) armed a session-wide freeze on the SECOND flagged ask,
-    # which over-governed everyday commands the classifier cannot prove
-    # read-only — `npm run <script>` (eslint/jest/tsc), `git rebase`,
-    # `git cherry-pick`, `git commit --amend`, unknown git/gh/npm
-    # subcommands. None of those are catastrophic; latching the whole
-    # session on them is friction without safety payoff.
+    # HOOK-ASK-ENFORCEMENT-001 — ask is no longer uniformly advisory. It splits
+    # by ENFORCEMENT (the wrapper contract the classifier emits):
     #
-    # The relaxation is scoped to the *ask verdict only*. The catastrophic
-    # `deny` class (rm -rf /, force-push, reset --hard, clean -f, deleted-tag
-    # push, pipe-to-shell, git init) still hard-blocks and latches immediately
-    # below, and the fail-closed paths (malformed classifier decision, and the
-    # classifier-unavailable early-exit near the top of this script) still
-    # latch. Only this arm changed.
+    #   enforcement=confirm  — a CAPABILITY-derived ask (the facet lattice /
+    #     opaque-exec produced it; it carries structured semantic evidence:
+    #     kind=DESTROY/MUTATE, reversibility, scope) OR a fail-closed
+    #     classifier_error/sidecar_error ask. These are operationally meaningful
+    #     risk: block the FIRST occurrence with a human-confirmation message and
+    #     record the latch. The message is DISTINCT from a catastrophic deny
+    #     ("requires confirmation," not "hard block") so operators don't learn to
+    #     ignore all friction.
     #
-    # Surface the classifier's reason on stderr as a non-blocking advisory so
-    # the operator still sees why a command was flagged, then allow. No warn
-    # marker, no latch file, no block.
+    #   enforcement=advisory — a LEGACY/family/regex ask (unknown git/gh/npm
+    #     subcommand, git rebase/cherry-pick/commit --amend, rm/find heuristics).
+    #     This is uncertainty, NOT graded capability risk. Preserve CAWS-DANGER-
+    #     LATCH-CATASTROPHIC-ONLY-001: surface the reason on stderr as a non-
+    #     blocking advisory, then exit 0. No latch, no block.
+    #
+    # Transition architecture: legacy-family advisory is a compatibility class
+    # that shrinks as families are remapped into the capability substrate. The
+    # bare `ask -> block` rule is explicitly rejected — it would recreate the
+    # over-governance CATASTROPHIC-ONLY-001 correctly removed.
+    if [[ "$ENFORCEMENT" == "confirm" ]]; then
+      record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
+      FULL_REASON="$REASON. This requires USER CONFIRMATION before it runs — it is NOT denied as catastrophic, but the command-safety classifier flagged a real capability risk (e.g. a destructive or mutating operation against an external/system resource) that a human should approve. The session danger latch is NOW ARMED: do not run another Bash command — subsequent calls block until a human resets the latch, which you CANNOT do yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: bash .claude/hooks/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe / approved>\", then proceed. Command was: $COMMAND"
+      emit_block_json "$FULL_REASON"
+      exit 0
+    fi
+    # advisory (and any non-confirm enforcement): non-blocking, exit 0.
     printf 'caws advisory (non-blocking): %s\n' "$REASON" >&2
     exit 0
     ;;
