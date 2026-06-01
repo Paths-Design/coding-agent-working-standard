@@ -2,10 +2,11 @@ id: WORKTREE-SUPPORT-SCOPE-001
 title: 'scope.support: a scope class admitted for edits but never worktree-claimed (compose-trap fix, part A)'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: wt-support-scope
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-support-scope at bcaa2725c2ba3dbfb298a44f03f9c00de923a2a0'
 created_at: '2026-06-01T03:44:22.699Z'
-updated_at: '2026-06-01T03:44:39.295Z'
+updated_at: '2026-06-01T03:58:37.237Z'
 blast_radius:
   modules:
     - 'caws-kernel: spec schema + Scope type + scope evaluator + rules + spec_scope_amended event schema'
