@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /*
- * CAWS-MANAGED-HOOK
- * hook_pack: claude-code
- * hook_pack_version: 11
- * caws_min_major: 11
- * lineage_refs: 4,8,13,20,32
- * do_not_edit_directly: update via caws init --agent-surface claude-code
- *
+# CAWS-MANAGED-HOOK
+# hook_pack: claude-code
+# hook_pack_version: 11
+# caws_min_major: 11
+# lineage_refs: 4,8,13,20,32
+# do_not_edit_directly: update via caws init --agent-surface claude-code
+
  * worktree-claim-oracle.js  (WORKTREE-ISOLATION-HARDENING-001)
  *
  * THE shared ownership oracle. Invoked by BOTH worktree-write-guard.sh
