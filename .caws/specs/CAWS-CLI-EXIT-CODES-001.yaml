@@ -1,0 +1,25 @@
+id: CAWS-CLI-EXIT-CODES-001
+title: 'specs migrate --apply --partial must exit non-zero when specs the operator asked to migrate did not migrate'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-01T08:08:53.266Z'
+updated_at: '2026-06-01T08:08:53.266Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
