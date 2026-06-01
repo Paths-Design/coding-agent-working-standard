@@ -223,3 +223,90 @@ describe('composeDoctorSnapshot → inspectProjectState (end-to-end)', () => {
     expect(doctorInput.priorOwnersGrowthThreshold).toBe(10);
   });
 });
+
+// =====================================================================
+// CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001:
+// observeHookPackInstalled + end-to-end INIT_HOOKS_PRESENT_CAWS_ABSENT.
+// Distinct repoRoot != cawsDir layout: a repo with .claude/hooks/ present
+// and .caws/ absent. Exercises the real filesystem observation, not just
+// the hand-fed kernel rule.
+// =====================================================================
+describe('hookPackInstalled observation (CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001)', () => {
+  let repoRoot;
+  afterEach(() => {
+    if (repoRoot) fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function mkRepoRoot() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'caws-hookpack-'));
+  }
+
+  function installHook(root, name) {
+    const hooksDir = path.join(root, '.claude', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, name), '#!/bin/bash\nexit 0\n');
+  }
+
+  it('marker hook present + no .caws/ → hookPackInstalled=true and finding fires', () => {
+    repoRoot = mkRepoRoot();
+    installHook(repoRoot, 'scope-guard.sh'); // a CAWS marker hook
+    const cawsDir = path.join(repoRoot, '.caws'); // intentionally NOT created
+
+    const snap = composeStoreSnapshot({ repoRoot, cawsDir });
+    expect(snap.filesystem.hookPackInstalled).toBe(true);
+    expect(snap.filesystem.cawsDirExists).toBe(false);
+
+    const { doctorInput } = composeDoctorSnapshot({ repoRoot, cawsDir, now: NOW });
+    const report = inspectProjectState(doctorInput);
+    const f = report.findings.find(
+      (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+    );
+    expect(f).toBeDefined();
+    expect(f.severity).toBe('warning');
+    expect(f.narrowRepair).toContain('caws init');
+  });
+
+  it('the OTHER marker hook (worktree-write-guard.sh) alone also counts', () => {
+    repoRoot = mkRepoRoot();
+    installHook(repoRoot, 'worktree-write-guard.sh');
+    const cawsDir = path.join(repoRoot, '.caws');
+    const snap = composeStoreSnapshot({ repoRoot, cawsDir });
+    expect(snap.filesystem.hookPackInstalled).toBe(true);
+  });
+
+  it('a bare .claude/hooks/ with only a NON-CAWS hook → hookPackInstalled=false', () => {
+    repoRoot = mkRepoRoot();
+    installHook(repoRoot, 'some-unrelated-hook.sh');
+    const cawsDir = path.join(repoRoot, '.caws');
+    const snap = composeStoreSnapshot({ repoRoot, cawsDir });
+    expect(snap.filesystem.hookPackInstalled).toBe(false);
+    // And therefore the finding does NOT fire.
+    const { doctorInput } = composeDoctorSnapshot({ repoRoot, cawsDir, now: NOW });
+    const report = inspectProjectState(doctorInput);
+    expect(
+      report.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+
+  it('marker hook present AND .caws/ present → finding does NOT fire (initialized)', () => {
+    repoRoot = mkRepoRoot();
+    installHook(repoRoot, 'scope-guard.sh');
+    const cawsDir = path.join(repoRoot, '.caws');
+    fs.mkdirSync(cawsDir, { recursive: true });
+    fs.writeFileSync(path.join(cawsDir, 'policy.yaml'), VALID_POLICY);
+
+    const snap = composeStoreSnapshot({ repoRoot, cawsDir });
+    expect(snap.filesystem.hookPackInstalled).toBe(true);
+    expect(snap.filesystem.cawsDirExists).toBe(true);
+
+    const { doctorInput } = composeDoctorSnapshot({ repoRoot, cawsDir, now: NOW });
+    const report = inspectProjectState(doctorInput);
+    expect(
+      report.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+});

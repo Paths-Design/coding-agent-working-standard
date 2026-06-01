@@ -72,7 +72,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   // this spec-claim-keyed map (NOT the registry-keyed worktreeDirByName)
   // so it can distinguish "we observed the canonical path is absent"
   // from "we never observed the canonical path."
-  const filesystem = observeFilesystem(cawsDir, worktrees, specsResult.specs);
+  const filesystem = observeFilesystem(repoRoot, cawsDir, worktrees, specsResult.specs);
   const registryDiagnostics = collectRegistryDiagnostics(
     worktreesResult,
     agentsResult
@@ -143,7 +143,30 @@ function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
   };
 }
 
+/**
+ * CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: marker hooks that, when present
+ * under `<repoRoot>/.claude/hooks/`, identify the installed pack as the
+ * CAWS hook pack (as opposed to an unrelated project's `.claude/hooks/`).
+ * These two are load-bearing CAWS governance guards that no non-CAWS
+ * project ships; presence of EITHER is sufficient evidence the pack is
+ * installed. Kept narrow on purpose — a bare `.claude/hooks/` directory
+ * is NOT evidence of CAWS.
+ */
+const CAWS_HOOK_PACK_MARKERS = [
+  'scope-guard.sh',
+  'worktree-write-guard.sh',
+] as const;
+
+function observeHookPackInstalled(repoRoot: string): boolean {
+  const hooksDir = path.join(repoRoot, '.claude', 'hooks');
+  for (const marker of CAWS_HOOK_PACK_MARKERS) {
+    if (isFile(path.join(hooksDir, marker))) return true;
+  }
+  return false;
+}
+
 function observeFilesystem(
+  repoRoot: string,
   cawsDir: string,
   worktrees: Readonly<Record<string, unknown>>,
   specs: readonly { readonly worktree?: string }[]
@@ -183,6 +206,9 @@ function observeFilesystem(
     worktreesJsonExists: isFile(path.join(cawsDir, 'worktrees.json')),
     agentsJsonExists: isFile(path.join(cawsDir, 'agents.json')),
     eventsJsonlExists: isFile(path.join(cawsDir, 'events.jsonl')),
+    // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: observe the hook pack so doctor
+    // can flag the hooks-present/substrate-absent split-brain.
+    hookPackInstalled: observeHookPackInstalled(repoRoot),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
     legacyArchiveBodyCount: countLegacyArchiveBodies(cawsDir),

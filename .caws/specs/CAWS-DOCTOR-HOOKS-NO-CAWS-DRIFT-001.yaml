@@ -7,12 +7,12 @@ created_at: '2026-06-01T21:06:17.631Z'
 updated_at: '2026-06-01T22:12:15.111Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/doctor
+    - packages/caws-cli/src/store
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel/src/doctor/rules.ts
     - packages/caws-kernel/src/doctor/inspect.ts
     - packages/caws-kernel/src/doctor/types.ts
@@ -22,11 +22,30 @@ scope:
     - packages/caws-cli/src/store/types.ts
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - The finding fires only when the CAWS hook pack is observed installed AND
+    .caws/ is observed absent. Either condition alone, or an unobserved
+    hookPackInstalled fact, produces no finding.
+  - The finding is severity warning (not error) and its narrowRepair points at
+    `caws init` — it never instructs the agent to fabricate spec IDs or scope
+    entries to satisfy a downstream governance hook.
+  - hookPackInstalled is observed by the store from CAWS marker guard hooks
+    (scope-guard.sh / worktree-write-guard.sh) under .claude/hooks/, NOT from a
+    bare .claude/hooks/ directory that any project may carry.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a git repo whose .claude/hooks/ contains a CAWS marker guard hook and
+      that has no .caws/ directory
+    when: caws doctor runs against it
+    then: it emits doctor.init.hooks_present_caws_absent at severity warning with
+      a narrowRepair naming `caws init`
+  - id: A2
+    given: the same repo after `caws init` has created .caws/
+    when: caws doctor runs again
+    then: the doctor.init.hooks_present_caws_absent finding is absent
+  - id: A3
+    given: a repo whose .claude/hooks/ contains only a non-CAWS hook (no marker
+      guard) and has no .caws/
+    when: the store observes the filesystem
+    then: hookPackInstalled is false and the finding does not fire
 non_functional: {}
 contracts: []

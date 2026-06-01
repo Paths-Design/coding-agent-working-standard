@@ -173,6 +173,19 @@ export const DOCTOR_RULES = {
   INIT_AGENTS_REGISTRY_MISSING: 'doctor.init.agents_registry_missing',
   // No rule for events.jsonl missing — first append creates it under
   // lock and a missing file is valid until then.
+  /**
+   * CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: the CAWS hook pack is installed
+   * under `.claude/hooks/` but `.caws/` does NOT exist. This is the
+   * "hooks-present, substrate-absent" split-brain: governance hooks
+   * (scope-guard, worktree-write-guard, doc-frontmatter caws_specs gate)
+   * are wired and will fire, but there is no control plane behind them, so
+   * agents get cornered into satisfying a hook against state that cannot
+   * exist (the turn-003 placeholder-spec failure). Distinct from the
+   * INIT_*_MISSING rules, which presuppose `.caws/` exists and a sub-path
+   * is absent — this rule is the inverse: the hooks exist, the whole
+   * `.caws/` does not. Severity: warning. Repair: `caws init`.
+   */
+  INIT_HOOKS_PRESENT_CAWS_ABSENT: 'doctor.init.hooks_present_caws_absent',
 
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**

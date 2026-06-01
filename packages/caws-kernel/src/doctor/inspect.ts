@@ -1034,6 +1034,38 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // then.
   // -------------------------------------------------------------------------
 
+  // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: hooks-present, substrate-absent.
+  //
+  // The INVERSE of the INIT_*_MISSING rules below (which presuppose `.caws/`
+  // exists and a sub-path is gone). Here the whole control plane is absent
+  // while the CAWS hook pack IS installed under `.claude/hooks/`. The hooks
+  // (scope-guard, worktree-write-guard, the doc-frontmatter caws_specs gate)
+  // will fire with nothing behind them, cornering agents into satisfying a
+  // governance hook against state that cannot exist — the turn-003
+  // placeholder-spec failure. This fires regardless of the `.caws/`-present
+  // INIT_* block; `policy.missing` (section 6) also fires for an
+  // uninitialized repo, but that finding is generic ("budgets undefined"),
+  // whereas this one names the specific split-brain and the specific fix.
+  if (
+    input.filesystem !== undefined &&
+    input.filesystem.cawsDirExists === false &&
+    input.filesystem.hookPackInstalled === true
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT,
+        'warning',
+        'The CAWS hook pack is installed under .claude/hooks/, but .caws/ does not exist — CAWS governance hooks are wired with no control plane behind them. Hooks that demand spec/scope/linkage state (scope-guard, worktree-write-guard, the doc-frontmatter caws_specs gate) will fire against state that cannot exist until CAWS is initialized.',
+        {
+          subject: '.caws',
+          narrowRepair:
+            'Run `caws init` to create the control plane the installed hooks expect. Until then, do NOT satisfy a governance hook by fabricating spec IDs or scope entries — initialize first, then author real specs with `caws specs create`.',
+          data: { caws_dir_exists: false, hook_pack_installed: true },
+        }
+      )
+    );
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(

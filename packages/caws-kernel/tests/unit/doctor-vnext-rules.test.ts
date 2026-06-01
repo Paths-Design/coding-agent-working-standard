@@ -203,6 +203,91 @@ describe('7c.2 doctor.init.*_missing layout drift', () => {
 });
 
 // =====================================================================
+// CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001:
+// init.hooks_present_caws_absent — hooks installed, .caws/ absent.
+// The INVERSE of *_missing (which presuppose .caws/ exists).
+// =====================================================================
+describe('doctor.init.hooks_present_caws_absent', () => {
+  // An uninitialized repo: .caws/ does not exist, every sub-path absent.
+  function cawsAbsentFs(
+    overrides: Partial<NonNullable<DoctorInput['filesystem']>> = {}
+  ): NonNullable<DoctorInput['filesystem']> {
+    return {
+      cawsDirExists: false,
+      specsDirExists: false,
+      waiversDirExists: false,
+      policyYamlExists: false,
+      worktreesJsonExists: false,
+      agentsJsonExists: false,
+      eventsJsonlExists: false,
+      ...overrides,
+    };
+  }
+
+  it('hookPackInstalled=true AND cawsDir absent → warning fires', () => {
+    const r = inspectProjectState(
+      baseInput({ filesystem: cawsAbsentFs({ hookPackInstalled: true }) })
+    );
+    const f = r.findings.find(
+      (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+    );
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('warning');
+    expect(f!.subject).toBe('.caws');
+    // The repair must point at `caws init`, not at fabricating spec IDs.
+    expect(f!.narrowRepair).toContain('caws init');
+    expect(f!.data).toMatchObject({
+      caws_dir_exists: false,
+      hook_pack_installed: true,
+    });
+  });
+
+  it('hookPackInstalled=true BUT cawsDir present → does NOT fire (initialized)', () => {
+    const r = inspectProjectState(
+      baseInput({
+        filesystem: { ...fullFsPresent(), hookPackInstalled: true },
+      })
+    );
+    expect(
+      r.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+
+  it('cawsDir absent BUT hookPackInstalled=false → does NOT fire (plain new repo)', () => {
+    const r = inspectProjectState(
+      baseInput({ filesystem: cawsAbsentFs({ hookPackInstalled: false }) })
+    );
+    expect(
+      r.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+
+  it('hookPackInstalled undefined → does NOT fire (unobserved, not absent)', () => {
+    const r = inspectProjectState(
+      baseInput({ filesystem: cawsAbsentFs() })
+    );
+    expect(
+      r.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+
+  it('filesystem undefined entirely → does NOT fire', () => {
+    const r = inspectProjectState(baseInput());
+    expect(
+      r.findings.some(
+        (x) => x.rule === DOCTOR_RULES.INIT_HOOKS_PRESENT_CAWS_ABSENT
+      )
+    ).toBe(false);
+  });
+});
+
+// =====================================================================
 // registry.malformed_loaded
 // =====================================================================
 describe('7c.2 doctor.registry.malformed_loaded', () => {

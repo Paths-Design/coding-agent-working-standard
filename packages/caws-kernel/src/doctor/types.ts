@@ -191,6 +191,17 @@ export interface DoctorInput {
     readonly worktreesJsonExists: boolean;
     readonly agentsJsonExists: boolean;
     readonly eventsJsonlExists: boolean;
+    /**
+     * CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: whether the CAWS hook pack is
+     * installed under `.claude/hooks/`. The store observes this by looking
+     * for CAWS-managed marker hooks (e.g. scope-guard.sh / worktree-write-guard.sh)
+     * — NOT merely a `.claude/hooks/` directory, which any project may have.
+     * Combined with `cawsDirExists === false`, doctor fires
+     * `INIT_HOOKS_PRESENT_CAWS_ABSENT`. Optional so older snapshot writers
+     * and ad-hoc kernel callers stay valid; when undefined, the rule is
+     * skipped (treated as "unobserved", not "absent").
+     */
+    readonly hookPackInstalled?: boolean;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**

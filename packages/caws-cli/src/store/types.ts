@@ -149,6 +149,13 @@ export interface StoreSnapshot {
     readonly worktreesJsonExists: boolean;
     readonly agentsJsonExists: boolean;
     readonly eventsJsonlExists: boolean;
+    /**
+     * CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: whether the CAWS hook pack is
+     * installed under `.claude/hooks/` (detected by marker guard hooks).
+     * Combined with `cawsDirExists === false`, doctor fires
+     * INIT_HOOKS_PRESENT_CAWS_ABSENT.
+     */
+    readonly hookPackInstalled: boolean;
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
