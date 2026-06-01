@@ -63,6 +63,7 @@
         "worktree_bound",
         "worktree_merged",
         "worktree_destroyed",
+        "worktree_ownership_seized",
         "claim_taken_over",
         "evidence_recorded",
         "ac_recorded",
