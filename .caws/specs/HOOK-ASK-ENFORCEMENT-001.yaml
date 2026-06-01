@@ -3,6 +3,7 @@ title: 'Capability-aware ask enforcement: blocking-confirmation for capability-d
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: ask-enforcement
 created_at: '2026-06-01T00:59:47.676Z'
 updated_at: '2026-06-01T01:10:42.358Z'
 blast_radius:
