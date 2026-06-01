@@ -7,21 +7,71 @@ created_at: '2026-06-01T08:08:53.266Z'
 updated_at: '2026-06-01T08:08:58.695Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/tests/shell/specs-migrate-command.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Every CLI command whose run* handler can refuse, reject, or fail an
+    operation returns a non-zero exit code so shell `&&` chains and CI observe
+    the failure. `caws status` (observability) and `caws scope show` (report)
+    intentionally exit 0 always; `caws doctor` keeps its 0/1/2 semantics. These
+    three are documented exceptions, not violations.
+  - >-
+    `caws specs migrate --apply --partial` exits non-zero when one or more
+    specs the operator asked to migrate did NOT migrate — i.e. when the apply
+    distribution records `post_write_validation_failed > 0` or (in partial
+    mode) `refused > 0`. A partial migration that silently exits 0 masks an
+    incomplete migration from CI; that is the D7 defect this fixes.
+  - >-
+    Dry-run (`apply=false`) stays exit 0: nothing was attempted, so refused /
+    report-only verdicts are informational, not failures. Post-write
+    validation cannot occur on dry-run (the write path is skipped).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a .caws/specs containing a v10 spec that auto-migrates AND one that hits a post-write validation failure
+    when: the operator runs `caws specs migrate --from v10 --apply --partial`
+    then: >-
+      the migratable spec is written, the report records
+      post_write_validation_failed >= 1, and the command exits NON-ZERO (1) so
+      CI sees the partial failure — instead of the prior unconditional exit 0.
+  - id: A2
+    given: a .caws/specs containing a v10 spec that auto-migrates AND one that is refused
+    when: the operator runs `caws specs migrate --from v10 --apply --partial`
+    then: >-
+      the migratable spec is written, the report records refused >= 1, and the
+      command exits NON-ZERO (1).
+  - id: A3
+    given: a .caws/specs whose v10 specs ALL auto-migrate cleanly
+    when: the operator runs `caws specs migrate --from v10 --apply --partial`
+    then: >-
+      every spec is written, the distribution shows zero refused and zero
+      post_write_validation_failed, and the command exits 0.
+  - id: A4
+    given: a .caws/specs containing refused and/or unmigratable v10 specs
+    when: the operator runs `caws specs migrate --from v10` WITHOUT --apply (dry-run)
+    then: >-
+      the report is rendered, nothing is written, and the command exits 0 — a
+      dry-run report is not a failure.
+  - id: A5
+    given: the CLI-wide exit-code audit performed during this slice's recon
+    when: each named lifecycle/refusal path is probed live
+    then: >-
+      the closure note records that `worktree create` double-bind,
+      `worktree destroy` not-in-registry, and `specs activate/close` on a
+      nonexistent spec ALREADY exit non-zero (fixed in prior campaigns); the
+      one remaining return-0-on-failure survivor is the specs-migrate
+      partial-apply path fixed here. No other handler is changed.
+  - id: A6
+    given: the existing CLI store+shell suite
+    when: the full canonical gate runs post-build
+    then: >-
+      the new specs-migrate exit-code tests pass and the full suite is no worse
+      than baseline (zero failures).
 non_functional: {}
 contracts: []
