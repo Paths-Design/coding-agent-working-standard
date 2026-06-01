@@ -133,16 +133,6 @@ function runScopeGuard(wtDir, relFile) {
   );
 }
 
-function askReason(stdout) {
-  try {
-    const j = JSON.parse(stdout);
-    return j?.hookSpecificOutput?.permissionDecision === 'ask'
-      ? j.hookSpecificOutput.permissionDecisionReason || ''
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 // ── block-dangerous harness ────────────────────────────────────────────────
 function makeLatchProject() {

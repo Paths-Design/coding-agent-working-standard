@@ -119,7 +119,7 @@ describe('DANGER-LATCH-TRIGGER-DISCRIMINATION-001: guard source vs destination',
   it('A4: pipe-to-shell still arms the latch (true positive, unchanged)', () => {
     dir = makeProject();
     // A benign-looking echo piped into a shell interpreter is still pipe-to-shell.
-    const r = block(dir, 'echo echo hi | bash', SID);
+    block(dir, 'echo echo hi | bash', SID);
     // The catastrophic-deny / classifier path arms the latch.
     expect(fs.existsSync(latchPath(dir, SID))).toBe(true);
   });
