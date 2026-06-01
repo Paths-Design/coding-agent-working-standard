@@ -2,10 +2,11 @@ id: CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001
 title: 'Fix claimant-list rendering regression: pipe-while emits nothing in the guard runtime, breaking the claimed token'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-claimant-render
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-claimant-render at 31379a46c64e3482f1741e1e886453d75370096f'
 created_at: '2026-06-01T18:33:59.284Z'
-updated_at: '2026-06-01T18:34:00.205Z'
+updated_at: '2026-06-01T19:07:12.233Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
