@@ -295,16 +295,19 @@ case "$WORST" in
       # one per claiming worktree (CLASH-GUARD-CLAIMANT-LABELING-001). The lead
       # claimant names the mutated file; if more than one worktree claims it we
       # list every claimant so the agent sees all owners, not just the first.
-      _LEAD_WT="$(printf '%s' "$WORST_DETAIL" | cut -d, -f1 | cut -d: -f1)"
-      _LEAD_PAT="$(printf '%s' "$WORST_DETAIL" | cut -d, -f1 | cut -d: -f2-)"
+      # CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001: array split (no pipe-while), so
+      # the claimant enumeration emits under the guard runtime (stdin + set -e).
+      IFS=',' read -ra _CLAIM_PAIRS <<< "$WORST_DETAIL"
+      _LEAD_WT="${_CLAIM_PAIRS[0]%%:*}"
+      _LEAD_PAT="${_CLAIM_PAIRS[0]#*:}"
       echo "[$_BG_ID] BLOCKED: this Bash command mutates '$_LEAD_WT:$_LEAD_PAT', claimed by an active worktree's scope.in." >&2
-      _CLAIMANT_COUNT="$(printf '%s' "$WORST_DETAIL" | tr ',' '\n' | grep -c .)"
+      _CLAIMANT_COUNT=${#_CLAIM_PAIRS[@]}
       if [[ "$_CLAIMANT_COUNT" -gt 1 ]]; then
         echo "  This path is claimed via scope.in by $_CLAIMANT_COUNT active worktrees:" >&2
-        printf '%s' "$WORST_DETAIL" | tr ',' '\n' | while IFS= read -r _pair; do
+        for _pair in "${_CLAIM_PAIRS[@]}"; do
           [[ -z "$_pair" ]] && continue
-          _cw="$(printf '%s' "$_pair" | cut -d: -f1)"
-          _cp="$(printf '%s' "$_pair" | cut -d: -f2-)"
+          _cw="${_pair%%:*}"
+          _cp="${_pair#*:}"
           echo "    - worktree '$_cw' via scope.in '$_cp'" >&2
         done
         echo "  Route the edit through whichever single worktree should own it." >&2
