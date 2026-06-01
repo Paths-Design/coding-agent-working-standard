@@ -1,0 +1,240 @@
+id: WORKTREE-ISOLATION-HARDENING-001
+title: 'Enforce worktree ownership at every mutation surface (Bash, .caws/worktrees payload, bind, git restore); diagnose D3'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-05-31T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-kernel/src/schemas/events
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    # --- hook pack: the shared ownership oracle (NEW, copied plain-JS, node --check-able) ---
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/worktree-claim-oracle.js
+    # --- hook pack: Bash-aware write-target guard (NEW managed hook) ---
+    - packages/caws-cli/templates/hook-packs/claude-code/bash-write-guard.sh
+    # --- hook pack: existing guards to modify ---
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/caws_dispatch/pre_tool_use.sh
+    # --- hook pack: shared libs the oracle/guards may need ---
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/caws-state.sh
+    # --- CLI: register the two NEW hook-pack files in the install manifest ---
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    # --- store + shell: bind foreign-owner guard + --steal --reason ---
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    # --- kernel: conditional additive event schema for forced ownership transfer ---
+    - packages/caws-kernel/src/schemas/events/worktree_ownership_seized.v1.json
+    - packages/caws-kernel/src/schemas/events.v1.json
+    - packages/caws-kernel/src/evidence/types.ts
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/index.ts
+    # --- doctrine ---
+    - docs/failure-lineage.md
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    # --- tests ---
+    - packages/caws-cli/tests/hook-packs/
+    - packages/caws-cli/tests/init/hook-packs/
+    - packages/caws-cli/tests/store/
+    - packages/caws-cli/tests/shell/
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - >-
+    ONE OWNERSHIP ORACLE = CONTRACT + SHARED FIXTURES, NOT one physical module.
+    The installed hook pack MUST NOT depend on TypeScript build artifacts or
+    repo-local package resolution; it uses a copied plain-JS helper
+    lib/worktree-claim-oracle.js (node --check-able, no imports beyond node
+    builtins + the already-shipped js-yaml the existing node block uses). The CLI
+    side keeps its TypeScript admitsOwner/resolveSessionCandidates. The invariant
+    that both surfaces agree on the same (registry, specs, session, path) answer
+    is enforced by GOLDEN FIXTURES exercised against both — not by importing one
+    module everywhere.
+  - >-
+    CANONICAL-ROOT PROTECTION IS PRESERVED. A write to a claimed scope.in path at
+    the CANONICAL checkout root is blocked REGARDLESS of session (the existing
+    worktree-write-guard node block, lines 346-448, already does this and is NOT
+    weakened). This slice MUST NOT introduce an "owner session may write canonical
+    root" relaxation — that would reopen the dirty-main-while-worktree-owns-file
+    class. Owner writes are permitted only in the owner's linked worktree root or
+    via .caws/worktrees/<own>/<rest>.
+  - >-
+    .caws/worktrees/** IS PAYLOAD, NOT CONTROL-PLANE ALLOWLIST. The
+    worktree-write-guard allowlist arm "$PROJECT_DIR"/.caws/* (line ~193)
+    currently exits 0 for every file under .caws/worktrees/<name>/, exempting
+    worktree work content from the claim check. A new arm matching
+    .caws/worktrees/* BEFORE the broad .caws/* arm must NOT exit 0; it routes the
+    path to the ownership oracle. Control-plane files (.caws/specs, .caws/events,
+    .caws/leases, .caws/policy.yaml, .caws/state, .caws/agents.json,
+    .caws/worktrees.json) stay allowlisted.
+  - >-
+    PHYSICAL-ROOT-AWARE OWNERSHIP for worktree-payload paths. When a Write/Edit
+    (or Bash, see Bash invariant) target resolves to .caws/worktrees/<name>/<rest>,
+    the oracle (a) identifies <name> as the owning worktree, (b) treats <rest> as
+    the logical repo-relative path, (c) compares the operating session
+    (HOOK_SESSION_ID from the Claude Code hook payload's data.session_id) by DIRECT
+    STRING MATCH against worktrees.json[<name>].owner.session_id. Equal -> allow;
+    foreign owner -> block with the existing legible claimed:*-style message naming
+    the owning worktree + the session-rooting fix. The hook uses a direct
+    session_id match, NOT the candidate-resolution machinery (that stays CLI-side).
+  - >-
+    BASH MUTATION SURFACE IS GUARDED (deliberately narrow). A new managed hook
+    bash-write-guard.sh self-filters on Bash, extracts write targets ONLY for the
+    forms that reproduced or plausibly reproduce the probe class -- >/>>,
+    tee/tee -a, sed -i, perl -pi, truncate, touch, rm, mv, cp, dd of=, and the git
+    path-restore family (git restore <path>, git checkout -- <path>,
+    git reset -- <path>, git clean) -- and routes each extracted destination through
+    the SAME worktree-claim-oracle.js as Write/Edit. It does NOT attempt to parse
+    arbitrary shell. A claimed path explicitly present as a mutation target -> block;
+    a claimed path present but intent ambiguous -> ask; no claimed path / read-only
+    -> pass. The hook is SEPARATE from worktree-write-guard.sh (distinct
+    responsibility) and is wired into the pre_tool_use dispatcher HANDLERS array and
+    the install manifest.
+  - >-
+    BIND FOREIGN-OWNER GUARD (decoupled from liveness). bindWorktreeRepair refuses
+    a bind whose target worktree entry has an owner that does NOT admit the caller
+    (via admitsOwner + resolveSessionCandidates, exactly as destroy/merge already
+    do), UNLESS an explicit --steal --reason "<non-empty>" is passed. This guard
+    MUST NOT depend on fresh-vs-stale owner liveness -- the PID/liveness split is
+    known-broken and is a separate campaign's job. A forced --steal succeeds and
+    leaves AUDITABLE evidence of the forced ownership transfer (prefer a distinct
+    worktree_ownership_seized event; may downgrade to an existing event + structured
+    detail if the schema/chain work would balloon the slice). The functional
+    requirement is auditability of forced transfer, not the exact event name.
+  - >-
+    GIT RESTORE SYNONYM GAP CLOSED. worktree-guard.sh gates git restore <path>,
+    git checkout -- <path>, git reset -- <path>, and git clean by their underlying
+    mutation (file/working-tree restore), wording the block by the actual operation
+    (a path restore is NOT a "branch switch"). Today only a bare `git restore .`
+    is denied (classify_command.py) and `git restore <path>` is matched nowhere.
+  - >-
+    D3 IS A BOUNDED INVESTIGATION THAT SPLITS, NOT A BLOCKER. The clash-probe
+    events.jsonl (seq 16 create by 6f0f7d7a with owner_session_id 6f0f7d7a; seq 18
+    destroy by foreign 366eb2f8 recording owner_session_id 6f0f7d7a) proves the
+    destroy guard's owner WAS stamped and admitsOwner over-matched a distinct
+    same-host session -- the candidate-resolution root cause, NOT a missing/undefined
+    owner. Therefore this slice ships ONLY a regression/diagnostic fixture capturing
+    the over-match and opens a successor spec
+    SESSION-CANDIDATE-RESOLUTION-HARDENING-001; it does NOT tighten
+    resolveSessionCandidates (the destroy guard legitimately RELIES on
+    candidate-matching to admit claim --takeover-from-canonical, so tightening is
+    delicate). D1 (Bash/allowlist) and D2 (bind steal) MUST NOT be blocked by D3.
+  - >-
+    ORPHANED-SPEC IS WARNING-ONLY IN THIS SLICE. On destroy of a worktree whose
+    bound spec is active, emit a warning -- do NOT introduce lifecycle UX
+    (no auto-close, no auto-unbind, no interactive prompt). A later slice decides
+    the lifecycle behavior.
+  - >-
+    NO INLINE node -e GROWTH; NO GLOB RECONCILIATION. The ownership logic lands in
+    the standalone .js helper (node --check + fixture tested), NOT by extending the
+    existing quoted inline `node -e "..."` heredoc (JS comments inside it must
+    contain no backticks and no double-quotes -- that has corrupted hooks twice via
+    set -e silent exit 1; bash -n does not catch it; only the dist-dependent
+    init/hook-packs fixture suite does). The hook-glob vs TypeScript-glob mismatch
+    is NOT reconciled here -- golden fixtures prove the oracle's behavior on the
+    specific acceptance patterns only.
+acceptance:
+  - id: A1
+    given: A worktree clash-b owned by session S2, and the operating session is foreign S1, with worktrees active.
+    when: S1 issues a Write/Edit whose target resolves to .caws/worktrees/clash-b/<file>.
+    then: >-
+      The worktree-write-guard blocks (exit 2) via the new .caws/worktrees/* arm +
+      oracle (block_foreign_worktree), naming clash-b as the owning worktree and the
+      session-rooting fix. The path no longer sails through the .caws/* allowlist.
+  - id: A2
+    given: A worktree own-wt owned by the operating session S1, with worktrees active.
+    when: S1 issues a Write/Edit whose target resolves to .caws/worktrees/own-wt/<file>.
+    then: >-
+      The oracle returns pass (operating session == owner.session_id) and the guard
+      exits 0.
+  - id: A3
+    given: A claimed scope.in path at the CANONICAL checkout root, with worktrees active, operating session is the owner of that claiming worktree.
+    when: a Write/Edit targets that canonical-root path.
+    then: >-
+      The guard still blocks regardless of session (canonical-root protection
+      preserved -- no owner-may-write-root relaxation).
+  - id: A4
+    given: worktrees active and a claimed scope.in path P owned by a foreign session.
+    when: 'a Bash command issues each of: echo X >> P; sed -i ... P; tee P; truncate P; touch P; rm P; mv P Q; cp Q P; dd of=P; git restore P.'
+    then: >-
+      bash-write-guard.sh blocks (exit 2) each form via the oracle. A Bash command
+      that only READS P (cat P; grep x P; ls P) passes (no over-block). A claimed
+      path present with ambiguous intent asks.
+  - id: A5
+    given: A spec lists a path in scope.support (not scope.in) and a worktree is bound to that spec.
+    when: a foreign session writes that scope.support path.
+    then: >-
+      The oracle does NOT treat it as worktree-claimed (scope.support is never a
+      claim surface) -- regression guard that the existing
+      WORKTREE-SUPPORT-SCOPE-001 behavior is preserved across both Write/Edit and Bash.
+  - id: A6
+    given: A worktree owned by a foreign session in the registry.
+    when: '`caws worktree bind <name> --spec <id>` runs from a non-admitted session WITHOUT --steal.'
+    then: >-
+      bindWorktreeRepair refuses (LIFECYCLE_PLAN_REJECTED, nonzero) naming the
+      foreign owner. With `--steal --reason "<non-empty>"` the bind succeeds and
+      leaves auditable forced-transfer evidence (prefer worktree_ownership_seized
+      event; chain verifies). A `--steal` with empty/absent reason is refused.
+  - id: A7
+    given: The D3 destroy foreign-reap, root-caused to candidate over-match (Map 4).
+    when: the slice completes.
+    then: >-
+      A regression/diagnostic fixture reproduces the two-distinct-session candidate
+      over-match (admitsOwner admits a foreign session against a stamped owner) and
+      SESSION-CANDIDATE-RESOLUTION-HARDENING-001 is opened. resolveSessionCandidates
+      is NOT broadly tightened in this slice. D1/D2 land independently of D3.
+  - id: A8
+    given: The full slice on canonical.
+    when: kernel build + caws-cli build + kernel npm test + CLI store/shell/hook-pack/init suites run, and the pack is installed via caws init --overwrite then exercised by subprocess against the GENERATED hook paths.
+    then: >-
+      Build/typecheck clean both packages; the dist-dependent init/hook-packs
+      fixture suite (node-heredoc canary) passes (no set -e silent corruption from
+      the new oracle or guards); every acceptance row above is proven by a real
+      subprocess against the installed pack, not source files; no regression to
+      existing worktree/scope/classifier/lifecycle tests.
+non_functional:
+  reliability:
+    - >-
+      Closes proven worktree-isolation side doors (Bash mutation, direct
+      .caws/worktrees payload writes, bind steal, git restore) so the hard-block
+      messaging no longer advertises an isolation boundary that is softer in
+      practice. The oracle is a standalone node --check-able helper (no dist
+      dependency) fixture-tested on both surfaces; D3's risky candidate-resolution
+      fix is deferred to a successor spec so this slice stays reversible and bounded.
+  security:
+    - >-
+      The Bash target extractor and the .caws/worktrees payload arm must FAIL
+      CLOSED on uncertainty in the same direction as the existing guards (block /
+      ask, never silently allow a foreign mutation). The bind --steal escape
+      requires an explicit non-empty reason and leaves a durable audit; it never
+      silently rewrites ownership. Canonical-root protection is not relaxed.
+contracts:
+  - name: worktree-claim-oracle-shared-answer-v1
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/claude-code/lib/worktree-claim-oracle.js
+    description: >-
+      A copied, dependency-light (node builtins + js-yaml) ownership oracle invoked
+      by both worktree-write-guard.sh (Write/Edit) and bash-write-guard.sh (Bash).
+      Given the canonical worktrees.json registry, the active bound specs, the
+      operating session id (HOOK_SESSION_ID), and a candidate path, it normalizes
+      the path into canonical-repo-relative form or {worktreeName, logicalPath},
+      classifies whether the logical path is claimed by some active spec's scope.in
+      (NOT scope.support, NOT scope.out), and for direct .caws/worktrees/<name>
+      payload paths compares the operating session by direct string match to
+      worktrees.json[<name>].owner.session_id. It returns a structured outcome from
+      the closed set {pass, block_claimed, block_foreign_worktree, ask_uncertain,
+      error_fail_closed} and fails closed (block/ask) on any read/parse uncertainty.
+      It preserves canonical-root session-independent blocking and never imports
+      TypeScript build artifacts. The CLI-side admitsOwner/resolveSessionCandidates
+      and this helper are kept in agreement by golden fixtures, not by code sharing.
