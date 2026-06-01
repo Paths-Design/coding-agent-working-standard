@@ -2,10 +2,11 @@ id: CLAIM-TAKEOVER-CD-PHANTOM-001
 title: 'caws claim --takeover must refuse a cd-phantom claim when the session root is not the target worktree'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-claim-phantom
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-claim-phantom at ed58fa8b0c1f829526afcbc96670dcad5f0d0423'
 created_at: '2026-06-01T16:49:50.263Z'
-updated_at: '2026-06-01T16:49:51.118Z'
+updated_at: '2026-06-01T16:55:10.048Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
