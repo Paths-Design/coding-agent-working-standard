@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-06-01T21:06:17.631Z'
-updated_at: '2026-06-01T21:06:26.570Z'
+updated_at: '2026-06-01T21:24:03.366Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -19,6 +19,7 @@ scope:
     - packages/caws-cli/src/store/doctor-snapshot.ts
     - packages/caws-kernel/tests/unit/doctor-vnext-rules.test.ts
     - packages/caws-cli/tests/store/doctor-snapshot.test.js
+    - packages/caws-cli/src/store/types.ts
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
