@@ -2,9 +2,9 @@ id: WORKTREE-ISOLATION-HARDENING-001
 title: 'Enforce worktree ownership at every mutation surface (Bash, .caws/worktrees payload, bind, git restore); diagnose D3'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-31T00:00:00.000Z'
-updated_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-06-01T06:01:20.461Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
