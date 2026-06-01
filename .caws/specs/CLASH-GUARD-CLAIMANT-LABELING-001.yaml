@@ -2,10 +2,11 @@ id: CLASH-GUARD-CLAIMANT-LABELING-001
 title: 'Worktree guards must name ALL scope.in claimants when multiple specs claim a contested path'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-claimant-labeling
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-claimant-labeling at a66b6278b336685899841a64851249106176ae28'
 created_at: '2026-06-01T14:11:20.947Z'
-updated_at: '2026-06-01T14:11:28.256Z'
+updated_at: '2026-06-01T14:20:22.531Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
