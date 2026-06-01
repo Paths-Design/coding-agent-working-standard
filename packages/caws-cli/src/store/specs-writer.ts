@@ -144,6 +144,13 @@ export type SpecWriterOutcome =
        * succeeded; only the audit-trail commit was deferred.
        */
       readonly data?: { readonly audit_commit: AutoCommitOutcome };
+      /**
+       * Optional non-blocking advisories about the operation that succeeded
+       * (WORKTREE-CLAIM-COMPOSE-WARN-001). Absent when there is nothing to warn
+       * about. Callers print these to stderr; they never affect the exit code.
+       * Additive: callers reading only id/path/data are unaffected.
+       */
+      readonly warnings?: readonly string[];
     }
   | {
       readonly kind: 'partial_failure_recovered';
@@ -1611,6 +1618,29 @@ export function amendScopeSpec(
     },
   } as unknown as EventBody;
 
+  // WORKTREE-CLAIM-COMPOSE-WARN-001: warn (do not block) when a scope.in add
+  // on a worktree-bound spec pulls in a repo-root-level deliverable — the
+  // compose-trap shape (the path becomes worktree-claimed, so a main-checkout
+  // edit then hard-blocks). Keyed off the ACTUAL added_in delta (idempotent
+  // re-adds produce no delta → no warning) AND the spec's worktree binding.
+  // A repo-root-level path is a bare filename with no "/" separator. Edits to
+  // scope.support / scope.out / non-root scope.in paths do not trip it.
+  const composeWarnings: string[] = [];
+  const isWorktreeBound = typeof after.worktree === 'string' && after.worktree.length > 0;
+  if (isWorktreeBound) {
+    const rootDeliverables = addedIn.filter((p) => !p.includes('/'));
+    for (const p of rootDeliverables) {
+      composeWarnings.push(
+        `'${p}' was added to scope.in of worktree-bound spec '${input.id}'. ` +
+          `Because this spec is bound to a worktree, this repo-root path is now WORKTREE-CLAIMED — ` +
+          `editing it from the main checkout will be HARD-BLOCKED by worktree-write-guard. ` +
+          `If this is a deliverable you need to edit but NOT claim for the worktree (e.g. a friction log, ` +
+          `a root README), prefer: caws specs amend-scope ${input.id} --remove ${p} --add-support ${p} ` +
+          `(scope.support is editable but never worktree-claimed).`
+      );
+    }
+  }
+
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wasDirtyBeforeWrite = isPathDirty(
     repoRoot,
@@ -1628,7 +1658,12 @@ export function amendScopeSpec(
     return err(txnResult.errors);
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
-  return attachAutoCommit(outcome, cawsDir, input.id, 'amend-scope', wasDirtyBeforeWrite);
+  const committed = attachAutoCommit(outcome, cawsDir, input.id, 'amend-scope', wasDirtyBeforeWrite);
+  // Fold the advisory warnings into the success outcome (additive, non-blocking).
+  if (composeWarnings.length > 0 && isOk(committed) && committed.value.kind === 'success') {
+    return ok({ ...committed.value, warnings: composeWarnings });
+  }
+  return committed;
 }
 
 // ─── Outcome mapper ──────────────────────────────────────────────────────

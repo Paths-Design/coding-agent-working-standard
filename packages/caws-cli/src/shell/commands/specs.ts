@@ -545,6 +545,12 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
     return 1;
   }
   out(`amended scope for ${outcome.id}`);
+  // WORKTREE-CLAIM-COMPOSE-WARN-001: print any non-blocking compose-trap
+  // advisories to stderr. The amendment already succeeded; these never change
+  // the exit code.
+  for (const w of outcome.warnings ?? []) {
+    err(`caws advisory (non-blocking): ${w}`);
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
