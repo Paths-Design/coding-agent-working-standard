@@ -45,7 +45,7 @@ is wrong, stop and ask the user.
 | `guard-strikes.sh` | 8, 16 | progressive enforcement (strike 1 warn → strike 3 block) |
 | `audit.sh` | 9 | per-tool-call audit log |
 | `session-log.sh` | 10 | per-turn narrative + structured transcripts |
-| `dispatch/*` | 8, 11, 17 | wires Claude Code's lifecycle to the registered handler list |
+| `caws_dispatch/*` | 8, 11, 17 | wires Claude Code's lifecycle to the registered handler list |
 | `lib/*` | 8, 16 | shared input parsing and handler runner |
 | `god-object-check.sh` | 28 | advisory: flags a written/edited file whose SLOC exceeds `CAWS_GOD_OBJECT_LOC` (default 2000). Edit-time analogue of the `god_object` gate. Always exit 0. |
 | `shortcut-language-check.sh` | 29 | progressive: flags TODO/FIXME/XXX/placeholder/"not implemented" stub language in NON-test source; escalates warn→ask→block via guard-strikes. Edit-time analogue of the `todo_detection` gate. |
@@ -81,17 +81,20 @@ diagnostics may be invalid. Consider matching major versions:
 
 Claude Code reads `.claude/settings.json` at session start. Installing
 the pack mid-session does NOT activate it until the session is restarted.
-`caws init --agent-surface claude-code` prints an activation instruction
-saying so. Do not continue substantive work after install without
-restarting first; the hooks you just installed are not yet enforcing.
+`caws init --agent-surface claude-code` wires `settings.json` for you
+(see below), but the hooks still load only on the NEXT session start.
+Do not continue substantive work after install without restarting first;
+the hooks you just installed are not yet enforcing.
 
 ## settings.json wiring
 
-The pack does NOT manage `.claude/settings.json` — that file commonly
-carries user-authored `permissions` and `env` blocks that the pack
-should not overwrite. If you do not have a `.claude/settings.json`, add
-the following minimum configuration so the dispatch entrypoints fire on
-the Claude Code lifecycle:
+`caws init --agent-surface claude-code` MERGES the four CAWS
+`caws_dispatch` entrypoints into `.claude/settings.json`
+non-destructively: it creates the file if absent, appends the entries to
+an existing file while preserving your `permissions`, `env`, and any
+existing hooks, is a no-op if already wired, and refuses to touch an
+unparseable file. It also always writes a `.claude/settings.json.example`
+for reference. The canonical wiring it installs is:
 
 ```jsonc
 {
@@ -102,7 +105,7 @@ the Claude Code lifecycle:
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch/pre_tool_use.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/caws_dispatch/pre_tool_use.sh",
             "timeout": 45
           }
         ]
@@ -114,7 +117,7 @@ the Claude Code lifecycle:
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch/post_tool_use.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/caws_dispatch/post_tool_use.sh",
             "timeout": 60
           }
         ]
@@ -125,7 +128,7 @@ the Claude Code lifecycle:
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch/session_start.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/caws_dispatch/session_start.sh",
             "timeout": 30
           }
         ]
@@ -136,7 +139,7 @@ the Claude Code lifecycle:
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch/stop.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/caws_dispatch/stop.sh",
             "timeout": 30
           }
         ]

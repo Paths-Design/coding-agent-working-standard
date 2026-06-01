@@ -57,6 +57,14 @@
 #       Returns 0 if [dir] is the canonical (main) checkout (git-dir ==
 #       git-common-dir), 1 if it is a linked worktree or git is absent.
 #
+#   caws_compose_risk <root> <branch> <rel-path> [--verbose]
+#       WORKTREE-GUARD-RISK-SURFACE-001. Compose the composite risk signal
+#       (target-dir existence + active bound specs + active-agent count +
+#       lease staleness) that the SessionStart briefing and the per-write
+#       guard ask both surface, so they never disagree. Default: one compact
+#       line `risk[dir:… active-specs:N(…) agents:N+Mstale]`. --verbose: a
+#       multi-line briefing. Always exit 0 (advisory).
+#
 # Node-helper string constants:
 #   CAWS_NODE_ENTRIES_OF
 #       A JS function declaration string. Inline it into a node -e block
@@ -197,6 +205,109 @@ is_canonical_checkout() {
   gda=$(cd "$dir" 2>/dev/null && cd "$gd" 2>/dev/null && pwd || echo "$gd")
   gca=$(cd "$dir" 2>/dev/null && cd "$gc" 2>/dev/null && pwd || echo "$gc")
   [[ "$gda" == "$gca" ]]
+}
+
+# caws_compose_risk <canonical-root> <current-branch> <rel-path> [--verbose]
+#   WORKTREE-GUARD-RISK-SURFACE-001: compose the composite risk signal that
+#   both session-caws-status.sh (SessionStart, full) and worktree-write-guard.sh
+#   (per-write, short) surface, so they never disagree. Four signals:
+#     (1) target file's directory existence (is the edit landing somewhere real)
+#     (2) active bound specs claiming live worktrees (count + ids)
+#     (3) active-agent count (from `caws agents list --json` counts.active)
+#     (4) lease freshness (stale count vs the stale TTL)
+#   Default output: a single compact line. With --verbose: a multi-line
+#   briefing (used at SessionStart). Always exit 0 (advisory); degrades to a
+#   minimal line if node/caws are unavailable.
+caws_compose_risk() {
+  local root="${1:-.}"
+  local branch="${2:-}"
+  local rel="${3:-}"
+  local mode="${4:-}"
+  command -v node >/dev/null 2>&1 || { printf 'risk: signal unavailable (node missing)\n'; return 0; }
+
+  # Signal 3+4: agent/lease counts. `caws agents list --json` yields
+  # counts:{active,stale,...} + stale_ttl_ms. Best-effort; empty on failure.
+  local agents_json=""
+  if command -v caws >/dev/null 2>&1; then
+    agents_json=$(cd "$root" 2>/dev/null && caws agents list --json 2>/dev/null || echo "")
+  fi
+
+  CAWS_RISK_ROOT="$root" CAWS_RISK_BRANCH="$branch" CAWS_RISK_REL="$rel" \
+  CAWS_RISK_MODE="$mode" CAWS_RISK_AGENTS="$agents_json" node -e "
+    $CAWS_NODE_ENTRIES_OF
+    $CAWS_NODE_ENTRY_SPEC_ID
+    $CAWS_NODE_LIFECYCLE
+    var fs = require('fs');
+    var path = require('path');
+    var root = process.env.CAWS_RISK_ROOT;
+    var branch = process.env.CAWS_RISK_BRANCH;
+    var rel = process.env.CAWS_RISK_REL || '';
+    var verbose = process.env.CAWS_RISK_MODE === '--verbose';
+
+    // (1) target dir existence
+    var dirExists = null;
+    if (rel) {
+      var abs = path.isAbsolute(rel) ? rel : path.join(root, rel);
+      var dir = path.dirname(abs);
+      try { dirExists = fs.existsSync(dir); } catch (_) { dirExists = null; }
+    }
+
+    // (2) active bound specs claiming live (dir-present) worktrees
+    var activeSpecs = [];
+    try {
+      var reg = JSON.parse(fs.readFileSync(path.join(root, '.caws', 'worktrees.json'), 'utf8'));
+      var live = entriesOf(reg).filter(function(w) {
+        if (w.status === 'destroyed' || w.status === 'missing') return false;
+        if (branch && w.baseBranch && w.baseBranch !== branch) return false;
+        var wtPath = (typeof w.path === 'string' && w.path)
+          ? w.path
+          : path.join(root, '.caws', 'worktrees', String(w.name || ''));
+        return fs.existsSync(wtPath);
+      });
+      for (var i = 0; i < live.length; i++) {
+        var sid = entrySpecId(live[i]);
+        if (!sid) continue;
+        var sp = path.join(root, '.caws', 'specs', sid + '.yaml');
+        if (!fs.existsSync(sp)) sp = path.join(root, '.caws', 'specs', sid + '.yml');
+        if (!fs.existsSync(sp)) continue;
+        // Cheap lifecycle read without a YAML parser dependency: scan the
+        // lifecycle_state / status line. (Hooks may lack js-yaml.)
+        var txt = fs.readFileSync(sp, 'utf8');
+        var m = txt.match(/^\s*lifecycle_state:\s*([A-Za-z]+)/m) || txt.match(/^\s*status:\s*([A-Za-z]+)/m);
+        if (m && m[1] === 'active') activeSpecs.push(sid);
+      }
+    } catch (_) { /* registry absent → no active specs */ }
+
+    // (3)+(4) agent/lease counts
+    var agentsActive = null, agentsStale = null;
+    try {
+      var aj = JSON.parse(process.env.CAWS_RISK_AGENTS || 'null');
+      if (aj && aj.counts) { agentsActive = aj.counts.active; agentsStale = aj.counts.stale; }
+      else if (aj && typeof aj.active === 'number') { agentsActive = aj.active; }
+    } catch (_) { /* leave null */ }
+
+    function fmtDir() {
+      if (dirExists === true) return 'dir:exists';
+      if (dirExists === false) return 'dir:MISSING';
+      return 'dir:?';
+    }
+    var specPart = activeSpecs.length
+      ? 'active-specs:' + activeSpecs.length + '(' + activeSpecs.join(',') + ')'
+      : 'active-specs:0';
+    var agentPart = (agentsActive == null)
+      ? 'agents:?'
+      : 'agents:' + agentsActive + (agentsStale ? ('+' + agentsStale + 'stale') : '');
+
+    if (!verbose) {
+      console.log('risk[' + fmtDir() + ' ' + specPart + ' ' + agentPart + ']');
+    } else {
+      console.log('  Composite risk signal (WORKTREE-GUARD-RISK-SURFACE-001):');
+      console.log('    - target dir:    ' + fmtDir().replace('dir:', ''));
+      console.log('    - active specs:  ' + (activeSpecs.length ? activeSpecs.join(', ') : '(none claiming a live worktree)'));
+      console.log('    - active agents: ' + (agentsActive == null ? 'unknown' : agentsActive)
+        + (agentsStale ? (' (' + agentsStale + ' stale — consider: caws agents prune --dead)') : ''));
+    }
+  " 2>/dev/null || printf 'risk: signal unavailable\n'
 }
 
 # Shared node-helper strings. These are JS function declarations that

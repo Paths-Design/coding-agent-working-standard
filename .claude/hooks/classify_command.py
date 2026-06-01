@@ -27,6 +27,7 @@ import re
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -310,6 +311,330 @@ ALLOWED_NPM_SUBCOMMANDS: set[str] = {
 GOVERNED_FAMILIES: set[str] = {"git", "gh", "npm"}
 
 
+# ===========================================================================
+# CAPABILITY ENGINE — Slice 0 scaffolding (HOOK-CAPABILITY-ENGINE-000)
+# ---------------------------------------------------------------------------
+# This block adds the capability-classification scaffolding: a typed
+# CommandFact, the abstract facet model, the facet->decision lattice, a
+# shared recursion budget, and the user-extensible adapter sidecar loader.
+#
+# ZERO RUNTIME DECISION CHANGE IN SLICE 0: the capability pass
+# (classify_capability_pass) is a stub that always returns None, so every
+# command receives the identical decision it did before this block existed.
+# The facet model + lattice are DATA here; Slices 2-3 activate them.
+#
+# Doctrine: docs/architecture/command-capability-taxonomy.md is the governed
+# source of truth. The lattice reads ABSTRACT FACETS, never concrete tool
+# tokens. Concrete labels are trace/debug only.
+# ===========================================================================
+
+# Shared recursion budget. One budget bounds total re-entry depth across
+# segmentation, nested-shell unwrap, command substitution, and (future)
+# opaque-exec recursion. Exhaustion yields a conservative "ask", never an
+# unbounded recursion / stack overflow in the hook.
+MAX_RECURSION_DEPTH: int = 8
+
+# Closed facet enums (mirror of command-adapters.schema.json + the doctrine
+# doc). The lattice is defined over these abstract values only.
+FACET_KINDS: set[str] = {
+    "READ", "MUTATE", "DESTROY", "EXEC", "PRIV_ESC", "SECRETS_READ", "NONE",
+}
+FACET_DOMAINS: set[str] = {
+    "local", "remote_orchestrator", "cloud", "container", "iac", "http",
+    "process", "filesystem", "unknown",
+}
+FACET_SCOPES: set[str] = {"narrow", "broad", "prod", "unknown"}
+FACET_REVERSIBILITY: set[str] = {"reversible", "partial", "irreversible", "unknown"}
+FACET_OPACITY: set[str] = {"literal", "opaque", "none"}
+FACET_BLAST: set[str] = {"single", "multi", "host", "cluster", "unknown"}
+
+# Mutation-amplifier flags. These raise scope/reversibility, but ONLY in the
+# presence of a mutation/destroy kind — a bare amplifier on a READ does not
+# escalate (avoids the routine-dev-loop overblock the regex proposal caused).
+MUTATION_AMPLIFIER_FLAGS: set[str] = {
+    "--force", "-f", "--recursive", "-r", "-R", "--all", "--auto-approve",
+    "-y", "--yes", "--prune", "--delete", "--destroy", "--volumes",
+}
+
+# Scope indicators that raise scope to broad/prod.
+BROAD_SCOPE_INDICATORS: set[str] = {"--all", "-A", "--all-namespaces"}
+PROD_SCOPE_INDICATORS: set[str] = {"prod", "production", "staging", "live"}
+
+# Exec-family executables whose argument is further code to run. For these,
+# build_command_fact records a structural payload + opacity fact (literal vs
+# opaque expansion). Slice 1 only POPULATES these facts (shadow); Slice 2/3
+# wire the opaque-exec recursion that acts on them.
+OPAQUE_EXEC_EXECUTABLES: set[str] = {
+    "sh", "bash", "zsh", "dash", "eval", "exec", "xargs",
+    "python", "python3", "node", "ruby", "perl",
+}
+
+# ---------------------------------------------------------------------------
+# Built-in default adapters (the corpus-surfaced first adapters).
+# Maps an executable to subcommand-prefix -> base facet assignment. The BASE
+# facet carries the HONEST reversibility per the architecture doc's stated
+# lattice (docs/architecture/command-capability-taxonomy.md + surgery-ward
+# terminal-use.commandfact-architecture.md lines 96-126,163-170). Amplifier
+# flags (derive_facets) then TIGHTEN reversibility/scope — they never fire on
+# their own. Concrete `trace` labels are debug-only; the lattice reads facets.
+#
+# Calibration notes (architecture-doc-grounded, NOT corpus-label-fitted):
+#   kill -9 / kill <pid> -> PROC kind=DESTROY reversibility=partial (ask-class:
+#     a process can be restarted; line 168 "kill -9 ... ask-class").
+#   pkill/killall -> broad blast (pattern kill), still partial -> ask.
+#   cloud rm/delete -> partial -> ask; --recursive amplifier -> deny (line 115).
+#   docker system prune -> partial -> ask; --volumes amplifier -> deny (line 107).
+#   shred -> irreversible -> deny (line 122,170). truncate -s 0 -> irreversible
+#     -> deny (doc lines 122,170 classify it deny-class; the CSV said ask — a
+#     documented CSV-vs-doc adjudication, lattice/doc wins).
+#   terraform destroy -> irreversible -> deny; apply -> partial -> ask.
+#   kubectl delete <pod> -> partial -> ask; delete ns/secret/pv/--all/prod ->
+#     handled by amplifier/scope -> deny.
+#   curl -> HTTP_MUTATE handled separately (method from -X/-d), partial -> ask.
+# Each row: (subcommand-prefix tuple) -> {kind,domain,reversibility,blast,trace}.
+# () is the catch-all for the executable when no subcommand prefix matches.
+DEFAULT_ADAPTERS: dict[str, list[tuple[tuple[str, ...], dict]]] = {
+    "kubectl": [
+        (("delete",), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                       "reversibility": "partial", "blast": "single", "trace": "K8S_DELETE"}),
+        # Cluster-scoped resource deletes cascade and are not pod-recreatable:
+        # namespace/crd/pv/pvc/secret => cluster blast + irreversible => deny
+        # (doc: "delete namespace|crd|pv|secret -> deny K8S_DELETE_BROAD").
+        # Longest-prefix match wins over the bare ("delete",) row above.
+        (("delete", "namespace"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                                   "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "ns"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                            "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "crd"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                             "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "pv"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                            "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "pvc"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                             "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("delete", "secret"), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                                "reversibility": "irreversible", "blast": "cluster", "trace": "K8S_DELETE_BROAD"}),
+        (("apply",), {"kind": "MUTATE", "domain": "remote_orchestrator",
+                      "reversibility": "partial", "blast": "single", "trace": "K8S_MUTATE"}),
+        (("scale",), {"kind": "MUTATE", "domain": "remote_orchestrator",
+                      "reversibility": "partial", "blast": "single", "trace": "K8S_MUTATE"}),
+        (("patch",), {"kind": "MUTATE", "domain": "remote_orchestrator",
+                      "reversibility": "partial", "blast": "single", "trace": "K8S_MUTATE"}),
+    ],
+    "helm": [
+        (("uninstall",), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                          "reversibility": "partial", "blast": "multi", "trace": "K8S_DELETE"}),
+        (("delete",), {"kind": "DESTROY", "domain": "remote_orchestrator",
+                       "reversibility": "partial", "blast": "multi", "trace": "K8S_DELETE"}),
+    ],
+    "docker": [
+        (("system", "prune"), {"kind": "DESTROY", "domain": "container",
+                               "reversibility": "partial", "blast": "multi", "trace": "CONTAINER_PRUNE"}),
+        (("volume", "prune"), {"kind": "DESTROY", "domain": "container",
+                               "reversibility": "irreversible", "blast": "multi", "trace": "CONTAINER_PRUNE"}),
+        (("volume", "rm"), {"kind": "DESTROY", "domain": "container",
+                            "reversibility": "irreversible", "blast": "single", "trace": "CONTAINER_VOLUME_RM"}),
+        (("image", "prune"), {"kind": "DESTROY", "domain": "container",
+                              "reversibility": "partial", "blast": "multi", "trace": "CONTAINER_PRUNE"}),
+    ],
+    "terraform": [
+        (("destroy",), {"kind": "DESTROY", "domain": "iac",
+                        "reversibility": "irreversible", "blast": "multi", "trace": "IAC_DESTROY"}),
+        (("apply",), {"kind": "MUTATE", "domain": "iac",
+                      "reversibility": "partial", "blast": "multi", "trace": "IAC_APPLY"}),
+    ],
+    "pulumi": [
+        (("destroy",), {"kind": "DESTROY", "domain": "iac",
+                        "reversibility": "irreversible", "blast": "multi", "trace": "IAC_DESTROY"}),
+        (("up",), {"kind": "MUTATE", "domain": "iac",
+                   "reversibility": "partial", "blast": "multi", "trace": "IAC_APPLY"}),
+    ],
+    # cloud CLIs: a delete/rm verb in the subcommand path -> DESTROY (partial;
+    # --recursive amplifier tightens to deny). Catch-all matched via verb scan
+    # in derive_facets (any positional in DESTROY_VERBS) so az vm delete,
+    # aws s3 rm, gcloud ... delete all resolve without enumerating every service.
+    "shred": [
+        ((), {"kind": "DESTROY", "domain": "filesystem",
+              "reversibility": "irreversible", "blast": "single", "trace": "FS_SHRED"}),
+    ],
+    "truncate": [
+        # truncate -s 0 zeroes a file's contents but the inode/path survive and
+        # the file is rewritable. Doc lines 122/170: "ask/deny outside scratch."
+        # Base = partial (ask); the deny-OUTSIDE-scratch refinement needs scratch
+        # vs non-scratch path detection, which is Slice 3. Until then, ask-class
+        # matches both the corpus (expected ask) and the conservative-but-not-
+        # catastrophic posture. shred (true unrecoverable wipe) stays irreversible.
+        ((), {"kind": "DESTROY", "domain": "filesystem",
+              "reversibility": "partial", "blast": "single", "trace": "FS_ZERO_FILE"}),
+    ],
+    "chown": [
+        ((), {"kind": "MUTATE", "domain": "filesystem",
+              "reversibility": "partial", "blast": "single", "trace": "FS_CHOWN_R"}),
+    ],
+    "kill": [
+        ((), {"kind": "DESTROY", "domain": "process",
+              "reversibility": "partial", "blast": "single", "trace": "PROC_KILL"}),
+    ],
+    "pkill": [
+        ((), {"kind": "DESTROY", "domain": "process",
+              "reversibility": "partial", "blast": "multi", "trace": "PROC_KILL_BROAD"}),
+    ],
+    "killall": [
+        ((), {"kind": "DESTROY", "domain": "process",
+              "reversibility": "partial", "blast": "multi", "trace": "PROC_KILL_BROAD"}),
+    ],
+}
+
+# Cloud CLIs: facets derived by a destroy/mutate VERB scan rather than a fixed
+# subcommand table (services are open-ended). A delete/destroy/terminate/rm verb
+# anywhere in the positionals -> DESTROY; create/update -> MUTATE.
+CLOUD_CLIS: set[str] = {"aws", "az", "gcloud", "doctl"}
+DESTROY_VERBS: set[str] = {"delete", "destroy", "terminate", "rm", "rb", "remove"}
+MUTATE_VERBS: set[str] = {"create", "update", "put", "set", "modify", "patch", "apply"}
+
+
+@dataclass
+class CommandFact:
+    """Typed facts about one command segment.
+
+    Abstract facets (kind/domain/scope/reversibility/opacity/blast_radius)
+    are what the policy lattice reads. The concrete `trace_label` is for
+    debug output only and is never consulted by a decision branch.
+    """
+
+    executable: str = ""
+    executable_path: str = ""
+    argv: list[str] = field(default_factory=list)
+    wrappers: list[str] = field(default_factory=list)
+    subcommand_path: list[str] = field(default_factory=list)
+    flags: set[str] = field(default_factory=set)
+    targets: list[str] = field(default_factory=list)
+    payload: str = ""
+    parse_confidence: str = "high"  # high | partial | low
+    # abstract facets
+    kind: str = "NONE"
+    domain: str = "unknown"
+    scope: str = "narrow"
+    reversibility: str = "unknown"
+    opacity: str = "none"
+    blast_radius: str = "single"
+    trace_label: str = ""  # non-authoritative
+
+    def facets(self) -> dict[str, str]:
+        return {
+            "kind": self.kind,
+            "domain": self.domain,
+            "scope": self.scope,
+            "reversibility": self.reversibility,
+            "opacity": self.opacity,
+            "blast_radius": self.blast_radius,
+        }
+
+
+# Facet -> decision lattice. GOVERNED CORE: this table is authoritative and
+# reads abstract facets only. Slice 0 ships it as data; classify_capability_pass
+# is a stub, so this governs nothing yet (Slices 2-3 activate it).
+def lattice_decision(fact: CommandFact) -> tuple[str, str] | None:
+    """Map abstract facets -> (decision, reason), or None for no opinion.
+
+    Evaluated top-down, first match wins. Not called by the Slice 0 stub.
+    """
+    k, scope, rev, blast = fact.kind, fact.scope, fact.reversibility, fact.blast_radius
+    label = fact.trace_label or k
+    if k == "PRIV_ESC":
+        return "deny", f"privilege escalation ({label})"
+    if k == "SECRETS_READ":
+        return "deny", f"secret/credential read ({label})"
+    if k == "DESTROY" and rev == "irreversible":
+        return "deny", f"irreversible destruction ({label})"
+    # Broad/prod DESTROY denies on prod/broad SCOPE or CLUSTER blast only. A
+    # merely `multi`/`host` blast with reversible/partial effect (docker prune,
+    # pkill/killall, helm uninstall) is ask-class per the architecture doc's
+    # lattice (deny = irreversible | prod-scope | governance-bypass; broad blast
+    # alone is NOT a deny trigger). The irreversibility AMPLIFIER (--volumes,
+    # --force, --recursive) tightens reversibility -> the rule above fires.
+    if k == "DESTROY" and (scope in {"prod", "broad"} or blast == "cluster"):
+        return "deny", f"broad/prod destruction ({label})"
+    if k == "EXEC" and fact.opacity == "opaque":
+        return "ask", f"opaque execution — cannot prove payload ({label})"
+    if k == "DESTROY":
+        return "ask", f"destructive operation ({label})"
+    if k == "MUTATE" and scope in {"prod", "broad"}:
+        return "deny", f"broad/prod mutation ({label})"
+    if k == "MUTATE":
+        return "ask", f"state mutation ({label})"
+    return None  # READ / NONE -> no escalation
+
+
+def load_command_adapters(repo_root: Path) -> dict:
+    """Load the user-extensible adapter sidecar, FAIL CLOSED.
+
+    Reads `.caws/command-adapters.json` (JSON — PyYAML is unavailable in the
+    hook runtime). Return semantics distinguish ABSENT from MALFORMED so the
+    active pass can fail closed:
+      - sidecar ABSENT (or the file is unreadable as a filesystem error): {} —
+        no user adapters, built-ins only (legitimate, not an error).
+      - sidecar PRESENT but malformed / version-mismatched / over-authority
+        (a decision/policy key, an unknown facet value/kind): {"__error__": <reason>}
+        — the pass surfaces a diagnostic ask for any command the built-ins do
+        not already classify, rather than silently degrading to built-ins-only.
+
+    Authority boundary (mirrors command-adapters.schema.json):
+      - rows map tool + subcommand-path -> abstract facet assignment only
+      - no decision/allow/deny/policy key may appear
+      - facet values must come from the closed enums above
+    """
+    path = repo_root / ".caws" / "command-adapters.json"
+    if not path.is_file():
+        return {}  # ABSENT -> built-ins only (legitimate)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {}  # unreadable as a filesystem error -> treat as absent
+    except ValueError as e:
+        return {"__error__": f"invalid JSON: {e}"}  # PRESENT but unparseable -> fail closed
+    if not isinstance(raw, dict) or raw.get("version") != 1:
+        return {"__error__": "missing or unsupported version (expected 1)"}
+    adapters = raw.get("adapters")
+    if not isinstance(adapters, dict):
+        return {"__error__": "adapters must be an object"}
+    clean: dict = {}
+    for tool, spec in adapters.items():
+        if not isinstance(spec, dict):
+            return {"__error__": f"adapter '{tool}' must be an object"}
+        rows = spec.get("subcommands")
+        if not isinstance(rows, list):
+            return {"__error__": f"adapter '{tool}'.subcommands must be a list"}
+        validated_rows = []
+        for row in rows:
+            if not isinstance(row, dict) or set(row) - {"path", "facets"}:
+                return {"__error__": f"adapter '{tool}' row has unexpected keys"}
+            facets = row.get("facets")
+            path_tokens = row.get("path")
+            if not isinstance(facets, dict) or not isinstance(path_tokens, list):
+                return {"__error__": f"adapter '{tool}' row path/facets malformed"}
+            # AUTHORITY BOUNDARY: no decision/policy key, valid facet values only.
+            if {"decision", "allow", "deny", "ask", "policy", "outcome", "severity", "override"} & set(facets):
+                return {"__error__": f"adapter '{tool}' facets attempt a policy override (forbidden)"}
+            if facets.get("kind") not in FACET_KINDS:
+                return {"__error__": f"adapter '{tool}' facets.kind is not a valid capability kind"}
+            if "domain" in facets and facets["domain"] not in FACET_DOMAINS:
+                return {"__error__": f"adapter '{tool}' facets.domain invalid"}
+            if "reversibility" in facets and facets["reversibility"] not in FACET_REVERSIBILITY:
+                return {"__error__": f"adapter '{tool}' facets.reversibility invalid"}
+            if "blast_radius" in facets and facets["blast_radius"] not in FACET_BLAST:
+                return {"__error__": f"adapter '{tool}' facets.blast_radius invalid"}
+            validated_rows.append(row)
+        unknown = spec.get("unknown_subcommand", "no_escalation")
+        if unknown not in {"no_escalation", "intent_fallback"}:
+            return {"__error__": f"adapter '{tool}'.unknown_subcommand invalid"}
+        clean[tool] = {
+            "subcommands": validated_rows,
+            "resource_aliases": spec.get("resource_aliases", {}),
+            "unknown_subcommand": unknown,
+        }
+    return clean
+
+
 # ---------------------------------------------------------------------------
 # Command segmentation
 # ---------------------------------------------------------------------------
@@ -407,6 +732,22 @@ def segment_command(raw: str) -> list[str]:
                 continue
             # ; (but not ;;)
             if ch == ';' and (i + 1 >= len(raw) or raw[i+1] != ';'):
+                seg = ''.join(current).strip()
+                if seg:
+                    segments.append(seg)
+                current = []
+                i += 1
+                continue
+            # newline — a bash statement separator equivalent to ';'. Each line
+            # of a multi-line block is its own command, so splitting here keeps
+            # `rm -rf /tmp/x` on one line from absorbing the next line's tokens
+            # as phantom delete targets (CAWS-CLASSIFY-NEWLINE-SEGMENT-001). A
+            # line-continuation backslash before the newline was already consumed
+            # by the '\\' branch above (the '\n' is glued onto that token and
+            # never reaches here), so this only fires on real separators. Heredoc
+            # bodies are handled by the in_heredoc state machine above and never
+            # reach this branch.
+            if ch == '\n':
                 seg = ''.join(current).strip()
                 if seg:
                     segments.append(seg)
@@ -633,8 +974,20 @@ def has_git_init_alias_config(segment: str) -> bool:
     return False
 
 
-def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool) -> tuple[str, str] | None:
-    """Recursively classify sh/bash/zsh -c strings."""
+def classify_nested_shell(
+    segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool,
+    *, _depth: int = 0, _adapters: dict | None = None,
+) -> tuple[str, str, str, str] | None:
+    """Recursively classify sh/bash/zsh -c strings.
+
+    Threads the shared recursion budget (`_depth`) and the cached adapter
+    sidecar (`_adapters`) into the recursive classify_command call so nested
+    shells share one budget with substitution + opaque-exec recursion.
+
+    Returns the inner classify_command's (decision, reason, source, enforcement)
+    so the enforcement class of a nested capability ask propagates outward
+    (HOOK-ASK-ENFORCEMENT-001 A5).
+    """
     try:
         tokens = shlex.split(segment)
     except ValueError:
@@ -644,7 +997,10 @@ def classify_nested_shell(segment: str, repo_root: Path, home: Path, cwd: Path, 
     if not nested:
         return None
 
-    return classify_command(nested[0], repo_root, home, cwd, caws_worktree)
+    return classify_command(
+        nested[0], repo_root, home, cwd, caws_worktree,
+        _depth=_depth + 1, _adapters=_adapters,
+    )
 
 
 _SPEC_PATH_RE = re.compile(r"^\.caws/specs/[^/]+\.(?:yaml|yml)$")
@@ -959,6 +1315,26 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             except ValueError:
                 return None
             if any(t in ("--get", "--get-all", "--get-regexp", "--list", "-l") for t in tokens):
+                return ("allow", "")
+            return None
+        # Special-case `git rm` — admit ONLY the non-destructive forms
+        # (CAWS-CLASSIFY-GIT-RM-CACHED-001, friction-probe Event 7).
+        # `git rm --cached <path>` removes from the index only; the working-tree
+        # file is untouched. `git rm -n` / `git rm --dry-run` mutates nothing.
+        # Both are routine cleanups (untrack a wrongly-committed runtime file)
+        # that were previously swept into the governed-family fail-closed
+        # default → "ask", arming the sticky session danger latch on a safe op.
+        # WORKING-TREE-DESTRUCTIVE forms (plain `git rm <path>`, `-r`, `-rf`)
+        # return None so they fall through to "ask" and stay governed — the
+        # allow-list is suppress-only and cannot itself escalate.
+        if sub == "rm":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            index_only = any(t == "--cached" for t in tokens)
+            dry_run = any(t in ("-n", "--dry-run") for t in tokens)
+            if index_only or dry_run:
                 return ("allow", "")
             return None
         # Special-case `git commit` — admit plain commit (creates a new
@@ -1664,27 +2040,356 @@ def strip_quoted_regions(raw: str) -> str:
 # Main classifier
 # ---------------------------------------------------------------------------
 
+def build_command_fact(segment: str, adapters: dict | None = None) -> CommandFact:
+    """Parse one command segment into a typed CommandFact.
+
+    Slice 0 populates the structural fields (executable, basename-resolved,
+    wrappers peeled, flags, targets) so the fact builder is demonstrably live
+    (CAWS_CLASSIFY_FACTS_DUMP). Facet ASSIGNMENT from adapters + engine rules
+    is deliberately minimal here (kind stays NONE unless a wrapper marks
+    PRIV_ESC) — full facet derivation is Slice 2 work. Never raises; on a
+    parse failure it returns a low-confidence fact.
+    """
+    fact = CommandFact()
+    try:
+        tokens = shlex.split(segment, comments=False, posix=True)
+    except ValueError:
+        fact.parse_confidence = "low"
+        return fact
+    if not tokens:
+        fact.parse_confidence = "low"
+        return fact
+
+    # Peel env assignments + known wrappers, recording them. Reuses the
+    # existing normalization intent without rebuilding tokenization.
+    i = 0
+    wrappers: list[str] = []
+    while i < len(tokens):
+        tok = tokens[i]
+        if "=" in tok and not tok.startswith("-") and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tok):
+            wrappers.append(tok)
+            i += 1
+            continue
+        base = command_basename(tok)
+        if base in {"env", "command", "nohup", "builtin", "time", "sudo", "doas"}:
+            wrappers.append(base)
+            i += 1
+            # skip env/time option flags conservatively
+            while i < len(tokens) and tokens[i].startswith("-"):
+                i += 1
+            continue
+        break
+
+    if i >= len(tokens):
+        fact.wrappers = wrappers
+        fact.parse_confidence = "partial"
+        return fact
+
+    fact.wrappers = wrappers
+    fact.executable_path = tokens[i]
+    fact.executable = command_basename(tokens[i])
+    fact.argv = tokens[i + 1:]
+    fact.flags = {t for t in fact.argv if t.startswith("-")}
+    positional = [t for t in fact.argv if not t.startswith("-")]
+    fact.subcommand_path = positional[:2]
+    fact.targets = positional
+
+    # Engine rule (always-on, tool-agnostic): sudo/su/doas => privilege escalation.
+    if "sudo" in wrappers or "doas" in wrappers or fact.executable in {"su", "sudo", "doas"}:
+        fact.kind = "PRIV_ESC"
+        fact.domain = "local"
+        fact.trace_label = "PRIV_ESC"
+
+    # Scope inference from flags/targets (data for the lattice; not acted on in Slice 0).
+    if BROAD_SCOPE_INDICATORS & fact.flags:
+        fact.scope = "broad"
+    if any(p in PROD_SCOPE_INDICATORS for p in positional):
+        fact.scope = "prod"
+
+    # Opaque-exec STRUCTURAL fact (shadow-only — Slice 1). For exec-family
+    # executables, record the payload and whether it is a literal we could
+    # recurse-classify or an opaque expansion we cannot inspect. This populates
+    # CommandFact.payload/opacity so Slice 2's opaque-exec recursion has its
+    # inputs; it assigns NO kind and drives NO decision here (zero change).
+    if fact.executable in OPAQUE_EXEC_EXECUTABLES:
+        # the payload is the first positional after the executable (e.g. the
+        # string after `eval`, or the `-c`/`-e` argument for sh/python/node).
+        payload = ""
+        if fact.executable in {"sh", "bash", "zsh", "dash"}:
+            # take the token following a -c flag, if present
+            for idx, tok in enumerate(fact.argv):
+                if tok == "-c" and idx + 1 < len(fact.argv):
+                    payload = fact.argv[idx + 1]
+                    break
+        elif fact.executable in {"python", "python3", "node", "ruby", "perl"}:
+            for idx, tok in enumerate(fact.argv):
+                if tok in {"-c", "-e"} and idx + 1 < len(fact.argv):
+                    payload = fact.argv[idx + 1]
+                    break
+        else:  # eval / exec / xargs — payload is the joined positional remainder
+            payload = " ".join(positional)
+        fact.payload = payload
+        if not payload:
+            fact.opacity = "none"
+        elif re.search(r"\$\(|\$\{|\$[A-Za-z_]|`", payload):
+            fact.opacity = "opaque"   # $VAR / $(...) / ${...} / backtick — cannot inspect
+        else:
+            fact.opacity = "literal"  # recurse-classifiable in Slice 2
+
+    # Tool-adapter facet derivation (Slice 2). Skips exec-family (routed via
+    # opacity above) and PRIV_ESC (already set). Mutates fact.kind/domain/
+    # reversibility/blast_radius/trace_label, then applies amplifier tightening.
+    if fact.kind == "NONE" and fact.executable not in OPAQUE_EXEC_EXECUTABLES:
+        derive_facets(fact, adapters)
+    return fact
+
+
+def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
+    """Assign abstract facets from the built-in default adapters ∪ user sidecar,
+    then apply amplifier-flag / scope tightening. The lattice reads the result.
+
+    The concrete trace label is recorded for debug only. Amplifier flags
+    (--recursive/--volumes/--force/--all/--delete/--destroy/--prune/-y/...) and
+    prod/broad scope TIGHTEN reversibility/scope, but ONLY once a mutation/destroy
+    kind is present — a bare amplifier on a READ never escalates.
+    """
+    exe = fact.executable
+    base: dict | None = None
+
+    # 1. curl/http: method from -X/--request, or inferred from -d/--data*.
+    if exe in {"curl", "http", "wget"}:
+        method = ""
+        for idx, tok in enumerate(fact.argv):
+            if tok in {"-X", "--request"} and idx + 1 < len(fact.argv):
+                method = fact.argv[idx + 1].upper()
+                break
+            if tok.startswith("-X") and len(tok) > 2:
+                method = tok[2:].upper()
+                break
+        has_data = any(t in {"-d", "--data"} or t.startswith(("--data", "-d")) for t in fact.flags)
+        if method in {"POST", "PUT", "PATCH", "DELETE"} or (not method and has_data):
+            base = {"kind": "MUTATE", "domain": "http", "reversibility": "unknown",
+                    "blast": "single", "trace": "HTTP_MUTATE"}
+
+    # 2. cloud CLIs: verb scan over positionals (open-ended services).
+    if base is None and exe in CLOUD_CLIS:
+        positional = fact.targets
+        if any(v in DESTROY_VERBS for v in positional):
+            base = {"kind": "DESTROY", "domain": "cloud", "reversibility": "partial",
+                    "blast": "single", "trace": "CLOUD_DELETE"}
+        elif any(v in MUTATE_VERBS for v in positional):
+            base = {"kind": "MUTATE", "domain": "cloud", "reversibility": "partial",
+                    "blast": "single", "trace": "CLOUD_MUTATE"}
+
+    # 3. built-in subcommand-prefix table (longest matching prefix wins; () catch-all).
+    if base is None and exe in DEFAULT_ADAPTERS:
+        best: tuple[tuple[str, ...], dict] | None = None
+        for prefix, facets in DEFAULT_ADAPTERS[exe]:
+            n = len(prefix)
+            if tuple(fact.subcommand_path[:n]) == prefix and (best is None or n > len(best[0])):
+                best = (prefix, facets)
+        if best is not None:
+            base = best[1]
+
+    # 4. user sidecar (alias->facet rows). adapters maps exe -> {subcommands:[{path,facets}], ...}.
+    #    Built-ins take precedence is NOT required; sidecar only ADDS tools the defaults miss.
+    if base is None and adapters and exe in adapters:
+        spec = adapters[exe]
+        aliases = spec.get("resource_aliases", {})
+        sp = [aliases.get(t, t) for t in fact.subcommand_path]
+        best_s: tuple[int, dict] | None = None
+        for row in spec.get("subcommands", []):
+            prefix = tuple(row["path"])
+            n = len(prefix)
+            # support '*' single-token wildcard at the tail
+            match = all(prefix[k] in ("*", sp[k]) for k in range(n)) if len(sp) >= n else False
+            if match and (best_s is None or n > best_s[0]):
+                f = row["facets"]
+                best_s = (n, {"kind": f["kind"], "domain": f.get("domain", "unknown"),
+                              "reversibility": f.get("reversibility", "unknown"),
+                              "blast": f.get("blast_radius", "single"),
+                              "trace": f.get("trace_label", "")})
+        if best_s is not None:
+            base = best_s[1]
+
+    if base is None:
+        return  # no adapter matched -> kind stays NONE -> lattice gives no opinion
+
+    fact.kind = base["kind"]
+    fact.domain = base["domain"]
+    fact.reversibility = base["reversibility"]
+    fact.blast_radius = base["blast"]
+    fact.trace_label = base["trace"]
+
+    # Amplifier tightening — only with a mutation/destroy kind present.
+    if fact.kind in {"MUTATE", "DESTROY"}:
+        # A destroy-INTENT flag promotes a mutation to a destruction. `terraform
+        # apply -destroy` (and `apply --destroy`) is destruction, not mutation —
+        # doc: "destroy / apply -destroy -> deny". The flag changes the KIND, not
+        # just reversibility, so this must run before the reversibility tightening.
+        destroy_intent = {"--destroy", "-destroy"} & fact.flags
+        if fact.kind == "MUTATE" and destroy_intent:
+            fact.kind = "DESTROY"
+            fact.reversibility = "irreversible"
+            fact.trace_label = (fact.trace_label or "") + "_DESTROY" if fact.trace_label else "DESTROY"
+        amp = MUTATION_AMPLIFIER_FLAGS & fact.flags
+        if amp:
+            # Irreversibility amplifiers push reversibility down a notch — but
+            # only the UNAMBIGUOUS long forms the architecture doc names
+            # (--force/--recursive/--volumes/--prune/--delete/--destroy). Bare
+            # short flags (-f/-r/-R) are NOT included: -f is --full-cmdline for
+            # pkill, --follow for logs, --file elsewhere — treating it as a
+            # universal force flag manufactured false denies (pkill -f -> deny).
+            # The amplifier must never manufacture a deny from an ambiguous flag.
+            irreversibility_amp = {"--recursive", "--volumes", "--prune",
+                                   "--delete", "--destroy", "--force"} & amp
+            # Domain guard: --force removes recovery for filesystem/container/
+            # cloud/iac destruction and for kubectl pod force-delete (skips
+            # graceful termination = data loss; doc names it a deny trigger). It
+            # does NOT deepen irreversibility for the PROCESS domain (kill
+            # reversibility is intrinsic to the signal, not the flag) nor for
+            # helm uninstall (a single release removal; --force only ignores
+            # hook/resource errors — doc + corpus keep helm uninstall ask-class).
+            force_exempt = (fact.domain == "process") or (fact.executable == "helm")
+            if irreversibility_amp and not force_exempt:
+                fact.reversibility = "irreversible"
+            # --all/-A raise scope to broad, but must NOT downgrade an already
+            # prod scope (prod is the more severe/specific scope set from a
+            # `production`/`staging`/`live` token in build_command_fact). Both
+            # deny under the lattice, but the FACET must stay prod for honest
+            # attribution (kubectl delete pods --all -n production is prod-scoped,
+            # not merely broad).
+            if ({"--all", "-A"} & amp) and fact.scope != "prod":
+                fact.scope = "broad"
+        # prod/broad scope already set on fact.scope by build_command_fact.
+
+
+def classify_capability_pass(
+    segment: str,
+    repo_root: Path,
+    home: Path,
+    cwd: Path,
+    adapters: dict | None = None,
+    already_decided: bool = False,
+    _depth: int = 0,
+    fact: "CommandFact | None" = None,
+) -> tuple[str, str] | None:
+    """Capability-based classification of one segment (Slice 2, active).
+
+    Returns (decision, reason) from the abstract facet lattice, or None when the
+    capability layer has no opinion (kind NONE -> the segment falls through to
+    the existing classifiers). The decision is derived from FACETS only; the
+    concrete trace label appears in the reason for auditability but does not
+    drive the branch.
+
+    Fail-closed: a malformed user adapter sidecar (error state) yields a
+    diagnostic ask rather than silently degrading to built-ins-only.
+    """
+    # Sidecar fail-closed THROUGH the active pass. A malformed/over-authority
+    # .caws/command-adapters.json surfaces an error state. We do NOT silently
+    # degrade to built-ins-only: we classify with built-ins (so built-in-covered
+    # dangerous commands still get their correct decision), and for any command
+    # the built-ins would leave at NONE (a potential user-adapter target -> would
+    # otherwise be a silent allow) we surface a diagnostic ask.
+    sidecar_error = adapters.get("__error__") if isinstance(adapters, dict) else None
+    effective_adapters = None if sidecar_error else adapters
+
+    if fact is None:
+        fact = build_command_fact(segment, effective_adapters)
+
+    if sidecar_error and fact.kind == "NONE" and fact.executable not in OPAQUE_EXEC_EXECUTABLES:
+        return "ask", f"command-adapters sidecar invalid (fail-closed): {sidecar_error}"
+
+    # Opaque-exec routing: exec-family executables are classified by payload
+    # opacity, NOT adapter lookup. (Slice 2 wires the literal-recurse path here;
+    # the deep-escaped nested-shell gap remains a Slice-3 known_gap.)
+    if fact.executable in OPAQUE_EXEC_EXECUTABLES:
+        if fact.opacity == "opaque":
+            return "ask", f"opaque execution — cannot prove payload ({fact.executable})"
+        if fact.opacity == "literal" and fact.payload:
+            sub = classify_command(
+                fact.payload, repo_root, home, cwd,
+                _depth=_depth + 1, _adapters=adapters,
+            )
+            if sub[0] != "allow":
+                return sub[0], f"{fact.executable} literal payload: {sub[1]}"
+        return None  # benign literal / empty payload -> no opinion
+
+    return lattice_decision(fact)
+
+
 def classify_command(
     raw_command: str,
     repo_root: Path,
     home: Path,
     cwd: Path,
     caws_worktree: bool = False,
-) -> tuple[str, str]:
+    *,
+    _depth: int = 0,
+    _adapters: dict | None = None,
+) -> tuple[str, str, str, str]:
     """Classify a full command string.
 
-    Returns the most restrictive (decision, reason) across all segments.
-    Priority: deny > ask > allow.
+    Returns the most restrictive (decision, reason, source, enforcement) across
+    all segments. Priority: deny > ask > allow.
+
+    HOOK-ASK-ENFORCEMENT-001 — enforcement provenance, NOT a flipped ask. Two
+    additive fields ride alongside the unchanged decision/reason:
+      source      — diagnostic provenance of the WINNING decision: capability |
+                    legacy_family | regex | rm_classifier | find_delete |
+                    classifier_error | sidecar_error | unknown.
+      enforcement — the wrapper contract block-dangerous.sh branches on:
+                    pass | advisory | confirm | block.
+    enforcement is DERIVED from (decision, source) by derive_enforcement(): deny
+    -> block; allow -> pass; a CAPABILITY-derived ask (facet lattice / opaque-exec,
+    carrying structured semantic evidence) or a classifier_error/budget ask ->
+    confirm (current-command human approval at the hook boundary); every other
+    ask (legacy governed-family default, CONFIRM regex, rm/find) -> advisory,
+    preserving CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001. Bare `ask -> block` is
+    explicitly rejected.
+
+    `_depth` threads the shared recursion budget through every re-entry path
+    (substitution, nested-shell, opaque-exec). At the budget the classifier
+    returns a conservative "ask" rather than recursing further.
+    `_adapters` caches the loaded sidecar across recursive calls.
     """
+    if _depth > MAX_RECURSION_DEPTH:
+        # Budget-exceeded ask is a CAPABILITY-derived "cannot prove this is safe"
+        # verdict (the engine could not finish analyzing a nested payload) ->
+        # confirm enforcement (fail-closed), same class as opaque-exec.
+        return ("ask", "recursion budget exceeded — cannot fully analyze nested command",
+                "classifier_error", "confirm")
     worst_decision = "allow"
     worst_reason = ""
+    worst_source = "unknown"
+    worst_enforcement = "pass"
 
-    def escalate(decision: str, reason: str) -> None:
-        nonlocal worst_decision, worst_reason
+    # Load the user adapter sidecar once and thread it through recursion.
+    adapters = _adapters if _adapters is not None else load_command_adapters(repo_root)
+
+    def derive_enforcement(decision: str, source: str, enforcement: str | None) -> str:
+        # Explicit enforcement (propagated from a recursed inner result) wins.
+        if enforcement is not None:
+            return enforcement
+        if decision == "deny":
+            return "block"
+        if decision == "allow":
+            return "pass"
+        # ask: capability-derived and fail-closed asks confirm; everything else
+        # (legacy_family / regex / rm_classifier / find_delete / unknown) is advisory.
+        if source in {"capability", "classifier_error", "sidecar_error"}:
+            return "confirm"
+        return "advisory"
+
+    def escalate(decision: str, reason: str, source: str = "unknown",
+                 enforcement: str | None = None) -> None:
+        nonlocal worst_decision, worst_reason, worst_source, worst_enforcement
         priority = {"allow": 0, "ask": 1, "deny": 2}
         if priority.get(decision, 0) > priority.get(worst_decision, 0):
             worst_decision = decision
             worst_reason = reason
+            worst_source = source
+            worst_enforcement = derive_enforcement(decision, source, enforcement)
 
     # --- Pipeline-aware deny patterns ---
     # Strip quoted regions so patterns only match executable shell surface.
@@ -1692,7 +2397,7 @@ def classify_command(
     executable_surface = strip_quoted_regions(raw_command)
     for pattern, desc in DENY_PIPELINE_PATTERNS:
         if re.search(pattern, executable_surface, re.IGNORECASE):
-            escalate("deny", desc)
+            escalate("deny", desc, "regex")
 
     # --- Recursively classify command substitutions ---
     # Bash executes `$(...)` and backtick substitutions even inside double
@@ -1701,17 +2406,27 @@ def classify_command(
     for body in extract_command_substitutions(raw_command):
         if not body.strip():
             continue
-        sub_decision, sub_reason = classify_command(
+        sub_decision, sub_reason, sub_source, sub_enforcement = classify_command(
             body, repo_root, home, cwd, caws_worktree,
+            _depth=_depth + 1, _adapters=adapters,
         )
         if sub_decision != "allow":
-            escalate(sub_decision, f"command substitution: {sub_reason}")
+            # Propagate the inner source + enforcement: a capability ask inside
+            # $(...) stays source=capability/enforcement=confirm when surfaced
+            # on the outer command (A5).
+            escalate(sub_decision, f"command substitution: {sub_reason}",
+                     sub_source, sub_enforcement)
 
     segments = segment_command(raw_command)
 
     for segment in segments:
-        nested_result = classify_nested_shell(segment, repo_root, home, cwd, caws_worktree)
+        nested_result = classify_nested_shell(
+            segment, repo_root, home, cwd, caws_worktree, _depth=_depth + 1, _adapters=adapters,
+        )
         if nested_result:
+            # classify_nested_shell returns the inner (decision, reason, source,
+            # enforcement) so a nested capability ask (sh -c "kubectl delete pod")
+            # surfaces source=capability/enforcement=confirm outward (A5).
             escalate(*nested_result)
             continue
 
@@ -1725,7 +2440,10 @@ def classify_command(
         # carve-out's allow would be overridden.
         git_segment_allowed = bool(git_result and git_result[0] == "allow")
         if git_result:
-            escalate(*git_result)
+            # git semantics is a legacy detector: a git ask (cherry-pick, reset
+            # carve-out edge) is uncertainty, not graded capability risk ->
+            # advisory; a git deny (force-push, hard reset) still derives to block.
+            escalate(git_result[0], git_result[1], "legacy_family")
 
         # Strip quoted regions for pattern matching so that e.g.
         # echo "git reset --hard" does not trigger the git pattern.
@@ -1736,7 +2454,7 @@ def classify_command(
         # --- Hard-block patterns (segment-level) ---
         for pattern, desc in DENY_SEGMENT_PATTERNS:
             if re.search(pattern, segment_surface, re.IGNORECASE):
-                escalate("deny", desc)
+                escalate("deny", desc, "regex")
 
         # --- Confirm patterns (segment-level) ---
         for pattern, desc in CONFIRM_SEGMENT_PATTERNS:
@@ -1749,25 +2467,27 @@ def classify_command(
                 # that would re-flag the very same git op.
                 if git_segment_allowed:
                     continue
-                escalate("ask", desc)
+                # CONFIRM regex (git rebase/cherry-pick/amend, git init) is a
+                # legacy uncertainty ask -> advisory (CATASTROPHIC-ONLY-001).
+                escalate("ask", desc, "regex")
 
         # --- rm classifier ---
         is_recursive, targets = is_recursive_rm(segment)
         if is_recursive:
             if not targets:
                 # Cannot determine targets — be conservative
-                escalate("ask", "recursive delete with unparseable targets")
+                escalate("ask", "recursive delete with unparseable targets", "rm_classifier")
             else:
                 for target in targets:
                     decision, reason = classify_rm_target(
                         target, repo_root, home, cwd,
                     )
-                    escalate(decision, reason)
+                    escalate(decision, reason, "rm_classifier")
 
         # --- find -delete classifier ---
         find_result = classify_find_delete(segment)
         if find_result:
-            escalate(*find_result)
+            escalate(find_result[0], find_result[1], "find_delete")
 
         # --- DANGER-LATCH-CALIBRATION-001 ---
         # Hybrid fail-closed for governed families (git/gh/npm).
@@ -1782,6 +2502,50 @@ def classify_command(
         # check. If it is NOT on the allow-list AND the segment is a
         # governed-family command, escalate to "ask".
         allow_result = classify_allow_list(segment)
+
+        # --- Capability pass (HOOK-CAPABILITY-ENGINE) ---
+        # Slice 0: build the fact (so the fact builder is live + dumpable) and
+        # call the capability pass, which is a STUB returning None. No decision
+        # change. Slices 2-3 make this pass emit lattice decisions. Gated on the
+        # same condition as the governed-family default so git/gh/npm — handled
+        # by their own stack — are untouched.
+        if allow_result is None and not git_segment_allowed:
+            # A malformed sidecar surfaces {"__error__": ...}; build facts with
+            # built-ins only (the pass handles the fail-closed ask separately).
+            _eff_adapters = None if (isinstance(adapters, dict) and adapters.get("__error__")) else adapters
+            fact = build_command_fact(segment, _eff_adapters)
+            if os.environ.get("CAWS_CLASSIFY_FACTS_DUMP") == "1":
+                # Shadow-mode diagnostics go to STDERR only; the stdout
+                # {"decision","reason"} contract is unchanged.
+                sys.stderr.write(json.dumps({
+                    "caws_command_fact": {
+                        "segment": segment,
+                        "executable": fact.executable,
+                        "wrappers": fact.wrappers,
+                        "subcommand_path": fact.subcommand_path,
+                        "flags": sorted(fact.flags),
+                        "targets": fact.targets,
+                        "payload": fact.payload,
+                        "facets": fact.facets(),
+                        "trace_label": fact.trace_label,
+                        "parse_confidence": fact.parse_confidence,
+                    },
+                }) + "\n")
+            cap_result = classify_capability_pass(
+                segment, repo_root, home, cwd,
+                adapters=adapters,
+                already_decided=(worst_decision != "allow"),
+                _depth=_depth + 1,
+                fact=fact,
+            )
+            if cap_result is not None:
+                # The capability pass is the SOLE source of confirm-class asks:
+                # any ask/deny it returns is facet-derived (lattice / opaque-exec /
+                # sidecar-fail-closed), so a capability ask routes to current-
+                # command human confirmation at the hook boundary (A1). A capability
+                # deny still derives to block. source=capability.
+                escalate(cap_result[0], cap_result[1], "capability")
+
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this
             # segment (CAWS-SCOPE-AMEND-COMMAND-001 spec-only cherry-pick
@@ -1790,9 +2554,11 @@ def classify_command(
             # detector independently re-escalates the same git op to "ask".
             family_result = classify_governed_family_default(segment)
             if family_result is not None:
-                escalate(*family_result)
+                # governed-family default ask (unknown git/gh/npm subcommand) is
+                # LEGACY uncertainty -> advisory, preserving CATASTROPHIC-ONLY-001 (A2).
+                escalate(family_result[0], family_result[1], "legacy_family")
 
-    return worst_decision, worst_reason
+    return worst_decision, worst_reason, worst_source, worst_enforcement
 
 
 # ---------------------------------------------------------------------------
@@ -1815,11 +2581,20 @@ def main() -> None:
     cwd = Path(args.cwd).resolve(strict=False)
     caws_worktree = has_trusted_git_init_context(repo_root)
 
-    decision, reason = classify_command(
+    decision, reason, source, enforcement = classify_command(
         raw_command, repo_root, home, cwd, caws_worktree,
     )
 
-    json.dump({"decision": decision, "reason": reason}, sys.stdout)
+    # ADDITIVE contract (HOOK-ASK-ENFORCEMENT-001): decision + reason are
+    # unchanged; source (diagnostic provenance) + enforcement (the wrapper
+    # contract block-dangerous.sh branches on) are added. A jq consumer reading
+    # only .decision/.reason is unaffected; both new fields are ALWAYS present
+    # for a stable contract.
+    json.dump(
+        {"decision": decision, "reason": reason,
+         "source": source, "enforcement": enforcement},
+        sys.stdout,
+    )
 
 
 if __name__ == "__main__":
