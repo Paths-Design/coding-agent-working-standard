@@ -393,7 +393,10 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
   const applyPartial = runCaws(
     cawsBin, ['specs', 'migrate', '--from', 'v10', '--apply', '--partial'], repoDir,
   );
-  assertExit(applyPartial, 0, 'apply --partial');
+  // CAWS-CLI-EXIT-CODES-001: --apply --partial with refused>0 is an INCOMPLETE
+  // migration and exits 1 (non-zero), even though happy.yaml was written. The
+  // corpus deliberately has refused=2, so exit 1 is the correct contract here.
+  assertExit(applyPartial, 1, 'apply --partial');
   assertStdoutMatches(applyPartial, /\[apply\]/, 'apply --partial');
   assertStdoutMatches(applyPartial, /migrated_with_warnings=1/, 'apply --partial');
   assertStdoutMatches(applyPartial, /refused=2/, 'apply --partial');
@@ -462,7 +465,8 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
     ],
     repoDir,
   );
-  assertExit(applyMapped, 0, 'apply --partial with mapping');
+  // CAWS-CLI-EXIT-CODES-001: still refused=1 under --partial → incomplete → exit 1.
+  assertExit(applyMapped, 1, 'apply --partial with mapping');
   // Distribution: total=2 (happy is now v11, silently excluded),
   // migrated_with_warnings=1 (lifecycle), refused=1 (empty modules).
   assertStdoutMatches(applyMapped, /migrated_with_warnings=1/, 'apply mapped');

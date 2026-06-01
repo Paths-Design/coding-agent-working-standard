@@ -404,7 +404,7 @@ function assertHookPackV3(pack) {
 function assertSessionStartCreatesLease(projectDir, shimDir) {
   step('A14.5 — SessionStart dispatcher creates a lease file');
   const sessionId = 'caws-smoke-session-a';
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'dispatch', 'session_start.sh');
+  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'session_start.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'SessionStart',
     session_id: sessionId,
@@ -439,7 +439,7 @@ function assertSessionStartCreatesLease(projectDir, shimDir) {
 
 function assertPreToolUseSilentAtN1(projectDir, shimDir, sessionId) {
   step('A14.6 — PreToolUse is silent when only one lease exists');
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'PreToolUse',
     session_id: sessionId,
@@ -476,7 +476,7 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
     });
   }
 
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'dispatch', 'pre_tool_use.sh');
+  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'PreToolUse',
     session_id: selfSessionId,
@@ -509,7 +509,7 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
 
 function assertStopMarksLeaseStopped(projectDir, shimDir, sessionId) {
   step('A14.8 — Stop dispatcher flips lease to stopped with stopped_at');
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'dispatch', 'stop.sh');
+  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'stop.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'Stop',
     session_id: sessionId,
