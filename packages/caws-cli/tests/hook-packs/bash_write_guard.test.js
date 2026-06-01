@@ -132,6 +132,17 @@ describe('WORKTREE-ISOLATION-HARDENING-001 Fix 3: bash-write-guard', () => {
     expect(r.status).toBe(0);
   });
 
+  // CLASH-GUARD-CLAIMANT-LABELING-001 NOTE: the canonical-root MULTI-CLAIMANT
+  // block-rendering is proven authoritatively in worktree_claim_oracle.test.js
+  // (the oracle emits the comma-separated `block_claimed` claimant list). It is
+  // NOT re-asserted here because the bash-write-guard harness copies the hook
+  // into an isolated temp repo with NO resolvable js-yaml, so the oracle's
+  // canonical scope.in check (which needs js-yaml) fails closed to `ask` rather
+  // than reaching `block_claimed` — the same lazy-yaml limitation Campaign 1
+  // documented. The guard's MESSAGE-RENDERING change (parsing the comma list) is
+  // pure bash and covered by the worktree_write_guard_payload_arm + shell-level
+  // suites; the oracle test covers the detail format end-to-end.
+
   test('read-only Bash mentioning a claimed payload path -> PASS (no over-block)', () => {
     setup();
     // cat/grep/ls do not mutate; the extractor must not extract their operands.

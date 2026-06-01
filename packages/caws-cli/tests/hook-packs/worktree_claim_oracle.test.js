@@ -157,6 +157,47 @@ describe('worktree-claim-oracle: physical-root-aware ownership', () => {
     expect(r.outcome).toBe('block_claimed');
   });
 
+  // CLASH-GUARD-CLAIMANT-LABELING-001 (A1): when TWO active-bound worktrees
+  // both claim the same path via scope.in, block_claimed names BOTH, as a
+  // comma-separated list of name:pattern pairs.
+  function setupTwoClaimants() {
+    dir = makeRepo();
+    writeRegistry(dir, {
+      'wt-a': {
+        spec_id: 'CLAIM-A1', branch: 'wt-a', baseBranch: 'main',
+        owner: { session_id: OWNER, platform: 'claude-code' },
+      },
+      'wt-b': {
+        spec_id: 'CLAIM-B1', branch: 'wt-b', baseBranch: 'main',
+        owner: { session_id: FOREIGN, platform: 'claude-code' },
+      },
+    });
+    writeSpec(dir, 'CLAIM-A1', { lifecycle: 'active', scopeIn: ['shared.txt'] });
+    writeSpec(dir, 'CLAIM-B1', { lifecycle: 'active', scopeIn: ['shared.txt'] });
+  }
+
+  test('two worktrees claiming the same scope.in path -> block_claimed names BOTH', () => {
+    setupTwoClaimants();
+    const r = oracle(dir, 'shared.txt', FOREIGN);
+    expect(r.outcome).toBe('block_claimed');
+    // Detail is a comma-separated list of name:pattern pairs, one per claimant.
+    const pairs = r.detail.split(',');
+    expect(pairs.length).toBe(2);
+    const names = pairs.map((p) => p.split(':')[0]).sort();
+    expect(names).toEqual(['wt-a', 'wt-b']);
+    // Each pair carries its matched pattern.
+    expect(r.detail).toContain('wt-a:shared.txt');
+    expect(r.detail).toContain('wt-b:shared.txt');
+  });
+
+  test('single claimant detail stays a bare name:pattern (no trailing comma)', () => {
+    setupOneWorktree();
+    const r = oracle(dir, 'packages/caws-cli/src/target.ts', FOREIGN);
+    expect(r.outcome).toBe('block_claimed');
+    expect(r.detail).not.toContain(',');
+    expect(r.detail).toBe('wt-a:packages/caws-cli/src/target.ts');
+  });
+
   test('scope.support path is never worktree-claimed -> pass', () => {
     setupOneWorktree();
     const r = oracle(dir, 'SHARED-NOTES.md', FOREIGN);
