@@ -7,23 +7,58 @@ created_at: '2026-06-01T07:38:58.867Z'
 updated_at: '2026-06-01T07:39:07.528Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/render
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/render/finding.ts
     - packages/caws-cli/src/shell/render/status.ts
     - packages/caws-cli/tests/shell/renderers.test.js
     - packages/caws-cli/tests/shell/status-command.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The `caws status` surface never suggests, mentions, or implies `--takeover`
+    for a stale-but-not-abandoned foreign worktree owner. A stale heartbeat is
+    display/hygiene only; stale does NOT mean abandoned.
+  - >-
+    No ownership authority is derived from lease freshness or heartbeat staleness
+    in the status surface. The worktrees.json owner remains the sole authority
+    (Campaign 2 doctrine: freshness prevents unsafe cleanup, never authorizes
+    ownership).
+  - >-
+    The `caws doctor` command output is unchanged by this slice. The takeover
+    suppression is a status-render-layer concern; doctor (the kernel rule and its
+    full repair prose) is out of scope and untouched.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a bound worktree owned by a foreign session whose heartbeat is stale (>TTL)
+    when: the current session runs `caws status` from inside that worktree
+    then: >-
+      the output labels the owner OWNED (foreign) and the heartbeat as stale
+      (display only — NOT abandonment), exits 0, and contains no `--takeover`
+      suggestion anywhere in the rendered surface (Claim panel or inline Doctor
+      section).
+  - id: A2
+    given: the status inline Doctor section includes an owner_lease_missing finding whose kernel repair text mentions `--takeover`
+    when: status renders that finding inline (suppressTakeoverHints active)
+    then: >-
+      the rendered repair line drops the takeover-suggesting sentence and points
+      to `caws doctor` for the full hygiene context, while preserving the
+      finding's severity, rule id, message, and subject.
+  - id: A3
+    given: the same owner_lease_missing finding
+    when: the full `caws doctor` command renders findings (suppression NOT active)
+    then: >-
+      the repair text is byte-identical to its prior output, including the
+      `--takeover` hand-off guidance, proving doctor is unchanged.
+  - id: A4
+    given: the existing status/render unit + shell suites
+    when: the full store+shell gate runs on canonical post-build
+    then: >-
+      `tests/shell/status-command.test.js` stale-foreign-owner case passes, the
+      full gate is no worse than the current baseline (1112/1113) and preferably
+      reaches 1113/1113, and the kernel suite is documented as not touched.
 non_functional: {}
 contracts: []
