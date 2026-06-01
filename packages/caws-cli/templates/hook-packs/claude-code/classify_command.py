@@ -977,14 +977,16 @@ def has_git_init_alias_config(segment: str) -> bool:
 def classify_nested_shell(
     segment: str, repo_root: Path, home: Path, cwd: Path, caws_worktree: bool,
     *, _depth: int = 0, _adapters: dict | None = None,
-) -> tuple[str, str, str] | None:
+) -> tuple[str, str, str, str] | None:
     """Recursively classify sh/bash/zsh -c strings.
 
     Threads the shared recursion budget (`_depth`) and the cached adapter
     sidecar (`_adapters`) into the recursive classify_command call so nested
     shells share one budget with substitution + opaque-exec recursion.
-    Returns the inner classify_command's (decision, reason, ask_enforcement)
-    so the enforcement class of a nested capability ask propagates outward.
+
+    Returns the inner classify_command's (decision, reason, source, enforcement)
+    so the enforcement class of a nested capability ask propagates outward
+    (HOOK-ASK-ENFORCEMENT-001 A5).
     """
     try:
         tokens = shlex.split(segment)
@@ -2325,13 +2327,26 @@ def classify_command(
     *,
     _depth: int = 0,
     _adapters: dict | None = None,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     """Classify a full command string.
 
-    Returns the most restrictive (decision, reason, ask_enforcement) across all
-    segments. Priority: deny > ask > allow. ask_enforcement is
-    "blocking_confirmation" when the winning `ask` came from the capability pass
-    (the facet lattice / opaque-exec), else "advisory" (HOOK-ASK-ENFORCEMENT-001).
+    Returns the most restrictive (decision, reason, source, enforcement) across
+    all segments. Priority: deny > ask > allow.
+
+    HOOK-ASK-ENFORCEMENT-001 — enforcement provenance, NOT a flipped ask. Two
+    additive fields ride alongside the unchanged decision/reason:
+      source      — diagnostic provenance of the WINNING decision: capability |
+                    legacy_family | regex | rm_classifier | find_delete |
+                    classifier_error | sidecar_error | unknown.
+      enforcement — the wrapper contract block-dangerous.sh branches on:
+                    pass | advisory | confirm | block.
+    enforcement is DERIVED from (decision, source) by derive_enforcement(): deny
+    -> block; allow -> pass; a CAPABILITY-derived ask (facet lattice / opaque-exec,
+    carrying structured semantic evidence) or a classifier_error/budget ask ->
+    confirm (current-command human approval at the hook boundary); every other
+    ask (legacy governed-family default, CONFIRM regex, rm/find) -> advisory,
+    preserving CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001. Bare `ask -> block` is
+    explicitly rejected.
 
     `_depth` threads the shared recursion budget through every re-entry path
     (substitution, nested-shell, opaque-exec). At the budget the classifier
@@ -2339,30 +2354,42 @@ def classify_command(
     `_adapters` caches the loaded sidecar across recursive calls.
     """
     if _depth > MAX_RECURSION_DEPTH:
-        # A budget-exceeded ask is a CAPABILITY-derived "cannot prove this is safe"
-        # verdict (the engine could not finish analyzing a nested payload), so it
-        # carries blocking_confirmation enforcement — the same class as opaque-exec.
-        return "ask", "recursion budget exceeded — cannot fully analyze nested command", "blocking_confirmation"
+        # Budget-exceeded ask is a CAPABILITY-derived "cannot prove this is safe"
+        # verdict (the engine could not finish analyzing a nested payload) ->
+        # confirm enforcement (fail-closed), same class as opaque-exec.
+        return ("ask", "recursion budget exceeded — cannot fully analyze nested command",
+                "classifier_error", "confirm")
     worst_decision = "allow"
     worst_reason = ""
-    # ask_enforcement (HOOK-ASK-ENFORCEMENT-001): how block-dangerous.sh should
-    # treat a winning `ask`. "blocking_confirmation" = a capability-derived ask
-    # (the facet lattice / opaque-exec path produced it) → current-command human
-    # approval at the hook boundary. "advisory" = a legacy/default ask (git/gh
-    # detectors, governed-family default, CONFIRM regex) → CATASTROPHIC-ONLY
-    # advisory exit-0. Default advisory; only the capability pass escalates it.
-    worst_enforcement = "advisory"
+    worst_source = "unknown"
+    worst_enforcement = "pass"
 
     # Load the user adapter sidecar once and thread it through recursion.
     adapters = _adapters if _adapters is not None else load_command_adapters(repo_root)
 
-    def escalate(decision: str, reason: str, enforcement: str = "advisory") -> None:
-        nonlocal worst_decision, worst_reason, worst_enforcement
+    def derive_enforcement(decision: str, source: str, enforcement: str | None) -> str:
+        # Explicit enforcement (propagated from a recursed inner result) wins.
+        if enforcement is not None:
+            return enforcement
+        if decision == "deny":
+            return "block"
+        if decision == "allow":
+            return "pass"
+        # ask: capability-derived and fail-closed asks confirm; everything else
+        # (legacy_family / regex / rm_classifier / find_delete / unknown) is advisory.
+        if source in {"capability", "classifier_error", "sidecar_error"}:
+            return "confirm"
+        return "advisory"
+
+    def escalate(decision: str, reason: str, source: str = "unknown",
+                 enforcement: str | None = None) -> None:
+        nonlocal worst_decision, worst_reason, worst_source, worst_enforcement
         priority = {"allow": 0, "ask": 1, "deny": 2}
         if priority.get(decision, 0) > priority.get(worst_decision, 0):
             worst_decision = decision
             worst_reason = reason
-            worst_enforcement = enforcement
+            worst_source = source
+            worst_enforcement = derive_enforcement(decision, source, enforcement)
 
     # --- Pipeline-aware deny patterns ---
     # Strip quoted regions so patterns only match executable shell surface.
@@ -2370,7 +2397,7 @@ def classify_command(
     executable_surface = strip_quoted_regions(raw_command)
     for pattern, desc in DENY_PIPELINE_PATTERNS:
         if re.search(pattern, executable_surface, re.IGNORECASE):
-            escalate("deny", desc)
+            escalate("deny", desc, "regex")
 
     # --- Recursively classify command substitutions ---
     # Bash executes `$(...)` and backtick substitutions even inside double
@@ -2379,14 +2406,16 @@ def classify_command(
     for body in extract_command_substitutions(raw_command):
         if not body.strip():
             continue
-        sub_decision, sub_reason, sub_enforcement = classify_command(
+        sub_decision, sub_reason, sub_source, sub_enforcement = classify_command(
             body, repo_root, home, cwd, caws_worktree,
             _depth=_depth + 1, _adapters=adapters,
         )
         if sub_decision != "allow":
-            # Propagate the inner enforcement: a capability ask inside $(...)
-            # stays blocking_confirmation when surfaced on the outer command.
-            escalate(sub_decision, f"command substitution: {sub_reason}", sub_enforcement)
+            # Propagate the inner source + enforcement: a capability ask inside
+            # $(...) stays source=capability/enforcement=confirm when surfaced
+            # on the outer command (A5).
+            escalate(sub_decision, f"command substitution: {sub_reason}",
+                     sub_source, sub_enforcement)
 
     segments = segment_command(raw_command)
 
@@ -2395,6 +2424,9 @@ def classify_command(
             segment, repo_root, home, cwd, caws_worktree, _depth=_depth + 1, _adapters=adapters,
         )
         if nested_result:
+            # classify_nested_shell returns the inner (decision, reason, source,
+            # enforcement) so a nested capability ask (sh -c "kubectl delete pod")
+            # surfaces source=capability/enforcement=confirm outward (A5).
             escalate(*nested_result)
             continue
 
@@ -2408,7 +2440,10 @@ def classify_command(
         # carve-out's allow would be overridden.
         git_segment_allowed = bool(git_result and git_result[0] == "allow")
         if git_result:
-            escalate(*git_result)
+            # git semantics is a legacy detector: a git ask (cherry-pick, reset
+            # carve-out edge) is uncertainty, not graded capability risk ->
+            # advisory; a git deny (force-push, hard reset) still derives to block.
+            escalate(git_result[0], git_result[1], "legacy_family")
 
         # Strip quoted regions for pattern matching so that e.g.
         # echo "git reset --hard" does not trigger the git pattern.
@@ -2419,7 +2454,7 @@ def classify_command(
         # --- Hard-block patterns (segment-level) ---
         for pattern, desc in DENY_SEGMENT_PATTERNS:
             if re.search(pattern, segment_surface, re.IGNORECASE):
-                escalate("deny", desc)
+                escalate("deny", desc, "regex")
 
         # --- Confirm patterns (segment-level) ---
         for pattern, desc in CONFIRM_SEGMENT_PATTERNS:
@@ -2432,25 +2467,27 @@ def classify_command(
                 # that would re-flag the very same git op.
                 if git_segment_allowed:
                     continue
-                escalate("ask", desc)
+                # CONFIRM regex (git rebase/cherry-pick/amend, git init) is a
+                # legacy uncertainty ask -> advisory (CATASTROPHIC-ONLY-001).
+                escalate("ask", desc, "regex")
 
         # --- rm classifier ---
         is_recursive, targets = is_recursive_rm(segment)
         if is_recursive:
             if not targets:
                 # Cannot determine targets — be conservative
-                escalate("ask", "recursive delete with unparseable targets")
+                escalate("ask", "recursive delete with unparseable targets", "rm_classifier")
             else:
                 for target in targets:
                     decision, reason = classify_rm_target(
                         target, repo_root, home, cwd,
                     )
-                    escalate(decision, reason)
+                    escalate(decision, reason, "rm_classifier")
 
         # --- find -delete classifier ---
         find_result = classify_find_delete(segment)
         if find_result:
-            escalate(*find_result)
+            escalate(find_result[0], find_result[1], "find_delete")
 
         # --- DANGER-LATCH-CALIBRATION-001 ---
         # Hybrid fail-closed for governed families (git/gh/npm).
@@ -2502,13 +2539,12 @@ def classify_command(
                 fact=fact,
             )
             if cap_result is not None:
-                # The capability pass is the SOLE source of blocking_confirmation:
-                # any ask/deny it returns is facet-derived (lattice or opaque-exec),
-                # so a capability ask routes to current-command human approval at
-                # the hook boundary (HOOK-ASK-ENFORCEMENT-001 A1). deny enforcement
-                # is irrelevant (deny hard-blocks regardless), but tagging it
-                # blocking_confirmation keeps the source attribution honest.
-                escalate(cap_result[0], cap_result[1], "blocking_confirmation")
+                # The capability pass is the SOLE source of confirm-class asks:
+                # any ask/deny it returns is facet-derived (lattice / opaque-exec /
+                # sidecar-fail-closed), so a capability ask routes to current-
+                # command human confirmation at the hook boundary (A1). A capability
+                # deny still derives to block. source=capability.
+                escalate(cap_result[0], cap_result[1], "capability")
 
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this
@@ -2518,12 +2554,11 @@ def classify_command(
             # detector independently re-escalates the same git op to "ask".
             family_result = classify_governed_family_default(segment)
             if family_result is not None:
-                # governed-family default ask (unknown git/gh/npm subcommand) is a
-                # LEGACY ask → advisory (the escalate default), preserving
-                # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001.
-                escalate(*family_result)
+                # governed-family default ask (unknown git/gh/npm subcommand) is
+                # LEGACY uncertainty -> advisory, preserving CATASTROPHIC-ONLY-001 (A2).
+                escalate(family_result[0], family_result[1], "legacy_family")
 
-    return worst_decision, worst_reason, worst_enforcement
+    return worst_decision, worst_reason, worst_source, worst_enforcement
 
 
 # ---------------------------------------------------------------------------
@@ -2546,17 +2581,18 @@ def main() -> None:
     cwd = Path(args.cwd).resolve(strict=False)
     caws_worktree = has_trusted_git_init_context(repo_root)
 
-    decision, reason, ask_enforcement = classify_command(
+    decision, reason, source, enforcement = classify_command(
         raw_command, repo_root, home, cwd, caws_worktree,
     )
 
-    # ask_enforcement is additive (HOOK-ASK-ENFORCEMENT-001): consumers that read
-    # only .decision/.reason are unaffected. block-dangerous.sh reads it to route
-    # a capability-derived `ask` to current-command blocking-confirmation vs a
-    # legacy/default `ask` to advisory exit-0. It is only meaningful for ask;
-    # emitted always for a stable contract.
+    # ADDITIVE contract (HOOK-ASK-ENFORCEMENT-001): decision + reason are
+    # unchanged; source (diagnostic provenance) + enforcement (the wrapper
+    # contract block-dangerous.sh branches on) are added. A jq consumer reading
+    # only .decision/.reason is unaffected; both new fields are ALWAYS present
+    # for a stable contract.
     json.dump(
-        {"decision": decision, "reason": reason, "ask_enforcement": ask_enforcement},
+        {"decision": decision, "reason": reason,
+         "source": source, "enforcement": enforcement},
         sys.stdout,
     )
 
