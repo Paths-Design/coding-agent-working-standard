@@ -1,0 +1,171 @@
+id: AGENT-LIVENESS-DOCTOR-001
+title: 'Make prune --dead recency-primary (D4) and teach doctor the lease/worktree drift classes (D10); freshness prevents unsafe cleanup, never authorizes ownership'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-05-31T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/worktree/leases.ts
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    # --- D4: recency-primary prune --dead ---
+    - packages/caws-cli/src/store/leases-store.ts
+    # --- shared recency helper (already exists: summarizeActiveAgents / isStaleByTTL) ---
+    - packages/caws-kernel/src/worktree/leases.ts
+    - packages/caws-kernel/src/worktree/freshness.ts
+    - packages/caws-kernel/src/worktree/index.ts
+    # --- D10: doctor reads leases + new drift checks ---
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/doctor/rules.ts
+    - packages/caws-kernel/src/doctor/types.ts
+    - packages/caws-kernel/src/index.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    # --- tests ---
+    - packages/caws-cli/tests/store/
+    - packages/caws-cli/tests/shell/
+    - packages/caws-kernel/tests/
+    - packages/caws-cli/CHANGELOG.md
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - >-
+    D4 — RECENCY IS PRIMARY IN prune --dead. pruneDeadLeases currently selects a
+    lease for deletion purely on PID (lease.pid is process.pid of the ephemeral
+    per-CLI-invocation subshell — agents.ts:248 — dead the instant that
+    invocation exits), never consulting last_active. A lease whose last_active is
+    within the active TTL window (the same window summarizeActiveAgents uses to
+    bucket 'active') must NEVER be pruned as dead, regardless of whether its
+    recorded PID is alive. PID is demoted to advisory metadata: it may only
+    ESCALATE confidence that an ALREADY-stale lease is dead, never override a
+    fresh heartbeat. A stale (last_active older than the TTL) lease whose PID is
+    also gone remains pruneable under the intended policy.
+  - >-
+    FRESHNESS PREVENTS UNSAFE CLEANUP; IT NEVER AUTHORIZES OWNERSHIP. This slice
+    uses recency ONLY to refuse deleting a live lease. It MUST NOT make lease
+    freshness authorize takeover, destroy, merge, or bind — those continue to
+    consult worktrees.json owner via admitsOwner, lease-blind. The kernel already
+    enforces this doctrine (leases.ts + freshness.ts headers: "operational cache,
+    NEVER authority"; admitsOwner reads the registry owner, not leases). No code
+    path added here may read lease freshness to grant a governance decision.
+  - >-
+    ONE RECENCY ORACLE WHERE PRACTICAL. prune --dead routes its
+    fresh-lease-protection through the SAME recency classifier the correct
+    surfaces use (kernel summarizeActiveAgents / isStaleByTTL, last_active vs
+    ttlMs) so prune / status / agents list / doctor cannot disagree about which
+    leases are live. The store-layer prune may call the kernel helper or apply
+    the identical last_active-vs-ttl predicate; the invariant is agreement, not a
+    specific call graph.
+  - >-
+    D10 — DOCTOR READS .caws/leases/ WITH A STRUCTURAL AGENT-RECORD PREDICATE.
+    DoctorInput gains an optional `leases` field; composeDoctorSnapshot loads
+    .caws/leases/ via the store loadLeases reader and passes it. inspect.ts
+    iterates leases ONLY through a structural agent-record predicate so a
+    top-level metadata key (a future "version" sibling, a non-lease object) does
+    NOT become a fake agent finding. Doctor never reads files itself (the store
+    hands facts across) — the leases arrive as parsed data, same as worktrees /
+    agents today.
+  - >-
+    D10 — DOCTOR SURFACES THE PROBE DRIFT CLASSES. inspect.ts adds findings for:
+    (a) an active spec whose bound worktree directory is gone (do not wait for the
+    1h unbound-stale threshold when the registry entry / dir is absent);
+    (b) an active spec with worktree: set but no registry entry;
+    (c) a registry entry whose path is missing on disk (extend/loosen
+    WORKTREE_GHOST_REGISTRY_ENTRY so it is not silently skipped on git-observation
+    failure — the filesystem worktreeDirByName fact already carries dir presence);
+    (d) a registry owner whose lease is absent / stale / stopped;
+    (e) leases present but with no corresponding active-agent visibility;
+    (f) an all-PIDs-dead-but-recently-active platform-liveness DIAGNOSTIC (signals
+    the PID oracle is invalid on this platform) — a note, NOT cleanup authority.
+    New rule ids in doctor/rules.ts. doctor reporting 0E/0W/0I on the known
+    Campaign-1 post-probe drift shape is the defect this closes.
+  - >-
+    SCOPE FENCE. This slice is D4 + D10 ONLY. NO broad session-candidate-resolution
+    change (that is SESSION-CANDIDATE-RESOLUTION-HARDENING-001). NO D3 successor
+    work except as a fixture dependency. NO repair/reconcile MUTATION behavior
+    (doctor stays read-only; prune mutates only under its existing non-dry-run
+    contract). NO exit-code audit beyond noting failures discovered incidentally.
+    The 16 pre-existing stale-agent warnings are TEST MATERIAL, not cleanup
+    permission — the danger is the cleanup oracle, not the display warning.
+acceptance:
+  - id: A1
+    given: A lease with status active and last_active within the TTL window, whose recorded PID is not alive (the ephemeral-PID case).
+    when: pruneDeadLeases runs (apply, not dry-run).
+    then: >-
+      The lease is NOT a candidate and is NOT deleted — a fresh heartbeat
+      protects it regardless of PID. The PruneDeadResult candidates list excludes
+      it.
+  - id: A2
+    given: A lease with status active whose last_active is OLDER than the TTL window AND whose PID is not alive.
+    when: pruneDeadLeases runs.
+    then: >-
+      The lease remains a candidate (stale + dead pid) under the intended policy —
+      the fix protects fresh leases, it does not disable --dead for genuinely
+      stale ones.
+  - id: A3
+    given: prune --dead and status/agents-list/doctor on the same lease set.
+    when: each classifies liveness.
+    then: >-
+      They agree on which leases are live (prune routes fresh-protection through
+      the same recency predicate). No lease is 'active' to status but 'dead' to
+      prune.
+  - id: A4
+    given: A .caws/leases/ directory plus an active spec whose bound worktree dir is gone, a registry entry whose path is missing, and a registry owner whose lease is stale/absent.
+    when: doctor runs against this drift shape.
+    then: >-
+      doctor emits the corresponding findings (worktree-dir-gone, ghost registry
+      entry, owner-without-live-lease) and does NOT report 0E/0W/0I. The findings
+      are diagnostic; their narrowRepair does not assert cleanup authority over
+      ownership.
+  - id: A5
+    given: A .caws/leases registry that also carries a non-lease top-level key (a metadata sibling / malformed object).
+    when: doctor iterates leases.
+    then: >-
+      The structural agent-record predicate excludes the non-lease key — it does
+      NOT become a fake agent finding. Only well-formed lease records are
+      classified.
+  - id: A6
+    given: The full slice on canonical.
+    when: kernel build + caws-cli build + kernel npm test + CLI store/shell/init suites run, and a live-ish fixture reproduces the Campaign-1 post-probe drift.
+    then: >-
+      Build/typecheck clean both packages; the fresh-lease-survives-prune test,
+      the doctor-drift tests, and the structural-predicate test pass; the live
+      fixture shows the new doctor findings and the surviving fresh lease; no
+      regression to existing prune (status/stale/stopped) or doctor tests; no new
+      code path reads lease freshness to authorize a governance decision.
+non_functional:
+  reliability:
+    - >-
+      Closes the false-positive cleanup oracle: prune --dead reaped 100% of
+      healthy sessions because the recorded PID is an ephemeral per-invocation
+      subshell. Recency-primary selection makes prune safe; doctor's new drift
+      findings make the post-merge half-state visible instead of reporting clean.
+      All changes are read-side or selection-side; prune's mutation contract
+      (non-dry-run deletes candidates) is unchanged.
+  security:
+    - >-
+      The slice must FAIL CLOSED in the cleanup direction: when liveness cannot be
+      proven (unparseable last_active, missing data), prune must NOT delete a lease
+      it cannot confirm is dead — under-pruning (a stale lease lingers, visible to
+      doctor) is safe; over-pruning (deleting a live session's lease) is the
+      breach. Lease freshness must never be promoted into ownership authority.
+contracts:
+  - name: prune-dead-recency-primary-v1
+    type: behavior
+    path: packages/caws-cli/src/store/leases-store.ts
+    description: >-
+      pruneDeadLeases selects a lease for --dead deletion only when it is BOTH
+      not-fresh by the shared recency predicate (last_active older than the active
+      TTL window, the same window summarizeActiveAgents uses) AND unverifiable-or-
+      dead by PID. A lease with a fresh last_active is never a candidate
+      regardless of PID; PID is advisory and may only escalate confidence on an
+      already-stale lease. The function never reads lease freshness to authorize
+      any ownership/governance decision (freshness gates cleanup only), and fails
+      closed (does not delete what it cannot confirm dead).
