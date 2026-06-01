@@ -286,7 +286,12 @@ export function renderStatus(input: StatusRenderInput): string {
     const top = [...input.doctorFindings]
       .sort((a, b) => rank[a.severity] - rank[b.severity])
       .slice(0, cap);
-    lines.push(renderFindings(top));
+    // STATUS-STALE-OWNER-NO-TAKEOVER-001: status is a glance dashboard, not a
+    // hygiene workflow. Suppress `--takeover` hints in the inline Doctor
+    // section so a stale-but-not-abandoned foreign owner is never presented
+    // here with a takeover suggestion. The full `caws doctor` command renders
+    // the repair prose verbatim (suppression off there).
+    lines.push(renderFindings(top, { suppressTakeoverHints: true }));
     if (input.doctorFindings.length > cap) {
       lines.push(
         `  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`

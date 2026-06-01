@@ -143,6 +143,72 @@ describe('renderFinding / renderFindings', () => {
     expect(out).toContain('w');
     expect(out).not.toContain('[INFO');
   });
+
+  // STATUS-STALE-OWNER-NO-TAKEOVER-001: the owner_lease_missing repair text
+  // (authored in the kernel) ends with a `--takeover` hand-off suggestion.
+  // That prose is correct for `caws doctor`, but the `caws status` inline
+  // Doctor section must NOT imply takeover for a stale-but-not-abandoned
+  // foreign owner. The render layer carries the suppression so doctor stays
+  // byte-identical.
+  const OWNER_LEASE_MISSING_REPAIR =
+    'No automatic action. The registry owner is still authoritative for ' +
+    'ownership decisions (leases are operational cache, never authority). ' +
+    'If the owning session is truly gone, hand off explicitly via ' +
+    '`caws claim wt-foo --takeover`.';
+
+  it('A3: by default (doctor surface) the takeover hint is rendered verbatim', () => {
+    const out = renderFinding({
+      rule: 'doctor.worktree.owner_lease_missing',
+      authority: 'kernel/diagnostics',
+      severity: 'warning',
+      message: 'owned by a session with no live lease',
+      subject: 'wt-foo',
+      narrowRepair: OWNER_LEASE_MISSING_REPAIR,
+    });
+    // Doctor output is unchanged: full repair prose including --takeover.
+    expect(out).toContain('--takeover');
+    expect(out).toContain(`repair:  ${OWNER_LEASE_MISSING_REPAIR}`);
+  });
+
+  it('A2: suppressTakeoverHints drops the takeover hand-off, keeps the authoritative-owner sentence + points to caws doctor', () => {
+    const out = renderFinding(
+      {
+        rule: 'doctor.worktree.owner_lease_missing',
+        authority: 'kernel/diagnostics',
+        severity: 'warning',
+        message: 'owned by a session with no live lease',
+        subject: 'wt-foo',
+        narrowRepair: OWNER_LEASE_MISSING_REPAIR,
+      },
+      { suppressTakeoverHints: true }
+    );
+    // Takeover hint must be gone.
+    expect(out).not.toContain('--takeover');
+    expect(out).not.toContain('hand off');
+    // Severity, rule, message, subject preserved.
+    expect(out).toContain('[WARN   ]');
+    expect(out).toContain('doctor.worktree.owner_lease_missing');
+    expect(out).toContain('subject: wt-foo');
+    // The authoritative-owner sentence survives; a neutral doctor pointer is added.
+    expect(out).toContain('registry owner is still authoritative');
+    expect(out).toContain('caws doctor');
+  });
+
+  it('suppressTakeoverHints leaves a takeover-free repair untouched', () => {
+    const repair = 'Remove the stale entry from .caws/worktrees.json.';
+    const out = renderFinding(
+      {
+        rule: 'doctor.worktree.ghost_registry_entry',
+        authority: 'kernel/diagnostics',
+        severity: 'error',
+        message: 'ghost entry',
+        narrowRepair: repair,
+      },
+      { suppressTakeoverHints: true }
+    );
+    expect(out).toContain(`repair:  ${repair}`);
+    expect(out).not.toContain('caws doctor');
+  });
 });
 
 describe('renderDecision — three no_authority shapes', () => {
