@@ -7,21 +7,88 @@ created_at: '2026-06-01T19:10:11.335Z'
 updated_at: '2026-06-01T19:10:12.191Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    # PROVISIONAL — recon-first. The latch trigger likely lives in classify_command.py
+    # (capability/danger classification) and/or block-dangerous.sh (latch write). Confirm
+    # the exact predicate location at implementation time; amend-scope as needed.
     - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
     - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    THESIS (not latch-bad). The danger-latch mechanism is correct; its TRIGGER
+    PREDICATE is too coarse. The latch should engage on confirmed protected-state
+    DESTINATION mutation or bypass-shaped intent, NOT on a command merely because
+    a protected path appears as a READ/COPY SOURCE or as text in the command.
+  - >-
+    EXHIBIT A (TRUE POSITIVE — must keep). A pipe into a shell interpreter
+    (printf ... | bash -c ..., curl | sh, etc.) is catastrophic-deny and may latch.
+    This slice does NOT weaken that.
+  - >-
+    EXHIBIT B (CANDIDATE FALSE POSITIVE — the target). Copying a protected guard
+    (e.g. worktree-write-guard.sh) as the SOURCE into an isolated temp fixture
+    latched because the source path is protected, regardless of the destination
+    being a throwaway dir (not protected state). Reading or copying a protected
+    guard OUT to a non-protected destination is diagnostic setup, not a bypass —
+    it should warn/ask at most, not latch.
+  - >-
+    DESTINATION-AWARE RULE. Latch (or hard-block) when the command WRITES into
+    protected state — destination under .claude/hooks/**, the managed hook region,
+    guard/latch state files, or otherwise mutates a protected guard in place. Do
+    NOT latch when the protected path is only a read source, a copy source to a
+    non-protected destination, or substring text in an unrelated command.
+  - >-
+    AUDIT LEGIBILITY. When the latch engages it must cite the EXACT protected-state
+    mutation predicate it matched (which destination/op), so a reader can tell a
+    real bypass from diagnostic setup. Reset remains human-only (unchanged).
+  - >-
+    NO weakening of existing true-positive coverage. Force-push, reset --hard,
+    rebase, cherry-pick, clean -f, commit --amend, bare checkout <path>, rm -rf
+    outside safe prefixes, pipe-to-shell, and the git init bootstrap family keep
+    their current block/latch behavior. The change is strictly additive
+    discrimination on the protected-guard source-vs-destination axis.
+  - >-
+    SAFE DEFAULT. Where destination-intent cannot be determined, the predicate
+    errs toward the SAFER side appropriate to the op family (ask over silent-allow;
+    do not silently downgrade a genuine in-place guard mutation to a warning).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the current latch trigger predicates in classify_command.py / block-dangerous.sh
+    when: each command family that currently latches versus warns/denies is enumerated (recon)
+    then: >-
+      a table records, per family, whether it latches/blocks/asks/warns today and
+      why — establishing the baseline before any change. This recon answers: did
+      copyFileSync(protected-guard -> tempdir) classify as a mutation because the
+      SOURCE was protected regardless of destination? does tempdir git init remain
+      advisory/ask not latch? are read-only bash -c wrappers misclassified as
+      mutating by shape alone?
+  - id: A2
+    given: Exhibit B (protected guard copied as source into an isolated, non-protected fixture)
+    when: the destination-aware predicate is applied
+    then: >-
+      the command does NOT latch (warn or ask at most), because no protected-state
+      destination is written.
+  - id: A3
+    given: a command that WRITES into protected state (destination under .claude/hooks/** or an in-place guard edit)
+    when: classified
+    then: >-
+      it latches/hard-blocks as today, and the latch message cites the exact
+      protected-destination predicate matched.
+  - id: A4
+    given: Exhibit A (pipe-to-shell) and the existing catastrophic-deny corpus
+    when: re-run against the changed predicate
+    then: >-
+      behavior is byte-identical to today — no true-positive coverage is lost,
+      proven by the classifier calibration corpus passing unchanged.
+  - id: A5
+    given: the change
+    when: gated on canonical
+    then: >-
+      the full hook-pack run stays clean (570/570 baseline) and the
+      classify-calibration suites prove no verdict drift.
 non_functional: {}
 contracts: []
