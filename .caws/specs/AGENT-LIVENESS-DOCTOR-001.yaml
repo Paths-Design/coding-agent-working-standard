@@ -3,6 +3,7 @@ title: 'Make prune --dead recency-primary (D4) and teach doctor the lease/worktr
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-liveness-doctor
 created_at: '2026-05-31T00:00:00.000Z'
 updated_at: '2026-06-01T06:52:12.679Z'
 blast_radius:
