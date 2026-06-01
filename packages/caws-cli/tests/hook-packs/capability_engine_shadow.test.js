@@ -1,21 +1,32 @@
 /**
- * @fileoverview HOOK-CAPABILITY-ENGINE-001 — shadow-fact liveness harness.
+ * @fileoverview HOOK-CAPABILITY-ENGINE — shadow-fact LIVENESS harness.
  *
  * Proves the capability fact layer is observably LIVE and operationally
- * sufficient for Slice 2, WITHOUT changing any classifier decision (Slice 1
- * keeps the capability pass a stub). Two suites:
+ * sufficient: every command emits a non-trivial parsed CommandFact. This is
+ * the structural-liveness witness, deliberately SEPARATE from decision
+ * authority.
  *
- *   1. 80-FN corpus liveness: every known-false-negative command emits a
- *      non-trivial parsed CommandFact (executable resolved + subcommand_path
- *      or flags populated) on STDERR under CAWS_CLASSIFY_FACTS_DUMP=1, and the
- *      stdout decision is UNCHANGED (still the silent allow it is at baseline).
- *      This is the FM-6 guard: it proves build_command_fact RAN, distinct from
- *      the stub pass trivially returning None.
+ *   1. 80-FN corpus liveness: every row emits a non-trivial parsed CommandFact
+ *      (executable resolved + subcommand_path or flags populated) on STDERR
+ *      under CAWS_CLASSIFY_FACTS_DUMP=1. This is the FM-6 guard: it proves
+ *      build_command_fact RAN and produced structure. It asserts LIVENESS ONLY
+ *      — decision authority for these 80 rows lives in
+ *      capability_engine_closure.test.js (which owns the
+ *      expected_final_decision assertions). Splitting the two keeps each test
+ *      single-responsibility: a fact-builder regression fails HERE, a
+ *      lattice/decision regression fails in the closure test.
  *
- *   2. Named fact-probes: assert the exact structural fields Slice 2 will map
- *      (basename resolution, wrapper peel, scope, amplifier flags, payload
- *      opacity, substitution recursion, parse_confidence). Semantic assertions
- *      read the structured STDERR facts, never the human `reason` prose.
+ *      (Slice-1 history: this suite once asserted decision === current_decision
+ *      (allow), the zero-change witness for the stub pass. Slice 2 activated
+ *      the pass, so decisions are now ask/deny by design; the decision-unchanged
+ *      assertion was removed and decision authority moved to the closure test.)
+ *
+ *   2. Named fact-probes: assert the exact structural fields the capability pass
+ *      maps (basename resolution, wrapper peel, scope, amplifier flags, payload
+ *      opacity, substitution recursion, parse_confidence) AND the active-pass
+ *      decision they drive. Semantic assertions read the structured STDERR
+ *      facts, never the human `reason` prose — the FM-1 guard that the decision
+ *      is facet-attributed.
  *
  * Tests the shipped TEMPLATE, not the installed .claude/hooks copy.
  *
@@ -86,20 +97,20 @@ function classifyWithFacts(cmd) {
 const baseName = (cmd) => cmd.trim().split(/\s+/)[0].split('/').pop();
 
 // ===========================================================================
-// Suite 1 — 80-FN corpus liveness (FM-6 guard: builder ran, decision unchanged)
+// Suite 1 — 80-FN corpus LIVENESS (FM-6 guard: build_command_fact ran)
+//   Liveness ONLY. Decision authority for these rows is owned by
+//   capability_engine_closure.test.js.
 // ===========================================================================
-describe('HOOK-CAPABILITY-ENGINE-001: 80-FN shadow liveness (decision unchanged + fact live)', () => {
+describe('HOOK-CAPABILITY-ENGINE: 80-FN shadow liveness (fact builder ran + produced structure)', () => {
   fnCorpus.entries.forEach((entry) => {
     it(`row ${entry.source_row} [${entry.detector_capability}]: ${entry.command.slice(0, 56)}`, () => {
-      const { decision, facts } = classifyWithFacts(entry.command);
+      const { facts } = classifyWithFacts(entry.command);
 
-      // (a) ZERO decision change: this FN is still a silent allow in Slice 1.
-      //     (Slice 2 will close it to expected_final_decision.)
-      expect(decision).toBe(entry.current_decision); // all rows: "allow"
-
-      // (b) Semantic liveness: at least one emitted fact for the primary tool
-      //     is non-trivial — executable resolved AND (subcommand_path|flags)
-      //     populated. Proves build_command_fact ran and produced structure.
+      // Semantic liveness: at least one emitted fact for the primary tool
+      // is non-trivial — executable resolved AND (subcommand_path|flags)
+      // populated. Proves build_command_fact ran and produced structure,
+      // independent of whatever decision the lattice then made. (The decision
+      // itself is asserted in the closure test.)
       const wanted = baseName(entry.command);
       const live = facts.some(
         (f) =>

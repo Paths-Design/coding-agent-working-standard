@@ -1,10 +1,10 @@
 {
-  "$comment": "CAWS-owned committed 80-FN regression corpus. Converted from surgery-ward terminal-use.commandfact-fn-closure.csv via Python csv.DictReader (RFC-4180; commands contain commas/quoted JSON). target_slice:2/active:false => inactive until Slice 2. Slice 2 asserts expected_facets + expected_final_decision, NEVER reason prose. detector_capability is a trace label only and does not drive the lattice.",
+  "$comment": "CAWS-owned committed 80-FN regression corpus. Converted from surgery-ward terminal-use.commandfact-fn-closure.csv via Python csv.DictReader (RFC-4180; commands contain commas/quoted JSON). DE-GATED at Slice-2 closure: active:true and the rows run in the DEFAULT jest suite via capability_engine_closure.test.js (which iterates all entries unconditionally \u2014 no CAWS_CLASSIFIER_SLICE env gate). expected_final_decision + expected_facets are reconciled to the capability LATTICE (authority); detector_capability is a trace label only and does not drive the lattice. Slice 2 asserts decision + facets, NEVER reason prose.",
   "generated_from": "surgery-ward/surgery_ward_training_bundle/terminal-use.commandfact-fn-closure.csv",
   "count": 80,
   "slice_activation": {
     "1": "shadow_liveness_only",
-    "2": "adapter_activation_and_closure"
+    "2": "adapter_activation_and_closure (ACTIVE \u2014 rows run in default jest via capability_engine_closure.test.js)"
   },
   "entries": [
     {
@@ -16,13 +16,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune",
@@ -33,13 +34,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker volume rm my_volume1 my_volume2",
@@ -50,13 +52,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune --volumes",
@@ -67,13 +70,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pods --all -n production",
@@ -84,21 +88,32 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
-        "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "scope": "prod",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-production-example-1",
       "source_row": 7,
       "current_decision": "allow",
-      "expected_final_decision": "deny",
+      "expected_final_decision": "ask",
+      "adjudication": "lattice_wins",
+      "adjudication_note": "Corpus proposed deny via an accidental prod-substring regex on the resource NAME. The lattice derives prod scope from namespace/context only (exact-token PROD_SCOPE match), so a pod merely NAMED '...production...' in the default namespace is an ordinary single-pod delete -> ask. Doc backs the lattice ('accidental correctness, fixed in Slice 2'). See adjudication.md.",
+      "corpus_proposed_decision": "deny",
       "detector_capability": "K8S_DELETE_BROAD",
       "expected_facets": {
+        "kind": "DESTROY",
+        "domain": "remote_orchestrator",
+        "scope": "narrow",
+        "reversibility": "partial",
+        "blast_radius": "single"
+      },
+      "corpus_proposed_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
         "reversibility": "irreversible",
@@ -107,7 +122,7 @@
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod app-service-1 -n production",
@@ -118,13 +133,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
-        "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "scope": "prod",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply tfplan",
@@ -135,13 +151,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply -auto-approve tfplan",
@@ -152,13 +169,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply",
@@ -169,13 +187,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"test\"}'",
@@ -186,13 +205,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"NewUser\"}'",
@@ -203,13 +223,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"newUser\"}'",
@@ -220,13 +241,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{\"name\":\"newUser\", \"email\":\"newuser@example.com\"}'",
@@ -237,13 +259,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/123",
@@ -254,13 +277,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/456",
@@ -271,13 +295,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 12345",
@@ -288,13 +313,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <process_id>",
@@ -305,13 +331,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users",
@@ -322,13 +349,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/*",
@@ -339,13 +367,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/users/1",
@@ -356,13 +385,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 $(lsof -t -i:3000)",
@@ -373,13 +403,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9",
@@ -390,13 +421,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 $(netstat -tunap | grep '3000' | awk '{print $5}')",
@@ -405,15 +437,18 @@
       "expected_final_decision": "ask",
       "detector_capability": "PROC_FORCE_KILL",
       "expected_facets": {
-        "kind": "DESTROY",
-        "domain": "process",
-        "reversibility": "irreversible",
+        "kind": "NONE",
+        "domain": "unknown",
+        "scope": "narrow",
+        "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true,
+      "decision_path": "substitution_or_pipeline_recursion",
+      "decision_path_note": "Top-level segment fact is kind=NONE because the dangerous operand is inside a $()/pipeline; the decision is facet-attributed via the recursed inner segment (reason carries the capability trace)."
     },
     {
       "command": "kill -9 3000",
@@ -424,13 +459,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-name -n namespace --force --grace-period=0",
@@ -441,13 +477,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod pod-name -n namespace --force",
@@ -458,13 +495,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f process-name",
@@ -475,13 +513,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill process-name",
@@ -492,13 +531,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group dir/",
@@ -509,13 +549,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group /path/to/directory",
@@ -526,13 +567,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "chown -R user:group /path/to/directory/",
@@ -543,13 +585,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "multi"
+        "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d '{\"key\":\"value\"}' url",
@@ -560,13 +603,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d '{\"key\":\"value\"}' https://example.com/api/data",
@@ -577,13 +621,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -H 'Content-Type: application/json' -d @data.json http://example.com",
@@ -594,13 +639,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 PID",
@@ -611,13 +657,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID>",
@@ -628,13 +675,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'process name'",
@@ -645,30 +693,34 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "ps aux | grep process_name | awk '{print $2}' | xargs kill -9",
       "source_row": 40,
       "current_decision": "allow",
       "expected_final_decision": "ask",
+      "decision_path": "substitution_or_pipeline_recursion",
+      "decision_path_note": "Pipeline: the primary (first) token is `ps` (kind=NONE); the destructive operand is the last segment `xargs kill -9`. The decision is facet-attributed via that recursed segment (xargs literal payload -> kill -> PROC_KILL DESTROY -> ask). expected_facets below describe the attributing kill segment, not the ps head.",
       "detector_capability": "XARGS->PROC_FORCE_KILL",
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
-        "blast_radius": "multi"
+        "scope": "narrow",
+        "reversibility": "partial",
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "pipeline-inherit",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "docker system prune -a",
@@ -679,13 +731,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "container",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod mypod",
@@ -696,13 +749,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete namespace prod",
@@ -713,13 +767,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "prod",
         "reversibility": "irreversible",
         "blast_radius": "cluster"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete namespace my-namespace",
@@ -730,13 +785,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "cluster"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "terraform apply -destroy",
@@ -747,13 +803,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "iac",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "multi"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://bucket/key",
@@ -764,13 +821,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://my-bucket/my-object",
@@ -781,13 +839,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://bucket/key-to-delete",
@@ -798,13 +857,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "aws s3 rm s3://my-bucket/non-existent-object",
@@ -815,13 +875,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete",
@@ -832,13 +893,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete --resource-group <group_name> --name <vm_name>",
@@ -849,13 +911,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az vm delete --resource-group my-resource-group --name my-vm",
@@ -866,13 +929,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "az group delete --name my-resource-group --subscription my-subscription",
@@ -883,13 +947,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "cloud",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -d '{}' https://api",
@@ -900,13 +965,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X POST -d '{}' https://api.example.com/resource",
@@ -917,13 +983,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api/resource",
@@ -934,13 +1001,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/resource/123",
@@ -951,13 +1019,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE https://api.example.com/resource",
@@ -968,13 +1037,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "curl -X DELETE \"https://api.example.com/v1/resource\"",
@@ -985,13 +1055,14 @@
       "expected_facets": {
         "kind": "MUTATE",
         "domain": "http",
+        "scope": "narrow",
         "reversibility": "unknown",
         "blast_radius": "single"
       },
       "csv_reversibility": "unknown",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u filename",
@@ -1002,13 +1073,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u sensitive_file",
@@ -1019,13 +1091,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/sensitive_file",
@@ -1036,13 +1109,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/sensitive_file & disown $!",
@@ -1053,13 +1127,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "shred -u /path/to/nonexistent_file",
@@ -1070,13 +1145,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
+        "scope": "narrow",
         "reversibility": "irreversible",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 file",
@@ -1087,13 +1163,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 log_file",
@@ -1104,13 +1181,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 <(pwd)/log_file",
@@ -1121,13 +1199,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 $(pwd)/log_file",
@@ -1138,13 +1217,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "truncate -s 0 /path/to/log/original_file.log",
@@ -1155,13 +1235,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "filesystem",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID_from_previous_output>",
@@ -1172,13 +1253,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'python script'",
@@ -1189,13 +1271,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "pkill -f 'python script.*'",
@@ -1206,13 +1289,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "killall nginx",
@@ -1223,13 +1307,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "killall -HUP nginx",
@@ -1240,13 +1325,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 <PID of nginx master process>",
@@ -1257,13 +1343,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kill -9 915",
@@ -1274,13 +1361,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "process",
-        "reversibility": "irreversible",
+        "scope": "narrow",
+        "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod nginx-abc123",
@@ -1291,13 +1379,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
         "blast_radius": "single"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "kubectl delete pod --force",
@@ -1308,13 +1397,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "irreversible",
-        "blast_radius": "cluster"
+        "blast_radius": "single"
       },
       "csv_reversibility": "no",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall myapp",
@@ -1325,13 +1415,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall my-app",
@@ -1342,13 +1433,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     },
     {
       "command": "helm uninstall myapp --force",
@@ -1359,13 +1451,14 @@
       "expected_facets": {
         "kind": "DESTROY",
         "domain": "remote_orchestrator",
+        "scope": "narrow",
         "reversibility": "partial",
-        "blast_radius": "single"
+        "blast_radius": "multi"
       },
       "csv_reversibility": "partial",
       "layer": "family-detector",
       "target_slice": 2,
-      "active": false
+      "active": true
     }
   ]
 }
