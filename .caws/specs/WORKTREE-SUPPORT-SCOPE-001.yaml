@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-06-01T03:44:22.699Z'
-updated_at: '2026-06-01T03:44:22.699Z'
+updated_at: '2026-06-01T03:44:39.295Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,24 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-kernel/src/schemas/spec.v1.json
+    - packages/caws-kernel/src/spec/types.ts
+    - packages/caws-kernel/src/scope/evaluate.ts
+    - packages/caws-kernel/src/scope/rules.ts
+    - packages/caws-kernel/src/spec/validate-semantics.ts
+    - packages/caws-kernel/src/schemas/events/spec_scope_amended.v1.json
+    - packages/caws-kernel/tests/unit/scope.test.ts
+    - packages/caws-kernel/tests/unit/spec.test.ts
+    - packages/caws-kernel/tests/fixtures/spec-fixtures.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/templates/hook-packs/claude-code/scope-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/tests/store/specs-writer-amend-scope.test.js
+    - packages/caws-cli/tests/init/hook-packs/scope-guard.fixture.test.js
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
