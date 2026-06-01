@@ -1,0 +1,25 @@
+id: HOOK-ASK-ENFORCEMENT-001
+title: 'Capability-aware ask enforcement: blocking-confirmation for capability-derived ask, advisory for legacy/default ask'
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-01T00:59:47.676Z'
+updated_at: '2026-06-01T00:59:47.676Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
