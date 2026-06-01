@@ -399,6 +399,23 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: false,
       managed: true,
     },
+    {
+      // The shared worktree-ownership oracle (WORKTREE-ISOLATION-HARDENING-001).
+      // A standalone node helper (NOT an inline node -e heredoc — that form
+      // corrupted hooks twice via JS-comment backtick/double-quote inside a
+      // bash double-quoted string) shelled out to by BOTH worktree-write-guard
+      // (Write/Edit) and bash-write-guard (Bash mutation target), so a write and
+      // a Bash mutation of the same .caws/worktrees/<name>/<rest> payload path
+      // get the SAME owner-vs-session answer. js-yaml is required lazily so the
+      // foreign-worktree-payload block works even where js-yaml is unresolvable
+      // in an installed .claude/hooks/lib/. Plain JS (no TS build artifact
+      // dependency); the CLI-side admitsOwner/resolveSessionCandidates stays in
+      // agreement via golden fixtures, not code sharing.
+      destPath: '.claude/hooks/lib/worktree-claim-oracle.js',
+      sourcePath: 'lib/worktree-claim-oracle.js',
+      executable: false,
+      managed: true,
+    },
 
     // -- Dispatch entrypoints invoked from .claude/settings.json --
     // The caws_dispatch/ directory name is the namespace: a settings.json
