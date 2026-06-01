@@ -2,9 +2,11 @@ id: SUBAGENT-LEASE-IDENTITY-RECONCILE-001
 title: 'Reconcile the phantom-lease provenance contradiction before choosing a subagent-lease-identity fix surface'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'DOCUMENTED NO-OP. A1 recon (ac seq=1187) proved HIGH-confidence that ea12659d was a genuine top-level Claude Code session, not a subagent lease — all four probe leases map 1:1 to four top-level transcripts; the subagent session_start lease claim (CLASH-LOG line 266) was a probe-log attribution error; line 4 (top-level runner) is correct. A4 matrix (seq=1191): register-layer reconciliation / SubagentStart tagging / prune-doctor hygiene all NOT-APPLICABLE; no-op PROVEN. A5 (seq=1192): closed completed — real recon done, false phantom-lease premise eliminated, no implementation shipped, no production behavior changed, no edits to agent-register.sh / resolve-session.ts / lease store / ownership / takeover / prune / doctor / dispatch / settings / SubagentStart. Optional SubagentStart subagent-observability, if ever pursued, is a SEPARATE spec and not a fix for this one.'
 created_at: '2026-06-01T20:27:45.285Z'
-updated_at: '2026-06-01T20:27:45.285Z'
+updated_at: '2026-06-01T22:11:16.787Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
