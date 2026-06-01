@@ -21,8 +21,43 @@ record what happens.
 
 Confirm before anything else: run `pwd` and `git rev-parse --show-toplevel`. If you are
 **not** inside the probe repo (you're in a parent dir, or another repo), **stop and
-report** — running from the wrong root invalidates the probe. The hook chain is fixed at
-session launch; you cannot `cd` your way into it.
+report** — running from the wrong root invalidates the probe.
+
+### Environment capture — MANDATORY, record as you go
+
+The CAWS hook chain is wired in `.claude/settings.json` and dispatched via
+`"$CLAUDE_PROJECT_DIR"/.claude/hooks/...` — so **`$CLAUDE_PROJECT_DIR` is what determines
+whether your tool calls are governed at all**, and it is set at session launch. A subtlety
+this probe specifically needs you to pin down: **when you create and `cd` into a git
+worktree (e.g. `.caws/worktrees/<name>/`), does the hook chain follow you, or not?** That
+hinges on whether `$CLAUDE_PROJECT_DIR` still points at the main repo root or moved — and a
+linked worktree does **not** contain an untracked `.claude/` from the main checkout, so if
+the project dir moved to the worktree, there may be no hooks there.
+
+Do not assume. **Record the actual values** so the result is data, not inference:
+
+1. **At session start**, before any other work, capture and write to the friction log:
+   ```bash
+   echo "CLAUDE_PROJECT_DIR=$CLAUDE_PROJECT_DIR"
+   pwd
+   git rev-parse --show-toplevel
+   ls -d "$CLAUDE_PROJECT_DIR/.claude" 2>&1   # does the project-dir hook root exist?
+   ```
+2. **Every time you change directories or enter/leave a worktree**, re-capture the same
+   four lines and note them in the log with a one-line "now in: <where>, why". The
+   `$CLAUDE_PROJECT_DIR` value will not change mid-session (it is fixed at launch), but
+   recording `pwd` + `git rev-parse --show-toplevel` + whether `$CLAUDE_PROJECT_DIR/.claude`
+   exists at each location is the evidence that tells us whether your worktree work was
+   governed. This is the single most useful thing this probe can capture.
+3. **When you do your first real Write/Edit inside a worktree**, explicitly note whether a
+   hook produced any signal (advisory, block, audit line) — and cross-reference the env
+   capture for that location. "I wrote a file in the worktree and nothing fired" is only
+   meaningful alongside "and here is what `$CLAUDE_PROJECT_DIR` / `pwd` / the hook root
+   were at that moment."
+
+If your tool calls sail through when you'd expect governance, **do not conclude "CAWS is
+not enforcing" without the env capture** — the more likely explanation is *where* the hook
+chain is rooted relative to where you are working. Record both; let the operator triage.
 
 ## Method — non-negotiable
 
@@ -118,6 +153,7 @@ For **every** friction event, record:
 | Field | What to capture |
 |---|---|
 | What I did | The exact command / tool call and the legitimate goal behind it |
+| Where (env) | `pwd` + whether you were in the main checkout or a worktree at the time, and (if it bears on governance) the `$CLAUDE_PROJECT_DIR` / `git rev-parse --show-toplevel` you captured for that location. Mandatory for any event about a hook firing or NOT firing. |
 | What resisted | Which hook or CLI surface (name it), and verbatim message |
 | Legitimate? | Were you doing a genuinely reasonable first-timer thing? (yes/no + why) |
 | Escape | What you did to get past it, or "could not" |
@@ -125,7 +161,10 @@ For **every** friction event, record:
 
 End with a short synthesis: which resistances were *correct* governance (working as
 intended), which were friction a real first-timer would stumble on, and — if any — where
-you got genuinely stuck.
+you got genuinely stuck. **Include an explicit "governance reachability" line:** based on
+your env captures, were your tool calls actually passing through the hook chain at each
+location you worked (main checkout vs. worktree)? If you can't tell, say so and cite the
+env values — do not guess.
 
 Do not pad the log. If the run was mostly clean, say so plainly and report the few real
 events. An honest short log beats a padded long one.
