@@ -133,6 +133,8 @@ describe('StoreSnapshot.filesystem', () => {
         worktreesJsonExists: false,
         agentsJsonExists: false,
         eventsJsonlExists: false,
+        // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: no .claude hook pack installed.
+        hookPackInstalled: false,
         // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
         // per-name canonical-dir map.
         worktreeDirByName: {},
@@ -167,6 +169,9 @@ describe('StoreSnapshot.filesystem', () => {
         worktreesJsonExists: true,
         agentsJsonExists: true,
         eventsJsonlExists: false,
+        // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: bootstrap writes .caws/ but no
+        // .claude hook pack, so the pack-installed observation is false.
+        hookPackInstalled: false,
         // WORKTREE-DOCTOR-HALF-STATE-001: empty registry → empty
         // per-name canonical-dir map.
         worktreeDirByName: {},
