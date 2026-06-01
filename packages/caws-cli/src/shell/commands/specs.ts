@@ -796,6 +796,27 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
   } else {
     renderApplyHuman(result.value, ctx.repoRoot, opts.apply === true, out);
   }
+
+  // CAWS-CLI-EXIT-CODES-001 (D7): an apply run that left specs un-migrated
+  // because they FAILED must exit non-zero so shell `&&` chains and CI observe
+  // the incomplete migration. The store returns ok() for a --partial --apply
+  // even when some specs hit post-write validation failure or were refused; if
+  // we returned 0 unconditionally the failure would be invisible to callers.
+  //   - apply + post_write_validation_failed > 0: a spec the operator asked to
+  //     migrate could not be written (transformer/serialization/IO). Always a
+  //     failure exit.
+  //   - apply + partial + refused > 0: --partial deliberately skips refused
+  //     specs, but the migration is still incomplete — exit non-zero. (Non-
+  //     partial apply with refused > 0 never reaches here: the store returns
+  //     err earlier via SPECS_MIGRATE_REFUSALS_PRESENT.)
+  //   - dry-run (apply=false): nothing was attempted, the report is
+  //     informational, and post-write validation cannot occur — stays exit 0.
+  if (opts.apply === true) {
+    const dist = result.value.report.distribution;
+    if (dist.post_write_validation_failed > 0) return 1;
+    if (result.value.partial && dist.refused > 0) return 1;
+  }
+
   return 0;
 }
 
