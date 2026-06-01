@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-guard-legibility
 created_at: '2026-06-01T03:10:39.497Z'
-updated_at: '2026-06-01T03:10:47.736Z'
+updated_at: '2026-06-01T03:26:34.204Z'
 blast_radius:
   modules:
     - 'caws-cli hook-pack: lib/guard-message.sh — new shared message-prefix helper (guard identity + remediation)'
@@ -22,6 +22,7 @@ scope:
     - packages/caws-cli/templates/hook-packs/claude-code/block-dangerous.sh
     - packages/caws-cli/tests/hook-packs/worktree_guard_ask_redirect.test.js
     - packages/caws-cli/tests/hook-packs/guard_legibility.test.js
+    - packages/caws-cli/tests/hook-packs/danger_latch_warn_then_latch.test.js
   out: []
 invariants:
   - 'LEGIBILITY, NOT ENFORCEMENT CHANGE. This slice changes only the human/agent-facing REASON strings
