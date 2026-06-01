@@ -2,9 +2,11 @@ id: SUBAGENT-PHANTOM-LEASE-001
 title: 'Subagent SessionStart must not mint a phantom lease distinct from the parent session'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'A1 completed; A3 branch taken; candidate fix (agent-register prefers CLAUDE_CODE_SESSION_ID) falsified — no guaranteed in-hook env discriminator (session_id is stdin-only per docs; SessionStart does not fire on subagent spawn; SubagentStart unwired). No production behavior change shipped. A1 evidence ac event seq=1184 (hash f667508f). Superseded by SUBAGENT-LEASE-IDENTITY-RECONCILE-001 which must mechanically prove the phantom-lease writer before choosing an implementation surface (header-vs-A1 contradiction: CLASH-LOG line 4 names ea12659d the top-level probe runner; line 266 calls it a subagent session_start lease).'
 created_at: '2026-06-01T17:04:21.456Z'
-updated_at: '2026-06-01T17:04:21.456Z'
+updated_at: '2026-06-01T20:27:37.463Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
