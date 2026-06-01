@@ -3,6 +3,7 @@ title: 'caws claim --takeover must refuse a cd-phantom claim when the session ro
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-claim-phantom
 created_at: '2026-06-01T16:49:50.263Z'
 updated_at: '2026-06-01T16:49:51.118Z'
 blast_radius:
