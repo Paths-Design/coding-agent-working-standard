@@ -474,3 +474,61 @@ acceptance:
 non_functional: {}
 contracts: []
 `;
+
+// WORKTREE-SUPPORT-SCOPE-001: scope.support is a valid optional array on the
+// scope object. A spec declaring it must pass shape validation (the schema's
+// scope object keeps additionalProperties:false but now lists support).
+export const SPEC_WITH_SCOPE_SUPPORT = `
+id: TEST-SUP-1
+title: Test spec with scope.support
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+blast_radius:
+  modules:
+    - src/test
+scope:
+  in:
+    - src/test/**
+  support:
+    - FRICTION-LOG.md
+    - docs/**
+invariants:
+  - test invariant
+acceptance:
+  - id: A1
+    given: a support path
+    when: validation runs
+    then: it returns ok
+non_functional: {}
+contracts: []
+`;
+
+// scope.out shadows a scope.support entry — the overbroad-out semantic check
+// must fire against support exactly as it does against scope.in.
+export const SPEC_WITH_OUT_SHADOWING_SUPPORT = `
+id: TEST-SUP-2
+title: Test spec out shadows support
+risk_tier: 3
+mode: feature
+lifecycle_state: draft
+blast_radius:
+  modules:
+    - src/test
+scope:
+  in:
+    - src/test/**
+  support:
+    - docs/secret/notes.md
+  out:
+    - docs/secret
+invariants:
+  - test invariant
+acceptance:
+  - id: A1
+    given: a shadowed support path
+    when: semantic validation runs
+    then: it reports overbroad-out
+non_functional: {}
+contracts: []
+`;

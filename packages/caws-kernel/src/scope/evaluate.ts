@@ -193,20 +193,39 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       };
     }
 
+    // scope.support — admitted for edits like scope.in, but never a worktree
+    // claim (WORKTREE-SUPPORT-SCOPE-001). Checked after scope.in (so a path in
+    // both reports as scope.in) and after the upstream scope.out gate (so out
+    // still shadows support). Lets a repo-root deliverable be edited without
+    // making the bound worktree claim it.
+    const scopeSupportRoot = matchGlob(normPath, spec.scope.support ?? []);
+    if (scopeSupportRoot !== null) {
+      return {
+        kind: 'admit',
+        rule: SCOPE_RULES.ADMIT_SCOPE_SUPPORT,
+        authority: 'kernel/scope',
+        path,
+        normalizedPath: normPath,
+        message: `Path is admitted by spec ${spec.id} scope.support entry "${scopeSupportRoot}" (editable, not worktree-claimed).`,
+        bindingState: 'bound',
+        data: { matchedPattern: scopeSupportRoot, specId: spec.id },
+      };
+    }
+
     return {
       kind: 'reject',
       rule: SCOPE_RULES.REJECT_ROOT_NOT_ALLOWED,
       authority: 'kernel/scope',
       path,
       normalizedPath: normPath,
-      message: `Root-level file "${normPath}" is not in policy.root_passthrough and not listed in spec ${spec.id} scope.in.`,
-      narrowRepair: `Add "${normPath}" to policy.root_passthrough, or list it explicitly in spec scope.in.`,
+      message: `Root-level file "${normPath}" is not in policy.root_passthrough and not listed in spec ${spec.id} scope.in or scope.support.`,
+      narrowRepair: `Add "${normPath}" to policy.root_passthrough, list it in spec scope.in, or add it to scope.support (editable, not worktree-claimed).`,
       bindingState: 'bound',
       data: { specId: spec.id },
     };
   }
 
-  // Non-root path: scope.in is the only admit gate.
+  // Non-root path: scope.in then scope.support are the admit gates.
   const scopeInMatch = matchGlob(normPath, spec.scope.in);
   if (scopeInMatch !== null) {
     return {
@@ -221,14 +240,30 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
     };
   }
 
+  // scope.support — editable like scope.in, never a worktree claim
+  // (WORKTREE-SUPPORT-SCOPE-001). After scope.in, after the scope.out gate.
+  const scopeSupportMatch = matchGlob(normPath, spec.scope.support ?? []);
+  if (scopeSupportMatch !== null) {
+    return {
+      kind: 'admit',
+      rule: SCOPE_RULES.ADMIT_SCOPE_SUPPORT,
+      authority: 'kernel/scope',
+      path,
+      normalizedPath: normPath,
+      message: `Path is admitted by spec ${spec.id} scope.support entry "${scopeSupportMatch}" (editable, not worktree-claimed).`,
+      bindingState: 'bound',
+      data: { matchedPattern: scopeSupportMatch, specId: spec.id },
+    };
+  }
+
   return {
     kind: 'reject',
     rule: SCOPE_RULES.REJECT_SCOPE_IN_MISS,
     authority: 'kernel/scope',
     path,
     normalizedPath: normPath,
-    message: `Path "${normPath}" does not match any entry in spec ${spec.id} scope.in.`,
-    narrowRepair: 'Add a covering entry to scope.in or move the change to a covered path.',
+    message: `Path "${normPath}" does not match any entry in spec ${spec.id} scope.in or scope.support.`,
+    narrowRepair: 'Add a covering entry to scope.in (worktree-claimed) or scope.support (editable, not claimed), or move the change to a covered path.',
     bindingState: 'bound',
     data: { specId: spec.id },
   };

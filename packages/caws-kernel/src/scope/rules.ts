@@ -14,6 +14,10 @@ export const SCOPE_RULES = {
   ADMIT_NON_GOVERNED_ZONE: 'scope.admit.non_governed_zone',
   ADMIT_ROOT_PASSTHROUGH: 'scope.admit.root_passthrough',
   ADMIT_SCOPE_IN: 'scope.admit.scope_in',
+  // Admitted via scope.support: editable like scope.in, but NOT a worktree
+  // claim (WORKTREE-SUPPORT-SCOPE-001). Distinct rule so diagnostics can tell
+  // "admitted because owned (scope.in)" from "admitted as support".
+  ADMIT_SCOPE_SUPPORT: 'scope.admit.scope_support',
 
   // Reject
   REJECT_SCOPE_OUT: 'scope.reject.scope_out',

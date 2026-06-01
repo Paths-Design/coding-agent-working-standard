@@ -280,6 +280,79 @@ describe('evaluatePath – admit rules', () => {
   });
 });
 
+// ---------- scope.support (WORKTREE-SUPPORT-SCOPE-001) ----------
+
+describe('evaluatePath – scope.support', () => {
+  const policy = makePolicy({ root_passthrough: [] });
+
+  it('admits a non-root path in scope.support (not scope.in) via ADMIT_SCOPE_SUPPORT', () => {
+    const d = evaluatePath(
+      'docs/notes.md',
+      bound(makeSpec({ scope: { in: ['src/**'], support: ['docs/**'] } })),
+      policy,
+    );
+    expect(d.kind).toBe('admit');
+    expect(d.rule).toBe(SCOPE_RULES.ADMIT_SCOPE_SUPPORT);
+    expect(d.data?.['matchedPattern']).toBe('docs/**');
+  });
+
+  it('admits a ROOT-level deliverable listed only in scope.support', () => {
+    // The compose-trap case: a repo-root file the slice must write but should
+    // NOT make worktree-claimed. scope.support admits it; scope.in does not.
+    const d = evaluatePath(
+      'FRICTION-LOG.md',
+      bound(makeSpec({ scope: { in: ['src/**'], support: ['FRICTION-LOG.md'] } })),
+      policy,
+    );
+    expect(d.kind).toBe('admit');
+    expect(d.rule).toBe(SCOPE_RULES.ADMIT_SCOPE_SUPPORT);
+  });
+
+  it('prefers scope.in over scope.support when a path is in both (reports scope_in)', () => {
+    const d = evaluatePath(
+      'src/foo.ts',
+      bound(makeSpec({ scope: { in: ['src/**'], support: ['src/**'] } })),
+      policy,
+    );
+    expect(d.kind).toBe('admit');
+    expect(d.rule).toBe(SCOPE_RULES.ADMIT_SCOPE_IN);
+  });
+
+  it('scope.out still shadows a scope.support path (out is the upstream gate)', () => {
+    const d = evaluatePath(
+      'docs/secret/notes.md',
+      bound(
+        makeSpec({
+          scope: { in: ['src/**'], support: ['docs/**'], out: ['docs/secret'] },
+        }),
+      ),
+      policy,
+    );
+    expect(d.kind).toBe('reject');
+    expect(d.rule).toBe(SCOPE_RULES.REJECT_SCOPE_OUT);
+  });
+
+  it('a path in neither scope.in nor scope.support is rejected (scope_in_miss)', () => {
+    const d = evaluatePath(
+      'lib/other.ts',
+      bound(makeSpec({ scope: { in: ['src/**'], support: ['docs/**'] } })),
+      policy,
+    );
+    expect(d.kind).toBe('reject');
+    expect(d.rule).toBe(SCOPE_RULES.REJECT_SCOPE_IN_MISS);
+  });
+
+  it('absent scope.support is unchanged behavior (root miss still REJECT_ROOT_NOT_ALLOWED)', () => {
+    const d = evaluatePath(
+      'UNLISTED.md',
+      bound(makeSpec({ scope: { in: ['src/**'] } })),
+      policy,
+    );
+    expect(d.kind).toBe('reject');
+    expect(d.rule).toBe(SCOPE_RULES.REJECT_ROOT_NOT_ALLOWED);
+  });
+});
+
 // ---------- Reject rules ----------
 
 describe('evaluatePath – reject rules', () => {
@@ -435,6 +508,7 @@ describe('SCOPE_RULES namespace contract', () => {
       SCOPE_RULES.ADMIT_NON_GOVERNED_ZONE,
       SCOPE_RULES.ADMIT_ROOT_PASSTHROUGH,
       SCOPE_RULES.ADMIT_SCOPE_IN,
+      SCOPE_RULES.ADMIT_SCOPE_SUPPORT,
     ];
     for (const r of admitRules) expect(r.startsWith('scope.admit.')).toBe(true);
   });
