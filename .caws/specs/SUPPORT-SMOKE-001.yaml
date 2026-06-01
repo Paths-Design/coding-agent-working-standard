@@ -2,9 +2,11 @@ id: SUPPORT-SMOKE-001
 title: 'smoke test for scope.support add'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'smoke test artifact'
 created_at: '2026-06-01T04:05:13.115Z'
-updated_at: '2026-06-01T04:05:14.224Z'
+updated_at: '2026-06-01T04:05:24.423Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
