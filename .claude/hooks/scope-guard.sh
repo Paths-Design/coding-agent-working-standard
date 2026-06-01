@@ -386,12 +386,20 @@ if command -v node >/dev/null 2>&1; then
         }
       }
 
-      // Union all scope.in patterns — file must match at least one
+      // Union all scope.in AND scope.support patterns — file must match at
+      // least one. scope.support (WORKTREE-SUPPORT-SCOPE-001) is ADMITTED for
+      // edits exactly like scope.in here; the difference (support is NOT a
+      // worktree claim) lives in worktree-write-guard claim derivation, which
+      // reads scope.in only. This guard only decides edit-admissibility.
       var allInScope = [];
       for (var si = 0; si < specsToCheck.length; si++) {
         var inPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.in) || [];
         for (var pi = 0; pi < inPatterns.length; pi++) {
           allInScope.push(inPatterns[pi]);
+        }
+        var supportPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.support) || [];
+        for (var sp = 0; sp < supportPatterns.length; sp++) {
+          allInScope.push(supportPatterns[sp]);
         }
       }
       if (allInScope.length > 0) {

@@ -66,6 +66,16 @@ source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 # that a trailing `|| true` does NOT catch.
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
 
+# WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): the shared ownership oracle.
+# A standalone node helper (NOT an inline node -e heredoc — that form has
+# corrupted hooks twice via JS-comment backtick/double-quote in a bash
+# double-quoted string). worktree-write-guard.sh (here) AND bash-write-guard.sh
+# both shell out to it so a Write/Edit and a Bash mutation of the same path get
+# the same answer. Absent (older install) -> the worktree-payload arm below
+# degrades to the prior allowlist behavior (fail open on the helper, never a
+# silent enforcement claim).
+CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.js"
+
 TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
 
@@ -190,6 +200,63 @@ if [[ -n "$FILE_PATH" ]]; then
   esac
   case "$FILE_PATH_FOR_ALLOWLIST" in
     "${HOME:-}"/.claude/*) exit 0 ;;
+    # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): .caws/worktrees/<name>/<rest>
+    # is worktree PAYLOAD, not control-plane metadata. It must NOT ride the broad
+    # .caws/* allowlist below (that is the side door the clash probe walked: a
+    # foreign session wrote into another worktree's payload and the .caws/* arm
+    # exited 0). Route it through the ownership oracle FIRST: owner-self -> allow;
+    # foreign owner -> hard block; uncertain -> ask (never silent-allow). This arm
+    # MUST precede the ".caws/*) exit 0" arm.
+    "$PROJECT_DIR"/.caws/worktrees/*|.caws/worktrees/*)
+      if [[ -f "$CAWS_CLAIM_ORACLE" ]] && command -v node >/dev/null 2>&1; then
+        _ORACLE_OUT="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+          CAWS_ORACLE_CURRENT_BRANCH="" \
+          CAWS_ORACLE_REL_PATH="$FILE_PATH_FOR_ALLOWLIST" \
+          CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}" \
+          node "$CAWS_CLAIM_ORACLE" 2>/dev/null || echo "error_fail_closed:oracle-spawn")"
+        _ORACLE_OUTCOME="${_ORACLE_OUT%%:*}"
+        _ORACLE_DETAIL="${_ORACLE_OUT#*:}"
+        case "$_ORACLE_OUTCOME" in
+          pass)
+            exit 0 ;;
+          block_foreign_worktree)
+            _WG_ID="CAWS worktree-write-guard"
+            command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
+            _OWN_WT="$(printf '%s' "$_ORACLE_DETAIL" | cut -d: -f1)"
+            echo "[$_WG_ID] BLOCKED: this is a write into worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), which is owned by a DIFFERENT session." >&2
+            echo "  A worktree's files are owned by the session that created/claimed it; another session must not mutate them directly." >&2
+            echo "  This is a CAWS governance decision, not a Claude Code harness prompt." >&2
+            echo "  To work in worktree '$_OWN_WT', your SESSION must be rooted there (caws claim '$_OWN_WT' --takeover if you intend to take ownership), not writing into its path from a foreign session." >&2
+            echo "  Do NOT edit .claude/hooks/ or guard state to bypass this." >&2
+            exit 2 ;;
+          block_claimed)
+            # A worktree-payload path that also matches a canonical claim. Treat
+            # as the canonical claimed-block (session-independent) for legibility.
+            _WG_ID="CAWS worktree-write-guard"
+            command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
+            echo "[$_WG_ID] BLOCKED: '$FILE_PATH_FOR_ALLOWLIST' is claimed by an active worktree's scope.in ($_ORACLE_DETAIL)." >&2
+            echo "  This is a CAWS governance decision, not a Claude Code harness prompt." >&2
+            exit 2 ;;
+          ask_uncertain|error_fail_closed)
+            # Cannot prove same-session ownership of worktree payload. Fail
+            # CLOSED: ask (never silent-allow). Degrade to block on an
+            # ask-incapable harness, consistent with the base-branch tail below.
+            _WG_ID="CAWS worktree-write-guard"
+            command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
+            _WP_REASON="[$_WG_ID] This write targets worktree payload (.caws/worktrees/...) and ownership could not be confirmed ($_ORACLE_OUT). Approve only if you are the owning session; otherwise route the edit through the owning worktree's session."
+            if [[ "${CAWS_GUARD_NO_ASK:-0}" == "1" ]] || ! command -v emit_ask >/dev/null 2>&1; then
+              echo "$_WP_REASON" >&2
+              echo "  (ask-incapable harness — degraded to block; no silent allow)" >&2
+              exit 2
+            fi
+            emit_ask "$_WP_REASON"
+            exit 0 ;;
+        esac
+      fi
+      # Oracle absent (older install) or node missing: preserve the prior
+      # behavior (the path was previously allowlisted). Fail OPEN here — the
+      # enforcement claim is only made when the oracle is present.
+      exit 0 ;;
     "$PROJECT_DIR"/.caws/*|.caws/*) exit 0 ;;
     "$PROJECT_DIR"/.claude/*|.claude/*) exit 0 ;;
     # Root CLAUDE.md is the project-level agent-instruction surface; it lives
@@ -418,6 +485,14 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
         // scope.out must NOT make it 'claimed' — scope.out is exclusion
         // documentation, not a hostility surface (CLAUDE.md trap #4). This
         // is the same over-broad-authority class the slice removes.
+        //
+        // scope.support is INTENTIONALLY EXCLUDED from the claim surface
+        // (WORKTREE-SUPPORT-SCOPE-001): a support path is editable like scope.in
+        // but must NEVER establish a worktree claim — that is the entire point
+        // of the class (it breaks the compose-trap where a repo-root deliverable
+        // pulled into scope.in becomes worktree-claimed and hard-blocks the main
+        // checkout). Do NOT add scope.support here; doing so silently
+        // reintroduces the trap.
         var patterns = Array.isArray(scope.in) ? scope.in : [];
 
         if (patterns.length === 0) {
