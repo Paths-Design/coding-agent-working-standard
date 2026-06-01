@@ -199,7 +199,11 @@ describe('--apply --partial', () => {
   let repo;
   afterEach(() => repo && cleanup(repo));
 
-  it('rewrites migratable, skips refused, emits durable report (exit 0)', () => {
+  // CAWS-CLI-EXIT-CODES-001 (A2): a --partial --apply that SKIPS a refused
+  // spec is an INCOMPLETE migration and must exit NON-ZERO so CI / `&&` chains
+  // see it — even though the migratable subset was written. (Prior behavior
+  // returned exit 0, masking the partial failure: that was the D7 defect.)
+  it('rewrites migratable, skips refused, emits durable report — exits 1 (incomplete migration)', () => {
     repo = mkTempRepo('caws-shell-migrate-');
     writeSpec(repo, 'happy.yaml', V10_HAPPY);
     writeSpec(repo, 'refused.yaml', V10_REFUSED);
@@ -207,12 +211,14 @@ describe('--apply --partial', () => {
 
     const r = captureRun({ cwd: repo, from: 'v10', apply: true, partial: true });
 
-    expect(r.code).toBe(0);
+    // The migration is incomplete (one spec refused) → non-zero exit.
+    expect(r.code).toBe(1);
     expect(r.stdout).toContain('[apply]');
     expect(r.stdout).toContain('refused=1');
     expect(r.stdout).toContain('migrated_with_warnings=1');
     expect(r.stdout).toContain('report: .caws/migrations/v10-specs/');
-    // Happy file was rewritten.
+    // Happy file was STILL rewritten (the exit code reflects incompleteness,
+    // not a rollback — the migratable subset is persisted).
     const happyAfter = fs.readFileSync(path.join(repo, '.caws/specs/happy.yaml'), 'utf8');
     expect(happyAfter).toContain('lifecycle_state:');
     expect(happyAfter).not.toContain('\nstatus:');
@@ -223,6 +229,78 @@ describe('--apply --partial', () => {
     expect(fs.existsSync(reportDir)).toBe(true);
     const reports = fs.readdirSync(reportDir);
     expect(reports.length).toBe(1);
+  });
+
+  // CAWS-CLI-EXIT-CODES-001 (A3): when EVERY v10 spec migrates cleanly, the
+  // distribution shows zero refused / zero post_write_validation_failed, so
+  // the apply run exits 0.
+  it('all specs migrate cleanly → exits 0', () => {
+    repo = mkTempRepo('caws-shell-migrate-');
+    writeSpec(repo, 'happy.yaml', V10_HAPPY);
+
+    const r = captureRun({ cwd: repo, from: 'v10', apply: true, partial: true });
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('[apply]');
+    expect(r.stdout).toContain('refused=0');
+    expect(r.stdout).toContain('post_write_validation_failed=0');
+    const happyAfter = fs.readFileSync(path.join(repo, '.caws/specs/happy.yaml'), 'utf8');
+    expect(happyAfter).toContain('lifecycle_state:');
+  });
+
+  // CAWS-CLI-EXIT-CODES-001 (A1): a spec that passes the scan but FAILS
+  // post-write validation (tier-2 with contracts: [] → TIER2_MISSING_CONTRACTS)
+  // increments post_write_validation_failed; the store rolls back that one
+  // file but returns ok(). The shell must surface the failure as exit 1.
+  const V10_TIER2_NO_CONTRACTS = `
+id: TEST-PWF-001
+title: tier 2 missing contracts triggers post-write validation failure
+status: active
+type: feature
+mode: feature
+acceptance_criteria:
+  - id: A1
+    given: x
+    when: y
+    then: z
+risk_tier: 2
+blast_radius:
+  modules:
+    - pkg/foo
+scope:
+  in:
+    - pkg/foo/bar.ts
+non_functional: {}
+contracts: []
+invariants: []
+`.trim();
+
+  it('post-write validation failure under --partial --apply → exits 1', () => {
+    repo = mkTempRepo('caws-shell-migrate-');
+    writeSpec(repo, 'pwf.yaml', V10_TIER2_NO_CONTRACTS);
+    const before = fs.readFileSync(path.join(repo, '.caws/specs/pwf.yaml'), 'utf8');
+
+    const r = captureRun({ cwd: repo, from: 'v10', apply: true, partial: true });
+
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain('post_write_validation_failed=1');
+    // The store rolled back the single file — byte-identical to pre-call.
+    expect(fs.readFileSync(path.join(repo, '.caws/specs/pwf.yaml'), 'utf8')).toBe(before);
+  });
+
+  // CAWS-CLI-EXIT-CODES-001 (A4): a DRY-RUN over refused specs is a report,
+  // not a failure — it stays exit 0. (Post-write validation cannot occur on a
+  // dry-run; the write path is skipped.)
+  it('dry-run over a refused spec stays exit 0 (report, not failure)', () => {
+    repo = mkTempRepo('caws-shell-migrate-');
+    writeSpec(repo, 'happy.yaml', V10_HAPPY);
+    writeSpec(repo, 'refused.yaml', V10_REFUSED);
+
+    const r = captureRun({ cwd: repo, from: 'v10' }); // no apply → dry-run
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('[dry-run]');
+    expect(r.stdout).toContain('refused=1');
   });
 });
 
