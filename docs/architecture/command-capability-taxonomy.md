@@ -118,14 +118,78 @@ unparseable). It is governed by `.caws/command-adapters.schema.json` and is **st
 This is the same governance shape as `.caws/policy.yaml` + `policy.schema.json`: a governed config
 surface with a schema, where the dangerous knobs are not exposed.
 
+## ask enforcement: source + enforcement provenance (HOOK-ASK-ENFORCEMENT-001)
+
+`ask` is not a single semantic class, so it is not uniformly enforced. The old classifier overloaded
+`ask` — it included genuinely risky operations AND "unknown git/npm/gh family subcommand, cannot
+prove read-only." `CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001` correctly relaxed `ask` to advisory
+because blocking all of it recreated an over-governance failure (latching the session on
+`git rebase`, `npm run jest`, `git commit --amend`). The capability lattice changes the situation:
+some `ask`s now carry **structured semantic evidence** (`kind=DESTROY`, `domain=remote_orchestrator`,
+`reversibility=partial`). Those are not the same as "unknown npm subcommand."
+
+So the classifier emits **two additive fields** alongside `decision`/`reason`, and the enforcement
+rule keys on them — it is **not** `ask -> block`:
+
+| field | meaning |
+|---|---|
+| `source` | diagnostic provenance of the winning decision: `capability` \| `legacy_family` \| `regex` \| `rm_classifier` \| `find_delete` \| `classifier_error` \| `sidecar_error` \| `unknown` |
+| `enforcement` | the wrapper contract `block-dangerous.sh` branches on: `pass` \| `advisory` \| `confirm` \| `block` |
+
+```text
+decision=allow                         -> enforcement=pass      (exit 0)
+decision=deny                          -> enforcement=block     (hard block + latch, as before)
+decision=ask, source=capability        -> enforcement=confirm   (block FIRST occurrence with a
+                                                                  human-confirmation message,
+                                                                  distinct from a catastrophic deny)
+decision=ask, source=classifier_error  -> enforcement=confirm   (fail-closed; cannot prove safe)
+decision=ask, source=legacy_family|regex|rm_classifier|find_delete
+                                       -> enforcement=advisory  (reason on stderr, exit 0, no latch —
+                                                                  CATASTROPHIC-ONLY-001 preserved)
+```
+
+`enforcement` is **additive**: a consumer reading only `.decision`/`.reason` is unaffected; both new
+fields are always present for a stable contract. `block-dangerous.sh` is the first consumer that
+branches on `enforcement`. There is **no new decision tier** — `kubectl delete pod` / `aws s3 rm key`
+/ `curl POST` / `kill -9` / `docker system prune` stay semantically `ask` (risky but not categorically
+catastrophic); the wrapper makes that `ask` operationally meaningful. A `capability-deny` tier is
+explicitly **not** created (it would muddle the lattice).
+
+**This is a transition architecture.** Legacy-family `ask` staying advisory is a *compatibility
+class*, not a permanent two-class moral distinction. The long-term direction is to migrate meaningful
+legacy families into explicit capability mappings (where they can be enforced precisely); once
+migrated, the family-default `ask` path shrinks. Until then, advisory is the honest treatment of
+old-classifier uncertainty.
+
+### Substrate / ecology boundary
+
+This split encodes the project's core extensibility principle: **CAWS does not know more than the
+project developers about every command surface in their repo.**
+
+```text
+CAWS owns:                                  Projects own:
+- the capability facet vocabulary           - tool/subcommand/resource adapter mappings
+- the lattice semantics                        (the .caws/command-adapters.json sidecar)
+- enforcement behavior for capability risk   - local command aliases
+- schema constraints preventing             - repo-specific operational surfaces
+  policy override                           - migration of legacy-family uncertainty
+                                               into explicit capability mappings
+```
+
+Baking a fixed classification into the release would force a CAWS publish every time a repo's
+operational surface matures, and would govern the substrate the project owns. The sidecar lets a
+project say "in our repo, this command maps to this capability"; CAWS applies the policy lattice.
+
 ## Two completion bars (do not conflate)
 
 - **Classifier-complete:** the classifier emits the correct `allow|ask|deny` with no silent allows
   on the admitted corpus. The capability slices (1–3) reach this bar.
-- **Command-safety-complete:** classifier-complete **and** `ask` is operationally enforced by
-  `block-dangerous.sh` (first-encounter `ask` becomes a blocking human-confirmation, not an
-  advisory that exits 0). This is a separate enforcement slice. A hook that recognizes danger but
-  still executes it is classifier-complete, not safety-complete.
+- **Command-safety-complete:** classifier-complete **and** capability-derived `ask` is operationally
+  enforced by `block-dangerous.sh` (`enforcement=confirm` becomes a blocking human-confirmation, not
+  an advisory that exits 0). **HOOK-ASK-ENFORCEMENT-001 reaches this bar for the capability surface.**
+  Legacy-family `ask` remaining advisory is acknowledged compatibility debt (tracked for migration
+  into the capability substrate), not a silent gap — a hook that recognized a *capability* danger no
+  longer executes it without confirmation.
 
 ## Trace labels (non-authoritative)
 
