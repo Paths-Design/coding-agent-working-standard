@@ -389,8 +389,8 @@ if command -v node >/dev/null 2>&1; then
       // Union all scope.in AND scope.support patterns — file must match at
       // least one. scope.support (WORKTREE-SUPPORT-SCOPE-001) is ADMITTED for
       // edits exactly like scope.in here; the difference (support is NOT a
-      // worktree claim) lives in worktree-write-guard's claim derivation, which
-      // reads scope.in only. This guard only decides "may the agent edit it".
+      // worktree claim) lives in worktree-write-guard claim derivation, which
+      // reads scope.in only. This guard only decides edit-admissibility.
       var allInScope = [];
       for (var si = 0; si < specsToCheck.length; si++) {
         var inPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.in) || [];
