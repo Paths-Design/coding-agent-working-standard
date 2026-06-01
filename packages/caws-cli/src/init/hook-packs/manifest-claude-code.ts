@@ -249,6 +249,20 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      // WORKTREE-ISOLATION-HARDENING-001 (Fix 3): Bash mutation target guard.
+      // worktree-write-guard only sees Write/Edit; Bash mutations (echo >>,
+      // sed -i, rm, mv, git restore, ...) into worktree-owned payload were an
+      // unguarded side door. This hook self-filters to Bash, extracts targets
+      // for a narrow mutation-form set, and routes each through the shared
+      // lib/worktree-claim-oracle.js — same owner-vs-session answer as a
+      // Write/Edit of the same path. Wired into caws_dispatch/pre_tool_use.sh
+      // after worktree-write-guard.
+      destPath: '.claude/hooks/bash-write-guard.sh',
+      sourcePath: 'bash-write-guard.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Entry 17 dangerous-command hardening (preserved verbatim) --
     {

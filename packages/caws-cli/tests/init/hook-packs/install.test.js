@@ -119,6 +119,8 @@ describe('Claude Code pack manifest', () => {
     expect(ids).toContain('.claude/hooks/scope-guard.sh');
     expect(ids).toContain('.claude/hooks/worktree-guard.sh');
     expect(ids).toContain('.claude/hooks/worktree-write-guard.sh');
+    // WORKTREE-ISOLATION-HARDENING-001 Fix 3: Bash mutation target guard.
+    expect(ids).toContain('.claude/hooks/bash-write-guard.sh');
     expect(ids).toContain('.claude/hooks/block-dangerous.sh');
     expect(ids).toContain('.claude/hooks/classify_command.py');
     expect(ids).toContain('.claude/hooks/CLAUDE.md');
