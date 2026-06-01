@@ -7,19 +7,110 @@ created_at: '2026-06-01T20:27:45.285Z'
 updated_at: '2026-06-01T20:27:45.285Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    # PROVISIONAL — recon-first. No implementation surface is chosen yet. The
+    # phantom-lease WRITER must be mechanically proven before scope is widened
+    # to any of agent-register.sh / agents-register CLI / a new SubagentStart
+    # handler / prune / doctor. Amend-scope to the proven surface ONLY after the
+    # implementation gate passes. Until then the only authorized write is this
+    # spec file (lifecycle + recon determination recorded here).
+    - .caws/specs/SUBAGENT-LEASE-IDENTITY-RECONCILE-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    SUCCESSOR TO SUBAGENT-PHANTOM-LEASE-001 (closed superseded; A1 evidence
+    ac event seq=1184). That spec's A1 falsified the in-hook candidate fix
+    (make agent-register.sh prefer CLAUDE_CODE_SESSION_ID): session_id is
+    stdin-only per the Claude Code docs, SessionStart does NOT fire on subagent
+    spawn (SubagentStart does, and CAWS wires neither), and CLAUDE_CODE_SESSION_ID
+    is undocumented as an env var — so there is no GUARANTEED in-hook env
+    discriminator. No register-behavior change ships under that assumption.
+  - >-
+    THE CONTRADICTION THIS SLICE EXISTS TO RESOLVE. run-002 attributed the
+    distinct-UUID phantom lease ea12659d to a SUBAGENT session_start hook
+    (CLASH-LOG addendum, the 948c00c1 A1 perspective). But the same CLASH-LOG
+    header (line 4) names ea12659d the TOP-LEVEL probe runner (main checkout,
+    unbound), and the docs say SessionStart does not fire on subagent spawn.
+    These cannot both be true. The current causal story is no longer safe enough
+    to patch against. The phantom-lease WRITER must be mechanically proven before
+    any implementation surface is chosen.
+  - >-
+    RECON-FIRST. No implementation until the origin of the phantom lease is
+    mechanically proven. Do NOT modify agent-register.sh, resolve-session.ts,
+    lease semantics, ownership, takeover, prune, or doctor behavior during recon.
+  - >-
+    AUTHORITY DOCTRINE (carried from Campaign 2). Lease freshness and lease
+    identity must NEVER be promoted into ownership authority. Any eventual fix is
+    observability/hygiene only — it must not relax the foreign-claim refusal or
+    the worktrees.json owner authority. A subagent that genuinely needs to own a
+    worktree still goes through explicit takeover.
+  - >-
+    NO UNDOCUMENTED-ENV INVARIANT. Do not rely on CLAUDE_CODE_SESSION_ID being
+    present inside any hook shell as an invariant. It is empirically present in
+    tool subprocesses (resolver tier 1.5) but undocumented, and SessionStart
+    hooks receive a different, smaller env injection set. A fix that depends on
+    in-hook CLAUDE_CODE_SESSION_ID is refused regardless of how convenient it is.
+  - >-
+    OUT OF SCOPE FOR THIS SLICE. Do not chase the packaging leak (the stray
+    committed tmp/<sid>/ session-log dir inside the hook-pack template tree) nor
+    the worktree-guard.sh read-only text-mention false-positive. Both are
+    separately tracked, non-blocking, and orthogonal to lease identity.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the ea12659d phantom lease observed in run-002 and its on-disk + log artifacts
+    when: its provenance is reconstructed from the lease file, any events-chain entries, last_seen_reason, session_start/session_stop evidence, cwd, branch, pid, and timestamp ordering against the CLASH-LOG narrative
+    then: >-
+      it is mechanically determined which of these produced ea12659d — a genuine
+      top-level SessionStart, a subagent lifecycle hook misidentified as
+      SessionStart, a CLI/tool subprocess register/heartbeat path, a
+      stale/durable-envelope fallback, or a probe-log attribution error — with the
+      evidence cited, not inferred from the probe narrative alone. (Known starting
+      facts: the ea12659d lease file records cwd=.caws/worktrees/worktree-b,
+      branch=worktree-b, pid=67480, last_seen_reason=session_stop; leases emit NO
+      events.jsonl entries — they are operational cache — so the lease file plus
+      log timestamps are the evidence surface, not the event chain.)
+  - id: A2
+    given: caws agents register as invoked from the SessionStart hook shell
+    when: its identity-resolution inputs in that process are enumerated
+    then: >-
+      it is recorded whether register has access to ANY parent-resolved identity
+      source there WITHOUT relying on undocumented in-hook env behavior — i.e.
+      whether resolveSessionCandidates / claude_code_env / the durable envelope /
+      the caller-session pointer can mechanically yield the parent id in the hook
+      process. This answers whether register-layer reconciliation is even
+      addressable from the hook surface, or only from the tool-subprocess surface.
+  - id: A3
+    given: this harness/runtime
+    when: SubagentStart availability is probed (a controlled fixture or a documented harness observation, not an ad hoc shell repro)
+    then: >-
+      it is recorded whether SubagentStart can be wired in .claude/settings.json
+      for this runtime and, if it fires, what its stdin payload carries
+      (specifically whether agent_id and a session identity are present as the
+      docs describe), so the SubagentStart-tagging option can be classified as
+      available or not.
+  - id: A4
+    given: the A1–A3 evidence
+    when: the candidate implementation surfaces are evaluated
+    then: >-
+      a determination matrix records, for each, one of {safe | unsafe |
+      not-applicable | insufficient}: register-layer reconciliation (compare
+      explicit hook-payload id against a separately proven parent-identity source);
+      SubagentStart + agent_id tagging (subagent activity as non-owner-eligible
+      observability, not a session lease); prune/doctor-only hygiene; and the
+      no-op outcome (run-002 attribution was a top-level session, proven or not
+      proven). No production behavior changes during this recon.
+  - id: A5
+    given: a proven writer and discriminator from A1–A4
+    when: the minimal fix surface is selected
+    then: >-
+      scope is amended to that exact surface and the minimal fix is implemented
+      with tests and gated on canonical (dist-dependent hook-pack install/fixture
+      suite green; foreign-claim refusal and worktrees.json owner authority
+      unchanged) — OR, if A1 proves a probe attribution error, the slice closes
+      as a documented no-op with no lease-identity code change.
 non_functional: {}
 contracts: []
