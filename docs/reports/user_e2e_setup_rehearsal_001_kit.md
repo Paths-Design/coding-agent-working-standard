@@ -48,24 +48,29 @@ it**, do not fall back to simulating.
 
 ## Setup
 
-The repo and your session were prepared by the operator. Bring the repo to a testable
-state, doing each step as a real first-timer would and recording any friction:
+The operator hands you a **bare repo**: a fresh `git init` with **zero commits**, a single
+`README.md` (untracked), and **no `.caws/` and no `.claude/` yet**. That is deliberate — you
+are a genuine first-timer bootstrapping CAWS into an empty project. Bring the repo to a
+testable state, doing each step as a real first-timer would and recording any friction:
 
-1. **Git.** If the repo has no commits, make an initial one (`git init` if needed, then a
-   `README.md` commit). Record any friction.
-2. **CAWS.** Run `caws init --agent-surface claude-code` to install the hook pack. Then do
-   whatever its output tells you is needed to make the hooks active for your session.
-   Record exactly what you had to do and any friction along the way.
-3. **Confirm you are governed.** Verify the hook pack is wired and active for *this*
-   session. The real proof is your first real Write/Edit/Bash being seen by a hook (step
-   5). If your tool calls sail through when you'd expect governance, that's a finding —
-   report it, don't simulate.
+1. **Git — first commit.** The repo is a git repo with no commits yet. Make the initial
+   commit (`git add README.md && git commit ...`). Record any friction. (The operator already
+   ran `git init`; you own the first commit.)
+2. **CAWS — install + activate.** Run `caws init --agent-surface claude-code` to install the
+   hook pack, then do whatever its output tells you is needed to make the hooks active for
+   your session (it will say the hooks load only on the NEXT session start). Record exactly
+   what you had to do and any friction along the way.
+3. **Confirm you are governed.** Verify the hook pack is wired and active for *this* session.
+   The real proof is your first real Write/Edit/Bash being seen by a hook (step 5). If your
+   tool calls sail through when you'd expect governance, that's a finding — report it, don't
+   simulate.
 
-   > **Operator note (not a task for the agent):** steps 1–2 are currently human-owned
-   > setup moves (git init, caws init, and any session restart the hook activation
-   > requires). An open improvement is to drive these without a human in the loop so the
-   > probe can run unattended end-to-end. Until then the operator runs them; the agent
-   > records the experience.
+   > **Operator note (not a task for the agent):** the operator owns exactly ONE move — a bare
+   > `git init` (leaving zero commits + an untracked `README.md`). The agent owns the first
+   > commit, `caws init`, and triggering/requesting the session restart the hook activation
+   > requires. An open improvement is to drive the whole sequence without a human in the loop
+   > so the probe runs unattended end-to-end; until then the split is: operator = `git init`,
+   > agent = everything else, recording the experience.
 
 ## The probe
 
@@ -81,6 +86,21 @@ state, doing each step as a real first-timer would and recording any friction:
    tool/message points you to; see if it works; see if it leads somewhere worse. Record
    the command, what resisted, the verbatim message, whether your action was legitimate,
    what you did to get past it (or "could not"), and what a better behavior would be.
+
+   > **Heads-up on the command-safety hook (changed behavior).** `block-dangerous.sh` now
+   > enforces *capability-derived* `ask` as a blocking confirmation, not a passive advisory.
+   > If you run a command the classifier reads as a real capability risk — a destructive or
+   > mutating operation against an external/system resource (e.g. `kubectl delete …`,
+   > `aws s3 rm …`, `docker system prune`, `kill -9 …`, a `curl -X POST/DELETE …`) — the hook
+   > emits a **block envelope** that says *"requires USER CONFIRMATION … NOT denied as
+   > catastrophic"* and arms the session danger latch. This is **intended new behavior**, not
+   > a bug: record whether the confirmation message is clear, whether you could tell it apart
+   > from a catastrophic hard-`deny`, and whether the latch/reset path made sense. By contrast,
+   > everyday *legacy* asks (`git rebase`, `git commit --amend`, `npm run <script>`, unknown
+   > git/npm subcommands) stay **advisory** — they print a `caws advisory (non-blocking)` note
+   > on stderr and do NOT block or latch. The probe goal below (read commits → markdown) is
+   > mostly read-only (`git log`) and likely won't trip the capability path; if it does, that's
+   > a useful event to record, not a reason to stop.
 
 6. **Stop condition.** End when **either**: (a) you complete the spec → worktree →
    first-implementation-commit cycle, **or** (b) you hit something you genuinely cannot
