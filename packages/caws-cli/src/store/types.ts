@@ -15,6 +15,7 @@ import type {
   ChainedEvent,
   Diagnostic,
   GitWorktreeEntry,
+  LeaseRegistry,
   Policy,
   Spec,
   Waiver,
@@ -89,6 +90,12 @@ export interface StoreSnapshot {
   readonly policyErrors: readonly Diagnostic[];
   readonly worktrees: WorktreeRegistry;
   readonly agents: AgentRegistry;
+  /**
+   * Per-session lease registry from `.caws/leases/` (operational cache, never
+   * authority). AGENT-LIVENESS-DOCTOR-001 (D10): passed to doctor so it can
+   * cross-reference worktrees.json owners against live leases.
+   */
+  readonly leases: LeaseRegistry;
   readonly events: readonly ChainedEvent[];
   readonly eventWarnings: readonly Diagnostic[];
   /** Waivers that parsed AND validated (slice 7a.5). */

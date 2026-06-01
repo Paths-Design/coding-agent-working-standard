@@ -19,6 +19,7 @@ import type { Policy } from '../policy/types';
 import type { Spec } from '../spec/types';
 import type { Waiver } from '../waiver/types';
 import type { AgentRegistry, WorktreeRegistry } from '../worktree/types';
+import type { LeaseRegistry } from '../worktree/leases';
 
 // ----------------------------------------------------------------------------
 // FindingSeverity — alias of the diagnostics Severity for clarity.
@@ -84,6 +85,18 @@ export interface DoctorInput {
 
   /** Agents registry contents (display/freshness only). */
   readonly agents?: AgentRegistry;
+
+  /**
+   * Per-session lease registry from `.caws/leases/` (operational cache, NEVER
+   * authority). AGENT-LIVENESS-DOCTOR-001 (D10): doctor cross-references
+   * worktrees.json owners against live leases to surface owner-without-live-lease
+   * drift and the unreliable-PID-oracle platform diagnostic. Doctor never reads
+   * files; the store loads the leases and passes them. The kernel iterates this
+   * map ONLY through a structural agent-lease predicate so a non-lease top-level
+   * key cannot become a fake agent finding. Lease freshness is consumed for
+   * DIAGNOSTICS ONLY here — it is never promoted into an ownership decision.
+   */
+  readonly leases?: LeaseRegistry;
 
   /** Events the shell has loaded from `.caws/events.jsonl`. */
   readonly events?: readonly ChainedEvent[];

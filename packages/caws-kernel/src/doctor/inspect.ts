@@ -10,6 +10,7 @@ import { CRITICAL_GATES, RISKY_ROOT_FILES } from '../policy/rules';
 import { waiverEffectiveness } from '../waiver/applicability';
 import { deriveBindingState } from '../worktree/binding';
 import { isStaleByTTL } from '../worktree/freshness';
+import type { AgentLease } from '../worktree/leases';
 import { isErr } from '../result/construct';
 import { DOCTOR_RULES } from './rules';
 import type {
@@ -374,9 +375,20 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // is better than fail-closed).
   // -------------------------------------------------------------------------
 
+  // AGENT-LIVENESS-DOCTOR-001 (D10): the ghost check no longer REQUIRES git
+  // observation. The canonical-dir filesystem fact (worktreeDirByName) is
+  // sufficient to detect a registry entry whose dir is gone; git porcelain is a
+  // refinement that prevents a false ghost for a worktree living at a
+  // non-canonical path. When git observation is unavailable, we still flag the
+  // dir-gone entry (the prior code silently skipped it — that is why doctor
+  // reported 0E/0W/0I on the drifted probe repo). The git cross-check is applied
+  // only when gitWorktrees is present.
   const gitWorktrees = input.gitWorktrees;
-  if (worktreeDirByName !== undefined && gitWorktrees !== undefined) {
-    const gitWorktreePaths = new Set<string>(gitWorktrees.map((w) => w.path));
+  if (worktreeDirByName !== undefined) {
+    const gitWorktreePaths =
+      gitWorktrees !== undefined
+        ? new Set<string>(gitWorktrees.map((w) => w.path))
+        : undefined;
     for (const [worktreeName, record] of Object.entries(registry)) {
       // Defensive: skip entries that aren't plain object records. A
       // legacy v10.2-format worktrees.json wraps entries inside a
@@ -405,7 +417,16 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // accept that as evidence the worktree exists (just at a
       // non-canonical location).
       const recordPath = record?.path;
-      if (typeof recordPath === 'string' && gitWorktreePaths.has(recordPath)) {
+      // Git refinement: when git observation IS available and the recorded
+      // path appears in `git worktree list`, the worktree exists at a
+      // non-canonical path — not a ghost. When git observation is UNAVAILABLE,
+      // we cannot apply this refinement and fall through to the dir-gone flag
+      // (the canonical-dir absence is itself sufficient evidence).
+      if (
+        gitWorktreePaths !== undefined &&
+        typeof recordPath === 'string' &&
+        gitWorktreePaths.has(recordPath)
+      ) {
         continue;
       }
       findings.push(
@@ -422,7 +443,10 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
               spec_id: record?.specId,
               recorded_path: recordPath,
               canonical_dir_present: false,
-              git_worktree_listed: false,
+              // null (not false) when git observation was unavailable — the
+              // refinement could not run, the flag is on the dir fact alone.
+              git_worktree_listed:
+                gitWorktreePaths === undefined ? null : false,
             },
           }
         )
@@ -614,6 +638,109 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         )
       );
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // 3b. Lease/worktree liveness drift (AGENT-LIVENESS-DOCTOR-001 D10).
+  //
+  // Doctor reads `.caws/leases/` (passed in as input.leases by the store; doctor
+  // never reads files). Leases are operational cache, NEVER authority — every
+  // finding here is DIAGNOSTIC and its narrowRepair never asserts cleanup or
+  // ownership authority. The leases map is iterated ONLY through a structural
+  // agent-lease predicate so a non-lease top-level key (a future metadata
+  // sibling, a malformed object) cannot become a fake agent finding.
+  // -------------------------------------------------------------------------
+
+  const leases = input.leases ?? {};
+
+  // Structural agent-lease predicate: a real lease record is a plain object
+  // carrying a string session_id and a string status. A top-level metadata key
+  // (number, string, array, or an object lacking these fields) is excluded.
+  const isAgentLeaseShape = (value: unknown): value is AgentLease => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+    const v = value as Record<string, unknown>;
+    return typeof v.session_id === 'string' && typeof v.status === 'string';
+  };
+
+  // Index live (well-formed, non-stopped, fresh-by-TTL) lease session_ids.
+  const liveLeaseSessionIds = new Set<string>();
+  const wellFormedLeases: AgentLease[] = [];
+  for (const value of Object.values(leases)) {
+    if (!isAgentLeaseShape(value)) continue; // metadata key / malformed → skip
+    wellFormedLeases.push(value);
+    const stopped = value.status === 'stopped';
+    const stale = isStaleByTTL(value, staleAgentTtlMs, now);
+    if (!stopped && !stale) liveLeaseSessionIds.add(value.session_id);
+  }
+
+  // (d) A registry owner whose session has no LIVE lease (absent / stale /
+  // stopped). Diagnostic only — the owner remains authoritative.
+  for (const [worktreeName, record] of Object.entries(registry)) {
+    if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+      continue;
+    }
+    const owner = (record as { owner?: { session_id?: unknown } }).owner;
+    const ownerSessionId =
+      owner && typeof owner.session_id === 'string' ? owner.session_id : undefined;
+    if (ownerSessionId === undefined) continue;
+    if (liveLeaseSessionIds.has(ownerSessionId)) continue;
+    findings.push(
+      finding(
+        DOCTOR_RULES.WORKTREE_OWNER_LEASE_MISSING,
+        'warning',
+        `Worktree "${worktreeName}" is owned by session ${ownerSessionId}, which has no live lease (absent, stale, or stopped) — display only; the owner remains authoritative.`,
+        {
+          subject: worktreeName,
+          narrowRepair:
+            'No automatic action. The registry owner is still authoritative for ownership decisions (leases are operational cache, never authority). If the owning session is truly gone, hand off explicitly via `caws claim ' +
+            worktreeName +
+            ' --takeover`.',
+          data: {
+            worktree_name: worktreeName,
+            owner_session_id: ownerSessionId,
+            lease_present: wellFormedLeases.some((l) => l.session_id === ownerSessionId),
+          },
+        }
+      )
+    );
+  }
+
+  // (f) Platform PID-oracle-unreliable diagnostic. When there ARE running
+  // (non-stopped) well-formed leases AND every one of them is recently active
+  // (fresh by TTL) yet records a pid, that is the ephemeral-per-invocation-pid
+  // shape that made prune --dead reap healthy sessions: the heartbeats prove
+  // the sessions are alive while the recorded pids would read as dead. We do
+  // NOT run a live PID probe in the kernel (doctor is pure); we surface the
+  // SHAPE so the operator knows the PID signal is not authoritative here. INFO,
+  // never cleanup authority.
+  const runningLeases = wellFormedLeases.filter(
+    (l) => l.status === 'active' || l.status === 'stopping'
+  );
+  const freshRunning = runningLeases.filter((l) => !isStaleByTTL(l, staleAgentTtlMs, now));
+  if (
+    runningLeases.length > 0 &&
+    freshRunning.length === runningLeases.length &&
+    freshRunning.every((l) => typeof l.pid === 'number')
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.AGENT_PID_ORACLE_UNRELIABLE,
+        'info',
+        `All ${runningLeases.length} running lease(s) are recently active but carry a recorded pid — under Claude Code the recorded pid is an ephemeral per-invocation subshell, so PID liveness is NOT a reliable death signal here. Recency is the authority for liveness; pid is advisory.`,
+        {
+          subject: '.caws/leases/',
+          narrowRepair:
+            'No action. `caws agents prune --dead` is recency-primary and will not reap these fresh leases. This note flags that the platform PID signal is unreliable, not that anything is wrong.',
+          data: {
+            running_lease_count: runningLeases.length,
+            fresh_running_count: freshRunning.length,
+            ttl_ms: staleAgentTtlMs,
+          },
+        }
+      )
+    );
   }
 
   // -------------------------------------------------------------------------
