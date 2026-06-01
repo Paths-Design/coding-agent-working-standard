@@ -7,22 +7,71 @@ created_at: '2026-06-01T04:06:19.889Z'
 updated_at: '2026-06-01T04:07:03.021Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli store: amendScopeSpec computes a non-blocking compose-trap warning on the success outcome'
+    - 'caws-cli shell: runSpecsAmendScopeCommand prints the warning to stderr'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/tests/store/specs-writer-amend-scope.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'WARN, DO NOT BLOCK. When `amend-scope --add <path>` adds a path to scope.in of a spec that has a
+    worktree binding (a `worktree:` field) AND the added path is repo-root-level (a bare filename with no
+    "/" separator — the friction-log shape), amendScopeSpec attaches a non-blocking advisory warning to
+    the success outcome. The amendment STILL SUCCEEDS (exit 0, scope.in patched, event appended). The
+    warning names the compose-trap (the path becomes worktree-claimed → main-checkout edits hard-block)
+    and suggests `--add-support` for a deliverable that should be editable but not claimed. This is the
+    transition-point fix the probe (run-003 Events 7-9) identified: the sanctioned --add of a repo-root
+    deliverable silently walked into the trap; now it warns at exactly that step.'
+  - 'ADDITIVE OUTCOME FIELD. The warning is carried on an OPTIONAL `warnings?: readonly string[]` field on
+    the SpecWriterOutcome success variant. Existing callers that read only id/path/data are unaffected;
+    the field is absent when there is no warning. This composes with WORKTREE-SUPPORT-SCOPE-001 — the
+    warning suggests the scope.support class that slice added.'
+  - 'NARROW TRIGGER, NO NOISE. The warning fires ONLY for the specific compose-trap shape: scope.in
+    add + worktree-bound spec + repo-root-level added path. A normal in-tree --add (src/foo.ts), a
+    --add-support, a --remove, an --add on an unbound spec, or an --add of a non-root path do NOT warn.
+    Over-warning would train users to ignore the advisory — the exact failure CATASTROPHIC-ONLY and the
+    legibility slice guard against.'
+  - 'WARNING IS DERIVED FROM THE ACTUAL DELTA. The warning keys off the computed added_in delta (paths
+    genuinely newly added), not the raw --add args — an idempotent re-add of an already-present path
+    produces no delta and therefore no warning.'
+  - 'NON-REGRESSION. The existing amend-scope suite stays green. No decision, exit code, scope mutation,
+    or event field changes; only an optional advisory string is added to the success outcome and printed.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'a worktree-bound spec (has a worktree: field) and `amend-scope --add FRICTION-LOG.md` (a repo-root-level path)'
+    when: 'amendScopeSpec runs and succeeds'
+    then: 'the outcome carries a warnings entry naming the compose-trap and suggesting --add-support;
+      the scope.in mutation and spec_scope_amended event still happen (exit 0)'
+  - id: A2
+    given: 'a worktree-bound spec and `amend-scope --add src/foo.ts` (an in-tree, non-root path)'
+    when: 'amendScopeSpec runs'
+    then: 'NO warning is attached (the trap shape requires a repo-root-level path)'
+  - id: A3
+    given: 'an UNBOUND spec (no worktree: field) and `amend-scope --add ROOT-FILE.md`'
+    when: 'amendScopeSpec runs'
+    then: 'NO warning is attached (no worktree binding → no claim → no trap)'
+  - id: A4
+    given: '`amend-scope --add-support FRICTION-LOG.md` on a worktree-bound spec'
+    when: 'amendScopeSpec runs'
+    then: 'NO warning is attached (support is the recommended class; it never claims)'
+  - id: A5
+    given: 'runSpecsAmendScopeCommand receives a success outcome that carries warnings'
+    when: 'the command finishes'
+    then: 'each warning is printed to stderr (advisory, non-blocking); the command still exits 0'
+non_functional:
+  reliability:
+    - 'Optional additive outcome field; warning is advisory-only and never changes the exit code or the
+      scope mutation. Derived from the real added_in delta so idempotent re-adds stay silent.'
+  security:
+    - 'The warning steers a user away from the compose-trap (a correct guard composing into a dead-end);
+      it is observability, not enforcement, and cannot relax any scope or claim decision.'
+contracts:
+  - name: amend-scope-compose-warning-v1
+    type: behavior
+    description: 'amendScopeSpec attaches an optional warnings[] advisory to its success outcome when a
+      scope.in --add on a worktree-bound spec adds a repo-root-level path (the compose-trap shape),
+      suggesting --add-support. Additive, non-blocking; the command prints it to stderr at exit 0.'
