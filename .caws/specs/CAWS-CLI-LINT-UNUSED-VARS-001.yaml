@@ -7,21 +7,32 @@ created_at: '2026-06-01T22:35:22.842Z'
 updated_at: '2026-06-01T22:35:23.714Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/tests/hook-packs/protected-guard-source-vs-dest.test.js
     - packages/caws-cli/tests/hook-packs/guard_legibility.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Pure lint hygiene, zero behavior change. Remove two no-unused-vars eslint
+    errors blocking a green workspace lint: the unused `r` binding at
+    protected-guard-source-vs-dest.test.js A4 (introduced by DANGER-LATCH-TRIGGER-
+    DISCRIMINATION-001 f689c58; the assertion checks the latch file directly, not
+    the return) and the unused `askReason` helper at guard_legibility.test.js
+    (introduced by HOOK-GUARD-LEGIBILITY-001 99fbe6b; never called). No test
+    assertion, no guard behavior, no production code is touched.
+  - >-
+    The tests/hook-packs suite must remain byte-identical in outcome (same suite
+    count, same pass count) — the change only deletes dead bindings/declarations.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the two no-unused-vars errors reported by `npm run lint`
+    when: the unused `r` binding and the unused `askReason` helper are removed
+    then: >-
+      `npm run lint` exits 0 with zero errors, and the tests/hook-packs jest run
+      stays green at its prior count (no behavior change).
 non_functional: {}
 contracts: []
