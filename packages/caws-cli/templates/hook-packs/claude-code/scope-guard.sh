@@ -28,6 +28,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=guard-strikes.sh
 source "$SCRIPT_DIR/guard-strikes.sh"
+# shellcheck source=lib/guard-message.sh
+# Provides guard_identity / guard_amend_scope_hint / guard_not_harness_note —
+# the shared legibility helpers (HOOK-GUARD-LEGIBILITY-001) so a scope refusal
+# names itself ("CAWS scope-guard") and prints a literal copy-pasteable
+# amend-scope remediation, instead of reading as a generic harness prompt.
+# Guard with a file-existence test: under `set -euo pipefail`, `source <missing>`
+# is a fatal builtin error a trailing `|| true` does NOT catch.
+[[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
 # shellcheck source=lib/caws-state.sh
 # Provides $CAWS_NODE_GLOB_TO_SCOPE_REGEXP — the single canonical scope-glob
 # matcher shared with worktree-write-guard so the two guards can never
@@ -51,21 +59,45 @@ fi
 
 emit_scope_progression() {
   local detail="$1"
+  # Optional 2nd arg: the bound spec id (authoritative mode). When known, the
+  # message prints the literal copy-pasteable widening command for THAT spec;
+  # otherwise it falls back to a placeholdered form. Run-003 (caws-firsttime-
+  # probe) showed an agent mis-attributing this very ask to the harness three
+  # times — so every strike message now leads with a self-identifying
+  # "CAWS scope-guard" token (guard_identity) and carries the exact remediation.
+  local spec_id="${2:-}"
+
+  # guard-message.sh provides the legibility helpers. If it failed to source
+  # (stand-alone invocation), fall back to literal strings so the message still
+  # self-identifies and remediates — legibility must never depend on a lib load.
+  local _id _hint _note
+  if command -v guard_identity >/dev/null 2>&1; then
+    _id="$(guard_identity scope-guard)"
+    _hint="$(guard_amend_scope_hint "$spec_id" "$REL_PATH")"
+    _note="$(guard_not_harness_note)"
+  else
+    _id="CAWS scope-guard"
+    _hint="caws specs amend-scope ${spec_id:-<spec-id>} --add $REL_PATH"
+    _note="This is a CAWS governance decision, not a Claude Code harness prompt."
+  fi
+
   # Strike-level diagnostic triage: strike 1 fires often (any agent
   # touching the edge of its lane) and the edit proceeds — keep the
   # message short so it informs without burying. Strike 2 escalates to
   # user-approval and adds the spec/binding-fix options. Strike 3 is the
   # hard block and surfaces the full reset-strikes + binding guidance.
-  local fix_options="Fix options: (1) edit a file already in scope, (2) update the bound spec's scope.in if this path should be in scope, (3) ask the user."
+  # Every level now leads with the guard identity + the literal remediation.
+  local widen="If this path SHOULD be in scope, widen the bound spec: $_hint"
+  local fix_options="Fix options: (1) edit a file already in scope, (2) $widen, (3) ask the user."
   local hard_block_guidance="If prior strikes from earlier edits are cornering this session and the scope is now correct, ask the user to run: bash .claude/hooks/reset-strikes.sh --current (or --session <uuid>) to clear stale strike state. Verify the worktree binding: the spec must declare 'worktree: <name>' and .caws/worktrees.json must map that same worktree name to the correct 'specId' (v10) or 'spec_id' (v11). On CAWS v11.0 the worktree lifecycle CLI is not yet restored; on v11.1+ use 'caws worktree bind'. Do not edit .claude/hooks/, .claude/logs/guard-strikes-*.json, or other guard state to bypass this check."
 
   guard_enforce_progressive_strikes \
     "$SESSION_ID" \
     "scope_guard" \
     "$WORK_DIR" \
-    "Scope guard strike 1 of 3 for '$REL_PATH'. This edit proceeds, but a second out-of-scope edit will require user approval. $detail" \
-    "Scope guard strike 2 of 3 for '$REL_PATH'. Blocked — asking the user for approval. $detail $fix_options" \
-    "Scope guard strike 3 of 3 for '$REL_PATH'. Hard-blocked until scope is corrected. $detail $fix_options $hard_block_guidance"
+    "$_id strike 1 of 3 for '$REL_PATH'. $_note This edit proceeds, but a second out-of-scope edit will require user approval. $detail $widen" \
+    "$_id strike 2 of 3 for '$REL_PATH'. $_note Blocked — asking the user for approval. $detail $fix_options" \
+    "$_id strike 3 of 3 for '$REL_PATH'. $_note Hard-blocked until scope is corrected. $detail $fix_options $hard_block_guidance"
 }
 
 resolve_worktree_root() {
@@ -372,7 +404,12 @@ if command -v node >/dev/null 2>&1; then
           }
         }
         if (!found) {
-          console.log('not_in_scope:' + mode);
+          // Append the authoritative bound spec id (when known) so the bash
+          // side can print a literal amend-scope remediation command
+          // (HOOK-GUARD-LEGIBILITY-001). Union mode has no single bound id,
+          // so the field is empty there.
+          var boundIdForHint = (authoritativeSpec && authoritativeSpec.spec && authoritativeSpec.spec.id) || '';
+          console.log('not_in_scope:' + mode + ':' + boundIdForHint);
           process.exit(0);
         }
       }
@@ -409,11 +446,17 @@ if command -v node >/dev/null 2>&1; then
   fi
 
   if [[ "$SCOPE_CHECK" == not_in_scope:* ]]; then
-    MODE="${SCOPE_CHECK#not_in_scope:}"
+    # Output shape: not_in_scope:<mode>[:<bound-spec-id>]
+    REST="${SCOPE_CHECK#not_in_scope:}"
+    MODE="${REST%%:*}"
+    BOUND_SPEC_ID=""
+    if [[ "$REST" == *:* ]]; then
+      BOUND_SPEC_ID="${REST#*:}"
+    fi
     if [[ "$MODE" == "union" ]]; then
       emit_scope_progression "This file is not in the defined scope of any active spec. Mode: union (no authoritative spec bound). Diagnose: caws scope show."
     else
-      emit_scope_progression "This file is not in the defined scope of your bound spec. Mode: authoritative. Update your spec's scope.in if this file should be in scope."
+      emit_scope_progression "This file is not in the defined scope of your bound spec '${BOUND_SPEC_ID:-<unknown>}'. Mode: authoritative." "$BOUND_SPEC_ID"
     fi
     exit 0
   fi

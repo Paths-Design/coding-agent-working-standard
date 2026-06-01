@@ -58,6 +58,13 @@ command -v _realpath >/dev/null 2>&1 || exit 0
 # If absent we cannot emit an ask envelope, so the base-branch decision tail
 # degrades to the prior hard block (see emit_ask_or_block below).
 source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+# guard-message.sh provides guard_identity (HOOK-GUARD-LEGIBILITY-001) so the
+# claimed/ask diagnostics self-identify as "CAWS worktree-write-guard" instead
+# of reading as a generic harness prompt. Non-fatal if absent — the wording
+# below falls back to a literal prefix. Guard the source with a file-existence
+# test: under `set -euo pipefail`, `source <missing>` is a fatal builtin error
+# that a trailing `|| true` does NOT catch.
+[[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
@@ -524,19 +531,23 @@ _guard_risk_reason() {
   if [[ -n "$risk" ]]; then
     body="$body $risk"
   fi
-  # Actionable redirect (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A1/A2): a
-  # PreToolUse `ask` cannot be pre-approved by auto-mode and re-fires on every
-  # retry, so a generic "cd into the owning worktree (caws worktree list)" lets
-  # an agent loop the human on the same on-main write. When exactly ONE active
-  # worktree is present, name it and give the literal cd target so the agent
-  # switches on the first ask. With zero or 2+ worktrees there is no single
-  # unambiguous redirect, so keep the generic guidance.
-  local redirect="cd into the owning worktree (caws worktree list) / create one (caws worktree create <name>)"
+  # Actionable redirect (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A1/A2, refined
+  # by HOOK-GUARD-LEGIBILITY-001): a PreToolUse `ask` cannot be pre-approved by
+  # auto-mode and re-fires on every retry, so a generic "cd into the owning
+  # worktree" lets an agent loop the human on the same on-main write. When
+  # exactly ONE active worktree is present, name it and give the literal path.
+  #
+  # IMPORTANT WORDING FIX (run-003): a one-off Bash `cd` does NOT move the
+  # Edit/Write TOOL context — the tool still operates from the session root.
+  # The fix is for your SESSION to be rooted in that worktree, not merely to
+  # run a `cd` in one shell. We surface the path (it names WHICH worktree) but
+  # frame it as a session-context requirement.
+  local redirect="make this edit from a session rooted in the owning worktree (caws worktree list) — or create one (caws worktree create <name>)"
   if [[ "$WT_COUNT" -eq 1 ]] 2>/dev/null; then
     # WT_NAMES is a single name here (it may be comma/space-joined for >1).
     local _wt="${WT_NAMES%%[, ]*}"
     if [[ -n "$_wt" ]] && [[ "$_wt" != "<unnamed>" ]]; then
-      redirect="cd .caws/worktrees/$_wt and make this edit there (it is the active worktree for branch '$CURRENT_BRANCH')"
+      redirect="make this edit from a session rooted in worktree '$_wt' (cd .caws/worktrees/$_wt and operate from there — a one-off Bash cd does NOT move your Edit/Write tool context). It is the active worktree for branch '$CURRENT_BRANCH'"
     fi
   fi
   printf '%s %s Approve to edit on the base branch, or %s.' "$head" "$body" "$redirect"
@@ -553,17 +564,26 @@ _guard_no_ask() {
 # owns this file via scope.in. This is the only base-branch hard block.
 case "${SPEC_CONTENTION_CHECK:-}" in
   claimed:*)
-    echo "[worktree-write-guard.sh] BLOCKED: '$REL_PATH' is claimed by an active worktree's scope.in." >&2
+    # Self-identify (HOOK-GUARD-LEGIBILITY-001): name the guard so the reader
+    # knows this is CAWS worktree-write-guard, not a harness prompt.
+    _WG_ID="CAWS worktree-write-guard"
+    command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
+    echo "[$_WG_ID] BLOCKED: '$REL_PATH' is claimed by an active worktree's scope.in." >&2
     echo "  $SPEC_CONTENTION_CHECK" >&2
     echo "  (format: claimed:<worktree-name>:<matching-pattern>)" >&2
-    # Give the literal cd target (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A3).
+    echo "  This is a CAWS governance decision, not a Claude Code harness prompt." >&2
+    # Name the owning worktree (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A3),
+    # but frame the fix as a SESSION-CONTEXT requirement, not a bare shell cd
+    # (run-003 fix): a one-off Bash `cd` does NOT move the Edit/Write tool
+    # context, so "cd into the worktree" alone makes the agent loop. The edit
+    # must come from a SESSION rooted in that worktree.
     # SPEC_CONTENTION_CHECK is "claimed:<wt>:<pattern>"; field 2 is the name.
-    # On any parse miss, fall back to the generic guidance.
     _CLAIM_WT="$(printf '%s' "$SPEC_CONTENTION_CHECK" | cut -d: -f2)"
     if [[ -n "$_CLAIM_WT" ]]; then
-      echo "Switch into that worktree to make this edit: cd .caws/worktrees/$_CLAIM_WT" >&2
+      echo "To make this edit, your SESSION must be operating in the owning worktree '$_CLAIM_WT'." >&2
+      echo "  cd .caws/worktrees/$_CLAIM_WT and operate from there — a one-off Bash cd does NOT move your Edit/Write tool context; the session itself must be rooted in the worktree." >&2
     else
-      echo "Switch into that worktree to make this edit (caws worktree list)." >&2
+      echo "To make this edit, your SESSION must be operating in the owning worktree (caws worktree list)." >&2
     fi
     echo "Do NOT edit .claude/hooks/ or guard state to bypass this." >&2
     exit 2
@@ -571,7 +591,11 @@ case "${SPEC_CONTENTION_CHECK:-}" in
 esac
 
 # Not a claimed conflict → ASK (or degrade to block on ask-incapable harnesses).
-_RISK_REASON="$(_guard_risk_reason "[worktree-write-guard.sh] base-branch write on '$CURRENT_BRANCH'.")"
+# Lead the reason with the self-identifying guard token (HOOK-GUARD-LEGIBILITY-001)
+# so a reader can tell this is CAWS worktree-write-guard, not a harness prompt.
+_WG_ASK_ID="CAWS worktree-write-guard"
+command -v guard_identity >/dev/null 2>&1 && _WG_ASK_ID="$(guard_identity worktree-write-guard)"
+_RISK_REASON="$(_guard_risk_reason "$_WG_ASK_ID: base-branch write on '$CURRENT_BRANCH'.")"
 
 if _guard_no_ask; then
   # Degrade to the prior hard block: emit unavailable or harness can't ask.

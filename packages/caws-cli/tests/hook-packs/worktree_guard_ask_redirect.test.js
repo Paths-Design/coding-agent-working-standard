@@ -159,6 +159,12 @@ describe('CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001', () => {
     expect(reason).not.toBeNull();
     expect(reason).toContain('wt-solo');
     expect(reason).toContain('cd .caws/worktrees/wt-solo');
+    // HOOK-GUARD-LEGIBILITY-001: the redirect now frames the fix as a SESSION-
+    // context requirement, not a bare shell cd (run-003 proved a one-off Bash
+    // cd does not move the Edit/Write tool context). The guard self-identifies.
+    expect(reason).toContain('CAWS worktree-write-guard');
+    expect(reason).toMatch(/session rooted in/i);
+    expect(reason).toMatch(/one-off Bash cd does NOT move/i);
   });
 
   // ── A2: zero worktrees → generic guidance, no fabricated cd path ──
@@ -208,6 +214,11 @@ describe('CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001', () => {
     expect(r.status).toBe(2); // decision model unchanged
     expect(r.stderr).toMatch(/claimed by an active worktree's scope\.in/);
     expect(r.stderr).toContain('cd .caws/worktrees/wt-claim');
+    // HOOK-GUARD-LEGIBILITY-001: self-identify + session-context framing on the
+    // claimed hard block, not the misleading bare "cd into the worktree".
+    expect(r.stderr).toContain('CAWS worktree-write-guard');
+    expect(r.stderr).toMatch(/SESSION must be operating in the owning worktree/i);
+    expect(r.stderr).toMatch(/one-off Bash cd does NOT move/i);
   });
 
   // ── A4: in-worktree write still exits 0 (decision model unchanged) ──
