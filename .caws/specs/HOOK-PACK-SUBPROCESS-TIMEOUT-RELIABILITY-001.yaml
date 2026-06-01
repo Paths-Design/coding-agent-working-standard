@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-01T18:18:26.652Z'
-updated_at: '2026-06-01T18:18:26.652Z'
+updated_at: '2026-06-01T18:18:27.547Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,14 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/tests/hook-packs/lib/classify-timeout.js
+    - packages/caws-cli/tests/hook-packs/classify-timeout.test.js
+    - packages/caws-cli/tests/hook-packs/capability_engine_shadow.test.js
+    - packages/caws-cli/tests/hook-packs/capability_engine_closure.test.js
+    - packages/caws-cli/tests/hook-packs/classify_command_calibration.test.js
+    - packages/caws-cli/tests/hook-packs/classify_worktree_prune_rm_redirect.test.js
+    - packages/caws-cli/tests/hook-packs/rm_scratch_path_calibration.test.js
+    - packages/caws-cli/tests/hook-packs/session_log_error_visibility.test.js
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
