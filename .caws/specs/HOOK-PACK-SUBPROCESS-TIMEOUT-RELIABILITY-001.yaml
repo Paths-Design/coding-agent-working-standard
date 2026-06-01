@@ -3,6 +3,7 @@ title: 'Raise and parameterize the classifier-spawn inner timeout so worker cont
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-classify-timeout
 created_at: '2026-06-01T18:18:26.652Z'
 updated_at: '2026-06-01T18:18:27.547Z'
 blast_radius:
