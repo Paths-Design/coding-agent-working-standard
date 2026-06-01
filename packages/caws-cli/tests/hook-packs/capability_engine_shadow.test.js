@@ -38,6 +38,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { classifyTimeoutMs } = require('./lib/classify-timeout');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const CLASSIFIER = path.join(
@@ -75,7 +76,7 @@ function classifyWithFacts(cmd) {
   const r = spawnSync(
     'python3',
     [CLASSIFIER, '--repo-root', REPO_ROOT, '--home', '/tmp/fake-home', '--cwd', REPO_ROOT],
-    { input: cmd, encoding: 'utf8', timeout: 5000, env: { ...process.env, CAWS_CLASSIFY_FACTS_DUMP: '1' } }
+    { input: cmd, encoding: 'utf8', timeout: classifyTimeoutMs(), env: { ...process.env, CAWS_CLASSIFY_FACTS_DUMP: '1' } }
   );
   if (r.error) throw new Error(`classifier invocation failed: ${r.error.message}`);
   if (r.status !== 0) throw new Error(`classifier exited ${r.status}\nstderr: ${r.stderr}`);

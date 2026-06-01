@@ -24,6 +24,7 @@
 
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { classifyTimeoutMs } = require('./lib/classify-timeout');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const RENDERER = path.join(
@@ -48,7 +49,7 @@ function isOfInterest(entry) {
   ].join('\n');
   const r = spawnSync('python3', ['-c', py, JSON.stringify(entry)], {
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: classifyTimeoutMs(),
   });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`renderer import/predicate failed: ${r.stderr}`);
