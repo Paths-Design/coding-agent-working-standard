@@ -49,6 +49,9 @@
 // claim/worktree event work in a later slice. Same-session refresh
 // emits nothing.
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import {
   assertOwnership,
   refreshAgentClaim,
@@ -95,6 +98,52 @@ export interface ClaimCommandOptions {
    * exists for the current session (LEASE_NOT_FOUND).
    */
   readonly paths?: readonly string[];
+}
+
+function safeRealpath(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/**
+ * CLAIM-TAKEOVER-CD-PHANTOM-001: decide whether the invoking session's STABLE
+ * root contradicts the target worktree — the run-002 cd-phantom shape.
+ *
+ * `caws claim` resolves the worktree from the process cwd (a shell `cd` into
+ * `.caws/worktrees/<wt>` is enough to satisfy that). But the worktree-write-
+ * guard keys file-write authority on CLAUDE_PROJECT_DIR, which always points at
+ * the canonical main checkout even after a one-off `cd` (a `cd` in one Bash call
+ * does NOT move the session's Edit/Write tool context). So a takeover driven
+ * from `cd <wt> && caws claim <wt> --takeover` registers ownership the guard
+ * will never honor — a phantom claim.
+ *
+ * The session-stable root is CLAUDE_PROJECT_DIR. The contradiction exists only
+ * when CLAUDE_PROJECT_DIR is PRESENT and resolves to a path that is neither the
+ * worktree itself nor inside it. When CLAUDE_PROJECT_DIR is absent, no
+ * contradicting root is asserted (e.g. a plain shell genuinely operating in the
+ * worktree) and the takeover proceeds unchanged.
+ *
+ * Returns the resolved session root (for the error message) when a phantom is
+ * detected, else null.
+ */
+function detectPhantomSessionRoot(
+  env: NodeJS.ProcessEnv,
+  worktreePath: string | undefined
+): string | null {
+  const projectDir = env['CLAUDE_PROJECT_DIR'];
+  if (typeof projectDir !== 'string' || projectDir.length === 0) return null;
+  if (typeof worktreePath !== 'string' || worktreePath.length === 0) return null;
+  const rootReal = safeRealpath(projectDir);
+  const wtReal = safeRealpath(worktreePath);
+  // Genuinely rooted in (or at) the worktree → not a phantom.
+  if (rootReal === wtReal) return null;
+  if (rootReal.startsWith(wtReal + path.sep)) return null;
+  // CLAUDE_PROJECT_DIR points somewhere else (canonical main, a sibling, …) →
+  // the worktree match came from a transient cwd, not the session root.
+  return rootReal;
 }
 
 export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
@@ -202,7 +251,44 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   const patch: RegistryPatch | null = ownershipResult.value;
   if (patch !== null) {
     // Patch must be a takeover_claim (the kernel only emits null or a
-    // takeover_claim from assertOwnership). Apply it.
+    // takeover_claim from assertOwnership). Before applying it, refuse a
+    // cd-phantom takeover (CLAIM-TAKEOVER-CD-PHANTOM-001): if the session's
+    // stable root (CLAUDE_PROJECT_DIR) is not the target worktree, the worktree
+    // match came from a transient `cd` and the registered ownership would be
+    // unexercisable (the write-guard keys on CLAUDE_PROJECT_DIR). Refuse rather
+    // than mint a phantom owner.
+    const phantomRoot = detectPhantomSessionRoot(env, record.path);
+    if (phantomRoot !== null) {
+      err('caws claim: refusing a phantom-root takeover.');
+      err(
+        `  Your session root (CLAUDE_PROJECT_DIR=${phantomRoot}) is not the ` +
+          `worktree '${worktreeName}'. A one-off shell \`cd\` into the worktree ` +
+          `does NOT root your session there — the Write/Edit guard still keys ` +
+          `file authority on CLAUDE_PROJECT_DIR, so this takeover would register ` +
+          `ownership you cannot exercise (a phantom claim).`
+      );
+      err(
+        `  To take over '${worktreeName}', run caws claim from a SESSION rooted ` +
+          `in that worktree (open the worktree as your session root), not a ` +
+          `transient cd from the main checkout.`
+      );
+      err('');
+      const ownerLine = renderClaimPanel({
+        worktreeName,
+        worktreeRecord: record,
+        ...(record.owner !== undefined &&
+        snapshot.agents[record.owner.session_id] !== undefined
+          ? { agentRecord: snapshot.agents[record.owner.session_id]! }
+          : {}),
+        currentSession: session,
+        now,
+        ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
+      });
+      err(ownerLine);
+      return 1;
+    }
+
+    // Apply the takeover.
     const applyResult = applyRegistryPatch(cawsDir, patch);
     if (!applyResult.ok) {
       err('caws claim: failed to apply takeover patch.');
