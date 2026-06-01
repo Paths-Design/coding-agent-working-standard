@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-06-01T21:06:17.631Z'
-updated_at: '2026-06-01T21:24:03.366Z'
+updated_at: '2026-06-01T22:12:15.111Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
