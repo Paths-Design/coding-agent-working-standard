@@ -82,6 +82,26 @@ export const DOCTOR_RULES = {
    */
   AGENT_STALE_DISPLAY_ONLY: 'doctor.agent.stale_display_only',
 
+  // ---- lease/worktree liveness drift (AGENT-LIVENESS-DOCTOR-001 D10) --------
+  /**
+   * A worktrees.json entry has an `owner` whose session has no live lease
+   * (the lease file is absent, stale by TTL, or stopped). DIAGNOSTIC ONLY —
+   * the owner is still authoritative for ownership decisions (leases are
+   * operational cache, never authority). This surfaces post-merge / post-probe
+   * half-state where the owning session has gone quiet but the registry still
+   * names it. Severity: warning.
+   */
+  WORKTREE_OWNER_LEASE_MISSING: 'doctor.worktree.owner_lease_missing',
+  /**
+   * Leases exist under `.caws/leases/` but the platform's PID liveness signal
+   * is unreliable here — specifically, every running lease's recorded pid is
+   * dead while its heartbeat is recent (the ephemeral-per-invocation-pid case
+   * that made `prune --dead` reap healthy sessions). DIAGNOSTIC ONLY — it tells
+   * the operator the PID oracle is invalid on this platform, NOT that anything
+   * should be cleaned up. Severity: info.
+   */
+  AGENT_PID_ORACLE_UNRELIABLE: 'doctor.agent.pid_oracle_unreliable',
+
   // ---- ownership hygiene ---------------------------------------------------
   /** prior_owners list length exceeds threshold (hygiene warning, no action). */
   OWNERSHIP_PRIOR_OWNER_GROWTH: 'doctor.ownership.prior_owner_growth',

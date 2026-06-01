@@ -31,6 +31,7 @@ import {
 } from '@paths.design/caws-kernel';
 import { loadAgents } from './agents-store';
 import { loadEvents } from './events-store';
+import { loadLeases } from './leases-store';
 import { loadPolicy } from './policy-store';
 import { loadSpecs } from './specs-store';
 import type { StoreSnapshot } from './types';
@@ -52,6 +53,11 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   const policyResult = loadPolicy(cawsDir);
   const worktreesResult = loadWorktrees(cawsDir);
   const agentsResult = loadAgents(cawsDir);
+  // AGENT-LIVENESS-DOCTOR-001 (D10): load .caws/leases/ so doctor can
+  // cross-reference worktrees.json owners against live leases. Leases are
+  // operational cache; on load failure we pass {} (doctor's lease checks
+  // simply find nothing). The store is the only layer that reads the dir.
+  const leasesResult = loadLeases(cawsDir);
   const eventsResult = loadEvents(cawsDir);
   const waiversResult = loadWaivers(cawsDir);
 
@@ -89,6 +95,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     policyErrors: policyResult.errors,
     worktrees,
     agents: isOk(agentsResult) ? agentsResult.value : {},
+    leases: isOk(leasesResult) ? leasesResult.value.leases : {},
     events: isOk(eventsResult) ? eventsResult.value.events : [],
     eventWarnings: isOk(eventsResult) ? eventsResult.value.warnings : eventsResult.errors,
     waivers: waiversResult.waivers,
@@ -359,6 +366,7 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     policyWarnings: snapshot.policyWarnings,
     worktrees: snapshot.worktrees,
     agents: snapshot.agents,
+    leases: snapshot.leases,
     events: snapshot.events,
     ...(options.templates !== undefined ? { templates: options.templates } : {}),
     waivers: snapshot.waivers,
