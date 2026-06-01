@@ -135,6 +135,12 @@ describe('composeDoctorSnapshot → inspectProjectState (end-to-end)', () => {
       path.join(cawsDir, 'worktrees.json'),
       JSON.stringify({ 'wt-foo': { specId: 'FOO-1' } })
     );
+    // AGENT-LIVENESS-DOCTOR-001 (D10): the H1 ghost rule no longer silently
+    // skips when git observation is unavailable — the canonical-dir fact alone
+    // now flags a registry entry whose dir is gone (that silent skip was the
+    // D10 defect). This fixture intends a CLEAN valid project, so the backing
+    // worktree dir must actually exist; otherwise wt-foo is a legitimate ghost.
+    fs.mkdirSync(path.join(cawsDir, 'worktrees', 'wt-foo'), { recursive: true });
     fs.writeFileSync(path.join(cawsDir, 'agents.json'), '{}');
 
     const { snapshot, doctorInput } = composeDoctorSnapshot({

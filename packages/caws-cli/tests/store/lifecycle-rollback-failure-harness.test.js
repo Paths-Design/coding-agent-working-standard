@@ -488,6 +488,12 @@ describe('LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001 (event-append boundary)', () =>
           name: wtName,
           specId: idB,
           session: SESSION,
+          // WORKTREE-ISOLATION-HARDENING-001 (Fix 4) added a foreign-owner guard
+          // to bindWorktreeRepair, so sessionCandidates is now required. The
+          // rebind here is by the SAME owning session, so its own candidate set
+          // admits it (no foreign-owner refuse) and the rollback mechanics under
+          // test still run.
+          sessionCandidates: SESSION_CANDIDATES,
           actor: ACTOR,
         })
       );
