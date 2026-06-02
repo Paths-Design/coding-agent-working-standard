@@ -2,9 +2,11 @@ id: FIX-HOOKPACK-ORACLE-SPAWN-DIAGNOSTIC-TEST-001
 title: 'Backfill the A3 proof gap: a regression test that forces the oracle-spawn failure path and asserts the real cause is surfaced, not the bare oracle-spawn sentinel'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Backfills the A3 proof gap from FIX-HOOKPACK-CONSUMER-INSTALL-001 (merged 54002781). Added one regression test to bash_write_guard.test.js that forces the oracle-spawn failure path (stub oracle .cjs exits 1 with a unique stderr line), targets the owned worktree payload, runs CAWS_GUARD_NO_ASK=1, and asserts the guard fails closed (exit 2) AND its stderr contains both ''oracle-spawn'' and the real first-line cause — proving A3''s promise (real cause surfaced, not swallowed). Would have failed against pre-A3 2>/dev/null code. Targeted bash-write-guard suite 14/14. Test-only; merged hotfix stays closed/green (not reopened). Fix commit c3511d4a.'
 created_at: '2026-06-02T03:55:17.826Z'
-updated_at: '2026-06-02T03:55:17.826Z'
+updated_at: '2026-06-02T03:57:58.589Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/hook-packs
