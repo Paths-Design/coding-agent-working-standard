@@ -322,4 +322,180 @@ describe('CAWS-SCOPE-AMEND-COMMAND-001: amendScopeSpec', () => {
     expect(r.ok).toBe(true);
     expect(r.value.warnings).toBeUndefined();
   });
+
+  // ── CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001 ─────────────────────
+  // --remove/--remove-out/--remove-support must match a sequence entry by its
+  // PARSED scalar value, not the raw YAML line text. A single-quoted entry
+  // ('a/b.ts') previously failed to match the unquoted arg and silently no-op'd
+  // while the command still reported success.
+
+  // Helper: a spec whose scope.out entries are SINGLE-QUOTED on disk, exactly
+  // as `caws specs create --scope-in` / hand-authoring with quotes produces.
+  function writeSpecQuotedOut(cawsDir, id, { scopeIn = ['a/b.ts'], scopeOut = [] }) {
+    const inLines = scopeIn.map((p) => `    - ${p}`).join('\n');
+    const outLines = scopeOut.map((p) => `    - '${p}'`).join('\n'); // QUOTED
+    const yaml = `id: ${id}
+title: '${id} quoted-out fixture'
+risk_tier: 3
+mode: refactor
+lifecycle_state: active
+created_at: '2026-05-01T00:00:00.000Z'
+updated_at: '2026-05-15T12:00:00.000Z'
+blast_radius:
+  modules:
+    - some/module
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+${inLines}
+  out:
+${outLines}
+invariants:
+  - 'invariant one'
+acceptance:
+  - id: A1
+    given: 'g'
+    when: 'w'
+    then: 't'
+non_functional: {}
+contracts: []
+`;
+    fs.writeFileSync(path.join(cawsDir, 'specs', `${id}.yaml`), yaml);
+  }
+
+  // A1: --remove-out on a single-QUOTED scope.out entry actually removes it.
+  it('A1 --remove-out removes a single-quoted scope.out entry (the bug)', () => {
+    writeSpecQuotedOut(env.cawsDir, 'QUOTED-OUT-1', {
+      scopeIn: ['a/b.ts'],
+      scopeOut: ['packages/x/ir.ts', 'packages/x/frameworks'],
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'QUOTED-OUT-1', removeOut: ['packages/x/ir.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'QUOTED-OUT-1.yaml'), 'utf8');
+    // The quoted line is gone, in either quote form…
+    expect(yaml).not.toMatch(/^ {4}- '?packages\/x\/ir\.ts'?$/m);
+    // …and the sibling quoted entry survives.
+    expect(yaml).toMatch(/^ {4}- 'packages\/x\/frameworks'$/m);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.removed_out).toEqual(['packages/x/ir.ts']);
+    expect(ev[0].data.resulting_scope_out).toEqual(['packages/x/frameworks']);
+  });
+
+  // A2: --remove-out on a BARE scope.out entry still works (no regression).
+  it('A2 --remove-out still removes a bare (unquoted) scope.out entry', () => {
+    writeSpec(env.cawsDir, 'BARE-OUT-1', {
+      scopeIn: ['a/b.ts'],
+      scopeOut: ['packages/x/ir.ts', 'packages/x/frameworks'],
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'BARE-OUT-1', removeOut: ['packages/x/ir.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'BARE-OUT-1.yaml'), 'utf8');
+    expect(yaml).not.toMatch(/^ {4}- packages\/x\/ir\.ts$/m);
+    expect(yaml).toMatch(/^ {4}- packages\/x\/frameworks$/m);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.removed_out).toEqual(['packages/x/ir.ts']);
+  });
+
+  // A3: a --remove-out that matches nothing is reported honestly — the event's
+  // removed_out delta is empty (it did not falsely claim a removal).
+  it('A3 --remove-out of an unmatched path reports an empty removal delta', () => {
+    writeSpecQuotedOut(env.cawsDir, 'NOMATCH-OUT-1', {
+      scopeIn: ['a/b.ts'],
+      scopeOut: ['packages/x/ir.ts'],
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'NOMATCH-OUT-1', removeOut: ['packages/x/NOT-THERE.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    // Honest: nothing matched, so nothing was removed.
+    expect(ev[0].data.removed_out).toEqual([]);
+    expect(ev[0].data.resulting_scope_out).toEqual(['packages/x/ir.ts']);
+    // And the on-disk entry is untouched.
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'NOMATCH-OUT-1.yaml'), 'utf8');
+    expect(yaml).toMatch(/^ {4}- 'packages\/x\/ir\.ts'$/m);
+  });
+
+  // A4: the same quote-insensitive matching applies to scope.in (--remove).
+  it('A4 --remove removes a single-quoted scope.in entry', () => {
+    const id = 'QUOTED-IN-1';
+    const yaml = `id: ${id}
+title: '${id} quoted-in fixture'
+risk_tier: 3
+mode: refactor
+lifecycle_state: active
+created_at: '2026-05-01T00:00:00.000Z'
+updated_at: '2026-05-15T12:00:00.000Z'
+blast_radius:
+  modules:
+    - some/module
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'a/keep.ts'
+    - 'a/drop.ts'
+  out: []
+invariants:
+  - 'invariant one'
+acceptance:
+  - id: A1
+    given: 'g'
+    when: 'w'
+    then: 't'
+non_functional: {}
+contracts: []
+`;
+    fs.writeFileSync(path.join(env.cawsDir, 'specs', `${id}.yaml`), yaml);
+    const r = amendScopeSpec(env.cawsDir, {
+      id, removeIn: ['a/drop.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const out = fs.readFileSync(path.join(env.cawsDir, 'specs', `${id}.yaml`), 'utf8');
+    expect(out).not.toMatch(/^ {4}- '?a\/drop\.ts'?$/m);
+    expect(out).toMatch(/^ {4}- 'a\/keep\.ts'$/m);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.removed_in).toEqual(['a/drop.ts']);
+  });
+
+  // A4: the same quote-insensitive matching applies to scope.support.
+  it('A4 --remove-support removes a single-quoted scope.support entry', () => {
+    writeSpec(env.cawsDir, 'QUOTED-SUP-1', {
+      scopeIn: ['a/b.ts'],
+      extra: "  support:\n    - 'keep.md'\n    - 'drop.md'\n",
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'QUOTED-SUP-1', removeSupport: ['drop.md'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'QUOTED-SUP-1.yaml'), 'utf8');
+    expect(yaml).not.toMatch(/^ {4}- '?drop\.md'?$/m);
+    expect(yaml).toMatch(/^ {4}- 'keep\.md'$/m);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.removed_support).toEqual(['drop.md']);
+  });
+
+  // Idempotent ADD must also respect quote-normalization: re-adding a path that
+  // is present only in QUOTED form must not create a bare duplicate line.
+  it('idempotent --add does not duplicate a path already present in quoted form', () => {
+    writeSpecQuotedOut(env.cawsDir, 'QUOTED-DUP-1', {
+      scopeIn: ['a/b.ts'],
+      scopeOut: ['packages/x/ir.ts'],
+    });
+    const r = amendScopeSpec(env.cawsDir, {
+      id: 'QUOTED-DUP-1', addOut: ['packages/x/ir.ts'], now: NOW, actor: ACTOR,
+    });
+    expect(r.ok).toBe(true);
+    const yaml = fs.readFileSync(path.join(env.cawsDir, 'specs', 'QUOTED-DUP-1.yaml'), 'utf8');
+    // Exactly one occurrence of the path (quoted), no bare duplicate.
+    const occ = (yaml.match(/^ {4}- '?packages\/x\/ir\.ts'?$/gm) || []).length;
+    expect(occ).toBe(1);
+    const ev = readEvents(env.cawsDir).filter((e) => e.event === 'spec_scope_amended');
+    expect(ev[0].data.added_out).toEqual([]); // already present → no delta
+  });
 });
