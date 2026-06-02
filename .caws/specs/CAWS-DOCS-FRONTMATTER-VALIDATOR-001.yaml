@@ -7,12 +7,12 @@ created_at: '2026-06-02T22:20:57.014Z'
 updated_at: '2026-06-02T22:21:04.606Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/docs-tooling
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - docs/DOCUMENTATION_STANDARDS.md
     - packages/caws-cli/scripts/validate-docs.mjs
     - packages/caws-cli/tests/docs/frontmatter.test.js
@@ -23,11 +23,29 @@ scope:
     - docs/guides/worktree-isolation.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'docs/DOCUMENTATION_STANDARDS.md defines the front-matter schema: required fields (doc_id, authority, status, title, owner, updated), the authority/status/audience enums, and the conditional rules (superseded requires superseded_by).'
+  - 'The validator enforces the schema over a STRICT SET only; docs outside the strict set are not failed. The strict set is data (a declared list/glob in the script or standards doc), so repo-wide enforcement is a configuration change, not a code change — slice 1 ships the mechanism OFF for the ~30 maintainer docs and ON for the consumer-doc strict set + the standards doc itself.'
+  - 'Every strict-set doc carries valid front-matter including an `audience` field (consumer|maintainer); the consumer-doc ship-list (slice 3) will derive from `audience: consumer`.'
+  - 'The validator and its test do not ship in the npm package (they live under packages/caws-cli/scripts and tests; the build allowlist gates only src/ → dist/).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a strict-set doc missing a required front-matter field or carrying an invalid authority/status/audience enum value'
+    when: 'validate-docs.mjs runs'
+    then: 'the validator exits non-zero and names the offending file + field + reason'
+  - id: A2
+    given: 'a doc OUTSIDE the strict set with absent or partial front-matter'
+    when: 'validate-docs.mjs runs in the default (slice-1) mode'
+    then: 'the validator does NOT fail on it (lenient), proving the strict set is the only enforced surface and repo-wide is a toggle'
+  - id: A3
+    given: 'the strict set as shipped by this slice (the five consumer guides + the standards doc)'
+    when: 'validate-docs.mjs runs'
+    then: 'every strict-set doc passes — each has the six required fields, a valid enum triple, and an `audience` value'
+  - id: A4
+    given: 'the strict set is expanded to all docs/ (the future toggle)'
+    when: 'the toggle is flipped in configuration with no code edit'
+    then: 'the validator enforces repo-wide (demonstrated by the test exercising both the narrow and the all-docs strict-set inputs)'
+non_functional:
+  reliability:
+    - 'The validator must fail closed on a malformed front-matter block (unparseable YAML) for a strict-set doc rather than skipping it silently.'
+    - 'The strict set is declared as data so widening enforcement requires editing a list, not the validator logic.'
 contracts: []
