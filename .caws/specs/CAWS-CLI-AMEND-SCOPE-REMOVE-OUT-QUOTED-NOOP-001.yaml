@@ -7,7 +7,8 @@ created_at: '2026-06-02T07:28:03.861Z'
 updated_at: '2026-06-02T07:28:03.861Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,13 +18,106 @@ scope:
     - 'packages/caws-cli/src/shell/command-metadata.ts'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws specs amend-scope --remove-out <path>` removes a matching scope.out
+    entry regardless of how that entry is YAML-serialized — bare
+    (`    - packages/x`) OR single-quoted (`    - 'packages/x'`) OR
+    double-quoted. The user supplies the logical path; the comparison must be
+    on the parsed scalar value, not on the raw line text including quote
+    characters.
+  - >-
+    When `--remove-out` is given a path that matches NO scope.out entry (after
+    quote-normalization), the command reports that nothing was removed (no
+    false "amended scope" success). A no-op removal must be observably
+    distinguishable from a successful removal so the caller is never told an
+    entry was removed when it was not.
+  - >-
+    The same quote-insensitive matching applies to `--remove` (scope.in) and
+    `--remove-support` (scope.support), which share the `patchScopeSequence`
+    code path. A fix scoped only to scope.out would leave the sibling sequences
+    latently broken.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      a spec whose scope.out contains a single-quoted file-path entry
+      (`    - 'packages/ds-codegen/src/ir.ts'`), exactly as produced when the
+      path was authored with surrounding quotes
+    when: >-
+      the operator runs
+      `caws specs amend-scope <id> --remove-out packages/ds-codegen/src/ir.ts`
+    then: >-
+      the quoted entry is removed from scope.out, `caws scope check` for that
+      path no longer reports it excluded via scope.out, and the canonical YAML
+      no longer contains the line — instead of the current behavior where the
+      command prints "amended scope" but the entry persists (the silent no-op
+      this spec fixes).
+  - id: A2
+    given: >-
+      a spec whose scope.out contains a BARE (unquoted) file-path entry
+      (`    - packages/ds-codegen/src/ir.ts`)
+    when: >-
+      the operator runs
+      `caws specs amend-scope <id> --remove-out packages/ds-codegen/src/ir.ts`
+    then: >-
+      the bare entry is removed (the pre-existing path must keep working — the
+      fix must not regress unquoted removal).
+  - id: A3
+    given: >-
+      a spec where the supplied --remove-out path matches no scope.out entry
+      under either quoting form
+    when: the operator runs `caws specs amend-scope <id> --remove-out <unmatched-path>`
+    then: >-
+      the command does not falsely claim the entry was removed; it surfaces
+      that zero scope.out entries matched (no misleading success).
+  - id: A4
+    given: the same quote-insensitive matching applies to scope.in and scope.support
+    when: '`--remove` / `--remove-support` is given a quoted-on-disk entry'
+    then: >-
+      that entry is removed too, proving the fix lives in the shared
+      `patchScopeSequence` matcher rather than a scope.out-only special case.
+  - id: A5
+    given: the help text for `--remove-out` previously implied a "directory only" constraint that misframed the failure
+    when: a user reads `caws specs amend-scope --help`
+    then: >-
+      the `--remove-out` description accurately states it removes a matching
+      scope.out path (file or directory), so the user is not led to believe a
+      file-path removal is unsupported by design when it was actually a
+      quote-matching bug.
 non_functional: {}
 contracts:
   - name: 'amend-scope-remove-out'
     type: behavior
+    description: >-
+      amend-scope --remove-out (and sibling --remove / --remove-support) match
+      and delete a scope sequence entry by its parsed scalar value,
+      quote-insensitively, and report no-op vs removal honestly.
+# --- Research notes (root cause, verified 2026-06-02) -------------------------
+# Symptom: in full-stack-ds, a spec had ir.ts in BOTH scope.in and scope.out.
+#   `caws specs amend-scope <id> --remove-out packages/ds-codegen/src/ir.ts`
+#   printed "amended scope for <id>" but the scope.out entry persisted, so
+#   `caws scope check` kept REJECTing (scope.out wins over scope.in). The agent
+#   ran it twice; both reported success while the YAML never changed.
+#
+# Root cause (packages/caws-cli/src/store/specs-writer.ts, patchScopeSequence
+#   ~lines 1374-1464): removal does an exact trimmed-string match —
+#     const itemRe = /^ {4}- (.*)$/;            // captures raw line content
+#     if (removeSet.has(m[1].trim())) return false;
+#   The on-disk entry is single-quoted ('packages/.../ir.ts'), so m[1].trim()
+#   yields the value WITH the surrounding quote characters, which never equals
+#   the unquoted --remove-out argument. Removal silently no-ops. The same regex
+#   + match feeds scope.in (--remove) and scope.support (--remove-support), so
+#   all three sequences share the defect.
+#
+# Why it reported success anyway: amendScopeSpec treats a returned (unchanged)
+#   YAML string as a successful patch and emits the success message + (likely)
+#   a spec_scope_amended event even though no line changed — masking the no-op.
+#
+# Direction for the fix (to be implemented under this spec):
+#   1. In patchScopeSequence, normalize each candidate item by stripping a
+#      single matching pair of surrounding quotes before comparing to removeSet
+#      (and likewise normalize when building presentPaths for idempotent add).
+#   2. Track whether any line was actually removed; surface no-op vs removed so
+#      the command (and the audit event) reflect reality (A3).
+#   3. Correct the --remove-out help description in command-metadata.ts (A5).
+#   4. Tests in specs-writer-amend-scope.test.js: quoted-remove (A1), bare-remove
+#      regression (A2), unmatched no-op (A3), scope.in/support parity (A4).
