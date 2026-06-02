@@ -1371,6 +1371,28 @@ function ensureScopeKeyBlock(source: string, key: 'support'): string | null {
  *
  * Returns the new bytes, or null when the key block cannot be located.
  */
+/**
+ * Strip a single matching pair of surrounding YAML quotes from a scalar so
+ * scope-sequence entries compare by logical value regardless of how they were
+ * serialized. `'a/b.ts'` and `"a/b.ts"` both normalize to `a/b.ts`; a bare
+ * `a/b.ts` is returned unchanged. Only an outermost matching pair is removed
+ * (single XOR double) — interior quotes are left intact. This is the matcher
+ * fix for CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001: the scope kernel and
+ * the parsed spec both see the unquoted value, so the line-surgical patcher
+ * must too, or --remove/--remove-out/--remove-support silently no-op on a
+ * quoted-on-disk entry while reporting success.
+ */
+function unquoteScalar(value: string): string {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === "'" && last === "'") || (first === '"' && last === '"')) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
 function patchScopeSequence(
   source: string,
   key: 'in' | 'out' | 'support',
@@ -1410,16 +1432,22 @@ function patchScopeSequence(
     // A 2-space key (e.g. `  out:`) ends the current key's block.
     if (/^ {2}\S/.test(line) && !/^ {4}/.test(line)) break;
     const m = itemRe.exec(line);
-    if (m && m[1] !== undefined) presentPaths.add(m[1].trim());
+    // CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001: compare the PARSED scalar
+    // value, not the raw line text. Entries authored with surrounding quotes
+    // ('a/b.ts' or "a/b.ts") must match an unquoted --add/--remove argument; a
+    // raw-text comparison kept the quote characters and silently never matched,
+    // so --remove-out reported success while the entry persisted.
+    if (m && m[1] !== undefined) presentPaths.add(unquoteScalar(m[1].trim()));
     endIdx = i + 1;
   }
 
-  // Remove matching item lines.
-  const removeSet = new Set(remove.map((p) => p.trim()));
+  // Remove matching item lines (quote-insensitive: the on-disk entry may be
+  // bare or quoted, the caller supplies the bare logical path).
+  const removeSet = new Set(remove.map((p) => unquoteScalar(p.trim())));
   let working = lines.filter((line, i) => {
     if (i < keyIdx + 1 || i >= endIdx) return true;
     const m = itemRe.exec(line);
-    if (m && m[1] !== undefined && removeSet.has(m[1].trim())) return false;
+    if (m && m[1] !== undefined && removeSet.has(unquoteScalar(m[1].trim()))) return false;
     return true;
   });
 
@@ -1453,8 +1481,13 @@ function patchScopeSequence(
     insertAt = i + 1;
   }
 
-  // Append additions that are not already present (idempotent).
-  const toAdd = add.map((p) => p.trim()).filter((p) => p && !presentPaths.has(p));
+  // Append additions that are not already present (idempotent). Presence is
+  // compared on the unquoted scalar so a path already stored in quoted form
+  // ('a/b.ts') is not re-added as a bare duplicate
+  // (CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001).
+  const toAdd = add
+    .map((p) => p.trim())
+    .filter((p) => p && !presentPaths.has(unquoteScalar(p)));
   if (toAdd.length > 0) {
     const newItems = toAdd.map((p) => `    - ${p}`);
     working = [...working.slice(0, insertAt), ...newItems, ...working.slice(insertAt)];
