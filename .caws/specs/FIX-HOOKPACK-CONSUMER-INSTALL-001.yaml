@@ -139,10 +139,11 @@ acceptance:
       template"); the caws-cli-v11.1.10 tag push is left to the human release
       step.
 non_functional:
-  reliability: >-
-    The worktree-isolation enforcement surface must be operable in the consumer
-    runtime it actually ships into (Node ESM repos), and a fail-closed guard must
-    emit a diagnosable reason rather than an opaque sentinel.
+  reliability:
+    - >-
+      The worktree-isolation enforcement surface must be operable in the consumer
+      runtime it actually ships into (Node ESM repos), and a fail-closed guard
+      must emit a diagnosable reason rather than an opaque sentinel.
 contracts:
   - name: consumer-install-hook-pack-operable-v1
     type: behavior
