@@ -95,10 +95,13 @@ describe('A1: caws specs create', () => {
     // that scope-guard rejects edits — on the unbound main checkout it fails
     // open. It must instead say scope.in is enforced inside the bound worktree,
     // that base-branch writes are governed by the worktree-write-guard, and
-    // point at the contracts guide.
+    // orient the operator to the contract requirement.
     expect(r.stdout).not.toMatch(/scope-guard rejects every edit/);
     expect(r.stdout).toMatch(/worktree-write-guard/);
-    expect(r.stdout).toMatch(/caws-contracts\.md/);
+    // FIX-SPECS-CONTRACT-ORIENTATION-001 (A3): the guidance no longer cites the
+    // unshipped docs/guides/caws-contracts.md; the orientation is inlined.
+    expect(r.stdout).not.toMatch(/caws-contracts\.md/);
+    expect(r.stdout).toMatch(/Tier 1\/2 specs require at least one contract/);
 
     // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001 A2: the no-scope-in
     // guidance must tell the first-timer to COMMIT the spec before
@@ -151,7 +154,10 @@ describe('A1: caws specs create', () => {
     expect(r.stdout).toMatch(/caws specs show FEAT-009|caws doctor/);
     // The existing scope-in-branch guidance is preserved.
     expect(r.stdout).toMatch(/caws specs amend-scope FEAT-009 --add/);
-    expect(r.stdout).toMatch(/caws-contracts\.md/);
+    // FIX-SPECS-CONTRACT-ORIENTATION-001 (A3): contract orientation is inlined,
+    // not a pointer to the unshipped docs/guides/caws-contracts.md.
+    expect(r.stdout).not.toMatch(/caws-contracts\.md/);
+    expect(r.stdout).toMatch(/Tier 1\/2 specs require at least one contract/);
   });
 
   it('appends a spec_created event with correct shape', () => {
