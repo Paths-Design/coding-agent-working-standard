@@ -3,6 +3,7 @@ title: 'Ship a manifest-managed README.md in the claude-code hook pack so consum
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: hookpack-readme
 created_at: '2026-06-02T17:49:08.804Z'
 updated_at: '2026-06-02T17:49:18.650Z'
 blast_radius:
