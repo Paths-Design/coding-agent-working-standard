@@ -80,7 +80,7 @@ acceptance:
       (the orientation is inlined, or the pointer is removed) — no dangling
       repo-internal reference reaches a consumer install.
   - id: A4
-    given: `caws specs create --help`
+    given: the caws specs create --help output
     when: displayed
     then: >-
       it mentions the tier-1/2 contract requirement (so the requirement is
