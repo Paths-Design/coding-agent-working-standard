@@ -1517,3 +1517,47 @@ A fifth finding (D3) — a foreign session destroying another's live worktree at
 ### Single-line synthesis
 
 **Entry 35: worktree ownership was enforced only on Write/Edit (and even there a `.caws/*` allowlist exempted worktree payload), leaving Bash mutations, `.caws/worktrees/` writes, `git restore`, and `bind` as unguarded side doors a foreign session could walk. The fix is one ownership oracle behind every mutation surface — a standalone node helper both the write-guard and a new bash-write-guard shell out to, a foreign-owner guard on `bind` with an audited `--steal`, and a `git restore` block — with the candidate-resolution over-match (D3) split to its own successor spec because tightening it risks regressing the takeover-from-canonical path.**
+
+## Entry 36: An Unowned Pre-Scoped Draft Was Read As A Convenience, Not A Coordination Signal (June 2026)
+
+**Severity:** Medium (no data loss; two agents implemented the same slice in parallel, one stood down correctly, the division of labor turned out clean by accident rather than by design — but the same setup one step less lucky is a two-implementer collision on one branch)
+**Era:** v11.1 — observed in the Sterling consumer repo (CAWS as governing framework)
+**Surface that failed:** agent *reasoning* at slice-selection time, not a guard. The visibility substrate from Entry 19 (`caws agents list` / `caws worktree list` / `caws status` Agents panel) was present and would have surfaced the conflict — it simply was not consulted before `caws specs activate` + `caws worktree create`.
+**Agent class involved:** two concurrent Claude Code sessions (`31807fe8` the implementer, `6a963237` the spec-author) routed to the same slice `HARNESS-WORLD-MEMORY-DECISION-DELTA-01`
+
+### What happened
+
+A CAWS slice existed on disk as an unowned `draft` spec — hand-authored, scoped, and change-budgeted, but never committed and bound to no worktree. Two sessions were independently pointed at it as "next critical work."
+
+1. **Session `31807fe8`** ran a readiness recon and recommended the draft as rank-1 next slice. Its load-bearing justification was that *"the spec is **already authored, scoped, and budgeted as a draft**, so activation is immediate."* It read the pre-existing draft as a point **in the slice's favor** — a cost it didn't have to pay — and never asked the only question that mattered: *who authored this draft, and were they (or another live session) routed to implement it?*
+2. On the user's go-ahead, `31807fe8` ran `caws specs activate`. The activation machinery warned the spec was **dirty before the write** and the audit commit did not land cleanly; investigation showed the file was **untracked**. The agent treated this as housekeeping (committed it itself) rather than as the signature it actually was — an untracked, hand-authored draft that the governed write refused to cleanly commit is the fingerprint of *another session's in-flight work*.
+3. `31807fe8` then ran `caws worktree create`, which stamped `owner=31807fe8` on the branch. **This is the point of no easy return** — it is the action that later forced the peer to stand down. It implemented the production code (posture projection, category re-weighting, evidence-row fields) competently against the spec.
+4. Meanwhile session `6a963237` was applying the user's three amendments to the **same active spec** on the shared `.caws/specs/` surface. Its first `Edit` failed with *"File has been modified since read"* — concurrent writers to the same contract, the live shared-state hazard manifesting. It re-read, re-applied, then noticed a peer was on **its own slice's branch**, inspected the registry, found `owner=31807fe8` (not itself), correctly invoked the worktree-isolation rule, refused to enter the foreign worktree, and asked the user how to proceed.
+
+The recovery was benign — the peer had authored the contract, the implementer built it, a clean accidental division of labor — but that was luck. The same setup with both sessions reaching `worktree create` is a two-implementer collision on one branch, the exact hazard isolation exists to prevent.
+
+### Why the existing guards did not catch it
+
+This is not a missing-guard entry. Entry 19 already shipped the **visibility substrate** — leases, `caws agents list`, the `caws status` Agents panel — precisely so concurrent agent presence is legible at decision points. Entry 35 hardened every *mutation* surface against a foreign session. Both were in place. The failure was upstream of all of them: the agent **did not consult the visibility substrate before claiming**, because its own reasoning had reframed the pre-existing draft as a convenience. A guard that can only fire on a tool call cannot fire on a misframed premise. The "already drafted and scoped" framing lowered *authoring* cost and said nothing about *ownership* — and the convenience frame suppressed the ownership question entirely.
+
+### What we built or changed because of it
+
+Doctrine, not a hook (the signal lives in reasoning, not in a tool argument a guard can inspect):
+
+- **Doctrine rule:** *A CAWS draft you did not author — already scoped and budgeted when you arrive — is a coordination signal ("who else is here?"), never a convenience ("great, activation is immediate"). Before `caws specs activate` + `caws worktree create` on a draft you didn't write, run the ownership preflight FIRST:* `caws agents list`, `caws worktree list`, `caws status`, *and* `git log` */ session logs for who authored the draft. Confirm ownership before claiming, because activation + worktree creation stamps `owner=<you>` and forces any peer mid-authoring to stand down.*
+- **Corollary:** *An untracked, hand-authored draft whose governed `activate` refuses to cleanly commit is evidence of another session's in-flight work — not a housekeeping nuisance to commit past.*
+- **Corollary:** *Do not edit the `acceptance`/`invariants` of an active spec another session is implementing against. Concurrent edits to a contract that is frozen-by-implication surprise the implementer's code.*
+- A session-scoped memory recording the lesson was written in the Sterling memory store (`feedback_unowned_draft_is_a_coordination_signal.md`).
+
+### What it doesn't catch
+
+- This is a reasoning-level discipline; nothing structurally blocks an agent from activating an unowned draft without the ownership preflight. A future guard could *advise* at `caws specs activate` time when the target draft is untracked and a peer lease is live ("this draft is untracked and session X is active — confirm ownership before claiming"), but it cannot prove the draft is *unrelated* to the peer.
+- The root framing error — "pre-scoped means low-cost, therefore good" — recurs anywhere a ready-made artifact is mistaken for an unowned one (a stub PR, a checked-in plan, a half-bound worktree). The doctrine names the class; only the agent's own check closes it.
+
+### The doctrine
+
+> A pre-authored, pre-scoped draft you did not write is a coordination signal, not a convenience. "Already drafted, so activation is immediate" lowers authoring cost and says nothing about ownership — never let the convenience frame suppress the ownership question. The visibility substrate (Entry 19) only helps the agent who consults it before claiming; `caws specs activate` + `caws worktree create` is the point of no easy return, because it stamps ownership and forces any peer mid-authoring to stand down.
+
+### Single-line synthesis
+
+**Entry 36: a slice got doubly-assigned because an unowned, pre-scoped `draft` spec was read as a convenience ("already drafted, so activation is immediate") instead of a coordination signal ("another agent was routed here — who?"). The visibility substrate from Entry 19 would have surfaced the clash, but it was never consulted before `caws specs activate` + `caws worktree create` stamped ownership and forced the peer to stand down. The fix is doctrine — an ownership preflight (`caws agents list`/`worktree list`/`status` + git authorship) before claiming any draft you didn't author, plus the corollary that an untracked draft whose governed activate won't cleanly commit is the fingerprint of another session's in-flight work, not a housekeeping nuisance.**
