@@ -8,7 +8,7 @@
 # Human-authorized reset for the dangerous-command latch written by
 # block-dangerous.sh. Clears latch sentinel(s) under
 # .claude/hooks/state/ and records each reset (with a mandatory reason)
-# to .claude/logs/danger-latch-resets.log. See failure-lineage Entry 17.
+# to .claude/logs/danger-latch-resets.log.
 
 set -euo pipefail
 
