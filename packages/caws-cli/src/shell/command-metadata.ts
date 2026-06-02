@@ -166,6 +166,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           collect: true,
         },
         {
+          flag: '--contract <spec>',
+          description:
+            'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.',
+          collect: true,
+        },
+        {
           flag: '--type <type>',
           description:
             'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',

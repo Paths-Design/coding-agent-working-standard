@@ -168,19 +168,77 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * (CAWS-SPECS-CREATE-SCOPE-IN-001).
    */
   readonly scopeIn?: readonly string[];
+  /**
+   * Repeatable --contract "name:type[:path]". Tier-1/2 specs require at least
+   * one contract; supplying it here creates the spec valid in one command
+   * (FIX-SPECS-CONTRACT-ORIENTATION-001).
+   */
+  readonly contract?: readonly string[];
+}
+
+/** The closed contract.type enum (mirrors spec.v1.json). */
+const CONTRACT_TYPES = ['api', 'schema', 'contract-test', 'behavior'] as const;
+type ContractType = (typeof CONTRACT_TYPES)[number];
+
+/** The inline contract shape, shown wherever the operator needs orientation. */
+const CONTRACT_SHAPE_HINT =
+  'Contract shape: {name, type: api|schema|contract-test|behavior, path?, description?}. ' +
+  'Author via repeatable --contract "name:type[:path]".';
+
+/**
+ * Parse a repeatable --contract "name:type[:path]" into structured entries.
+ * Returns {contracts} on success or {error} with an operator-facing message
+ * (naming the valid type enum) on a malformed entry.
+ */
+function parseContractFlags(
+  raw: readonly string[]
+): { contracts: { name: string; type: ContractType; path?: string }[] } | { error: string } {
+  const contracts: { name: string; type: ContractType; path?: string }[] = [];
+  for (const entry of raw) {
+    // Split into at most 3 fields: name : type : path (path may contain colons
+    // only if quoted by the shell; we take the remainder as the path).
+    const firstColon = entry.indexOf(':');
+    if (firstColon === -1) {
+      return {
+        error: `invalid --contract "${entry}": expected "name:type[:path]". ${CONTRACT_SHAPE_HINT}`,
+      };
+    }
+    const name = entry.slice(0, firstColon).trim();
+    const rest = entry.slice(firstColon + 1);
+    const secondColon = rest.indexOf(':');
+    const typeRaw = (secondColon === -1 ? rest : rest.slice(0, secondColon)).trim();
+    const path = secondColon === -1 ? undefined : rest.slice(secondColon + 1).trim();
+    if (name.length === 0) {
+      return { error: `invalid --contract "${entry}": contract name is empty. ${CONTRACT_SHAPE_HINT}` };
+    }
+    if (!CONTRACT_TYPES.includes(typeRaw as ContractType)) {
+      return {
+        error: `invalid --contract "${entry}": type "${typeRaw}" is not one of ${CONTRACT_TYPES.join(', ')}.`,
+      };
+    }
+    contracts.push({
+      name,
+      type: typeRaw as ContractType,
+      ...(path !== undefined && path.length > 0 ? { path } : {}),
+    });
+  }
+  return { contracts };
 }
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]...',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]... [--contract "name:type[:path]"]...',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
   '  caws specs create FEAT-002 --title "Render slice" --mode feature --risk-tier 3 --scope-in src/render.js --scope-in tests/render.test.js',
+  '  caws specs create FEAT-003 --title "Tier-2 cross-package" --mode feature --risk-tier 2 --contract "core-api:behavior"',
   '',
   'Notes:',
   '  --type is not supported in v11. Use --mode instead.',
   '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
+  '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
+  '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
   '  To widen scope later, use `caws specs amend-scope <id> --add <path>` (governed; no hand-edit).',
   '  Invariants and acceptance still need filling in via the spec YAML before iteration.',
@@ -239,6 +297,19 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   );
   if (actor === null) return 2;
 
+  // FIX-SPECS-CONTRACT-ORIENTATION-001: parse repeatable --contract into
+  // structured entries (validating the type enum) BEFORE the writer, so a
+  // tier-1/2 spec is created valid in one command.
+  let parsedContracts: { name: string; type: ContractType; path?: string }[] | undefined;
+  if (opts.contract !== undefined && opts.contract.length > 0) {
+    const parsed = parseContractFlags(opts.contract);
+    if ('error' in parsed) {
+      err(`caws specs create: ${parsed.error}`);
+      return 1;
+    }
+    parsedContracts = parsed.contracts;
+  }
+
   const result = createSpec(ctx.cawsDir, {
     id: opts.id,
     title,
@@ -250,10 +321,25 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(opts.scopeIn !== undefined && opts.scopeIn.length > 0
       ? { scopeIn: opts.scopeIn }
       : {}),
+    ...(parsedContracts !== undefined && parsedContracts.length > 0
+      ? { contracts: parsedContracts }
+      : {}),
   });
   if (!isOk(result)) {
     err('caws specs create: failed.');
     err(renderDiagnostics(result.errors, { showData }));
+    // FIX-SPECS-CONTRACT-ORIENTATION-001 (A2): the kernel's narrowRepair already
+    // says "Add at least one contract or change risk_tier to 3 or mode to chore",
+    // but does not state the contract SHAPE. When a tier-1/2 create was rejected
+    // without any --contract supplied, append the inline shape + the one-command
+    // path so the operator never has to look up an (unshipped) external doc.
+    if ((riskTier === 1 || riskTier === 2) && parsedContracts === undefined) {
+      err('');
+      err(`  ${CONTRACT_SHAPE_HINT}`);
+      err(
+        `  Example: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
+      );
+    }
     return 1;
   }
   const outcome = result.value;
@@ -324,8 +410,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     );
     out('  governed by the worktree-write-guard, not scope.in.)');
   }
+  // FIX-SPECS-CONTRACT-ORIENTATION-001 (A3): inline the contract orientation
+  // instead of pointing at docs/guides/caws-contracts.md, which is NOT shipped
+  // in the published package (files-field ships only dist/README/templates) —
+  // a dangling repo-internal pointer in a consumer install. No external lookup.
   out(
-    '  Tier 1/2 specs also require a `contract` — see docs/guides/caws-contracts.md.'
+    '  Tier 1/2 specs require at least one contract. ' + CONTRACT_SHAPE_HINT
   );
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;

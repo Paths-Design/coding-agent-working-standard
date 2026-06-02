@@ -76,6 +76,19 @@ export interface CreateSpecInput {
    * needed. When undefined/empty, the scaffold line is rendered (prior behavior).
    */
   readonly scopeIn?: readonly string[];
+  /**
+   * Contracts to populate at creation time (FIX-SPECS-CONTRACT-ORIENTATION-001).
+   * Tier-1/2 specs require at least one contract; supplying them here lets a
+   * tier-1/2 spec be created in one command instead of create-at-tier-3-then-
+   * hand-edit. When non-empty, the rendered spec's `contracts:` lists exactly
+   * these entries; when undefined/empty, `contracts: []` is rendered (prior
+   * behavior — valid for tier-3 / mode: chore).
+   */
+  readonly contracts?: readonly {
+    readonly name: string;
+    readonly type: 'api' | 'schema' | 'contract-test' | 'behavior';
+    readonly path?: string;
+  }[];
   /** Override the timestamp used for created_at + the event ts. Tests inject. */
   readonly now?: () => Date;
   /** The EventBody actor envelope (built by the shell layer). */
@@ -410,6 +423,25 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     dedupedScopeIn !== null
       ? dedupedScopeIn.map((p) => `    - '${p.replace(/'/g, "''")}'`)
       : [`    - 'TODO: list the file(s) or directories this spec authorizes.'`];
+  // FIX-SPECS-CONTRACT-ORIENTATION-001: when --contract entries were supplied,
+  // render them so a tier-1/2 spec is created valid in one command. Each entry
+  // is {name, type[, path]}; single-quote string scalars defensively. When none
+  // are supplied, render the empty sequence (prior behavior; valid for tier-3 /
+  // mode: chore).
+  const sq = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+  const contractsLines =
+    input.contracts !== undefined && input.contracts.length > 0
+      ? [
+          `contracts:`,
+          ...input.contracts.flatMap((c) => [
+            `  - name: ${sq(c.name)}`,
+            `    type: ${c.type}`,
+            ...(c.path !== undefined && c.path.length > 0
+              ? [`    path: ${sq(c.path)}`]
+              : []),
+          ]),
+        ]
+      : [`contracts: []`];
   // Render a minimum-viable v11 spec. Plain-string fields are
   // single-quoted to be defensive against embedded colons. The body
   // is intentionally minimal but satisfies the kernel's structural
@@ -440,7 +472,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `    when: 'TODO'`,
     `    then: 'TODO'`,
     `non_functional: {}`,
-    `contracts: []`,
+    ...contractsLines,
     ``,
   ].join('\n');
 }
