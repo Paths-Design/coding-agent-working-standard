@@ -5,6 +5,7 @@ status: active
 title: Waiver troubleshooting (v11.0.0)
 owner: vNext rewrite team
 updated: 2026-05-15
+audience: consumer
 ---
 
 # Waiver troubleshooting (v11.0.0)

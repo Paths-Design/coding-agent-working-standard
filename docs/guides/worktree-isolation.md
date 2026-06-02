@@ -5,6 +5,7 @@ status: active
 title: Git worktree isolation for parallel agents (v11.1)
 owner: vNext rewrite team
 updated: 2026-05-28
+audience: consumer
 ---
 
 # Git worktree isolation for parallel agents (v11.1)

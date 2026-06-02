@@ -1,3 +1,13 @@
+---
+doc_id: caws-developer-guide
+authority: guide
+status: active
+title: CAWS Developer Guide
+owner: vNext rewrite team
+updated: 2026-06-02
+audience: consumer
+---
+
 # CAWS Developer Guide
 
 > Purpose: make every change predictable. Pick a **mode**, generate scaffolds, run gates, deliver a PR bundle.
