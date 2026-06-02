@@ -2,10 +2,11 @@ id: CAWS-DOCS-COMMAND-REFERENCE-GEN-001
 title: 'Generate docs/command-reference.md from COMMAND_SURFACE_METADATA at build + a CI drift test that fails when the committed doc diverges from the metadata'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: docs-cmdref
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-cmdref at 0e2ac06d802f6caab57ecc01c2c0d130de9180ef'
 created_at: '2026-06-02T23:16:20.642Z'
-updated_at: '2026-06-02T23:16:28.356Z'
+updated_at: '2026-06-02T23:21:25.996Z'
 blast_radius:
   modules:
     - caws-cli/docs-tooling
