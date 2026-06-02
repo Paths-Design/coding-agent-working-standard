@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-06-02T22:20:57.014Z'
-updated_at: '2026-06-02T22:20:57.014Z'
+updated_at: '2026-06-02T22:21:04.606Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,14 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - docs/DOCUMENTATION_STANDARDS.md
+    - packages/caws-cli/scripts/validate-docs.mjs
+    - packages/caws-cli/tests/docs/frontmatter.test.js
+    - docs/guides/caws-developer-guide.md
+    - docs/guides/multi-agent-workflow.md
+    - docs/guides/quality-gates.md
+    - docs/guides/waiver-troubleshooting.md
+    - docs/guides/worktree-isolation.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
