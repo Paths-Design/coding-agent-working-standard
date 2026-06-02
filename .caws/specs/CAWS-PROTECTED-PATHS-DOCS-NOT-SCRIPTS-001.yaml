@@ -1,0 +1,25 @@
+id: CAWS-PROTECTED-PATHS-DOCS-NOT-SCRIPTS-001
+title: 'protected-paths.sh must guard hook scripts and strike-state, not docs (README.md/CLAUDE.md) under .claude/hooks/'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-02T17:21:29.220Z'
+updated_at: '2026-06-02T17:21:29.220Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
