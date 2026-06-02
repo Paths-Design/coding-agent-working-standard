@@ -54,7 +54,51 @@ then refuse to touch.
 | `duplicate-export-check.sh` | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
 | `loc-delta-check.sh` | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
 
-The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env. See `docs/guides/hook-packs.md` for operator usage.
+The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
+
+## Authoring a spec without getting trapped
+
+A handful of CAWS conventions reject an authored spec in ways that are easy to
+hit blind. Each has a concrete fix below. **Validate every authored spec with
+`caws specs show <id>` (or `caws doctor`) before you commit it** — those surface
+a schema rejection immediately, so you never commit a spec that will not load.
+
+- **Tier 1 / tier 2 specs require at least one contract.** A bare
+  `caws specs create <id> --mode feature --risk-tier 2` is rejected
+  (`Tier 2 specs require at least one contract`). Author the contract in the same
+  command — do not hand-edit the YAML afterward:
+
+  ```bash
+  caws specs create FEAT-001 --title "..." --mode feature --risk-tier 2 \
+    --contract "core-api:behavior"
+  ```
+
+  `--contract` is repeatable and takes `"name:type[:path]"`, where `type` is one
+  of `api | schema | contract-test | behavior`. If the slice is a low-blast-radius
+  chore, use `--risk-tier 3` (or `--mode chore`) instead — those need no contract.
+
+- **`non_functional.*` values are arrays of strings, not scalars.** The four
+  admitted subkeys (`accessibility`, `performance`, `reliability`, `security`)
+  each take a list:
+
+  ```yaml
+  non_functional:
+    reliability:
+      - 'the guard must fail closed on a spawn error'
+  ```
+
+  A scalar value is rejected with `spec.schema.violation: Expected array`.
+
+- **Quote YAML scalars that start with a backtick or other special character.**
+  A `given:` / `when:` / `then:` value beginning with a backtick (or `:` `#` `{`
+  `[`) breaks the parse (`bad indentation of a mapping entry`). Quote it, or use a
+  block scalar (`>-`) which takes the text verbatim.
+
+- **Scope paths must match real file extensions.** A test file is usually
+  `*.test.js` even when the code under test is TypeScript — list the path that
+  actually exists on disk in `scope.in`, or the scope guard refuses edits to the
+  real file. Widen scope later with `caws specs amend-scope <id> --add <path>`
+  (governed; no hand-edit).
 
 ## v11 state-model awareness
 
