@@ -255,7 +255,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // sed -i, rm, mv, git restore, ...) into worktree-owned payload were an
       // unguarded side door. This hook self-filters to Bash, extracts targets
       // for a narrow mutation-form set, and routes each through the shared
-      // lib/worktree-claim-oracle.js — same owner-vs-session answer as a
+      // lib/worktree-claim-oracle.cjs — same owner-vs-session answer as a
       // Write/Edit of the same path. Wired into caws_dispatch/pre_tool_use.sh
       // after worktree-write-guard.
       destPath: '.claude/hooks/bash-write-guard.sh',
@@ -425,8 +425,12 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       // in an installed .claude/hooks/lib/. Plain JS (no TS build artifact
       // dependency); the CLI-side admitsOwner/resolveSessionCandidates stays in
       // agreement via golden fixtures, not code sharing.
-      destPath: '.claude/hooks/lib/worktree-claim-oracle.js',
-      sourcePath: 'lib/worktree-claim-oracle.js',
+      // .cjs (not .js): the oracle is CommonJS (require()); a .js extension is
+      // treated as ESM in a consumer repo whose package.json declares
+      // "type":"module", crashing the spawn. .cjs forces CommonJS regardless of
+      // the host package type (FIX-HOOKPACK-CONSUMER-INSTALL-001 D-cjs).
+      destPath: '.claude/hooks/lib/worktree-claim-oracle.cjs',
+      sourcePath: 'lib/worktree-claim-oracle.cjs',
       executable: false,
       managed: true,
     },
