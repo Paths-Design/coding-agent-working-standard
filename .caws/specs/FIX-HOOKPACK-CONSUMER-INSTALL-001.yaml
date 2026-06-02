@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-02T01:08:53.796Z'
-updated_at: '2026-06-02T01:08:53.796Z'
+updated_at: '2026-06-02T01:08:54.761Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,22 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/claude-code/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/claude-code/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/caws_dispatch/pre_tool_use.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md
+    - packages/caws-cli/templates/hook-packs/claude-code/classify_command.py
+    - packages/caws-cli/templates/hook-packs/claude-code/guard-strikes.sh
+    - packages/caws-cli/templates/hook-packs/claude-code/reset-danger-latch.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - packages/caws-cli/tests/hook-packs/worktree_claim_oracle.test.js
+    - packages/caws-cli/tests/hook-packs/bash_write_guard.test.js
+    - packages/caws-cli/tests/hook-packs/worktree_write_guard_payload_arm.test.js
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
