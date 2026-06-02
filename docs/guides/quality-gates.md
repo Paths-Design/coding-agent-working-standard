@@ -3,7 +3,9 @@ doc_id: quality-gates-guide
 authority: guide
 status: active
 title: Quality gates in v11
+owner: vNext rewrite team
 updated: 2026-05-29
+audience: consumer
 ---
 
 # Quality gates in v11

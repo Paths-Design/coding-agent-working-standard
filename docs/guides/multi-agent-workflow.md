@@ -5,6 +5,7 @@ status: active
 title: Multi-agent workflow (v11.1)
 owner: vNext rewrite team
 updated: 2026-05-28
+audience: consumer
 ---
 
 # Multi-agent workflow (v11.1)
