@@ -132,7 +132,7 @@ describe('Claude Code pack manifest', () => {
     // WORKTREE-ISOLATION-HARDENING-001: the shared ownership oracle must ship
     // so worktree-write-guard / bash-write-guard can shell out to it at the
     // installed surface (otherwise the .caws/worktrees payload arm fails open).
-    expect(ids).toContain('.claude/hooks/lib/worktree-claim-oracle.js');
+    expect(ids).toContain('.claude/hooks/lib/worktree-claim-oracle.cjs');
 
     for (const f of CLAUDE_CODE_PACK.installedFiles) {
       expect(f.managed).toBe(true);

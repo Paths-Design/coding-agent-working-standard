@@ -57,8 +57,8 @@ function makeRepo() {
   }
   // The new oracle helper — the whole point of this test.
   fs.copyFileSync(
-    path.join(PACK, 'lib', 'worktree-claim-oracle.js'),
-    path.join(dir, '.claude', 'hooks', 'lib', 'worktree-claim-oracle.js')
+    path.join(PACK, 'lib', 'worktree-claim-oracle.cjs'),
+    path.join(dir, '.claude', 'hooks', 'lib', 'worktree-claim-oracle.cjs')
   );
 
   fs.mkdirSync(path.join(dir, '.caws', 'specs'), { recursive: true });
