@@ -139,4 +139,42 @@ describe('caws specs create --contract orientation (FIX-SPECS-CONTRACT-ORIENTATI
     // The orientation is still present, inlined.
     expect(r.stdout).toMatch(/name, type: api\|schema\|contract-test\|behavior/);
   });
+
+  // A5 (Commander-level): the in-process tests above pass `contract:[...]`
+  // straight to the handler, which does NOT exercise the register.ts opt-mapping
+  // layer. The first live run revealed --contract was parsed by Commander but
+  // DROPPED at register.ts (the action only forwarded title/mode/riskTier/scopeIn),
+  // so a real `--contract` never reached the writer while the handler test passed.
+  // This drives the FULL parse path (registerShellCommands -> Commander -> action
+  // -> handler -> on-disk YAML) so that gap can never silently reopen.
+  it('--contract flows through Commander/register into the written spec (full parse path)', async () => {
+    const { Command } = require('commander');
+    const { registerShellCommands } = require('../../dist/shell');
+    const origCwd = process.cwd();
+    process.chdir(repoRoot);
+    try {
+      const program = new Command();
+      program.exitOverride();
+      program.name('caws').version('test');
+      registerShellCommands(program, { exit: () => {} });
+      await program.parseAsync(
+        ['specs', 'create', 'FEAT-206',
+          '--title', 'full parse path',
+          '--mode', 'feature',
+          '--risk-tier', '2',
+          '--contract', 'core-api:behavior'],
+        { from: 'user' }
+      );
+      const specPath = path.join(cawsDir, 'specs', 'FEAT-206.yaml');
+      // The spec must have been CREATED (not rejected) and carry the contract —
+      // proving --contract survived the register.ts mapping layer.
+      expect(fs.existsSync(specPath)).toBe(true);
+      const yaml = fs.readFileSync(specPath, 'utf8');
+      expect(yaml).toMatch(/- name: 'core-api'/);
+      expect(yaml).toMatch(/type: behavior/);
+      expect(yaml).not.toMatch(/contracts: \[\]/);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
 });

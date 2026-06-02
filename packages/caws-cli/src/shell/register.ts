@@ -604,6 +604,7 @@ export function registerShellCommands(
           mode?: string;
           riskTier?: string;
           scopeIn?: string[];
+          contract?: string[];
           type?: string;
           data?: boolean;
         }
@@ -614,6 +615,11 @@ export function registerShellCommands(
           ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
           ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
           ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
+          // FIX-SPECS-CONTRACT-ORIENTATION-001: forward the repeatable
+          // --contract values to the handler. Without this the flag is parsed
+          // by Commander (so --help shows it) but dropped at this hand-mapping
+          // layer, so a live `--contract` never reached the writer.
+          ...(opts.contract !== undefined ? { contract: opts.contract } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           showData: opts.data === true,
         });
