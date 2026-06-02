@@ -114,6 +114,17 @@ governed command surface unchanged (the thirteen v11.1 groups).
   subagent shares the parent session id via `claude_code_env` and `SessionStart`
   does not fire on subagent spawn). No lease-identity code change shipped.
 
+### Release readiness (test-only, non-user-facing)
+
+* Stale release-gate assertions left by this batch's own fixes were corrected so
+  the gates pass against the packed 11.1.9 CLI — no product behavior change:
+  the fresh-install smoke's dispatcher path (`dispatch/` → `caws_dispatch/`,
+  renamed by `CAWS-INIT-SETTINGS-WIRING-001`) and its `migrate --apply --partial`
+  exit-code expectations (`CAWS-CLI-EXIT-CODES-001` made `refused>0` exit 1)
+  (`CAWS-SMOKE-DISPATCHER-PATH-STALE-001`); and a `composeStoreSnapshot`
+  `toEqual` expectation that did not list the `hookPackInstalled` field added by
+  `CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001` (`CAWS-SNAPSHOT-HOOKPACK-FIELD-TEST-001`).
+
 ### Added (continued)
 
 * **`caws specs amend-scope` — governed scope amendment without `git cherry-pick`**
