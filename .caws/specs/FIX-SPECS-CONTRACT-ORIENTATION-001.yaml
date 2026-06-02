@@ -2,10 +2,11 @@ id: FIX-SPECS-CONTRACT-ORIENTATION-001
 title: 'caws specs create gives no consumer orientation to the tier-1/2 contract requirement: bare rejection, dangling caws-contracts.md pointer, no --contract path'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-contract-orient
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-contract-orient at b83698d34828bd8aa34a3f0a59ba859c488bf873'
 created_at: '2026-06-02T01:23:51.423Z'
-updated_at: '2026-06-02T01:24:14.028Z'
+updated_at: '2026-06-02T04:08:37.535Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell
