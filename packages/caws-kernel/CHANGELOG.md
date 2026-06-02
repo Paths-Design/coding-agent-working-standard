@@ -5,6 +5,43 @@ pure-TypeScript governance primitive layer (spec/policy/scope/evidence/worktree
 types, parsers, validators, lifecycle transitions; no I/O) consumed by
 `caws-cli@^11` and external integrators.
 
+## [1.2.0] (2026-06-01)
+
+Additive governance-primitive surface for the caws-cli 11.1.9 batch
+(worktree-isolation hardening, agent-liveness doctor, scope amendment, and
+`scope.support`). No breaking changes — new event schemas, a new optional spec
+field, new scope/doctor rule ids, and additive event-vocabulary entries. The CLI
+11.1.9 runtime imports these symbols, so this kernel must be published before the
+caws-cli 11.1.9 tag (coupled-release ordering; see `docs/release-procedure.md`).
+
+### Added
+
+* **`scope.support` spec field** (`spec/types.ts` `support?: string[]`,
+  `schemas/spec.v1.json`, `scope/evaluate.ts`, `scope/rules.ts`)
+  (`WORKTREE-SUPPORT-SCOPE-001`). Paths admitted for editing **like `scope.in`
+  but never treated as a worktree claim** — for repo-root deliverables a slice
+  must write but should not contend for. New distinct scope rule
+  `ADMIT_SCOPE_SUPPORT` (`scope.admit.scope_support`) so diagnostics
+  distinguish "admitted because owned (`scope.in`)" from "admitted as support".
+* **`spec_scope_amended.v1` event schema** (`schemas/events/spec_scope_amended.v1.json`)
+  for `caws specs amend-scope` (`CAWS-SCOPE-AMEND-COMMAND-001`). Registered in the
+  event vocabulary at all sites (`events.v1.json` enum, `EventType` union +
+  `REQUIRES_SPEC_ID` in `evidence/types.ts` and `evidence/validate.ts`).
+* **`worktree_ownership_seized.v1` event schema**
+  (`schemas/events/worktree_ownership_seized.v1.json`) for the forced
+  `caws worktree bind --steal --reason` audit (`WORKTREE-ISOLATION-HARDENING-001`
+  Fix 4). A seizure binds to a spec, so the event carries `spec_id` like
+  `worktree_bound`. Registered in the event vocabulary at all sites.
+* **Lease/worktree liveness-drift doctor rules** (`doctor/rules.ts`,
+  `doctor/inspect.ts`, `doctor/types.ts`) (`AGENT-LIVENESS-DOCTOR-001` D10):
+  `WORKTREE_OWNER_LEASE_MISSING` (`doctor.worktree.owner_lease_missing` —
+  diagnostic only; the registry owner remains authoritative) and a
+  `pid_oracle_unreliable` signal for the Claude Code per-call-PID case where
+  recency, not PID, is the liveness authority.
+* **Hook-pack-without-`.caws` doctor rule** (`CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001`):
+  the inverse of the `INIT_*_MISSING` family — the hook pack is installed but the
+  whole `.caws/` is absent.
+
 ## [1.1.4] (2026-05-29)
 
 ### Added
