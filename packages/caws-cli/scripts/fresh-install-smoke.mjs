@@ -401,6 +401,72 @@ function assertHookPackV3(pack) {
   ok(`hook pack v${pack.packVersion} (>=3) with all three agent-*.sh as managed+executable`);
 }
 
+function assertOracleRunsUnderTypeModule(projectDir) {
+  // FIX-HOOKPACK-CONSUMER-INSTALL-001 A1/A6 — the regression this slice fixes.
+  // The worktree-claim-oracle is CommonJS (require()). It shipped as .js; in a
+  // consumer repo whose package.json declares "type":"module", Node loads a .js
+  // file as ESM and crashes (ReferenceError: require is not defined), so both
+  // write-guards fail closed with error_fail_closed:oracle-spawn on every
+  // worktree-path write. The pre-existing smoke never caught this because its
+  // scratch package.json is CommonJS-default. Here we set "type":"module" and
+  // prove the INSTALLED oracle still runs.
+  step('A1/A6 — ownership oracle runs under a consumer "type":"module" repo');
+
+  const oracle = join(projectDir, '.claude', 'hooks', 'lib', 'worktree-claim-oracle.cjs');
+  if (!existsSync(oracle)) {
+    fail('installed oracle not found at the .cjs path', {
+      expected: oracle,
+      hint: 'manifest destPath must be lib/worktree-claim-oracle.cjs',
+    });
+  }
+
+  // Flip the scratch repo to ESM for the duration of this check, then restore.
+  const pkgPath = join(projectDir, 'package.json');
+  const original = readFileSync(pkgPath, 'utf8');
+  let restored = false;
+  const restore = () => {
+    if (!restored) {
+      writeFileSync(pkgPath, original);
+      restored = true;
+    }
+  };
+  try {
+    const pkg = JSON.parse(original);
+    pkg.type = 'module';
+    writeFileSync(pkgPath, JSON.stringify(pkg));
+
+    const r = spawnSync('node', [oracle], {
+      cwd: projectDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CAWS_ORACLE_PROJECT_DIR: projectDir,
+        CAWS_ORACLE_CURRENT_BRANCH: '',
+        CAWS_ORACLE_REL_PATH: join(projectDir, 'README.md'),
+        CAWS_ORACLE_SESSION_ID: 'caws-smoke-typemodule',
+      },
+    });
+
+    // The .cjs extension forces CommonJS regardless of the host package type,
+    // so require() resolves and the oracle prints a decision. The bug (a .js
+    // oracle) would instead crash with a non-zero exit and the ESM error on
+    // stderr, and stdout would be empty.
+    const decision = (r.stdout || '').trim().split('\n')[0];
+    const validOutcome = /^(pass|block_claimed|block_foreign_worktree|ask_uncertain|error_fail_closed)\b/;
+    if (r.status !== 0 || !validOutcome.test(decision)) {
+      fail('oracle did not run under "type":"module" — the .cjs fix is not in effect', {
+        exitCode: r.status,
+        stdout: (r.stdout || '').trim().slice(0, 400),
+        stderr: (r.stderr || '').trim().slice(0, 400),
+        hint: 'a .js (not .cjs) oracle would crash here with "require is not defined in ES module scope"',
+      });
+    }
+    ok(`oracle ran under "type":"module": ${decision} (exit 0, no ESM crash)`);
+  } finally {
+    restore();
+  }
+}
+
 function assertSessionStartCreatesLease(projectDir, shimDir) {
   step('A14.5 — SessionStart dispatcher creates a lease file');
   const sessionId = 'caws-smoke-session-a';
@@ -779,6 +845,11 @@ try {
   assertTemplateSourcesPresent(installedRoot, pack);
   runInit(projectDir, installedRoot);
   assertDestFilesPresent(projectDir, pack);
+
+  // FIX-HOOKPACK-CONSUMER-INSTALL-001 A1/A6 — the oracle must run in an ESM
+  // consumer repo (the regression this slice fixes). Runs against the installed
+  // pack, before the lease-substrate checks.
+  assertOracleRunsUnderTypeModule(projectDir);
 
   // A14.4 — hook pack v3 with the three new agent-*.sh templates.
   assertHookPackV3(pack);

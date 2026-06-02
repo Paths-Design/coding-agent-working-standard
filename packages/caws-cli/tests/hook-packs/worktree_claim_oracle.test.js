@@ -1,6 +1,6 @@
 /**
  * @fileoverview WORKTREE-ISOLATION-HARDENING-001 — the shared
- * worktree-claim-oracle.js decision logic.
+ * worktree-claim-oracle.cjs decision logic.
  *
  * The oracle is the single ownership authority shelled out to by BOTH
  * worktree-write-guard.sh (Write/Edit) and bash-write-guard.sh (Bash mutation
@@ -33,7 +33,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const ORACLE = path.join(
   REPO_ROOT,
   'packages', 'caws-cli', 'templates', 'hook-packs', 'claude-code', 'lib',
-  'worktree-claim-oracle.js'
+  'worktree-claim-oracle.cjs'
 );
 
 /** Build a throwaway .caws control plane (no git needed — oracle reads files). */

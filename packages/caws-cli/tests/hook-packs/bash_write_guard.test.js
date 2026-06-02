@@ -40,7 +40,7 @@ function makeRepo() {
   fs.mkdirSync(path.join(dir, '.claude', 'hooks', 'lib'), { recursive: true });
   fs.copyFileSync(path.join(PACK, 'bash-write-guard.sh'), path.join(dir, '.claude', 'hooks', 'bash-write-guard.sh'));
   fs.copyFileSync(path.join(PACK, 'runtime-paths.sh'), path.join(dir, '.claude', 'hooks', 'runtime-paths.sh'));
-  for (const f of ['parse-input.sh', 'caws-state.sh', 'emit.sh', 'guard-message.sh', 'worktree-claim-oracle.js']) {
+  for (const f of ['parse-input.sh', 'caws-state.sh', 'emit.sh', 'guard-message.sh', 'worktree-claim-oracle.cjs']) {
     fs.copyFileSync(path.join(PACK, 'lib', f), path.join(dir, '.claude', 'hooks', 'lib', f));
   }
   fs.mkdirSync(path.join(dir, '.caws', 'specs'), { recursive: true });

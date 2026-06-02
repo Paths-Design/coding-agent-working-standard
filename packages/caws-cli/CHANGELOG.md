@@ -1,5 +1,41 @@
 ## [Unreleased]
 
+## [11.1.10] (2026-06-02)
+
+Consumer-install hotfix for the Claude Code hook pack. The pack installed by
+`caws init` into a consumer repo was not operable under normal consumer
+conditions; both defects below shipped in 11.1.9. No enforcement, schema,
+risk-tier, or hook-authority change.
+
+### Fixed
+
+* **Ownership oracle runs in ESM consumer repos** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
+  `lib/worktree-claim-oracle` is CommonJS (`require()`) but shipped as `.js`. In a
+  consumer repo whose `package.json` declares `"type":"module"`, Node loaded it as
+  ESM and crashed (`require is not defined in ES module scope`), so both
+  `worktree-write-guard.sh` and `bash-write-guard.sh` failed closed with
+  `error_fail_closed:oracle-spawn` on every Bash/Write to a worktree path — the
+  whole worktree-isolation enforcement surface was inoperable. The oracle now ships
+  as `worktree-claim-oracle.cjs` (the extension forces CommonJS regardless of the
+  host package type); both guards, the install manifest, and the tests follow the
+  rename. The fresh-install smoke now spawns the installed oracle under a
+  `"type":"module"` scratch repo so this regression class is covered.
+* **Guard spawn errors are no longer swallowed** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
+  Both guard spawn sites discarded the oracle's stderr (`2>/dev/null`), so a node
+  module-mode crash surfaced only as the opaque `oracle-spawn` sentinel. They now
+  merge stderr into the captured output and fold the real first-line cause into the
+  `error_fail_closed` detail; the happy-path decision parse is unchanged.
+* **Consumer-safe hook-pack doctrine** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`). The
+  shipped template `CLAUDE.md` carried CAWS-internal failure-lineage doctrine
+  ("every hook exists because of an incident" / read `docs/failure-lineage.md` /
+  "name the lineage entry" before editing) and a lineage-entry-number column. In a
+  consumer repo that incident ledger does not exist, so a consumer agent could
+  refuse legitimate hook fixes. Reframed to consumer-safe managed-file guidance (do
+  not hand-edit; surface blocks to the user; update via `caws init`). Inline
+  `failure-lineage Entry N` citations in `classify_command.py`, `guard-strikes.sh`,
+  and `reset-danger-latch.sh` reworded to behavioral descriptions. The
+  `lineage_refs:` managed-header field is retained (load-bearing for install).
+
 ## [11.1.9] (2026-06-01)
 
 Multi-agent worktree-isolation hardening, agent-liveness correctness, and a
