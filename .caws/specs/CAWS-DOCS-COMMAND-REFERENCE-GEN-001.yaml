@@ -7,23 +7,40 @@ created_at: '2026-06-02T23:16:20.642Z'
 updated_at: '2026-06-02T23:16:28.356Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/docs-tooling
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/scripts/generate-command-reference.mjs
     - docs/command-reference.md
     - packages/caws-cli/tests/docs/command-reference-sync.test.js
     - packages/caws-cli/package.json
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'docs/command-reference.md is GENERATED from COMMAND_SURFACE_METADATA (the typed single-source register.ts consumes), never hand-edited — every group, leaf, positional argument, and visible option is rendered from the metadata.'
+  - 'Hidden options (hidden: true, e.g. the legacy specs create --type alias) are omitted from the generated doc, mirroring their omission from --help; enum-backed options render their allowedValues list.'
+  - 'A sync test regenerates the doc in-memory and byte-compares it against the committed docs/command-reference.md; any metadata change without regenerating the doc fails the test (CI drift gate).'
+  - 'The generator is build-wired (a docs:generate npm script invoked by build, or an equivalent hook) so a fresh build refreshes the doc deterministically; the generator reads the built dist metadata.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the committed docs/command-reference.md and the current COMMAND_SURFACE_METADATA'
+    when: 'the sync test regenerates the reference and compares'
+    then: 'they are byte-identical (exit 0); a divergence fails the test with a regenerate hint'
+  - id: A2
+    given: 'the generated reference'
+    when: 'it is inspected for the specs group'
+    then: 'every visible subcommand (create/list/show/...) appears with its description, positional arg, and visible options; the hidden --type alias does NOT appear'
+  - id: A3
+    given: 'an option with allowedValues (e.g. specs create --mode)'
+    when: 'the reference is generated'
+    then: 'the allowed values are rendered as a list, matching the enum the metadata derives from'
+  - id: A4
+    given: 'a fresh build of the caws-cli package'
+    when: 'the build runs'
+    then: 'docs/command-reference.md is regenerated deterministically from the built metadata (re-running the generator produces no diff)'
+non_functional:
+  reliability:
+    - 'The generator must be deterministic: same metadata input always yields byte-identical output (stable ordering, no timestamps), so the drift test is not flaky.'
 contracts: []
