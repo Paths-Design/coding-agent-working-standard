@@ -7,22 +7,33 @@ created_at: '2026-06-02T17:49:08.804Z'
 updated_at: '2026-06-02T17:49:18.650Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/README.md
     - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
     - packages/caws-cli/tests/init/hook-packs/install.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The claude-code hook pack ships a README.md template carrying the CAWS-MANAGED-HOOK HTML-comment header (hook_pack_version matching the pack), so caws init installs and manages it like CLAUDE.md.'
+  - 'The README inventory is factually accurate against the wired dispatch: guard-strikes.sh is documented as a sourced shared library (not a standalone handler), and each hook is documented with its real exit-code semantics.'
+  - 'The README does not duplicate CLAUDE.md authority — CLAUDE.md remains the agent-doctrine surface; the README is the human-facing inventory and points to CLAUDE.md for doctrine.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a fresh caws init --agent-surface claude-code into a project'
+    when: 'the install completes'
+    then: '.claude/hooks/README.md exists, carries a parseable CAWS-MANAGED-HOOK header, and the manifest lists it with managed: true'
+  - id: A2
+    given: 'the shipped README template'
+    when: 'its hook inventory is cross-checked against caws_dispatch/pre_tool_use.sh and post_tool_use.sh'
+    then: 'guard-strikes.sh is described as a sourced library and every standalone handler in the README appears in a HANDLERS array (no standalone-vs-library miscategorization)'
+  - id: A3
+    given: 'install.test.js A1 (every manifest file has a managed header)'
+    when: 'the suite runs after the README is added to the manifest'
+    then: 'the README is enumerated and passes the managed-header assertion alongside CLAUDE.md'
+non_functional:
+  reliability:
+    - 'The README header version must match the pack version so caws init treats it as a managed file (not an unmanaged collision).'
 contracts: []
