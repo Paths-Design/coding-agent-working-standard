@@ -2,10 +2,11 @@ id: CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001
 title: 'amend-scope --remove-out silently no-ops on quoted scope.out entries'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: amend-scope-quoted-noop
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge amend-scope-quoted-noop at 2e658b0c6632716cf3354039abddf5d97e2129fa'
 created_at: '2026-06-02T07:28:03.861Z'
-updated_at: '2026-06-02T07:28:03.861Z'
+updated_at: '2026-06-02T07:50:49.704Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/specs-writer.ts
