@@ -124,6 +124,8 @@ describe('Claude Code pack manifest', () => {
     expect(ids).toContain('.claude/hooks/block-dangerous.sh');
     expect(ids).toContain('.claude/hooks/classify_command.py');
     expect(ids).toContain('.claude/hooks/CLAUDE.md');
+    // CAWS-HOOKPACK-SHIP-README-001: the human-facing inventory ships managed.
+    expect(ids).toContain('.claude/hooks/README.md');
     expect(ids).toContain('.claude/hooks/caws_dispatch/pre_tool_use.sh');
     expect(ids).toContain('.claude/hooks/lib/parse-input.sh');
     // HOOK-LIB-CONSOLIDATION-001: shared-utility libs are managed too.
