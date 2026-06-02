@@ -3,6 +3,7 @@ title: 'Generate docs/command-reference.md from COMMAND_SURFACE_METADATA at buil
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: docs-cmdref
 created_at: '2026-06-02T23:16:20.642Z'
 updated_at: '2026-06-02T23:16:28.356Z'
 blast_radius:
