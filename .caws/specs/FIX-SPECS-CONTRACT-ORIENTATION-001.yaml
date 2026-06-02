@@ -1,18 +1,18 @@
 id: FIX-SPECS-CONTRACT-ORIENTATION-001
 title: 'caws specs create gives no consumer orientation to the tier-1/2 contract requirement: bare rejection, dangling caws-contracts.md pointer, no --contract path'
-risk_tier: 3
+risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-02T01:23:51.423Z'
 updated_at: '2026-06-02T01:24:14.028Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell
+    - packages/caws-cli/src/store
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/src/shell/register.ts
@@ -24,11 +24,99 @@ scope:
     - packages/caws-cli/tests/shell/specs-create-scope-in.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CONSUMER-ORIENTATION DEFECT (sibling to FIX-HOOKPACK-CONSUMER-INSTALL-001,
+    NOT folded in — different surface, different failure mode). "Contract" is
+    CAWS-internal vocabulary an agent/consumer gets no in-context orientation to.
+    `caws specs create --risk-tier 1|2` rejects with a bare "Tier N specs require
+    at least one contract" that does NOT render the kernel's narrowRepair, does
+    NOT state the contract shape, points at docs/guides/caws-contracts.md which
+    is NOT shipped (files-field ships only dist/README/templates — a dangling
+    pointer, same class as the failure-lineage leak), and there is no --contract
+    path so tier-1/2 cannot be satisfied in one command. Reproduced live during
+    FIX-HOOKPACK-CONSUMER-INSTALL-001 creation.
+  - >-
+    SCOPE GUARD. This is CLI lifecycle-UX + specs-create ergonomics, not a change
+    to what a contract IS or to the tier-contract requirement itself. The closed
+    contract.type enum (api|schema|contract-test|behavior) and the requirement
+    that tier-1/2 need a contract are UNCHANGED. The fix is orientation: render
+    the existing narrowRepair, inline the shape, kill the dangling doc pointer,
+    and add a --contract create path.
+  - >-
+    NO DANGLING REPO-INTERNAL DOC POINTERS IN CONSUMER-FACING OUTPUT. A consumer
+    install must never be told to read a repo path (docs/guides/*) that is not
+    shipped. Either inline the orientation or ship the guide; do not cite an
+    unshipped path. (General rule this slice establishes for the contract case.)
+  - >-
+    SINGLE-SOURCE OPTION METADATA. --contract is added through
+    command-metadata.ts (COMMAND_SURFACE_METADATA — the single typed source that
+    register.ts and --help both read), so help text and registration cannot drift
+    (the --help-authority lock from CAWS-HELP-METADATA work).
+  - >-
+    RELEASE POSTURE. May co-ride 11.1.10 with the hook-pack hotfix IF it lands
+    cleanly, but stays a SEPARATE spec so the hook-pack emergency fix does not
+    become a kitchen-sink consumer-orientation release. If this slice expands, it
+    ships on its own later patch. Tag push is the human step.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: an agent runs `caws specs create --risk-tier 1` or `--risk-tier 2` with no contract
+    when: the create is rejected
+    then: >-
+      the rejection renders the semantic narrowRepair ("Add at least one contract
+      or change risk_tier to 3 or mode to chore"), not only the bare "requires at
+      least one contract" message.
+  - id: A2
+    given: the same rejection
+    when: it is displayed
+    then: >-
+      it includes the contract shape inline —
+      {name, type: api|schema|contract-test|behavior, path?, description?} — so
+      the operator can author one without external lookup.
+  - id: A3
+    given: every consumer-facing specs-create message (rejection AND post-create guidance)
+    when: scanned for repo-internal doc pointers
+    then: >-
+      no consumer-facing output points at an unshipped docs/guides/caws-contracts.md
+      (the orientation is inlined, or the pointer is removed) — no dangling
+      repo-internal reference reaches a consumer install.
+  - id: A4
+    given: `caws specs create --help`
+    when: displayed
+    then: >-
+      it mentions the tier-1/2 contract requirement (so the requirement is
+      discoverable before hitting the rejection), sourced from
+      COMMAND_SURFACE_METADATA so help and registration cannot drift.
+  - id: A5
+    given: a tier-1/2 spec create that needs a contract
+    when: the operator supplies a repeatable --contract flag
+    then: >-
+      the spec is created with that contract in one command (no create-at-tier-3-
+      then-hand-edit dance). Flag shape: --contract "name:type[:path]" (or an
+      equivalent --contract-json), repeatable; an invalid type is rejected with
+      the enum named.
+  - id: A6
+    given: the change
+    when: gated on canonical
+    then: >-
+      tests cover create-time rejection rendering (narrowRepair + inline shape +
+      no dangling pointer), successful tier-2 create WITH --contract, an invalid
+      contract type rejection, and the packed/fresh-install behavior; full CLI
+      jest + the gates stay green.
+non_functional:
+  reliability:
+    - >-
+      A governed lifecycle rejection must be self-orienting: it must render its
+      repair and the required shape in-context, and never cite an artifact that
+      is not present in the surface the operator is running from.
+contracts:
+  - name: specs-create-contract-orientation-v1
+    type: behavior
+    description: >-
+      `caws specs create` orients the operator to the tier-1/2 contract
+      requirement entirely in-context: the create-time rejection renders the
+      kernel narrowRepair and the inline contract shape
+      {name, type: api|schema|contract-test|behavior, path?, description?}, cites
+      no unshipped doc path, --help advertises the requirement from the
+      single-source metadata, and a repeatable --contract flag lets a tier-1/2
+      spec be created in one command. The contract.type enum and the
+      tier-contract requirement are unchanged.
