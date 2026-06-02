@@ -2,10 +2,11 @@ id: CAWS-HOOKPACK-SHIP-README-001
 title: 'Ship a manifest-managed README.md in the claude-code hook pack so consumers get an authoritative human-facing hook inventory'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: hookpack-readme
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hookpack-readme at 9c72fd71e3d5d310ca66289a3424e080834909c9'
 created_at: '2026-06-02T17:49:08.804Z'
-updated_at: '2026-06-02T17:49:18.650Z'
+updated_at: '2026-06-02T17:52:21.755Z'
 blast_radius:
   modules:
     - caws-cli/hook-packs/claude-code
