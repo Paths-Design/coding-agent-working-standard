@@ -1,0 +1,509 @@
+<!--
+  GENERATED FILE — do not edit by hand.
+  Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).
+  Regenerate: node packages/caws-cli/scripts/generate-command-reference.mjs
+  The sync test (tests/docs/command-reference-sync.test.js) fails CI if this
+  file drifts from the metadata.
+-->
+
+# CAWS CLI Command Reference
+
+Every `caws` command group and its subcommands, generated from the same typed metadata the CLI uses to build `--help`. Run `caws <group> --help` for the live form.
+
+## Groups
+
+- [`caws init`](#caws-init) — Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.
+- [`caws doctor`](#caws-doctor) — Run drift detection against the current .caws/ state
+- [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
+- [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
+- [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
+- [`caws gates`](#caws-gates) — Run quality gates against the current changes (policy-driven)
+- [`caws evidence`](#caws-evidence) — Record typed evidence events into .caws/events.jsonl
+- [`caws events`](#caws-events) — Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
+- [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse). Worktrees are git worktrees bound to active specs.
+- [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
+- [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
+
+## `caws init`
+
+Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+- `--agent-surface <name>` — Install a hook pack for an agent harness (claude-code | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.
+- `--overwrite` — For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.
+- `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
+
+## `caws doctor`
+
+Run drift detection against the current .caws/ state
+
+**Options:**
+
+- `--data` — Show structured data block on findings/diagnostics
+
+## `caws status`
+
+Read-only dashboard: project, current context, claim, and doctor findings
+
+**Options:**
+
+- `--data` — Show structured data block on rendered diagnostics
+
+## `caws scope`
+
+Evaluate file paths against the bound spec scope
+
+### `caws scope show <path>`
+
+Explain the scope decision for <path>; always exits 0
+
+**Argument:** `path` (required) — File path to evaluate
+
+**Options:**
+
+- `--data` — Show structured data block
+
+### `caws scope check <path>`
+
+Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise
+
+**Argument:** `path` (required) — File path to enforce
+
+**Options:**
+
+- `--data` — Show structured data block
+
+## `caws claim`
+
+Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
+
+**Options:**
+
+- `--takeover` — Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session.
+- `--paths <path>` (repeatable) — Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session.
+- `--data` — Show structured data block on diagnostics
+
+## `caws gates`
+
+Run quality gates against the current changes (policy-driven)
+
+### `caws gates run`
+
+Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / subprocess-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).
+
+**Options:**
+
+- `--spec <id>` (**required**) — Spec id this gate run is about
+- `--context <ctx>` (default: `cli`) — Compatibility no-op retained from the former quality-gates subprocess path
+- `--data` — Show structured data block on diagnostics
+
+## `caws evidence`
+
+Record typed evidence events into .caws/events.jsonl
+
+### `caws evidence record`
+
+Append a typed evidence event (test|gate|ac)
+
+**Options:**
+
+- `--type <kind>` (**required**) — Evidence kind: test | gate | ac
+- `--spec <id>` (**required**) — Spec id this evidence is about
+- `--data <json>` (**required**) — Event payload as a JSON object string
+- `--actor-kind <kind>` (default: `agent`) — Actor kind: agent | human | system | automation
+- `--actor-id <id>` — Override actor id (defaults to session id)
+
+## `caws events`
+
+Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
+
+### `caws events migrate`
+
+Migrate a v10-shape events.jsonl to a v11 chain via chain_rotated rotation. Dry-run by default; --apply executes.
+
+**Options:**
+
+- `--from <version>` (**required**) — Source schema version (only v10 supported in v11.2)
+- `--apply` — Execute the rotation (default is dry-run)
+- `--reason <text>` — Operator reason recorded into the chain_rotated payload (required with --apply)
+- `--actor-kind <kind>` (default: `agent`) — Actor kind: agent | human | system | automation
+- `--actor-id <id>` — Override actor id (defaults to session id)
+- `--allow-partial-upgrade` — Allow rotation when v10 specs are still present (off by default; see CAWS-MIGRATE-V10-SPECS-001)
+
+### `caws events rotate`
+
+Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.
+
+**Options:**
+
+- `--reason <text>` (**required**) — Operator reason recorded into the chain_rotated payload
+- `--actor-kind <kind>` (default: `agent`) — Actor kind: agent | human | system | automation
+- `--actor-id <id>` — Override actor id (defaults to session id)
+- `--allow-clean` — Allow rotation of a clean v11 chain (friction flag)
+
+### `caws events verify-archive`
+
+Verify that the archive file named in the most recent chain_rotated event byte-matches its committed digest + line count.
+
+## `caws waiver`
+
+Manage CAWS waivers (bounded exception records that suppress matching gate violations)
+
+### `caws waiver create <id>`
+
+Create a new active waiver. Validates against the kernel before writing.
+
+**Argument:** `id` (required) — Waiver id to create
+
+**Options:**
+
+- `--title <title>` (**required**) — Short waiver title (≥5 chars)
+- `--gate <gate>` (**required**, repeatable) — Gate id this waiver covers; repeat for multiple gates
+- `--reason <reason>` (**required**) — Justification for the waiver
+- `--approved-by <id>` (**required**) — Approver identity
+- `--expires-at <iso>` (**required**) — Expiry as an ISO-8601 datetime with timezone
+- `--spec <id>` — Optional spec id this waiver is scoped to (omit for project-wide)
+- `--data` — Show structured data block on diagnostics
+
+### `caws waiver list`
+
+List waivers. By default excludes revoked and expired records.
+
+**Options:**
+
+- `--include-revoked` — Include revoked waivers
+- `--include-expired` — Include expired waivers
+- `--data` — Show structured data block on diagnostics
+
+### `caws waiver show <id>`
+
+Show a waiver, including its derived effectiveness at now.
+
+**Argument:** `id` (required) — Waiver id to show
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+
+### `caws waiver revoke <id>`
+
+Revoke a waiver. Writes a revocation record; refuses double-revoke.
+
+**Argument:** `id` (required) — Waiver id to revoke
+
+**Options:**
+
+- `--revoked-by <id>` — Identity recorded in revocation.revoked_by
+- `--reason <reason>` — Reason recorded in revocation.reason (recommended for audit)
+- `--data` — Show structured data block on diagnostics
+
+## `caws specs`
+
+Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)
+
+### `caws specs create <id>`
+
+Create a new spec in lifecycle_state: active.
+
+**Argument:** `id` (required) — Spec id to create
+
+**Options:**
+
+- `--title <title>` — Short spec title (required)
+- `--mode <mode>` — Spec mode (required): feature | refactor | fix | doc | chore
+- `--risk-tier <n>` — Risk tier (required): 1 | 2 | 3
+- `--scope-in <path>` (repeatable) — Populate scope.in at creation time (repeatable); avoids the YAML hand-edit. Widen later with `caws specs amend-scope`.
+- `--contract <spec>` (repeatable) — Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs list`
+
+List specs. By default excludes archived specs.
+
+**Options:**
+
+- `--archived` — Include archived specs in the listing
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs show <id>`
+
+Show a spec by id. Defaults to active specs only; pass --archived to recover an archived spec body from the event log + git history.
+
+**Argument:** `id` (required) — Spec id to show
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+- `--archived` — Recover an archived spec body via the event log + git show <blob_sha>. The body is NOT loaded from .caws/specs/.archive/ (which the post-CAWS-ARCHIVE-AS-TOMBSTONE-001 archive flow does not write).
+
+### `caws specs recover <id>`
+
+Recover an archived spec body via the event log + git show <blob_sha>. Topology-independent (works with merge commits, rebases, cherry-picks). Reads .caws/events.jsonl for the spec_archived event, validates the blob_sha, runs git show, prints to stdout (or --out <path>). Does NOT mutate .caws/specs/.
+
+**Argument:** `id` (required) — Archived spec id to recover
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+- `--out <path>` — Write the recovered body to this path instead of stdout
+
+### `caws specs retire-draft <id>`
+
+Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), closed (use archive), and archived specs. Deletes the draft YAML and appends a recoverable spec_retired event (recover via caws specs show <id> --archived). The governed alternative to raw git rm.
+
+**Argument:** `id` (required) — Draft spec id to retire
+
+**Options:**
+
+- `--reason <text>` — Optional human-readable retirement note
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs activate <id>`
+
+Activate a pre-authored draft spec. Draft-only: patches lifecycle_state to active and appends spec_activated.
+
+**Argument:** `id` (required) — Draft spec id to activate
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs amend-scope <id>`
+
+Amend a spec's scope.in/scope.out/scope.support on the canonical control plane (active/draft only). The sanctioned way to add a path you need to edit — no git cherry-pick, no danger latch. Writes only canonical .caws/specs/<id>; scope check from a linked worktree admits the added path immediately. Comment-preserving; validate-before-write; appends spec_scope_amended.
+
+**Argument:** `id` (required) — Active or draft spec id to amend
+
+**Options:**
+
+- `--add <path>` (repeatable) — Add a scope.in path — editable AND worktree-claimed (repeatable)
+- `--remove <path>` (repeatable) — Remove a matching scope.in path — file or directory, matched by logical value regardless of quoting (repeatable)
+- `--add-out <path>` (repeatable) — Add a scope.out path. NOTE: the no-glob rule is an ADD-time schema constraint (file or directory paths only); removal has no such restriction (repeatable)
+- `--remove-out <path>` (repeatable) — Remove a matching scope.out path — file or directory, matched by logical value regardless of quoting (repeatable)
+- `--add-support <path>` (repeatable) — Add a scope.support path — editable like scope.in but NOT worktree-claimed (use for repo-root deliverables; repeatable)
+- `--remove-support <path>` (repeatable) — Remove a matching scope.support path — matched by logical value regardless of quoting (repeatable)
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs close <id>`
+
+Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed event.
+
+**Argument:** `id` (required) — Active spec id to close
+
+**Options:**
+
+- `--resolution <r>` (default: `completed`) — Resolution: completed | superseded | abandoned
+- `--reason <text>` — Closure notes recorded on the spec YAML and the spec_closed event
+- `--merge-commit <sha>` — Optional merge commit SHA (e.g., when closure follows a worktree merge)
+- `--superseded-by <id>` — Spec id that supersedes this one (use with --resolution superseded)
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs archive <id>`
+
+Archive a closed spec (tombstone, not a move): deletes the spec YAML and appends a recoverable spec_archived event carrying its blob_sha. Recover the body with caws specs show <id> --archived or caws specs recover <id>.
+
+**Argument:** `id` (required) — Closed spec id to archive
+
+**Options:**
+
+- `--reason <text>` — Archive reason (advisory; the spec_archived schema does not carry it)
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs prune-archive`
+
+Migrate legacy .caws/specs/.archive/<id>.yaml bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass --apply to execute. Recoverable bodies (reachable via git log --follow) are removed from the working tree; unrecoverable bodies are QUARANTINED to .caws/specs/.archive/.unrecoverable/ (never silently deleted, no override flag). Emits one spec_archive_pruned event per id on --apply.
+
+**Options:**
+
+- `--apply` — Execute the migration. Default is dry-run.
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs migrate`
+
+v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; --apply opts into mutation. --apply without --partial refuses if any spec hits a "refused" verdict. --apply --partial writes migratable specs, skips refused, emits a durable JSON report under .caws/migrations/v10-specs/.
+
+**Options:**
+
+- `--from <version>` (**required**) — Source schema version (only v10 is supported in v11.2)
+- `--apply` — Write migrated YAMLs to disk (default: dry-run)
+- `--partial` — Allow apply to proceed even when some specs are refused (only meaningful with --apply)
+- `--lifecycle-mapping <path>` — Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.
+- `--json` — Emit machine-readable JSON output instead of human text
+- `--data` — Show structured data block on diagnostics
+
+## `caws worktree`
+
+Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse). Worktrees are git worktrees bound to active specs.
+
+### `caws worktree create <name>`
+
+Create a new git worktree under .caws/worktrees/<name> bound to an active spec.
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--spec <id>` (**required**) — Active spec id to bind the worktree to
+- `--base-branch <branch>` — Base branch to start from (default: current branch)
+- `--branch <branch>` — New branch name (default: worktree name)
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree list`
+
+List registered worktrees with branch, spec binding, and owner.
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree bind <name>`
+
+Repair bidirectional binding between a worktree and a spec (one-sided → bound). Refuses a foreign-owned worktree unless --steal --reason is given.
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--spec <id>` (**required**) — Spec id to bind the worktree to
+- `--steal` — Forcibly take ownership of a worktree owned by a different session. Requires --reason. Appends a worktree_ownership_seized audit event.
+- `--reason <text>` — Justification for --steal (required when stealing; recorded in the audit log).
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree destroy <name>`
+
+Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use --abandon-unmerged to override branch check only).
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--abandon-unmerged` — Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree merge <name>`
+
+Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close.
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--dry-run` — Validate prerequisites only; no git, no file writes, no events
+- `--message <text>` — Custom merge commit message (default: merge(worktree): <name>)
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree migrate-registry`
+
+Convert v10.2 legacy-envelope .caws/worktrees.json into the v11 flat-map shape. Destroyed records are omitted iff no spec claims them and their path is absent; refuses otherwise. Idempotent on already-flat files.
+
+**Options:**
+
+- `--dry-run` — Classify and report what would happen; do not write.
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree repair-sparse <name>`
+
+Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if .caws/specs/ has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it. Use this after a `git sparse-checkout disable` has materialized canonical spec files into the worktree.
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--data` — Show structured data block on diagnostics
+
+## `caws agents`
+
+Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
+
+### `caws agents register`
+
+Register this session in .caws/leases/. Hook-invoked at SessionStart.
+
+**Options:**
+
+- `--session-id <id>` — Explicit session id (required for hook-invoked usage; overrides resolveSession)
+- `--platform <p>` — Platform tag (e.g., claude-code, cursor, manual)
+- `--reason <r>` — session_start | pre_tool_use | manual_register | claim | status
+- `--json` — Emit CAWS-native JSON to stdout (never hookSpecificOutput)
+- `--include-active-summary` — Include active_agent_count + active_agents in JSON output
+- `--data` — Show structured data block on diagnostics
+
+### `caws agents heartbeat`
+
+Refresh this session's lease. Hook-invoked at PreToolUse. Throttle-aware.
+
+**Options:**
+
+- `--session-id <id>` — Explicit session id (required for hook-invoked usage)
+- `--platform <p>` — Platform tag
+- `--reason <r>` — pre_tool_use | claim | status | manual_register
+- `--throttle <ms>` — Skip write if last_active within this many ms (default: 0 — no throttle)
+- `--json` — Emit CAWS-native JSON to stdout
+- `--include-active-summary` — Include active_agent_count + active_agents in JSON output
+- `--data` — Show structured data block on diagnostics
+
+### `caws agents stop`
+
+Mark this session's lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.
+
+**Options:**
+
+- `--session-id <id>` — Explicit session id
+- `--platform <p>` — Platform tag
+- `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+### `caws agents list`
+
+List active / stale / stopped agents. Read-only.
+
+**Options:**
+
+- `--include-stale` — Include stale (active-but-TTL-expired) records
+- `--include-stopped` — Include stopped records
+- `--active` — Active-only (overrides --include-* flags); TTL-classified active, not raw status field
+- `--stale-ttl-ms <ms>` — TTL for stale classification (default: 1800000 = 30m)
+- `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+### `caws agents show <id>`
+
+Show one lease by session id. Read-only.
+
+**Argument:** `id` (required) — Session id of the lease to show
+
+**Options:**
+
+- `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+### `caws agents prune`
+
+Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Two modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone — collapses the verify→stop→prune dance into one step), or --status <stopped|stale> --older-than-ms <ms> (retention-based).
+
+**Options:**
+
+- `--dead` — Remove leases whose owning process is dead (active/stopping, this host, pid not alive). Mutually exclusive with --status. Foreign-host leases are never touched.
+- `--status <s>` — stopped | stale (required unless --dead)
+- `--older-than-ms <ms>` — Retention threshold in milliseconds (required with --status)
+- `--stale-ttl-ms <ms>` — TTL for stale classification (used with --status stale; default 30m)
+- `--apply` — Actually delete (default: dry-run)
+- `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+## `caws prepush`
+
+Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
+
+**Options:**
+
+- `--remote <remote>` (default: `origin`) — Push remote
+- `--branch <branch>` (default: `main`) — Push branch
+- `--base <ref>` — Base ref override (default <remote>/<branch>)
+- `--spec <id>` — Current session active spec id (for slice-match)
+- `--ack <sha>` (repeatable, default: `[]`) — Acknowledge an unexpected commit by SHA (repeatable)
+- `--data` — Show structured data block on diagnostics

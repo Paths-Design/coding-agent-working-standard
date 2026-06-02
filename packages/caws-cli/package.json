@@ -16,6 +16,9 @@
   ],
   "scripts": {
     "build": "node scripts/build-cli.js",
+    "docs:generate": "node scripts/generate-command-reference.mjs",
+    "docs:check": "node scripts/generate-command-reference.mjs --check",
+    "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs",
     "dev": "node scripts/build-cli.js && node dist/index.js",
     "typecheck": "tsc -p tsconfig.vnext.test.json",
     "start": "node dist/index.js",
