@@ -7,7 +7,7 @@ created_at: '2026-06-02T04:29:04.859Z'
 updated_at: '2026-06-02T04:29:04.859Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,76 @@ scope:
     - 'packages/caws-cli/tests/init/hook-packs/install.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ORIENTATION-ONLY, NON-EXPANSIVE pre-release slice. The two runtime defects
+    are already closed (FIX-HOOKPACK-CONSUMER-INSTALL-001 + FIX-SPECS-CONTRACT-
+    ORIENTATION-001). This slice adds concrete consumer-facing trap guidance so an
+    agent takes the RIGHT path through CAWS — it does NOT change enforcement,
+    schema, hook behavior, release automation, or kernel contracts, and adds NO
+    new CLI surface.
+  - >-
+    SINGLE CONSUMER SURFACE. The only doc `caws init` installs into a consumer
+    project is .claude/hooks/CLAUDE.md (manifest sourcePath 'CLAUDE.md' ->
+    destPath '.claude/hooks/CLAUDE.md', i.e. templates/hook-packs/claude-code/
+    CLAUDE.md). templates/CLAUDE.md (repo-internal, 17KB) is NOT shipped
+    (package.json files[] = dist/README/templates/hook-packs only) and is NOT
+    installed by init, so it is out of scope. All consumer orientation goes in
+    the one shipped+installed doc.
+  - >-
+    TRAP COVERAGE (concrete, example-driven). Add: hook-pack managed-file framing
+    (already present from the prior slice — keep); the tier-1/2 contract
+    requirement + the now-supported --contract "name:type[:path]" shape (NOT raw
+    YAML surgery); non_functional.* are ARRAYS of strings not scalars; YAML
+    scalars starting with a backtick or special char must be quoted/block-scalar;
+    validate authored specs with `caws specs show <id>` / `caws doctor` before
+    committing.
+  - >-
+    NO DANGLING / NO MAINTAINER-ONLY DOCTRINE. The shipped doc must cite NO
+    unshipped repo-internal path (docs/guides/*, docs/architecture/*,
+    docs/failure-lineage.md) and must make NO consumer-facing reference that
+    treats failure-lineage.md or an incident-entry "lineage entry" as a
+    consumer-local authority requirement. The line-57 `docs/guides/hook-packs.md`
+    pointer (the last dangling ref) is removed/inlined in this slice.
+  - >-
+    GOVERNED-DOC CATCH-UP. Documentation that governs these tooling areas is
+    brought current with the shipped implementation (the --contract path now
+    exists; the contract shape is authable in one command), so the consumer doc
+    does not describe a pre-fix world.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the shipped+installed consumer doc (.claude/hooks/CLAUDE.md from the template)
+    when: it is read by a fresh agent
+    then: >-
+      it explains the common agent traps (managed-file framing; tier-1/2 contract
+      requirement + --contract shape; non_functional arrays; YAML special-char
+      quoting; specs show / doctor validation) concretely, without exporting
+      maintainer-only doctrine.
+  - id: A2
+    given: any contract-authoring example in the consumer doc
+    when: inspected
+    then: >-
+      it uses the supported `--contract "name:type[:path]"` one-command path, not
+      a raw-YAML-surgery instruction.
+  - id: A3
+    given: the consumer doc
+    when: grepped for stale/internal references
+    then: >-
+      there are NO consumer-facing references to docs/guides/caws-contracts.md,
+      docs/guides/hook-packs.md, docs/failure-lineage.md, or "lineage entry" as a
+      required consumer-local authority (the lineage_refs managed-header field is
+      not consumer doctrine and may remain).
+  - id: A4
+    given: the change
+    when: gated on canonical
+    then: >-
+      the dist-dependent hook-pack install/fixture suite passes (the doc is a
+      managed file the installer materializes), and no enforcement/schema/hook/
+      release/kernel surface changed.
+  - id: A5
+    given: this slice
+    when: closed
+    then: >-
+      closure notes state it is orientation-only and that 11.1.10 remains
+      CLI-only with kernel ^1.2.0 unchanged.
 non_functional: {}
 contracts: []
