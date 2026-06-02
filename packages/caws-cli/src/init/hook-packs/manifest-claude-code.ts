@@ -623,5 +623,15 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
       executable: false,
       managed: true,
     },
+    // -- Human-facing inventory (CAWS-HOOKPACK-SHIP-README-001). Companion to
+    // CLAUDE.md: CLAUDE.md is the agent-doctrine surface; README.md is the
+    // at-a-glance hook map. Shipping it authoritatively prevents consumers
+    // from reverse-engineering a drift-prone inventory by hand. --
+    {
+      destPath: '.claude/hooks/README.md',
+      sourcePath: 'README.md',
+      executable: false,
+      managed: true,
+    },
   ],
 };
