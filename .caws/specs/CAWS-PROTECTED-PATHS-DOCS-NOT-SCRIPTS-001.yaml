@@ -7,22 +7,33 @@ created_at: '2026-06-02T17:21:29.220Z'
 updated_at: '2026-06-02T17:21:43.786Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/hook-packs/claude-code
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/protected-paths.sh
     - packages/caws-cli/tests/hook-packs/protected-paths-docs-not-scripts.test.js
     - .claude/hooks/protected-paths.sh
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'protected-paths.sh refuses Write/Edit of executable hook artifacts under .claude/hooks/ (*.sh, *.py, *.cjs) and of strike-state files .claude/logs/guard-strikes-*.json.'
+  - 'protected-paths.sh does NOT refuse Write/Edit of documentation files under .claude/hooks/ (*.md), including the installer-managed CLAUDE.md and a hand-authored README.md.'
+  - 'The matcher keys on the artifact class (script/guard file), not on the .claude/hooks/ directory as a whole — a docs sibling in that directory is admitted.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a Write/Edit tool call whose target is .claude/hooks/README.md or .claude/hooks/CLAUDE.md'
+    when: 'protected-paths.sh runs against the call'
+    then: 'the hook exits 0 (admit) and emits no BLOCKED message'
+  - id: A2
+    given: 'a Write/Edit tool call whose target is a hook script under .claude/hooks/ (e.g. scope-guard.sh, classify_command.py, lib/parse-input.sh, lib/worktree-claim-oracle.cjs)'
+    when: 'protected-paths.sh runs against the call'
+    then: 'the hook exits 1 (advisory block) and emits the hook-script BLOCKED message'
+  - id: A3
+    given: 'a Write/Edit tool call whose target is .claude/logs/guard-strikes-<session>.json'
+    when: 'protected-paths.sh runs against the call'
+    then: 'the hook exits 2 (hard block) and emits the strike-state BLOCKED message with the reset-strikes guidance'
+non_functional:
+  reliability:
+    - 'The matcher must fail closed: an unrecognized extension under .claude/hooks/ that is not clearly a doc defaults to the protected (blocked) path rather than silently admitting a potential script.'
 contracts: []
