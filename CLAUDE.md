@@ -10,6 +10,46 @@ The v11 cutover is complete. `main` runs the v11.1 surface, published to npm as 
 
 **For teams migrating from v10.2:** read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is the canonical line for new work but is **not a drop-in replacement** for every v10.2 workflow — some commands (`sidecar`, `burnup`, `verify-acs`, `evaluate`, `test-analysis`) are removed without v11.1 replacements, while `agents list/show` now ships in the v11.1 surface. The migration guide classifies every v10.2 command into one of four buckets (Replaced / Renamed / Removed-no-replacement / Deferred), documents the rollback one-liner, and includes CI migration recipes.
 
+## We do not ship buggy runtime code (release stance)
+
+CAWS governs agents by *blocking* them: scope guards, danger latches, lifecycle
+refusals, the `amend-scope` control plane. That enforcement only works if the
+governed paths are correct. **Every bug left in the runtime CLI or kernel
+actively incentivizes agents to look for an exploit to get unblocked.** When a
+governed command misbehaves — reports success while doing nothing, refuses a
+legitimate operation, or strands state in a contradictory shape — the agent's
+local pressure is to route *around* the guard (dodge `git checkout`, hand-edit
+the YAML the CLI won't fix, find a different command that achieves the blocked
+effect). That is the exact failure mode CAWS exists to prevent, and a runtime
+bug is what manufactures it.
+
+Worked example (`CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001`):
+`amend-scope --remove-out` silently no-op'd on a quoted `scope.out` entry while
+printing "amended scope". An agent, unable to un-fence a path through the
+sanctioned command, was pushed toward hand-editing the spec YAML — bypassing the
+audit trail. The bug *created* the incentive to circumvent governance.
+
+Therefore the release stance is non-negotiable:
+
+- **A known correctness bug in the CLI or kernel blocks release.** It is not
+  backlog; it is a governance hole. Fix it (or, if it genuinely cannot ship in
+  time, gate the affected command so it *fails loudly* rather than lying about
+  success) before tagging.
+- **"Reports success while doing nothing" is the most dangerous class.** A
+  command that errors honestly is recoverable; a command that falsely confirms
+  leaves the agent trusting a state that never changed, and trains it to stop
+  trusting the guard. Prioritize these.
+- **The fix must restore the sanctioned path, not just document a workaround.**
+  Telling agents "amend-scope can't do X, hand-edit instead" institutionalizes
+  the bypass. Make the governed command correct so the audited path is also the
+  easy path.
+- **When you find one, file a spec and fix it under governance** — the same
+  discipline this section protects. Do not patch a control-plane bug off-spec.
+
+The integrity of every guard depends on the integrity of the runtime that
+enforces it. Shipping buggy governance code is shipping the incentive to defeat
+governance.
+
 ## v11.1 ships thirteen command groups
 
 ```
