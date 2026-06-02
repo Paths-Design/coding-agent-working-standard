@@ -3,6 +3,7 @@ title: 'caws specs create gives no consumer orientation to the tier-1/2 contract
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-contract-orient
 created_at: '2026-06-02T01:23:51.423Z'
 updated_at: '2026-06-02T01:24:14.028Z'
 blast_radius:
