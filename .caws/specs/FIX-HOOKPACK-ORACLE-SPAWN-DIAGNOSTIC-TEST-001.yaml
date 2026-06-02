@@ -7,7 +7,7 @@ created_at: '2026-06-02T03:55:17.826Z'
 updated_at: '2026-06-02T03:55:17.826Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -15,11 +15,29 @@ scope:
     - 'packages/caws-cli/tests/hook-packs/bash_write_guard.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    TEST-ONLY backfill of the A3 proof gap from FIX-HOOKPACK-CONSUMER-INSTALL-001
+    (merged 54002781, closed). That slice implemented A3 — both guard spawn sites
+    now merge stderr (2>&1) and fold the real first-line cause into the
+    error_fail_closed detail instead of the opaque oracle-spawn sentinel — but
+    shipped NO test that exercises the failure path, so A3's promise ("the useful
+    cause is surfaced when the oracle spawn fails") was implemented-but-unlocked.
+    The merged hotfix stays closed and green; this follow-up locks the subclaim.
+    No production code change.
+  - >-
+    The guard computes CAWS_CLAIM_ORACLE as $SCRIPT_DIR/lib/worktree-claim-oracle.cjs
+    (not env-injected), so the deterministic way to force the spawn failure is to
+    overwrite the fixture's copied oracle .cjs with a stub that exits non-zero
+    with a known stderr line, target a claimed/owned payload path, and assert the
+    emitted ask reason contains that line — proving the real cause is surfaced,
+    not swallowed.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a fixture bash-write-guard whose oracle .cjs is replaced by a stub that exits non-zero and prints a known first-line cause to stderr
+    when: the guard runs a Bash command whose target is a worktree-claimed/payload path (so the oracle is consulted)
+    then: >-
+      the guard emits an ask/error_fail_closed decision whose reason text
+      INCLUDES the stub's known stderr first line (the real cause), NOT only the
+      bare "oracle-spawn" sentinel — and the happy-path suites remain green.
 non_functional: {}
 contracts: []
