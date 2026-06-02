@@ -3,6 +3,7 @@ title: 'protected-paths.sh must guard hook scripts and strike-state, not docs (R
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: protected-paths-docs
 created_at: '2026-06-02T17:21:29.220Z'
 updated_at: '2026-06-02T17:21:43.786Z'
 blast_radius:
