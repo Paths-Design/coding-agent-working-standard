@@ -165,4 +165,39 @@ describe('WORKTREE-ISOLATION-HARDENING-001 Fix 3: bash-write-guard', () => {
     const r = guard(dir, 'rm .caws/worktrees/wt-owned/src/owned.ts', FOREIGN);
     expect(r.status).toBe(0);
   });
+
+  // FIX-HOOKPACK-ORACLE-SPAWN-DIAGNOSTIC-TEST-001 — backfills the A3 proof gap
+  // from FIX-HOOKPACK-CONSUMER-INSTALL-001. The guard now captures the oracle's
+  // stderr (2>&1) and folds the real first-line cause into the
+  // error_fail_closed detail instead of the opaque bare "oracle-spawn" sentinel.
+  // The happy-path suites above prove the decision parse is unchanged; this test
+  // forces the SPAWN-FAILURE path and asserts the real cause is surfaced, not
+  // swallowed. The guard computes CAWS_CLAIM_ORACLE as
+  // $SCRIPT_DIR/lib/worktree-claim-oracle.cjs (not env-injected), so we force the
+  // failure deterministically by overwriting that fixture file with a stub that
+  // exits non-zero printing a known first line to stderr.
+  test('oracle-spawn FAILURE surfaces the real first-line cause, not a bare sentinel', () => {
+    setup();
+    const UNIQUE = 'caws-test-oracle-boom-XYZ123';
+    // Replace the copied oracle with a stub that crashes with a known message.
+    const stub = `#!/usr/bin/env node\nprocess.stderr.write('${UNIQUE}: simulated oracle crash\\n');\nprocess.exit(1);\n`;
+    fs.writeFileSync(path.join(dir, '.claude', 'hooks', 'lib', 'worktree-claim-oracle.cjs'), stub);
+
+    // Target the owned worktree payload so the guard extracts a target and
+    // consults the (now-broken) oracle. CAWS_GUARD_NO_ASK=1 degrades the ask to
+    // a hard block so the reason is emitted on stderr deterministically.
+    const r = guard(
+      dir,
+      'echo X >> .caws/worktrees/wt-owned/src/owned.ts',
+      FOREIGN,
+      { CAWS_GUARD_NO_ASK: '1' }
+    );
+
+    // Fails closed (never silent-allow on a spawn failure).
+    expect(r.status).toBe(2);
+    // The detail must name error_fail_closed:oracle-spawn AND carry the real
+    // first-line cause from the stub's stderr — the whole point of A3.
+    expect(r.stderr).toMatch(/oracle-spawn/);
+    expect(r.stderr).toContain(UNIQUE);
+  });
 });
