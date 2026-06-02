@@ -1,18 +1,18 @@
 id: FIX-HOOKPACK-CONSUMER-INSTALL-001
 title: 'Claude Code hook pack is not operable in consumer repos: CommonJS oracle crashes under type:module, and the template ships CAWS-internal failure-lineage doctrine'
-risk_tier: 3
+risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-02T01:08:53.796Z'
 updated_at: '2026-06-02T01:08:54.761Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/src/init/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/lib/worktree-claim-oracle.cjs
     - packages/caws-cli/templates/hook-packs/claude-code/bash-write-guard.sh
     - packages/caws-cli/templates/hook-packs/claude-code/worktree-write-guard.sh
@@ -31,11 +31,127 @@ scope:
     - packages/caws-cli/package.json
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ONE CONSUMER-INSTALL INCIDENT, TWO INDEPENDENTLY-TESTED DEFECTS. The shared
+    failure is that the Claude Code hook pack, as installed into a consumer repo
+    by `caws init`, is not executable/operable under normal consumer conditions.
+    Both defects shipped in caws-cli 11.1.9. This is a CONSUMER-INSTALL HOTFIX,
+    NOT a broad lineage/doctrine redesign — target 11.1.10.
+  - >-
+    D-cjs (EXECUTABLE DEFECT). lib/worktree-claim-oracle.js is CommonJS
+    (require('fs'/'path'/'js-yaml')) but ships with a .js extension. In any
+    consumer repo whose root package.json has "type": "module", Node treats it
+    as ESM and crashes (ReferenceError: require is not defined), so both
+    worktree-write-guard.sh and bash-write-guard.sh hit
+    error_fail_closed:oracle-spawn on every Bash/Write to a worktree path — the
+    entire worktree-isolation enforcement surface fails closed. FIX: rename to
+    .cjs (the extension forces CommonJS regardless of the consumer's package
+    type) and repoint every caller + the install manifest + tests. The consumer
+    must NOT have to do this by hand (a managed-file rename would be reverted by
+    the next caws init); it is shipped as .cjs by us.
+  - >-
+    D-cjs DIAGNOSTIC OPACITY. Both guards spawn the oracle with `2>/dev/null ||
+    echo error_fail_closed:oracle-spawn`, so the consumer sees a fail-closed
+    oracle error with no underlying Node module-mode explanation. The hotfix must
+    not make hooks noisy, but must not leave "fail closed with no usable error"
+    as the only observable: preserve a useful reason in a debug/log path or a
+    structured fallback field that a test can assert.
+  - >-
+    D-lineage (CONSUMER DOCTRINE DEFECT). The shipped template CLAUDE.md exports
+    CAWS-internal failure-lineage doctrine ("every hook exists because of an
+    incident" / read docs/failure-lineage.md / "name the lineage entry" before
+    editing) plus failure-lineage Entry citations in shipped executables
+    (classify_command.py, guard-strikes.sh, reset-danger-latch.sh). In a consumer
+    repo that authority does not exist (no docs/failure-lineage.md, no incident
+    ledger), so a consumer agent REFUSES legitimate hook fixes, treating our
+    private incident numbering as an uncrossable gate. FIX: consumer-safe
+    re-framing of the managed-file invariant — NOT removal of CAWS's internal
+    lineage substrate (which remains legitimate for maintainers).
+  - >-
+    CONSTRAINT — DO NOT redesign the managed-header schema. `lineage_refs:` is
+    parsed by src/init/hook-install.ts (load-bearing for managed-file
+    identity/version machinery) and asserted by install.test.js. Keep the field
+    as opaque upstream metadata; reframe only rendered documentation/prose and
+    inline comments. Deleting lineage_refs across the 47 managed files without
+    proving install/adopt/update still works is OUT OF SCOPE and unacceptable.
+  - >-
+    RELEASE POSTURE. Do NOT unpublish or mutate 11.1.9 — once npm publish
+    succeeds the registry is authoritative and the tag is the provenance anchor;
+    repair forward. Ship 11.1.10 as a patch with an explicit CHANGELOG section.
+    Bump package.json + CHANGELOG; the tag push is the human release step (left
+    undone by this slice).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: a consumer repo whose root package.json declares "type":"module", with the hook pack installed
+    when: the two guards spawn the ownership oracle in the paths that call it
+    then: >-
+      the oracle returns a normal decision (e.g. pass:owner-self / block_*),
+      NOT error_fail_closed:oracle-spawn — proven by a REAL type:module scratch
+      install repro that FAILS on 11.1.9 and PASSES on this branch, not only by
+      unit tests.
+  - id: A2
+    given: the installed hook pack after caws init
+    when: the lib dir and the two guards are inspected
+    then: >-
+      the oracle file is worktree-claim-oracle.cjs and both
+      worktree-write-guard.sh and bash-write-guard.sh invoke the .cjs path
+      (no remaining .js reference in any caller, manifest, or dispatch comment).
+  - id: A3
+    given: the oracle spawn fails for any reason in a guard
+    when: the failure path is exercised
+    then: >-
+      a useful underlying reason (the Node module-mode / spawn error) is
+      preserved in a debug/log path or a structured fallback field that a test
+      asserts — the only observable is no longer a bare error_fail_closed with
+      the real cause swallowed by 2>/dev/null.
+  - id: A4
+    given: every shipped consumer template (CLAUDE.md and executable hooks)
+    when: scanned for CAWS-internal lineage authority
+    then: >-
+      no shipped consumer template tells an agent to read or satisfy
+      docs/failure-lineage.md, and no consumer-facing CLAUDE.md prose says every
+      hook exists because of a CAWS incident or requires naming lineage entries
+      before edits; inline "failure-lineage Entry N" citations in
+      classify_command.py / guard-strikes.sh / reset-danger-latch.sh are reworded
+      to behavioral descriptions (e.g. "history-rewrite / attribution-loss risk").
+  - id: A5
+    given: the renamed oracle and the consumer-safe CLAUDE.md
+    when: the hook-pack install/adopt/update tests run
+    then: >-
+      the managed-file machinery still recognizes and updates the renamed oracle
+      (install.test.js manifest id updated to .cjs; lineage_refs still parsed),
+      proving the rename and the doc reframe did not break header identity,
+      version reconcile, or adopt/update behavior.
+  - id: A6
+    given: the fresh-install smoke
+    when: it runs against the PACKED artifact (npm pack), not source
+    then: >-
+      it includes a type:module scratch-install assertion that spawns the oracle
+      and proves a normal decision, and the full hook-pack jest suite plus the
+      kernel and CLI gates stay green on canonical.
+  - id: A7
+    given: the completed fix
+    when: release prep is staged
+    then: >-
+      packages/caws-cli/package.json is 11.1.10 and CHANGELOG.md has an 11.1.10
+      section naming both fixes ("Fix Claude Code hook pack in ESM consumer
+      repos; remove CAWS-internal failure-lineage doctrine from consumer
+      template"); the caws-cli-v11.1.10 tag push is left to the human release
+      step.
+non_functional:
+  reliability: >-
+    The worktree-isolation enforcement surface must be operable in the consumer
+    runtime it actually ships into (Node ESM repos), and a fail-closed guard must
+    emit a diagnosable reason rather than an opaque sentinel.
+contracts:
+  - name: consumer-install-hook-pack-operable-v1
+    type: behavior
+    description: >-
+      The Claude Code hook pack installed by `caws init` is executable and
+      operable in a consumer repo under normal conditions — specifically a repo
+      with package.json "type":"module": the ownership oracle spawns and returns
+      a real decision (not error_fail_closed:oracle-spawn), the guards reference
+      the shipped .cjs oracle, oracle-spawn failures surface a usable reason, and
+      no shipped consumer template imports CAWS-internal failure-lineage authority
+      that would cause a consumer agent to refuse legitimate hook work. The
+      managed-header schema (incl. lineage_refs parsing) is unchanged.
