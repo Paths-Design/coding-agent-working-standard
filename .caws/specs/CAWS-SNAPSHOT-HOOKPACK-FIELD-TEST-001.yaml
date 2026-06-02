@@ -2,9 +2,11 @@ id: CAWS-SNAPSHOT-HOOKPACK-FIELD-TEST-001
 title: 'snapshot-vnext-facts toEqual expectations miss hookPackInstalled field added by CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Added hookPackInstalled: false to two exact-match toEqual assertions in snapshot-vnext-facts.test.js (the field CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001 added to composeStoreSnapshot().filesystem). Full CLI jest now 142 passed/0 failed (1955 tests, was 2 failed). Test-only; product unchanged. Fix b696c29.'
 created_at: '2026-06-01T23:47:22.923Z'
-updated_at: '2026-06-01T23:47:23.757Z'
+updated_at: '2026-06-02T00:00:51.852Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/store
