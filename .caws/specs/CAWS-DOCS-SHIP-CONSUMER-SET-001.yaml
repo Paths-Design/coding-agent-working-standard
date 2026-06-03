@@ -2,10 +2,11 @@ id: CAWS-DOCS-SHIP-CONSUMER-SET-001
 title: 'Ship the audience:consumer docs in the npm package via pure front-matter derivation: files-list == front-matter set, command-reference self-describes, no internal docs leak (campaign slice 3/3)'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: docs-shiplist
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-shiplist at 35eb3f7c609e0b3261881eb553c396772d4c8c5c'
 created_at: '2026-06-03T15:54:53.468Z'
-updated_at: '2026-06-03T16:43:43.232Z'
+updated_at: '2026-06-03T16:48:26.789Z'
 blast_radius:
   modules:
     - caws-cli/docs-tooling
